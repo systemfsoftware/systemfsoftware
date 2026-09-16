@@ -9,6 +9,7 @@ import type { GuardSources, PolicyVerdict } from './policy.ts'
 interface Hunk {
   readonly oldString: string
   readonly newString: string
+  readonly replaceAll: boolean
 }
 
 interface ContentPair {
@@ -31,6 +32,9 @@ const replaceFirst = (buffer: string, oldString: string, newString: string): str
   return index === -1 ? undefined : buffer.slice(0, index) + newString + buffer.slice(index + oldString.length)
 }
 
+const replaceEvery = (buffer: string, oldString: string, newString: string): string | undefined =>
+  buffer.includes(oldString) ? buffer.split(oldString).join(newString) : undefined
+
 type ApplyResult = { readonly tag: 'ok'; readonly content: string } | {
   readonly tag: 'unrecoverable'
   readonly reason: string
@@ -39,7 +43,9 @@ type ApplyResult = { readonly tag: 'ok'; readonly content: string } | {
 const applyHunks = (buffer: string, hunks: readonly Hunk[]): ApplyResult => {
   let current = buffer
   for (const hunk of hunks) {
-    const next = replaceFirst(current, hunk.oldString, hunk.newString)
+    const next = hunk.replaceAll
+      ? replaceEvery(current, hunk.oldString, hunk.newString)
+      : replaceFirst(current, hunk.oldString, hunk.newString)
     if (next === undefined) {
       return {
         tag: 'unrecoverable',
@@ -73,7 +79,7 @@ const hunkFromRecord = (
     return undefined
   }
   if (typeof oldString === 'string' && typeof newString === 'string') {
-    return { oldString, newString }
+    return { oldString, newString, replaceAll: record['replace_all'] === true }
   }
   return { tag: 'unrecoverable', reason: 'an edit entry is not a valid before/after pair' }
 }
@@ -158,7 +164,7 @@ const findReplaceHunk = (entry: unknown): Hunk | undefined | { tag: 'unrecoverab
     return undefined
   }
   if (typeof find === 'string' && typeof replace === 'string') {
-    return { oldString: find, newString: replace }
+    return { oldString: find, newString: replace, replaceAll: record['replace_all'] === true }
   }
   return { tag: 'unrecoverable', reason: 'a morph file_edits entry is not a valid find/replace pair' }
 }
@@ -222,12 +228,20 @@ const GUARDED_BASENAMES: readonly string[] = [WORKSPACE_BASENAME, NPMRC_BASENAME
 const basename = (targetPath: string): string =>
   targetPath.slice(Math.max(targetPath.lastIndexOf('/'), targetPath.lastIndexOf('\\')) + 1)
 
-const isGuardedBasename = (targetPath: string): boolean => GUARDED_BASENAMES.includes(basename(targetPath))
+const basenameIn = (names: readonly string[], targetPath: string): boolean => {
+  const name = basename(targetPath).toLowerCase()
+  return names.some((candidate) => candidate.toLowerCase() === name)
+}
 
-const isPnpmfile = (targetPath: string): boolean => PNPMFILE_BASENAMES.includes(basename(targetPath))
+const guardedBasenameOf = (targetPath: string): string | undefined => {
+  const name = basename(targetPath).toLowerCase()
+  return GUARDED_BASENAMES.find((candidate) => candidate.toLowerCase() === name)
+}
 
-const PLUGIN_MANIFEST_BASENAMES: readonly string[] = ['plugin.json', 'deno.jsonc', 'deno.lock']
-const CLAUDE_MANIFEST_BASENAMES: readonly string[] = ['settings.json', 'deno.jsonc', 'deno.lock']
+const isPnpmfile = (targetPath: string): boolean => basenameIn(PNPMFILE_BASENAMES, targetPath)
+
+const PLUGIN_MANIFEST_BASENAMES: readonly string[] = ['plugin.json', 'deno.json', 'deno.jsonc', 'deno.lock']
+const CLAUDE_MANIFEST_BASENAMES: readonly string[] = ['settings.json', 'deno.json', 'deno.jsonc', 'deno.lock']
 
 const isEnforcementSurface = (relative: string): boolean => {
   const parts = relative.split('/')
@@ -236,21 +250,22 @@ const isEnforcementSurface = (relative: string): boolean => {
   if (head === 'agent-plugins' && parts.length >= 3 && (parts[1] ?? '') !== '') {
     return marker === 'src' || marker === 'hooks'
       ? parts.length >= 4
-      : parts.length === 3 && PLUGIN_MANIFEST_BASENAMES.includes(marker)
+      : parts.length === 3 && basenameIn(PLUGIN_MANIFEST_BASENAMES, marker)
   }
   if (head === '.claude' && (parts[1] ?? '') === 'hooks') {
     return parts.length >= 3
   }
   if (head === '.claude' && parts.length === 2) {
-    return CLAUDE_MANIFEST_BASENAMES.includes(parts[1] ?? '')
+    return basenameIn(CLAUDE_MANIFEST_BASENAMES, parts[1] ?? '')
   }
-  return relative === '.claude-plugin/marketplace.json'
+  return relative.toLowerCase() === '.claude-plugin/marketplace.json'
 }
 
 const humanEditedMessage = (relative: string): string =>
   `Blocked: ${relative} is part of pnpm-guard's enforcement surface (agent-plugins/*/src, agent-plugins/*/hooks, ` +
-  'the plugin manifests, .claude/hooks, .claude/settings.json, .claude/deno.jsonc, .claude/deno.lock, and ' +
-  '.claude-plugin/marketplace.json). These files are human-edited: ask a human to make this change.'
+  'the plugin manifests, .claude/hooks, .claude/settings.json, .claude/deno.json, .claude/deno.jsonc, ' +
+  '.claude/deno.lock, and .claude-plugin/marketplace.json). These files are human-edited: ask a human to make ' +
+  'this change.'
 
 const pnpmfileVerdict = (pnpmfileName: string): PolicyVerdict => ({
   tag: 'block',
@@ -297,11 +312,19 @@ const relativeTarget = (target: string, root: string): string | undefined => {
   return relative === '' || relative.startsWith('..') ? undefined : relative
 }
 
-const readOldSide = async (fs: Fs, target: string): Promise<string | undefined> => {
+type OldSide =
+  | { readonly tag: 'text'; readonly content: string }
+  | { readonly tag: 'absent' }
+  | { readonly tag: 'error' }
+
+const readOldSide = async (fs: Fs, target: string): Promise<OldSide> => {
+  if (!(await fs.exists(target))) {
+    return { tag: 'absent' }
+  }
   try {
-    return await fs.readTextFile(target)
+    return { tag: 'text', content: await fs.readTextFile(target) }
   } catch {
-    return undefined
+    return { tag: 'error' }
   }
 }
 
@@ -320,8 +343,16 @@ const decideConfigEdit = async (
   editedBasename: string,
 ): Promise<PolicyVerdict> => {
   const counterpartBasename = editedBasename === WORKSPACE_BASENAME ? NPMRC_BASENAME : WORKSPACE_BASENAME
-  const diskEdited = await readOldSide(fs, resolveTarget(root, command.filePath))
-  const counterpart = (await readOldSide(fs, path.join(root, counterpartBasename))) ?? ''
+  const editedSide = await readOldSide(fs, resolveTarget(root, command.filePath))
+  const counterpartSide = await readOldSide(fs, path.join(root, counterpartBasename))
+  if (editedSide.tag === 'error' || counterpartSide.tag === 'error') {
+    return {
+      tag: 'cannot-verify',
+      reason: 'the on-disk pnpm config could not be read, so the edit cannot be compared against the declared posture',
+    }
+  }
+  const diskEdited = editedSide.tag === 'text' ? editedSide.content : undefined
+  const counterpart = counterpartSide.tag === 'text' ? counterpartSide.content : ''
   const extraction = extractPairs(command, diskEdited)
   switch (extraction.tag) {
     case 'contentless':
@@ -357,8 +388,9 @@ export const runFileGuard = async (
       ? ALLOW
       : refuse(pnpmfileVerdict(basename(command.filePath)))
   }
-  if (isGuardedBasename(command.filePath)) {
-    const verdict = await decideConfigEdit(command, projectRoot, fs, basename(command.filePath))
+  const guarded = guardedBasenameOf(command.filePath)
+  if (guarded !== undefined) {
+    const verdict = await decideConfigEdit(command, projectRoot, fs, guarded)
     return verdict.tag === 'allow' ? ALLOW : refuse(verdict)
   }
   const relative = relativeTarget(command.filePath, projectRoot)

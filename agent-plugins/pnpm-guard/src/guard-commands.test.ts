@@ -372,6 +372,52 @@ Deno.test('a malformed payload is allowed silently', () => {
   assertEquals(runRaw(JSON.stringify({ tool_name: 'Bash', tool_input: { command: '' } })), { exit: 0, stderr: '' })
 })
 
+// ---------------------------------------------------------------------------
+// Review pins: the argument shapes the matrix only reached after the fix.
+// ---------------------------------------------------------------------------
+
+Deno.test('a bare --<key>=<value> flag is a config write', () => {
+  assertBlocked('pnpm install --trustLockfile=true', DEFAULT, 'trustLockfile')
+  assertBlocked('pnpm install --minimum-release-age=0', DEFAULT, 'minimumReleaseAge')
+  assertBlocked('pnpm install --block-exotic-subdeps=false', DEFAULT, 'blockExoticSubdeps')
+})
+
+Deno.test('a pnpm invocation inside a for-loop word list is reached', () => {
+  assertBlocked('for i in $(pnpm config set minimumReleaseAge 0); do echo x; done', DEFAULT, 'minimumReleaseAge')
+})
+
+Deno.test('an environment assignment handed to a wrapper program is read', () => {
+  assertBlocked('env pnpm_config_strictDepBuilds=false pnpm install', DEFAULT, 'strictDepBuilds')
+  assertBlocked('command pnpm_config_blockExoticSubdeps=false pnpm install', DEFAULT, 'blockExoticSubdeps')
+})
+
+Deno.test('a --config.<key> whose next token is a flag is not verifiable', () => {
+  assertBlocked('pnpm install --config.minimumReleaseAge --frozen-lockfile', DEFAULT, 'cannot verify')
+})
+
+Deno.test('a guarded --config write retargeted out of the project is blocked', () => {
+  assertBlocked('pnpm install --config.minimumReleaseAge=10080 -C ..', DEFAULT, 'outside the project')
+})
+
+Deno.test('--fix-prefixed arguments that are not --fix are allowed', () => {
+  assertAllowed('pnpm audit --fixed-output foo')
+  assertAllowed('pnpm audit --fixme')
+})
+
+Deno.test('a posture read that fails is refused as unverifiable', () => {
+  const result = runCommandGuard({
+    payload: bashPayload('pnpm config set minimumReleaseAge 0'),
+    reads: {
+      workspaceYaml: () => {
+        throw new Error('EACCES')
+      },
+      npmrc: () => '',
+    },
+  })
+  assertEquals(result.exit, 2)
+  assertStringIncludes(result.stderr, 'cannot verify')
+})
+
 Deno.test('non-pnpm commands are allowed silently', () => {
   assertAllowed('cargo build --release && deno task test')
   assertAllowed('git config set user.name "Someone"')

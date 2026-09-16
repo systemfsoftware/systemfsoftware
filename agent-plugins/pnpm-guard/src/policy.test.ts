@@ -242,6 +242,25 @@ Deno.test('trustLockfile turned back off is allowed', () => {
   assertAllowed(wsPair('trustLockfile: true', 'trustLockfile: false'))
 })
 
+Deno.test('a scalar allowBuilds entry is a grant', () => {
+  assertViolation(
+    evaluateGuardChange(ws(''), { kind: 'set', source: 'workspace', key: 'allowBuilds', value: 'esbuild' }),
+    `${WORKSPACE} allowBuilds["esbuild"]`,
+    'absent',
+    'true',
+  )
+})
+
+Deno.test('an empty scalar release age is the default, not an explicit zero', () => {
+  assertViolation(
+    wsPair("minimumReleaseAge: ''\n", 'minimumReleaseAge: 0\n'),
+    `${WORKSPACE} minimumReleaseAge`,
+    '1440',
+    '0',
+  )
+  assertAllowed(wsPair("minimumReleaseAge: ''\n", "minimumReleaseAge: ''\n# comment\n"))
+})
+
 Deno.test('an allowBuilds entry granted true from absent is blocked', () => {
   assertViolation(
     wsPair('packages: []', 'allowBuilds:\n  esbuild: true'),

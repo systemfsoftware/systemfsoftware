@@ -51,6 +51,7 @@ interface InvocationFacts {
 
 const ALLOW: CommandGuardResult = { exit: 0, stderr: '' }
 const EMPTY_WORD: WordText = { text: '', dynamic: false }
+const DYNAMIC_WORD: WordText = { text: '', dynamic: true }
 const ENV_PREFIX = /^pnpm_config_/i
 const GLOB_PATTERN = /[*?[\]{}]/
 const PNPM_WORD = /(^|[^A-Za-z0-9_.-])(pnpm|pnpx|pnx|pn)([^A-Za-z0-9_-]|$)/
@@ -152,6 +153,11 @@ const visitCommand = (
       }
       break
     case 'For':
+      pending.push(...command.body)
+      for (const word of command.words ?? []) {
+        pending.push(...substitutionsIn(word))
+      }
+      break
     case 'CStyleFor':
       pending.push(...command.body)
       break
@@ -313,8 +319,12 @@ const scanInvocation = (args: readonly WordText[]): InvocationFacts => {
     }
     if (text.startsWith('--config.') && text.length > '--config.'.length) {
       const next = args[index + 1]
-      flagWrites.push(setWrite(literalWord(text.slice('--config.'.length)), next ?? EMPTY_WORD))
-      index += 1
+      if (next !== undefined && !next.dynamic && !next.text.startsWith('-')) {
+        flagWrites.push(setWrite(literalWord(text.slice('--config.'.length)), next))
+        index += 1
+      } else {
+        flagWrites.push(setWrite(literalWord(text.slice('--config.'.length)), DYNAMIC_WORD))
+      }
       continue
     }
     const danger = /^--dangerously-allow-all-builds(?:=(.*))?$/s.exec(text)
@@ -325,11 +335,6 @@ const scanInvocation = (args: readonly WordText[]): InvocationFacts => {
     const negative = /^--no-(.+)$/s.exec(text)
     if (negative !== null) {
       flagWrites.push(setWrite(literalWord(negative[1]!), literalWord('false')))
-      continue
-    }
-    const falseFlag = /^--([^=]+)=false$/s.exec(text)
-    if (falseFlag !== null) {
-      flagWrites.push(setWrite(literalWord(falseFlag[1]!), literalWord('false')))
       continue
     }
     const allowBuild = /^--allow-build(?:=(.*))?$/s.exec(text)
@@ -351,8 +356,13 @@ const scanInvocation = (args: readonly WordText[]): InvocationFacts => {
       index += valueFlag.consumed
       continue
     }
-    if (text.startsWith('--fix') || text === '-f' || text === '-fix') {
+    if (text === '--fix' || text.startsWith('--fix=') || text === '-f' || text === '-fix') {
       fixRequested = true
+      continue
+    }
+    const equalsFlag = /^--([^=]+)=(.*)$/s.exec(text)
+    if (equalsFlag !== null) {
+      flagWrites.push(setWrite(literalWord(equalsFlag[1]!), literalWord(equalsFlag[2]!)))
       continue
     }
     if (text.length > 1 && text.startsWith('-')) {
@@ -377,7 +387,7 @@ const scanInvocation = (args: readonly WordText[]): InvocationFacts => {
 const envKeyOf = (name: string, nameDynamic: boolean): WordText | null =>
   ENV_PREFIX.test(name) ? { text: name.slice('pnpm_config_'.length), dynamic: nameDynamic } : null
 
-const exportedWriteOf = (word: WordNode): ConfigWrite | null => {
+const assignmentWriteOf = (word: WordNode): ConfigWrite | null => {
   let name = ''
   let nameDynamic = false
   let valueText = ''
@@ -406,6 +416,25 @@ const exportedWriteOf = (word: WordNode): ConfigWrite | null => {
   }
   const key = envKeyOf(name, nameDynamic)
   return key === null ? null : setWrite(key, { text: valueText, dynamic: valueDynamic })
+}
+
+const ENV_WRAPPER_PROGRAMS: Readonly<Record<string, true>> = {
+  env: true,
+  command: true,
+  nice: true,
+  nohup: true,
+  setsid: true,
+  stdbuf: true,
+  time: true,
+  xargs: true,
+}
+
+const isEnvWrapperCommand = (command: SimpleCommandNode): boolean => {
+  if (command.name === null) {
+    return false
+  }
+  const program = wordTextOf(command.name)
+  return !program.dynamic && ENV_WRAPPER_PROGRAMS[program.text] === true
 }
 
 const isExportCommand = (command: SimpleCommandNode): boolean => {
@@ -568,7 +597,15 @@ const inspectEnvironment = (command: SimpleCommandNode, sources: () => GuardSour
   })
   if (isExportCommand(command)) {
     for (const arg of command.args) {
-      const write = exportedWriteOf(arg)
+      const write = assignmentWriteOf(arg)
+      if (write !== null) {
+        writes.push(write)
+      }
+    }
+  }
+  if (isEnvWrapperCommand(command)) {
+    for (const arg of command.args) {
+      const write = assignmentWriteOf(arg)
       if (write !== null) {
         writes.push(write)
       }
@@ -603,7 +640,8 @@ const inspectCommand = (command: SimpleCommandNode, sources: () => GuardSources)
   if (facts.subcommand?.text === 'audit' && facts.fixRequested) {
     return AUDIT_FIX_BLOCK
   }
-  const retargeted = facts.configWrites.find((write) => !write.key.dynamic && isGuardedKey(write.key.text))
+  const retargeted = [...facts.configWrites, ...facts.flagWrites]
+    .find((write) => !write.key.dynamic && isGuardedKey(write.key.text))
   if (facts.retarget && retargeted !== undefined) {
     return retargetBlock(retargeted.key.text)
   }
@@ -653,7 +691,12 @@ export const runCommandGuard = (input: CommandGuardInput): CommandGuardResult =>
   const sources = (): GuardSources =>
     posture ??= { workspaceYaml: input.reads.workspaceYaml(), npmrc: input.reads.npmrc() }
   for (const simple of simpleCommandsOf(script)) {
-    const result = inspectCommand(simple, sources)
+    let result: CommandGuardResult | null
+    try {
+      result = inspectCommand(simple, sources)
+    } catch {
+      return cannotVerifyBlock('the project pnpm config could not be read to compare against.')
+    }
     if (result !== null) {
       return result
     }
@@ -664,8 +707,11 @@ export const runCommandGuard = (input: CommandGuardInput): CommandGuardResult =>
 const readSource = (path: string): string => {
   try {
     return Deno.readTextFileSync(path)
-  } catch {
-    return ''
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      return ''
+    }
+    throw error
   }
 }
 

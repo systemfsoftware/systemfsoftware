@@ -322,8 +322,16 @@ Deno.test('a sibling directory whose name merely starts with src is not an enfor
   await assertAllowed(enforcement('agent-plugins/pnpm-guard/srcfoo/guard.ts'))
 })
 
-Deno.test('a plugin-root file that is not a manifest is allowed', async () => {
-  await assertAllowed(enforcement('agent-plugins/pnpm-guard/deno.json'))
+Deno.test('a plugin-root deno.json is refused as an import map', async () => {
+  await assertBlocked(enforcement('agent-plugins/pnpm-guard/deno.json'), {}, 'human-edited')
+})
+
+Deno.test('a plugin-root file with a near-miss config name is allowed', async () => {
+  await assertAllowed(enforcement('agent-plugins/pnpm-guard/deno.json.bak'))
+})
+
+Deno.test('a case-varied enforcement-surface manifest is refused', async () => {
+  await assertBlocked(enforcement('agent-plugins/pnpm-guard/DENO.JSON'), {}, 'human-edited')
 })
 
 Deno.test('a .claude file that is not a hook or a guarded manifest is allowed', async () => {
@@ -364,4 +372,64 @@ Deno.test('a payload without a file path is ignored', async () => {
 
 Deno.test('an oversized stdin payload is refused as unverifiable', async () => {
   await assertBlocked(OVERSIZE, {}, 'cannot verify', 'input cap')
+})
+
+// ---------------------------------------------------------------------------
+// Review pins: reconstruction fidelity, the guarded-name boundary, and reads
+// that fail for a reason other than absence.
+// ---------------------------------------------------------------------------
+
+Deno.test('a replace_all edit weakening the release age is blocked', async () => {
+  await assertBlocked(
+    content('Edit', {
+      file_path: WORKSPACE,
+      old_string: 'minimumReleaseAge: 1440',
+      new_string: 'minimumReleaseAge: 0',
+      replace_all: true,
+    }),
+    WORKSPACE_TREE,
+    'minimumReleaseAge',
+  )
+})
+
+Deno.test('a benign replace_all edit is allowed', async () => {
+  await assertAllowed(
+    content('Edit', {
+      file_path: WORKSPACE,
+      old_string: 'packages:',
+      new_string: 'packages: # packages',
+      replace_all: true,
+    }),
+    WORKSPACE_TREE,
+  )
+})
+
+Deno.test('a case-varied guarded basename reaches the same decision', async () => {
+  await assertBlocked(
+    weakenAge(`${ROOT}/PNPM-Workspace.yaml`),
+    { [`${ROOT}/PNPM-Workspace.yaml`]: WORKSPACE_DISK },
+    'minimumReleaseAge',
+  )
+})
+
+Deno.test('a guarded config that cannot be read is refused as unverifiable', async () => {
+  const unreadable: Fs = {
+    exists: () => Promise.resolve(true),
+    readTextFile: () => Promise.reject(new Error('EACCES')),
+  }
+  const result = await runFileGuard(EDIT_WEAKEN_AGE, ROOT, unreadable)
+  assertEquals(result.exit, 2)
+  assertStringIncludes(result.stderr, 'cannot verify')
+})
+
+Deno.test('a scalar allowBuilds entry is a grant and blocks', async () => {
+  await assertBlocked(content('Write', { file_path: WORKSPACE, content: 'allowBuilds: evil-pkg\n' }), {}, 'allowBuilds')
+})
+
+Deno.test('an empty scalar for the release age is the default, not an explicit zero', async () => {
+  await assertBlocked(
+    weakenAge(WORKSPACE, "minimumReleaseAge: ''", 'minimumReleaseAge: 0'),
+    { [`${ROOT}/pnpm-workspace.yaml`]: "minimumReleaseAge: ''\npackages:\n  - packages/*\n" },
+    'minimumReleaseAge',
+  )
 })

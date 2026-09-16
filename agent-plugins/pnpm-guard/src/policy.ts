@@ -270,10 +270,11 @@ const boolOf = (view: ConfigView, source: Source, settingId: string, fallback: b
 
 const numberOf = (view: ConfigView, source: Source, settingId: string, fallback: number): Effective<number> => {
   const text = scalarOf(view, source, settingId)
-  const parsed = text === undefined ? undefined : Number(text)
-  return parsed === undefined || !Number.isFinite(parsed)
-    ? { explicit: false, value: fallback }
-    : { explicit: true, value: parsed }
+  if (text === undefined || text.trim() === '') {
+    return { explicit: false, value: fallback }
+  }
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? { explicit: true, value: parsed } : { explicit: false, value: fallback }
 }
 
 const listOf = (view: ConfigView, source: Source, settingId: string): Effective<readonly string[]> => {
@@ -303,6 +304,8 @@ const allowBuildsOf = (view: ConfigView): Effective<ReadonlyMap<string, boolean>
     ? [...entry.value.entries].map(([packageName, text]) => [packageName, booleanText(text) ?? false] as const)
     : entry?.value.kind === 'list'
     ? entry.value.items.map((packageName) => [packageName, true] as const)
+    : entry?.value.kind === 'scalar' && entry.value.text !== ''
+    ? [[entry.value.text, true] as const]
     : []
   return { explicit: entry !== undefined, value: new Map(entries) }
 }
