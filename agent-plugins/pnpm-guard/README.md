@@ -165,9 +165,17 @@ The file guard runs with `--allow-read` only. The command guard also runs with `
 From the plugin directory:
 
 ```bash
-deno task check    # type-check + lint
-deno task test     # behaviour tests (in-process; no process spawning)
+deno task check    # type-check + lint, src and tests
+deno task test     # the suites below
 ```
+
+Three suites, by altitude:
+
+- `src/policy.test.ts` — the pure decision core: one named scenario pair per matrix row above, plus the two invariants as generated properties (an allow verdict never weakens a guarded effective value; every weakening transition is blocked).
+- `tests/guard.integration.test.ts` — the composed guards driven end to end against a real project tree on disk: payload decode, target classification, real posture reads, the policy core, and the exit contract. The flag, edit-shape, key, path, and payload matrices are scenario rows here rather than one case per internal branch.
+- `tests/hook-process.e2e.test.ts` — four journeys through the process seam, running the commands `hooks.json` declares and asserting the streams a client sees (exit code, empty stdout, named setting on stderr, the stdin cap).
+
+The integration and process suites need filesystem and process access, which `deno task test` grants them; the shipped hooks keep their own narrower permissions (`--allow-read` only, per `hooks.json`).
 
 Formatting is owned by the repository's dprint config (`pnpm exec dprint fmt` from the repo root).
 
