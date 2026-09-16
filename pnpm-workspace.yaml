@@ -11,7 +11,7 @@ allowBuilds:
   unrs-resolver: false
 catalog:
   typescript: ^7
-  "@systemfsoftware/arethetypeswrong-cli": ^4.1.0
+  "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": 4.0.0-rc.112
   "@effect/platform-node-shared": 4.0.0-rc.112
   effect: 4.0.0-rc.112
