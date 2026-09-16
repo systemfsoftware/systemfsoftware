@@ -63,9 +63,9 @@ flowchart TB
   end
 ```
 
-The file guard governs `pnpm-workspace.yaml`, `.npmrc`, and `.pnpmfile.mjs`/`.pnpmfile.cjs` at any depth. It rebuilds the whole before/after document pair from the edit payload — for patch-shaped tools (`Edit`, `Update`, `MultiEdit`, and the morph tools) by applying each hunk to the file on disk, so the guard reads whole documents rather than fragments — then compares the two sides' _effective_ values, where a value is the explicit setting if present and the pnpm 11 default otherwise. Only a change in posture blocks; an absent key and a key at its default compare equal.
+The file guard governs `pnpm-workspace.yaml`, `.npmrc`, and `.pnpmfile.mjs`/`.pnpmfile.cjs` at any depth, matching each name case-insensitively — a case-varied name reaches the same file on a case-insensitive filesystem. It rebuilds the whole before/after document pair from the edit payload — for patch-shaped tools (`Edit`, `Update`, `MultiEdit`, and the morph tools) by applying each hunk to the file on disk, so the guard reads whole documents rather than fragments, and applying every occurrence when the edit carries `replace_all` — then compares the two sides' _effective_ values, where a value is the explicit setting if present and the pnpm 11 default otherwise. Only a change in posture blocks; an absent key and a key at its default compare equal.
 
-The command guard parses the Bash payload and walks every simple command inside pipelines, `&&`/`||` chains, and command substitution, matching the pnpm family (`pnpm`, `pn`, `pnx`, `pnpx`, and `corepack pnpm`).
+The command guard parses the Bash payload and walks every simple command inside pipelines, `&&`/`||` chains, command substitution, and `for … in` word lists, matching the pnpm family (`pnpm`, `pn`, `pnx`, `pnpx`, and `corepack pnpm`).
 
 ## Blocked Settings
 
@@ -105,10 +105,11 @@ Two notes the table cannot carry:
 The command guard vetoes the same weakening out-of-band, reaching each invocation through the parsed script AST:
 
 - `pnpm config set` / `pnpm config delete` on a guarded key, in a weakening direction — including a write retargeted out of the project via `--location global` or `-C <dir>`, because the agent does not write global pnpm config.
-- `--config.<key>=<value>` flags that weaken a guarded key.
-- `--no-<key>` and `--<key>=false` forms.
+- `--config.<key>=<value>` flags that weaken a guarded key. A `--config.<key>` with no literal value beside it — a flag where a value would be, or a substitution — is refused as unverifiable rather than guessed.
+- `--<key>=<value>` forms for any guarded key, in a weakening direction, and `--no-<key>`.
 - `--dangerously-allow-all-builds`.
-- `pnpm_config_*` / `PNPM_CONFIG_*` environment assignments, in both the prefix form (`pnpm_config_minimumReleaseAge=0 pnpm install`) and the `export` form.
+- `pnpm_config_*` / `PNPM_CONFIG_*` environment assignments, in the prefix form (`pnpm_config_minimumReleaseAge=0 pnpm install`), the `export` form, and as arguments handed to a wrapper program (`env`, `command`, `nice`, `nohup`, `setsid`, `stdbuf`, `time`, `xargs`).
+- An `allowBuilds` grant in any of its shapes — the map form (`allowBuilds: { esbuild: true }`), the list form, and the scalar form (`allowBuilds: esbuild`), whether the agent writes it to the file or reaches it through `pnpm config set allowBuilds esbuild`.
 - Build grants: `pnpm approve-builds`, and `pnpm add --allow-build=` — every name in a comma list, every repeat of the flag, and `*`/glob values, which grant builds wholesale.
 - `pnpm audit --fix`, which rewrites the pnpm config through pnpm and auto-mints release-age exclusions for the advisories it fixes. Only a human runs it, when a CVE demands the exception.
 
@@ -137,8 +138,8 @@ A missing runtime is a different code: the hook's command carries a `command -v 
 A guard wired from the repository's own tree is editable by the very agent it guards. The file guard therefore vetoes agent edits to its enforcement surface, with a message stating these files are human-edited:
 
 - `agent-plugins/*/src/**` and `agent-plugins/*/hooks/**` — the guard code;
-- `agent-plugins/*/plugin.json`, `deno.jsonc`, `deno.lock` — the manifests, import maps, and lockfiles that pin the parsers the guard trusts;
-- `.claude/hooks/**`, `.claude/settings.json`, `.claude/deno.jsonc`, `.claude/deno.lock` — the in-repo hook wiring;
+- `agent-plugins/*/plugin.json`, `deno.json`, `deno.jsonc`, `deno.lock` — the manifests, import maps, and lockfiles that pin the parsers the guard trusts (Deno reads either config name);
+- `.claude/hooks/**`, `.claude/settings.json`, `.claude/deno.json`, `.claude/deno.jsonc`, `.claude/deno.lock` — the in-repo hook wiring;
 - `.claude-plugin/marketplace.json`.
 
 An import map or lockfile is enforcement surface because it selects and pins the parser behind every verdict: an actor who can swap `@std/yaml` for a hostile module with the same export shape programs the guard's decisions.
@@ -147,7 +148,7 @@ An import map or lockfile is enforcement surface because it selects and pins the
 
 Out of scope by design, not omission:
 
-- **Obfuscated execution.** `echo … | sh`, base64 blobs, and anything else beyond the parsed AST. The guard reasons over the script it can parse; command obfuscation beyond that is a documented gap, in the same class as [git-subtrees](https://github.com/systemfsoftware/systemfsoftware/tree/main/agent-plugins/git-subtrees)' limits.
+- **Obfuscated execution.** `echo … | sh`, base64 blobs, and anything else beyond the parsed AST. The guard reasons over the script it can parse; command obfuscation beyond that is a documented gap, in the same class as [git-subtrees](https://github.com/systemfsoftware/systemfsoftware/tree/main/agent-plugins/git-subtrees)' limits. A pnpm invocation embedded in a quoted string (`bash -c "pnpm config set …"`) is the same class: the guard reads assignments and wrapper arguments, not program text inside a word.
 - **Generic file deletion.** `rm pnpm-workspace.yaml` via Bash is not a guarded vector — git history and CI's frozen-lockfile remain the backstop.
 - **Write-capable MCP tools outside the edit-tool matcher.** The matcher is a closed tool-name set; a file-writing tool that is not in it edits a guarded file without the guard firing. The same gap oxlint-guard carries.
 - **The TOCTOU window** between the guard's on-disk read and the agent's write. A concurrent-writer race is out of scope for a per-tool-call hook; closing it needs file locking that would break the guard's hermeticity.
