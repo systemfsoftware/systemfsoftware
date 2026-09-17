@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Checker } from '@systemfsoftware/stryker-js'
 import { CheckerFailed } from '@systemfsoftware/stryker-js'
 import type { CheckResult } from '@systemfsoftware/stryker-js'
@@ -76,26 +76,26 @@ const mergeAnswers = (runs: ReadonlyArray<RunAnswers>): HashMap.HashMap<string, 
     HashMap.empty<string, CheckResult>(),
   )
 
-const checkCell = Cell.layer({
-  read: (command: CheckMutantsCommand) =>
-    Effect.flatMap(TypeScriptCompiler, (compiler) =>
-      Effect.zipWith(
-        compiler.nodes,
-        compiler.check([...command.mutants]),
-        (nodes, diagnostics): CheckMutantsInput =>
-          new CheckMutantsInput({
-            mutants: [...command.mutants],
-            diagnostics: [...diagnostics],
-            nodes: Object.fromEntries(nodes),
-          }),
-      )).pipe(Effect.mapError((cause) => refuse(command.mutants.map((mutant) => mutant.id), cause))),
-  decide: checkMutants,
-  write: (outcome: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>) =>
+const checkCell = Sandwich.read((command: CheckMutantsCommand) =>
+  Effect.flatMap(TypeScriptCompiler, (compiler) =>
+    Effect.zipWith(
+      compiler.nodes,
+      compiler.check([...command.mutants]),
+      (nodes, diagnostics): CheckMutantsInput =>
+        new CheckMutantsInput({
+          mutants: [...command.mutants],
+          diagnostics: [...diagnostics],
+          nodes: Object.fromEntries(nodes),
+        }),
+    )).pipe(Effect.mapError((cause) => refuse(command.mutants.map((mutant) => mutant.id), cause)))
+)
+  .decide(checkMutants)
+  .write((outcome: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>) =>
     Result.match(outcome, {
       onFailure: (failure) => Effect.fail(refuse([], failure)),
       onSuccess: Effect.succeed,
-    }),
-})
+    })
+  )
 
 export const makeCheckerService = ({ options, compiler }: CheckerDeps): Checker['Service'] => {
   const verify = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, compiler))

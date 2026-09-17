@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import type { ExitClass } from '@systemfsoftware/stryker-js'
 import { Module } from '@systemfsoftware/stryker-js'
 import { Mutant } from '@systemfsoftware/stryker-js'
@@ -135,25 +135,25 @@ export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
 const hashContent: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 
 export const survivorsAdmissionCell = (basePath: string) =>
-  Cell.layer({
-    read: (cliOptions: PartialStrykerOptions) =>
-      Effect.gen(function*() {
-        const pathService = yield* Path.Path
-        const resolvedOptions = yield* resolveSurvivorsRunOptions(cliOptions, basePath)
-        const priorReportPath = priorReportPathOf(resolvedOptions)
-        const resolveAbsolutePath: ResolveAbsolutePath = (file) => pathService.resolve(file)
-        const read = yield* readPriorReport(priorReportPath)
-        const sourceContentHashes = yield* currentSourceHashesFor(priorReportFileKeys(read.raw))
-        return {
-          resolvedOptions,
-          priorReportRaw: read.raw,
-          priorReportFound: read.found,
-          priorReportPath,
-          sourceContentHashes,
-          resolveAbsolutePath,
-        }
-      }),
-    decode: ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
+  Sandwich.read((cliOptions: PartialStrykerOptions) =>
+    Effect.gen(function*() {
+      const pathService = yield* Path.Path
+      const resolvedOptions = yield* resolveSurvivorsRunOptions(cliOptions, basePath)
+      const priorReportPath = priorReportPathOf(resolvedOptions)
+      const resolveAbsolutePath: ResolveAbsolutePath = (file) => pathService.resolve(file)
+      const read = yield* readPriorReport(priorReportPath)
+      const sourceContentHashes = yield* currentSourceHashesFor(priorReportFileKeys(read.raw))
+      return {
+        resolvedOptions,
+        priorReportRaw: read.raw,
+        priorReportFound: read.found,
+        priorReportPath,
+        sourceContentHashes,
+        resolveAbsolutePath,
+      }
+    })
+  ).decode(
+    Sandwich.pure(({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
       if (!priorReportFound) {
         return Result.succeed(
           AdmitSurvivorsRunCommand.make({
@@ -183,10 +183,12 @@ export const survivorsAdmissionCell = (basePath: string) =>
           priorSourceHashes: priorSourceHashes(document, hashContent),
           priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
         }))
-    },
-    decide: admitSurvivorsRun,
-    encode: (outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => outcome,
-    write: (outcome, raw) =>
+    }),
+  ).decide(admitSurvivorsRun)
+    .encode(
+      Sandwich.pure((outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => Result.succeed(outcome)),
+    )
+    .write((outcome, raw) =>
       Result.match(outcome, {
         onSuccess: (admission) =>
           Effect.succeed({
@@ -195,8 +197,8 @@ export const survivorsAdmissionCell = (basePath: string) =>
             priorReportPath: raw.priorReportPath,
           }),
         onFailure: Effect.fail,
-      }),
-  })
+      })
+    )
 
 export function runSurvivorsAdmission(
   cliOptions: PartialStrykerOptions,

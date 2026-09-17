@@ -1,6 +1,6 @@
 /// <reference types="vitest/import-meta" />
 
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import * as schema from '@systemfsoftware/stryker-js'
 import {
   Heartbeat,
@@ -413,18 +413,20 @@ const probeInput = (command: FormatFlags): ProbeInput => ({
   toolVars: envToolVars(),
 })
 
-export const outputModeProbeCell = Cell.layer({
-  read: (command: FormatFlags) => Effect.succeed(probeInput(command)),
-  decode: (raw: ProbeInput) => Result.succeed(commandFor(raw)),
-  decide: resolveOutputMode,
-  encode: (outcome: Result.Result<ResolveModeDecision, ModeConflictError>) =>
-    Result.map(outcome, decisionToResolvedMode),
-  write: (outcome) =>
+export const outputModeProbeCell = Sandwich.read((command: FormatFlags) => Effect.succeed(probeInput(command)))
+  .decode(Sandwich.pure((raw: ProbeInput) => Result.succeed(commandFor(raw))))
+  .decide(resolveOutputMode)
+  .encode(
+    Sandwich.pure((outcome: Result.Result<ResolveModeDecision, ModeConflictError>) =>
+      Result.succeed(Result.map(outcome, decisionToResolvedMode))
+    ),
+  )
+  .write((outcome) =>
     Result.match(outcome, {
       onFailure: (error) => Effect.fail(error),
       onSuccess: (mode) => Effect.succeed(mode),
-    }),
-})
+    })
+  )
 
 export const detectModeWithProbe = (flags: FormatFlags = {}): Effect.Effect<ResolvedMode, CliError.CliError> =>
   outputModeProbeCell.run(flags).pipe(
