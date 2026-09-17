@@ -241,7 +241,9 @@ An impure phase's interior is not type-visible, so no count of I/O operations is
 
 ### Vocabulary
 
-What a package states about itself as a const table: which phases are pure, the module that owns them, and which of that module's exports perform I/O. Order is not in the table — it is carried by the chain's lawful-next-step surface, which nothing else restates. The table carries only what a rule cannot read off a type, so there is nothing to re-walk and no description object kept alive for consumers to fold.
+What a package states about itself as a const table: which phases are pure, the module that owns them, and which of that module's exports perform I/O. Order is not in the table — it is carried by the chain's lawful-next-step surface, which no runtime source restates (the Description entry above describes the same surface in prose). The table carries only what a rule cannot read off a type, so there is nothing to re-walk and no description object kept alive for consumers to fold.
+
+No such table ships today: the Cell vocabulary was retired with the record spec, and a filling slot's purity is carried by its type instead. The concept survives for the package whose facts no rule can read off a type.
 
 A vocabulary is the unit of agreement between packages. Where several packages must decide the same question the same way, each reads the vocabulary instead of restating it, and the disagreement they would otherwise have becomes impossible rather than merely unlikely.
 

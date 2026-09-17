@@ -34,7 +34,7 @@ pnpm oxlint
 
 ## What's Included
 
-The preset registers and enables four custom plugin suites alongside stock oxlint correctness rules at `error`:
+The preset registers and enables three custom plugin suites alongside stock oxlint correctness rules at `error`:
 
 ### Custom Rule Plugins
 
