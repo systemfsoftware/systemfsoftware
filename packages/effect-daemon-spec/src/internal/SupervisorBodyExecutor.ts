@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Cause, Clock, Effect, Exit, Fiber, Match, Metric, Option, Ref, Result, Schedule } from 'effect'
 import { type Scope } from 'effect'
 import { WorkerTypeId } from '../Brands.js'
@@ -76,19 +76,21 @@ const restartDescription = <R>(spec: {
     decision: RestartDecisionRestart,
   ) => Effect.Effect<void, never, never>
 }) =>
-  Cell.layer({
-    read: (intensity: IntensityTracker) => Effect.andThen(intensity.record, intensity.isExceeded),
-    decode: (intensityExceeded) =>
-      Result.succeed({
-        strategy: spec.strategy,
-        totalChildren: spec.totalChildren,
-        failedIndex: spec.failedIndex,
-        exitSuccess: false,
-        intensityExceeded,
-      }),
-    decide: chooseRestartStrategy,
-    encode: (outcome) => outcome,
-    write: (outcome) =>
+  Sandwich.read((intensity: IntensityTracker) => Effect.andThen(intensity.record, intensity.isExceeded))
+    .decode(
+      Sandwich.pure((intensityExceeded) =>
+        Result.succeed({
+          strategy: spec.strategy,
+          totalChildren: spec.totalChildren,
+          failedIndex: spec.failedIndex,
+          exitSuccess: false,
+          intensityExceeded,
+        })
+      ),
+    )
+    .decide(chooseRestartStrategy)
+    .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
+    .write((outcome) =>
       Result.match(outcome, {
         onFailure: () => handleExhausted(spec.ctx, spec.cause),
         onSuccess: (right) =>
@@ -100,8 +102,8 @@ const restartDescription = <R>(spec: {
             ),
             Match.exhaustive,
           ),
-      }),
-  })
+      })
+    )
 
 const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
   Effect.andThen(
