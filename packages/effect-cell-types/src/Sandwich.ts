@@ -50,13 +50,10 @@ export interface EncodedChain<I, Raw, Out, RE, DecE, RR> {
 }
 
 export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE, RR>): ReadChain<I, Raw, RE, RR> => {
-  const readRun = run
   const decode = <Dcd, DecE>(phase: PurePhase<Raw, Dcd, DecE>): DecodedChain<I, Raw, Dcd, RE, DecE, RR> => {
-    const decodePhase = phase
     const decide = <Dec, DE>(
       workflow: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand,
     ): DecodedDecidedChain<I, Raw, Dec, DE, RE, DecE, RR> => {
-      const decideWorkflow = workflow
       const encode = <Out>(
         encodePhase: PurePhase<Result.Result<Dec, DE>, Out>,
       ): EncodedChain<I, Raw, Out, RE, DecE, RR> => {
@@ -67,12 +64,14 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
         } => {
           const composed = (input: I): Effect.Effect<Resp, RE | DecE | WE, RR | WR> =>
             Effect.gen(function*() {
-              const raw = yield* readRun(input)
-              const decoded = yield* Result.match(decodePhase(raw), {
+              const raw = yield* run(input)
+              const decoded = yield* Result.match(phase(raw), {
                 onFailure: Effect.fail,
                 onSuccess: Effect.succeed,
               })
-              const outcome = decideWorkflow(decoded)
+              const outcome = workflow(decoded)
+              // The encode phase's refusal channel is `never` by construction, so this arm cannot
+              // run; `Result.match` keeps the unwrap total without asserting the result's shape.
               const encoded = Result.match(encodePhase(outcome), {
                 onFailure: (error: never): Out => error,
                 onSuccess: (output) => output,
@@ -90,14 +89,13 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
   const decide = <Dec, DE>(
     workflow: ((decoded: Raw) => Result.Result<Dec, DE>) & WorkflowBrand,
   ): RawDecidedChain<I, Raw, Dec, DE, RE, RR> => {
-    const decideWorkflow = workflow
     const write = <Resp, WE, WR>(
       writeRun: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, WR>,
     ): Cell<I, Resp, RE | WE, RR | WR> & { readonly phases: readonly ['read', 'decide', 'write'] } => {
       const composed = (input: I): Effect.Effect<Resp, RE | WE, RR | WR> =>
         Effect.gen(function*() {
-          const raw = yield* readRun(input)
-          const outcome = decideWorkflow(raw)
+          const raw = yield* run(input)
+          const outcome = workflow(raw)
           return yield* writeRun(outcome, raw)
         })
       return { [CellTypeId]: CellTypeId, run: composed, phases: ['read', 'decide', 'write'] }
