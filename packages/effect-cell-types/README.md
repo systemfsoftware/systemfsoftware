@@ -143,7 +143,7 @@ A cell is authored as a typed continuation chain, not a record of phases. `Sandw
 | `decode` | `decide`                                        | a `Sandwich.pure` phase; its refusal fails the cell              |
 | `decide` | `encode` (decoded chain) or `write` (raw chain) | a `Workflow.make` value; the outcome is a value, never a failure |
 | `encode` | `write`                                         | a `Sandwich.pure` phase shaping the outcome `Result`             |
-| `write`  | —                                               | `Out` plus `Raw` in; `Resp`/`E`/`R` out                          |
+| `write`  | —                                               | `Out` plus `Raw` in (or unary `Out` alone); `Resp`/`E`/`R` out   |
 
 A short chain skips the filling's middle steps — `read → decide → write` — and records exactly those three phases:
 

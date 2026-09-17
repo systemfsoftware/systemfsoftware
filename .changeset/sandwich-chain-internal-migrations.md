@@ -1,5 +1,6 @@
 ---
 "@systemfsoftware/effect-daemon-spec": none
+"@systemfsoftware/effect-schema-recursion-budget": none
 "@systemfsoftware/stryker-js": none
 "@systemfsoftware/stryker-js-cli": none
 "@systemfsoftware/stryker-js-engine": none

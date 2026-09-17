@@ -444,4 +444,20 @@ describe('T11 the sandwich chain the continuation surface builds', () => {
     const readChain = Sandwich.read(read)
     expect<typeof readChain.decode>().type.not.toBeCallableWith((raw: Raw) => succeedDecoded(raw))
   })
+
+  it('Should_RefuseABareClosure_When_EncodeDemandsAPurePhase', () => {
+    const chain = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
+    expect<typeof chain.encode>().type.not.toBeCallableWith(
+      (outcome: Result.Result<Decision, Refusal>) => Result.succeed(encode(outcome)),
+    )
+  })
+
+  it('Should_RefuseTheEncode_When_ItsRefusalChannelIsNotNever', () => {
+    const chain = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
+    expect<typeof chain.encode>().type.not.toBeCallableWith(
+      Sandwich.pure((outcome: Result.Result<Decision, Refusal>): Result.Result<Output, Refusal> =>
+        Result.succeed(encode(outcome))
+      ),
+    )
+  })
 })

@@ -37,7 +37,7 @@ export interface RawDecidedChain<I, Raw, Dec, DE, RE, RR> {
 
 export interface DecodedDecidedChain<I, Raw, Dec, DE, RE, DecE, RR> {
   readonly 'sentence: must encode after decide on decoded chain': true
-  encode<Out>(phase: PurePhase<Result.Result<Dec, DE>, Out>): EncodedChain<I, Raw, Out, RE, DecE, RR>
+  encode<Out>(phase: PurePhase<Result.Result<Dec, DE>, Out, never>): EncodedChain<I, Raw, Out, RE, DecE, RR>
 }
 
 export interface EncodedChain<I, Raw, Out, RE, DecE, RR> {
@@ -55,7 +55,7 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
       workflow: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand,
     ): DecodedDecidedChain<I, Raw, Dec, DE, RE, DecE, RR> => {
       const encode = <Out>(
-        encodePhase: PurePhase<Result.Result<Dec, DE>, Out>,
+        encodePhase: PurePhase<Result.Result<Dec, DE>, Out, never>,
       ): EncodedChain<I, Raw, Out, RE, DecE, RR> => {
         const write = <Resp, WE, WR>(
           writeRun: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, WR>,

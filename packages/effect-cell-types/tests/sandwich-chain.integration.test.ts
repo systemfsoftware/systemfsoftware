@@ -6,13 +6,7 @@ import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
-import {
-  admitDecodedCommand,
-  Admitted,
-  Decoded,
-  Malformed,
-  Rejected,
-} from './__fixtures__/admit-decoded-command.workflow.js'
+import { Admitted, Decoded, Malformed, Rejected } from './__fixtures__/admit-decoded-command.workflow.js'
 import { admitTracedCommand } from './__fixtures__/admit-traced-command.workflow.js'
 
 const Feature = makeFeature({ it, layer })
@@ -80,16 +74,30 @@ const tracedRawCell = (trace: Array<string>) =>
       }),
   )
 
-const refusingCell = Sandwich.read((command: Command) => Effect.succeed({ bytes: command.id })).decode(
-  Sandwich.pure((raw: Raw): Result.Result<Decoded, Malformed> =>
-    Result.succeed(new Decoded({ length: raw.bytes.length }))
-  ),
-).decide(admitDecodedCommand).encode(
-  Sandwich.pure((outcome: Result.Result<Admitted | Rejected, Malformed>): Result.Result<Output, never> =>
-    Result.succeed({ line: render(outcome) })
-  ),
-).write((output: Output, raw: Raw) => Effect.succeed(`${output.line}<-${raw.bytes}`))
-
+const refusingTracedCell = (trace: Array<string>) =>
+  Sandwich.read((command: Command) =>
+    Effect.sync(() => {
+      trace.push('read')
+      return { bytes: command.id }
+    })
+  ).decode(
+    Sandwich.pure((raw: Raw): Result.Result<Decoded, Malformed> => {
+      trace.push('decode')
+      return Result.succeed(new Decoded({ length: raw.bytes.length }))
+    }),
+  ).decide(
+    admitTracedCommand(trace, new Admitted({ length: 0 }), new Rejected({ why: 'too short' })),
+  ).encode(
+    Sandwich.pure((outcome: Result.Result<Admitted | Rejected, Malformed>): Result.Result<Output, never> => {
+      trace.push('encode')
+      return Result.succeed({ line: render(outcome) })
+    }),
+  ).write((output: Output, raw: Raw) =>
+    Effect.sync(() => {
+      trace.push('write')
+      return `${output.line}<-${raw.bytes}`
+    })
+  )
 Feature('Building a cell one step at a time').body(({ scenario }) => {
   scenario(
     'Each step of a full chain runs once in the order it was added',
@@ -128,12 +136,16 @@ Feature('Building a cell one step at a time').body(({ scenario }) => {
   scenario(
     'A refusal is delivered to the writer as a result',
     Gherkin.Do.pipe(
-      When('a chain is run for a command the decider turns down')(
-        'exit',
-        () => Effect.exit(refusingCell.run({ id: 'abc' })),
-      ),
-      Then('the run succeeds carrying the refusal')((s) => {
-        expect(s.exit).toStrictEqual(Exit.succeed('refused:too short<-abc'))
+      When('a chain is run for a command the decider turns down')('outcome', () => {
+        const trace: Array<string> = []
+        return Effect.map(
+          Effect.exit(refusingTracedCell(trace).run({ id: 'a'.repeat(101) })),
+          (exit) => ({ exit, trace }),
+        )
+      }),
+      Then('the run succeeds carrying the refusal and every step ran')((s) => {
+        expect(s.outcome.exit).toStrictEqual(Exit.succeed(`refused:too short<-${'a'.repeat(101)}`))
+        expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
       }),
     ),
   )
