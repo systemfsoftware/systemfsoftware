@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/all#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Complete oxlint preset for Effect and cell architecture: bundles all custom rule plugins (workflow, schema, entrypoint, cell vocabulary, property testing, test placement, hygiene) with type-aware correctness settings in a single config.",
+  "description": "Complete oxlint preset for Effect and cell architecture: bundles all custom rule plugins (workflow, schema, entrypoint, property testing, test placement, hygiene) with type-aware correctness settings in a single config.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -35,7 +35,6 @@
   },
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",

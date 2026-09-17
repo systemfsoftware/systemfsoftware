@@ -59,7 +59,6 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/stryker-js-cli": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",

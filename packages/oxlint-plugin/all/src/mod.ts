@@ -1,5 +1,4 @@
 import house from '@systemfsoftware/oxlint-plugin'
-import cellVocabulary from '@systemfsoftware/oxlint-plugin-cell-vocabulary'
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import effectEntrypoint from '@systemfsoftware/oxlint-plugin-effect-entrypoint'
 import {
@@ -22,7 +21,6 @@ import type { OxlintConfig } from 'oxlint'
  */
 const jsPlugins: readonly string[] = [
   import.meta.resolve('@systemfsoftware/oxlint-plugin'),
-  import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-vocabulary'),
   import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-dmmf'),
   import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-entrypoint'),
 ]
@@ -57,7 +55,6 @@ export const plugins: NonNullable<OxlintConfig['plugins']> = [
 export const rules: NonNullable<OxlintConfig['rules']> = {
   ...stockRules,
   ...house.configs.recommended.rules,
-  ...cellVocabulary.configs.recommended.rules,
   ...effectDmmf.configs.recommended.rules,
   ...effectEntrypoint.configs.recommended.rules,
   'no-restricted-imports': [
