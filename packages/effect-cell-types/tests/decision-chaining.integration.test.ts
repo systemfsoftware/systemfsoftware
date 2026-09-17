@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
@@ -21,11 +21,9 @@ const render = (decision: Decision): string =>
     Match.exhaustive,
   )
 
-const chainCell = (trace: string[]) =>
-  Cell.layer({
-    read: (command: Decoded) => Effect.succeed(command),
-    decide: chainAdmitDecisions(trace),
-    write: (outcome: Result.Result<Decision, Malformed>) =>
+const chainCell = (trace: string[]): Cell.Cell<Decoded, string, never, never> =>
+  Sandwich.read((command: Decoded) => Effect.succeed(command)).decide(chainAdmitDecisions(trace)).write(
+    (outcome: Result.Result<Decision, Malformed>) =>
       Effect.sync(() => {
         const line = Result.match(outcome, {
           onSuccess: render,
@@ -34,19 +32,20 @@ const chainCell = (trace: string[]) =>
         trace.push(line)
         return line
       }),
-  })
+  )
 
-const totalCell = (trace: string[], decide = totalAdmitDecision(trace)) =>
-  Cell.layer({
-    read: (command: SettleCommand) => Effect.succeed(command),
-    decide,
-    write: (outcome: Result.Result<Decision, never>) =>
+const totalCell = (
+  trace: string[],
+  decide = totalAdmitDecision(trace),
+): Cell.Cell<SettleCommand, string, never, never> =>
+  Sandwich.read((command: SettleCommand) => Effect.succeed(command)).decide(decide).write(
+    (outcome: Result.Result<Decision, never>) =>
       Effect.sync(() => {
         const line = Result.match(outcome, { onSuccess: render, onFailure: (): string => 'failed' })
         trace.push(line)
         return line
       }),
-  })
+  )
 
 Feature('Chaining decisions across a cell')
   .body(({ scenario }) => {

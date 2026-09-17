@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -63,13 +63,11 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
-/** Short form: `read` gathers the raw the decider rules on, and `write` receives the outcome. */
-const admitCell = Cell.layer({
-  read: (command: Command) => Effect.succeed(new Decoded({ length: command.id.length })),
-  decide: admitDecodedCommand,
-  write: (outcome: Result.Result<Admitted | Rejected, Malformed>) =>
-    Effect.flatMap(Ledger, (ledger) => ledger.append(render(outcome))),
-})
+const admitCell: Cell.Cell<Command, string, never, Ledger> = Sandwich.read((command: Command) =>
+  Effect.succeed(new Decoded({ length: command.id.length }))
+).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
+  Effect.flatMap(Ledger, (ledger) => ledger.append(render(outcome)))
+)
 
 /** A reading the validation refuses, and a reading the decider refuses. */
 const decodeRaw = (raw: Raw): Result.Result<Decoded, Malformed> =>
@@ -79,39 +77,37 @@ const decodeRaw = (raw: Raw): Result.Result<Decoded, Malformed> =>
     Match.orElse(() => Result.succeed(new Decoded({ length: raw.bytes.length }))),
   )
 
-/** Long form: all five phases; `write` reports the encoded output together with the raw. */
-const reportingCell = Cell.layer({
-  read: (command: Command) => Effect.succeed({ bytes: command.id }),
-  decode: decodeRaw,
-  decide: admitDecodedCommand,
-  encode: (outcome: Result.Result<Admitted | Rejected, Malformed>): Output => ({ line: render(outcome) }),
-  write: (output: Output, raw: Raw) =>
-    Effect.flatMap(Ledger, (ledger) => ledger.append(`${output.line}<-${raw.bytes}`)),
-})
+const reportingCell: Cell.Cell<Command, string, Malformed, Ledger> = Sandwich.read((command: Command) =>
+  Effect.succeed({ bytes: command.id })
+).decode(
+  Sandwich.pure(decodeRaw),
+).decide(admitDecodedCommand).encode(
+  Sandwich.pure((outcome) => Result.succeed({ line: render(outcome) })),
+).write((output: Output, raw: Raw) => Effect.flatMap(Ledger, (ledger) => ledger.append(`${output.line}<-${raw.bytes}`)))
 
-/** The phase-order observer: each phase marks the local trace as the interpreter reaches it. */
-const tracedCell = (trace: string[]) =>
-  Cell.layer({
-    read: (command: Command) =>
-      Effect.sync(() => {
-        trace.push('read')
-        return { bytes: command.id }
-      }),
-    decode: (raw: Raw) => {
+/** Each phase appends to the trace so the scenario can read the run order. */
+const tracedCell = (trace: string[]): Cell.Cell<Command, string, never, never> =>
+  Sandwich.read((command: Command) =>
+    Effect.sync(() => {
+      trace.push('read')
+      return { bytes: command.id }
+    })
+  ).decode(
+    Sandwich.pure((raw: Raw) => {
       trace.push('decode')
       return Result.succeed(new Decoded({ length: raw.bytes.length }))
-    },
-    decide: admitTracedCommand(trace, new Admitted({ length: 0 }), new Rejected({ why: 'traced refusal' })),
-    encode: (outcome: Result.Result<Admitted | Rejected, Malformed>): Output => {
+    }),
+  ).decide(admitTracedCommand(trace, new Admitted({ length: 0 }), new Rejected({ why: 'traced refusal' }))).encode(
+    Sandwich.pure((outcome: Result.Result<Admitted | Rejected, Malformed>) => {
       trace.push('encode')
-      return { line: render(outcome) }
-    },
-    write: (output: Output) =>
-      Effect.sync(() => {
-        trace.push('write')
-        return output.line
-      }),
-  })
+      return Result.succeed({ line: render(outcome) })
+    }),
+  ).write((output: Output) =>
+    Effect.sync(() => {
+      trace.push('write')
+      return output.line
+    })
+  )
 
 Feature('Interpreting a cell sandwich')
   .withScenarioLayer(LedgerRecording)

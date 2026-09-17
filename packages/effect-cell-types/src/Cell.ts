@@ -4,13 +4,9 @@ import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
 import type { Layer } from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
-import { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName } from './Facts.js'
-import { type WorkflowBrand } from './Workflow.js'
-
-export { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName }
 
 /**
- * The nominal brand every `Cell` carries. `Cell.layer` is the only door that applies it.
+ * The nominal brand every `Cell` carries. The `Sandwich` chain's `write` is the only door that applies it.
  */
 export const CellTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Cell')
 
@@ -53,98 +49,6 @@ const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A,
   [CellTypeId]: CellTypeId,
   run,
 })
-
-interface LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR> {
-  readonly read: (command: I) => Effect.Effect<Raw, RE, RR>
-  readonly decide: ((decoded: Raw) => Result.Result<Dec, DE>) & WorkflowBrand
-  readonly write: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, WR>
-}
-
-interface LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-  extends LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-{
-  readonly decode?: never
-  readonly encode?: never
-}
-
-interface LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
-  extends Omit<LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>, 'decide' | 'write'>
-{
-  readonly decode: (raw: Raw) => Result.Result<Dcd, DecE>
-  readonly decide: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand
-  readonly encode: (outcome: Result.Result<Dec, DE>) => Out
-  readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, WR>
-}
-
-/**
- * The interpreter. Order is the text: read, then decode, then decide, then encode, then
- * write. The `E` channel is the sandwich's truth — read, decode, and write failures;
- * a decide refusal is the outcome the encode and write receive, not a failure.
- */
-const layerRunner = <I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
-  spec:
-    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
-): (input: I) => Effect.Effect<Resp, RE | DecE | WE, RR | WR> => {
-  if ('decode' in spec && 'encode' in spec) {
-    return (input) =>
-      Effect.gen(function*() {
-        const raw = yield* spec.read(input)
-        const decoded = yield* Result.match(spec.decode(raw), {
-          onFailure: Effect.fail,
-          onSuccess: Effect.succeed,
-        })
-        const outcome = spec.decide(decoded)
-        return yield* spec.write(spec.encode(outcome), raw)
-      })
-  }
-  return (input) =>
-    Effect.gen(function*() {
-      const raw = yield* spec.read(input)
-      const outcome = spec.decide(raw)
-      return yield* spec.write(outcome, raw)
-    })
-}
-
-/**
- * Builds a Cell from one sandwich.
- *
- * Short form — `read` produces the value `decide` rules on, and the decide outcome is what
- * `write` receives:
- *
- * ```ts
- * import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
- * import { Effect, Result } from 'effect'
- *
- * declare const decideAdmission: Workflow<CliArgs, Verdict, Refusal>
- * declare class CliArgs { readonly target: string }
- * declare class Verdict { readonly ok: boolean }
- * declare class Refusal { readonly _tag: 'Refused' }
- *
- * const cell = Cell.layer({
- *   read: (args: CliArgs) => Effect.succeed(args),
- *   decide: decideAdmission,
- *   write: (outcome: Result.Result<Verdict, Refusal>, raw: CliArgs) => Effect.void,
- * })
- * ```
- *
- * Long form — `decode` and `encode` adapt each side of `decide`; both are required together,
- * and a spec carrying one without the other fails inference.
- */
-export function layer<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>(
-  spec: LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>,
-): Cell<I, Resp, RE | WE, RR | WR>
-export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
-  spec: LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
-): Cell<I, Resp, RE | DecE | WE, RR | WR>
-export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
-  spec:
-    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
-    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
-): Cell<I, Resp, RE | DecE | WE, RR | WR> {
-  return make(layerRunner(spec))
-}
-
 /**
  * Transforms the Cell's response.
  */
@@ -307,22 +211,3 @@ export const provide: {
     layer: Layer<ROut, LE, RIn>,
   ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
 )
-
-/**
- * The facts the lint plugin judges a spec body by, as a const table. The order the
- * interpreter runs is the text of {@link layerRunner}; the table states only what a
- * rule cannot read off a type: which phases are pure, and what counts as I/O.
- */
-export interface Vocabulary {
-  readonly module: typeof DESCRIPTION_MODULE
-  readonly ioCells: IoCellClassification
-  readonly byKind: { readonly pure: readonly PhaseName[] }
-  readonly composer: 'layer'
-}
-
-export const vocabulary: Vocabulary = {
-  module: DESCRIPTION_MODULE,
-  ioCells: IO_CELLS,
-  byKind: { pure: ['decode', 'decide', 'encode'] },
-  composer: 'layer',
-}

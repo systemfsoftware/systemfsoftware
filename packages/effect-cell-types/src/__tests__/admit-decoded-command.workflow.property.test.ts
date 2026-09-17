@@ -7,6 +7,7 @@ import { FastCheck as fc } from 'effect/testing'
 
 import { admitDecodedCommand, Admitted, Decoded, Malformed, Rejected } from '../admit-decoded-command.workflow.js'
 import * as Cell from '../Cell.js'
+import * as Sandwich from '../Sandwich.js'
 
 interface Command {
   readonly id: string
@@ -40,75 +41,70 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
 
 const commands = (ids: readonly string[]): readonly Command[] => ids.map((id) => ({ id }))
 
-const itemCell = (trace: string[]) =>
-  Cell.layer({
-    read: (command: Command) =>
-      Effect.gen(function*() {
-        trace.push(`item:read:${command.id}`)
-        const decoded = new Decoded({ length: command.id.length })
-        return command.id === READ_FAILURE ? yield* Effect.fail(new Malformed({ length: decoded.length })) : decoded
-      }),
-    decide: admitDecodedCommand,
-    write: (outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
-      Effect.sync(() => {
-        trace.push(`item:write:${raw.length}`)
-        return render(outcome)
-      }),
-  })
+const itemCell = (trace: string[]): Cell.Cell<Command, string, Malformed, never> =>
+  Sandwich.read((command: Command) =>
+    Effect.gen(function*() {
+      trace.push(`item:read:${command.id}`)
+      const decoded = new Decoded({ length: command.id.length })
+      return command.id === READ_FAILURE ? yield* Effect.fail(new Malformed({ length: decoded.length })) : decoded
+    })
+  ).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
+    Effect.sync(() => {
+      trace.push(`item:write:${raw.length}`)
+      return render(outcome)
+    })
+  )
 
-const readerCell = (trace: string[], admitted: Option.Option<Bytes>) =>
-  Cell.layer({
-    read: (command: Command) =>
-      Effect.sync(() => {
-        trace.push('reader:read')
-        return new Decoded({ length: command.id.length })
-      }),
-    decide: admitDecodedCommand,
-    write: () =>
-      Effect.sync(() => {
-        trace.push('reader:write')
-        return admitted
-      }),
-  })
+const readerCell = (
+  trace: string[],
+  admitted: Option.Option<Bytes>,
+): Cell.Cell<Command, Option.Option<Bytes>, never, never> =>
+  Sandwich.read((command: Command) =>
+    Effect.sync(() => {
+      trace.push('reader:read')
+      return new Decoded({ length: command.id.length })
+    })
+  ).decide(admitDecodedCommand).write(() =>
+    Effect.sync(() => {
+      trace.push('reader:write')
+      return admitted
+    })
+  )
 
-const innerCell = (trace: string[]) =>
-  Cell.layer({
-    read: (bytes: Bytes) =>
-      Effect.sync(() => {
-        trace.push('inner:read')
-        return new Decoded({ length: bytes.bytes.length })
-      }),
-    decide: admitDecodedCommand,
-    write: (outcome: Result.Result<Admitted | Rejected, Malformed>) =>
-      Effect.sync(() => {
-        trace.push('inner:write')
-        return render(outcome)
-      }),
-  })
+const innerCell = (trace: string[]): Cell.Cell<Bytes, string, Malformed, never> =>
+  Sandwich.read((bytes: Bytes) =>
+    Effect.sync(() => {
+      trace.push('inner:read')
+      return new Decoded({ length: bytes.bytes.length })
+    })
+  ).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
+    Effect.sync(() => {
+      trace.push('inner:write')
+      return render(outcome)
+    })
+  )
 
-const openingCell = (label: string, ledger: string[]) =>
-  Cell.layer({
-    read: (command: Command) => Effect.succeed(new Decoded({ length: command.id.length })),
-    decide: admitDecodedCommand,
-    write: (outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
-      Effect.sync(() => {
-        const line = `${label}:${render(outcome)}:${raw.length}`
-        ledger.push(line)
-        return line
-      }),
-  })
+const openingCell = (label: string, ledger: string[]): Cell.Cell<Command, string, never, never> =>
+  Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length }))).decide(
+    admitDecodedCommand,
+  ).write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
+    Effect.sync(() => {
+      const line = `${label}:${render(outcome)}:${raw.length}`
+      ledger.push(line)
+      return line
+    })
+  )
 
-const stageCell = (label: string, ledger: string[]) =>
-  Cell.layer({
-    read: (line: string) => Effect.succeed(new Decoded({ length: line.length })),
-    decide: admitDecodedCommand,
-    write: (outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
-      Effect.sync(() => {
-        const line = `${label}:${render(outcome)}:${raw.length}`
-        ledger.push(line)
-        return line
-      }),
-  })
+const stageCell = (label: string, ledger: string[]): Cell.Cell<string, string, never, never> =>
+  Sandwich.read((line: string) => Effect.succeed(new Decoded({ length: line.length }))).decide(
+    admitDecodedCommand,
+  ).write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
+    Effect.sync(() => {
+      const line = `${label}:${render(outcome)}:${raw.length}`
+      ledger.push(line)
+      return line
+    })
+  )
 
 const foldTo = (responses: readonly string[]): string => responses.join('|')
 
