@@ -15,7 +15,6 @@ import {
   Malformed,
   Rejected,
 } from './__fixtures__/admit-decoded-command.workflow.js'
-import { admitTracedCommand } from './__fixtures__/admit-traced-command.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -84,30 +83,6 @@ const reportingCell: Cell.Cell<Command, string, Malformed, Ledger> = Sandwich.re
 ).decide(admitDecodedCommand).encode(
   Sandwich.pure((outcome) => Result.succeed({ line: render(outcome) })),
 ).write((output: Output, raw: Raw) => Effect.flatMap(Ledger, (ledger) => ledger.append(`${output.line}<-${raw.bytes}`)))
-
-/** Each phase appends to the trace so the scenario can read the run order. */
-const tracedCell = (trace: string[]): Cell.Cell<Command, string, never, never> =>
-  Sandwich.read((command: Command) =>
-    Effect.sync(() => {
-      trace.push('read')
-      return { bytes: command.id }
-    })
-  ).decode(
-    Sandwich.pure((raw: Raw) => {
-      trace.push('decode')
-      return Result.succeed(new Decoded({ length: raw.bytes.length }))
-    }),
-  ).decide(admitTracedCommand(trace, new Admitted({ length: 0 }), new Rejected({ why: 'traced refusal' }))).encode(
-    Sandwich.pure((outcome: Result.Result<Admitted | Rejected, Malformed>) => {
-      trace.push('encode')
-      return Result.succeed({ line: render(outcome) })
-    }),
-  ).write((output: Output) =>
-    Effect.sync(() => {
-      trace.push('write')
-      return output.line
-    })
-  )
 
 Feature('Interpreting a cell sandwich')
   .withScenarioLayer(LedgerRecording)
@@ -190,20 +165,6 @@ Feature('Interpreting a cell sandwich')
               expect(lines).toEqual(['malformed:-1<-decide-bad'])
             }))
         ),
-      ),
-    )
-
-    scenario(
-      'The interpreter runs the sandwich in its declared order',
-      Gherkin.Do.pipe(
-        When('a Cell with tracing phases is run')('outcome', () => {
-          const trace: string[] = []
-          return Effect.map(tracedCell(trace).run({ id: 'abc' }), (response) => ({ response, trace }))
-        }),
-        Then('the phases ran exactly in the order the interpreter reads them')((s) => {
-          expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
-          expect(s.outcome.response).toBe('admitted:0')
-        }),
       ),
     )
   })

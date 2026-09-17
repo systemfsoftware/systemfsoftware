@@ -8,11 +8,10 @@ import { SettleCommand, totalAdmitDecision } from './total-admit-decision.workfl
  * file holds no decision body of its own: the one body lives in the file that owns it, and
  * both slots take it — the second rules on the decision the first published.
  */
-export const totalPairAdmitTaggedCommands = (trace: string[]) =>
-  Workflow.andThen(
-    SettleCommand,
-    totalAdmitDecision(trace),
-    SettleCommand,
-    'second',
-    totalAdmitDecision(trace),
-  )
+export const totalPairAdmitTaggedCommands = Workflow.andThen(
+  SettleCommand,
+  totalAdmitDecision,
+  SettleCommand,
+  'second',
+  totalAdmitDecision,
+)

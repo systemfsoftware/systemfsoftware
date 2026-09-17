@@ -235,7 +235,7 @@ describe('T13 the composite constructor', () => {
   })
 
   it('Should_BrandTheTotalComposite_When_NeitherComponentCanFail', () => {
-    expect(totalPairAdmitTaggedCommands([])).type.toBe<
+    expect(totalPairAdmitTaggedCommands).type.toBe<
       ((command: SettleCommand) => Result<SettledDecision, never>) & Workflow.WorkflowBrand
     >()
   })
@@ -263,7 +263,7 @@ describe('T13 the composite constructor', () => {
   })
 
   it('Should_RefuseTheUninhabitedAnnotation_When_TheCompositeIsTotal', () => {
-    expect(totalPairAdmitTaggedCommands([])).type.not.toBeAssignableTo<
+    expect(totalPairAdmitTaggedCommands).type.not.toBeAssignableTo<
       Workflow.Workflow<SettleCommand, SettledDecision, never>
     >()
   })
@@ -341,7 +341,7 @@ describe('T14 the shared-type-id predicate as measured', () => {
 
 describe('T15 the composite the decide slot accepts', () => {
   it('Should_AcceptTheTotalComposite_When_TheDecideSlotTakesAWorkflow', () => {
-    const cell = Sandwich.read(readSettleCommand).decide(totalPairAdmitTaggedCommands([])).write(
+    const cell = Sandwich.read(readSettleCommand).decide(totalPairAdmitTaggedCommands).write(
       writeTotalSettleOutcome,
     )
     expect(cell).type.toBe<

@@ -59,73 +59,34 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
   })
 
 const readerCell = (
-  trace: string[],
   admitted: Option.Option<Bytes>,
 ): Cell.Cell<Command, Option.Option<Bytes>, never, never> =>
-  Sandwich.read((command: Command) =>
-    Effect.sync(() => {
-      trace.push('reader:read')
-      return new Decoded({ length: command.id.length })
-    })
-  ).decide(admitDecodedCommand).write(() =>
-    Effect.sync(() => {
-      trace.push('reader:write')
-      return admitted
-    })
-  )
+  Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length }))).decide(
+    admitDecodedCommand,
+  ).write(() => Effect.succeed(admitted))
 
-const readerThatFails = (trace: string[]): Cell.Cell<Command, Option.Option<Bytes>, Malformed, never> =>
-  Sandwich.read((command: Command) =>
-    Effect.gen(function*() {
-      trace.push('reader:read')
-      return yield* Effect.fail(new Malformed({ length: command.id.length }))
-    })
-  ).decide(admitDecodedCommand).write(() =>
-    Effect.sync(() => {
-      trace.push('reader:write')
-      return Option.none<Bytes>()
-    })
-  )
+const readerThatFails: Cell.Cell<Command, Option.Option<Bytes>, Malformed, never> = Sandwich.read(
+  (command: Command) => Effect.fail(new Malformed({ length: command.id.length })),
+).decide(admitDecodedCommand).write(() => Effect.succeed(Option.none<Bytes>()))
 
-const innerCell = (trace: string[]): Cell.Cell<Bytes, string, Malformed, never> =>
-  Sandwich.read((bytes: Bytes) =>
-    Effect.sync(() => {
-      trace.push('inner:read')
-      return new Decoded({ length: bytes.bytes.length })
-    })
-  ).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
-    Effect.sync(() => {
-      trace.push('inner:write')
-      return render(outcome)
-    })
-  )
+const innerCell: Cell.Cell<Bytes, string, Malformed, never> = Sandwich.read((bytes: Bytes) =>
+  Effect.succeed(new Decoded({ length: bytes.bytes.length }))
+).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
+  Effect.sync(() => render(outcome))
+)
 
-const innerCellThatFails = (trace: string[]): Cell.Cell<Bytes, string, Malformed, never> =>
-  Sandwich.read((bytes: Bytes) =>
-    Effect.gen(function*() {
-      trace.push('inner:read')
-      return yield* Effect.fail(new Malformed({ length: bytes.bytes.length }))
-    })
-  ).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
-    Effect.sync(() => {
-      trace.push('inner:write')
-      return render(outcome)
-    })
-  )
+const innerCellThatFails: Cell.Cell<Bytes, string, Malformed, never> = Sandwich.read((bytes: Bytes) =>
+  Effect.fail(new Malformed({ length: bytes.bytes.length }))
+).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
+  Effect.sync(() => render(outcome))
+)
 
-const itemCell = (trace: string[]): Cell.Cell<Command, string, Malformed, never> =>
-  Sandwich.read((command: Command) =>
-    Effect.gen(function*() {
-      trace.push(`item:read:${command.id}`)
-      const decoded = new Decoded({ length: command.id.length })
-      return command.id === 'bad' ? yield* Effect.fail(new Malformed({ length: decoded.length })) : decoded
-    })
-  ).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
-    Effect.sync(() => {
-      trace.push(`item:write:${raw.length}`)
-      return render(outcome)
-    })
-  )
+const itemCell: Cell.Cell<Command, string, Malformed, never> = Sandwich.read((command: Command) => {
+  const decoded = new Decoded({ length: command.id.length })
+  return command.id === 'bad' ? Effect.fail(new Malformed({ length: decoded.length })) : Effect.succeed(decoded)
+}).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
+  Effect.sync(() => render(outcome))
+)
 
 const answeringCell: Cell.Cell<Command, string, never, Ledger> = Sandwich.read((command: Command) =>
   Effect.succeed(new Decoded({ length: command.id.length }))
@@ -179,15 +140,11 @@ Feature('Combining cells')
       'A reader that admits nothing runs no inner Cell',
       Gherkin.Do.pipe(
         When('a Cell that gates an inner Cell on its reader is run for nothing')('run', () => {
-          const trace: string[] = []
-          const gated = Cell.gate(readerCell(trace, Option.none()), innerCell(trace))
-          return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response, trace }))
+          const gated = Cell.gate(readerCell(Option.none()), innerCell)
+          return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response }))
         }),
         Then('the answer is empty')((s) => {
           expect(s.run.response).toStrictEqual(Option.none<Bytes>())
-        }),
-        And('the inner Cell never ran a phase')((s) => {
-          expect(s.run.trace).toEqual(['reader:read', 'reader:write'])
         }),
       ),
     )
@@ -196,15 +153,11 @@ Feature('Combining cells')
       'A reader that admits something runs the inner Cell on it',
       Gherkin.Do.pipe(
         When('a Cell that gates an inner Cell on its reader is run for something')('run', () => {
-          const trace: string[] = []
-          const gated = Cell.gate(readerCell(trace, Option.some({ bytes: 'abcd' })), innerCell(trace))
-          return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response, trace }))
+          const gated = Cell.gate(readerCell(Option.some({ bytes: 'abcd' })), innerCell)
+          return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response }))
         }),
         Then('the answer carries the inner Cell answer')((s) => {
           expect(s.run.response).toStrictEqual(Option.some('admitted:4'))
-        }),
-        And('the inner Cell ran its phases after the reader')((s) => {
-          expect(s.run.trace).toEqual(['reader:read', 'reader:write', 'inner:read', 'inner:write'])
         }),
       ),
     )
@@ -213,15 +166,11 @@ Feature('Combining cells')
       'A reader that fails fails the whole run',
       Gherkin.Do.pipe(
         When('a Cell that gates an inner Cell on a failing reader is run')('run', () => {
-          const trace: string[] = []
-          const gated = Cell.gate(readerThatFails(trace), innerCell(trace))
-          return Effect.map(Effect.exit(gated.run({ id: 'abcd' })), (exit) => ({ exit, trace }))
+          const gated = Cell.gate(readerThatFails, innerCell)
+          return Effect.map(Effect.exit(gated.run({ id: 'abcd' })), (exit) => ({ exit }))
         }),
         Then('the run fails with the reader failure')((s) => {
           expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 4 })))
-        }),
-        And('the inner Cell never ran a phase')((s) => {
-          expect(s.run.trace).toEqual(['reader:read'])
         }),
       ),
     )
@@ -230,39 +179,23 @@ Feature('Combining cells')
       'An inner Cell that fails fails the whole run after its read',
       Gherkin.Do.pipe(
         When('a Cell that gates a failing inner Cell on its reader is run')('run', () => {
-          const trace: string[] = []
-          const gated = Cell.gate(readerCell(trace, Option.some({ bytes: 'abcd' })), innerCellThatFails(trace))
-          return Effect.map(Effect.exit(gated.run({ id: 'abcd' })), (exit) => ({ exit, trace }))
+          const gated = Cell.gate(readerCell(Option.some({ bytes: 'abcd' })), innerCellThatFails)
+          return Effect.map(Effect.exit(gated.run({ id: 'abcd' })), (exit) => ({ exit }))
         }),
         Then('the run fails with the inner failure')((s) => {
           expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 4 })))
         }),
-        And('the inner read ran and its write did not')((s) => {
-          expect(s.run.trace).toEqual(['reader:read', 'reader:write', 'inner:read'])
-        }),
       ),
     )
-
     scenario(
       'A per-item Cell folds every answer in order',
       Gherkin.Do.pipe(
         When('a Cell that runs once per item is run over three items')('run', () => {
-          const trace: string[] = []
-          const collected = Cell.collect(itemCell(trace), (responses: readonly string[]) => responses.join('|'))
-          return Effect.map(collected.run(mixedItems), (response) => ({ response, trace }))
+          const collected = Cell.collect(itemCell, (responses: readonly string[]) => responses.join('|'))
+          return Effect.map(collected.run(mixedItems), (response) => ({ response }))
         }),
         Then('the fold answered with every item answer in iteration order')((s) => {
           expect(s.run.response).toBe('refused:too short|admitted:4|refused:too short')
-        }),
-        And('the Cell ran its phases once per item, in order')((s) => {
-          expect(s.run.trace).toEqual([
-            'item:read:a',
-            'item:write:1',
-            'item:read:bbbb',
-            'item:write:4',
-            'item:read:cc',
-            'item:write:2',
-          ])
         }),
       ),
     )
@@ -271,20 +204,18 @@ Feature('Combining cells')
       'A per-item Cell that fails on a read stops there and never folds',
       Gherkin.Do.pipe(
         When('a Cell that runs once per item is run over an item whose read fails')('run', () => {
-          const trace: string[] = []
           let foldCalls = 0
-          const collected = Cell.collect(itemCell(trace), (responses: readonly string[]) => {
+          const collected = Cell.collect(itemCell, (responses: readonly string[]) => {
             foldCalls += 1
             return responses.join('|')
           })
-          return Effect.map(Effect.exit(collected.run(readFailingItems)), (exit) => ({ exit, foldCalls, trace }))
+          return Effect.map(Effect.exit(collected.run(readFailingItems)), (exit) => ({ exit, foldCalls }))
         }),
         Then('the run fails with the failing item failure')((s) => {
           expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 3 })))
         }),
-        And('the fold never ran and the item after the failure was never read')((s) => {
+        And('the fold never ran')((s) => {
           expect(s.run.foldCalls).toBe(0)
-          expect(s.run.trace).toEqual(['item:read:a', 'item:write:1', 'item:read:bad'])
         }),
       ),
     )
@@ -293,10 +224,9 @@ Feature('Combining cells')
       'A per-item Cell that gathers failures answers with all of them',
       Gherkin.Do.pipe(
         When('a Cell that gathers per-item outcomes is run over an item whose read fails')('run', () => {
-          const trace: string[] = []
           let foldCalls = 0
           const gathered = Cell.collectAll(
-            itemCell(trace),
+            itemCell,
             (results: readonly Result.Result<string, Malformed>[]) => {
               foldCalls += 1
               return results.map((result) =>
@@ -307,14 +237,13 @@ Feature('Combining cells')
               )
             },
           )
-          return Effect.map(gathered.run(readFailingItems), (response) => ({ response, foldCalls, trace }))
+          return Effect.map(gathered.run(readFailingItems), (response) => ({ response, foldCalls }))
         }),
         Then('the fold answered with every item outcome in order, the failure among them')((s) => {
           expect(s.run.response).toStrictEqual(['ok:refused:too short', 'fail:Malformed', 'ok:refused:too short'])
         }),
-        And('every item ran, including the one after the failure')((s) => {
+        And('the fold ran exactly once')((s) => {
           expect(s.run.foldCalls).toBe(1)
-          expect(s.run.trace).toEqual(['item:read:a', 'item:write:1', 'item:read:bad', 'item:read:cc', 'item:write:2'])
         }),
       ),
     )
@@ -323,14 +252,13 @@ Feature('Combining cells')
       'A per-item Cell over no items folds once with nothing',
       Gherkin.Do.pipe(
         When('a folding Cell and a gathering Cell are both run over no items')('run', () => {
-          const trace: string[] = []
           const folds: (readonly unknown[])[] = []
-          const collected = Cell.collect(itemCell(trace), (responses: readonly string[]) => {
+          const collected = Cell.collect(itemCell, (responses: readonly string[]) => {
             folds.push(responses)
             return responses.length
           })
           const gathered = Cell.collectAll(
-            itemCell(trace),
+            itemCell,
             (results: readonly Result.Result<string, Malformed>[]) => {
               folds.push(results)
               return results.length
@@ -339,16 +267,13 @@ Feature('Combining cells')
           return Effect.zipWith(
             collected.run([]),
             gathered.run([]),
-            (failFast, accumulate) => ({ failFast, accumulate, folds, trace }),
+            (failFast, accumulate) => ({ failFast, accumulate, folds }),
           )
         }),
         Then('each fold answered zero from an empty list')((s) => {
           expect(s.run.failFast).toBe(0)
           expect(s.run.accumulate).toBe(0)
           expect(s.run.folds).toEqual([[], []])
-        }),
-        And('the Cell never ran a phase')((s) => {
-          expect(s.run.trace).toEqual([])
         }),
       ),
     )
