@@ -15,8 +15,8 @@ When both channels are inhabited, `Workflow<Command, Decision, Error>` is the fu
 `(command: Command) => Result<Decision, Error>` carrying the nominal `WorkflowBrand`
 conjunct — a phantom readonly TypeId-keyed field that no runtime property backs. The brand
 is what makes the workbook nominal: `Workflow.make` is the only constructor that applies
-it, and every surface that runs a decision — the `decide` member a `Cell.layer` spec
-demands — requires it, so a decision that skipped `make` is a compile error at the call site that would have run it, with the brand named in the diagnostic. A `never` channel does
+it, and every surface that runs a decision — the chain's `decide` slot demands it —
+requires it, so a decision that skipped `make` is a compile error at the call site that would have run it, with the brand named in the diagnostic. A `never` channel does
 not silently collapse to that function: it resolves to a marker interface that no function
 can satisfy, so the mistake is a compile error with the remediation attached (below). The
 success channel is shaped the same way: `Workflow.make` refuses a decision channel that is
@@ -133,22 +133,80 @@ decision anything may run. The error channel is a real variant (`RestartDecision
 giving up is a decision the caller must branch on, so declaring the error channel `never` is
 rejected, not allowed.
 
+## Building a cell: the `Sandwich` chain
+
+A cell is authored as a typed continuation chain, not a record of phases. `Sandwich.read` takes the impure read effect and returns only the lawful next steps; each step composes its `run` at construction and exposes only what may follow, so a misordered chain fails to compile with a missing-method error whose displayed type names the lawful next steps. There is no interpreter: composition happens step by step inside the constructors. Every finished cell carries a recorded `phases` tuple — a type-level literal plus a matching runtime array, both produced by the constructors.
+
+| Step     | Exposes next                                    | Channel law                                                      |
+| -------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| `read`   | `decode`, `decide`                              | `I` consumed; `Raw` produced; `E`/`R` from the `Effect`          |
+| `decode` | `decide`                                        | a `Sandwich.pure` phase; its refusal fails the cell              |
+| `decide` | `encode` (decoded chain) or `write` (raw chain) | a `Workflow.make` value; the outcome is a value, never a failure |
+| `encode` | `write`                                         | a `Sandwich.pure` phase shaping the outcome `Result`             |
+| `write`  | —                                               | `Out` plus `Raw` in; `Resp`/`E`/`R` out                          |
+
+A short chain skips the filling's middle steps — `read → decide → write` — and records exactly those three phases:
+
+```ts
+import { Sandwich, type Workflow } from '@systemfsoftware/effect-cell-types'
+import { Effect, Result } from 'effect'
+
+// The reader's own domain: a command, its raw reading, and a decide outcome.
+interface Command {
+  readonly id: string
+}
+interface Raw {
+  readonly bytes: string
+}
+
+// `admit` is a `Workflow.make` value over the decoded form, built as in
+// "The constructor" above; `render` turns its outcome into a string.
+declare const admit: Workflow<Decoded, Admitted, Malformed>
+declare const render: (outcome: Result.Result<Admitted, Malformed>) => string
+
+const cell = Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length }))).decide(
+  admit,
+).write(
+  (outcome: Result.Result<Admitted, Malformed>) => Effect.sync(() => render(outcome)),
+)
+
+cell.phases // ['read', 'decide', 'write']
+```
+
+A full chain fills `decode` and `encode` with `Sandwich.pure` phases — synchronous `Result`-returning thunks, the only values the slots accept, so no `Effect` can be evaluated inside them:
+
+```ts
+const full = Sandwich.read((command: Command) => Effect.succeed({ bytes: command.id })).decode(
+  Sandwich.pure((raw: Raw): Result.Result<Decoded, Malformed> =>
+    Result.succeed(new Decoded({ length: raw.bytes.length }))
+  ),
+).decide(admit).encode(
+  Sandwich.pure((outcome: Result.Result<Admitted, Malformed>): Result.Result<string, never> =>
+    Result.succeed(render(outcome))
+  ),
+).write((line: string, raw: Raw) => Effect.succeed(`${line}<-${raw.bytes}`))
+
+full.phases // ['read', 'decode', 'decide', 'encode', 'write']
+```
+
+The `decide` refusal is an outcome, not a failure: it travels to `encode` and `write` as a `Result` value. A `decode` refusal fails the cell and the run stops there.
+
 ## What it rejects at compile time
 
 All six violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
 
-| Violation                                 | `tsc` reports                                                                             | Why it is rejected                                                                                                               |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                                    |
-| An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input                   |
-| `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                                   |
-| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; fold the function into its owning module                                            |
-| An untagged error variant                 | `Type '...' is not assignable to type 'UntaggedError'`                                    | an error variant needs a `_tag` a consumer can dispatch on; declare the errors as `S.TaggedError` instances                      |
-| A single-variant decision channel         | `Type '...' is not assignable to type 'SingleVariantDecision'`                            | a decision chooses between at least two distinguishable outcomes; one variant is a calculation wearing a decision's shape        |
-| An untagged decision variant              | `Type '...' is not assignable to type 'UntaggedDecision'`                                 | a decision variant needs a `_tag` a consumer can dispatch on; declare the variants as `S.TaggedClass` instances                  |
-| Decision variants with no shared TypeId   | `Type '...' is not assignable to type 'UnsharedTypeId'`                                   | one decision family carries one TypeId — a `Symbol.for` brand on every variant class                                             |
-| A bare decider in a `Cell.layer` spec     | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies the `decide` member; a lambda that skipped `make` is not a decision a description may run |
-| A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle                    |
+| Violation                                 | `tsc` reports                                                                             | Why it is rejected                                                                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                             |
+| An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input            |
+| `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                            |
+| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; fold the function into its owning module                                     |
+| An untagged error variant                 | `Type '...' is not assignable to type 'UntaggedError'`                                    | an error variant needs a `_tag` a consumer can dispatch on; declare the errors as `S.TaggedError` instances               |
+| A single-variant decision channel         | `Type '...' is not assignable to type 'SingleVariantDecision'`                            | a decision chooses between at least two distinguishable outcomes; one variant is a calculation wearing a decision's shape |
+| An untagged decision variant              | `Type '...' is not assignable to type 'UntaggedDecision'`                                 | a decision variant needs a `_tag` a consumer can dispatch on; declare the variants as `S.TaggedClass` instances           |
+| Decision variants with no shared TypeId   | `Type '...' is not assignable to type 'UnsharedTypeId'`                                   | one decision family carries one TypeId — a `Symbol.for` brand on every variant class                                      |
+| A bare decider in a `decide` slot         | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies the `decide` slot; a lambda that skipped `make` is not a decision a chain may run  |
+| A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle             |
 
 The two `never` cases are where the content-vs-filename distinction pays off. `Workflow<C, never, E>` resolves to `UninhabitedDecision` and `Workflow<C, D, never>` to `UninhabitedError` — interfaces whose only property is required and whose _type_ is the remediation, so the compile error points at the fix:
 
