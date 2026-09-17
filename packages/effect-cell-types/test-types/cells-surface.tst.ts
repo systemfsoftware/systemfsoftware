@@ -1,4 +1,4 @@
-import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich, Workflow } from '@systemfsoftware/effect-cell-types'
 import { pipe } from 'effect'
 import type { Effect } from 'effect/Effect'
 import { map } from 'effect/Effect'
@@ -71,12 +71,15 @@ declare const decideOverDecoded: Workflow.Workflow<Decoded, Decision, Refusal>
 declare const decideUnbranded: (decoded: Raw) => Result<Decision, Refusal>
 declare const decideUnbrandedChain: (command: TaggedCmd) => Result<TotalDecision, CommandRefused | DecisionError>
 declare const encode: (outcome: Result<Decision, Refusal>) => Output
+declare const encodeResult: (outcome: Result<Decision, Refusal>) => Result<Output, never>
+declare const succeedDecoded: (raw: Raw) => Result<Decoded, DecodeErr>
 declare const writeOutcome: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, never, never>
 declare const writeOutcomeFailing: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, WriteErr, never>
 declare const writeOutcomeUnary: (outcome: Result<Decision, Refusal>) => Effect<void, never, never>
 declare const writeOutcomeWrongRaw: (outcome: Result<Decision, Refusal>, raw: Decoded) => Effect<void, never, never>
 declare const writeOutcomeNeedingBus: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, never, Bus>
 declare const writeOutput: (output: Output, raw: Raw) => Effect<void, never, never>
+declare const writeOutputNeedingBus: (output: Output, raw: Raw) => Effect<void, never, Bus>
 declare const command: Cmd
 
 declare const dbLayer: Layer<Db, never, never>
@@ -374,5 +377,69 @@ describe('T10 the constructors the decide slot accepts', () => {
       decide: decideUnbrandedChain,
       write: writeChainedOutcome,
     })
+  })
+})
+
+describe('T11 the sandwich chain the continuation surface builds', () => {
+  it('Should_RefuseTheWrite_When_ReadIsFollowedByWrite', () => {
+    const lawful = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    expect(lawful).type.toBe<
+      Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
+    >()
+    expect(Sandwich.read(read)).type.not.toBeAssignableTo<{ readonly write: unknown }>()
+  })
+
+  it('Should_RefuseTheWrite_When_DecideOnADecodedChainSkipsEncode', () => {
+    const lawful = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+      Sandwich.pure(encodeResult),
+    ).write(writeOutput)
+    expect(lawful).type.toBe<
+      Cell.Cell<Cmd, void, DecodeErr, never> & {
+        readonly phases: readonly ['read', 'decode', 'decide', 'encode', 'write']
+      }
+    >()
+    Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(Sandwich.pure(encodeResult))
+    // write is not lawful before encode on a decoded chain
+    expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
+      readonly write: unknown
+    }>()
+  })
+
+  it('Should_PinTheRawGrainPhases_When_WritingAfterDecide', () => {
+    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    expect(cell).type.toBe<
+      Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
+    >()
+    expect(cell.phases).type.toBe<readonly ['read', 'decide', 'write']>()
+  })
+
+  it('Should_PinTheDecodedGrainPhases_When_WritingAfterEncode', () => {
+    const cell = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+      Sandwich.pure(encodeResult),
+    ).write(writeOutput)
+    expect(cell).type.toBe<
+      Cell.Cell<Cmd, void, DecodeErr, never> & {
+        readonly phases: readonly ['read', 'decode', 'decide', 'encode', 'write']
+      }
+    >()
+    expect(cell.phases).type.toBe<readonly ['read', 'decode', 'decide', 'encode', 'write']>()
+  })
+
+  it('Should_UnionTheChannels_When_FivePhasesEachContribute', () => {
+    const cell = Sandwich.read(readNeedingDbAndClock).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+      Sandwich.pure(encodeResult),
+    ).write(writeOutputNeedingBus)
+    expect(cell).type.toBe<
+      Cell.Cell<Cmd, void, DecodeErr, Db | Clock | Bus> & {
+        readonly phases: readonly ['read', 'decode', 'decide', 'encode', 'write']
+      }
+    >()
+  })
+
+  it('Should_RefuseABareClosure_When_DecodeDemandsAPurePhase', () => {
+    const lawful = Sandwich.read(read).decode(Sandwich.pure(decode))
+    expect(lawful).type.toBe<Sandwich.DecodedChain<Cmd, Raw, Decoded, never, DecodeErr, never>>()
+    // @ts-expect-error Argument of type '(raw: Raw) => Result<Decoded, DecodeErr>' is not assignable to parameter of type 'PurePhase<Raw, Decoded, DecodeErr>'.
+    Sandwich.read(read).decode((raw: Raw) => succeedDecoded(raw))
   })
 })
