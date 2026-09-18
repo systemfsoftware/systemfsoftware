@@ -323,6 +323,10 @@
   dir: packages/effect-cell-types
   intents:
     - cell-sandwich-chain
+"@systemfsoftware/effect-cell-types@8.3.0":
+  dir: packages/effect-cell-types
+  intents:
+    - cell-adt-parity
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -937,6 +941,10 @@
   intents:
     - fanout-rule-retired
     - recommended-set-gains-new-rules
+"@systemfsoftware/oxlint-plugin-effect-dmmf@6.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - oxlint-no-pseudo-gherkin
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -1247,6 +1255,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-placement
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-test-placement@3.5.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-placement
+  intents:
+    - oxlint-no-pseudo-gherkin
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
