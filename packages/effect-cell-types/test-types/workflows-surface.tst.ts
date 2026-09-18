@@ -161,7 +161,7 @@ declare const writeTotalSettleOutcome: (
   raw: SettleCommand,
 ) => Effect<void, never, never>
 
-describe('T11 the commands and deciders make refuses', () => {
+describe('the commands and deciders make refuses', () => {
   it('Should_BrandTheWorkflow_When_TheDeciderCarriesTwoTaggedVariants', () => {
     expect(acceptTaggedCommand).type.toBe<Workflow.Workflow<TaggedCmd, FixtureDecision, CommandRefused>>()
   })
@@ -199,7 +199,7 @@ describe('T11 the commands and deciders make refuses', () => {
   })
 })
 
-describe('T12 the total constructor', () => {
+describe('the total constructor', () => {
   it('Should_BrandTheTotalDecision_When_ItsErrorChannelIsNever', () => {
     expect(totalAdmitTaggedCommand).type.toBe<
       ((command: TaggedCmd) => Result<Decision, never>) & Workflow.WorkflowBrand
@@ -219,7 +219,7 @@ describe('T12 the total constructor', () => {
   })
 })
 
-describe('T13 the composite constructor', () => {
+describe('the composite constructor', () => {
   it('Should_UnionTheComponentErrors_When_TwoWorkflowsChain', () => {
     expect(chainAdmitTaggedCommands).type.toBe<Workflow.Workflow<TaggedCmd, Decision, CommandRefused | DecisionError>>()
   })
@@ -269,7 +269,7 @@ describe('T13 the composite constructor', () => {
   })
 })
 
-describe('T14 the shared-type-id predicate as measured', () => {
+describe('the shared-type-id predicate as measured', () => {
   it('Should_RefuseTheMarker_When_TheUnionSharesNoProperty', () => {
     expect<Workflow.Inhabited<UnbrandedOne | UnbrandedTwo, CommandRefused>>().type.toBe<Workflow.UnsharedTypeId>()
   })
@@ -339,7 +339,7 @@ describe('T14 the shared-type-id predicate as measured', () => {
   })
 })
 
-describe('T15 the composite the decide slot accepts', () => {
+describe('the composite the decide slot accepts', () => {
   it('Should_AcceptTheTotalComposite_When_TheDecideSlotTakesAWorkflow', () => {
     const cell = Sandwich.read(readSettleCommand).decide(totalPairAdmitTaggedCommands).write(
       writeTotalSettleOutcome,

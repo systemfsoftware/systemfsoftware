@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-cell-types
 
-The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, a `Result` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. Beside the types the package ships exactly one runtime value — the identity constructor `make` — and the type tests (`test-types/Workflow.tst.ts`, run by tstyche) prove the channel guards still bind.
+The type-level contract for a `*.workflow.ts` cell. A workflow is a pure decision — a command in, a `Result` out — and `Workflow<Command, Decision, Error>` pins that shape in the type system. The contract is checked by `tsc` from the file's **content** (an exported value that violates the shape stops the build), not by a lint rule keyed on the file's **name**. Beside the types the package ships the Cell runtime — the `Sandwich` chain constructors, the arrow combinators, the constructors, and the Do chain — and the type tests (`test-types/Workflow.tst.ts`, run by tstyche) prove the channel guards still bind.
 
 ## The contract
 
@@ -191,6 +191,37 @@ full.phases // ['read', 'decode', 'decide', 'encode', 'write']
 
 The `decide` refusal is an outcome, not a failure: it travels to `encode` and `write` as a `Result` value. A `decode` refusal fails the cell and the run stops there.
 
+## Composing cells: arrows, constructors, and the Do chain
+
+Every cell value is pipeable, so the module duals compose through the instance method as well as directly:
+
+```ts
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
+import { Effect, pipe } from 'effect'
+
+declare const base: Cell.Cell<Command, string, Malformed>
+
+const loud = pipe(base, Cell.map((line) => line.length), Cell.tap((n) => Effect.log(`length ${n}`)))
+const same = base.pipe(Cell.map((line) => line.length), Cell.tap((n) => Effect.log(`length ${n}`)))
+```
+
+The vocabulary falls into four groups. The eight sandwich arrows (`map`, `mapInput`, `andThen`, `zip`, `gate`, `collect`, `collectAll`, `provide`) thread cells built by the chain. The error-channel arrows (`mapError`, `orElse`, `tap`) and the sequencing arrows (`flatMap`, `zipWith`, the `andThen` function overload, `match`) extend the same algebra over the run outcome. The constructors (`succeed`, `fail`, `fromEffect`, `suspend`, `id`) are category units: they carry a constant, a constant failure, a lifted effect, a deferred thunk, or the identity — input-agnostic values with no phases to sequence, so they never bypass the sandwich requirement for pipelines. The Do chain (`Do`, `bind`, `bindTo`, `let`) composes cells as do-notation over the accumulated record.
+
+The register split: the shell writes imperative `Effect.gen`, the pure decide core stays pipeable, and the Cell composes as a Do chain:
+
+```ts
+const program = pipe(
+  Cell.Do,
+  Cell.bind('admitted', () => admitCell),
+  Cell.bind('line', ({ admitted }) => renderCell(admitted)),
+  Cell.let('shouted', ({ line }) => line.toUpperCase()),
+)
+```
+
+Two composition laws share the module, and the export doc comments state which is which. `flatMap` threads the response value with the input channel fixed: the function returns a cell over the same input, run on the original one. `andThen` is arrow composition: the response becomes the next cell's input, and the function overload selects that next cell from the response value. `id` is the both-sided identity for `andThen`.
+
+Recovery sees only the infrastructure `E` channel. `orElse`'s fallback runs on an `Effect` failure over the same input; a decide refusal is an outcome inside the sandwich — a success-channel value by the time `run` answers — so it passes through `mapError`, `orElse`, and `tap` untouched and the fallback never runs. `match` folds the same outcome: the success arm over `A`, the failure arm over `E`, yielding a cell whose error channel is `never`. Refusals therefore always reach `match`'s success arm, never its failure arm.
+
 ## What it rejects at compile time
 
 All six violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
@@ -308,4 +339,4 @@ Measured on the real consumer: when `decideRestart`'s error channel was set to `
 pnpm add -D @systemfsoftware/effect-cell-types
 ```
 
-A devDependency — consumers mostly use the types (`import type`), and the one runtime export, `make`, is an identity function. `effect` is a peer dependency: bring your own (you already have it).
+A devDependency — consumers mostly use the types (`import type`); the runtime surface is the Cell module (`Sandwich` chain, arrows, constructors, Do chain) plus the identity constructor `make`. `effect` is a peer dependency: bring your own (you already have it).

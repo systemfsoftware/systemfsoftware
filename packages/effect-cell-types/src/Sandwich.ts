@@ -1,4 +1,5 @@
 import * as Effect from 'effect/Effect'
+import { Prototype } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 import { type Cell, CellTypeId } from './Cell.js'
 import { type WorkflowBrand } from './Workflow.js'
@@ -73,7 +74,12 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
               const encoded = Result.getOrThrow(encodePhase(outcome))
               return yield* writeRun(encoded, raw)
             })
-          return { [CellTypeId]: CellTypeId, run: composed, phases: ['read', 'decode', 'decide', 'encode', 'write'] }
+          return {
+            [CellTypeId]: CellTypeId,
+            run: composed,
+            phases: Object.freeze(['read', 'decode', 'decide', 'encode', 'write'] as const),
+            ...Prototype,
+          }
         }
         return { 'sentence: must write after encode': true, write }
       }
@@ -93,7 +99,12 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
           const outcome = workflow(raw)
           return yield* writeRun(outcome, raw)
         })
-      return { [CellTypeId]: CellTypeId, run: composed, phases: ['read', 'decide', 'write'] }
+      return {
+        [CellTypeId]: CellTypeId,
+        run: composed,
+        phases: Object.freeze(['read', 'decide', 'write'] as const),
+        ...Prototype,
+      }
     }
     return { 'sentence: must write after decide on raw chain': true, write }
   }

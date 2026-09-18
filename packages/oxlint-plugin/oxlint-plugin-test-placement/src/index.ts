@@ -4,6 +4,7 @@ import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gh
 import { inSourceTestPropOnly } from './rules/in-source-test-prop-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
+import { noPseudoGherkinUnitTests } from './rules/no-pseudo-gherkin-unit-tests.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
 import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
 import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
@@ -44,6 +45,7 @@ export default {
     'behaviour-test-requires-gherkin': behaviourTestRequiresGherkin,
     'behaviour-exercises-use-case': behaviourExercisesUseCase,
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
+    'no-pseudo-gherkin-unit-tests': noPseudoGherkinUnitTests,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,

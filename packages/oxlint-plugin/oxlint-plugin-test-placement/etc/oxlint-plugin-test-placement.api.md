@@ -21,6 +21,7 @@ const _default: {
         'behaviour-test-requires-gherkin': Rule;
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
+        'no-pseudo-gherkin-unit-tests': Rule;
         'tests-dir-helpers-in-fixtures': Rule;
         'no-io-module-in-source-test': Rule;
         'tests-import-public-api': Rule;

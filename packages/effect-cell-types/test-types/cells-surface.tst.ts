@@ -4,6 +4,7 @@ import type { Effect } from 'effect/Effect'
 import { map } from 'effect/Effect'
 import type { Layer } from 'effect/Layer'
 import type { Option } from 'effect/Option'
+import type { Pipeable } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
@@ -87,8 +88,11 @@ declare const writeOutcomeNeedingBus: (outcome: Result.Result<Decision, Refusal>
 declare const writeOutput: (output: Output, raw: Raw) => Effect<void, never, never>
 declare const writeOutputNeedingBus: (output: Output, raw: Raw) => Effect<void, never, Bus>
 declare const command: Cmd
-
+declare const observeOnBus: (decision: Decision) => Effect<void, never, Bus>
 declare const dbLayer: Layer<Db, never, never>
+declare const readErr: ReadErr
+declare const lifted: Effect<string, ReadErr, Db>
+declare const succeedSeven: Effect<number, never, never>
 declare const failingDbLayer: Layer<Db, ReadErr, never>
 declare const clockLayer: Layer<Clock, never, never>
 declare const dbFromClock: Layer<Db, never, Clock>
@@ -101,7 +105,9 @@ declare const optionReaderOverLengths: Cell.Cell<Cmd, Option<Decoded>, ReadErr, 
 declare const bareReader: Cell.Cell<Cmd, Raw, ReadErr, Db>
 declare const innerOverRaw: Cell.Cell<Raw, Decision, WriteErr, Bus>
 declare const itemCell: Cell.Cell<Cmd, Decision, ReadErr, Db>
-
+declare const itemFallback: Cell.Cell<Cmd, Decision, WriteErr, Bus>
+declare const decisionCell: Cell.Cell<Decision, number, WriteErr, Bus>
+declare const numberCell: Cell.Cell<Cmd, number, WriteErr, Bus>
 declare const readTagged: (command: Cmd) => Effect<TaggedCmd, never, never>
 declare const writeTotalOutcome: (
   outcome: Result.Result<TotalDecision, never>,
@@ -112,7 +118,7 @@ declare const writeChainedOutcome: (
   raw: TaggedCmd,
 ) => Effect<void, never, never>
 
-describe('T1 the sandwich the chain builds', () => {
+describe('the sandwich the chain builds', () => {
   it('Should_InferTheCell_When_ReadDecideWriteChain', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell).type.toBe<
@@ -146,14 +152,14 @@ describe('T1 the sandwich the chain builds', () => {
   })
 })
 
-describe('T2 the refusal the error channel excludes', () => {
+describe('the refusal the error channel excludes', () => {
   it('Should_KeepTheDecideRefusalAnOutcome_When_NamingTheErrorChannel', () => {
     const cell = Sandwich.read(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
     expect(cell).type.not.toBeAssignableTo<Cell.Cell<Cmd, void, Refusal, never>>()
   })
 })
 
-describe('T3 the chains the surface refuses', () => {
+describe('the chains the surface refuses', () => {
   it('Should_RefuseTheWrite_When_DecodeArrivesWithoutEncode', () => {
     expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
       readonly write: unknown
@@ -180,7 +186,7 @@ describe('T3 the chains the surface refuses', () => {
   })
 })
 
-describe('T4 the unary write the chain admits', () => {
+describe('the unary write the chain admits', () => {
   it('Should_AdmitAUnaryWrite_When_TheWriteIgnoresTheOutcome', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcomeUnary)
     expect(cell).type.toBe<
@@ -189,14 +195,14 @@ describe('T4 the unary write the chain admits', () => {
   })
 })
 
-describe('T5 the run the Cell publishes', () => {
+describe('the run the Cell publishes', () => {
   it('Should_YieldTheChannels_When_TheArrowIsApplied', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell.run(command)).type.toBe<Effect<void, never, never>>()
   })
 })
 
-describe('T6 the provide that clears the services', () => {
+describe('the provide that clears the services', () => {
   it('Should_NarrowRToNever_When_TheOneServiceIsProvided', () => {
     const cell = Sandwich.read(readNeedingDb).decide(decideOverRaw).write(writeOutcome)
     const provided = pipe(cell, Cell.provide(dbLayer))
@@ -224,7 +230,7 @@ describe('T6 the provide that clears the services', () => {
   })
 })
 
-describe('T7 the combinator algebra', () => {
+describe('the combinator algebra', () => {
   it('Should_PreserveEveryChannel_When_MappingTheResponse', () => {
     const mapped = pipe(outputCell, Cell.map((verdict: boolean): number => (verdict ? 1 : 0)))
     expect(mapped).type.toBe<Cell.Cell<Output, number, WriteErr, Bus>>()
@@ -314,7 +320,7 @@ describe('T7 the combinator algebra', () => {
   })
 })
 
-describe('T8 the variance the Cell carries', () => {
+describe('the variance the Cell carries', () => {
   it('Should_AcceptTheWiderCommand_When_TheNarrowerIsExpected', () => {
     expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Cell.Cell<{ id: string }, void, never, never>>()
   })
@@ -334,9 +340,38 @@ describe('T8 the variance the Cell carries', () => {
   it('Should_AcceptTheWiderServices_When_TheNarrowerIsExpected', () => {
     expect<Cell.Cell<Cmd, void, never, Bus>>().type.toBeAssignableTo<Cell.Cell<Cmd, void, never, Bus | Clock>>()
   })
+
+  it('Should_PipeValues_When_TheCellCarriesPipeable', () => {
+    expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Pipeable>()
+    expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Cell.Cell<Cmd, void, never, never> & Pipeable>()
+  })
+
+  it('Should_KeepTheVariance_When_PipeableIsPresent', () => {
+    expect<Cell.Cell<Cmd, boolean, never, never>>().type.toBeAssignableTo<
+      Cell.Cell<{ id: string }, boolean | void, never, never> & Pipeable
+    >()
+    expect<Cell.Cell<Cmd, void, WriteErr, never>>().type.toBeAssignableTo<
+      Cell.Cell<{ id: string }, void, WriteErr | ReadErr, never> & Pipeable
+    >()
+  })
+
+  it('Should_PipeThePipedResult_When_NestingInstancePipes', () => {
+    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const piped = cell.pipe(Cell.map((response: void): number => (response === undefined ? 1 : 1)))
+    expect(piped).type.toBe<Cell.Cell<Cmd, number, never, never>>()
+    expect(piped.pipe(Cell.map((count: number): string => `${count}`))).type.toBe<
+      Cell.Cell<Cmd, string, never, never>
+    >()
+  })
+
+  it('Should_GateTheBrand_When_UnbrandedValueIsExpected', () => {
+    expect<{ readonly run: (input: Cmd) => Effect<void, never, never> }>().type.not.toBeAssignableTo<
+      Cell.Cell<Cmd, void, never, never>
+    >()
+  })
 })
 
-describe('T9 the record API the surface retired', () => {
+describe('the record API the surface retired', () => {
   it('Should_ExposeNoLayer_When_TheChainIsTheOnlyConstructor', () => {
     expect<typeof Cell>().type.not.toBeAssignableTo<{ readonly layer: unknown }>()
   })
@@ -361,7 +396,7 @@ describe('T9 the record API the surface retired', () => {
   })
 })
 
-describe('T10 the constructors the decide slot accepts', () => {
+describe('the constructors the decide slot accepts', () => {
   it('Should_AcceptTheTotalDecider_When_ItsErrorChannelIsNever', () => {
     const cell = Sandwich.read(readTagged).decide(totalAdmitTaggedCommand).write(writeTotalOutcome)
     expect(cell).type.toBe<
@@ -382,7 +417,7 @@ describe('T10 the constructors the decide slot accepts', () => {
   })
 })
 
-describe('T11 the sandwich chain the continuation surface builds', () => {
+describe('the sandwich chain the continuation surface builds', () => {
   it('Should_RefuseTheWrite_When_ReadIsFollowedByWrite', () => {
     const lawful = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
     expect(lawful).type.toBe<
@@ -459,5 +494,242 @@ describe('T11 the sandwich chain the continuation surface builds', () => {
         Result.succeed(encode(outcome))
       ),
     )
+  })
+})
+
+describe('the constructor arrows', () => {
+  it('Should_LiftTheConstant_When_Succeeding', () => {
+    expect(Cell.succeed(7)).type.toBe<Cell.Cell<unknown, number, never, never>>()
+    expect(Cell.succeed(7).run(command)).type.toBe<Effect<number, never, never>>()
+  })
+
+  it('Should_LiftTheFailure_When_Failing', () => {
+    expect(Cell.fail(readErr)).type.toBe<Cell.Cell<unknown, never, ReadErr, never>>()
+  })
+
+  it('Should_CarryTheChannels_When_LiftingAnEffect', () => {
+    expect(Cell.fromEffect(lifted)).type.toBe<Cell.Cell<unknown, string, ReadErr, Db>>()
+  })
+
+  it('Should_DeferConstruction_When_Suspending', () => {
+    expect(Cell.suspend(() => itemCell)).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db>>()
+  })
+
+  it('Should_EchoTheInput_When_Id', () => {
+    expect(Cell.id<Cmd>()).type.toBe<Cell.Cell<Cmd, Cmd, never, never>>()
+    expect(Cell.id<Cmd>().run(command)).type.toBe<Effect<Cmd, never, never>>()
+  })
+
+  it('Should_AcceptAnyInput_When_SupplyingAConstant', () => {
+    expect(Cell.succeed(7)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+  })
+
+  it('Should_AcceptAnyInput_When_LiftingAnEffect', () => {
+    expect(Cell.fromEffect(succeedSeven)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+  })
+})
+
+describe('the error-channel arrows', () => {
+  it('Should_RemapTheFailure_When_MappingTheError', () => {
+    const remapped = pipe(itemCell, Cell.mapError((_error: ReadErr): string => 'offline'))
+    expect(remapped).type.toBe<Cell.Cell<Cmd, Decision, string, Db>>()
+    expect(remapped.run(command)).type.toBe<Effect<Decision, string, Db>>()
+  })
+
+  it('Should_ReadTheSameCell_When_MappingTheErrorDataFirst', () => {
+    expect(Cell.mapError(itemCell, (_error: ReadErr): string => 'offline')).type.toBe<
+      Cell.Cell<Cmd, Decision, string, Db>
+    >()
+  })
+
+  it('Should_NarrowToTheFallbackError_When_Recovering', () => {
+    const recovered = pipe(itemCell, Cell.orElse(itemFallback))
+    expect(recovered).type.toBe<Cell.Cell<Cmd, Decision, WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCell_When_RecoveringDataFirst', () => {
+    expect(Cell.orElse(itemCell, itemFallback)).type.toBe<Cell.Cell<Cmd, Decision, WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseAFallback_When_ItsInputIsNotTheCommand', () => {
+    expect<typeof Cell.orElse>().type.not.toBeCallableWith(itemCell, innerOverRaw)
+  })
+
+  it('Should_UnionTheChannels_When_Observing', () => {
+    const observed = pipe(
+      itemCell,
+      Cell.tap(() => lifted),
+    )
+    expect(observed).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db>>()
+  })
+
+  it('Should_ReadTheSameCell_When_ObservingDataFirst', () => {
+    expect(Cell.tap(itemCell, () => lifted)).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db>>()
+  })
+
+  it('Should_UnionTheObserverServices_When_TheObserverNeedsMore', () => {
+    const observed = pipe(itemCell, Cell.tap(observeOnBus))
+    expect(observed).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db | Bus>>()
+  })
+})
+
+describe('the sequencing arrows and the match destructor', () => {
+  it('Should_ThreadTheSameInput_When_FlatMapping', () => {
+    const flatMapped = pipe(
+      itemCell,
+      Cell.flatMap((_decision: Decision): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell),
+    )
+    expect(flatMapped).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCell_When_FlatMappingDataFirst', () => {
+    expect(
+      Cell.flatMap(itemCell, (_decision: Decision): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell),
+    ).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheInner_When_FlatMapDemandsADifferentInput', () => {
+    expect<typeof Cell.flatMap>().type.not.toBeCallableWith(itemCell, (_decision: Decision) => innerOverRaw)
+  })
+
+  it('Should_CombineOverOneInput_When_ZippingWith', () => {
+    const combined = pipe(
+      itemCell,
+      Cell.zipWith(itemFallback, (_first: Decision, _second: Decision): string => 'paired'),
+    )
+    expect(combined).type.toBe<Cell.Cell<Cmd, string, ReadErr | WriteErr, Db | Bus>>()
+    expect(combined.run(command)).type.toBe<Effect<string, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCells_When_ZippingWithDataFirst', () => {
+    expect(
+      Cell.zipWith(itemCell, itemFallback, (_first: Decision, _second: Decision): string => 'paired'),
+    ).type.toBe<Cell.Cell<Cmd, string, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheOther_When_ZipWithDemandsADifferentInput', () => {
+    expect<typeof Cell.zipWith>().type.not.toBeCallableWith(
+      itemCell,
+      innerOverRaw,
+      (_first: Decision, _second: Decision): string => 'paired',
+    )
+  })
+
+  it('Should_FeedTheResponse_When_AndThenTakesAFunction', () => {
+    const dynamic = pipe(
+      itemCell,
+      Cell.andThen((_decision: Decision): Cell.Cell<Decision, number, WriteErr, Bus> => decisionCell),
+    )
+    expect(dynamic).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCell_When_AndThenTakesAFunctionDataFirst', () => {
+    expect(
+      Cell.andThen(itemCell, (_decision: Decision): Cell.Cell<Decision, number, WriteErr, Bus> => decisionCell),
+    ).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheBuiltCell_When_ItsInputIsNotTheResponse', () => {
+    expect<typeof Cell.andThen>().type.not.toBeCallableWith(itemCell, (_decision: Decision) => innerOverRaw)
+  })
+
+  it('Should_FoldTheOutcome_When_Matching', () => {
+    const folded = pipe(
+      itemCell,
+      Cell.match({
+        onFailure: (_error: ReadErr): string => 'down',
+        onSuccess: (_decision: Decision): number => 1,
+      }),
+    )
+    expect(folded).type.toBe<Cell.Cell<Cmd, string | number, never, Db>>()
+    expect(folded.run(command)).type.toBe<Effect<string | number, never, Db>>()
+  })
+
+  it('Should_ReadTheSameCell_When_MatchingDataFirst', () => {
+    expect(
+      Cell.match(itemCell, {
+        onFailure: (_error: ReadErr): string => 'down',
+        onSuccess: (_decision: Decision): number => 1,
+      }),
+    ).type.toBe<Cell.Cell<Cmd, string | number, never, Db>>()
+  })
+
+  it('Should_ComposeFurther_When_MatchedCellZips', () => {
+    const folded = pipe(
+      itemCell,
+      Cell.match({
+        onFailure: (_error: ReadErr): string => 'down',
+        onSuccess: (_decision: Decision): number => 1,
+      }),
+    )
+    const paired = pipe(folded, Cell.zip(itemFallback))
+    expect(paired).type.toBe<Cell.Cell<Cmd, readonly [string | number, Decision], WriteErr, Db | Bus>>()
+  })
+})
+
+describe('the Do chain over the TypeLambda', () => {
+  it('Should_TypeDoAsContravariantInputUnknown_When_Initialized', () => {
+    expect(Cell.Do).type.toBe<Cell.Cell<unknown, {}, never, never>>()
+  })
+
+  it('Should_AccumulateTheRecord_When_BindingOntoDo', () => {
+    const chained = pipe(
+      Cell.Do,
+      Cell.bind('decision', (): Cell.Cell<Cmd, Decision, ReadErr, Db> => itemCell),
+      Cell.bind('count', (): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell),
+      Cell.let('line', ({ count }: { readonly count: number }): string => `seen:${count}`),
+    )
+    expect(chained).type.toBe<
+      Cell.Cell<
+        Cmd,
+        Record<'decision', Decision> & Record<'count', number> & Record<'line', string>,
+        ReadErr | WriteErr,
+        Db | Bus
+      >
+    >()
+  })
+
+  it('Should_NarrowTheInput_When_BindingDirectlyOntoDo', () => {
+    const narrowed = pipe(
+      Cell.Do,
+      Cell.bind('decision', (): Cell.Cell<Cmd, Decision, ReadErr, Db> => itemCell),
+    )
+    expect(narrowed).type.toBe<Cell.Cell<Cmd, Record<'decision', Decision>, ReadErr, Db>>()
+  })
+
+  it('Should_RefuseTheInner_When_BindDemandsADifferentInput', () => {
+    expect<typeof Cell.bind>().type.not.toBeCallableWith(
+      itemCell,
+      'raw',
+      (_scope: { readonly decision: Decision }) => innerOverRaw,
+    )
+  })
+
+  it('Should_WrapTheValue_When_BindingToAName', () => {
+    expect(Cell.bindTo(itemCell, 'v')).type.toBe<
+      Cell.Cell<Cmd, Record<'v', Decision>, ReadErr, Db>
+    >()
+  })
+
+  it('Should_AccumulateTheRecord_When_BindingOntoABindTo', () => {
+    const chained = Cell.bind(
+      Cell.bindTo(itemCell, 'v'),
+      'w',
+      (): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell,
+    )
+    expect(chained).type.toBe<
+      Cell.Cell<Cmd, Record<'v', Decision> & Record<'w', number>, ReadErr | WriteErr, Db | Bus>
+    >()
+  })
+
+  it('Should_ThreadTheScope_When_LettingAPureField', () => {
+    const chained = pipe(
+      Cell.Do,
+      Cell.bind('decision', (): Cell.Cell<Cmd, Decision, ReadErr, Db> => itemCell),
+      Cell.let('admitted', ({ decision }: { readonly decision: Decision }): boolean => decision.admitted),
+    )
+    expect(chained).type.toBe<
+      Cell.Cell<Cmd, Record<'decision', Decision> & Record<'admitted', boolean>, ReadErr, Db>
+    >()
   })
 })
