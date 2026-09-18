@@ -1,0 +1,4 @@
+export default {
+  extends: '@systemfsoftware/stryker-config/base',
+  mutate: ['src/rules/*.ts', '!src/rules/**/*.test.ts', '!src/rules/*.config.ts'],
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@systemfsoftware/stryker-config",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./base": {
+      "import": {
+        "types": "./lib/base.d.ts",
+        "default": "./lib/base.js"
+      }
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit --incremental"
+  },
+  "devDependencies": {
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/toolchain/stryker-config"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain/stryker-config#readme"
+}

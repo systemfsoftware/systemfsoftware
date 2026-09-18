@@ -125,12 +125,11 @@
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
-        "stryker.config.json",
-        "$TURBO_ROOT$/stryker.config.base.json",
+        "stryker.config.ts",
+        "$TURBO_ROOT$/packages/toolchain/stryker-config/lib/**",
         "vitest.config.ts",
         "vitest.setup.ts",
         "reports/stryker-incremental.json",
-        "$TURBO_ROOT$/packages/stryker-js/**",
         "!**/*.md"
       ],
       "outputs": [

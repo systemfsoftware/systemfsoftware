@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-daemon-spec": minor
-"@systemfsoftware/stryker-js-cli": patch
 ---
 
 Produce every workflow through `Workflow.make`.
@@ -15,7 +14,6 @@ compiling as a workflow that cannot fail.
 `@systemfsoftware/effect-cell-types` moves from `devDependencies` to `dependencies`, so installing this
 package now installs it. That reclassification is required, not incidental — `make` is a runtime call,
 and `scripts/guards/check-runtime-deps.mjs` fails a runtime import declared only as a dev dependency.
-`stryker-js-cli` already declared it.
 
 `RestartDecisionWorkflow` survives as a type-only export: one in-repo consumer, its own property test,
 references it through `ReturnType<…>`.
