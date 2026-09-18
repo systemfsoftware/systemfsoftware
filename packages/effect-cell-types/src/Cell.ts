@@ -119,12 +119,25 @@ export const andThen: {
     self: Cell<I, A, E, R>,
     that: Cell<A, B, E2, R2>,
   ): Cell<I, B, E | E2, R | R2>
+  <A, B, E2, R2>(
+    f: (response: A) => Cell<A, B, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Cell<A, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2>
 } = dual(
   2,
   <I, A, E, R, B, E2, R2>(
     self: Cell<I, A, E, R>,
-    that: Cell<A, B, E2, R2>,
-  ): Cell<I, B, E | E2, R | R2> => make((input) => Effect.flatMap(self.run(input), (response) => that.run(response))),
+    that: Cell<A, B, E2, R2> | ((response: A) => Cell<A, B, E2, R2>),
+  ): Cell<I, B, E | E2, R | R2> =>
+    make((input) =>
+      Effect.flatMap(
+        self.run(input),
+        (response) => typeof that === 'function' ? that(response).run(response) : that.run(response),
+      )
+    ),
 )
 
 /**
@@ -296,4 +309,78 @@ export const tap: {
     self: Cell<I, A, E, R>,
     f: (response: A) => Effect.Effect<unknown, E2, R2>,
   ): Cell<I, A, E | E2, R | R2> => make((input) => Effect.tap(self.run(input), f)),
+)
+
+/**
+ * Threads the response through the function's cell on the original input. Both cells
+ * observe the identical input; the error and service channels union.
+ */
+export const flatMap: {
+  <I, A, B, E2, R2>(
+    f: (response: A) => Cell<I, B, E2, R2>,
+  ): <E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Cell<I, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Cell<I, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2> =>
+    make((input) => Effect.flatMap(self.run(input), (response) => f(response).run(input))),
+)
+
+/**
+ * Combines two cells over one input with the given function. Fail-fast: when one side
+ * refuses, the run fails and the error and service channels union.
+ */
+export const zipWith: {
+  <I, B, E2, R2, A, C>(
+    that: Cell<I, B, E2, R2>,
+    f: (a: A, b: B) => C,
+  ): <E, R>(self: Cell<I, A, E, R>) => Cell<I, C, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2, C>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+    f: (a: A, b: B) => C,
+  ): Cell<I, C, E | E2, R | R2>
+} = dual(
+  3,
+  <I, A, E, R, B, E2, R2, C>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+    f: (a: A, b: B) => C,
+  ): Cell<I, C, E | E2, R | R2> => make((input) => Effect.zipWith(self.run(input), that.run(input), f)),
+)
+
+/**
+ * Folds the run outcome with pure handlers. A decide refusal is success-channel data by
+ * the time run answers, so it reaches the success arm; the resulting error channel is
+ * never.
+ */
+export const match: {
+  <E, B, A, C>(
+    options: {
+      readonly onFailure: (error: E) => B
+      readonly onSuccess: (value: A) => C
+    },
+  ): <I, R>(self: Cell<I, A, E, R>) => Cell<I, B | C, never, R>
+  <I, A, E, R, B, C>(
+    self: Cell<I, A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => B
+      readonly onSuccess: (value: A) => C
+    },
+  ): Cell<I, B | C, never, R>
+} = dual(
+  2,
+  <I, A, E, R, B, C>(
+    self: Cell<I, A, E, R>,
+    options: {
+      readonly onFailure: (error: E) => B
+      readonly onSuccess: (value: A) => C
+    },
+  ): Cell<I, B | C, never, R> => make((input) => Effect.match(self.run(input), options)),
 )

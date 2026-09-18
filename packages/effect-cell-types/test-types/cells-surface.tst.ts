@@ -106,7 +106,8 @@ declare const bareReader: Cell.Cell<Cmd, Raw, ReadErr, Db>
 declare const innerOverRaw: Cell.Cell<Raw, Decision, WriteErr, Bus>
 declare const itemCell: Cell.Cell<Cmd, Decision, ReadErr, Db>
 declare const itemFallback: Cell.Cell<Cmd, Decision, WriteErr, Bus>
-
+declare const decisionCell: Cell.Cell<Decision, number, WriteErr, Bus>
+declare const numberCell: Cell.Cell<Cmd, number, WriteErr, Bus>
 declare const readTagged: (command: Cmd) => Effect<TaggedCmd, never, never>
 declare const writeTotalOutcome: (
   outcome: Result.Result<TotalDecision, never>,
@@ -569,5 +570,99 @@ describe('T13 the error-channel arrows', () => {
   it('Should_UnionTheObserverServices_When_TheObserverNeedsMore', () => {
     const observed = pipe(itemCell, Cell.tap(observeOnBus))
     expect(observed).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db | Bus>>()
+  })
+})
+
+describe('T14 the sequencing arrows and the match destructor', () => {
+  it('Should_ThreadTheSameInput_When_FlatMapping', () => {
+    const flatMapped = pipe(
+      itemCell,
+      Cell.flatMap((_decision: Decision): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell),
+    )
+    expect(flatMapped).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCell_When_FlatMappingDataFirst', () => {
+    expect(
+      Cell.flatMap(itemCell, (_decision: Decision): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell),
+    ).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheInner_When_FlatMapDemandsADifferentInput', () => {
+    expect<typeof Cell.flatMap>().type.not.toBeCallableWith(itemCell, (_decision: Decision) => innerOverRaw)
+  })
+
+  it('Should_CombineOverOneInput_When_ZippingWith', () => {
+    const combined = pipe(
+      itemCell,
+      Cell.zipWith(itemFallback, (_first: Decision, _second: Decision): string => 'paired'),
+    )
+    expect(combined).type.toBe<Cell.Cell<Cmd, string, ReadErr | WriteErr, Db | Bus>>()
+    expect(combined.run(command)).type.toBe<Effect<string, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCells_When_ZippingWithDataFirst', () => {
+    expect(
+      Cell.zipWith(itemCell, itemFallback, (_first: Decision, _second: Decision): string => 'paired'),
+    ).type.toBe<Cell.Cell<Cmd, string, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheOther_When_ZipWithDemandsADifferentInput', () => {
+    expect<typeof Cell.zipWith>().type.not.toBeCallableWith(
+      itemCell,
+      innerOverRaw,
+      (_first: Decision, _second: Decision): string => 'paired',
+    )
+  })
+
+  it('Should_FeedTheResponse_When_AndThenTakesAFunction', () => {
+    const dynamic = pipe(
+      itemCell,
+      Cell.andThen((_decision: Decision): Cell.Cell<Decision, number, WriteErr, Bus> => decisionCell),
+    )
+    expect(dynamic).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCell_When_AndThenTakesAFunctionDataFirst', () => {
+    expect(
+      Cell.andThen(itemCell, (_decision: Decision): Cell.Cell<Decision, number, WriteErr, Bus> => decisionCell),
+    ).type.toBe<Cell.Cell<Cmd, number, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheBuiltCell_When_ItsInputIsNotTheResponse', () => {
+    expect<typeof Cell.andThen>().type.not.toBeCallableWith(itemCell, (_decision: Decision) => innerOverRaw)
+  })
+
+  it('Should_FoldTheOutcome_When_Matching', () => {
+    const folded = pipe(
+      itemCell,
+      Cell.match({
+        onFailure: (_error: ReadErr): string => 'down',
+        onSuccess: (_decision: Decision): number => 1,
+      }),
+    )
+    expect(folded).type.toBe<Cell.Cell<Cmd, string | number, never, Db>>()
+    expect(folded.run(command)).type.toBe<Effect<string | number, never, Db>>()
+  })
+
+  it('Should_ReadTheSameCell_When_MatchingDataFirst', () => {
+    expect(
+      Cell.match(itemCell, {
+        onFailure: (_error: ReadErr): string => 'down',
+        onSuccess: (_decision: Decision): number => 1,
+      }),
+    ).type.toBe<Cell.Cell<Cmd, string | number, never, Db>>()
+  })
+
+  it('Should_ComposeFurther_When_MatchedCellZips', () => {
+    const folded = pipe(
+      itemCell,
+      Cell.match({
+        onFailure: (_error: ReadErr): string => 'down',
+        onSuccess: (_decision: Decision): number => 1,
+      }),
+    )
+    const paired = pipe(folded, Cell.zip(itemFallback))
+    expect(paired).type.toBe<Cell.Cell<Cmd, readonly [string | number, Decision], WriteErr, Db | Bus>>()
   })
 })

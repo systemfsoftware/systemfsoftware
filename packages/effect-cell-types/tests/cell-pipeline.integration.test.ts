@@ -367,4 +367,190 @@ Feature('Composing pipelines through the piped instance method').body(({ scenari
       }),
     ),
   )
+
+  scenario(
+    'flatMap observes the identical input in both cells and unions the channels',
+    Gherkin.Do.pipe(
+      When('a paired flatMap runs')(
+        'run',
+        () => {
+          const seen: Command[] = []
+          const watching = Cell.mapInput(Cell.succeed(41), (input: Command) => {
+            seen.push(input)
+            return input
+          })
+          const composed = watching.pipe(
+            Cell.flatMap((count) =>
+              Cell.mapInput(Cell.succeed(count + 1), (input: Command) => {
+                seen.push(input)
+                return input
+              })
+            ),
+          )
+          return Effect.map(composed.run(command), (total) => ({ total, seen }))
+        },
+      ),
+      Then('both cells saw the same input and the response threaded')((s) => {
+        expect(s.run.total).toStrictEqual(42)
+        expect(s.run.seen).toStrictEqual([command, command])
+      }),
+    ),
+  )
+
+  scenario(
+    'flatMap observes the original input across a diverse batch',
+    Gherkin.Do.pipe(
+      When('a diverse batch runs through flatMap')(
+        'run',
+        () => {
+          const ids = ['', 'a', 'ab', 'abc', 'abcd', 'abcdefgh', 'x'.repeat(64), 'héllo-✓-世界', 'a b\tc', '0000']
+          const outcomes = ids.map((raw) => {
+            const input = { id: raw }
+            const seen: Command[] = []
+            const first = Cell.mapInput(Cell.succeed(raw.length), (seenInput: Command) => {
+              seen.push(seenInput)
+              return seenInput
+            })
+            const composed = Cell.flatMap(
+              first,
+              (length) =>
+                Cell.mapInput(Cell.succeed(`len:${length}`), (seenInput: Command) => {
+                  seen.push(seenInput)
+                  return seenInput
+                }),
+            )
+            return { line: Effect.runSync(composed.run(input)), seen, input }
+          })
+          return Effect.succeed({ outcomes })
+        },
+      ),
+      Then('every inner cell saw its original input')((s) => {
+        expect(s.run.outcomes.length).toStrictEqual(10)
+        for (const outcome of s.run.outcomes) {
+          expect(outcome.line).toStrictEqual(`len:${outcome.input.id.length}`)
+          expect(outcome.seen).toStrictEqual([outcome.input, outcome.input])
+        }
+      }),
+    ),
+  )
+
+  scenario(
+    'zipWith fails fast when the first cell refuses',
+    Gherkin.Do.pipe(
+      When('a refusing zipWith runs')(
+        'run',
+        () => {
+          const trace: string[] = []
+          const failing = Sandwich.read(
+            (): Effect.Effect<Decoded, { readonly offline: true }, never> => Effect.fail({ offline: true } as const),
+          ).decide(admitDecodedCommand).write((outcome) => Effect.sync(() => render(outcome)))
+          const second = Cell.fromEffect(Effect.sync(() => {
+            trace.push('second')
+            return 'second-line'
+          }))
+          const paired = Cell.zipWith(failing, second, (first: string, _second: string): string => first)
+          return Effect.map(Effect.exit(paired.run(command)), (exit) => ({ exit, trace }))
+        },
+      ),
+      Then('the refusal arrives and the second write never ran')((s) => {
+        expect(s.run.exit).toStrictEqual(Exit.fail({ offline: true } as const))
+        expect(s.run.trace).toStrictEqual([])
+      }),
+    ),
+  )
+
+  scenario(
+    'zipWith pairs two answering cells through the pipe',
+    Gherkin.Do.pipe(
+      When('two answering pipelines zip through the instance')(
+        'run',
+        () =>
+          answeringCell.pipe(Cell.zipWith(answeringCell, (first: string, second: string) => [first, second])).run(
+            command,
+          ),
+      ),
+      Then('the paired lines arrive')((s) => {
+        expect(s.run).toStrictEqual(['admitted:4', 'admitted:4'])
+      }),
+    ),
+  )
+
+  scenario(
+    'andThen with a function feeds the response as the next input',
+    Gherkin.Do.pipe(
+      When('a dynamic andThen runs')(
+        'run',
+        () => Cell.andThen(answeringCell, (line: string) => Cell.succeed(`echo:${line.length}`)).run(command),
+      ),
+      Then('the next cell answered from the response')((s) => {
+        expect(s.run).toStrictEqual('echo:10')
+      }),
+    ),
+  )
+
+  scenario(
+    'match folds the infra failure and the success',
+    Gherkin.Do.pipe(
+      When('a failing and an answering cell run under match')(
+        'run',
+        () =>
+          Effect.map(
+            Effect.zip(
+              Cell.match(Cell.fail({ offline: true } as const), {
+                onFailure: () => 'down',
+                onSuccess: (_line: never): string => 'up',
+              }).run(command),
+              Cell.match(answeringCell, {
+                onFailure: (_error: never): string => 'down',
+                onSuccess: (line) => line.length,
+              }).run(command),
+            ),
+            ([down, count]) => ({ down, count }),
+          ),
+      ),
+      Then('each arm answered its side')((s) => {
+        expect(s.run.down).toStrictEqual('down')
+        expect(s.run.count).toStrictEqual('admitted:4'.length)
+      }),
+    ),
+  )
+
+  scenario(
+    'match receives a decide refusal on the success arm',
+    Gherkin.Do.pipe(
+      When('a refusing pipeline runs under match')(
+        'run',
+        () => {
+          const short: Command = { id: 'x' }
+          const folded = Cell.match(answeringCell, {
+            onFailure: (_error: never): string => 'failure-arm',
+            onSuccess: (line) => `success-arm:${line}`,
+          })
+          return folded.run(short)
+        },
+      ),
+      Then('the refusal arrived as success-arm data')((s) => {
+        expect(s.run).toStrictEqual('success-arm:refused:too short')
+      }),
+    ),
+  )
+
+  scenario(
+    'a matched cell feeds a further combinator',
+    Gherkin.Do.pipe(
+      When('a matched pipeline zips with its twin')(
+        'run',
+        () => {
+          const folded = Cell.match(answeringCell, {
+            onFailure: (_error: never): string => 'down',
+            onSuccess: (line) => line,
+          })
+          return Cell.zip(folded, answeringCell).run(command)
+        },
+      ),
+      Then('the fold value composes at altitude')((s) => {
+        expect(s.run).toStrictEqual(['admitted:4', 'admitted:4'])
+      }),
+    ),
+  )
 })
