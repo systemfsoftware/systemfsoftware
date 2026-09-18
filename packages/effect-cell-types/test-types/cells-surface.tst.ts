@@ -118,7 +118,7 @@ declare const writeChainedOutcome: (
   raw: TaggedCmd,
 ) => Effect<void, never, never>
 
-describe('T1 the sandwich the chain builds', () => {
+describe('the sandwich the chain builds', () => {
   it('Should_InferTheCell_When_ReadDecideWriteChain', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell).type.toBe<
@@ -152,14 +152,14 @@ describe('T1 the sandwich the chain builds', () => {
   })
 })
 
-describe('T2 the refusal the error channel excludes', () => {
+describe('the refusal the error channel excludes', () => {
   it('Should_KeepTheDecideRefusalAnOutcome_When_NamingTheErrorChannel', () => {
     const cell = Sandwich.read(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
     expect(cell).type.not.toBeAssignableTo<Cell.Cell<Cmd, void, Refusal, never>>()
   })
 })
 
-describe('T3 the chains the surface refuses', () => {
+describe('the chains the surface refuses', () => {
   it('Should_RefuseTheWrite_When_DecodeArrivesWithoutEncode', () => {
     expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
       readonly write: unknown
@@ -186,7 +186,7 @@ describe('T3 the chains the surface refuses', () => {
   })
 })
 
-describe('T4 the unary write the chain admits', () => {
+describe('the unary write the chain admits', () => {
   it('Should_AdmitAUnaryWrite_When_TheWriteIgnoresTheOutcome', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcomeUnary)
     expect(cell).type.toBe<
@@ -195,14 +195,14 @@ describe('T4 the unary write the chain admits', () => {
   })
 })
 
-describe('T5 the run the Cell publishes', () => {
+describe('the run the Cell publishes', () => {
   it('Should_YieldTheChannels_When_TheArrowIsApplied', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell.run(command)).type.toBe<Effect<void, never, never>>()
   })
 })
 
-describe('T6 the provide that clears the services', () => {
+describe('the provide that clears the services', () => {
   it('Should_NarrowRToNever_When_TheOneServiceIsProvided', () => {
     const cell = Sandwich.read(readNeedingDb).decide(decideOverRaw).write(writeOutcome)
     const provided = pipe(cell, Cell.provide(dbLayer))
@@ -230,7 +230,7 @@ describe('T6 the provide that clears the services', () => {
   })
 })
 
-describe('T7 the combinator algebra', () => {
+describe('the combinator algebra', () => {
   it('Should_PreserveEveryChannel_When_MappingTheResponse', () => {
     const mapped = pipe(outputCell, Cell.map((verdict: boolean): number => (verdict ? 1 : 0)))
     expect(mapped).type.toBe<Cell.Cell<Output, number, WriteErr, Bus>>()
@@ -320,7 +320,7 @@ describe('T7 the combinator algebra', () => {
   })
 })
 
-describe('T8 the variance the Cell carries', () => {
+describe('the variance the Cell carries', () => {
   it('Should_AcceptTheWiderCommand_When_TheNarrowerIsExpected', () => {
     expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Cell.Cell<{ id: string }, void, never, never>>()
   })
@@ -371,7 +371,7 @@ describe('T8 the variance the Cell carries', () => {
   })
 })
 
-describe('T9 the record API the surface retired', () => {
+describe('the record API the surface retired', () => {
   it('Should_ExposeNoLayer_When_TheChainIsTheOnlyConstructor', () => {
     expect<typeof Cell>().type.not.toBeAssignableTo<{ readonly layer: unknown }>()
   })
@@ -396,7 +396,7 @@ describe('T9 the record API the surface retired', () => {
   })
 })
 
-describe('T10 the constructors the decide slot accepts', () => {
+describe('the constructors the decide slot accepts', () => {
   it('Should_AcceptTheTotalDecider_When_ItsErrorChannelIsNever', () => {
     const cell = Sandwich.read(readTagged).decide(totalAdmitTaggedCommand).write(writeTotalOutcome)
     expect(cell).type.toBe<
@@ -417,7 +417,7 @@ describe('T10 the constructors the decide slot accepts', () => {
   })
 })
 
-describe('T11 the sandwich chain the continuation surface builds', () => {
+describe('the sandwich chain the continuation surface builds', () => {
   it('Should_RefuseTheWrite_When_ReadIsFollowedByWrite', () => {
     const lawful = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
     expect(lawful).type.toBe<
@@ -497,7 +497,7 @@ describe('T11 the sandwich chain the continuation surface builds', () => {
   })
 })
 
-describe('T12 the constructor arrows', () => {
+describe('the constructor arrows', () => {
   it('Should_LiftTheConstant_When_Succeeding', () => {
     expect(Cell.succeed(7)).type.toBe<Cell.Cell<unknown, number, never, never>>()
     expect(Cell.succeed(7).run(command)).type.toBe<Effect<number, never, never>>()
@@ -529,7 +529,7 @@ describe('T12 the constructor arrows', () => {
   })
 })
 
-describe('T13 the error-channel arrows', () => {
+describe('the error-channel arrows', () => {
   it('Should_RemapTheFailure_When_MappingTheError', () => {
     const remapped = pipe(itemCell, Cell.mapError((_error: ReadErr): string => 'offline'))
     expect(remapped).type.toBe<Cell.Cell<Cmd, Decision, string, Db>>()
@@ -573,7 +573,7 @@ describe('T13 the error-channel arrows', () => {
   })
 })
 
-describe('T14 the sequencing arrows and the match destructor', () => {
+describe('the sequencing arrows and the match destructor', () => {
   it('Should_ThreadTheSameInput_When_FlatMapping', () => {
     const flatMapped = pipe(
       itemCell,
@@ -667,7 +667,11 @@ describe('T14 the sequencing arrows and the match destructor', () => {
   })
 })
 
-describe('T15 the Do chain over the TypeLambda', () => {
+describe('the Do chain over the TypeLambda', () => {
+  it('Should_TypeDoAsContravariantInputUnknown_When_Initialized', () => {
+    expect(Cell.Do).type.toBe<Cell.Cell<unknown, {}, never, never>>()
+  })
+
   it('Should_AccumulateTheRecord_When_BindingOntoDo', () => {
     const chained = pipe(
       Cell.Do,

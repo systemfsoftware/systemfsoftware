@@ -77,7 +77,7 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
           return {
             [CellTypeId]: CellTypeId,
             run: composed,
-            phases: ['read', 'decode', 'decide', 'encode', 'write'],
+            phases: Object.freeze(['read', 'decode', 'decide', 'encode', 'write'] as const),
             ...Prototype,
           }
         }
@@ -102,7 +102,7 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
       return {
         [CellTypeId]: CellTypeId,
         run: composed,
-        phases: ['read', 'decide', 'write'],
+        phases: Object.freeze(['read', 'decide', 'write'] as const),
         ...Prototype,
       }
     }

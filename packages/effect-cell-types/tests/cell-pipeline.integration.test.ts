@@ -98,6 +98,25 @@ Feature('Processing admission orders through resilient cell pipelines')
         }),
       ),
     )
+    scenario(
+      'An order succeeding on primary infrastructure bypasses the fallback processor',
+      Gherkin.Do.pipe(
+        Given('an incoming admission order that succeeds at the primary gateway')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'valid-order' }),
+        ),
+        When('the order is processed by a pipeline equipped with a fallback processor')(
+          'outcome',
+          ({ order }) => {
+            const resilientPipeline = Cell.orElse(primaryProcessor, fallbackProcessor)
+            return Effect.exit(resilientPipeline.run(order))
+          },
+        ),
+        Then('the primary processor response is preserved without invoking fallback')(({ outcome }) => {
+          expect(outcome).toStrictEqual(Exit.succeed('admitted:11'))
+        }),
+      ),
+    )
 
     scenario(
       'An order with infrastructural failure can be remapped to an application status error',
@@ -193,6 +212,38 @@ Feature('Processing admission orders through resilient cell pipelines')
         ),
         Then('the composite pipeline delivers the response incorporating both evaluations')(({ outcome }) => {
           expect(outcome).toStrictEqual(Exit.succeed('chained:admitted:10'))
+        }),
+      ),
+    )
+    scenario(
+      'Failing the first stage short-circuits the pipeline before the second stage runs',
+      Gherkin.Do.pipe(
+        Given('an incoming order destined to fail at the primary gateway')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'infra-crash' }),
+        ),
+        When('the order is dispatched through a chained dependent pipeline')(
+          'outcome',
+          ({ order }) => {
+            let followUpExecuted = false
+            const chainedPipeline = Cell.flatMap(
+              primaryProcessor,
+              (firstResult) => {
+                followUpExecuted = true
+                return Sandwich.read((ord: AdmissionOrder) => Effect.succeed(new Decoded({ length: ord.id.length })))
+                  .decide(admitDecodedCommand)
+                  .write(() => Effect.succeed(`chained:${firstResult}`))
+              },
+            )
+            return Effect.all({
+              exit: Effect.exit(chainedPipeline.run(order)),
+              wasExecuted: Effect.sync(() => followUpExecuted),
+            })
+          },
+        ),
+        Then('the pipeline reports the initial failure without invoking the dependent stage')(({ outcome }) => {
+          expect(Exit.isFailure(outcome.exit)).toBe(true)
+          expect(outcome.wasExecuted).toBe(false)
         }),
       ),
     )
@@ -330,12 +381,16 @@ Feature('Processing admission orders through resilient cell pipelines')
               evalCount++
               return Cell.succeed(`evaluated:${evalCount}`)
             })
+            const explodingLazyCell: Cell.Cell<AdmissionOrder, never, never, never> = Cell.suspend(() => {
+              throw new Error('construction exploded')
+            })
             const identityCell = Cell.id<AdmissionOrder>()
             return Effect.succeed({
               staticCell,
               failingCell,
               liftedCell,
               lazyCell,
+              explodingLazyCell,
               identityCell,
               getCount: () => evalCount,
             })
@@ -351,6 +406,7 @@ Feature('Processing admission orders through resilient cell pipelines')
               liftedRes: defs.liftedCell.run(order),
               lazyOne: defs.lazyCell.run(order),
               lazyTwo: defs.lazyCell.run(order),
+              explodingRes: Effect.exit(defs.explodingLazyCell.run(order)),
               identityRes: defs.identityCell.run(order),
               finalCount: Effect.sync(defs.getCount),
             })
@@ -362,6 +418,7 @@ Feature('Processing admission orders through resilient cell pipelines')
           expect(evals.liftedRes).toBe('lifted-value')
           expect(evals.lazyOne).toBe('evaluated:1')
           expect(evals.lazyTwo).toBe('evaluated:2')
+          expect(Exit.hasDies(evals.explodingRes)).toBe(true)
           expect(evals.identityRes).toStrictEqual({ id: 'dummy' })
           expect(evals.finalCount).toBe(2)
         }),

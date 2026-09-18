@@ -280,7 +280,7 @@ export const orElse: {
     make((input) =>
       Effect.matchEffect(self.run(input), {
         onFailure: () => fallback.run(input),
-        onSuccess: Effect.succeed,
+        onSuccess: (value) => Effect.succeed(value),
       })
     ),
 )
@@ -355,7 +355,7 @@ export const zipWith: {
  * never.
  */
 export const match: {
-  <E, B, A, C>(
+  <A, E, B, C>(
     options: {
       readonly onFailure: (error: E) => B
       readonly onSuccess: (value: A) => C
@@ -386,11 +386,9 @@ export const match: {
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
 
 /**
- * The empty accumulator cell a Do chain starts from. It accepts any demanded
- * input, so the first bind soundly narrows the chain to its input.
+ * The empty accumulator cell a Do chain starts from.
  */
-export const Do: Kind<unknown, never, never, {}> = succeed({})
-
+export const Do: Kind<unknown, never, never, {}> = make(() => Effect.succeed({}))
 /**
  * Adds a named field to the Do accumulator by running the cell the function
  * builds from the accumulated scope. Both cells observe the identical input,
