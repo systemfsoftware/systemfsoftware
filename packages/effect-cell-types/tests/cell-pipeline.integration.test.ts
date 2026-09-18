@@ -1,10 +1,13 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
+
 import {
   admitDecodedCommand,
   Admitted,
@@ -15,9 +18,31 @@ import {
 
 const Feature = makeFeature({ it, layer })
 
-interface Command {
+interface AdmissionOrder {
   readonly id: string
+  readonly tags?: readonly string[]
 }
+
+interface AuditRecord {
+  readonly orderId: string
+  readonly summary: string
+}
+
+class AuditService extends Context.Service<AuditService, {
+  readonly entries: Effect.Effect<readonly AuditRecord[]>
+  readonly record: (orderId: string, summary: string) => Effect.Effect<void>
+}>()('AuditService') {}
+
+const AuditServiceLive = Layer.sync(AuditService, () => {
+  const log: AuditRecord[] = []
+  return {
+    entries: Effect.sync(() => log),
+    record: (orderId, summary) =>
+      Effect.sync(() => {
+        log.push({ orderId, summary })
+      }),
+  }
+})
 
 const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string =>
   Result.match(outcome, {
@@ -30,652 +55,313 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
-const answeringCell = Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length })))
-  .decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
-    Effect.sync(() => render(outcome))
-  )
-
-const command: Command = { id: 'abcd' }
-
-Feature('Composing pipelines through the piped instance method').body(({ scenario }) => {
-  scenario(
-    'Piping map and zip through the instance answers like the module duals',
-    Gherkin.Do.pipe(
-      When('a labelled pipeline runs beside its twin')(
-        'run',
-        () => {
-          const viaInstance = answeringCell.pipe(
-            Cell.map((line) => `seen:${line}`),
-            Cell.zip(answeringCell),
-          )
-          const viaDuals = Cell.zip(Cell.map(answeringCell, (line) => `seen:${line}`), answeringCell)
-          return Effect.map(
-            Effect.zip(viaInstance.run(command), viaDuals.run(command)),
-            ([fromInstance, fromDuals]) => ({ fromInstance, fromDuals }),
-          )
-        },
-      ),
-      Then('both pipelines answer the identical paired lines')((s) => {
-        expect(s.run.fromInstance).toStrictEqual(s.run.fromDuals)
-        expect(s.run.fromInstance).toStrictEqual(['seen:admitted:4', 'admitted:4'] as const)
-      }),
-    ),
-  )
-
-  scenario(
-    'A piped pipeline pipes a second time and keeps answering',
-    Gherkin.Do.pipe(
-      When('a counted pipeline is lengthened once more')(
-        'exit',
-        () => {
-          const once = answeringCell.pipe(Cell.map((line) => line.length))
-          const twice = once.pipe(Cell.map((count) => count + 1))
-          return Effect.exit(twice.run(command))
-        },
-      ),
-      Then('the twice-counted line length arrives')(({ exit }) => {
-        expect(exit).toStrictEqual(Exit.succeed('admitted:4'.length + 1))
-      }),
-    ),
-  )
-
-  scenario(
-    'A constant answers and a refusal carries its error',
-    Gherkin.Do.pipe(
-      When('a constant and a refusal run side by side')(
-        'run',
-        () =>
-          Effect.map(
-            Effect.zip(
-              Cell.succeed(7).run(command),
-              Effect.exit(Cell.fail({ offline: true } as const).run(command)),
-            ),
-            ([constant, refusal]) => ({ constant, refusal }),
-          ),
-      ),
-      Then('the constant arrives and the refusal carries the error')((s) => {
-        expect(s.run.constant).toStrictEqual(7)
-        expect(s.run.refusal).toStrictEqual(Exit.fail({ offline: true } as const))
-      }),
-    ),
-  )
-
-  scenario(
-    'A lifted effect carries its success and its failure',
-    Gherkin.Do.pipe(
-      When('a lifted success and a lifted failure run side by side')(
-        'run',
-        () =>
-          Effect.map(
-            Effect.zip(
-              Cell.fromEffect(Effect.succeed('up')).run(command),
-              Effect.exit(Cell.fromEffect(Effect.fail({ offline: true } as const)).run(command)),
-            ),
-            ([line, refusal]) => ({ line, refusal }),
-          ),
-      ),
-      Then('both channels arrive intact')((s) => {
-        expect(s.run.line).toStrictEqual('up')
-        expect(s.run.refusal).toStrictEqual(Exit.fail({ offline: true } as const))
-      }),
-    ),
-  )
-
-  scenario(
-    'A deferred cell builds on first run, never at wrap time',
-    Gherkin.Do.pipe(
-      When('a counted thunk is wrapped and then run twice')(
-        'run',
-        () => {
-          let builds = 0
-          const deferred = Cell.suspend(() => {
-            builds = builds + 1
-            return Cell.succeed(builds)
-          })
-          const wrapped = builds
-          return Effect.map(
-            Effect.zip(deferred.run(command), deferred.run(command)),
-            ([first, second]) => ({ wrapped, first, second }),
-          )
-        },
-      ),
-      Then('the wrap builds nothing and each run builds once')((s) => {
-        expect(s.run.wrapped).toStrictEqual(0)
-        expect(s.run.first).toStrictEqual(1)
-        expect(s.run.second).toStrictEqual(2)
-      }),
-    ),
-  )
-
-  scenario(
-    'The identity arrow echoes and composes as both-sided identity',
-    Gherkin.Do.pipe(
-      When('an echoed command runs beside its left and right compositions')(
-        'run',
-        () => {
-          const echoed = Cell.id<Command>().run(command)
-          const left = Cell.andThen(Cell.id<Command>(), answeringCell).run(command)
-          const right = Cell.andThen(answeringCell, Cell.id<string>()).run(command)
-          const viaPipe = answeringCell.pipe(Cell.andThen(Cell.id<string>())).run(command)
-          return Effect.map(
-            Effect.zip(Effect.zip(echoed, left), Effect.zip(right, viaPipe)),
-            ([[echo, leftLine], [rightLine, pipedLine]]) => ({ echo, leftLine, rightLine, pipedLine }),
-          )
-        },
-      ),
-      Then('the echo matches and every identity composition answers the line')((s) => {
-        expect(s.run.echo).toStrictEqual(command)
-        expect(s.run.leftLine).toStrictEqual('admitted:4')
-        expect(s.run.rightLine).toStrictEqual('admitted:4')
-        expect(s.run.pipedLine).toStrictEqual('admitted:4')
-      }),
-    ),
-  )
-
-  scenario(
-    'Generated commands keep the identity as both-sided identity',
-    Gherkin.Do.pipe(
-      When('a diverse batch runs echo and every identity composition')(
-        'run',
-        () => {
-          const ids = [
-            '',
-            'a',
-            'ab',
-            'abc',
-            'abcd',
-            'abcdefgh',
-            'x'.repeat(64),
-            'héllo-✓-世界',
-            'a b\tc',
-            '0000',
-          ] as const
-          const outcomes = ids.map((raw) => {
-            const input = { id: raw }
-            return {
-              input,
-              echo: Effect.runSync(Cell.id<Command>().run(input)),
-              left: Effect.runSync(Cell.andThen(Cell.id<Command>(), answeringCell).run(input)),
-              right: Effect.runSync(Cell.andThen(answeringCell, Cell.id<string>()).run(input)),
-              piped: Effect.runSync(answeringCell.pipe(Cell.andThen(Cell.id<string>())).run(input)),
-            }
-          })
-          return Effect.succeed({ outcomes })
-        },
-      ),
-      Then('every input echoes and every composition agrees')((s) => {
-        expect(s.run.outcomes.length).toStrictEqual(10)
-        for (const outcome of s.run.outcomes) {
-          expect(outcome.echo).toStrictEqual(outcome.input)
-          expect(outcome.left).toStrictEqual(outcome.right)
-          expect(outcome.left).toStrictEqual(outcome.piped)
-        }
-      }),
-    ),
-  )
-
-  scenario(
-    'A refusal outcome passes through orElse with the fallback never running',
-    Gherkin.Do.pipe(
-      When('a refusing pipeline wrapped in orElse runs')(
-        'run',
-        () => {
-          const trace: string[] = []
-          const fallback = Cell.fromEffect(
-            Effect.sync(() => {
-              trace.push('fallback')
-              return 'fallback-line'
-            }),
-          )
-          const guarded = Cell.orElse(answeringCell, fallback)
-          const short: Command = { id: 'x' }
-          return Effect.map(guarded.run(short), (line) => ({ line, ran: trace }))
-        },
-      ),
-      Then('the refusal arrives intact and the fallback never ran')((s) => {
-        expect(s.run.line).toStrictEqual('refused:too short')
-        expect(s.run.ran).toStrictEqual([])
-      }),
-    ),
-  )
-
-  scenario(
-    'An infra failure runs the fallback on the same input and replaces the failure',
-    Gherkin.Do.pipe(
-      When('a failing read wrapped in orElse runs')(
-        'run',
-        () => {
-          const seen: Command[] = []
-          const failing = Sandwich.read(
-            (): Effect.Effect<Decoded, { readonly offline: true }, never> => Effect.fail({ offline: true } as const),
-          ).decide(admitDecodedCommand).write((outcome) => Effect.sync(() => render(outcome)))
-          const watching = Cell.mapInput(Cell.fromEffect(Effect.sync(() => 'fallback-line')), (command: Command) => {
-            seen.push(command)
-            return command
-          })
-          const guarded = failing.pipe(Cell.orElse(watching))
-          return Effect.map(guarded.run(command), (line) => ({ line, seen }))
-        },
-      ),
-      Then('the fallback line replaces the failure and saw the original input')((s) => {
-        expect(s.run.line).toStrictEqual('fallback-line')
-        expect(s.run.seen).toStrictEqual([command])
-      }),
-    ),
-  )
-
-  scenario(
-    'orElse runs its fallback exactly when the wrapped run fails',
-    Gherkin.Do.pipe(
-      When('a mixed batch runs under orElse')(
-        'run',
-        () => {
-          let fallbacks = 0
-          const flaky = Sandwich.read(
-            (command: Command): Effect.Effect<Decoded, { readonly offline: true }, never> =>
-              command.id.length === 0
-                ? Effect.fail({ offline: true } as const)
-                : Effect.succeed(new Decoded({ length: command.id.length })),
-          ).decide(admitDecodedCommand).write((outcome) => Effect.sync(() => render(outcome)))
-          const guarded = Cell.orElse(
-            flaky,
-            Cell.fromEffect(Effect.sync(() => {
-              fallbacks = fallbacks + 1
-              return 'fallback-line'
-            })),
-          )
-          const ids = ['', 'a', 'ab', 'abc', 'abcd', 'abcde']
-          return Effect.map(
-            Effect.forEach(ids, (raw) => guarded.run({ id: raw })),
-            (lines) => ({ lines, fallbacks }),
-          )
-        },
-      ),
-      Then('only the failing input fell back')((s) => {
-        expect(s.run.lines).toStrictEqual([
-          'fallback-line',
-          'refused:too short',
-          'refused:too short',
-          'refused:too short',
-          'admitted:4',
-          'admitted:5',
-        ])
-        expect(s.run.fallbacks).toStrictEqual(1)
-      }),
-    ),
-  )
-
-  scenario(
-    'mapError remaps the failure and leaves the response',
-    Gherkin.Do.pipe(
-      When('a failing cell and an answering cell run under mapError')(
-        'run',
-        () =>
-          Effect.map(
-            Effect.zip(
-              Effect.exit(Cell.mapError(Cell.fail({ offline: true } as const), () => 'mapped').run(command)),
-              answeringCell.pipe(Cell.mapError(() => 'never-used')).run(command),
-            ),
-            ([refusal, line]) => ({ refusal, line }),
-          ),
-      ),
-      Then('the error is remapped and the response passes through')((s) => {
-        expect(s.run.refusal).toStrictEqual(Exit.fail('mapped'))
-        expect(s.run.line).toStrictEqual('admitted:4')
-      }),
-    ),
-  )
-
-  scenario(
-    'tap observes the response then continues unchanged and in order',
-    Gherkin.Do.pipe(
-      When('an observed pipeline runs')(
-        'run',
-        () => {
-          const trace: string[] = []
-          const observed = Cell.tap(answeringCell, (line) =>
-            Effect.sync(() => {
-              trace.push(line)
-            }))
-          return Effect.map(observed.run(command), (line) => ({ line, trace }))
-        },
-      ),
-      Then('the response is unchanged and the observation ran first')((s) => {
-        expect(s.run.line).toStrictEqual('admitted:4')
-        expect(s.run.trace).toStrictEqual(['admitted:4'])
-      }),
-    ),
-  )
-
-  scenario(
-    'tap on a failure skips the observer and keeps the failure',
-    Gherkin.Do.pipe(
-      When('an observed failing cell runs')(
-        'run',
-        () => {
-          const trace: string[] = []
-          const observed = Cell.tap(Cell.fail({ offline: true } as const), () =>
-            Effect.sync(() => {
-              trace.push('observed')
-            }))
-          return Effect.map(Effect.exit(observed.run(command)), (exit) => ({ exit, trace }))
-        },
-      ),
-      Then('the failure arrives and nothing was observed')((s) => {
-        expect(s.run.exit).toStrictEqual(Exit.fail({ offline: true } as const))
-        expect(s.run.trace).toStrictEqual([])
-      }),
-    ),
-  )
-
-  scenario(
-    'flatMap observes the identical input in both cells and unions the channels',
-    Gherkin.Do.pipe(
-      When('a paired flatMap runs')(
-        'run',
-        () => {
-          const seen: Command[] = []
-          const watching = Cell.mapInput(Cell.succeed(41), (input: Command) => {
-            seen.push(input)
-            return input
-          })
-          const composed = watching.pipe(
-            Cell.flatMap((count) =>
-              Cell.mapInput(Cell.succeed(count + 1), (input: Command) => {
-                seen.push(input)
-                return input
-              })
-            ),
-          )
-          return Effect.map(composed.run(command), (total) => ({ total, seen }))
-        },
-      ),
-      Then('both cells saw the same input and the response threaded')((s) => {
-        expect(s.run.total).toStrictEqual(42)
-        expect(s.run.seen).toStrictEqual([command, command])
-      }),
-    ),
-  )
-
-  scenario(
-    'flatMap observes the original input across a diverse batch',
-    Gherkin.Do.pipe(
-      When('a diverse batch runs through flatMap')(
-        'run',
-        () => {
-          const ids = ['', 'a', 'ab', 'abc', 'abcd', 'abcdefgh', 'x'.repeat(64), 'héllo-✓-世界', 'a b\tc', '0000']
-          const outcomes = ids.map((raw) => {
-            const input = { id: raw }
-            const seen: Command[] = []
-            const first = Cell.mapInput(Cell.succeed(raw.length), (seenInput: Command) => {
-              seen.push(seenInput)
-              return seenInput
-            })
-            const composed = Cell.flatMap(
-              first,
-              (length) =>
-                Cell.mapInput(Cell.succeed(`len:${length}`), (seenInput: Command) => {
-                  seen.push(seenInput)
-                  return seenInput
-                }),
-            )
-            return { line: Effect.runSync(composed.run(input)), seen, input }
-          })
-          return Effect.succeed({ outcomes })
-        },
-      ),
-      Then('every inner cell saw its original input')((s) => {
-        expect(s.run.outcomes.length).toStrictEqual(10)
-        for (const outcome of s.run.outcomes) {
-          expect(outcome.line).toStrictEqual(`len:${outcome.input.id.length}`)
-          expect(outcome.seen).toStrictEqual([outcome.input, outcome.input])
-        }
-      }),
-    ),
-  )
-
-  scenario(
-    'zipWith fails fast when the first cell refuses',
-    Gherkin.Do.pipe(
-      When('a refusing zipWith runs')(
-        'run',
-        () => {
-          const trace: string[] = []
-          const failing = Sandwich.read(
-            (): Effect.Effect<Decoded, { readonly offline: true }, never> => Effect.fail({ offline: true } as const),
-          ).decide(admitDecodedCommand).write((outcome) => Effect.sync(() => render(outcome)))
-          const second = Cell.fromEffect(Effect.sync(() => {
-            trace.push('second')
-            return 'second-line'
-          }))
-          const paired = Cell.zipWith(failing, second, (first: string, _second: string): string => first)
-          return Effect.map(Effect.exit(paired.run(command)), (exit) => ({ exit, trace }))
-        },
-      ),
-      Then('the refusal arrives and the second write never ran')((s) => {
-        expect(s.run.exit).toStrictEqual(Exit.fail({ offline: true } as const))
-        expect(s.run.trace).toStrictEqual([])
-      }),
-    ),
-  )
-
-  scenario(
-    'zipWith pairs two answering cells through the pipe',
-    Gherkin.Do.pipe(
-      When('two answering pipelines zip through the instance')(
-        'run',
-        () =>
-          answeringCell.pipe(Cell.zipWith(answeringCell, (first: string, second: string) => [first, second])).run(
-            command,
-          ),
-      ),
-      Then('the paired lines arrive')((s) => {
-        expect(s.run).toStrictEqual(['admitted:4', 'admitted:4'])
-      }),
-    ),
-  )
-
-  scenario(
-    'andThen with a function feeds the response as the next input',
-    Gherkin.Do.pipe(
-      When('a dynamic andThen runs')(
-        'run',
-        () => Cell.andThen(answeringCell, (line: string) => Cell.succeed(`echo:${line.length}`)).run(command),
-      ),
-      Then('the next cell answered from the response')((s) => {
-        expect(s.run).toStrictEqual('echo:10')
-      }),
-    ),
-  )
-
-  scenario(
-    'match folds the infra failure and the success',
-    Gherkin.Do.pipe(
-      When('a failing and an answering cell run under match')(
-        'run',
-        () =>
-          Effect.map(
-            Effect.zip(
-              Cell.match(Cell.fail({ offline: true } as const), {
-                onFailure: () => 'down',
-                onSuccess: (_line: never): string => 'up',
-              }).run(command),
-              Cell.match(answeringCell, {
-                onFailure: (_error: never): string => 'down',
-                onSuccess: (line) => line.length,
-              }).run(command),
-            ),
-            ([down, count]) => ({ down, count }),
-          ),
-      ),
-      Then('each arm answered its side')((s) => {
-        expect(s.run.down).toStrictEqual('down')
-        expect(s.run.count).toStrictEqual('admitted:4'.length)
-      }),
-    ),
-  )
-
-  scenario(
-    'match receives a decide refusal on the success arm',
-    Gherkin.Do.pipe(
-      When('a refusing pipeline runs under match')(
-        'run',
-        () => {
-          const short: Command = { id: 'x' }
-          const folded = Cell.match(answeringCell, {
-            onFailure: (_error: never): string => 'failure-arm',
-            onSuccess: (line) => `success-arm:${line}`,
-          })
-          return folded.run(short)
-        },
-      ),
-      Then('the refusal arrived as success-arm data')((s) => {
-        expect(s.run).toStrictEqual('success-arm:refused:too short')
-      }),
-    ),
-  )
-
-  scenario(
-    'a matched cell feeds a further combinator',
-    Gherkin.Do.pipe(
-      When('a matched pipeline zips with its twin')(
-        'run',
-        () => {
-          const folded = Cell.match(answeringCell, {
-            onFailure: (_error: never): string => 'down',
-            onSuccess: (line) => line,
-          })
-          return Cell.zip(folded, answeringCell).run(command)
-        },
-      ),
-      Then('the fold value composes at altitude')((s) => {
-        expect(s.run).toStrictEqual(['admitted:4', 'admitted:4'])
-      }),
-    ),
-  )
-
-  scenario(
-    'a Do chain feeds the identical input to every bound cell',
-    Gherkin.Do.pipe(
-      When('a two-bind chain with a let runs')(
-        'run',
-        () => {
-          const seen: Command[] = []
-          const watch = (seenInput: Command): Command => {
-            seen.push(seenInput)
-            return seenInput
-          }
-          const chained = answeringCell.pipe(
-            Cell.bindTo('first'),
-            Cell.bind('second', () => Cell.mapInput(answeringCell, watch)),
-            Cell.let('line', ({ first }: { readonly first: string }) => `seen:${first.length}`),
-          )
-          const dataFirst = Cell.bind(
-            Cell.bindTo(Cell.mapInput(answeringCell, watch), 'v'),
-            'w',
-            () => Cell.mapInput(answeringCell, watch),
-          )
-          return Effect.map(
-            Effect.zip(chained.run(command), dataFirst.run(command)),
-            ([chainedOut, dataFirstOut]) => ({ chainedOut, dataFirstOut, seen }),
-          )
-        },
-      ),
-      Then('every cell saw the same input and the record accumulated')((s) => {
-        expect(s.run.chainedOut).toStrictEqual({
-          first: 'admitted:4',
-          second: 'admitted:4',
-          line: 'seen:10',
-        })
-        expect(s.run.dataFirstOut).toStrictEqual({ v: 'admitted:4', w: 'admitted:4' })
-        expect(s.run.seen).toStrictEqual([command, command, command])
-      }),
-    ),
-  )
-
-  scenario(
-    'a Do chain short-circuits when a bound cell fails',
-    Gherkin.Do.pipe(
-      When('a bind chain runs under a failing first cell')(
-        'run',
-        () => {
-          const trace: string[] = []
-          const failing = Cell.fromEffect(Effect.fail({ offline: true } as const))
-          const chained = Cell.Do.pipe(
-            Cell.bind('first', () => failing),
-            Cell.bind('second', () => {
-              trace.push('second')
-              return answeringCell
-            }),
-            Cell.let('line', () => {
-              trace.push('let')
-              return 'never'
-            }),
-          )
-          return Effect.map(Effect.exit(chained.run(command)), (exit) => ({ exit, trace }))
-        },
-      ),
-      Then('the failure arrives and the later steps never ran')((s) => {
-        expect(s.run.exit).toStrictEqual(Exit.fail({ offline: true } as const))
-        expect(s.run.trace).toStrictEqual([])
-      }),
-    ),
-  )
-  scenario(
-    'a named answer gains a computed field',
-    Gherkin.Do.pipe(
-      When('a named answer gains a computed field')(
-        'run',
-        () =>
-          Cell.bindTo(answeringCell, 'first').pipe(
-            Cell.let('line', ({ first }: { readonly first: string }) => `seen:${first.length}`),
-            Cell.let('again', ({ line }: { readonly line: string }) => `${line}!`),
-          ).run(command),
-      ),
-      Then('the named answer carries both computed fields')((s) => {
-        expect(s.run).toStrictEqual({ first: 'admitted:4', line: 'seen:10', again: 'seen:10!' })
-      }),
-    ),
-  )
-
-  scenario(
-    'a Do bind chain builds the same cell as the flatMap chain',
-    Gherkin.Do.pipe(
-      When('a diverse batch runs under both spellings')(
-        'run',
-        () => {
-          const ids = ['', 'a', 'ab', 'abc', 'abcd', 'abcde'] as const
-          const outcomes = ids.map((raw) => {
-            const input = { id: raw }
-            const viaDo = Cell.Do.pipe(
-              Cell.bind('length', () => Cell.succeed(raw.length)),
-              Cell.bind('doubled', ({ length }: { readonly length: number }) => Cell.succeed(length * 2)),
-              Cell.let('line', ({ doubled }: { readonly doubled: number }) => `len:${doubled}`),
-            )
-            const viaFlatMap = Cell.flatMap(
-              Cell.succeed(raw.length),
-              (length) =>
-                Cell.flatMap(
-                  Cell.succeed(length * 2),
-                  (doubled) =>
-                    Cell.map(Cell.succeed({ length, doubled }), (scope) => ({ ...scope, line: `len:${doubled}` })),
-                ),
-            )
-            return {
-              fromDo: Effect.runSync(viaDo.run(input)),
-              fromFlatMap: Effect.runSync(viaFlatMap.run(input)),
-            }
-          })
-          return Effect.succeed({ outcomes })
-        },
-      ),
-      Then('both spellings answer the identical record')((s) => {
-        expect(s.run.outcomes.length).toStrictEqual(6)
-        for (const outcome of s.run.outcomes) {
-          expect(outcome.fromDo).toStrictEqual(outcome.fromFlatMap)
-        }
-        expect(s.run.outcomes[3]?.fromDo).toStrictEqual({ length: 3, doubled: 6, line: 'len:6' })
-      }),
-    ),
-  )
+const primaryProcessor = Sandwich.read((order: AdmissionOrder) => {
+  if (order.id === 'infra-crash') {
+    return Effect.fail(new Error('Gateway unavailable'))
+  }
+  return Effect.succeed(new Decoded({ length: order.id.length }))
 })
+  .decide(admitDecodedCommand)
+  .write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
+    Effect.flatMap(AuditService, (audit) =>
+      Effect.as(
+        audit.record(raw.length.toString(), render(outcome)),
+        render(outcome),
+      ))
+  )
+
+const fallbackProcessor = Sandwich.read((order: AdmissionOrder) =>
+  Effect.succeed(new Decoded({ length: order.id.length }))
+)
+  .decide(admitDecodedCommand)
+  .write((outcome: Result.Result<Admitted | Rejected, Malformed>) => Effect.succeed(`fallback:${render(outcome)}`))
+
+Feature('Processing admission orders through resilient cell pipelines')
+  .withScenarioLayer(AuditServiceLive)
+  .body(({ scenario }) => {
+    scenario(
+      'An order failing on primary infrastructure recovers gracefully via a secondary processor',
+      Gherkin.Do.pipe(
+        Given('an incoming admission order that triggers a primary gateway failure')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'infra-crash' }),
+        ),
+        When('the order is processed by a pipeline equipped with a fallback processor')(
+          'outcome',
+          ({ order }) => {
+            const resilientPipeline = Cell.orElse(primaryProcessor, fallbackProcessor)
+            return Effect.exit(resilientPipeline.run(order))
+          },
+        ),
+        Then('the fallback processor handles the order and produces a secondary response')(({ outcome }) => {
+          expect(outcome).toStrictEqual(Exit.succeed('fallback:admitted:11'))
+        }),
+      ),
+    )
+
+    scenario(
+      'An order with infrastructural failure can be remapped to an application status error',
+      Gherkin.Do.pipe(
+        Given('an incoming order with an unavailable service')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'infra-crash' }),
+        ),
+        When('the pipeline remaps errors to a custom message')(
+          'outcome',
+          ({ order }) => {
+            const mappedPipeline = Cell.mapError(primaryProcessor, (err) => `Service outage: ${err.message}`)
+            return Effect.exit(mappedPipeline.run(order))
+          },
+        ),
+        Then('the caller receives the formatted error message')(({ outcome }) => {
+          expect(outcome).toStrictEqual(Exit.fail('Service outage: Gateway unavailable'))
+        }),
+      ),
+    )
+
+    scenario(
+      'Observing completed order processing records metrics without altering the final response',
+      Gherkin.Do.pipe(
+        Given('a valid admission order with adequate length')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'valid-order' }),
+        ),
+        When('the pipeline observes successful processing to audit the result')(
+          'outcome',
+          ({ order }) => {
+            let observedValue: string | null = null
+            const tappedPipeline = Cell.tap(primaryProcessor, (resp) =>
+              Effect.sync(() => {
+                observedValue = resp
+              }))
+            return Effect.map(
+              tappedPipeline.run(order),
+              (resp) => ({ resp, observedValue }),
+            )
+          },
+        ),
+        Then('the original response is returned and the observer noted the exact payload')(({ outcome }) => {
+          expect(outcome.resp).toBe('admitted:11')
+          expect(outcome.observedValue).toBe('admitted:11')
+        }),
+      ),
+    )
+
+    scenario(
+      'Combining parallel validation stages merges outcomes into a combined summary',
+      Gherkin.Do.pipe(
+        Given('an order requiring dual validation passes')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'dual-pass' }),
+        ),
+        When('two validation pipelines are zipped with a custom pairing function')(
+          'outcome',
+          ({ order }) => {
+            const dualPipeline = Cell.zipWith(
+              primaryProcessor,
+              primaryProcessor,
+              (res1, res2) => `${res1} & ${res2}`,
+            )
+            return Effect.exit(dualPipeline.run(order))
+          },
+        ),
+        Then('both stages complete and deliver the combined paired summary')(({ outcome }) => {
+          expect(outcome).toStrictEqual(Exit.succeed('admitted:9 & admitted:9'))
+        }),
+      ),
+    )
+
+    scenario(
+      'Sequencing dependent order stages where the second stage relies on the first output',
+      Gherkin.Do.pipe(
+        Given('an initial order that determines the secondary verification policy')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'root-order' }),
+        ),
+        When('the first stage dynamically routes to a follow-up cell based on its response')(
+          'outcome',
+          ({ order }) => {
+            const chainedPipeline = Cell.flatMap(
+              primaryProcessor,
+              (firstResult) =>
+                Sandwich.read((ord: AdmissionOrder) => Effect.succeed(new Decoded({ length: ord.id.length })))
+                  .decide(admitDecodedCommand)
+                  .write(() => Effect.succeed(`chained:${firstResult}`)),
+            )
+            return Effect.exit(chainedPipeline.run(order))
+          },
+        ),
+        Then('the composite pipeline delivers the response incorporating both evaluations')(({ outcome }) => {
+          expect(outcome).toStrictEqual(Exit.succeed('chained:admitted:10'))
+        }),
+      ),
+    )
+
+    scenario(
+      'Collapsing pipeline success and infrastructure failure into an unexceptional status report',
+      Gherkin.Do.pipe(
+        Given('orders representing both success and failure cases')(
+          'orders',
+          () =>
+            Effect.succeed({
+              valid: { id: 'valid-order' },
+              failing: { id: 'infra-crash' },
+            }),
+        ),
+        When('both orders are evaluated under a unified outcome matcher')(
+          'results',
+          ({ orders }) => {
+            const matchedPipeline = Cell.match(primaryProcessor, {
+              onFailure: (err) => `handled-error:${err.message}`,
+              onSuccess: (res) => `handled-success:${res}`,
+            })
+            return Effect.all({
+              validResult: matchedPipeline.run(orders.valid),
+              failingResult: matchedPipeline.run(orders.failing),
+            })
+          },
+        ),
+        Then('both cases produce expected resolved strings with no unhandled failures')(({ results }) => {
+          expect(results.validResult).toBe('handled-success:admitted:11')
+          expect(results.failingResult).toBe('handled-error:Gateway unavailable')
+        }),
+      ),
+    )
+    scenario(
+      'Sequencing with a dynamic resolver cell decides subsequent routing at runtime',
+      Gherkin.Do.pipe(
+        Given('an incoming admission order')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'dynamic-order' }),
+        ),
+        When('the pipeline sequences into a dynamically resolved cell function')(
+          'outcome',
+          ({ order }) => {
+            const dynamicPipeline = Cell.andThen(
+              primaryProcessor,
+              (admittedStatus: string) =>
+                Sandwich.read((status: string) => Effect.succeed(new Decoded({ length: status.length })))
+                  .decide(admitDecodedCommand)
+                  .write(() => Effect.succeed(`resolved-from:${admittedStatus}`)),
+            )
+            return Effect.exit(dynamicPipeline.run(order))
+          },
+        ),
+        Then('the dynamically chosen cell processes the prior response')(({ outcome }) => {
+          expect(outcome).toStrictEqual(Exit.succeed('resolved-from:admitted:13'))
+        }),
+      ),
+    )
+
+    scenario(
+      'Composing multi-step processing workflows using contextual do-notation',
+      Gherkin.Do.pipe(
+        Given('an admission order requiring cumulative enrichment')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'enrich-order' }),
+        ),
+        When('the processing steps accumulate named attributes in sequence')(
+          'outcome',
+          ({ order }) => {
+            const pipeline = Cell.Do.pipe(
+              Cell.bind('stageOne', () => primaryProcessor),
+              Cell.let('summaryLength', ({ stageOne }) => stageOne.length),
+              Cell.bind(
+                'stageTwo',
+                ({ stageOne }) =>
+                  Sandwich.read((ord: AdmissionOrder) => Effect.succeed(new Decoded({ length: ord.id.length })))
+                    .decide(admitDecodedCommand)
+                    .write(() => Effect.succeed(`next-after-${stageOne}`)),
+              ),
+            )
+            return Effect.exit(pipeline.run(order))
+          },
+        ),
+        Then('all accumulated fields are returned in a consolidated context')(({ outcome }) => {
+          expect(outcome).toStrictEqual(
+            Exit.succeed({
+              stageOne: 'admitted:12',
+              summaryLength: 11,
+              stageTwo: 'next-after-admitted:12',
+            }),
+          )
+        }),
+      ),
+    )
+
+    scenario(
+      'Binding a starting cell directly into a named property context',
+      Gherkin.Do.pipe(
+        Given('a base processor cell')(
+          'order',
+          () => Effect.succeed<AdmissionOrder>({ id: 'bindto-order' }),
+        ),
+        When('the cell response is bound directly into a labeled object')(
+          'outcome',
+          ({ order }) => {
+            const labeledPipeline = Cell.bindTo(primaryProcessor, 'initialResult')
+            return Effect.exit(labeledPipeline.run(order))
+          },
+        ),
+        Then('the output matches an object with that single named field')(({ outcome }) => {
+          expect(outcome).toStrictEqual(
+            Exit.succeed({
+              initialResult: 'admitted:12',
+            }),
+          )
+        }),
+      ),
+    )
+
+    scenario(
+      'Creating constant and suspended cells for workflow defaults and lazy initialization',
+      Gherkin.Do.pipe(
+        Given('a set of static and deferred cell definitions')(
+          'defs',
+          () => {
+            let evalCount = 0
+            const staticCell = Cell.succeed('fixed-value')
+            const failingCell = Cell.fail('expected-rejection')
+            const liftedCell = Cell.fromEffect(Effect.succeed('lifted-value'))
+            const lazyCell = Cell.suspend(() => {
+              evalCount++
+              return Cell.succeed(`evaluated:${evalCount}`)
+            })
+            const identityCell = Cell.id<AdmissionOrder>()
+            return Effect.succeed({
+              staticCell,
+              failingCell,
+              liftedCell,
+              lazyCell,
+              identityCell,
+              getCount: () => evalCount,
+            })
+          },
+        ),
+        When('evaluating these cells under sample orders')(
+          'evals',
+          ({ defs }) => {
+            const order: AdmissionOrder = { id: 'dummy' }
+            return Effect.all({
+              staticRes: defs.staticCell.run(order),
+              failRes: Effect.exit(defs.failingCell.run(order)),
+              liftedRes: defs.liftedCell.run(order),
+              lazyOne: defs.lazyCell.run(order),
+              lazyTwo: defs.lazyCell.run(order),
+              identityRes: defs.identityCell.run(order),
+              finalCount: Effect.sync(defs.getCount),
+            })
+          },
+        ),
+        Then('all cells behave consistently with their respective constructors')(({ evals }) => {
+          expect(evals.staticRes).toBe('fixed-value')
+          expect(evals.failRes).toStrictEqual(Exit.fail('expected-rejection'))
+          expect(evals.liftedRes).toBe('lifted-value')
+          expect(evals.lazyOne).toBe('evaluated:1')
+          expect(evals.lazyTwo).toBe('evaluated:2')
+          expect(evals.identityRes).toStrictEqual({ id: 'dummy' })
+          expect(evals.finalCount).toBe(2)
+        }),
+      ),
+    )
+  })
