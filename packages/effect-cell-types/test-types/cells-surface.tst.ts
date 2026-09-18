@@ -666,3 +666,66 @@ describe('T14 the sequencing arrows and the match destructor', () => {
     expect(paired).type.toBe<Cell.Cell<Cmd, readonly [string | number, Decision], WriteErr, Db | Bus>>()
   })
 })
+
+describe('T15 the Do chain over the TypeLambda', () => {
+  it('Should_AccumulateTheRecord_When_BindingOntoDo', () => {
+    const chained = pipe(
+      Cell.Do,
+      Cell.bind('decision', (): Cell.Cell<Cmd, Decision, ReadErr, Db> => itemCell),
+      Cell.bind('count', (): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell),
+      Cell.let('line', ({ count }: { readonly count: number }): string => `seen:${count}`),
+    )
+    expect(chained).type.toBe<
+      Cell.Cell<
+        Cmd,
+        Record<'decision', Decision> & Record<'count', number> & Record<'line', string>,
+        ReadErr | WriteErr,
+        Db | Bus
+      >
+    >()
+  })
+
+  it('Should_NarrowTheInput_When_BindingDirectlyOntoDo', () => {
+    const narrowed = pipe(
+      Cell.Do,
+      Cell.bind('decision', (): Cell.Cell<Cmd, Decision, ReadErr, Db> => itemCell),
+    )
+    expect(narrowed).type.toBe<Cell.Cell<Cmd, Record<'decision', Decision>, ReadErr, Db>>()
+  })
+
+  it('Should_RefuseTheInner_When_BindDemandsADifferentInput', () => {
+    expect<typeof Cell.bind>().type.not.toBeCallableWith(
+      itemCell,
+      'raw',
+      (_scope: { readonly decision: Decision }) => innerOverRaw,
+    )
+  })
+
+  it('Should_WrapTheValue_When_BindingToAName', () => {
+    expect(Cell.bindTo(itemCell, 'v')).type.toBe<
+      Cell.Cell<Cmd, Record<'v', Decision>, ReadErr, Db>
+    >()
+  })
+
+  it('Should_AccumulateTheRecord_When_BindingOntoABindTo', () => {
+    const chained = Cell.bind(
+      Cell.bindTo(itemCell, 'v'),
+      'w',
+      (): Cell.Cell<Cmd, number, WriteErr, Bus> => numberCell,
+    )
+    expect(chained).type.toBe<
+      Cell.Cell<Cmd, Record<'v', Decision> & Record<'w', number>, ReadErr | WriteErr, Db | Bus>
+    >()
+  })
+
+  it('Should_ThreadTheScope_When_LettingAPureField', () => {
+    const chained = pipe(
+      Cell.Do,
+      Cell.bind('decision', (): Cell.Cell<Cmd, Decision, ReadErr, Db> => itemCell),
+      Cell.let('admitted', ({ decision }: { readonly decision: Decision }): boolean => decision.admitted),
+    )
+    expect(chained).type.toBe<
+      Cell.Cell<Cmd, Record<'decision', Decision> & Record<'admitted', boolean>, ReadErr, Db>
+    >()
+  })
+})

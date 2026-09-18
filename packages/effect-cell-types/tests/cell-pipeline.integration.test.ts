@@ -553,4 +553,129 @@ Feature('Composing pipelines through the piped instance method').body(({ scenari
       }),
     ),
   )
+
+  scenario(
+    'a Do chain feeds the identical input to every bound cell',
+    Gherkin.Do.pipe(
+      When('a two-bind chain with a let runs')(
+        'run',
+        () => {
+          const seen: Command[] = []
+          const watch = (seenInput: Command): Command => {
+            seen.push(seenInput)
+            return seenInput
+          }
+          const chained = answeringCell.pipe(
+            Cell.bindTo('first'),
+            Cell.bind('second', () => Cell.mapInput(answeringCell, watch)),
+            Cell.let('line', ({ first }: { readonly first: string }) => `seen:${first.length}`),
+          )
+          const dataFirst = Cell.bind(
+            Cell.bindTo(Cell.mapInput(answeringCell, watch), 'v'),
+            'w',
+            () => Cell.mapInput(answeringCell, watch),
+          )
+          return Effect.map(
+            Effect.zip(chained.run(command), dataFirst.run(command)),
+            ([chainedOut, dataFirstOut]) => ({ chainedOut, dataFirstOut, seen }),
+          )
+        },
+      ),
+      Then('every cell saw the same input and the record accumulated')((s) => {
+        expect(s.run.chainedOut).toStrictEqual({
+          first: 'admitted:4',
+          second: 'admitted:4',
+          line: 'seen:10',
+        })
+        expect(s.run.dataFirstOut).toStrictEqual({ v: 'admitted:4', w: 'admitted:4' })
+        expect(s.run.seen).toStrictEqual([command, command, command])
+      }),
+    ),
+  )
+
+  scenario(
+    'a Do chain short-circuits when a bound cell fails',
+    Gherkin.Do.pipe(
+      When('a bind chain runs under a failing first cell')(
+        'run',
+        () => {
+          const trace: string[] = []
+          const failing = Cell.fromEffect(Effect.fail({ offline: true } as const))
+          const chained = Cell.Do.pipe(
+            Cell.bind('first', () => failing),
+            Cell.bind('second', () => {
+              trace.push('second')
+              return answeringCell
+            }),
+            Cell.let('line', () => {
+              trace.push('let')
+              return 'never'
+            }),
+          )
+          return Effect.map(Effect.exit(chained.run(command)), (exit) => ({ exit, trace }))
+        },
+      ),
+      Then('the failure arrives and the later steps never ran')((s) => {
+        expect(s.run.exit).toStrictEqual(Exit.fail({ offline: true } as const))
+        expect(s.run.trace).toStrictEqual([])
+      }),
+    ),
+  )
+  scenario(
+    'a named answer gains a computed field',
+    Gherkin.Do.pipe(
+      When('a named answer gains a computed field')(
+        'run',
+        () =>
+          Cell.bindTo(answeringCell, 'first').pipe(
+            Cell.let('line', ({ first }: { readonly first: string }) => `seen:${first.length}`),
+            Cell.let('again', ({ line }: { readonly line: string }) => `${line}!`),
+          ).run(command),
+      ),
+      Then('the named answer carries both computed fields')((s) => {
+        expect(s.run).toStrictEqual({ first: 'admitted:4', line: 'seen:10', again: 'seen:10!' })
+      }),
+    ),
+  )
+
+  scenario(
+    'a Do bind chain builds the same cell as the flatMap chain',
+    Gherkin.Do.pipe(
+      When('a diverse batch runs under both spellings')(
+        'run',
+        () => {
+          const ids = ['', 'a', 'ab', 'abc', 'abcd', 'abcde'] as const
+          const outcomes = ids.map((raw) => {
+            const input = { id: raw }
+            const viaDo = Cell.Do.pipe(
+              Cell.bind('length', () => Cell.succeed(raw.length)),
+              Cell.bind('doubled', ({ length }: { readonly length: number }) => Cell.succeed(length * 2)),
+              Cell.let('line', ({ doubled }: { readonly doubled: number }) => `len:${doubled}`),
+            )
+            const viaFlatMap = Cell.flatMap(
+              Cell.succeed(raw.length),
+              (length) =>
+                Cell.flatMap(
+                  Cell.succeed(length * 2),
+                  (doubled) =>
+                    Cell.map(Cell.succeed({ length, doubled }), (scope) => ({ ...scope, line: `len:${doubled}` })),
+                ),
+            )
+            return {
+              fromDo: Effect.runSync(viaDo.run(input)),
+              fromFlatMap: Effect.runSync(viaFlatMap.run(input)),
+            }
+          })
+          return Effect.succeed({ outcomes })
+        },
+      ),
+      Then('both spellings answer the identical record')((s) => {
+        expect(s.run.outcomes.length).toStrictEqual(6)
+        for (const outcome of s.run.outcomes) {
+          expect(outcome.fromDo).toStrictEqual(outcome.fromFlatMap)
+        }
+        expect(s.run.outcomes[3]?.fromDo).toStrictEqual({ length: 3, doubled: 6, line: 'len:6' })
+      }),
+    ),
+  )
 })

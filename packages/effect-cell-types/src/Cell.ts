@@ -384,3 +384,82 @@ export const match: {
     },
   ): Cell<I, B | C, never, R> => make((input) => Effect.match(self.run(input), options)),
 )
+
+/**
+ * The local no-infer marker the Do chain overloads use so the accumulator
+ * stays fixed while the next field infers.
+ */
+type NoInfer<A> = [A][A extends unknown ? 0 : never]
+
+/**
+ * The empty accumulator cell a Do chain starts from. It accepts any demanded
+ * input, so the first bind soundly narrows the chain to its input.
+ */
+export const Do: Kind<unknown, never, never, {}> = succeed({})
+
+/**
+ * Adds a named field to the Do accumulator by running the cell the function
+ * builds from the accumulated scope. Both cells observe the identical input,
+ * so a bind demanding another input is a compile error; the error and service
+ * channels union. A failing cell short-circuits the rest of the chain.
+ */
+export const bind: {
+  <N extends string, A extends object, I, E2, R2, B>(
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => Kind<I, E2, R2, B>,
+  ): <E, R>(self: Kind<I, E, R, A>) => Kind<I, E | E2, R | R2, A & Record<N, B>>
+  <I, A extends object, E, R, N extends string, E2, R2, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => Kind<I, E2, R2, B>,
+  ): Kind<I, E | E2, R | R2, A & Record<N, B>>
+} = dual(
+  3,
+  <I, A extends object, E, R, N extends string, E2, R2, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => Kind<I, E2, R2, B>,
+  ) => flatMap(self, (a) => map(f(a), (b) => ({ ...a, [name]: b }))),
+)
+
+/**
+ * Wraps the cell's response into a named field, starting a Do chain from an
+ * existing cell.
+ */
+export const bindTo: {
+  <N extends string, A, E, R>(
+    name: N,
+  ): <I>(self: Kind<I, E, R, A>) => Kind<I, E, R, Record<N, A>>
+  <I, A, E, R, N extends string>(
+    self: Kind<I, E, R, A>,
+    name: N,
+  ): Kind<I, E, R, Record<N, A>>
+} = dual(
+  2,
+  <I, A, E, R, N extends string>(self: Kind<I, E, R, A>, name: N) => map(self, (a) => ({ [name]: a })),
+)
+
+/**
+ * Adds a named field to the Do accumulator by computing a pure value from the
+ * accumulated scope. The input, error, and service channels pass through.
+ */
+const let_: {
+  <N extends string, A extends object, B>(
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => B,
+  ): <I, E, R>(self: Kind<I, E, R, A>) => Kind<I, E, R, A & Record<N, B>>
+  <I, A extends object, E, R, N extends string, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => B,
+  ): Kind<I, E, R, A & Record<N, B>>
+} = dual(
+  3,
+  <I, A extends object, E, R, N extends string, B>(
+    self: Kind<I, E, R, A>,
+    name: Exclude<N, keyof A>,
+    f: (a: NoInfer<A>) => B,
+  ) => map(self, (a) => ({ ...a, [name]: f(a) })),
+)
+
+export { let_ as let }

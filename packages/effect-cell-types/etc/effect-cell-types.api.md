@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen$1 as andThen, collect, collectAll, fail, flatMap$1 as flatMap, fromEffect, gate, id, map, mapError, mapInput, match, orElse, provide, succeed, suspend, tap, zip, zipWith };
+    export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen$1 as andThen, bind, bindTo, collect, collectAll, fail, flatMap$1 as flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provide, succeed, suspend, tap, zip, zipWith };
 }
 
 // @public (undocumented)
