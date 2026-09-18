@@ -43,7 +43,7 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "memfs": "^4.17.2"
+    "memfs": "^4.78.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
