@@ -182,7 +182,14 @@ describe('the chains the surface refuses', () => {
 
   it('Should_RefuseTheDecide_When_ItsInputIsNotTheReadRaw', () => {
     const rawChain = Sandwich.read(read)
+    expect<typeof rawChain.decide>().type.toBeCallableWith(decideOverRaw)
     expect<typeof rawChain.decide>().type.not.toBeCallableWith(decideOverDecoded)
+  })
+
+  it('Should_RefuseUnbrandedPurePhase_When_DecodeRequiresPurePhaseBrand', () => {
+    const rawChain = Sandwich.read(read)
+    expect<typeof rawChain.decode>().type.toBeCallableWith(Sandwich.pure(decode))
+    expect<typeof rawChain.decode>().type.not.toBeCallableWith(decode)
   })
 })
 
@@ -521,11 +528,13 @@ describe('the constructor arrows', () => {
   })
 
   it('Should_AcceptAnyInput_When_SupplyingAConstant', () => {
-    expect(Cell.succeed(7)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+    expect(Cell.succeed(7)).type.toBe<Cell.Cell<unknown, number, never, never>>()
+    expect<Cell.Cell<unknown, number, never, never>>().type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
   })
 
   it('Should_AcceptAnyInput_When_LiftingAnEffect', () => {
-    expect(Cell.fromEffect(succeedSeven)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+    expect(Cell.fromEffect(succeedSeven)).type.toBe<Cell.Cell<unknown, number, never, never>>()
+    expect<Cell.Cell<unknown, number, never, never>>().type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
   })
 })
 
