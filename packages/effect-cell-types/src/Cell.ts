@@ -4,7 +4,7 @@ import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
 import type { Layer } from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type { Pipeable } from 'effect/Pipeable'
-import { pipeArguments } from 'effect/Pipeable'
+import { Prototype } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 
 /**
@@ -26,12 +26,6 @@ export type CellTypeId = typeof CellTypeId
 export interface Cell<in I, out A, out E = never, out R = never> extends Pipeable {
   readonly [CellTypeId]: CellTypeId
   readonly run: (input: I) => Effect.Effect<A, E, R>
-}
-
-const PipeInspectableProto = {
-  pipe() {
-    return pipeArguments(this, arguments)
-  },
 }
 
 /**
@@ -56,7 +50,7 @@ export type Run<I, A, E, R> = Cell<I, A, E, R>['run']
 const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A, E, R> => ({
   [CellTypeId]: CellTypeId,
   run,
-  ...PipeInspectableProto,
+  ...Prototype,
 })
 /**
  * A constant response for any input; the error and service channels are never.
