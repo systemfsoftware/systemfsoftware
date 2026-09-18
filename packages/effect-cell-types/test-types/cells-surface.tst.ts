@@ -4,6 +4,7 @@ import type { Effect } from 'effect/Effect'
 import { map } from 'effect/Effect'
 import type { Layer } from 'effect/Layer'
 import type { Option } from 'effect/Option'
+import type { Pipeable } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
@@ -333,6 +334,35 @@ describe('T8 the variance the Cell carries', () => {
 
   it('Should_AcceptTheWiderServices_When_TheNarrowerIsExpected', () => {
     expect<Cell.Cell<Cmd, void, never, Bus>>().type.toBeAssignableTo<Cell.Cell<Cmd, void, never, Bus | Clock>>()
+  })
+
+  it('Should_PipeValues_When_TheCellCarriesPipeable', () => {
+    expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Pipeable>()
+    expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Cell.Cell<Cmd, void, never, never> & Pipeable>()
+  })
+
+  it('Should_KeepTheVariance_When_PipeableIsPresent', () => {
+    expect<Cell.Cell<Cmd, boolean, never, never>>().type.toBeAssignableTo<
+      Cell.Cell<{ id: string }, boolean | void, never, never> & Pipeable
+    >()
+    expect<Cell.Cell<Cmd, void, WriteErr, never>>().type.toBeAssignableTo<
+      Cell.Cell<{ id: string }, void, WriteErr | ReadErr, never> & Pipeable
+    >()
+  })
+
+  it('Should_PipeThePipedResult_When_NestingInstancePipes', () => {
+    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const piped = cell.pipe(Cell.map((response: void): number => (response === undefined ? 1 : 1)))
+    expect(piped).type.toBe<Cell.Cell<Cmd, number, never, never>>()
+    expect(piped.pipe(Cell.map((count: number): string => `${count}`))).type.toBe<
+      Cell.Cell<Cmd, string, never, never>
+    >()
+  })
+
+  it('Should_GateTheBrand_When_UnbrandedValueIsExpected', () => {
+    expect<{ readonly run: (input: Cmd) => Effect<void, never, never> }>().type.not.toBeAssignableTo<
+      Cell.Cell<Cmd, void, never, never>
+    >()
   })
 })
 

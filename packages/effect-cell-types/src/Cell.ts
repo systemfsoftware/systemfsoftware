@@ -3,6 +3,8 @@ import { dual } from 'effect/Function'
 import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
 import type { Layer } from 'effect/Layer'
 import * as Option from 'effect/Option'
+import type { Pipeable } from 'effect/Pipeable'
+import { pipeArguments } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 
 /**
@@ -21,9 +23,15 @@ export type CellTypeId = typeof CellTypeId
  * channel carries the infrastructure refusals; the `R` channel carries the services the
  * phases `yield*`, provided once by the program's composition root.
  */
-export interface Cell<in I, out A, out E = never, out R = never> {
+export interface Cell<in I, out A, out E = never, out R = never> extends Pipeable {
   readonly [CellTypeId]: CellTypeId
   readonly run: (input: I) => Effect.Effect<A, E, R>
+}
+
+const PipeInspectableProto = {
+  pipe() {
+    return pipeArguments(this, arguments)
+  },
 }
 
 /**
@@ -48,6 +56,7 @@ export type Run<I, A, E, R> = Cell<I, A, E, R>['run']
 const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A, E, R> => ({
   [CellTypeId]: CellTypeId,
   run,
+  ...PipeInspectableProto,
 })
 /**
  * Transforms the Cell's response.
