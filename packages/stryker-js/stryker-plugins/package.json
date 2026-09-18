@@ -67,7 +67,7 @@
     "@systemfsoftware/stryker-js": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
-    "@types/estree": "1.0.8",
+    "@types/estree": "1.0.9",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
