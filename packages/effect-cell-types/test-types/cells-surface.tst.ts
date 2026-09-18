@@ -90,6 +90,9 @@ declare const writeOutputNeedingBus: (output: Output, raw: Raw) => Effect<void, 
 declare const command: Cmd
 
 declare const dbLayer: Layer<Db, never, never>
+declare const readErr: ReadErr
+declare const lifted: Effect<string, ReadErr, Db>
+declare const succeedSeven: Effect<number, never, never>
 declare const failingDbLayer: Layer<Db, ReadErr, never>
 declare const clockLayer: Layer<Clock, never, never>
 declare const dbFromClock: Layer<Db, never, Clock>
@@ -489,5 +492,37 @@ describe('T11 the sandwich chain the continuation surface builds', () => {
         Result.succeed(encode(outcome))
       ),
     )
+  })
+})
+
+describe('T12 the constructor arrows', () => {
+  it('Should_LiftTheConstant_When_Succeeding', () => {
+    expect(Cell.succeed(7)).type.toBe<Cell.Cell<unknown, number, never, never>>()
+    expect(Cell.succeed(7).run(command)).type.toBe<Effect<number, never, never>>()
+  })
+
+  it('Should_LiftTheFailure_When_Failing', () => {
+    expect(Cell.fail(readErr)).type.toBe<Cell.Cell<unknown, never, ReadErr, never>>()
+  })
+
+  it('Should_CarryTheChannels_When_LiftingAnEffect', () => {
+    expect(Cell.fromEffect(lifted)).type.toBe<Cell.Cell<unknown, string, ReadErr, Db>>()
+  })
+
+  it('Should_DeferConstruction_When_Suspending', () => {
+    expect(Cell.suspend(() => itemCell)).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db>>()
+  })
+
+  it('Should_EchoTheInput_When_Id', () => {
+    expect(Cell.id<Cmd>()).type.toBe<Cell.Cell<Cmd, Cmd, never, never>>()
+    expect(Cell.id<Cmd>().run(command)).type.toBe<Effect<Cmd, never, never>>()
+  })
+
+  it('Should_AcceptAnyInput_When_SupplyingAConstant', () => {
+    expect(Cell.succeed(7)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+  })
+
+  it('Should_AcceptAnyInput_When_LiftingAnEffect', () => {
+    expect(Cell.fromEffect(succeedSeven)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
   })
 })

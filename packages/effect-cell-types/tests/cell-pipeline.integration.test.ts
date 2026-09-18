@@ -5,7 +5,6 @@ import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
-
 import {
   admitDecodedCommand,
   Admitted,
@@ -76,6 +75,141 @@ Feature('Composing pipelines through the piped instance method').body(({ scenari
       ),
       Then('the twice-counted line length arrives')(({ exit }) => {
         expect(exit).toStrictEqual(Exit.succeed('admitted:4'.length + 1))
+      }),
+    ),
+  )
+
+  scenario(
+    'A constant answers and a refusal carries its error',
+    Gherkin.Do.pipe(
+      When('a constant and a refusal run side by side')(
+        'run',
+        () =>
+          Effect.map(
+            Effect.zip(
+              Cell.succeed(7).run(command),
+              Effect.exit(Cell.fail({ offline: true } as const).run(command)),
+            ),
+            ([constant, refusal]) => ({ constant, refusal }),
+          ),
+      ),
+      Then('the constant arrives and the refusal carries the error')((s) => {
+        expect(s.run.constant).toStrictEqual(7)
+        expect(s.run.refusal).toStrictEqual(Exit.fail({ offline: true } as const))
+      }),
+    ),
+  )
+
+  scenario(
+    'A lifted effect carries its success and its failure',
+    Gherkin.Do.pipe(
+      When('a lifted success and a lifted failure run side by side')(
+        'run',
+        () =>
+          Effect.map(
+            Effect.zip(
+              Cell.fromEffect(Effect.succeed('up')).run(command),
+              Effect.exit(Cell.fromEffect(Effect.fail({ offline: true } as const)).run(command)),
+            ),
+            ([line, refusal]) => ({ line, refusal }),
+          ),
+      ),
+      Then('both channels arrive intact')((s) => {
+        expect(s.run.line).toStrictEqual('up')
+        expect(s.run.refusal).toStrictEqual(Exit.fail({ offline: true } as const))
+      }),
+    ),
+  )
+
+  scenario(
+    'A deferred cell builds on first run, never at wrap time',
+    Gherkin.Do.pipe(
+      When('a counted thunk is wrapped and then run twice')(
+        'run',
+        () => {
+          let builds = 0
+          const deferred = Cell.suspend(() => {
+            builds = builds + 1
+            return Cell.succeed(builds)
+          })
+          const wrapped = builds
+          return Effect.map(
+            Effect.zip(deferred.run(command), deferred.run(command)),
+            ([first, second]) => ({ wrapped, first, second }),
+          )
+        },
+      ),
+      Then('the wrap builds nothing and each run builds once')((s) => {
+        expect(s.run.wrapped).toStrictEqual(0)
+        expect(s.run.first).toStrictEqual(1)
+        expect(s.run.second).toStrictEqual(2)
+      }),
+    ),
+  )
+
+  scenario(
+    'The identity arrow echoes and composes as both-sided identity',
+    Gherkin.Do.pipe(
+      When('an echoed command runs beside its left and right compositions')(
+        'run',
+        () => {
+          const echoed = Cell.id<Command>().run(command)
+          const left = Cell.andThen(Cell.id<Command>(), answeringCell).run(command)
+          const right = Cell.andThen(answeringCell, Cell.id<string>()).run(command)
+          const viaPipe = answeringCell.pipe(Cell.andThen(Cell.id<string>())).run(command)
+          return Effect.map(
+            Effect.zip(Effect.zip(echoed, left), Effect.zip(right, viaPipe)),
+            ([[echo, leftLine], [rightLine, pipedLine]]) => ({ echo, leftLine, rightLine, pipedLine }),
+          )
+        },
+      ),
+      Then('the echo matches and every identity composition answers the line')((s) => {
+        expect(s.run.echo).toStrictEqual(command)
+        expect(s.run.leftLine).toStrictEqual('admitted:4')
+        expect(s.run.rightLine).toStrictEqual('admitted:4')
+        expect(s.run.pipedLine).toStrictEqual('admitted:4')
+      }),
+    ),
+  )
+
+  scenario(
+    'Generated commands keep the identity as both-sided identity',
+    Gherkin.Do.pipe(
+      When('a diverse batch runs echo and every identity composition')(
+        'run',
+        () => {
+          const ids = [
+            '',
+            'a',
+            'ab',
+            'abc',
+            'abcd',
+            'abcdefgh',
+            'x'.repeat(64),
+            'héllo-✓-世界',
+            'a b\tc',
+            '0000',
+          ] as const
+          const outcomes = ids.map((raw) => {
+            const input = { id: raw }
+            return {
+              input,
+              echo: Effect.runSync(Cell.id<Command>().run(input)),
+              left: Effect.runSync(Cell.andThen(Cell.id<Command>(), answeringCell).run(input)),
+              right: Effect.runSync(Cell.andThen(answeringCell, Cell.id<string>()).run(input)),
+              piped: Effect.runSync(answeringCell.pipe(Cell.andThen(Cell.id<string>())).run(input)),
+            }
+          })
+          return Effect.succeed({ outcomes })
+        },
+      ),
+      Then('every input echoes and every composition agrees')((s) => {
+        expect(s.run.outcomes.length).toStrictEqual(10)
+        for (const outcome of s.run.outcomes) {
+          expect(outcome.echo).toStrictEqual(outcome.input)
+          expect(outcome.left).toStrictEqual(outcome.right)
+          expect(outcome.left).toStrictEqual(outcome.piped)
+        }
       }),
     ),
   )

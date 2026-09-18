@@ -59,6 +59,31 @@ const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A,
   ...PipeInspectableProto,
 })
 /**
+ * A constant response for any input; the error and service channels are never.
+ */
+export const succeed = <A>(response: A): Cell<unknown, A, never, never> => make(() => Effect.succeed(response))
+
+/**
+ * A constant infrastructure failure for any input.
+ */
+export const fail = <E>(error: E): Cell<unknown, never, E, never> => make(() => Effect.fail(error))
+
+/**
+ * The lifted effect's response, failure, and services carried for any input.
+ */
+export const fromEffect = <A, E, R>(effect: Effect.Effect<A, E, R>): Cell<unknown, A, E, R> => make(() => effect)
+
+/**
+ * The thunked cell built afresh on each run; construction never happens at wrap time.
+ */
+export const suspend = <I, A, E, R>(thunk: () => Cell<I, A, E, R>): Cell<I, A, E, R> =>
+  make((input) => Effect.suspend(() => thunk().run(input)))
+
+/**
+ * The response is the input; the identity for `andThen`.
+ */
+export const id = <I>(): Cell<I, I, never, never> => make((input) => Effect.succeed(input))
+/**
  * Transforms the Cell's response.
  */
 export const map: {
