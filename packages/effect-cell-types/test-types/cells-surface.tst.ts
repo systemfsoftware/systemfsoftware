@@ -88,7 +88,7 @@ declare const writeOutcomeNeedingBus: (outcome: Result.Result<Decision, Refusal>
 declare const writeOutput: (output: Output, raw: Raw) => Effect<void, never, never>
 declare const writeOutputNeedingBus: (output: Output, raw: Raw) => Effect<void, never, Bus>
 declare const command: Cmd
-
+declare const observeOnBus: (decision: Decision) => Effect<void, never, Bus>
 declare const dbLayer: Layer<Db, never, never>
 declare const readErr: ReadErr
 declare const lifted: Effect<string, ReadErr, Db>
@@ -105,6 +105,7 @@ declare const optionReaderOverLengths: Cell.Cell<Cmd, Option<Decoded>, ReadErr, 
 declare const bareReader: Cell.Cell<Cmd, Raw, ReadErr, Db>
 declare const innerOverRaw: Cell.Cell<Raw, Decision, WriteErr, Bus>
 declare const itemCell: Cell.Cell<Cmd, Decision, ReadErr, Db>
+declare const itemFallback: Cell.Cell<Cmd, Decision, WriteErr, Bus>
 
 declare const readTagged: (command: Cmd) => Effect<TaggedCmd, never, never>
 declare const writeTotalOutcome: (
@@ -524,5 +525,49 @@ describe('T12 the constructor arrows', () => {
 
   it('Should_AcceptAnyInput_When_LiftingAnEffect', () => {
     expect(Cell.fromEffect(succeedSeven)).type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+  })
+})
+
+describe('T13 the error-channel arrows', () => {
+  it('Should_RemapTheFailure_When_MappingTheError', () => {
+    const remapped = pipe(itemCell, Cell.mapError((_error: ReadErr): string => 'offline'))
+    expect(remapped).type.toBe<Cell.Cell<Cmd, Decision, string, Db>>()
+    expect(remapped.run(command)).type.toBe<Effect<Decision, string, Db>>()
+  })
+
+  it('Should_ReadTheSameCell_When_MappingTheErrorDataFirst', () => {
+    expect(Cell.mapError(itemCell, (_error: ReadErr): string => 'offline')).type.toBe<
+      Cell.Cell<Cmd, Decision, string, Db>
+    >()
+  })
+
+  it('Should_NarrowToTheFallbackError_When_Recovering', () => {
+    const recovered = pipe(itemCell, Cell.orElse(itemFallback))
+    expect(recovered).type.toBe<Cell.Cell<Cmd, Decision, WriteErr, Db | Bus>>()
+  })
+
+  it('Should_ReadTheSameCell_When_RecoveringDataFirst', () => {
+    expect(Cell.orElse(itemCell, itemFallback)).type.toBe<Cell.Cell<Cmd, Decision, WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseAFallback_When_ItsInputIsNotTheCommand', () => {
+    expect<typeof Cell.orElse>().type.not.toBeCallableWith(itemCell, innerOverRaw)
+  })
+
+  it('Should_UnionTheChannels_When_Observing', () => {
+    const observed = pipe(
+      itemCell,
+      Cell.tap(() => lifted),
+    )
+    expect(observed).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db>>()
+  })
+
+  it('Should_ReadTheSameCell_When_ObservingDataFirst', () => {
+    expect(Cell.tap(itemCell, () => lifted)).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db>>()
+  })
+
+  it('Should_UnionTheObserverServices_When_TheObserverNeedsMore', () => {
+    const observed = pipe(itemCell, Cell.tap(observeOnBus))
+    expect(observed).type.toBe<Cell.Cell<Cmd, Decision, ReadErr, Db | Bus>>()
   })
 })

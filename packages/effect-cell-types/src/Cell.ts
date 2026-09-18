@@ -245,3 +245,55 @@ export const provide: {
     layer: Layer<ROut, LE, RIn>,
   ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
 )
+
+/**
+ * Remaps the Cell's infrastructure failure.
+ */
+export const mapError: {
+  <E, F>(f: (error: E) => F): <I, A, R>(self: Cell<I, A, E, R>) => Cell<I, A, F, R>
+  <I, A, E, R, F>(self: Cell<I, A, E, R>, f: (error: E) => F): Cell<I, A, F, R>
+} = dual(
+  2,
+  <I, A, E, R, F>(self: Cell<I, A, E, R>, f: (error: E) => F): Cell<I, A, F, R> =>
+    make((input) => Effect.mapError(self.run(input), f)),
+)
+
+/**
+ * Recovers from the Cell's infrastructure failure by running the fallback cell for the
+ * same input. The fallback answers the same response, so the error narrows to the
+ * fallback's. A decide refusal is success-channel data by the time run answers, so it
+ * passes through untouched and the fallback never runs for it.
+ */
+export const orElse: {
+  <I, A, E2, R2>(fallback: Cell<I, A, E2, R2>): <E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E2, R | R2>
+  <I, A, E, R, E2, R2>(self: Cell<I, A, E, R>, fallback: Cell<I, A, E2, R2>): Cell<I, A, E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, E2, R2>(self: Cell<I, A, E, R>, fallback: Cell<I, A, E2, R2>): Cell<I, A, E2, R | R2> =>
+    make((input) =>
+      Effect.matchEffect(self.run(input), {
+        onFailure: () => fallback.run(input),
+        onSuccess: Effect.succeed,
+      })
+    ),
+)
+
+/**
+ * Observes the Cell's response with an effect and preserves it. The observer never runs
+ * on an infrastructure failure.
+ */
+export const tap: {
+  <A, E2, R2>(
+    f: (response: A) => Effect.Effect<unknown, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | E2, R | R2>
+  <I, A, E, R, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Effect.Effect<unknown, E2, R2>,
+  ): Cell<I, A, E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, E2, R2>(
+    self: Cell<I, A, E, R>,
+    f: (response: A) => Effect.Effect<unknown, E2, R2>,
+  ): Cell<I, A, E | E2, R | R2> => make((input) => Effect.tap(self.run(input), f)),
+)

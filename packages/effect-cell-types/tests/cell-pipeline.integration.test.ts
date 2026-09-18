@@ -213,4 +213,158 @@ Feature('Composing pipelines through the piped instance method').body(({ scenari
       }),
     ),
   )
+
+  scenario(
+    'A refusal outcome passes through orElse with the fallback never running',
+    Gherkin.Do.pipe(
+      When('a refusing pipeline wrapped in orElse runs')(
+        'run',
+        () => {
+          const trace: string[] = []
+          const fallback = Cell.fromEffect(
+            Effect.sync(() => {
+              trace.push('fallback')
+              return 'fallback-line'
+            }),
+          )
+          const guarded = Cell.orElse(answeringCell, fallback)
+          const short: Command = { id: 'x' }
+          return Effect.map(guarded.run(short), (line) => ({ line, ran: trace }))
+        },
+      ),
+      Then('the refusal arrives intact and the fallback never ran')((s) => {
+        expect(s.run.line).toStrictEqual('refused:too short')
+        expect(s.run.ran).toStrictEqual([])
+      }),
+    ),
+  )
+
+  scenario(
+    'An infra failure runs the fallback on the same input and replaces the failure',
+    Gherkin.Do.pipe(
+      When('a failing read wrapped in orElse runs')(
+        'run',
+        () => {
+          const seen: Command[] = []
+          const failing = Sandwich.read(
+            (): Effect.Effect<Decoded, { readonly offline: true }, never> => Effect.fail({ offline: true } as const),
+          ).decide(admitDecodedCommand).write((outcome) => Effect.sync(() => render(outcome)))
+          const watching = Cell.mapInput(Cell.fromEffect(Effect.sync(() => 'fallback-line')), (command: Command) => {
+            seen.push(command)
+            return command
+          })
+          const guarded = failing.pipe(Cell.orElse(watching))
+          return Effect.map(guarded.run(command), (line) => ({ line, seen }))
+        },
+      ),
+      Then('the fallback line replaces the failure and saw the original input')((s) => {
+        expect(s.run.line).toStrictEqual('fallback-line')
+        expect(s.run.seen).toStrictEqual([command])
+      }),
+    ),
+  )
+
+  scenario(
+    'orElse runs its fallback exactly when the wrapped run fails',
+    Gherkin.Do.pipe(
+      When('a mixed batch runs under orElse')(
+        'run',
+        () => {
+          let fallbacks = 0
+          const flaky = Sandwich.read(
+            (command: Command): Effect.Effect<Decoded, { readonly offline: true }, never> =>
+              command.id.length === 0
+                ? Effect.fail({ offline: true } as const)
+                : Effect.succeed(new Decoded({ length: command.id.length })),
+          ).decide(admitDecodedCommand).write((outcome) => Effect.sync(() => render(outcome)))
+          const guarded = Cell.orElse(
+            flaky,
+            Cell.fromEffect(Effect.sync(() => {
+              fallbacks = fallbacks + 1
+              return 'fallback-line'
+            })),
+          )
+          const ids = ['', 'a', 'ab', 'abc', 'abcd', 'abcde']
+          return Effect.map(
+            Effect.forEach(ids, (raw) => guarded.run({ id: raw })),
+            (lines) => ({ lines, fallbacks }),
+          )
+        },
+      ),
+      Then('only the failing input fell back')((s) => {
+        expect(s.run.lines).toStrictEqual([
+          'fallback-line',
+          'refused:too short',
+          'refused:too short',
+          'refused:too short',
+          'admitted:4',
+          'admitted:5',
+        ])
+        expect(s.run.fallbacks).toStrictEqual(1)
+      }),
+    ),
+  )
+
+  scenario(
+    'mapError remaps the failure and leaves the response',
+    Gherkin.Do.pipe(
+      When('a failing cell and an answering cell run under mapError')(
+        'run',
+        () =>
+          Effect.map(
+            Effect.zip(
+              Effect.exit(Cell.mapError(Cell.fail({ offline: true } as const), () => 'mapped').run(command)),
+              answeringCell.pipe(Cell.mapError(() => 'never-used')).run(command),
+            ),
+            ([refusal, line]) => ({ refusal, line }),
+          ),
+      ),
+      Then('the error is remapped and the response passes through')((s) => {
+        expect(s.run.refusal).toStrictEqual(Exit.fail('mapped'))
+        expect(s.run.line).toStrictEqual('admitted:4')
+      }),
+    ),
+  )
+
+  scenario(
+    'tap observes the response then continues unchanged and in order',
+    Gherkin.Do.pipe(
+      When('an observed pipeline runs')(
+        'run',
+        () => {
+          const trace: string[] = []
+          const observed = Cell.tap(answeringCell, (line) =>
+            Effect.sync(() => {
+              trace.push(line)
+            }))
+          return Effect.map(observed.run(command), (line) => ({ line, trace }))
+        },
+      ),
+      Then('the response is unchanged and the observation ran first')((s) => {
+        expect(s.run.line).toStrictEqual('admitted:4')
+        expect(s.run.trace).toStrictEqual(['admitted:4'])
+      }),
+    ),
+  )
+
+  scenario(
+    'tap on a failure skips the observer and keeps the failure',
+    Gherkin.Do.pipe(
+      When('an observed failing cell runs')(
+        'run',
+        () => {
+          const trace: string[] = []
+          const observed = Cell.tap(Cell.fail({ offline: true } as const), () =>
+            Effect.sync(() => {
+              trace.push('observed')
+            }))
+          return Effect.map(Effect.exit(observed.run(command)), (exit) => ({ exit, trace }))
+        },
+      ),
+      Then('the failure arrives and nothing was observed')((s) => {
+        expect(s.run.exit).toStrictEqual(Exit.fail({ offline: true } as const))
+        expect(s.run.trace).toStrictEqual([])
+      }),
+    ),
+  )
 })
