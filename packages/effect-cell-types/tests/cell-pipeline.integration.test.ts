@@ -78,7 +78,7 @@ const fallbackProcessor = Sandwich.read((order: AdmissionOrder) =>
 
 Feature('Processing admission orders through resilient cell pipelines')
   .withScenarioLayer(AuditServiceLive)
-  .body(({ scenario }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'An order failing on primary infrastructure recovers gracefully via a secondary processor',
       Gherkin.Do.pipe(
@@ -197,35 +197,38 @@ Feature('Processing admission orders through resilient cell pipelines')
       ),
     )
 
-    scenario(
-      'Collapsing pipeline success and infrastructure failure into an unexceptional status report',
-      Gherkin.Do.pipe(
-        Given('orders representing both success and failure cases')(
-          'orders',
-          () =>
-            Effect.succeed({
-              valid: { id: 'valid-order' },
-              failing: { id: 'infra-crash' },
-            }),
+    scenarioOutline(
+      'Collapsing pipeline outcomes into an unexceptional status report',
+      [
+        {
+          orderId: 'valid-order',
+          expectedResult: 'handled-success:admitted:11',
+        },
+        {
+          orderId: 'infra-crash',
+          expectedResult: 'handled-error:Gateway unavailable',
+        },
+      ] as const,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('an incoming admission order')(
+            'order',
+            () => Effect.succeed<AdmissionOrder>({ id: row.orderId }),
+          ),
+          When('evaluated under a unified outcome matcher')(
+            'result',
+            ({ order }) => {
+              const matchedPipeline = Cell.match(primaryProcessor, {
+                onFailure: (err) => `handled-error:${err.message}`,
+                onSuccess: (res) => `handled-success:${res}`,
+              })
+              return matchedPipeline.run(order)
+            },
+          ),
+          Then('it resolves to the formatted status string')(({ result }) => {
+            expect(result).toBe(row.expectedResult)
+          }),
         ),
-        When('both orders are evaluated under a unified outcome matcher')(
-          'results',
-          ({ orders }) => {
-            const matchedPipeline = Cell.match(primaryProcessor, {
-              onFailure: (err) => `handled-error:${err.message}`,
-              onSuccess: (res) => `handled-success:${res}`,
-            })
-            return Effect.all({
-              validResult: matchedPipeline.run(orders.valid),
-              failingResult: matchedPipeline.run(orders.failing),
-            })
-          },
-        ),
-        Then('both cases produce expected resolved strings with no unhandled failures')(({ results }) => {
-          expect(results.validResult).toBe('handled-success:admitted:11')
-          expect(results.failingResult).toBe('handled-error:Gateway unavailable')
-        }),
-      ),
     )
     scenario(
       'Sequencing with a dynamic resolver cell decides subsequent routing at runtime',
