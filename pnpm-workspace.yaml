@@ -17,10 +17,10 @@ catalog:
   effect: 4.0.0-rc.112
   "@effect/vitest": 4.0.0-rc.112
   fast-check: ^4
-  vitest: ^4
+  vitest: ^5
   "@vitest/snapshot": ^4
-  "@vitest/coverage-v8": ^4
-  "@vitest/coverage-istanbul": ^4
+  "@vitest/coverage-v8": ^5
+  "@vitest/coverage-istanbul": ^5
   vite-tsconfig-paths: ^6.1.1
   vite: ^8
   tsdown: ^0.22.14
@@ -51,8 +51,8 @@ catalog:
   type-fest: ^5.8.0
   "@storybook/addon-vitest": ^10.5.0
   "@storybook/react-vite": ^10.5.0
-  "@vitest/browser": ^4
-  "@vitest/browser-playwright": ^4
+  "@vitest/browser": ^5
+  "@vitest/browser-playwright": ^5
   playwright: ^1
 catalogMode: prefer
 catalogs:
