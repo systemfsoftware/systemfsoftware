@@ -70,12 +70,7 @@ export const read = <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE,
                 onSuccess: Effect.succeed,
               })
               const outcome = workflow(decoded)
-              // The encode phase's refusal channel is `never` by construction, so this arm cannot
-              // run; `Result.match` keeps the unwrap total without asserting the result's shape.
-              const encoded = Result.match(encodePhase(outcome), {
-                onFailure: (error: never): Out => error,
-                onSuccess: (output) => output,
-              })
+              const encoded = Result.getOrThrow(encodePhase(outcome))
               return yield* writeRun(encoded, raw)
             })
           return { [CellTypeId]: CellTypeId, run: composed, phases: ['read', 'decode', 'decide', 'encode', 'write'] }
