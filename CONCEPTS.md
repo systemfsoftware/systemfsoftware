@@ -187,6 +187,10 @@ A property test granted to a pure decision, sitting beside it under a matching n
 
 A decision earns a property test only when something about it cannot be reached from above: invariants that are universals over generated input, or refusals no generated law can express. Being important, or merely being hard to test through its callers, is not a qualification.
 
+### Deterministic universal
+
+A law verified by asserting every element of a fixed, deliberately diverse input batch inside the behaviour lane, used where no sanctioned lane admits a generated-input property over the surface under test. It preserves the universal quantification of a law — every batch element must satisfy the law, so the assertion is a ∀-claim and not a sample — while living in a lane whose purity contract forbids generators. Hand-picked illustrative examples are a different, weaker thing; a deterministic universal is admitted only when the batch spans the law's boundary shapes (empty, boundary sizes, repetition, unicode, whitespace), and the placement gap that forced the substitution belongs to the instrument's owner, not to the test author.
+
 ### workflow
 
 The pure decision — one business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. The gates are enforced, not documented: `Workflow.make` refuses an uninhabited (`never`) or untagged error channel at the construction site via the `InhabitedErrorChannel` and `TaggedErrorChannel` constraints, and the `WorkflowBrand` phantom on `Workflow<C,D,E>` means only `make` produces a value `Cell.decide` accepts.
