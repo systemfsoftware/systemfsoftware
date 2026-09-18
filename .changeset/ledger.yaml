@@ -47,6 +47,10 @@
   dir: packages/oxlint-plugin/all
   intents:
     - recommended-set-gains-new-rules
+"@systemfsoftware/all@2.1.0":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - oxlint-preset-cell-rules-retired
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -315,6 +319,10 @@
   dir: packages/effect-cell-types
   intents:
     - effect-cell-types-minor-honest-channels
+"@systemfsoftware/effect-cell-types@8.2.0":
+  dir: packages/effect-cell-types
+  intents:
+    - cell-sandwich-chain
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
