@@ -7,7 +7,7 @@
  * the two and verifies the join.
  */
 
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import type { CheckResult } from '@systemfsoftware/stryker-js'
 import type { FileDescriptions } from '@systemfsoftware/stryker-js'
 import type { Mutant } from '@systemfsoftware/stryker-js'
@@ -485,43 +485,44 @@ export const checkPlans = (
   readonly (readonly [MutantRunPlan, CheckResult])[],
   CheckerCrash | CheckerContractBroken
 > => {
-  const description = Cell.layer({
-    read: (
-      command: {
-        readonly checker: CheckerResourceService
-        readonly checkerName: string
-        readonly plans: readonly MutantRunPlan[]
-      },
-    ) =>
-      // raw: { checkerName, requestedIds, answers } from checker
-      command.checker
-        .check(command.checkerName, command.plans.map((plan) => plan.mutant))
-        .pipe(
-          Effect.map((answers) => ({
-            checkerName: command.checkerName,
-            requestedIds: command.plans.map((plan) => plan.mutant.id),
-            answers,
-          })),
-        ),
-    decode: (
-      raw: {
-        readonly checkerName: string
-        readonly requestedIds: readonly string[]
-        readonly answers: Readonly<Record<string, CheckResult>>
-      },
-    ): Result.Result<CheckerCommand, CheckerContractBroken> =>
-      Result.succeed(
-        new CheckerCommand({
-          checkerName: raw.checkerName,
-          requestedIds: [...raw.requestedIds],
-          phase: 'check',
-          answers: { ...raw.answers },
-        }),
+  const description = Sandwich.read((
+    command: {
+      readonly checker: CheckerResourceService
+      readonly checkerName: string
+      readonly plans: readonly MutantRunPlan[]
+    },
+  ) =>
+    command.checker
+      .check(command.checkerName, command.plans.map((plan) => plan.mutant))
+      .pipe(
+        Effect.map((answers) => ({
+          checkerName: command.checkerName,
+          requestedIds: command.plans.map((plan) => plan.mutant.id),
+          answers,
+        })),
+      )
+  )
+    .decode(
+      Sandwich.pure((
+        raw: {
+          readonly checkerName: string
+          readonly requestedIds: readonly string[]
+          readonly answers: Readonly<Record<string, CheckResult>>
+        },
+      ): Result.Result<CheckerCommand, CheckerContractBroken> =>
+        Result.succeed(
+          new CheckerCommand({
+            checkerName: raw.checkerName,
+            requestedIds: [...raw.requestedIds],
+            phase: 'check',
+            answers: { ...raw.answers },
+          }),
+        )
       ),
-    decide: admitCheckerAnswer,
-    encode: (outcome) => outcome,
-    write: (outcome, raw) => writeCheckerOutcome(plans, raw.checkerName, outcome),
-  })
+    )
+    .decide(admitCheckerAnswer)
+    .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
+    .write((outcome, raw) => writeCheckerOutcome(plans, raw.checkerName, outcome))
   return description.run({ checker, checkerName, plans })
 }
 
@@ -536,43 +537,44 @@ export const groupPlans = (
   readonly (readonly MutantRunPlan[])[],
   CheckerCrash | CheckerContractBroken
 > => {
-  const description = Cell.layer({
-    read: (
-      command: {
-        readonly checker: CheckerResourceService
-        readonly checkerName: string
-        readonly plans: readonly MutantRunPlan[]
-      },
-    ) =>
-      // raw: { checkerName, requestedIds, idGroups } from checker
-      command.checker
-        .group(command.checkerName, command.plans.map((plan) => plan.mutant))
-        .pipe(
-          Effect.map((idGroups) => ({
-            checkerName: command.checkerName,
-            requestedIds: command.plans.map((plan) => plan.mutant.id),
-            idGroups,
-          })),
-        ),
-    decode: (
-      raw: {
-        readonly checkerName: string
-        readonly requestedIds: readonly string[]
-        readonly idGroups: readonly (readonly string[])[]
-      },
-    ): Result.Result<CheckerCommand, CheckerContractBroken> =>
-      Result.succeed(
-        new CheckerCommand({
-          checkerName: raw.checkerName,
-          requestedIds: [...raw.requestedIds],
-          phase: 'group',
-          idGroups: raw.idGroups.map((group) => [...group]),
-        }),
+  const description = Sandwich.read((
+    command: {
+      readonly checker: CheckerResourceService
+      readonly checkerName: string
+      readonly plans: readonly MutantRunPlan[]
+    },
+  ) =>
+    command.checker
+      .group(command.checkerName, command.plans.map((plan) => plan.mutant))
+      .pipe(
+        Effect.map((idGroups) => ({
+          checkerName: command.checkerName,
+          requestedIds: command.plans.map((plan) => plan.mutant.id),
+          idGroups,
+        })),
+      )
+  )
+    .decode(
+      Sandwich.pure((
+        raw: {
+          readonly checkerName: string
+          readonly requestedIds: readonly string[]
+          readonly idGroups: readonly (readonly string[])[]
+        },
+      ): Result.Result<CheckerCommand, CheckerContractBroken> =>
+        Result.succeed(
+          new CheckerCommand({
+            checkerName: raw.checkerName,
+            requestedIds: [...raw.requestedIds],
+            phase: 'group',
+            idGroups: raw.idGroups.map((group) => [...group]),
+          }),
+        )
       ),
-    decide: admitCheckerAnswer,
-    encode: (outcome) => outcome,
-    write: (outcome, raw) => writeGroupOutcome(plans, raw.checkerName, outcome),
-  })
+    )
+    .decide(admitCheckerAnswer)
+    .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
+    .write((outcome, raw) => writeGroupOutcome(plans, raw.checkerName, outcome))
   return description.run({ checker, checkerName, plans })
 }
 

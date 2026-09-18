@@ -6,12 +6,17 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, vocabulary, zip };
+    export { Cell, CellTypeId, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen$1 as andThen, collect, collectAll, gate, map, mapInput, provide, zip };
+}
+
+// @public (undocumented)
+export namespace Sandwich {
+    export { DecodedChain, DecodedDecidedChain, EncodedChain, PurePhase, RawDecidedChain, ReadChain, pure, read };
 }
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen$1 as andThen, make, total };
+    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen, make, total };
 }
 
 // (No @packageDocumentation comment for this package)

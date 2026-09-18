@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -17,14 +17,13 @@ interface OrderPair {
 const describeOrders = (): OrderPair => {
   const trace: string[] = []
   const recorded: { secondReadRaw?: OrderRequest; secondWriteRaw?: OrderRequest } = {}
-  const first = Cell.layer({
-    read: (request: OrderRequest) =>
-      Effect.sync(() => {
-        trace.push('first order read its request')
-        return request
-      }),
-    decide: admitOrder,
-    write: (output: Result.Result<OrderDecision, OrderRefused>, _raw: OrderRequest) =>
+  const first = Sandwich.read((request: OrderRequest) =>
+    Effect.sync(() => {
+      trace.push('first order read its request')
+      return request
+    })
+  ).decide(admitOrder)
+    .write((output: Result.Result<OrderDecision, OrderRefused>, _raw: OrderRequest) =>
       Effect.sync(() => {
         trace.push('first order wrote its answer')
         const answered = Result.match(output, {
@@ -32,23 +31,22 @@ const describeOrders = (): OrderPair => {
           onFailure: (refused) => refused.id,
         })
         return new OrderRequest({ id: `after-${answered}` })
-      }),
-  })
-  const second = Cell.layer({
-    read: (request: OrderRequest) =>
-      Effect.sync(() => {
-        trace.push('second order read its request')
-        recorded.secondReadRaw = request
-        return request
-      }),
-    decide: admitOrder,
-    write: (output: Result.Result<OrderDecision, OrderRefused>, raw: OrderRequest) =>
+      })
+    )
+  const second = Sandwich.read((request: OrderRequest) =>
+    Effect.sync(() => {
+      trace.push('second order read its request')
+      recorded.secondReadRaw = request
+      return request
+    })
+  ).decide(admitOrder)
+    .write((output: Result.Result<OrderDecision, OrderRefused>, raw: OrderRequest) =>
       Effect.sync(() => {
         trace.push('second order wrote its answer')
         recorded.secondWriteRaw = raw
         return raw
-      }),
-  })
+      })
+    )
   return { first, second, trace, recorded }
 }
 
@@ -66,14 +64,13 @@ interface SingleOrder {
 
 const describeSingleOrder = (): SingleOrder => {
   const trace: string[] = []
-  const cell = Cell.layer({
-    read: (request: OrderRequest) =>
-      Effect.sync(() => {
-        trace.push('single order read its request')
-        return request
-      }),
-    decide: admitOrder,
-    write: (output: Result.Result<OrderDecision, OrderRefused>, _raw: OrderRequest) =>
+  const cell = Sandwich.read((request: OrderRequest) =>
+    Effect.sync(() => {
+      trace.push('single order read its request')
+      return request
+    })
+  ).decide(admitOrder)
+    .write((output: Result.Result<OrderDecision, OrderRefused>, _raw: OrderRequest) =>
       Result.match(output, {
         onSuccess: (decision) =>
           Effect.sync(() => {
@@ -86,8 +83,8 @@ const describeSingleOrder = (): SingleOrder => {
             return new OrderRequest({ id: answered })
           }),
         onFailure: (refused) => Effect.fail(refused),
-      }),
-  })
+      })
+    )
   return { cell, trace }
 }
 

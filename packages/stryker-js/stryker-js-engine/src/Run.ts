@@ -1,4 +1,4 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import type { CheckResult, PassedCheckResult } from '@systemfsoftware/stryker-js'
 import type { ExitClass } from '@systemfsoftware/stryker-js'
 import type { IgnorerService } from '@systemfsoftware/stryker-js'
@@ -538,75 +538,78 @@ interface InstrumentRaw {
   readonly concurrency: { readonly testRunners: number; readonly checkers: number }
 }
 
-export const instrumentCell = Cell.layer({
-  read: (command: PrepareDone) =>
-    Effect.gen(function*() {
-      yield* Scope.Scope
-      const env = yield* RunEnvironment
+export const instrumentCell = Sandwich.read((command: PrepareDone) =>
+  Effect.gen(function*() {
+    yield* Scope.Scope
+    const env = yield* RunEnvironment
 
-      const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(command.project.filesToMutate)], (file) =>
-        toInstrumenterFile(file), {
-        concurrency: FILE_CONCURRENCY,
-      }).pipe(
-        Effect.mapError((cause) =>
-          new StageError({ stage: 'instrument', reason: 'Failed to read files to mutate', cause })
-        ),
+    const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(command.project.filesToMutate)], (file) =>
+      toInstrumenterFile(file), {
+      concurrency: FILE_CONCURRENCY,
+    }).pipe(
+      Effect.mapError((cause) =>
+        new StageError({ stage: 'instrument', reason: 'Failed to read files to mutate', cause })
+      ),
+    )
+
+    const instrumentResult = yield* instrument(filesToMutate, {
+      ignorers: [...command.ignorers],
+      excludedMutations: [...command.options.mutator.excludedMutations],
+    }).pipe(Effect.mapError((cause) =>
+      new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
+    ))
+
+    const instrumentedProject = withInstrumentedFiles(command.project, instrumentResult.files)
+
+    const basePath = env.basePath
+    let workingDirectory = command.temporaryDirectoryPath
+    let backupDirectory = ''
+    if (command.options.inPlace) {
+      workingDirectory = basePath
+      backupDirectory = command.temporaryDirectoryPath
+    }
+
+    const sandbox = yield* makeSandbox({
+      options: command.options,
+      project: instrumentedProject,
+      workingDirectory,
+      backupDirectory,
+      basePath,
+    }).pipe(Effect.mapError((cause) =>
+      new StageError({ stage: 'instrument', reason: 'Sandbox initialization failed', cause })
+    ))
+
+    const concurrency = yield* makeConcurrency(command.options).pipe(
+      Effect.mapError((cause) =>
+        new StageError({ stage: 'instrument', reason: 'Failed to compute concurrency', cause })
+      ),
+    )
+
+    const raw: InstrumentRaw = {
+      prev: command,
+      filesToMutate,
+      instrumentResult,
+      instrumentedProject,
+      sandbox,
+      concurrency,
+    }
+    return raw
+  })
+)
+  .decode(
+    Sandwich.pure((raw: InstrumentRaw): Result.Result<InstrumentCommand, StageError> =>
+      Result.succeed(
+        new InstrumentCommand({
+          fileCount: raw.filesToMutate.length,
+          inPlace: raw.prev.options.inPlace,
+          pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
+        }),
       )
-
-      const instrumentResult = yield* instrument(filesToMutate, {
-        ignorers: [...command.ignorers],
-        excludedMutations: [...command.options.mutator.excludedMutations],
-      }).pipe(Effect.mapError((cause) =>
-        new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
-      ))
-
-      const instrumentedProject = withInstrumentedFiles(command.project, instrumentResult.files)
-
-      const basePath = env.basePath
-      let workingDirectory = command.temporaryDirectoryPath
-      let backupDirectory = ''
-      if (command.options.inPlace) {
-        workingDirectory = basePath
-        backupDirectory = command.temporaryDirectoryPath
-      }
-
-      const sandbox = yield* makeSandbox({
-        options: command.options,
-        project: instrumentedProject,
-        workingDirectory,
-        backupDirectory,
-        basePath,
-      }).pipe(Effect.mapError((cause) =>
-        new StageError({ stage: 'instrument', reason: 'Sandbox initialization failed', cause })
-      ))
-
-      const concurrency = yield* makeConcurrency(command.options).pipe(
-        Effect.mapError((cause) =>
-          new StageError({ stage: 'instrument', reason: 'Failed to compute concurrency', cause })
-        ),
-      )
-
-      const raw: InstrumentRaw = {
-        prev: command,
-        filesToMutate,
-        instrumentResult,
-        instrumentedProject,
-        sandbox,
-        concurrency,
-      }
-      return raw
-    }),
-  decode: (raw: InstrumentRaw): Result.Result<InstrumentCommand, StageError> =>
-    Result.succeed(
-      new InstrumentCommand({
-        fileCount: raw.filesToMutate.length,
-        inPlace: raw.prev.options.inPlace,
-        pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
-      }),
     ),
-  decide: planInstrumentation,
-  encode: (outcome) => outcome,
-  write: (output, raw) =>
+  )
+  .decide(planInstrumentation)
+  .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
+  .write((output, raw) =>
     withPhaseSpan(
       'instrument',
       { fileCount: raw.filesToMutate.length },
@@ -633,8 +636,8 @@ export const instrumentCell = Cell.layer({
             },
           }
         }),
-    ),
-})
+    )
+  )
 
 export interface DryRunRaw {
   readonly prev: InstrumentDone
@@ -767,89 +770,92 @@ const completeDryRunPassed = (raw: DryRunRaw): Effect.Effect<DryRunDone, StageEr
     }
   })
 
-export const dryRunCell = Cell.layer({
-  read: (command: InstrumentDone) =>
-    Effect.gen(function*() {
-      yield* Scope.Scope
-      const idGenerator = yield* IdGenerator
+export const dryRunCell = Sandwich.read((command: InstrumentDone) =>
+  Effect.gen(function*() {
+    yield* Scope.Scope
+    const idGenerator = yield* IdGenerator
 
-      const { files, testFiles } = buildDryRunFiles(command)
-      const dryRunTimeout = command.options.dryRunTimeoutMinutes * 60 * 1000
+    const { files, testFiles } = buildDryRunFiles(command)
+    const dryRunTimeout = command.options.dryRunTimeoutMinutes * 60 * 1000
 
-      yield* Effect.logInfo('Starting dry run')
-      const { rawResult, capabilities, gross } = yield* Effect.scoped(
-        Effect.gen(function*() {
-          const childRunnerEffect = makeChildProcessTestRunner({
+    yield* Effect.logInfo('Starting dry run')
+    const { rawResult, capabilities, gross } = yield* Effect.scoped(
+      Effect.gen(function*() {
+        const childRunnerEffect = makeChildProcessTestRunner({
+          options: command.options,
+          fileDescriptions: command.project.fileDescriptions,
+          sandboxWorkingDirectory: command.sandbox.workingDirectory,
+          pluginModulePaths: [...command.loadedPlugins.pluginModulePaths],
+          idGenerator,
+        })
+        const runner = yield* buildTestRunner(
+          {
             options: command.options,
             fileDescriptions: command.project.fileDescriptions,
             sandboxWorkingDirectory: command.sandbox.workingDirectory,
             pluginModulePaths: [...command.loadedPlugins.pluginModulePaths],
             idGenerator,
-          })
-          const runner = yield* buildTestRunner(
-            {
-              options: command.options,
-              fileDescriptions: command.project.fileDescriptions,
-              sandboxWorkingDirectory: command.sandbox.workingDirectory,
-              pluginModulePaths: [...command.loadedPlugins.pluginModulePaths],
-              idGenerator,
-              retire: Effect.void,
-            },
-            childRunnerEffect,
-          )
-          const extra: { testFiles?: string[] } = {}
-          if (testFiles !== undefined) {
-            extra.testFiles = testFiles
-          }
-          const timed = yield* Effect.timed(
-            runner
-              .dryRun({
-                timeout: dryRunTimeout,
-                coverageAnalysis: command.options.coverageAnalysis,
-                disableBail: command.options.disableBail,
-                files,
-                ...extra,
-              })
-              .pipe(
-                Effect.mapError((cause) => new StageError({ stage: 'dryRun', reason: 'Dry run failed', cause })),
-              ),
-          )
-          const gross: Duration.Duration = timed[0]
-          const rawResult = timed[1]
-          const capabilities = yield* runner.capabilities.pipe(
-            Effect.mapError((cause) =>
-              new StageError({ stage: 'dryRun', reason: 'Failed to get test runner capabilities', cause })
+            retire: Effect.void,
+          },
+          childRunnerEffect,
+        )
+        const extra: { testFiles?: string[] } = {}
+        if (testFiles !== undefined) {
+          extra.testFiles = testFiles
+        }
+        const timed = yield* Effect.timed(
+          runner
+            .dryRun({
+              timeout: dryRunTimeout,
+              coverageAnalysis: command.options.coverageAnalysis,
+              disableBail: command.options.disableBail,
+              files,
+              ...extra,
+            })
+            .pipe(
+              Effect.mapError((cause) => new StageError({ stage: 'dryRun', reason: 'Dry run failed', cause })),
             ),
-          )
-          return { rawResult, capabilities, gross }
-        }),
-      ).pipe(
-        Effect.mapError((cause) => {
-          if (cause instanceof StageError) {
-            return cause
-          }
-          return new StageError({ stage: 'dryRun', reason: 'Dry run failed to start test runner', cause })
-        }),
-      )
+        )
+        const gross: Duration.Duration = timed[0]
+        const rawResult = timed[1]
+        const capabilities = yield* runner.capabilities.pipe(
+          Effect.mapError((cause) =>
+            new StageError({ stage: 'dryRun', reason: 'Failed to get test runner capabilities', cause })
+          ),
+        )
+        return { rawResult, capabilities, gross }
+      }),
+    ).pipe(
+      Effect.mapError((cause) => {
+        if (cause instanceof StageError) {
+          return cause
+        }
+        return new StageError({ stage: 'dryRun', reason: 'Dry run failed to start test runner', cause })
+      }),
+    )
 
-      const normalizedRawResult = rawResult
-      const raw: DryRunRaw = {
-        prev: command,
-        rawResult: normalizedRawResult,
-        capabilities,
-        gross,
-      }
-      return raw
-    }),
-  decode: (raw: DryRunRaw): Result.Result<DryRunCommand, StageError> =>
-    Match.value(raw.rawResult).pipe(
-      Match.when(isCompleteDryRun, (complete) => decodeCompleteDryRun(complete, raw.prev.options.allowEmpty)),
-      Match.when(isFailedDryRun, (failed) => decodeFailedDryRun(failed, raw.prev.options.allowEmpty)),
-      Match.orElse((timedOut) => decodeTimedOutDryRun(timedOut, raw.prev.options.allowEmpty)),
+    const normalizedRawResult = rawResult
+    const raw: DryRunRaw = {
+      prev: command,
+      rawResult: normalizedRawResult,
+      capabilities,
+      gross,
+    }
+    return raw
+  })
+)
+  .decode(
+    Sandwich.pure((raw: DryRunRaw): Result.Result<DryRunCommand, StageError> =>
+      Match.value(raw.rawResult).pipe(
+        Match.when(isCompleteDryRun, (complete) => decodeCompleteDryRun(complete, raw.prev.options.allowEmpty)),
+        Match.when(isFailedDryRun, (failed) => decodeFailedDryRun(failed, raw.prev.options.allowEmpty)),
+        Match.orElse((timedOut) => decodeTimedOutDryRun(timedOut, raw.prev.options.allowEmpty)),
+      )
     ),
-  decide: dryRun,
-  encode: (outcome) => outcome,
-  write: (outcome, raw) =>
+  )
+  .decide(dryRun)
+  .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
+  .write((outcome, raw) =>
     withPhaseSpan(
       'dryRun',
       {},
@@ -878,8 +884,8 @@ export const dryRunCell = Cell.layer({
             Match.exhaustive,
           )
         }),
-    ),
-})
+    )
+  )
 
 interface MutationTestRaw {
   readonly prev: DryRunDone
@@ -949,26 +955,30 @@ const checkPlansWithConfiguredCheckers = (
     onSome: (pool) => checkPlansWithEachChecker(prev, pool, plans, reporting),
   })
 
-export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, StageServices> = Cell.layer({
-  read: (command: DryRunDone): Effect.Effect<MutationTestRaw, never, Scope.Scope> =>
+export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, StageServices> = Sandwich.read(
+  (command: DryRunDone): Effect.Effect<MutationTestRaw, never, Scope.Scope> =>
     Effect.gen(function*() {
       yield* Scope.Scope
       const prev = command
       const raw: MutationTestRaw = { prev }
       return raw
     }),
-  decode: (raw: MutationTestRaw): Result.Result<MutationTestCommand, StageError> =>
-    Result.succeed(
-      new MutationTestCommand({
-        dryRunOnly: raw.prev.options.dryRunOnly,
-        allowEmpty: raw.prev.options.allowEmpty,
-        testCount: raw.prev.dryRunResult.tests.length,
-        isZero: raw.prev.dryRunResult.tests.length === 0,
-      }),
+)
+  .decode(
+    Sandwich.pure((raw: MutationTestRaw): Result.Result<MutationTestCommand, StageError> =>
+      Result.succeed(
+        new MutationTestCommand({
+          dryRunOnly: raw.prev.options.dryRunOnly,
+          allowEmpty: raw.prev.options.allowEmpty,
+          testCount: raw.prev.dryRunResult.tests.length,
+          isZero: raw.prev.dryRunResult.tests.length === 0,
+        }),
+      )
     ),
-  decide: admitMutationTest,
-  encode: (outcome) => outcome,
-  write: (
+  )
+  .decide(admitMutationTest)
+  .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
+  .write((
     outcome: Result.Result<MutationTestDecision, MutationTestError>,
     raw: MutationTestRaw,
   ): Effect.Effect<RunOutcome, StageError, StageServices> =>
@@ -1285,8 +1295,8 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
         }
         return new StageError({ stage: 'mutationTest', reason: 'Mutation testing failed', cause })
       }),
-    ),
-})
+    )
+  )
 export const makeRunLayer = (
   env: RunEnvironmentShape,
   events?: Queue.Queue<RunEvent, Cause.Done>,

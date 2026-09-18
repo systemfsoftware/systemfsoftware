@@ -11,5 +11,10 @@ import { SettleCommand, totalAdmitDecision } from './total-admit-decision.workfl
  * `andThen` takes constructed workflows where a decider would sit, so this file holds no
  * decision body of its own: both bodies live in the file that owns each of them.
  */
-export const chainAdmitDecisions = (trace: string[]) =>
-  Workflow.andThen(Decoded, admitDecodedCommand, SettleCommand, 'chain', totalAdmitDecision(trace))
+export const chainAdmitDecisions = Workflow.andThen(
+  Decoded,
+  admitDecodedCommand,
+  SettleCommand,
+  'chain',
+  totalAdmitDecision,
+)

@@ -3,7 +3,7 @@ import type { RunMode, RunnerTestCase, RunnerTestSuite, TaskState as VitestTaskS
 import { createVitest as createVitestOriginal } from 'vitest/node'
 import type { Vitest } from 'vitest/node'
 
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js'
 import {
   type CoverageData,
@@ -1104,53 +1104,53 @@ export const makeVitestRunnerLayer = (
           }),
       }
 
-      const mutantRunCell = Cell.layer({
-        read: (command: MutantRunOptions) =>
-          Effect.gen(function*() {
-            const harness = yield* VitestHarness
-            yield* harness.setMode('mutant')
-            yield* harness.provide('hitLimit', command.hitLimit)
-            yield* harness.provide('mutantActivation', command.mutantActivation)
-            yield* harness.provide('activeMutant', command.activeMutant.id)
-            const { rawTests, hasExternalError, externalErrorText } = yield* collectRaw({
-              testIds: (() => {
-                if (command.testFilter !== undefined) return [...command.testFilter]
-                return undefined
-              })(),
-              relatedFiles: [command.sandboxFileName],
-            })
-            const hitCount = yield* readHitCount.pipe(
-              Effect.mapError((cause) =>
-                new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause: errorToString(cause) })
-              ),
-              Effect.option,
-              Effect.map(Option.getOrUndefined),
-            )
-            const reportAllKillers = (() => {
-              if (typeof input.options.disableBail === 'boolean') return input.options.disableBail
-              return false
-            })()
-            if (hitCount === undefined) {
-              return {
-                rawTests,
-                projectRoot: input.sandboxDirectory,
-                hasExternalError,
-                externalErrorText,
-                hitLimit: command.hitLimit,
-                reportAllKillers,
-              }
-            }
+      const mutantRunCell = Sandwich.read((command: MutantRunOptions) =>
+        Effect.gen(function*() {
+          const harness = yield* VitestHarness
+          yield* harness.setMode('mutant')
+          yield* harness.provide('hitLimit', command.hitLimit)
+          yield* harness.provide('mutantActivation', command.mutantActivation)
+          yield* harness.provide('activeMutant', command.activeMutant.id)
+          const { rawTests, hasExternalError, externalErrorText } = yield* collectRaw({
+            testIds: (() => {
+              if (command.testFilter !== undefined) return [...command.testFilter]
+              return undefined
+            })(),
+            relatedFiles: [command.sandboxFileName],
+          })
+          const hitCount = yield* readHitCount.pipe(
+            Effect.mapError((cause) =>
+              new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause: errorToString(cause) })
+            ),
+            Effect.option,
+            Effect.map(Option.getOrUndefined),
+          )
+          const reportAllKillers = (() => {
+            if (typeof input.options.disableBail === 'boolean') return input.options.disableBail
+            return false
+          })()
+          if (hitCount === undefined) {
             return {
               rawTests,
               projectRoot: input.sandboxDirectory,
               hasExternalError,
               externalErrorText,
-              hitCount,
               hitLimit: command.hitLimit,
               reportAllKillers,
             }
-          }),
-        decode: (
+          }
+          return {
+            rawTests,
+            projectRoot: input.sandboxDirectory,
+            hasExternalError,
+            externalErrorText,
+            hitCount,
+            hitLimit: command.hitLimit,
+            reportAllKillers,
+          }
+        })
+      ).decode(
+        Sandwich.pure((
           raw: {
             readonly rawTests: readonly unknown[]
             readonly projectRoot: string
@@ -1171,52 +1171,57 @@ export const makeVitestRunnerLayer = (
               hitLimit: raw.hitLimit,
               reportAllKillers: raw.reportAllKillers,
             }),
+          )
+        ),
+      ).decide(interpretVitestRun)
+        .encode(
+          Sandwich.pure((outcome: Result.Result<VitestMutantRunOutput, VitestMutantRunError>) =>
+            Result.succeed(
+              Result.match(outcome, {
+                onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies MutantRunResult,
+                onSuccess: (out) => {
+                  const nrOfTests = (): number => countIdRecords(parseJson(out.testsJson))
+                  return Match.value(out).pipe(
+                    Match.tag(
+                      'Error',
+                      (error) =>
+                        ({
+                          status: 'error' as const,
+                          errorMessage: error.errorMessage ?? 'unknown',
+                        }) satisfies MutantRunResult,
+                    ),
+                    Match.tag('Timeout', (timeout) =>
+                      (() => {
+                        if (timeout.reason === undefined) {
+                          return { status: 'timeout' as const } satisfies MutantRunResult
+                        }
+                        return { status: 'timeout' as const, reason: timeout.reason } satisfies MutantRunResult
+                      })()),
+                    Match.tag(
+                      'Killed',
+                      (killed) =>
+                        ({
+                          status: 'killed' as const,
+                          failureMessage: killed.failureMessage ?? '',
+                          killedBy: (() => {
+                            if (killed.killerIds !== undefined) return [...killed.killerIds]
+                            return []
+                          })(),
+                          nrOfTests: nrOfTests(),
+                        }) satisfies MutantRunResult,
+                    ),
+                    Match.tag(
+                      'Survived',
+                      () => ({ status: 'survived' as const, nrOfTests: nrOfTests() }) satisfies MutantRunResult,
+                    ),
+                    Match.exhaustive,
+                  )
+                },
+              }),
+            )
           ),
-        decide: interpretVitestRun,
-        encode: (outcome: Result.Result<VitestMutantRunOutput, VitestMutantRunError>) =>
-          Result.match(outcome, {
-            onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies MutantRunResult,
-            onSuccess: (out) => {
-              const nrOfTests = (): number => countIdRecords(parseJson(out.testsJson))
-              return Match.value(out).pipe(
-                Match.tag(
-                  'Error',
-                  (error) =>
-                    ({
-                      status: 'error' as const,
-                      errorMessage: error.errorMessage ?? 'unknown',
-                    }) satisfies MutantRunResult,
-                ),
-                Match.tag('Timeout', (timeout) =>
-                  (() => {
-                    if (timeout.reason === undefined) {
-                      return { status: 'timeout' as const } satisfies MutantRunResult
-                    }
-                    return { status: 'timeout' as const, reason: timeout.reason } satisfies MutantRunResult
-                  })()),
-                Match.tag(
-                  'Killed',
-                  (killed) =>
-                    ({
-                      status: 'killed' as const,
-                      failureMessage: killed.failureMessage ?? '',
-                      killedBy: (() => {
-                        if (killed.killerIds !== undefined) return [...killed.killerIds]
-                        return []
-                      })(),
-                      nrOfTests: nrOfTests(),
-                    }) satisfies MutantRunResult,
-                ),
-                Match.tag(
-                  'Survived',
-                  () => ({ status: 'survived' as const, nrOfTests: nrOfTests() }) satisfies MutantRunResult,
-                ),
-                Match.exhaustive,
-              )
-            },
-          }),
-        write: (output: MutantRunResult, _raw: unknown) => Effect.succeed(output),
-      })
+        )
+        .write((output: MutantRunResult, _raw: unknown) => Effect.succeed(output))
       const dryRunFilter = (options: Parameters<TestRunner['Service']['dryRun']>[0]): RunFilter => {
         const relatedFiles = Option.getOrUndefined(
           Option.map(Option.fromNullishOr(options.files), (files) => [...files]),

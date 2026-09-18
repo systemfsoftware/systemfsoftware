@@ -20,8 +20,7 @@ export class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand
  * decision, so this decider publishes it as its own instead of rebuilding each
  * variant. The value published is the same either way.
  */
-export const totalAdmitDecision = (trace: string[]) =>
-  Workflow.total(SettleCommand, (command: SettleCommand): Result.Result<Admitted | Rejected, never> => {
-    trace.push(`settle:${command.ctx}`)
-    return Result.succeed(command.decision)
-  })
+export const totalAdmitDecision = Workflow.total(
+  SettleCommand,
+  (command: SettleCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(command.decision),
+)

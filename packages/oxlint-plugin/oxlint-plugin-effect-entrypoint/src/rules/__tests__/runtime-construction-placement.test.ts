@@ -151,10 +151,10 @@ export function build(provide) {
     },
     {
       name: 'Should_Pass_When_TheReceiverIsNotANamespaceBinding',
-      code: `import { Cell } from '@systemfsoftware/effect-cell-types'
+      code: `import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 
 export function build() {
-  return Cell.layer({ read, decide, write }).provide(ledgerLayer)
+  return Sandwich.read(read).decide(decide).write(write).provide(ledgerLayer)
 }`,
       filename: 'src/ledger.ts',
     },

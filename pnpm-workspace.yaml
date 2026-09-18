@@ -105,7 +105,6 @@ packages:
   - packages/oxlint-plugin/make-boundary/
   - packages/oxlint-plugin/oxlint-plugin/
   - packages/oxlint-plugin/oxlint-plugin-recommended/
-  - packages/oxlint-plugin/oxlint-plugin-cell-vocabulary/
   - packages/oxlint-plugin/oxlint-plugin-effect-dmmf/
   - packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/
   - packages/oxlint-plugin/oxlint-plugin-effect-native/

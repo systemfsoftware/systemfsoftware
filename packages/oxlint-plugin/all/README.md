@@ -34,14 +34,13 @@ pnpm oxlint
 
 ## What's Included
 
-The preset registers and enables four custom plugin suites alongside stock oxlint correctness rules at `error`:
+The preset registers and enables three custom plugin suites alongside stock oxlint correctness rules at `error`:
 
 ### Custom Rule Plugins
 
 | Plugin                                             | Scope                      | Key Invariants Enforced                                                                                                                                                     |
 | -------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@systemfsoftware/oxlint-plugin`                   | Core Effect & architecture | Ban native `Date.now()`, `Map`, `Set`, `setTimeout`, and `Promise` inside Effect blocks; require structured errors over string errors; forbid boundary tests in unit suites |
-| `@systemfsoftware/oxlint-plugin-cell-vocabulary`   | Cell architecture          | Enforce kernel/executor boundary conventions and domain naming structures by walking cell descriptions                                                                      |
 | `@systemfsoftware/oxlint-plugin-effect-dmmf`       | DMMF aggregate suite       | Bundles schema codec checks, workflow step structure, property-based test isolation, and test hygiene                                                                       |
 | `@systemfsoftware/oxlint-plugin-effect-entrypoint` | Application runtime        | Require explicit top-level runtime entrypoints (`runMain`, `ManagedRuntime`) and forbid leaking intermediate runtimes                                                       |
 
