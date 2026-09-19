@@ -34,6 +34,7 @@
     "oxlint-tsgolint": "catalog:oxlint"
   },
   "devDependencies": {
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^",
     "@systemfsoftware/oxlint-plugin-structure": "workspace:^",
     "@systemfsoftware/oxlint-plugin-tag-discipline": "workspace:^",

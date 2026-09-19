@@ -21,11 +21,20 @@ export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 
 /**
+ * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
+ * Both pipelines need the condition, and Vite replaces its defaults when they are set.
+ * @type {import('vitest/config').ViteUserConfig}
+ */
+export const sourceResolveConditions = {
+  resolve: { conditions: [...defaultClientConditions, sourceCondition] },
+  ssr: { resolve: { conditions: [...defaultServerConditions, sourceCondition] } },
+}
+
+/**
  * @type {import('vitest/config').ViteUserConfig}
  */
 export const sharedConfig = {
-  resolve: { conditions: [...defaultClientConditions, sourceCondition] },
-  ssr: { resolve: { conditions: [...defaultServerConditions, sourceCondition] } },
+  ...sourceResolveConditions,
   test: {
     globals: true,
     environment: 'node',

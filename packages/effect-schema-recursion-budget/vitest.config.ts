@@ -1,13 +1,12 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, sourceResolveConditions } from '@systemfsoftware/vitest-config'
 
 import { recursionBudgetTransform } from './src/recursion-budget-transform.js'
 
 const isCI = typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
 
 export default defineConfig({
+  ...sourceResolveConditions,
   plugins: [recursionBudgetTransform()],
-  resolve: { conditions: ['@systemfsoftware/source'] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source'] } },
   test: {
     globals: true,
     environment: 'node',

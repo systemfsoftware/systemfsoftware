@@ -48,6 +48,7 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",

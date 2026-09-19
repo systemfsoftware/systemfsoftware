@@ -1,8 +1,7 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, sourceResolveConditions } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
-  resolve: { conditions: ['@systemfsoftware/source'] },
-  ssr: { resolve: { conditions: ['@systemfsoftware/source'] } },
+  ...sourceResolveConditions,
   test: {
     include: ['src/**/*.test.ts'],
     coverage: {

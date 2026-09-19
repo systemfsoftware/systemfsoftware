@@ -717,6 +717,9 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -1086,6 +1089,9 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
