@@ -20,29 +20,79 @@
 // The this-cycle set comes from tag-released-packages.mjs, which owns the one
 // definition of "released this cycle". A second copy here would drift.
 
+import { parse } from '@std/yaml'
+
 const CHANGESET_DIR = '.changeset'
 const TAG_SCRIPT = './scripts/tools/tag-released-packages.mjs'
 
 /**
- * True when a `.changeset` entry name is an unconsumed change intent.
+ * True when a `.changeset` entry name has the shape of a change intent.
  *
  * `README.md` documents the directory and `ledger.yaml` records consumed
- * intents; neither is pending. Authored changelogs live in `changelogs/`, which
- * is a directory and so never reaches this predicate from a shallow read — the
- * path form is rejected anyway, so a caller passing one gets the same answer.
+ * intents; neither is an intent file. Authored changelogs live in `changelogs/`,
+ * which is a directory and so never reaches this predicate from a shallow read
+ * — the path form is rejected anyway, so a caller passing one gets the same
+ * answer. Consumption is a separate question: `pnpm version -r` writes the slug
+ * into `ledger.yaml` and is supposed to delete the file; when the file remains,
+ * `isUnconsumedIntent` is the planner's pending set, not this shape check.
  */
 export const isPendingIntent = (name) =>
   name.endsWith('.md') && !name.includes('changelogs/') && name.split('/').pop() !== 'README.md'
+
+export const intentSlug = (name) => name.split('/').pop().replace(/\.md$/, '')
+
+/**
+ * Slugs `pnpm version -r` has already consumed, read from its own ledger.
+ *
+ * The ledger is the authority: pnpm reports "No pending changes" for a
+ * `.changeset/*.md` whose slug it lists, so a file left behind is not pending.
+ * Counting it as one pins the phase at `version` and starves `publish`. A
+ * ledger that is not a mapping of package@version to slug lists is corrupt, and
+ * reading it as "nothing consumed" would re-bump published packages — so the
+ * parse fails loudly instead of degrading to an empty set.
+ */
+export const consumedIntentSlugs = (ledgerYaml) => {
+  const ledger = parse(ledgerYaml)
+  if (!isPlainRecord(ledger)) {
+    throw new Error('ledger.yaml must map each package@version to its consumed intents')
+  }
+  const slugs = new Set()
+  for (const entry of Object.values(ledger)) {
+    const intents = entry?.intents
+    if (intents === undefined) continue
+    if (!Array.isArray(intents)) {
+      throw new Error('a ledger.yaml entry’s intents must be a list of slugs')
+    }
+    for (const slug of intents) slugs.add(slug)
+  }
+  return slugs
+}
+
+const isPlainRecord = (value) =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) &&
+  Object.getPrototypeOf(value) === Object.prototype
+
+export const isUnconsumedIntent = (name, consumed) => isPendingIntent(name) && !consumed.has(intentSlug(name))
 
 /** Owed publishes first (draining is lossless, bumping over them is not), then intents. */
 export const decidePhase = (pendingIntents, thisCycle) =>
   thisCycle > 0 ? 'publish' : pendingIntents > 0 ? 'version' : 'none'
 
+const readConsumedSlugs = async () => {
+  try {
+    return consumedIntentSlugs(await Deno.readTextFile(`${CHANGESET_DIR}/ledger.yaml`))
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return new Set()
+    throw error
+  }
+}
+
 const countPendingIntents = async () => {
+  const consumed = await readConsumedSlugs()
   let count = 0
   try {
     for await (const entry of Deno.readDir(CHANGESET_DIR)) {
-      if (entry.isFile && isPendingIntent(entry.name)) count++
+      if (entry.isFile && isUnconsumedIntent(entry.name, consumed)) count++
     }
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error
@@ -72,10 +122,29 @@ const readDeferred = async (file) => {
 }
 
 /**
- * The planner's negative control. Both halves are pure, so the selftest drives
- * the same functions the run drives — no filesystem, no subprocess.
+ * The planner's negative control. The functions are pure, so the selftest
+ * drives the same functions the run drives — no filesystem, no subprocess.
  */
 const selftest = () => {
+  const ledger = `"@scope/alpha@1.0.0":
+  dir: packages/alpha
+  intents:
+    - alpha-change
+    - shared-change
+"@scope/beta@2.0.0":
+  dir: packages/beta
+  intents:
+    - shared-change
+`
+  const consumed = consumedIntentSlugs(ledger)
+  const rejects = (fn) => {
+    try {
+      fn()
+      return 'accepted'
+    } catch {
+      return 'rejected'
+    }
+  }
   const phases = [
     ['owed tags win over pending intents', decidePhase(3, 5), 'publish'],
     ['owed tags with no intents is publish', decidePhase(0, 5), 'publish'],
@@ -87,8 +156,28 @@ const selftest = () => {
     ['README.md is not an intent', isPendingIntent('README.md'), false],
     ['a path to README.md is not an intent', isPendingIntent('.changeset/README.md'), false],
     ['ledger.yaml is not an intent', isPendingIntent('ledger.yaml'), false],
-    ['an authored changelog is not an intent', isPendingIntent('changelogs/@systemfsoftware!all@1.0.0.md'), false],
+    ['an authored changelog is not an intent', isPendingIntent('changelogs/@scope/alpha@1.0.0.md'), false],
     ['the changelogs directory is not an intent', isPendingIntent('changelogs'), false],
+    ['every listed intent is consumed', consumed.has('alpha-change') && consumed.has('shared-change'), true],
+    ['a dir field is not an intent slug', consumed.has('packages/alpha'), false],
+    ['an unlisted slug is not consumed', consumed.has('gamma-change'), false],
+    [
+      'an entry without intents consumes nothing',
+      consumedIntentSlugs('"@scope/alpha@1.0.0":\n  dir: packages/alpha').size,
+      0,
+    ],
+    ['a listed file is consumed, not pending', isUnconsumedIntent('alpha-change.md', consumed), false],
+    ['an unlisted file is pending', isUnconsumedIntent('gamma-change.md', consumed), true],
+    ['README is not pending against a ledger', isUnconsumedIntent('README.md', consumed), false],
+    ['the slug drops the md suffix', intentSlug('alpha-change.md'), 'alpha-change'],
+    ['a blank ledger is rejected', rejects(() => consumedIntentSlugs('')), 'rejected'],
+    ['a comment-only ledger is rejected', rejects(() => consumedIntentSlugs('# no entries yet')), 'rejected'],
+    ['a scalar ledger is rejected', rejects(() => consumedIntentSlugs('2026-09-19')), 'rejected'],
+    [
+      'a non-list intents field is rejected',
+      rejects(() => consumedIntentSlugs('"@scope/alpha@1.0.0":\n  intents: alpha-change')),
+      'rejected',
+    ],
   ]
 
   const failures = [...phases, ...intents].filter(([, actual, expected]) => actual !== expected)

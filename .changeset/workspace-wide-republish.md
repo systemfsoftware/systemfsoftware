@@ -9,6 +9,7 @@
 "@systemfsoftware/effect-schema-discovery": patch
 "@systemfsoftware/effect-schema-extensions": patch
 "@systemfsoftware/effect-schema-law": patch
+"@systemfsoftware/effect-schema-recursion-budget": patch
 "@systemfsoftware/effect-schema-vite": patch
 "@systemfsoftware/hex-schema": patch
 "@systemfsoftware/npm-package": patch
@@ -19,18 +20,21 @@
 "@systemfsoftware/oxlint-plugin-effect-schema": patch
 "@systemfsoftware/oxlint-plugin-effect-workflow": patch
 "@systemfsoftware/oxlint-plugin-property-testing": patch
+"@systemfsoftware/oxlint-plugin-recommended": patch
 "@systemfsoftware/oxlint-plugin-test-hygiene": patch
 "@systemfsoftware/oxlint-plugin-test-placement": patch
 "@systemfsoftware/rx-effect": patch
 "@systemfsoftware/storybook-gherkin": patch
 "@systemfsoftware/stryker-js": patch
 "@systemfsoftware/stryker-js-cli": patch
+"@systemfsoftware/stryker-js-engine": patch
 "@systemfsoftware/stryker-js-html-reporter": patch
 "@systemfsoftware/stryker-js-instrumenter": patch
 "@systemfsoftware/stryker-js-typescript-checker": patch
 "@systemfsoftware/stryker-js-vitest-runner": patch
 "@systemfsoftware/stryker-plugins": patch
 "@systemfsoftware/stryker-test-contribution": patch
+"@systemfsoftware/tsconfig": patch
 ---
 
-Peer Effect requirement advances to 4.0.0-rc.112. No API changes.
+Re-released together so every package in this workspace advances on one shared version line.
