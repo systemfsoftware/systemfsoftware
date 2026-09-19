@@ -27,6 +27,7 @@
   ],
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/effect-schema-recursion-budget.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -47,6 +48,7 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",

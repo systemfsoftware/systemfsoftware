@@ -53,7 +53,10 @@
     "access": "public",
     "provenance": true,
     "exports": {
-      ".": "./dist/index.mjs",
+      ".": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
       "./package.json": "./package.json"
     }
   },
@@ -61,7 +64,11 @@
     "effect": "catalog:peers"
   },
   "exports": {
-    ".": "./dist/index.mjs",
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
     "./package.json": "./package.json"
   }
 }

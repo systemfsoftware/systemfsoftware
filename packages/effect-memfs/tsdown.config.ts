@@ -33,6 +33,7 @@ export default defineConfig({
     onlyBundle: false,
   },
   exports: {
+    devExports: '@systemfsoftware/source',
     customExports: injectTypes,
   },
 })

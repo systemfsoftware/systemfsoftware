@@ -38,6 +38,7 @@ export default defineConfig({
   clean: true,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   exports: {
+    devExports: '@systemfsoftware/source',
     customExports: shapeExports,
   },
   deps: {

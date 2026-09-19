@@ -1,4 +1,13 @@
+import { defaultClientConditions, defaultServerConditions } from 'vite'
+
 export { defineConfig } from 'vitest/config'
+
+// Workspace packages expose their source under this condition in `exports`, so a
+// test resolves a sibling's `src/` instead of a `dist/` this run may not have built.
+// Both pipelines need it: node-environment tests resolve through the SSR resolver,
+// while browser tests use the client one. Vite replaces the default conditions when
+// they are set, so the defaults are spread back in rather than dropped.
+export const sourceCondition = '@systemfsoftware/source'
 
 // AGENT outranks CI. This repo's agent shell sets both, so a CI-first reading
 // gives every agent run the thorough forge treatment - tenfold property draws
@@ -12,9 +21,20 @@ export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 
 /**
+ * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
+ * Both pipelines need the condition, and Vite replaces its defaults when they are set.
+ * @type {import('vitest/config').ViteUserConfig}
+ */
+export const sourceResolveConditions = {
+  resolve: { conditions: [...defaultClientConditions, sourceCondition] },
+  ssr: { resolve: { conditions: [...defaultServerConditions, sourceCondition] } },
+}
+
+/**
  * @type {import('vitest/config').ViteUserConfig}
  */
 export const sharedConfig = {
+  ...sourceResolveConditions,
   test: {
     globals: true,
     environment: 'node',

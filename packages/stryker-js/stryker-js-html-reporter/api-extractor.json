@@ -4,7 +4,7 @@
   "mainEntryPointFilePath": "<projectFolder>/dist/index.d.mts",
   "bundledPackages": [],
   "compiler": {
-    "tsconfigFilePath": "<projectFolder>/tsconfig.json"
+    "tsconfigFilePath": "<projectFolder>/tsconfig.api.json"
   },
   "apiReport": {
     "enabled": true,

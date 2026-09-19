@@ -24,6 +24,7 @@
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "repository": {

@@ -52,28 +52,19 @@
     "access": "public",
     "provenance": true,
     "exports": {
-      ".": "./dist/index.mjs",
-      "./Checker": "./dist/Checker.mjs",
-      "./Evaluator": "./dist/Evaluator.mjs",
-      "./ExitClass": "./dist/ExitClass.mjs",
-      "./Ignorer": "./dist/Ignorer.mjs",
-      "./Metrics": "./dist/Metrics.mjs",
-      "./Module": "./dist/Module.mjs",
-      "./Mutant": "./dist/Mutant.mjs",
-      "./output-file": "./dist/output-file.mjs",
-      "./Plugin": "./dist/Plugin.mjs",
-      "./provided-options": "./dist/provided-options.mjs",
-      "./Report": "./dist/Report.mjs",
-      "./Reporter": "./dist/Reporter.mjs",
-      "./ReporterEvent": "./dist/ReporterEvent.mjs",
-      "./Run": "./dist/Run.mjs",
-      "./Schema": "./dist/Schema.mjs",
-      "./TestRunner": "./dist/TestRunner.mjs",
+      ".": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
       "./package.json": "./package.json"
     }
   },
   "exports": {
-    ".": "./dist/index.mjs",
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
     "./package.json": "./package.json"
   }
 }

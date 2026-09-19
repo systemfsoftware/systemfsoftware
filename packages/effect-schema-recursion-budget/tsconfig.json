@@ -5,6 +5,9 @@
     "types": [
       "node",
       "vitest/import-meta"
+    ],
+    "customConditions": [
+      "@systemfsoftware/source"
     ]
   },
   "include": [

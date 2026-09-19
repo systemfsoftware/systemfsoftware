@@ -30,6 +30,7 @@ export default defineConfig({
   clean: false,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   exports: {
+    devExports: '@systemfsoftware/source',
     customExports: injectApiExtractorTypes,
   },
   deps: {

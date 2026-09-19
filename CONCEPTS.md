@@ -4,6 +4,16 @@ Shared domain vocabulary for this project — entities, named processes, and sta
 
 ## Build pipeline
 
+### `@systemfsoftware/source` custom export condition
+
+An `exports` condition tsdown writes into every workspace package's map — the first key on each object subpath, ahead of `types` and `default` — naming the package's TypeScript source (`./src/*.ts`) instead of its built entry. A package opts in with `compilerOptions.customConditions`, and the shared `@systemfsoftware/vitest-config` sets it on both Vite resolution pipelines, so in-repo typecheck, type-aware lint and tests resolve a workspace dependency to live source rather than a `dist/` the current run may not have rebuilt. It is not a Node.js condition — running apps with `node` fall through to `default` → `.mjs` — and the published map (`publishConfig.exports`) omits it entirely.
+
+An api-extractor must point at a tsconfig that clears the condition (`tsconfig.api.json`, `customConditions: []`); otherwise its program follows the condition into a sibling's `src/*.ts` and reports `ae-wrong-input-file-type`.
+
+_Gate:_ `pnpm --filter <pkg> build` regenerates both maps; `node scripts/tools/pack-all.mjs` proves the packed map carries no condition and every entry it names is in the tarball.
+
+_Aliases:_ the condition is declared as `customConditions: ["@systemfsoftware/source"]` in a tsconfig, and as `exports.devExports` in tsdown — the same name surfaced by two tools.
+
 ### tsdown output
 
 The `.d.ts` and `.mjs` files in `packages/<name>/dist/` produced by the `tsdown` build step. For a barrel-re-export package this is `dist/index.d.ts` containing `export * from '@workspace/dep'` — a one-line re-export that depends on the consumer resolving the dep's types. Created fresh on every `pnpm build`; gitignored.
@@ -16,7 +26,7 @@ _Avoid:_ "the dist .d.ts" (ambiguous with tsdown output)
 
 ### internal folder
 
-A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. The published `exports.types` artifact — the api-extractor public-trimmed rollup — omits them, and an in-repo typecheck that resolves the package by name reads that same artifact, so only a relative import inside the owning package reaches an `@internal` declaration.
+A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. Workspace typecheck still sees the declarations through `@systemfsoftware/source`; the published `exports.types` artifact — the api-extractor public-trimmed rollup — omits them.
 
 _Avoid:_ treating a filename substring as the folder (`internalize.ts` is not an internal folder)
 

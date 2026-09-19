@@ -3,7 +3,10 @@
   "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
   "compilerOptions": {
     "types": [],
-    "plugins": [{ "name": "@effect/language-service" }]
+    "plugins": [{ "name": "@effect/language-service" }],
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
   },
   "include": ["src"],
 
