@@ -34,7 +34,7 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   clean: true,
-  exports: { customExports: injectTypes },
+  exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
   deps: {

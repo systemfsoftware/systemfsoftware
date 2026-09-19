@@ -12,6 +12,11 @@
     "dist",
     "src/rules/__tests__"
   ],
+  "compilerOptions": {
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
+  },
   "references": [
     {
       "path": "./tsconfig.node.json"

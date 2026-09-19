@@ -2,5 +2,8 @@
   "extends": "./tsconfig.json",
   "include": [
     "dist/Registry.d.ts"
-  ]
+  ],
+  "compilerOptions": {
+    "customConditions": []
+  }
 }

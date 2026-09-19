@@ -29,6 +29,7 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   exports: {
+    devExports: '@systemfsoftware/source',
     customExports: injectTypes,
   },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),

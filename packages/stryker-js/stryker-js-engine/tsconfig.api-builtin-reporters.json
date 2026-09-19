@@ -2,5 +2,8 @@
   "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
   "include": [
     "dist/builtin-reporters.d.mts"
-  ]
+  ],
+  "compilerOptions": {
+    "customConditions": []
+  }
 }

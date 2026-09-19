@@ -6,6 +6,8 @@ const isCI = typeof process.env['CI'] === 'string' && process.env['CI'].length >
 
 export default defineConfig({
   plugins: [recursionBudgetTransform()],
+  resolve: { conditions: ['@systemfsoftware/source'] },
+  ssr: { resolve: { conditions: ['@systemfsoftware/source'] } },
   test: {
     globals: true,
     environment: 'node',

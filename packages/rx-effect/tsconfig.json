@@ -8,6 +8,11 @@
     "src",
     "tests"
   ],
+  "compilerOptions": {
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
+  },
   "references": [
     {
       "path": "./tsconfig.node.json"

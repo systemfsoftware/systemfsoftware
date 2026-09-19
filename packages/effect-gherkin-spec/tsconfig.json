@@ -7,6 +7,9 @@
   "compilerOptions": {
     "types": [
       "vitest/globals"
+    ],
+    "customConditions": [
+      "@systemfsoftware/source"
     ]
   },
   "include": [

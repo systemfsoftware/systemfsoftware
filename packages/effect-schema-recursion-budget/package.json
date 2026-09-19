@@ -27,6 +27,7 @@
   ],
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/effect-schema-recursion-budget.d.ts",
       "default": "./dist/index.mjs"
     },

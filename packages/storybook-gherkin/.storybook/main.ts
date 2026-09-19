@@ -7,6 +7,13 @@ const config = {
     name: '@storybook/react-vite',
     options: {},
   },
+  viteFinal: (viteConfig) => ({
+    ...viteConfig,
+    resolve: {
+      ...viteConfig.resolve,
+      conditions: [...(viteConfig.resolve?.conditions ?? []), '@systemfsoftware/source'],
+    },
+  }),
 } satisfies StorybookConfig
 
 export default config

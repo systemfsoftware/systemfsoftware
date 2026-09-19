@@ -27,6 +27,7 @@
   "type": "module",
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },

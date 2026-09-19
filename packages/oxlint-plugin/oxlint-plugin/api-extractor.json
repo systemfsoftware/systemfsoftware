@@ -8,7 +8,7 @@
     "@systemfsoftware/oxlint-plugin-tag-discipline"
   ],
   "compiler": {
-    "tsconfigFilePath": "<projectFolder>/tsconfig.build.json"
+    "tsconfigFilePath": "<projectFolder>/tsconfig.api.json"
   },
   "apiReport": {
     "enabled": true,

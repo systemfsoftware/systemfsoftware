@@ -6,7 +6,10 @@
   ],
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": []
+    "types": [],
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
   },
   "include": ["src"],
   "references": [

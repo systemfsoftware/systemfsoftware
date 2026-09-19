@@ -26,6 +26,7 @@
   "type": "module",
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/oxlint-plugin-effect-native.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -67,5 +68,14 @@
   "peerDependencies": {
     "effect": "catalog:peers",
     "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/oxlint-plugin-effect-native.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }

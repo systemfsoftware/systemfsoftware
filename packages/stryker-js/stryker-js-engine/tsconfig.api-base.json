@@ -2,5 +2,8 @@
   "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
   "include": [
     "dist/config/base.d.mts"
-  ]
+  ],
+  "compilerOptions": {
+    "customConditions": []
+  }
 }

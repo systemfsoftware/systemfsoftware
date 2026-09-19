@@ -5,7 +5,10 @@
     "types": [
       "node"
     ],
-    "isolatedModules": true
+    "isolatedModules": true,
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
   },
   "include": [
     "src"

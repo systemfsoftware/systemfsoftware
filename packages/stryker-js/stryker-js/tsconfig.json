@@ -10,6 +10,7 @@
     "noPropertyAccessFromIndexSignature": false,
     "noImplicitOverride": false,
     "skipLibCheck": true,
+    "customConditions": ["@systemfsoftware/source"],
     "types": [
       "node"
     ],

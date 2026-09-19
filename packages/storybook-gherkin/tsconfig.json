@@ -5,7 +5,10 @@
     "@systemfsoftware/tsconfig/effect"
   ],
   "compilerOptions": {
-    "types": []
+    "types": [],
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
   },
   "include": ["src", "test/browser"],
   "references": [

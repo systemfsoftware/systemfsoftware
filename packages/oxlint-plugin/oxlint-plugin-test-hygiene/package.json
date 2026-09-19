@@ -28,6 +28,7 @@
   ],
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/oxlint-plugin-test-hygiene.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -73,6 +74,13 @@
     "typescript": ">=5.0.0"
   },
   "publishConfig": {
-    "provenance": true
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/oxlint-plugin-test-hygiene.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }

@@ -57,18 +57,46 @@
     "access": "public",
     "provenance": true,
     "exports": {
-      ".": "./dist/index.mjs",
-      "./builtin-reporters": "./dist/builtin-reporters.mjs",
-      "./config/base": "./dist/config/base.mjs",
-      "./worker": "./dist/worker.mjs",
+      ".": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "./builtin-reporters": {
+        "types": "./dist/builtin-reporters.d.mts",
+        "default": "./dist/builtin-reporters.mjs"
+      },
+      "./config/base": {
+        "types": "./dist/config/base.d.mts",
+        "default": "./dist/config/base.mjs"
+      },
+      "./worker": {
+        "types": "./dist/worker.d.mts",
+        "default": "./dist/worker.mjs"
+      },
       "./package.json": "./package.json"
     }
   },
   "exports": {
-    ".": "./dist/index.mjs",
-    "./builtin-reporters": "./dist/builtin-reporters.mjs",
-    "./config/base": "./dist/config/base.mjs",
-    "./worker": "./dist/worker.mjs",
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./builtin-reporters": {
+      "@systemfsoftware/source": "./src/builtin-reporters.ts",
+      "types": "./dist/builtin-reporters.d.mts",
+      "default": "./dist/builtin-reporters.mjs"
+    },
+    "./config/base": {
+      "@systemfsoftware/source": "./src/config/base.ts",
+      "types": "./dist/config/base.d.mts",
+      "default": "./dist/config/base.mjs"
+    },
+    "./worker": {
+      "@systemfsoftware/source": "./src/worker-wiring.ts",
+      "types": "./dist/worker.d.mts",
+      "default": "./dist/worker.mjs"
+    },
     "./package.json": "./package.json"
   },
   "inlinedDependencies": {

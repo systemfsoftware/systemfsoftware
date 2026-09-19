@@ -32,6 +32,7 @@
   ],
   "exports": {
     ".": {
+      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/oxlint-plugin-recommended.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -59,6 +60,13 @@
     "oxlint": "catalog:oxlint"
   },
   "publishConfig": {
-    "provenance": true
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/oxlint-plugin-recommended.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }
