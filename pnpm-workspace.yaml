@@ -86,6 +86,7 @@ packages:
   - packages/atom/effect-atom/
   - packages/atom/effect-atom-react/
   - packages/oxlint-plugin/
+  - packages/stryker-js/
   - packages/toolchain/
   - packages/effect-gherkin-spec/
   - packages/storybook-gherkin/
@@ -116,6 +117,15 @@ packages:
   - packages/oxlint-plugin/oxlint-plugin-test-placement/
   - packages/oxlint-plugin/oxlint-config/
   - packages/oxlint-plugin/all/
+  - packages/stryker-js/stryker-js/
+  - packages/stryker-js/stryker-js-cli/
+  - packages/stryker-js/stryker-js-engine/
+  - packages/stryker-js/stryker-js-html-reporter/
+  - packages/stryker-js/stryker-js-instrumenter/
+  - packages/stryker-js/stryker-js-typescript-checker/
+  - packages/stryker-js/stryker-js-vitest-runner/
+  - packages/stryker-js/stryker-plugins/
+  - packages/stryker-js/stryker-test-contribution/
   - packages/toolchain/tsconfig/
   - packages/toolchain/tsdown-config/
   - packages/toolchain/vitest-config/
