@@ -84,9 +84,17 @@ A key can be complete with respect to every input it declares and still return o
 
 ### intent versioning
 
-The pnpm-native release model the repo uses: the manifest `version` is the source of truth for what a package will publish, not a placeholder a tool overwrites. A change is recorded with `pnpm change`, which writes a `.changeset/` intent; a push to `main` runs `pnpm version -r`, which consumes pending intents and bumps the manifests; the Release PR commits those bumps.
+The pnpm-native release model the repo uses: the manifest `version` is the source of truth for what a package will publish, not a placeholder a tool overwrites. A change is recorded with `pnpm change`, which writes a `.changeset/` intent; the version phase of a push to `main` runs `pnpm version -r`, which consumes pending intents and bumps the manifests; the Release PR commits those bumps.
 
 Because the manifest version is what npm carries, the first release of a package publishes that string verbatim — there is no "dev" placeholder convention here. Adopting semantic-release's `0.0.0-development` placeholder would ship `0.0.0-development` as a package's literal debut version.
+
+### release set
+
+The workspace versions the npm registry does not yet serve, computed by probing `<registry>/<name>/<version>` for every non-private workspace package. Membership is a registry fact, never a version-control fact: a package leaves the set when its version is published, so a killed publish remains owed on the next run. A probe that is not an explicit 404 is "cannot tell" and throws — never read as unpublished.
+
+### release phase
+
+The planner's verdict for a push to `main`, derived from two counts alone: `pending` (intent stems `.changeset/ledger.yaml` does not record as consumed) and `owed` (the release set's size). `pending > 0` selects `version`, else `owed > 0` selects `publish`, else `none`. Pending intents win, so a merge that adds an intent always opens the Version PR rather than shipping under the previous changelog.
 
 ### intent liveness
 
