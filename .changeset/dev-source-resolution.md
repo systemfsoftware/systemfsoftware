@@ -19,6 +19,7 @@
 "@systemfsoftware/stryker-js-cli": none
 "@systemfsoftware/stryker-plugins": none
 "@systemfsoftware/stryker-test-contribution": none
+"@systemfsoftware/tsconfig": none
 ---
 
 No release is made for these packages: nothing a consumer installs changed, and the manifest each one publishes is byte-for-byte what the previous version published.

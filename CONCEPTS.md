@@ -12,7 +12,7 @@ An api-extractor must point at a tsconfig that clears the condition (`tsconfig.a
 
 _Gate:_ `pnpm --filter <pkg> build` regenerates both maps; `node scripts/tools/pack-all.mjs` proves the packed map carries no condition and every entry it names is in the tarball.
 
-_Aliases:_ `customConditions: ["@systemfsoftware/source"]`, tsdown `exports.devExports`
+_Aliases:_ the condition is declared as `customConditions: ["@systemfsoftware/source"]` in a tsconfig, and as `exports.devExports` in tsdown — the same name surfaced by two tools.
 
 ### tsdown output
 
