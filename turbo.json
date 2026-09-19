@@ -19,7 +19,10 @@
         "tsdown.config.*",
         "api-extractor.json",
         "api-extractor.*.json",
-        "etc/*.api.md"
+        "etc/*.api.md",
+        "$TURBO_ROOT$/packages/toolchain/tsconfig/*.json",
+        "$TURBO_ROOT$/packages/toolchain/tsconfig/bundler/**",
+        "$TURBO_ROOT$/packages/toolchain/tsconfig/tsc/**"
       ],
       "outputs": [
         "dist/**"
