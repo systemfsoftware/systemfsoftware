@@ -27,19 +27,13 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      - uses: denoland/setup-deno@v2
       - uses: ./.github/actions/install-deps
       - name: Preflight intent consumption
         run: corepack pnpm version -r --dry-run
-      - uses: denoland/setup-deno@v2
-      - name: Name the packages npm has never seen
-        # OIDC cannot debut a package, so one that npm has never seen is not
-        # something this pipeline can ever release. Naming it here keeps it out
-        # of the owed set, which would otherwise pin the phase at `publish`
-        # forever and stop every intent from ever being consumed.
-        run: ./scripts/tools/check-npm-publish.ts --emit-deferred /tmp/deferred.txt
       - id: plan
         name: Decide release phase from repository state
-        run: ./scripts/tools/plan-release.mjs --deferred /tmp/deferred.txt --output "$GITHUB_OUTPUT"
+        run: ./scripts/tools/plan-release.ts --output "$GITHUB_OUTPUT"
 
   version:
     if: needs.plan.outputs.phase == 'version'
@@ -57,75 +51,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/install-deps
       - uses: denoland/setup-deno@v2
+      - uses: ./.github/actions/install-deps
       - name: Consume pending change intents
         run: corepack pnpm version -r
       - name: Capture release set
-        run: ./scripts/tools/tag-released-packages.mjs --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
+        run: ./scripts/tools/tag-released-packages.ts --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
       - name: Assert release notes
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/tools/create-github-releases.mjs --assert --captured /tmp/captured.json
+        run: ./scripts/tools/create-github-releases.ts --assert --captured /tmp/captured.json
       - name: Open or update the Release PR
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: changeset-release/main
           BASE: ${{ github.event.repository.default_branch }}
-        run: |
-          set -euo pipefail
-
-          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "no pending change intents — nothing to release"
-            if [ -n "$existing" ]; then
-              gh pr close "$existing" --delete-branch --comment "No pending change intents remain."
-            fi
-            exit 0
-          fi
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch --force-create "$BRANCH"
-          git add -A
-          git commit -m 'chore(release): version packages'
-          git push --force origin "$BRANCH"
-
-          cat > /tmp/release-pr-body.md <<'BODY'
-          Consumes pending `.changeset/` intents via `pnpm version -r`.
-
-          Merging runs the gate, then builds, publishes (OIDC + provenance),
-          and tags the changed packages.
-
-          Review every consumed `none` intent before merging — a `none` on a
-          behavior-visible change is a silent non-release.
-
-          Packages not registered as npm trusted publishers fail at publish
-          with an OIDC auth error; register them at https://www.npmjs.com.
-          BODY
-
-          gh label create release \
-            --color 0E8A16 \
-            --description 'Automated version-packages release PR' \
-            --force
-
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" \
-              --title 'chore(release): version packages' \
-              --body-file /tmp/release-pr-body.md \
-              --add-label release
-          else
-            gh pr create \
-              --base "$BASE" \
-              --head "$BRANCH" \
-              --title 'chore(release): version packages' \
-              --body-file /tmp/release-pr-body.md \
-              --label release
-          fi
-
-          echo "dispatching CI for branch $BRANCH at $(git rev-parse HEAD)"
-          gh workflow run ci.yml --ref "$BRANCH"
+        run: ./scripts/tools/open-release-pr.sh
 
   gate:
     if: needs.plan.outputs.phase == 'publish'
@@ -152,18 +93,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/install-deps
+          fetch-tags: true
       - uses: denoland/setup-deno@v2
-      - name: Name the packages npm has never seen
-        # Two spellings of one set: `pnpm --filter` exclusions keep a package
-        # OIDC cannot debut out of the recursive publish, and the bare names
-        # keep it out of the tag and release steps. Tagging a version npm never
-        # received would publish a GitHub Release nobody can install. The debut
-        # itself still fails the job, at the last step.
-        run: |
-          ./scripts/tools/check-npm-publish.ts \
-            --emit-filters /tmp/publish-filters.txt \
-            --emit-deferred /tmp/deferred.txt
+      - uses: ./.github/actions/install-deps
       - name: Turbo cache
         uses: actions/cache@v6
         with:
@@ -172,34 +104,19 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-release-
             turbo-${{ runner.os }}-
-      - name: Build
-        # Necessary: every package publishes files: ["dist"] against a gitignored
-        # dist/ and none carries a prepack hook, so the build is an explicit step.
-        run: corepack pnpm build
       - name: Capture release set
-        run: |
-          ./scripts/tools/tag-released-packages.mjs \
-            --dry-run --json --exclude /tmp/deferred.txt --output /tmp/captured.json
+        run: ./scripts/tools/tag-released-packages.ts --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
       - name: Assert release notes
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/tools/create-github-releases.mjs --assert --captured /tmp/captured.json
-      - name: Publish via OIDC trusted publishing
-        # Necessary: --no-git-checks disables pnpm's clean-tree and commit-is-HEAD
-        # checks because the version-bump commit from the Release PR need not be
-        # HEAD-of-remote at publish time. Do not copy this flag elsewhere.
-        # Unregistered packages fail loudly with an OIDC auth error.
-        run: corepack pnpm publish -r --provenance --access public --no-git-checks $(cat /tmp/publish-filters.txt)
+        run: ./scripts/tools/create-github-releases.ts --assert --captured /tmp/captured.json
+      - name: Build
+        run: corepack pnpm build
+      - name: Publish unpublished versions via OIDC
+        run: ./scripts/tools/tag-released-packages.ts --unpublished --captured /tmp/captured.json --publish
       - name: Tag released versions
-        run: ./scripts/tools/tag-released-packages.mjs --captured /tmp/captured.json
+        run: ./scripts/tools/tag-released-packages.ts --captured /tmp/captured.json
       - name: GitHub Releases from authored changelogs
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/tools/create-github-releases.mjs --captured /tmp/captured.json
-      - name: Assert every package now exists on npm
-        # The job's verdict, deliberately last. A package npm has never seen
-        # cannot be debuted by OIDC — a maintainer bootstraps it and registers
-        # the trusted publisher — so this ends the run red while naming it. It
-        # runs after tag and release so the packages that could ship already
-        # did, and the next push to main retries only what is still owed.
-        run: ./scripts/tools/check-npm-publish.ts --preflight
+        run: ./scripts/tools/create-github-releases.ts --captured /tmp/captured.json

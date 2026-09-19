@@ -1,7 +1,7 @@
 ---
 title: First publish under npm OIDC trusted publishing
 date: 2026-08-11
-last_updated: 2026-08-20
+last_updated: 2026-09-19
 category: tooling-decisions
 module: release-tooling
 problem_type: tooling_decision
@@ -30,9 +30,8 @@ pre-registration path: a trusted publisher can only be registered _for_ an
 existing package. Every new package must therefore be published once by some
 other credential, from a maintainer machine, before CI can take over with OIDC.
 
-This is a real, currently-painful gap in this repo. The release-time preflight
-added for it measures the exposure live: the workspace publish-status checker's
-`--preflight` mode, run 2026-08-11 against
+This is a real, currently-painful gap in this repo. The workspace
+publish-status checker's `--preflight` mode, run 2026-08-11 against
 `https://registry.npmjs.org` reported **20 of 46** non-private workspace
 packages as 404-on-npm (never published), and exited 1. Without the gate,
 `pnpm -r publish` would attempt all 20 mid-batch, hit an OIDC auth error on
@@ -155,8 +154,9 @@ is the system telling you a package has never been published and no trusted
 publisher can exist for it yet. The failure mode is the worst kind: `pnpm
 publish -r` publishes the packages it can reach, then aborts on the first
 unregistered one, leaving a **partial publish** on the registry and a half-done
-release. The `--preflight` gate converts that silent partial publish into a
-loud, zero-side-effect failure _before_ the multi-minute build and any publish.
+release. The publish step's failure names the package and exits red; the
+`--preflight` mode of the publish-status checker reports the same exposure on
+demand, without touching the registry.
 
 The `0.0.0-development` question matters because it is a plausible-looking
 convention that would corrupt every new package's debut version. A team member
@@ -216,24 +216,21 @@ version ships from CI with an OIDC provenance attestation.
 
 ## Prevention
 
-The never-published class is **deferred, not prevented**. Two facts force that
-shape: OIDC cannot debut a package, and a recursive publish that meets one
-mid-batch aborts after publishing its predecessors. So the release pipeline
-partitions instead of blocking:
+The never-published class is **not deferred**. `plan-release` sizes the release
+set from the registry (`loadWorkspaceCycle`), so a never-published version
+counts as owed exactly like a bumped-but-unpublished one; the pipeline does not
+carve it out. Three properties make that safe:
 
-1. The publish-status checker names the deferred set twice — as `pnpm --filter`
-   exclusions, and as bare package names.
-2. The exclusions keep the deferred package out of the recursive publish, so
-   every publishable package still ships.
-3. The bare names keep it out of the tag and GitHub-Release steps. A tag and
-   release for a version the registry never received is a release nobody can
-   install — a tombstone that misinforms anyone reading the release history.
-4. The release planner subtracts the deferred set from the owed set. Counting an
-   unreleasable package as owed would pin the phase at `publish` permanently and
-   stop every pending change intent from ever being consumed; the planner
-   annotates each deferred package on every release run instead.
-5. The preflight runs **last** and ends the run red, naming the package. Placing
-   it first would block the packages that can ship on one that cannot.
+1. Pending intents win the phase, so a never-published package never pins the
+   phase at `publish` and never stops change intents from being consumed.
+2. The publish step narrows the captured set to the versions npm still 404s for
+   (`--unpublished`) and publishes them recursively; an unregistered package
+   fails the run loudly with an OIDC auth error, naming the package, rather than
+   silently reaching `no-oidc`.
+3. Tag and GitHub-Release steps run only after the publish succeeds, so a
+   version the registry never received is never tagged — a tag for an
+   uninstallable version is a tombstone that misinforms anyone reading the
+   release history.
 
 The remedy is a maintainer's, never CI's: publish the debut from a maintainer
 machine, then register its trusted publisher. The next push retries only what is
@@ -244,8 +241,8 @@ still owed.
 - `publish-and-setup-npm-trust` — automates the runbook: publishes every
   unpublished non-private package, then registers the trusted publisher for each
   one just published (root script alias `publish:unpublished`).
-- The CI-failure runbook under `.github/` — the `publish` job's step order, the
-  deferred-set partitioning, and the OIDC publish invocation.
+- The CI-failure runbook under `.github/` — the `publish` job's step order and
+  the OIDC publish invocation.
 - `docs/solutions/runtime-errors/pnpm-internal-range-breaks-recursive-versioning.md`
   — the pnpm-native recursive-versioning failure that shaped the release model
   this runbook serves.

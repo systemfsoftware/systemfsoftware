@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-run=git,pnpm --allow-read --allow-write=/tmp --allow-net=registry.npmjs.org --allow-env=NPM_REGISTRY
+#!/usr/bin/env -S deno run --allow-run=git,pnpm --allow-read --allow-write=/tmp --allow-net=registry.npmjs.org --allow-env=NPM_REGISTRY,GITHUB_REPOSITORY
 // check-npm-publish.ts — which workspace packages are unpublished, and which
 // lack OIDC publishing evidence.
 //
@@ -9,23 +9,21 @@
 //   3. Report the local package.json version against npm's latest, so
 //      "published but stuck" is visible.
 //
-// Informational and exit 0 by default. The flags below add verdicts.
+// Informational and exit 0 by default. The flags below add verdicts:
+//   --json       one JSON object per package
+//   --preflight  fail on a package npm has never seen, or an unreadable registry
+//   --check      fail on anything not published-and-attested
 //
 // `--allow-net` is scoped to registry.npmjs.org, so pointing NPM_REGISTRY at a
 // different host needs a deliberately wider grant at the call site. That is the
 // point: the default invocation can reach exactly one registry.
 
+import { pooledMap } from '@std/async/pool'
 import { queryRegistry, REGISTRY_CONCURRENCY, type RegistrySnapshot } from './npm-query.ts'
+import { expectedSlug } from './oidc.ts'
+import { rawWorkspacePackages } from './workspace.ts'
 
 const REGISTRY_DEFAULT = 'https://registry.npmjs.org'
-
-const dec = new TextDecoder()
-
-const run = async (cmd: string, args: readonly string[]): Promise<string> => {
-  const out = await new Deno.Command(cmd, { args: [...args], stdout: 'piped', stderr: 'inherit' }).output()
-  if (!out.success) throw new Error(`${cmd} ${args.join(' ')} failed (exit ${out.code})`)
-  return dec.decode(out.stdout)
-}
 
 type Klass = 'unpublished' | 'no-oidc' | 'stuck' | 'ok' | 'error'
 
@@ -64,53 +62,32 @@ interface Member {
   readonly dir: string
 }
 
-const workspaceMembers = async (): Promise<readonly Member[]> => {
-  const raw = JSON.parse(await run('pnpm', ['ls', '-r', '--depth=-1', '--json'])) as readonly {
-    name?: string
-    path?: string
-    private?: boolean
-  }[]
-  return raw
-    .filter((entry) => entry.private !== true && typeof entry.name === 'string' && typeof entry.path === 'string')
-    .map((entry) => ({ name: entry.name as string, dir: entry.path as string }))
-}
-
-/** Bounded fan-out. An unbounded map over every member is an fd and rate-limit hazard. */
-const mapBounded = async <T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> => {
-  const results = new Array<R>(items.length)
-  let next = 0
-  const worker = async () => {
-    while (true) {
-      const index = next++
-      if (index >= items.length) return
-      results[index] = await fn(items[index] as T)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
+const workspaceMembers = async (): Promise<readonly Member[]> =>
+  (await rawWorkspacePackages()).map(({ name, path }) => ({ name, dir: path }))
 
 const evaluate = async (registry: string): Promise<readonly Evaluation[]> => {
   const members = await workspaceMembers()
   if (members.length === 0) {
     throw new Error('no non-private workspace packages discovered (did `pnpm ls -r` fail?)')
   }
-  return await mapBounded(members, REGISTRY_CONCURRENCY, async (member) => {
-    const manifest = JSON.parse(await Deno.readTextFile(`${member.dir}/package.json`)) as {
-      version?: string
-      publishConfig?: { provenance?: boolean }
-    }
-    const localVersion = manifest.version ?? '?'
-    const snapshot = await queryRegistry(member.name, registry)
-    return {
-      name: member.name,
-      dir: member.dir,
-      localVersion,
-      provenanceConfig: manifest.publishConfig?.provenance === true,
-      snapshot,
-      klass: classify(localVersion, snapshot),
-    }
-  })
+  return await Array.fromAsync(
+    pooledMap(REGISTRY_CONCURRENCY, members, async (member) => {
+      const manifest = JSON.parse(await Deno.readTextFile(`${member.dir}/package.json`)) as {
+        version?: string
+        publishConfig?: { provenance?: boolean }
+      }
+      const localVersion = manifest.version ?? '?'
+      const snapshot = await queryRegistry(member.name, registry)
+      return {
+        name: member.name,
+        dir: member.dir,
+        localVersion,
+        provenanceConfig: manifest.publishConfig?.provenance === true,
+        snapshot,
+        klass: classify(localVersion, snapshot),
+      }
+    }),
+  )
 }
 
 const SECTIONS: readonly (readonly [Klass, string])[] = [
@@ -152,39 +129,6 @@ const report = (evaluations: readonly Evaluation[], registry: string): void => {
   console.log(lines.join('\n'))
 }
 
-const originSlug = async (): Promise<string> => {
-  try {
-    return (await run('git', ['remote', 'get-url', 'origin']))
-      .trim()
-      .replace(/^git@github\.com:/, '')
-      .replace(/^https?:\/\/github\.com\//, '')
-      .replace(/\.git$/, '') || '<owner>/<repo>'
-  } catch {
-    return '<owner>/<repo>'
-  }
-}
-
-/**
- * The two spellings of the deferred set, because two consumers need different
- * ones: `pnpm --filter` exclusions keep a package OIDC cannot debut out of
- * `pnpm publish -r`, and bare names keep it out of the tag and release steps.
- * Tagging a version npm never received would publish a GitHub Release nobody
- * can install.
- */
-export const filterArgs = (deferred: readonly string[]): string =>
-  deferred.map((name) => `--filter=!${name}`).join('\n')
-
-const flagValue = (args: readonly string[], flag: string): string | null => {
-  const index = args.indexOf(flag)
-  if (index !== -1) {
-    const value = args[index + 1]
-    if (value === undefined || value.startsWith('-')) throw new Error(`missing argument for ${flag}`)
-    return value
-  }
-  const inline = args.find((arg) => arg.startsWith(`${flag}=`))
-  return inline === undefined ? null : inline.slice(flag.length + 1)
-}
-
 const selftest = (): number => {
   const published = (latest: string, attested: boolean): Snapshot => ({ status: 'published', latest, attested })
   const cases: readonly (readonly [string, Klass, Klass])[] = [
@@ -198,21 +142,16 @@ const selftest = (): number => {
     // evidence the package exists.
     ['error outranks attestation', classify('1.0.0', { status: 'error', latest: '1.0.0', attested: true }), 'error'],
   ]
-  const spellings: readonly (readonly [string, string, string])[] = [
-    ['no deferred packages emit an empty filter list', filterArgs([]), ''],
-    ['one deferred package emits one exclusion', filterArgs(['@scope/pkg']), '--filter=!@scope/pkg'],
-    ['two deferred packages emit one exclusion per line', filterArgs(['a', 'b']), '--filter=!a\n--filter=!b'],
-  ]
 
-  const failures = [...cases, ...spellings].filter(([, actual, expected]) => actual !== expected)
+  const failures = cases.filter(([, actual, expected]) => actual !== expected)
   for (const [name, actual, expected] of failures) {
     console.error(`selftest: ${name} — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`)
   }
   if (failures.length > 0) {
-    console.error(`selftest FAILED: ${failures.length} of ${cases.length + spellings.length}`)
+    console.error(`selftest FAILED: ${failures.length} of ${cases.length}`)
     return 1
   }
-  console.log(`selftest ok: ${cases.length + spellings.length} cases`)
+  console.log(`selftest ok: ${cases.length} cases`)
   return 0
 }
 
@@ -220,8 +159,6 @@ const main = async (): Promise<number> => {
   const args = Deno.args
   if (args.includes('--selftest')) return selftest()
 
-  const filterOutput = flagValue(args, '--emit-filters')
-  const deferredOutput = flagValue(args, '--emit-deferred')
   const jsonMode = args.includes('--json')
   const preflight = args.includes('--preflight')
   const check = args.includes('--check')
@@ -229,22 +166,6 @@ const main = async (): Promise<number> => {
   const registry = Deno.env.get('NPM_REGISTRY') ?? REGISTRY_DEFAULT
   const evaluations = await evaluate(registry)
   const of = (klass: Klass) => evaluations.filter((e) => e.klass === klass)
-  const deferred = of('unpublished').map((e) => e.name).sort()
-
-  // Emitting is a query, not a verdict: it exits 0 even when a package is
-  // deferred, because the publish job's verdict is the trailing --preflight.
-  if (filterOutput !== null || deferredOutput !== null) {
-    if (filterOutput !== null) {
-      await Deno.writeTextFile(filterOutput, filterArgs(deferred) + (deferred.length > 0 ? '\n' : ''))
-      console.error(`wrote ${deferred.length} filter(s) to ${filterOutput}`)
-    }
-    if (deferredOutput !== null) {
-      await Deno.writeTextFile(deferredOutput, deferred.join('\n') + (deferred.length > 0 ? '\n' : ''))
-      console.error(`wrote ${deferred.length} deferred name(s) to ${deferredOutput}`)
-    }
-    for (const name of deferred) console.error(`  deferred: ${name}`)
-    return 0
-  }
 
   if (jsonMode) {
     for (const e of evaluations) {
@@ -276,7 +197,12 @@ const main = async (): Promise<number> => {
       console.log('PREFLIGHT OK: every non-private workspace package exists on the registry.')
       return 0
     }
-    const slug = await originSlug()
+    const slug = await expectedSlug().catch((error) => {
+      console.error(
+        `::warning::could not derive the repository slug: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return '<owner>/<repo>'
+    })
     console.error(
       `::error::preflight failed — ${of('unpublished').length} package(s) have never been published, ${
         of('error').length
