@@ -169,9 +169,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
-      - name: Build the report merger
-        run: corepack pnpm turbo build --filter=@systemfsoftware/stryker-js-cli
-
       - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -181,7 +178,11 @@ jobs:
       - name: Merge
         env:
           PACKAGES: ${{ needs.discover.outputs.packages }}
-        run: node packages/stryker-js/stryker-js-cli/dist/main.mjs merge-reports --parts mutation-parts --out mutation-merged
+        run: |
+          pnpm exec stryker merge-reports \
+            --parts "$GITHUB_WORKSPACE/mutation-parts" \
+            --out "$GITHUB_WORKSPACE/mutation-merged" \
+            --packages "$PACKAGES"
 
       - uses: actions/upload-artifact@v7
         with:
