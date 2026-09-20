@@ -5,25 +5,16 @@ export const CHECK_SITE_NAME = 'a filter declared in this file' as const
 export const EXPORTED_NAME = 'an exported filter (its check site may live in another module)' as const
 
 export const MISSING_EXPECTED =
-  'a filter whose annotation carries arbitraryConstraint (when the predicate maps to the constraint vocabulary: length, range, pattern, integer, unique) or a node toCodecArbitrary (a constructor for a predicate the vocabulary cannot express)' as const
+  'a filter whose annotation carries arbitraryConstraint (when the predicate maps to the constraint vocabulary: length, range, pattern, integer, unique) or a node toCodecArbitrary (on a Schema.declare receiver)' as const
 
 export const MISSING_ACTUAL =
   'a filter declared in this file with no constructive-generation metadata: it generates by discarding, so generation cost is rejection sampling and the real generator lives outside the schema' as const
 
 export const MISSING_FIX =
-  'attach arbitraryConstraint to this filter at its Schema.makeFilter / Schema.makeFilterGroup annotations when the predicate maps to the constraint vocabulary, or annotate the base schema node with toCodecArbitrary before this check' as const
+  'attach arbitraryConstraint to this filter at its Schema.makeFilter / Schema.makeFilterGroup annotations when the predicate maps to the constraint vocabulary, or move to Schema.declare with toCodecArbitrary' as const
 
 export const EXPORTED_FIX =
   'attach arbitraryConstraint to the filter here, at its declaration — an exported filter is trusted where it is consumed, so its metadata must live at home' as const
-
-export const LEGACY_EXPECTED =
-  'an arbitrary annotation of { constraint } or { candidate } — v4 composes hints and keeps the predicate as the final check' as const
-
-export const LEGACY_ACTUAL =
-  'a function-valued arbitrary annotation on a filter: the v3 form that replaced the node generator instead of composing with it' as const
-
-export const LEGACY_FIX =
-  'replace the function with arbitrary: { constraint: {...} } when the predicate maps to the constraint vocabulary, or arbitrary: { candidate: { make: (fc) => ... } } when it needs a constructor' as const
 
 export const meta = {
   type: 'problem',
@@ -34,6 +25,5 @@ export const meta = {
   schema: [],
   messages: {
     filterDiscards: MESSAGE,
-    legacyArbitraryFunction: MESSAGE,
   },
 } as const

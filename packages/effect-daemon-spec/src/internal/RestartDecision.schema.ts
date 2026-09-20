@@ -74,12 +74,6 @@ const generatedFromCommand = (command: DecideInputFields) => ({
   intensityExceeded: command.intensityExceeded,
 })
 
-const generatedLink = (): SchemaAST.Link =>
-  Schema.link<DecideInputFields>()(DecideInputGenerated, {
-    decode: SchemaGetter.transform(commandFromGenerated),
-    encode: SchemaGetter.transform(generatedFromCommand),
-  })
-
 /**
  * The command's field map and cross-field check, named so the class below extends a binding
  * rather than an inline factory call. An anonymous base adds a new `ae-forgotten-export`
@@ -89,9 +83,9 @@ const generatedLink = (): SchemaAST.Link =>
  * `failedIndex` is at most `MAX_CHILDREN_CEILING - 1` because it must be strictly less
  * than `totalChildren`, whose own maximum is the ceiling.
  *
- * The constructor hangs on the node as `toCodecArbitrary` *before* the check: a filter
- * cannot construct a cross-field sample, and `.pipe(Schema.check)` would hide the
- * annotation from the gate (the check receiver would be `Schema`, not this struct).
+ * The struct-level cross-field filter relies on Effect's native rejection
+ * sampling. Constructive generation lives at the class level via
+ * `toCodecArbitrary` on `DecideInput` below.
  */
 const DecideInputBase = Schema.Struct({
   strategy: RestartStrategy,
@@ -100,7 +94,6 @@ const DecideInputBase = Schema.Struct({
   exitSuccess: Schema.Boolean,
   intensityExceeded: Schema.Boolean,
 })
-  .annotate({ toCodecArbitrary: generatedLink })
   .check(
     Schema.makeFilter(failedIndexAddressesAChild, {
       message: BOUND_MESSAGE,
