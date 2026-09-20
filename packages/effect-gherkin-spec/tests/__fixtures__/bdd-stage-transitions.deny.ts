@@ -29,19 +29,20 @@ const denyWhenBeforeGiven = (): void => {
   )
 }
 
-const denyThenBeforeWhen = (): void => {
+const denyGivenAfterThen = (): void => {
   scenario(
-    'Then step cannot be followed by When in pipeline',
+    'Given step cannot follow Then in pipeline',
     Gherkin.Do.pipe(
       Given('initial state')('x', () => Effect.succeed(1)),
       Then('asserting outcome')(() => {}),
-      // @ts-expect-error Then cannot be followed by When
-      When('attempting action after assertion')('y', () => Effect.succeed(2)),
+      // @ts-expect-error Given cannot be followed by Then
+      Given('attempting setup after assertion')('y', () => Effect.succeed(2)),
+      Then('outcome observed')(() => {}),
     ),
   )
 }
 
-const denyHeadlessPipeline = (): void => {
+const denyPipelineEndingOnGiven = (): void => {
   scenario(
     'Pipeline ending on Given without Then is rejected',
     // @ts-expect-error Headless pipeline ending on Given without Then is rejected
@@ -51,7 +52,19 @@ const denyHeadlessPipeline = (): void => {
   )
 }
 
+const denyPipelineEndingOnWhen = (): void => {
+  scenario(
+    'Pipeline ending on When without Then is rejected',
+    // @ts-expect-error Headless pipeline ending on When without Then is rejected
+    Gherkin.Do.pipe(
+      Given('initial state')('x', () => Effect.succeed(1)),
+      When('action taken without outcome assertion')('y', () => Effect.succeed(2)),
+    ),
+  )
+}
+
 void validSequence
 void denyWhenBeforeGiven
-void denyThenBeforeWhen
-void denyHeadlessPipeline
+void denyGivenAfterThen
+void denyPipelineEndingOnGiven
+void denyPipelineEndingOnWhen
