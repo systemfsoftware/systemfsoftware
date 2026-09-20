@@ -22,7 +22,8 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { sql } from 'drizzle-orm'
 import { makeWithDefaults } from 'drizzle-orm/effect-pglite'
-import { integer, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { drizzle } from 'drizzle-orm/pglite'
 import { and, eq } from 'drizzle-orm/sql/expressions/conditions'
 import { Context, Effect, Layer, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from 'effect/unstable/http'
@@ -66,18 +67,18 @@ const authUser = pgTable('spike_user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
-  emailVerified: text('email_verified').notNull().default('false'),
+  emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
+  createdAt: timestamp('created_at').notNull(),
+  updatedAt: timestamp('updated_at').notNull(),
 })
 
 const authSession = pgTable('spike_session', {
   id: text('id').primaryKey(),
-  expiresAt: text('expires_at').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
   token: text('token').notNull().unique(),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
+  createdAt: timestamp('created_at').notNull(),
+  updatedAt: timestamp('updated_at').notNull(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
   userId: text('user_id').notNull(),
@@ -91,21 +92,21 @@ const authAccount = pgTable('spike_account', {
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),
-  accessTokenExpiresAt: text('access_token_expires_at'),
-  refreshTokenExpiresAt: text('refresh_token_expires_at'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at'),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
   scope: text('scope'),
   password: text('password'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
+  createdAt: timestamp('created_at').notNull(),
+  updatedAt: timestamp('updated_at').notNull(),
 })
 
 const authVerification = pgTable('spike_verification', {
   id: text('id').primaryKey(),
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
-  expiresAt: text('expires_at').notNull(),
-  createdAt: text('created_at'),
-  updatedAt: text('updated_at'),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at'),
+  updatedAt: timestamp('updated_at'),
 })
 
 // ---------------------------------------------------------------------------
@@ -118,6 +119,18 @@ const program = Effect.gen(function*() {
 
   yield* db.execute(
     sql`CREATE TABLE spike_items (id text PRIMARY KEY, qty integer NOT NULL, version integer NOT NULL)`,
+  )
+  yield* db.execute(
+    sql`CREATE TABLE spike_user (id text PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE, email_verified boolean NOT NULL DEFAULT false, image text, created_at timestamp NOT NULL, updated_at timestamp NOT NULL)`,
+  )
+  yield* db.execute(
+    sql`CREATE TABLE spike_session (id text PRIMARY KEY, expires_at timestamp NOT NULL, token text NOT NULL UNIQUE, created_at timestamp NOT NULL, updated_at timestamp NOT NULL, ip_address text, user_agent text, user_id text NOT NULL)`,
+  )
+  yield* db.execute(
+    sql`CREATE TABLE spike_account (id text PRIMARY KEY, account_id text NOT NULL, provider_id text NOT NULL, user_id text NOT NULL, access_token text, refresh_token text, id_token text, access_token_expires_at timestamp, refresh_token_expires_at timestamp, scope text, password text, created_at timestamp NOT NULL, updated_at timestamp NOT NULL)`,
+  )
+  yield* db.execute(
+    sql`CREATE TABLE spike_verification (id text PRIMARY KEY, identifier text NOT NULL, value text NOT NULL, expires_at timestamp NOT NULL, created_at timestamp, updated_at timestamp)`,
   )
   yield* db.execute(sql`INSERT INTO spike_items (id, qty, version) VALUES ('sku-1', 5, 1)`)
   const inserted = yield* db.select().from(spikeItems).where(eq(spikeItems.id, 'sku-1'))
@@ -152,8 +165,14 @@ const program = Effect.gen(function*() {
   console.log(`[2] transactional CAS: OK (hit rows=${casHit.length}, stale rows=${casMiss.length})`)
 
   // ---- Leg 4 setup: better-auth over the drizzle adapter -------------------
+  // better-auth's adapter is promise-based and cannot drive the Effect-native
+  // session, so it gets a promise-mode drizzle view over the SAME raw PGlite
+  // instance. One database, two dialect views.
+  const rawPglite = yield* Pglite.PgliteClient
+  const authDb = drizzle({ client: rawPglite.pglite })
   const auth = betterAuth({
-    database: drizzleAdapter(db as never, {
+    baseURL: 'http://spike.local',
+    database: drizzleAdapter(authDb, {
       provider: 'pg',
       schema: {
         user: authUser,
@@ -162,7 +181,6 @@ const program = Effect.gen(function*() {
         verification: authVerification,
       },
     }),
-    advanced: { database: { generateId: () => crypto.randomUUID() } },
     emailAndPassword: { enabled: true },
     secret: 'spike-only-secret-never-production',
   })
@@ -174,7 +192,15 @@ const program = Effect.gen(function*() {
       }),
     catch: (cause) => new Error(`leg 4: signUpEmail failed: ${String(cause)}`, { cause }),
   })
-  const setCookie = signUp.headers.get('set-cookie')
+  const signOut = yield* Effect.tryPromise({
+    try: () =>
+      auth.api.signInEmail({
+        body: { email: 'spike@example.test', password: 'spike-password-123' },
+        asResponse: true,
+      }),
+    catch: (cause) => new Error(`leg 4: signInEmail failed: ${String(cause)}`, { cause }),
+  })
+  const setCookie = signOut.headers.get('set-cookie')
   if (setCookie === null || !setCookie.includes('better-auth.session_token')) {
     return yield* Effect.die(new Error('leg 4: signUpEmail returned no session cookie'))
   }
@@ -216,14 +242,15 @@ const program = Effect.gen(function*() {
     Layer.provide(AuthMiddlewareLive),
     Layer.provide(RpcSerialization.layerJson),
   )
-  const ServerLive = HttpRouter.serve(RpcApp).pipe(
-    Layer.provide(NodeHttpServer.layer(() => createServer(), { port: 0 })),
-  )
+  const ServerLive = HttpRouter.serve(RpcApp)
 
   yield* Effect.gen(function*() {
     const raw = yield* HttpClient.HttpClient
     const url = yield* HttpServer.addressFormattedWith(Effect.succeed)
-    const httpClient = HttpClient.mapRequest(raw, HttpClientRequest.prependUrl(url))
+    const httpClient = raw.pipe(
+      HttpClient.mapRequest(HttpClientRequest.prependUrl(`${url}/rpc`)),
+      HttpClient.mapRequest(HttpClientRequest.setHeader('cookie', setCookie)),
+    )
     const proto = yield* RpcClient.makeProtocolHttp(httpClient).pipe(
       Effect.provide(RpcSerialization.layerJson),
     )
@@ -237,9 +264,9 @@ const program = Effect.gen(function*() {
     console.log(`[3] unstable/rpc over platform-node: OK (echo userId matches session)`)
   }).pipe(
     Effect.scoped,
-    Effect.provide(HttpServer.layerTestClient),
     Effect.provide(NodeHttpClient.layerUndici),
     Effect.provide(ServerLive),
+    Effect.provide(NodeHttpServer.layer(() => createServer(), { port: 0 })),
     Effect.provide(Pglite.layer()),
   )
 }).pipe(Effect.provide(Pglite.layer()))
