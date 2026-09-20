@@ -17,10 +17,6 @@
     },
     "provenance": true
   },
-  "devDependencies": {
-    "@systemfsoftware/oxlint-config": "workspace:^",
-    "oxlint": "catalog:oxlint"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",

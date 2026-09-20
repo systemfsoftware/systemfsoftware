@@ -1,5 +1,4 @@
 ---
-"@systemfsoftware/all": none
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none
@@ -14,7 +13,6 @@
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
-"@systemfsoftware/oxlint-plugin-recommended": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
 ---

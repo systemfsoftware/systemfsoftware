@@ -1,9 +1,9 @@
-# @systemfsoftware/oxlint-plugin-effect-entrypoint
+# @systemfsoftware/oxlint-plugin-effect-platform
 
-[![npm](https://img.shields.io/npm/v/@systemfsoftware/oxlint-plugin-effect-entrypoint?style=flat-square)](https://www.npmjs.com/package/@systemfsoftware/oxlint-plugin-effect-entrypoint)
-[![license](https://img.shields.io/npm/l/@systemfsoftware/oxlint-plugin-effect-entrypoint?style=flat-square)](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
+[![npm](https://img.shields.io/npm/v/@systemfsoftware/oxlint-plugin-effect-platform?style=flat-square)](https://www.npmjs.com/package/@systemfsoftware/oxlint-plugin-effect-platform)
+[![license](https://img.shields.io/npm/l/@systemfsoftware/oxlint-plugin-effect-platform?style=flat-square)](https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE)
 
-> An oxlint plugin that keeps `main.ts` an interpretation edge: the one place a process interprets an Effect value, and nowhere a behavior lives.
+> Oxlint rules enforcing Effect Platform runtime entrypoint semantics, I/O boundaries, and native global bans.
 
 ## The end state
 

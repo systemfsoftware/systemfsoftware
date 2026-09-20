@@ -1,4 +1,4 @@
-# @systemfsoftware/oxlint-plugin-structure
+# @systemfsoftware/oxlint-plugin-cell-architecture
 
 Oxlint rules for module structure and export hygiene — classes stay out except where Effect v4 sanctions them, errors carry causes instead of strings, barrels and inline destructured types are forbidden, `@internal` JSDoc marks internal exports and nothing else, and I/O boundaries are verified by composition tests.
 
@@ -22,7 +22,7 @@ Oxlint rules for module structure and export hygiene — classes stay out except
 
 ## Enrollment
 
-Turned on by `@systemfsoftware/oxlint-config/base`, which spreads `configs.recommended.rules` of `@systemfsoftware/oxlint-plugin` — the aggregate re-registers every rule here under its own namespace.
+Included in `@systemfsoftware/oxlint-config-cell-architecture`.
 
 ## Testing
 

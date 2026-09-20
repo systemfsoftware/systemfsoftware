@@ -1,6 +1,6 @@
-# @systemfsoftware/oxlint-plugin-test-placement
+# @systemfsoftware/oxlint-plugin-test-discipline
 
-Oxlint rules enforcing test placement and sanctioned suffixes, following the `place-tests` permission matrix.
+Oxlint rules enforcing property-based test laws, test placement, and test naming hygiene.
 
 ## Rules
 

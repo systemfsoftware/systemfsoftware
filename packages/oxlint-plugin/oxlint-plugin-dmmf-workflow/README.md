@@ -28,12 +28,12 @@ These eight rules make that convention executable at the boundary that construct
 
 ```ts
 // oxlint.config.ts
-import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
+import dmmfWorkflow from '@systemfsoftware/oxlint-plugin-dmmf-workflow'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-workflow'],
-  rules: { ...effectWorkflow.configs.recommended.rules },
+  jsPlugins: ['@systemfsoftware/oxlint-plugin-dmmf-workflow'],
+  rules: { ...dmmfWorkflow.configs.recommended.rules },
 })
 ```
 
@@ -43,7 +43,7 @@ pnpm oxlint src
 
 On a clean codebase: `Found 0 warnings and 0 errors.`
 
-To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-workflow/<rule>': 'warn'`. Entries placed after the spread override it.
+To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-dmmf-workflow/<rule>': 'warn'`. Entries placed after the spread override it.
 
 ## Rules
 
@@ -62,7 +62,7 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## FAQ
 
-**Q: `Failed to parse config … Unknown plugin: '@systemfsoftware/oxlint-plugin-effect-workflow'`.**
+**Q: `Failed to parse config … Unknown plugin: '@systemfsoftware/oxlint-plugin-dmmf-workflow'`.**
 A: The name was placed in oxlint's `plugins` field, which takes built-in namespaces only. JavaScript plugins load through `jsPlugins`; their rules go in `rules`.
 
 **Q: Installed, but nothing is reported.**
