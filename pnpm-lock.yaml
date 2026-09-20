@@ -2233,6 +2233,120 @@ importers:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  packages/oxlint-presets/oxlint-config-cell-architecture:
+    dependencies:
+      '@systemfsoftware/oxlint-config-dmmf':
+        specifier: workspace:^
+        version: link:../oxlint-config-dmmf
+      '@systemfsoftware/oxlint-plugin-cell-architecture':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-cell-architecture
+      '@systemfsoftware/oxlint-plugin-effect-platform':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-platform
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+    devDependencies:
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../toolchain/tsdown-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.116
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/oxlint-presets/oxlint-config-dmmf:
+    dependencies:
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.45.0
+      '@systemfsoftware/oxlint-plugin-dmmf-workflow':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-dmmf-workflow
+      '@systemfsoftware/oxlint-plugin-effect-schema':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-schema
+      '@systemfsoftware/oxlint-plugin-test-discipline':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-test-discipline
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      oxlint-tsgolint:
+        specifier: catalog:oxlint
+        version: 7.0.2001
+    devDependencies:
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../toolchain/tsdown-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.116
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/oxlint-presets/oxlint-config-rule-authoring:
+    dependencies:
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+    devDependencies:
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../toolchain/tsdown-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/oxlint-presets/oxlint-plugin-recommended:
     devDependencies:
       '@microsoft/api-extractor':

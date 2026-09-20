@@ -1,0 +1,75 @@
+{
+  "name": "@systemfsoftware/oxlint-config-cell-architecture",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-presets/oxlint-config-cell-architecture"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-presets/oxlint-config-cell-architecture#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Shareable Oxlint configuration for Cell Architecture: extends DMMF and layers on Effect Platform and Cell Architecture AST rules.",
+  "keywords": [
+    "oxlint",
+    "oxlint-config",
+    "preset",
+    "cell-architecture",
+    "dmmf",
+    "effect",
+    "effect-platform",
+    "typescript"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-cell-architecture": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-platform": "workspace:^",
+    "oxlint": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "oxlint": "catalog:oxlint",
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}
