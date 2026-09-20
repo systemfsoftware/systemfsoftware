@@ -128,24 +128,24 @@
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "stryker.config.ts",
         "stryker.config.json",
-        "$TURBO_ROOT$/stryker.config.base.json",
         "vitest.config.ts",
         "vitest.setup.ts",
         "reports/stryker-incremental.json",
-        "$TURBO_ROOT$/packages/stryker-js/**",
+        "$TURBO_ROOT$/packages/toolchain/stryker-config/**",
         "!**/*.md"
       ],
       "outputs": [
-        "reports/mutation-report.html",
-        "reports/mutation-report.json"
+        "reports/mutation/mutation.html",
+        "reports/mutation/mutation.json"
       ],
       "env": [
         "NODE_ENV",
         "CI",
         "AGENT"
       ],
-      "cache": true
+      "cache": false
     },
     "lint": {
       "inputs": [

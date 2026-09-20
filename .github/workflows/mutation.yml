@@ -98,9 +98,9 @@ jobs:
       - uses: actions/cache/restore@v6
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main
+          key: ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-main
           restore-keys: |
-            ${{ runner.os }}-stryker-${{ matrix.package }}-
+            ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-
 
       # Advisory: a mutation score below threshold never fails this job — the
       # merged report in the `report` job carries that verdict. A run that never
@@ -130,7 +130,7 @@ jobs:
         if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-${{ github.run_id }}
+          key: ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-${{ github.run_id }}
 
       - name: Record part metadata
         if: always()
@@ -152,7 +152,7 @@ jobs:
           name: mutation-part-${{ steps.sanitize.outputs.name }}
           path: |
             ${{ matrix.package }}/reports/mutation-part.json
-            ${{ matrix.package }}/reports/mutation-report.json
+            ${{ matrix.package }}/reports/mutation/mutation.json
             ${{ matrix.package }}/reports/mutation-stream.jsonl
           if-no-files-found: ignore
           retention-days: 1
@@ -169,9 +169,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
-      - name: Build the report merger
-        run: corepack pnpm turbo build --filter=@systemfsoftware/stryker-js-cli
-
       - uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -181,7 +178,11 @@ jobs:
       - name: Merge
         env:
           PACKAGES: ${{ needs.discover.outputs.packages }}
-        run: node packages/stryker-js/stryker-js-cli/dist/main.mjs merge-reports --parts mutation-parts --out mutation-merged
+        run: |
+          pnpm exec stryker merge-reports \
+            --parts "$GITHUB_WORKSPACE/mutation-parts" \
+            --out "$GITHUB_WORKSPACE/mutation-merged" \
+            --packages "$PACKAGES"
 
       - uses: actions/upload-artifact@v7
         with:

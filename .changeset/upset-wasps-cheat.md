@@ -14,9 +14,18 @@
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
+"@systemfsoftware/oxlint-plugin": none
+"@systemfsoftware/oxlint-plugin-effect-dmmf": none
+"@systemfsoftware/oxlint-plugin-effect-entrypoint": none
+"@systemfsoftware/oxlint-plugin-effect-schema": none
+"@systemfsoftware/oxlint-plugin-effect-workflow": none
+"@systemfsoftware/oxlint-plugin-property-testing": none
+"@systemfsoftware/oxlint-plugin-recommended": none
+"@systemfsoftware/oxlint-plugin-test-hygiene": none
+"@systemfsoftware/oxlint-plugin-test-placement": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
 "@systemfsoftware/tsconfig": none
 ---
 
-No release is made for these packages: nothing a consumer installs changed, and the manifest each one publishes is byte-for-byte what the previous version published.
+Mutation testing now uses the published Stryker JS Effect CLI.

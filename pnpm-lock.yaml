@@ -6,24 +6,12 @@ settings:
 
 catalogs:
   default:
-    '@effect/platform-node':
-      specifier: 4.0.0-rc.112
-      version: 4.0.0-rc.112
-    '@effect/platform-node-shared':
-      specifier: 4.0.0-rc.112
-      version: 4.0.0-rc.112
     '@effect/vitest':
       specifier: 4.0.0-rc.112
       version: 4.0.0-rc.112
     '@microsoft/api-extractor':
       specifier: ^7.58.7
       version: 7.58.9
-    '@noble/hashes':
-      specifier: 2.4.0
-      version: 2.4.0
-    '@oxc-parser/binding-wasm32-wasi':
-      specifier: ^0.140.0
-      version: 0.140.0
     '@oxc-project/types':
       specifier: ^0.140.0
       version: 0.140.0
@@ -96,9 +84,6 @@ catalogs:
     storybook:
       specifier: ^10.5.0
       version: 10.5.6
-    testcontainers:
-      specifier: ^12.1.0
-      version: 12.1.0
     tsdown:
       specifier: ^0.22.14
       version: 0.22.14
@@ -111,9 +96,6 @@ catalogs:
     typescript:
       specifier: ^7
       version: 7.0.2
-    vite-tsconfig-paths:
-      specifier: ^6.1.1
-      version: 6.1.1
     vitest:
       specifier: ^4
       version: 4.1.10
@@ -128,24 +110,24 @@ catalogs:
       specifier: 7.0.2001
       version: 7.0.2001
   stryker:
-    '@systemfsoftware/stryker-js-cli':
-      specifier: ^4.0.1
-      version: 4.0.1
+    '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
+      specifier: ^0.1.0
+      version: 0.1.0
+    '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+      specifier: ^0.1.0
+      version: 0.1.0
+    '@systemfsoftware/stryker-js':
+      specifier: ^9.0.0
+      version: 9.0.0
     '@systemfsoftware/stryker-js-typescript-checker':
-      specifier: ^3.0.1
-      version: 3.0.1
+      specifier: ^7.0.2
+      version: 7.0.2
     '@systemfsoftware/stryker-js-vitest-runner':
-      specifier: ^2.0.1
-      version: 2.0.1
-    '@systemfsoftware/stryker-plugins':
-      specifier: ^1.0.1
-      version: 1.0.1
+      specifier: ^7.0.0
+      version: 7.0.0
     '@systemfsoftware/stryker-test-contribution':
-      specifier: ^1.0.1
-      version: 1.0.1
-    mutation-testing-elements:
-      specifier: 3.7.3
-      version: 3.7.3
+      specifier: ^3.0.2
+      version: 3.0.2
 
 overrides:
   fast-check: ^4
@@ -174,6 +156,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       concurrently:
         specifier: ^10.0.5
         version: 10.0.5
@@ -422,21 +407,27 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -823,21 +814,27 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -1218,21 +1215,27 @@ importers:
       '@systemfsoftware/oxlint-import-origin':
         specifier: workspace:^
         version: link:../import-origin
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1276,21 +1279,27 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1340,21 +1349,27 @@ importers:
       '@systemfsoftware/oxlint-import-origin':
         specifier: workspace:^
         version: link:../import-origin
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1404,21 +1419,27 @@ importers:
       '@systemfsoftware/oxlint-make-boundary':
         specifier: workspace:^
         version: link:../make-boundary
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1465,21 +1486,27 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1547,21 +1574,27 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1605,21 +1638,27 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1666,21 +1705,27 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1727,21 +1772,27 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/stryker-js-cli':
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.0(rolldown@1.2.3)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
-        version: 3.0.1
+        version: 7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: catalog:stryker
-        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/stryker-plugins':
-        specifier: catalog:stryker
-        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+        version: 7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+        version: 3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1897,601 +1948,14 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/stryker-js/stryker-js:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
+  packages/toolchain/stryker-config:
     devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
+        version: link:../tsconfig
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      oxlint-tsgolint:
-        specifier: catalog:oxlint
-        version: 7.0.2001
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-js-cli:
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/platform-node-shared':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
-      '@noble/hashes':
-        specifier: 'catalog:'
-        version: 2.4.0
-      '@oxc-parser/binding-wasm32-wasi':
-        specifier: 'catalog:'
-        version: 0.140.0
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-      '@systemfsoftware/stryker-js-engine':
-        specifier: workspace:^
-        version: link:../stryker-js-engine
-      '@systemfsoftware/stryker-js-html-reporter':
-        specifier: workspace:^
-        version: link:../stryker-js-html-reporter
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../stryker-js-typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../stryker-js-vitest-runner
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../stryker-plugins
-      '@systemfsoftware/stryker-test-contribution':
-        specifier: workspace:^
-        version: link:../stryker-test-contribution
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      mutation-testing-elements:
-        specifier: catalog:stryker
-        version: 3.7.3
-      oxc-parser:
-        specifier: 'catalog:'
-        version: 0.140.0
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      testcontainers:
-        specifier: 'catalog:'
-        version: 12.1.0(supports-color@10.2.2)
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      vite-tsconfig-paths:
-        specifier: 'catalog:'
-        version: 6.1.1(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-js-engine:
-    dependencies:
-      '@noble/hashes':
-        specifier: 'catalog:'
-        version: 2.4.0
-      '@opentelemetry/api':
-        specifier: ^1.9.0
-        version: 1.9.1
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-      '@systemfsoftware/stryker-js-instrumenter':
-        specifier: workspace:^
-        version: link:../stryker-js-instrumenter
-      diff-match-patch:
-        specifier: 1.0.5
-        version: 1.0.5
-      minimatch:
-        specifier: ~10.2.4
-        version: 10.2.5
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@std/jsonc':
-        specifier: 'catalog:'
-        version: '@jsr/std__jsonc@1.0.2'
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/diff-match-patch':
-        specifier: 1.0.36
-        version: 1.0.36
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      oxlint-tsgolint:
-        specifier: catalog:oxlint
-        version: 7.0.2001
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-js-html-reporter:
-    dependencies:
-      '@effect/platform-node-shared':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-      mutation-testing-elements:
-        specifier: catalog:stryker
-        version: 3.7.3
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      oxlint-tsgolint:
-        specifier: catalog:oxlint
-        version: 7.0.2001
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-js-instrumenter:
-    dependencies:
-      '@eslint-community/regexpp':
-        specifier: 4.12.2
-        version: 4.12.2
-      '@oxc-project/types':
-        specifier: 'catalog:'
-        version: 0.140.0
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-      angular-html-parser:
-        specifier: ~10.4.0
-        version: 10.4.0
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxc-parser:
-        specifier: 'catalog:'
-        version: 0.140.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/estree':
-        specifier: 1.0.8
-        version: 1.0.8
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      svelte:
-        specifier: 5.55.1
-        version: 5.55.1
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-js-typescript-checker:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/platform-node-shared':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@std/jsonc':
-        specifier: 'catalog:'
-        version: '@jsr/std__jsonc@1.0.2'
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-js-vitest-runner:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-    devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/all
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/browser-playwright':
-        specifier: 'catalog:'
-        version: 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-plugins:
-    dependencies:
-      typescript:
-        specifier: '>=5.0.0'
-        version: 7.0.2
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/estree':
-        specifier: 1.0.8
-        version: 1.0.8
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/stryker-js/stryker-test-contribution:
-    dependencies:
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/toolchain/tsconfig:
     devDependencies:
@@ -2555,26 +2019,12 @@ packages:
     resolution: {integrity: sha512-DkXD5OJQaAQIdZ1bt3UZdEnHAn9Imd3IVBdX03UFe+ony9Ojw5pzr9YVKGDY1jt+Gcn/FnGkNf8r+Vj5NOJWtQ==}
     engines: {node: '>=6.9.0'}
 
-  '@babel/helper-annotate-as-pure@7.29.7':
-    resolution: {integrity: sha512-OoK6239jHPuSQOoS0kfTVKn0b/rVTk0seKq4Gd2UMLtmOVLjDC0ki3e+c90Trqv2gMfvJFqkiljrr568+qddiw==}
-    engines: {node: '>=6.9.0'}
-
   '@babel/helper-compilation-targets@7.29.7':
     resolution: {integrity: sha512-wem6WaBj4NaVYVdNhLPPVacES6ZJ+KBBfSkTMD3YZxbP3rm3Di85tJU5ljaUNhaOynt+Aj0xruhYuzQBt8n71g==}
     engines: {node: '>=6.9.0'}
 
-  '@babel/helper-create-class-features-plugin@7.29.7':
-    resolution: {integrity: sha512-IY3ZD9Tmooqr3TUhc3DUWxiuo8xx1DWLhd5M7hQ+ZWJamqM2BbalrBJb2MisSLoYorOj75U03qULCxQTY9r3hg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0
-
   '@babel/helper-globals@7.29.7':
     resolution: {integrity: sha512-3nQVUAtvkKH9zahfWgw96Jc/uFOmjACE1kQz82E2lqWmHBgjzbNlsC22nuQTfahmWeQtTq5nQ/4Nnd2A1wj4zA==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/helper-member-expression-to-functions@7.29.7':
-    resolution: {integrity: sha512-j+7JYmk1JYDtACIGj0QJqqWZjoUpMoEikQGADMaHgCMCSDqd2+P32rfcibUNrGOMWrlzK1WJBdxrB3JJQZwWtg==}
     engines: {node: '>=6.9.0'}
 
   '@babel/helper-module-imports@7.29.7':
@@ -2586,24 +2036,6 @@ packages:
     engines: {node: '>=6.9.0'}
     peerDependencies:
       '@babel/core': ^7.0.0
-
-  '@babel/helper-optimise-call-expression@7.29.7':
-    resolution: {integrity: sha512-+kmGVjcT9RGYzoDwdwEqEvGgKe3BYq+O1iGzjFubaNgZHwYHP6lsF2Yghf4kEuv9BV7tYDZ913aBW9am6YKong==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/helper-plugin-utils@7.29.7':
-    resolution: {integrity: sha512-G7sHYigPY17oO5SYWnfD/0MTBwVR781S/JI643e/JhUYgVgWE/61SoW3NH9KWUKyKq5LVh3npif99Wkt6j86Jw==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/helper-replace-supers@7.29.7':
-    resolution: {integrity: sha512-atfGXWSeCiF4DnKZIfmJfQRkSw9b9gNNXR1kqKjbhG4pGYCOnkp8OcTB8E3NXjBu8NpheSnOeNKz8KT7UNFTmQ==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0
-
-  '@babel/helper-skip-transparent-expression-wrappers@7.29.7':
-    resolution: {integrity: sha512-brcMGQaVzIeUb+6/bs1Av0f8YuNNjKY2JyvfRCsFuFsdKccEQ5Ges2y74D74NZ1Rz8lKJ9ksJkfqwQFJ/iNEyQ==}
-    engines: {node: '>=6.9.0'}
 
   '@babel/helper-string-parser@7.29.7':
     resolution: {integrity: sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==}
@@ -2626,60 +2058,6 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  '@babel/plugin-proposal-decorators@7.29.7':
-    resolution: {integrity: sha512-EtU0Hi3GvrTqD56xKmZvV/uCXK2ZbwVNPNLAquVItcAZpUhkXwWlo3Fmj0c2LxgSf2I8IDULeAepwNP1OefLXg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-syntax-decorators@7.29.7':
-    resolution: {integrity: sha512-9MTTLbF39X6sqM92JPEsoI7++26hjZvzkxKZy64aMhWLH2mPkJ/Q3AV4QLmls3R14FpSpkOwQQfUh962JGQxxg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-syntax-jsx@7.29.7':
-    resolution: {integrity: sha512-TSu8+mHCoEaaCDEZ0I3+6mvTBYR4PCxQwf2z9/r5Tbztv6NaLR3B9thGTTxX2WGuGHJqRiAbKPeGTJ5XWXVg6A==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-syntax-typescript@7.29.7':
-    resolution: {integrity: sha512-ngr+82Sh0xMz25TPCZi+nC2iTzjfCdWS2ONXTp/PtSCHCgaCNBpdMqgvJ2ccdLlClVZ7sisIgB914j/JFe+RZA==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-destructuring@7.29.7':
-    resolution: {integrity: sha512-iPX8aD6H9zV5s7ZsqTdNocPN/MGQ5sSMnElKrktxjJRMnB2jN/1p2+R7GkfD6CAYoVFqy5A4XnSIUeGgJzIWpg==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-explicit-resource-management@7.29.7':
-    resolution: {integrity: sha512-Rstj7coNz8sE+7Ju7ihpHLI564lsK5pUpNNlvptCIC/16E/S5hbl6n3kESPKdNRmqEWlpn5xpS5Q2dvXBsySLw==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-modules-commonjs@7.29.7':
-    resolution: {integrity: sha512-j0vCldybPC5b5dwCQOJ21uKtHzt7hxLygJTg9eF1ScfaikEDNfzn94XoW5Fi+seBR0nCyL23xaBFFkq7dTM8XQ==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-typescript@7.29.7':
-    resolution: {integrity: sha512-jK52h8LaLc7JarhQV2ofeFMts4H7vnOXnqZNA6fYglBTZewRBE51KWt3BUltW1P+KoPsYkHoJeXePuz4zo2LMw==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/preset-typescript@7.28.5':
-    resolution: {integrity: sha512-+bQy5WOI2V6LJZpPVxY+yp66XdZ2yifu0Mc1aP5CQKgjn4QM5IN2i5fAZ4xKop47pr8rpVhiAeu+nDQa12C8+g==}
-    engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
   '@babel/runtime@7.29.7':
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
@@ -2695,9 +2073,6 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
-
-  '@balena/dockerignore@1.0.2':
-    resolution: {integrity: sha512-wMue2Sy4GAVTk6Ic4tJVcnfdau+gx2EnG7S+uAEe+TWJFqE4YoWN4/H8MSLj4eYJKxGg26lZwboEniNiNwZQ6Q==}
 
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
@@ -2833,6 +2208,38 @@ packages:
   '@csstools/css-tokenizer@4.0.0':
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
+
+  '@effect/opentelemetry@4.0.0-rc.112':
+    resolution: {integrity: sha512-OTRv1DxTHUmnakgJ6XVM8wVgF1KgZH4UXnOemwSLUwUjXO+RCikzF8oR/rlVmOGq81KtQzj1URM4M4nchlQOuQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.9.0 <2.0.0'
+      '@opentelemetry/api-logs': '>=0.203.0 <0.300.0'
+      '@opentelemetry/resources': '>=2.0.0 <3.0.0'
+      '@opentelemetry/sdk-logs': '>=0.203.0 <0.300.0'
+      '@opentelemetry/sdk-metrics': '>=2.0.0 <3.0.0'
+      '@opentelemetry/sdk-trace-base': '>=2.0.0 <3.0.0'
+      '@opentelemetry/sdk-trace-node': '>=2.0.0 <3.0.0'
+      '@opentelemetry/sdk-trace-web': '>=2.0.0 <3.0.0'
+      '@opentelemetry/semantic-conventions': '>=1.33.0 <2.0.0'
+      effect: ^4.0.0-rc.112
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      '@opentelemetry/api-logs':
+        optional: true
+      '@opentelemetry/resources':
+        optional: true
+      '@opentelemetry/sdk-logs':
+        optional: true
+      '@opentelemetry/sdk-metrics':
+        optional: true
+      '@opentelemetry/sdk-trace-base':
+        optional: true
+      '@opentelemetry/sdk-trace-node':
+        optional: true
+      '@opentelemetry/sdk-trace-web':
+        optional: true
 
   '@effect/platform-node-shared@4.0.0-rc.112':
     resolution: {integrity: sha512-ttjz0xKamFN7vL8pNDYVwddJLjZvqKePc05djlz2VcdaKbLsnYbtMnL1rbOfHgEnIUSHGh7FkjaN4DM1Ov81sQ==}
@@ -3089,11 +2496,6 @@ packages:
     resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
     engines: {node: '>=12.10.0'}
 
-  '@grpc/proto-loader@0.7.15':
-    resolution: {integrity: sha512-tMXdRCfYVixjuFK+Hk0Q1s38gV9zDiDJfWL3h1rv4Qc39oILCu1TRTDt7+fGUI8K4G1Fj125Hx/ru3azECWTyQ==}
-    engines: {node: '>=6'}
-    hasBin: true
-
   '@grpc/proto-loader@0.8.1':
     resolution: {integrity: sha512-wtF6h+DY6M3YaDBPAmvuuA6jV8Sif9MjtOI5euKFWRgCDl5PeDpPsHR9u2l6St5ceY8AZgoNDww5+HvEsXFsGg==}
     engines: {node: '>=6'}
@@ -3102,10 +2504,6 @@ packages:
   '@gwhitney/detect-indent@7.0.1':
     resolution: {integrity: sha512-7bQW+gkKa2kKZPeJf6+c6gFK9ARxQfn+FKy9ScTBppyKRWH2KzsmweXUoklqeEiHiNVWaeP5csIdsNq6w7QhzA==}
     engines: {node: '>=12.20'}
-
-  '@isaacs/cliui@8.0.2':
-    resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
-    engines: {node: '>=12'}
 
   '@istanbuljs/schema@0.1.6':
     resolution: {integrity: sha512-+Sg6GCR/wy1oSmQDFq4LQDAhm3ETKnorxN+y5nbLULOR3P0c14f2Wurzj3/xqPXtasLFfHd5iRFQ7AJt4KH2cw==}
@@ -3271,9 +2669,6 @@ packages:
   '@jsr/std__streams@1.1.2':
     resolution: {integrity: sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A==, tarball: https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz}
 
-  '@kwsites/file-exists@1.1.1':
-    resolution: {integrity: sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==}
-
   '@microsoft/api-extractor-model@7.33.8':
     resolution: {integrity: sha512-aIcoQggPyer3B6Ze3usz0YWC/oBwUHfRH5ETUsr+oT2BRA6SfTJl7IKPcPZkX4UR+PohowzW4uMxsvjrn8vm+w==}
 
@@ -3331,17 +2726,195 @@ packages:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.3
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.3
 
-  '@noble/hashes@1.8.0':
-    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
-    engines: {node: ^14.21.3 || >=16}
-
   '@noble/hashes@2.4.0':
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
+  '@opentelemetry/api-logs@0.208.0':
+    resolution: {integrity: sha512-CjruKY9V6NMssL/T1kAFgzosF1v9o6oeN+aX5JB/C/xPNtmgIJqcXHG7fA82Ou1zCpWGl4lROQUKwUNE1pMCyg==}
+    engines: {node: '>=8.0.0'}
+
   '@opentelemetry/api@1.9.1':
     resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
     engines: {node: '>=8.0.0'}
+
+  '@opentelemetry/context-async-hooks@2.2.0':
+    resolution: {integrity: sha512-qRkLWiUEZNAmYapZ7KGS5C4OmBLcP/H2foXeOEaowYCR0wi89fHejrfYfbuLVCMLp/dWZXKvQusdbUEZjERfwQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/core@2.11.0':
+    resolution: {integrity: sha512-7YP44XH0tV6+Mb54x2YGf84i7yi+31MBZlE8JwvozkxyTvXbSp10X7cI7YE49ChJ3shMJoBmCJF3+1QFBJctGA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/core@2.2.0':
+    resolution: {integrity: sha512-FuabnnUm8LflnieVxs6eP7Z383hgQU4W1e3KJS6aOG3RxWxcHyBxH8fDMHNgu/gFx/M2jvTOW/4/PHhLz6bjWw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/exporter-logs-otlp-grpc@0.208.0':
+    resolution: {integrity: sha512-AmZDKFzbq/idME/yq68M155CJW1y056MNBekH9OZewiZKaqgwYN4VYfn3mXVPftYsfrCM2r4V6tS8H2LmfiDCg==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-logs-otlp-http@0.208.0':
+    resolution: {integrity: sha512-jOv40Bs9jy9bZVLo/i8FwUiuCvbjWDI+ZW13wimJm4LjnlwJxGgB+N/VWOZUTpM+ah/awXeQqKdNlpLf2EjvYg==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-logs-otlp-proto@0.208.0':
+    resolution: {integrity: sha512-Wy8dZm16AOfM7yddEzSFzutHZDZ6HspKUODSUJVjyhnZFMBojWDjSNgduyCMlw6qaxJYz0dlb0OEcb4Eme+BfQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-metrics-otlp-grpc@0.208.0':
+    resolution: {integrity: sha512-YbEnk7jjYmvhIwp2xJGkEvdgnayrA2QSr28R1LR1klDPvCxsoQPxE6TokDbQpoCEhD3+KmJVEXfb4EeEQxjymg==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-metrics-otlp-http@0.208.0':
+    resolution: {integrity: sha512-QZ3TrI90Y0i1ezWQdvreryjY0a5TK4J9gyDLIyhLBwV+EQUvyp5wR7TFPKCAexD4TDSWM0t3ulQDbYYjVtzTyA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-metrics-otlp-proto@0.208.0':
+    resolution: {integrity: sha512-CvvVD5kRDmRB/uSMalvEF6kiamY02pB46YAqclHtfjJccNZFxbkkXkMMmcJ7NgBFa5THmQBNVQ2AHyX29nRxOw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-prometheus@0.208.0':
+    resolution: {integrity: sha512-Rgws8GfIfq2iNWCD3G1dTD9xwYsCof1+tc5S5X0Ahdb5CrAPE+k5P70XCWHqrFFurVCcKaHLJ/6DjIBHWVfLiw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-trace-otlp-grpc@0.208.0':
+    resolution: {integrity: sha512-E/eNdcqVUTAT7BC+e8VOw/krqb+5rjzYkztMZ/o+eyJl+iEY6PfczPXpwWuICwvsm0SIhBoh9hmYED5Vh5RwIw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-trace-otlp-http@0.208.0':
+    resolution: {integrity: sha512-jbzDw1q+BkwKFq9yxhjAJ9rjKldbt5AgIy1gmEIJjEV/WRxQ3B6HcLVkwbjJ3RcMif86BDNKR846KJ0tY0aOJA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-trace-otlp-proto@0.208.0':
+    resolution: {integrity: sha512-q844Jc3ApkZVdWYd5OAl+an3n1XXf3RWHa3Zgmnhw3HpsM3VluEKHckUUEqHPzbwDUx2lhPRVkqK7LsJ/CbDzA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/exporter-zipkin@2.2.0':
+    resolution: {integrity: sha512-VV4QzhGCT7cWrGasBWxelBjqbNBbyHicWWS/66KoZoe9BzYwFB72SH2/kkc4uAviQlO8iwv2okIJy+/jqqEHTg==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.0.0
+
+  '@opentelemetry/instrumentation@0.208.0':
+    resolution: {integrity: sha512-Eju0L4qWcQS+oXxi6pgh7zvE2byogAkcsVv0OjHF/97iOz1N/aKE6etSGowYkie+YA1uo6DNwdSxaaNnLvcRlA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/otlp-exporter-base@0.208.0':
+    resolution: {integrity: sha512-gMd39gIfVb2OgxldxUtOwGJYSH8P1kVFFlJLuut32L6KgUC4gl1dMhn+YC2mGn0bDOiQYSk/uHOdSjuKp58vvA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/otlp-grpc-exporter-base@0.208.0':
+    resolution: {integrity: sha512-fGvAg3zb8fC0oJAzfz7PQppADI2HYB7TSt/XoCaBJFi1mSquNUjtHXEoviMgObLAa1NRIgOC1lsV1OUKi+9+lQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/otlp-transformer@0.208.0':
+    resolution: {integrity: sha512-DCFPY8C6lAQHUNkzcNT9R+qYExvsk6C5Bto2pbNxgicpcSWbe2WHShLxkOxIdNcBiYPdVHv/e7vH7K6TI+C+fQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.3.0
+
+  '@opentelemetry/propagator-b3@2.2.0':
+    resolution: {integrity: sha512-9CrbTLFi5Ee4uepxg2qlpQIozoJuoAZU5sKMx0Mn7Oh+p7UrgCiEV6C02FOxxdYVRRFQVCinYR8Kf6eMSQsIsw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/propagator-jaeger@2.2.0':
+    resolution: {integrity: sha512-FfeOHOrdhiNzecoB1jZKp2fybqmqMPJUXe2ZOydP7QzmTPYcfPeuaclTLYVhK3HyJf71kt8sTl92nV4YIaLaKA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/resources@2.11.0':
+    resolution: {integrity: sha512-Ie7+8q8MDF4FAEQCKVMTx3ReUvxiIAgIiiW3c9JdmP8+HMcDy20puT+AHjexnExgnbvBxjQ9fjkFDWrikJ2jQA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/resources@2.2.0':
+    resolution: {integrity: sha512-1pNQf/JazQTMA0BiO5NINUzH0cbLbbl7mntLa4aJNmCCXSj0q03T5ZXXL0zw4G55TjdL9Tz32cznGClf+8zr5A==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/sdk-logs@0.208.0':
+    resolution: {integrity: sha512-QlAyL1jRpOeaqx7/leG1vJMp84g0xKP6gJmfELBpnI4O/9xPX+Hu5m1POk9Kl+veNkyth5t19hRlN6tNY1sjbA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.4.0 <1.10.0'
+
+  '@opentelemetry/sdk-metrics@2.2.0':
+    resolution: {integrity: sha512-G5KYP6+VJMZzpGipQw7Giif48h6SGQ2PFKEYCybeXJsOCB4fp8azqMAAzE5lnnHK3ZVwYQrgmFbsUJO/zOnwGw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.9.0 <1.10.0'
+
+  '@opentelemetry/sdk-node@0.208.0':
+    resolution: {integrity: sha512-pbAqpZ7zTMFuTf3YecYsecsto/mheuvnK2a/jgstsE5ynWotBjgF5bnz5500W9Xl2LeUfg04WMt63TWtAgzRMw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace-base@2.11.0':
+    resolution: {integrity: sha512-H19x/TX/LZdqiYOjM7fqtSxwlplC5pgelavqbQdHbhdq0q/AI/TGkM2dfGuuynTXmJPeF2HoZVoPDu+TGoW78A==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace-base@2.2.0':
+    resolution: {integrity: sha512-xWQgL0Bmctsalg6PaXExmzdedSp3gyKV8mQBwK/j9VGdCDu2fmXIb2gAehBKbkXCpJ4HPkgv3QfoJWRT4dHWbw==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace-node@2.2.0':
+    resolution: {integrity: sha512-+OaRja3f0IqGG2kptVeYsrZQK9nKRSpfFrKtRBq4uh6nIB8bTBgaGvYQrQoRrQWQMA5dK5yLhDMDc0dvYvCOIQ==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.0.0 <1.10.0'
+
+  '@opentelemetry/sdk-trace@2.11.0':
+    resolution: {integrity: sha512-fFnTqGm8/G73GQVnxYi7LXa1ZVYEUvgL6XI1LpvV0bPC7WQ/ZGgKxCSl8FnlZBKto9JHHEFTO6s6CUpvvtwFrA==}
+    engines: {node: ^18.19.0 || >=20.6.0}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.3.0 <1.10.0'
+
+  '@opentelemetry/semantic-conventions@1.43.0':
+    resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
+    engines: {node: '>=14'}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     resolution: {integrity: sha512-0LC7ye4hvqbIKxAzThzvswgHLFu2AURKzYLeSVvLdu2TBOYWQDmHnTqPLeA597BcUCxiLqLsS4CJ5uoI5WYWCQ==}
@@ -3864,10 +3437,6 @@ packages:
   '@oxlint/plugins@1.77.0':
     resolution: {integrity: sha512-6KtPXskPgpt+0Kyl2nNSxNnYXt7lbkxW1C7vi2L7xwtq/AisZlsmV+hnzOTEyM5tU1TxPv1GpTqpUBbZfPzBLg==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
-
-  '@pkgjs/parseargs@0.11.0':
-    resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
-    engines: {node: '>=14'}
 
   '@pnpm/constants@10.0.0':
     resolution: {integrity: sha512-dxIXcW1F1dxIGfye2JXE7Q8WVwYB0axVzdBOkvE1WKIVR4xjB8e6k/Dkjo7DpbyfW5Vu2k21p6dyM32YLSAWoQ==}
@@ -4448,24 +4017,25 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
-  '@systemfsoftware/effect-cell-types@5.0.1':
-    resolution: {integrity: sha512-pIheHBnwShyLoJNXJLOaUlWA5Eaqxq64xJibPnzUtRpJ6Zo/+oSPUqhV1wrQ145CTvlcznKV2H6CS4zodg3Iuw==}
+  '@systemfsoftware/effect-cell-types@8.3.0':
+    resolution: {integrity: sha512-NvD4mQopWz4yV4Maww72MjC+74GqbvVAkVDmKkXWFqezvOcl35zUHVe5Gcl/ru0wdr+Br/YSua3BCORrOZdd5Q==}
     peerDependencies:
-      effect: ^4.0.0-rc.112
+      effect: 4.0.0-rc.112
 
-  '@systemfsoftware/stryker-js-cli@4.0.1':
-    resolution: {integrity: sha512-OeMTokScJT4mWKdMnnaMS119Rme8PiHTueNCZEUnJWYNLT7YI9uNxLP0Bifunjerp5kVjRmC5ef6tNNf+YyBiA==}
-    engines: {node: '>=20.0.0'}
-    hasBin: true
+  '@systemfsoftware/stryker-ignorer-effect-schema-declarations@0.1.0':
+    resolution: {integrity: sha512-WpO7/d6PFvY4W6c3TuxLP5kQQQkbk/2eNy+r/Z9roOXeLBYWWlFW0sDA6uhUT7YWhLR7Qd/+eg5TrRnA+sfjzw==}
 
-  '@systemfsoftware/stryker-js-html-reporter@0.1.0':
-    resolution: {integrity: sha512-+r/n1kVhXPQRY8G4Zn3a7FWz29O24czxDCvRk5kmtu0KmeXakWc3gtyHAXe3VkgaUw2y0AlEl04TwCZaJiVLhQ==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      effect: ^4.0.0-rc.112
+  '@systemfsoftware/stryker-ignorer-in-source-vitest-block@0.1.0':
+    resolution: {integrity: sha512-+pyGxFtmlVBJ3YxB88xf8VLTLWpSsYitVkvclOZTOycTCA96JwH8N4M+R7/iyyumx+h87xXh2c8Lz5K5i8T02A==}
 
-  '@systemfsoftware/stryker-js-instrumenter@2.0.1':
-    resolution: {integrity: sha512-0gNGub2tTRr6fecMIsdkdQtO6kPP0NUVFNQ7iPGjaqIinb1Gz8vFdFWLXosrb5pGEffvwEJzLdeZ78LnKbpZFg==}
+  '@systemfsoftware/stryker-ignorer-interface@0.1.0':
+    resolution: {integrity: sha512-o186GuIqtC7P7tg1HlNa15Tr0qN81XmUrm5qxqTwPBNdwWeK/l0258mxnhziRgrC5Bx1p5Svrn/AQqjEUUmRbw==}
+
+  '@systemfsoftware/stryker-ignorer-kit@0.1.0':
+    resolution: {integrity: sha512-6Qz9fYZu6YOqi7dq09jjE8FH7wPUCgUp04IlgPvxPs6VdqVWAtDwQKUMUX2artucFnfNRPLeSAPwFpu6XKsfVQ==}
+
+  '@systemfsoftware/stryker-js-instrumenter@8.0.0':
+    resolution: {integrity: sha512-lEd9yIeH4UUn7HRYaWQfpN87eeCc1F8u+/BjGysqPJC+bzYtOJxQfG/XKlkBUeOHljyhES+DCgaKWIe3mek6fw==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       svelte: '>=4.0.0'
@@ -4473,37 +4043,35 @@ packages:
       svelte:
         optional: true
 
-  '@systemfsoftware/stryker-js-platform-node@0.1.0':
-    resolution: {integrity: sha512-5iFBJqVdYXzuHWqYe4+002A5XUtmAsojH6GQzwOUO975RC+7xINkERfcXDRKjmjEmslAa8jhE5gDMb25ehYruw==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      effect: ^4.0.0-rc.112
-
-  '@systemfsoftware/stryker-js-typescript-checker@3.0.1':
-    resolution: {integrity: sha512-asYToyl9ZtOa0DnQ8oXHRJ5gxZHzdWOmjsl9pWSxCHngEmsg2SrY05cYgZhEQ+3sofrkUzYVWVZqatZdfjHSBw==}
-
-  '@systemfsoftware/stryker-js-vitest-runner@2.0.1':
-    resolution: {integrity: sha512-0qZYljYn/nzrdRFcsbuK6sxGxQTqF/HZntj93Wu8s4RaARy/GCXRcfAbx86tJzeU5Hd7RZCqhPpG2EWq7EJPnQ==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      effect: ^4.0.0-rc.112
-      vitest: '>=2.0.0'
-
-  '@systemfsoftware/stryker-js@0.1.0':
-    resolution: {integrity: sha512-opXrRTtkG30oHIr/53DLPJ7K3Wabtz2daijId6b3i0D0semzcP/kn+lrxLb9mGuAl3KmLkXWdk8ocdrpShLARA==}
+  '@systemfsoftware/stryker-js-plugin-interface@7.0.0':
+    resolution: {integrity: sha512-EMkiqNdUJdKE9iWWGbT4YHwkwwVkLDsSfdHmLK77bA+TsWpWhaDxJLpzecz5uMMt63AOHmQqCh0A7mJVsvxInA==}
     engines: {node: '>=20.0.0'}
 
-  '@systemfsoftware/stryker-plugins@1.0.1':
-    resolution: {integrity: sha512-Ms4IanHHeaqzpQ9+pTxpsTLNnjGaJ5J2SwlVldXRMZP71cqKOU+aQ4PPK5P26uVGuHX/ZO0KAGXvj7yel9+JTQ==}
-    peerDependencies:
-      '@systemfsoftware/stryker-js': ^0.1.0
-      effect: ^4.0.0-rc.112
-      typescript: '>=5.0.0'
+  '@systemfsoftware/stryker-js-plugin-runtime@5.0.2':
+    resolution: {integrity: sha512-r8l3ZlPuX0Q8aJLy0IGsG8Kaz0uDSSnhqqw+fov6yzfptslHp0MMXUopFz0LGc5o6RyebAn3og6zQfAHQuv9YA==}
+    engines: {node: '>=22.18.0'}
 
-  '@systemfsoftware/stryker-test-contribution@1.0.1':
-    resolution: {integrity: sha512-62XE7tv2V8uv0GW4bhhNIo+2AqVdFE+YSgV9215EgXFoFTFG03Ov9/+UATyL92FDUj3sncj5MK+ijS0E6Q+B6w==}
+  '@systemfsoftware/stryker-js-typescript-checker@7.0.2':
+    resolution: {integrity: sha512-zZhr7zJMIoAwlozPlXsxdPTEGR0UksQ+EBsLmVPgr5FX7elo101MhCSg71NpVhMc1MYD4mdxEw1drJrenG40TQ==}
+
+  '@systemfsoftware/stryker-js-vitest-runner@7.0.0':
+    resolution: {integrity: sha512-LxKBWGg34FENqAwKMVdIVx1AMLTBxah9Sp+CbZnkjYg0EhqlcrhFsHf61tKiF5nI32qdlWD3Eahmva3aPsPgyQ==}
+    engines: {node: '>=22.18.0'}
     peerDependencies:
-      effect: ^4.0.0-rc.112
+      effect: 4.0.0-rc.112
+      vitest: '>=4.1.0'
+
+  '@systemfsoftware/stryker-js@9.0.0':
+    resolution: {integrity: sha512-MlbmMvUY0Z7Flnb4Ruh6W4cQEUp5zZ9ZK/zMXGxX4LzFESCEeAU79dvVNZVEOBOLRdJbf6JYfo+eeQjP8WI5zA==}
+    engines: {node: '>=22.18.0'}
+    hasBin: true
+    peerDependencies:
+      effect: 4.0.0-rc.112
+
+  '@systemfsoftware/stryker-test-contribution@3.0.2':
+    resolution: {integrity: sha512-I6HrHcNAuwUpemeViI45kA8T7r+uQVnd8YW1Fr7C1rNmeKsRHdjiZPP4RNxu85K2jS4MOcivwTu5/scPoU29VA==}
+    peerDependencies:
+      effect: 4.0.0-rc.112
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -4591,15 +4159,6 @@ packages:
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
-  '@types/diff-match-patch@1.0.36':
-    resolution: {integrity: sha512-xFdR6tkm0MWvBfO8xXCSsinYxHcqkQUlcHeSpMC2ukzOb6lwQAfDmW+Qt0AvlGd8HpsS28qKsB+oPeJn9I39jg==}
-
-  '@types/docker-modem@3.0.6':
-    resolution: {integrity: sha512-yKpAGEuKRSS8wwx0joknWxsmLha78wNMe9R2S3UNsVOkZded8UqOrV8KoeDXoXsjndxwyF3eIhyClGbO1SEhEg==}
-
-  '@types/dockerode@4.0.1':
-    resolution: {integrity: sha512-cmUpB+dPN955PxBEuXE3f6lKO1hHiIGYJA46IVF3BJpNsZGvtBDcRnlrHYHtOH/B6vtDOyl2kZ2ShAu3mgc27Q==}
-
   '@types/doctrine@0.0.9':
     resolution: {integrity: sha512-eOIHzCUSH7SMfonMG1LsC2f8vxBFtho6NGBznK41R84YzPuvSBzrhEps33IsQiOW9+VL6NQ9DbjQJznk/S4uRA==}
 
@@ -4608,9 +4167,6 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
-
-  '@types/node@18.19.130':
-    resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
 
   '@types/node@24.13.2':
     resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
@@ -4631,15 +4187,6 @@ packages:
 
   '@types/scheduler@0.26.0':
     resolution: {integrity: sha512-WFHp9YUJQ6CKshqoC37iOlHnQSmxNc795UhB26CyBBttrN9svdIrUjl/NjnNmfcwtncN0h/0PPAFWv9ovP8mLA==}
-
-  '@types/ssh2-streams@0.1.13':
-    resolution: {integrity: sha512-faHyY3brO9oLEA0QlcO8N2wT7R0+1sHWZvQ+y3rMLwdY1ZyS1z0W3t65j9PqT4HmQ6ALzNe7RZlNuCNE0wBSWA==}
-
-  '@types/ssh2@0.5.52':
-    resolution: {integrity: sha512-lbLLlXxdCZOSJMCInKH2+9V/77ET2J6NPQHpFI0kda61Dd1KglJs+fPQBchizmzYSOJBgdTajhPqBO1xxLywvg==}
-
-  '@types/ssh2@1.15.5':
-    resolution: {integrity: sha512-N1ASjp/nXH3ovBHddRJpli4ozpk6UdDYIX4RJWFa9L1YKnzdhTlVmiGHm4DZnj/jLbqZpes4aeR30EFGQtvhQQ==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -4977,9 +4524,10 @@ packages:
   '@yuku-toolchain/types@0.8.4':
     resolution: {integrity: sha512-p7JE8flrj7ijZ/qLjHi4UwKqMarMD6zumbKXhrjp2I2iLJOuTYiQyci2U36VlXcUlNyzsY7E/mLnKCHotbzJVw==}
 
-  abort-controller@3.0.0:
-    resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
-    engines: {node: '>=6.5'}
+  acorn-import-attributes@1.9.5:
+    resolution: {integrity: sha512-n02Vykv5uA3eHGM/Z2dQrcD56kL8TyDb2p1+0P83PClMnC/nc+anbQRhIOWnSq4Ke/KvDPrY3C9hDtC/A3eHnQ==}
+    peerDependencies:
+      acorn: ^8
 
   acorn@8.18.0:
     resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
@@ -5033,14 +4581,6 @@ packages:
     resolution: {integrity: sha512-BJ8/l4R5LRE7hW9WdSuGYrLSHi2ynxeFpDFbH0K/CgNeY/tyhk+vO6TYxXC5r5CpUhNVX310xzPsN/H9lCdfOA==}
     engines: {node: '>=14'}
 
-  archiver-utils@5.0.2:
-    resolution: {integrity: sha512-wuLJMmIBQYCsGZgYLTy5FIB2pF6Lfb6cXMSF8Qywwk3t20zWnAi7zLcQFdKQmIB8wyZpY5ER38x08GbwtR2cLA==}
-    engines: {node: '>= 14'}
-
-  archiver@7.0.1:
-    resolution: {integrity: sha512-ZcbTaIqJOfCc03QwD468Unz/5Ir8ATtvAHsK+FdXbDIbGfihqh9mrvdcYunQzqn4HrvWWaFyaxJhGZagaJJpPQ==}
-    engines: {node: '>= 14'}
-
   argparse@1.0.10:
     resolution: {integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==}
 
@@ -5062,9 +4602,6 @@ packages:
     resolution: {integrity: sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw==}
     engines: {node: '>= 0.4'}
 
-  asn1@0.2.6:
-    resolution: {integrity: sha512-ix/FxPn0MDjeyJ7i/yoHGFt/EX6LyNbxSEhPPXODPL+KB0VPk86UYfL0lMdy+KCnv+fmvIzySwaK5COwqVbWTQ==}
-
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
@@ -5076,86 +4613,20 @@ packages:
   ast-v8-to-istanbul@1.0.5:
     resolution: {integrity: sha512-UPAgKJFSEGMWSDr3LX4tqnAb4f7KGT8O40Tyx8wbYmmZ/yn58lNCm8h3svs3eXgiGd5AXxz8NDOvXWvicq+rJA==}
 
-  async-lock@1.4.1:
-    resolution: {integrity: sha512-Az2ZTpuytrtqENulXwO3GGv1Bztugx6TT37NIo7imr/Qo0gsYiGtSdBa2B6fsXhTpVZDNfu1Qn3pk531e3q+nQ==}
-
-  async@3.2.6:
-    resolution: {integrity: sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA==}
-
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
-
-  b4a@1.8.1:
-    resolution: {integrity: sha512-aiqre1Nr0B/6DgE2N5vwTc+2/oQZ4Wh1t4NznYY4E00y8LCt6NqdRv81so00oo27D8MVKTpUa/MwUUtBLXCoDw==}
-    peerDependencies:
-      react-native-b4a: '*'
-    peerDependenciesMeta:
-      react-native-b4a:
-        optional: true
-
-  balanced-match@1.0.2:
-    resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
 
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
-  bare-events@2.9.1:
-    resolution: {integrity: sha512-Z0oHEHAFDZkffN8Qc39zNZjQlMDkPJRyyyZieU1VH7u8c5S+qHZ2S8ixdKIAxEjfHO7FJxXmJWgteOghVanIsg==}
-    peerDependencies:
-      bare-abort-controller: '*'
-    peerDependenciesMeta:
-      bare-abort-controller:
-        optional: true
-
-  bare-fs@4.8.0:
-    resolution: {integrity: sha512-fM+MhCvdQhZ7NV6S95a07gPSqjIYKn6mFaXfx266wN3ajZGl/+1AzH+ubkXQ0fFZvOe2nk9VHkzdYkQE5zMV3Q==}
-    engines: {bare: '>=1.28.0'}
-    peerDependencies:
-      bare-buffer: '*'
-    peerDependenciesMeta:
-      bare-buffer:
-        optional: true
-
-  bare-path@3.1.1:
-    resolution: {integrity: sha512-JprUlveX3QjApC1cTpsUOiscADftCGVWkzitbHsRqv84hzYwYHw2mbluddsq5TvI8mH/8Ov1f4BiMAdcB0oYnQ==}
-
-  bare-stream@2.13.3:
-    resolution: {integrity: sha512-Kc+brLqvEqGkjyfiwJmImAOqLZL7OsoLKuavx+hJjgVV3nLTOjloJyPMFxjUPerGGHrNH0fLU06jjykMLWrERQ==}
-    peerDependencies:
-      bare-abort-controller: '*'
-      bare-buffer: '*'
-      bare-events: '*'
-    peerDependenciesMeta:
-      bare-abort-controller:
-        optional: true
-      bare-buffer:
-        optional: true
-      bare-events:
-        optional: true
-
-  bare-url@2.4.7:
-    resolution: {integrity: sha512-o8CRCiJtib+ycO3mE4A5UChtGX4dDP2XxsWVu9P+Zc3H8tcmKwNVEDoDTXmwN+uuMhfKeT7/i7Y26xS8W7ohoA==}
-
-  base64-js@1.5.1:
-    resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
-
   baseline-browser-mapping@2.10.38:
     resolution: {integrity: sha512-31/02mVB4yuQU6adKk5SlY6m+mxDwUq5KZkyYgnLrrKl7TEm1+3PyDtDBz2kOv/wxZz41GHsvV1A/u6RmiyBvw==}
     engines: {node: '>=6.0.0'}
 
-  bcrypt-pbkdf@1.0.2:
-    resolution: {integrity: sha512-qeFIXtP4MSoi6NLqO12WfqARWWuCKi2Rn/9hJLEmtB5yTNr9DqFWkJRCf2qShWzPeAMRnOgCrq0sg/KLv5ES9w==}
-
   bidi-js@1.0.3:
     resolution: {integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==}
-
-  bl@4.1.0:
-    resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
-
-  brace-expansion@2.1.4:
-    resolution: {integrity: sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==}
 
   brace-expansion@5.0.6:
     resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
@@ -5165,27 +4636,9 @@ packages:
     resolution: {integrity: sha512-MTc8i/x9jBQd1iMw2CFGS+rwMa07eYjLR0CCTLDACl9xhxy+nIs3KeML/biicXtk9JrZ6dnnTatmc7ErPXIxqw==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
 
-  buffer-crc32@1.0.0:
-    resolution: {integrity: sha512-Db1SbgBS/fg/392AblrMJk97KggmvYhr4pB5ZIMTWtaivCPMWLkmb7m21cJvpvgK+J3nsU2CmmixNBZx4vFj/w==}
-    engines: {node: '>=8.0.0'}
-
-  buffer@5.7.1:
-    resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
-
-  buffer@6.0.3:
-    resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
-
-  buildcheck@0.0.7:
-    resolution: {integrity: sha512-lHblz4ahamxpTmnsk+MNTRWsjYKv965MwOrSJyeD588rR3Jcu7swE+0wN5F+PbL5cjgu/9ObkhfzEPuofEMwLA==}
-    engines: {node: '>=10.0.0'}
-
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
     engines: {node: '>=18'}
-
-  byline@5.0.0:
-    resolution: {integrity: sha512-s6webAy+R4SR8XVuJWt2V2rGvhnrhxN+9S15GNuTK3wKPOXFF6RNc+8ug2XhH+2s4f+uudG4kUVYmYOQWL2g0Q==}
-    engines: {node: '>=0.10.0'}
 
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
@@ -5214,8 +4667,8 @@ packages:
     resolution: {integrity: sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA==}
     engines: {node: '>= 16'}
 
-  chownr@1.1.4:
-    resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
+  cjs-module-lexer@2.2.1:
+    resolution: {integrity: sha512-Ca8swihM+/4yKecYHY52kgJd300hi2lADU/a1RxNTRe+RJ9jvqQlESpbz9DnG9mowez8qwXHB8qYdIUw9e+F5Q==}
 
   cliui@8.0.1:
     resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==}
@@ -5240,10 +4693,6 @@ packages:
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
-  compress-commons@6.0.2:
-    resolution: {integrity: sha512-6FqVXeETqWPoGcfzrXb37E50NP0LXT8kAMu5ooZayhWWdgEY4lBEEcbQNXtkuKQsGduxiIcI4gOTsxTmuq/bSg==}
-    engines: {node: '>= 14'}
-
   concurrently@10.0.5:
     resolution: {integrity: sha512-JaP/CoftUrCcAFW/g//RbgEGwlelnEae6cfBLgH6ZdO6s8jPkn6p9SB9u6pdVxYXoiSnFqseOlHfrEfF82TVOg==}
     engines: {node: '>=22'}
@@ -5264,9 +4713,6 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
-  core-util-is@1.0.3:
-    resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
-
   cosmiconfig-typescript-loader@6.3.0:
     resolution: {integrity: sha512-Akr82WH1Wfqatyiqpj8HDkO2o2KmJRu1FhKfSNJP3K4IdXwHfEyL7MOb62i1AGQVLtIQM+iCE9CGOtrfhR+mmA==}
     engines: {node: '>=v18'}
@@ -5283,23 +4729,6 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
-
-  cpu-features@0.0.10:
-    resolution: {integrity: sha512-9IkYqtX3YHPCzoVg1Py+o9057a3i0fp7S530UWokCSaFVTc7CwXPRiOjRjBQQ18ZCNafx78YfnG+HALxtVmOGA==}
-    engines: {node: '>=10.0.0'}
-
-  crc-32@1.2.2:
-    resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
-    engines: {node: '>=0.8'}
-    hasBin: true
-
-  crc32-stream@6.0.0:
-    resolution: {integrity: sha512-piICUB6ei4IlTv1+653yq5+KoqfBYmj9bw6LqXoOneTMDXk5nM1qt12mFW1caG3LlJXEKW1Bp0WggEmIfQB34g==}
-    engines: {node: '>= 14'}
-
-  cross-spawn@7.0.6:
-    resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
-    engines: {node: '>= 8'}
 
   css-tree@3.2.1:
     resolution: {integrity: sha512-X7sjQzceUhu1u7Y/ylrRZFU2FS6LRiFVp6rKLPg23y3x3c3DOKAwuXGDp+PAGjh6CSnCjYeAul8pcT8bAl+lSA==}
@@ -5357,24 +4786,9 @@ packages:
   devalue@5.9.1:
     resolution: {integrity: sha512-+17vil3EVQRzvtDJSFuTWEb8XJRvXqAiV3qZyQWD398QeXUa6CxsUyMdD1fxzEhUrd4FojitFz7lhIHBTlV4fw==}
 
-  diff-match-patch@1.0.5:
-    resolution: {integrity: sha512-IayShXAgj/QMXgB0IWmKx+rOPuGMhqm5w6jvFxmVenXKIzRqTAAsbBPT3kWQeGANj3jGgvcvv4yK6SxqYmikgw==}
-
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
     engines: {node: '>=0.3.1'}
-
-  docker-compose@1.4.2:
-    resolution: {integrity: sha512-rPHigTKGaEHpkUmfd69QgaOp+Os5vGJwG/Ry8lcr8W/382AmI+z/D7qoa9BybKIkqNppaIbs8RYeHSevdQjWww==}
-    engines: {node: '>= 6.0.0'}
-
-  docker-modem@5.0.7:
-    resolution: {integrity: sha512-XJgGhoR/CLpqshm4d3L7rzH6t8NgDFUIIpztYlLHIApeJjMZKYJMz2zxPsYxnejq5h3ELYSw/RBsi3t5h7gNTA==}
-    engines: {node: '>= 8.0'}
-
-  dockerode@5.0.1:
-    resolution: {integrity: sha512-avsq/xk4YPIrn0CgleX5bjT9Y8IT1p9PxrNQ++RBQ2WEyFfHCTDsT9kmyxz+H/axnjAwg8wJWEIuPGOUuNupiA==}
-    engines: {node: '>= 14.17'}
 
   doctrine@3.0.0:
     resolution: {integrity: sha512-yS+Q5i3hBf7GBkd4KG8a7eBNNWNGLTaEwwYWUijIYM7zrlYDM0BFXHjjPWlWZ1Rg7UaddZeIDmi9jF3HmqiQ2w==}
@@ -5395,9 +4809,6 @@ packages:
       oxc-resolver:
         optional: true
 
-  eastasianwidth@0.2.0:
-    resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
-
   effect@4.0.0-rc.112:
     resolution: {integrity: sha512-wXxwuh1Ywnv4cPRM3Wfa0vDwuOHnZ1TsTgHJkG9XgzND6inhBH9n1vBxhg3iIXOia/OrpmvVmd3lrD4vq6bF3A==}
 
@@ -5410,15 +4821,9 @@ packages:
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
 
-  emoji-regex@9.2.2:
-    resolution: {integrity: sha512-L18DaJsXSUk2+42pv8mLs5jJT2hqFkFE4j21wOmgbUqsZ2hL72NsUU785g9RXgo3s0ZNgVl42TiHp3ZtOv/Vyg==}
-
   empathic@2.0.1:
     resolution: {integrity: sha512-YGRs8knHhKHVShLkFET/rWAU8kmHbOV5LwN938RHI0pljAJ1Gf6SzXsSmRaEzcXTtOOmVqJ5+WtQPL5uigY50Q==}
     engines: {node: '>=14'}
-
-  end-of-stream@1.4.5:
-    resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
 
   entities@8.0.0:
     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
@@ -5476,17 +4881,6 @@ packages:
     resolution: {integrity: sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==}
     engines: {node: '>=0.10.0'}
 
-  event-target-shim@5.0.1:
-    resolution: {integrity: sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==}
-    engines: {node: '>=6'}
-
-  events-universal@1.0.1:
-    resolution: {integrity: sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw==}
-
-  events@3.3.0:
-    resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
-    engines: {node: '>=0.8.x'}
-
   expect-type@1.4.0:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
@@ -5497,9 +4891,6 @@ packages:
 
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
-
-  fast-fifo@1.3.2:
-    resolution: {integrity: sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==}
 
   fast-uri@3.1.2:
     resolution: {integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==}
@@ -5515,13 +4906,6 @@ packages:
 
   fflate@0.8.3:
     resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
-
-  foreground-child@3.3.1:
-    resolution: {integrity: sha512-gIXjKqtFuWEgzFRJA9WCQeSJLZDjgJUOMCMzxtvFq/37KojM1BFGufqsCy0r4qSQmYLsZYMeyRqzIWOMup03sw==}
-    engines: {node: '>=14'}
-
-  fs-constants@1.0.0:
-    resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
 
   fs-extra@11.3.5:
     resolution: {integrity: sha512-eKpRKAovdpZtR1WopLHxlBWvAgPny3c4gX1G5Jhwmmw4XJj0ifSD5qB5TOo8hmA0wlRKDAOAhEE1yVPgs6Fgcg==}
@@ -5552,10 +4936,6 @@ packages:
     resolution: {integrity: sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==}
     engines: {node: '>=18'}
 
-  get-port@5.1.1:
-    resolution: {integrity: sha512-g/Q1aTSDOxFpchXC4i8ZWvxA1lnPqx/JHqcpIw0/LX9T8x/GBbi6YnlN5nhaKIFkT8oFsscUKgDJYxfwfS6QsQ==}
-    engines: {node: '>=8'}
-
   get-tsconfig@5.0.0-beta.5:
     resolution: {integrity: sha512-/6gFNr0N04nob252sTQxyFLi3eKFRqIg1I87YcqAMT1i6SQrSF6KujUEQrtrjMV0H/eejTCltLdDSTEMzHbnsQ==}
     engines: {node: '>=20.20.0'}
@@ -5566,11 +4946,6 @@ packages:
     peerDependencies:
       tslib: '2'
 
-  glob@10.5.0:
-    resolution: {integrity: sha512-DfXN8DfhJ7NH3Oe7cFmu3NCu1wKbkReJ8TorzSAFbSKrlNaQSKfIzqYqVY8zlbs2NLBbWpRiU52GX2PbaBVNkg==}
-    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
-    hasBin: true
-
   glob@13.0.6:
     resolution: {integrity: sha512-Wjlyrolmm8uDpm/ogGyXZXb1Z+Ca2B8NbJwqBVg0axK9GbBeoS7yGV6vjXnYdGm6X53iehEuxxbyiKp8QmN4Vw==}
     engines: {node: 18 || 20 || >=22}
@@ -5578,9 +4953,6 @@ packages:
   global-directory@5.0.0:
     resolution: {integrity: sha512-1pgFdhK3J2LeM+dVf2Pd424yHx2ou338lC0ErNP2hPx4j8eW1Sp0XqSjNxtk6Tc4Kr5wlWtSvz8cn2yb7/SG/w==}
     engines: {node: '>=20'}
-
-  globrex@0.1.2:
-    resolution: {integrity: sha512-uHJgbwAMwNFf5mLst7IWLNg14x1CkeqglJb/K3doi4dw6q2IvAAmM/Y81kevy83wP+Sst+nutFTYOGg3d1lsxg==}
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
@@ -5611,12 +4983,12 @@ packages:
     resolution: {integrity: sha512-Y93lCzHYgGWdrJ66yIktxiaGULYc6oGiABxhcO5AufBeOyoIdZF7bIfLaOrbM0iGIOXQQgxxRrFEnb+Y6w1n4A==}
     engines: {node: '>=10.18'}
 
-  ieee754@1.2.1:
-    resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
-
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
     engines: {node: '>=6'}
+
+  import-in-the-middle@2.0.6:
+    resolution: {integrity: sha512-3vZV3jX0XRFW3EJDTwzWoZa+RH1b8eTTx6YOCjglrLyPuepwoBti1k3L2dKwdCUrnVEfc5CuRuGstaC/uQJJaw==}
 
   import-lazy@4.0.0:
     resolution: {integrity: sha512-rKtvo6a868b5Hu3heneU+L4yEQ4jYKLtjpnPeUdK7h0yzXGmyBTypknlkCvHFBqfX9YlorEiMM6Dnq/5atfHkw==}
@@ -5633,9 +5005,6 @@ packages:
   indent-string@4.0.0:
     resolution: {integrity: sha512-EdDDZu4A2OyIK7Lr/2zG+w5jmbuk1DVBnEwREQvBzspBJkCEbRa8GxU1lghYcaGJCnRWibjDXlq779X1/y5xwg==}
     engines: {node: '>=8'}
-
-  inherits@2.0.4:
-    resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
   ini@6.0.0:
     resolution: {integrity: sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==}
@@ -5676,10 +5045,6 @@ packages:
   is-reference@3.0.3:
     resolution: {integrity: sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw==}
 
-  is-stream@2.0.1:
-    resolution: {integrity: sha512-hFoiJiTl63nn+kstHGBtewWSKnQLpyb155KHheA1l39uvtO9nWIop1p3udqPcUd/xbF1VLMO4n7OI6p7RbngDg==}
-    engines: {node: '>=8'}
-
   is-windows@1.0.2:
     resolution: {integrity: sha512-eXK1UInq2bPmjyX6e3VHIzMLobc4J94i4AWn+Hpq3OU5KkrRC96OAcR3PRJ/pGu6m8TRnBHP9dkXQVsT/COVIA==}
     engines: {node: '>=0.10.0'}
@@ -5687,12 +5052,6 @@ packages:
   is-wsl@3.1.1:
     resolution: {integrity: sha512-e6rvdUCiQCAuumZslxRJWR/Doq4VpPR82kqclvcS0efgt430SlGIk05vdCN58+VrzgtIcfNODjozVielycD4Sw==}
     engines: {node: '>=16'}
-
-  isarray@1.0.0:
-    resolution: {integrity: sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==}
-
-  isexe@2.0.0:
-    resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
   istanbul-lib-coverage@3.2.2:
     resolution: {integrity: sha512-O8dpsF+r0WV/8MNRKfnmrtCWhuKjxrq2w+jpzBL5UZKTi2LeVWnWOmWRxFlesJONmc+wLAGvKQZEOanko0LFTg==}
@@ -5705,9 +5064,6 @@ packages:
   istanbul-reports@3.2.0:
     resolution: {integrity: sha512-HGYWWS/ehqTV3xN10i23tkPkpH46MLCIMFNCaaKNavAXTF1RkqxawEPtnjnGZ6XKSInBKkiOA5BKS+aZiY3AvA==}
     engines: {node: '>=8'}
-
-  jackspeak@3.4.3:
-    resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
 
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
@@ -5758,10 +5114,6 @@ packages:
 
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
-
-  lazystream@1.0.1:
-    resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
-    engines: {node: '>= 0.6.3'}
 
   lightningcss-android-arm64@1.33.0:
     resolution: {integrity: sha512-gEpRTalKdosp4Bb8qWtc2iOgE5SeIHlpS1up9bFq2wAyYhl1UdTObYiHe98zEM9SQvSoqQZ1IQD0JNpg3Ml5pg==}
@@ -5853,17 +5205,11 @@ packages:
   lodash.clonedeep@4.5.0:
     resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
 
-  lodash@4.18.1:
-    resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
-
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
   loupe@3.2.1:
     resolution: {integrity: sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ==}
-
-  lru-cache@10.4.3:
-    resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
   lru-cache@11.5.2:
     resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
@@ -5911,14 +5257,6 @@ packages:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
     engines: {node: 18 || 20 || >=22}
 
-  minimatch@5.1.9:
-    resolution: {integrity: sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==}
-    engines: {node: '>=10'}
-
-  minimatch@9.0.9:
-    resolution: {integrity: sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==}
-    engines: {node: '>=16 || 14 >=14.17'}
-
   minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
 
@@ -5926,13 +5264,8 @@ packages:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
 
-  mkdirp-classic@0.5.3:
-    resolution: {integrity: sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A==}
-
-  mkdirp@3.0.1:
-    resolution: {integrity: sha512-+NsyUUAZDmo6YVHzL/stxSu3t9YS1iljliy3BSDrXJ/dkn1KYdmtZODGGjLcc9XLgVVpH4KshHB8XmZgMhaBXg==}
-    engines: {node: '>=10'}
-    hasBin: true
+  module-details-from-path@1.0.4:
+    resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
 
   mrmime@2.0.1:
     resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
@@ -5948,18 +5281,6 @@ packages:
   msgpackr@2.0.5:
     resolution: {integrity: sha512-cef05H/dSYpLpqp3sj/qyZh5vhUYCalnaLO7j1yOmpsR0y/XwLVtK7r5gn+U/F7CTEfMowcGhlUQJDLcLf7jcA==}
 
-  mutation-testing-elements@3.7.3:
-    resolution: {integrity: sha512-SMeIPxngJpfjfNYctFpYQQtlBlZaVO0aoB3FKdwrI8Ee/2bkyUuCZzAOCLv1U9fnmfA37dPFq0Owduoxs2XgGQ==}
-
-  mutation-testing-metrics@3.7.3:
-    resolution: {integrity: sha512-B8QrP0ZomErzTPNlhrzKWPNBln+3afwBZPHv0Q7N8wZZTYxMptzb/Gdm3ExXVmioVYrtZAtsDs7W/T/b2AixOQ==}
-
-  mutation-testing-report-schema@3.7.3:
-    resolution: {integrity: sha512-BHm3MYq+ckO+t5CtlG8zpqxc75rdJCkxVlE+fGuGJM3F7tNCQ/OW2N+TQVHN3BHsYa84+BFc6g3AwDYkUsw2MA==}
-
-  nan@2.28.0:
-    resolution: {integrity: sha512-fTsDz99OTq2sVePhGdp4qQhggZFtKr64ZNVyVajRKtMOkJxYekplBh577PiJB12v/D3s2E5cGtOI45LWp6rnLQ==}
-
   nanoid@3.3.18:
     resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -5973,16 +5294,9 @@ packages:
     resolution: {integrity: sha512-1uz8041X6LoI6ZSdZacM9lVY28vuzDlSKitnpbSNK0RfKoIJkX29NBPVEFXhnuSuEOA9Ww0xnPJ+ILWbGAv8DA==}
     engines: {node: '>=18'}
 
-  normalize-path@3.0.0:
-    resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
-    engines: {node: '>=0.10.0'}
-
   obug@2.1.4:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
-
-  once@1.4.0:
-    resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
   open@10.2.0:
     resolution: {integrity: sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA==}
@@ -5998,6 +5312,20 @@ packages:
 
   oxc-resolver@11.24.2:
     resolution: {integrity: sha512-FY91FiDBj7ls5MsFS9jN3tjz2o0/zsdSsymlakySaBwVJZorHhkWyICLZMKxlu1R9vYo+sd3z1jwb4J8x7bNDw==}
+
+  oxc-walker@1.1.1:
+    resolution: {integrity: sha512-Hwd7dq28zu/Er99+bpWp16CGwFrhyalJh0W3JOB7XpPvgWo3MqMi2ksWGKuzzA9zt50mJ2pIUwR5lpAdZ9ACNQ==}
+    peerDependencies:
+      '@oxc-project/types': '>=0.98.0'
+      oxc-parser: '>=0.98.0'
+      rolldown: '>=1.0.0'
+    peerDependenciesMeta:
+      '@oxc-project/types':
+        optional: true
+      oxc-parser:
+        optional: true
+      rolldown:
+        optional: true
 
   oxlint-tsgolint@7.0.2001:
     resolution: {integrity: sha512-KjK/XLcXr1DSyonKhsuFqJRiuKqcyG9j3LJ8nkOsrLzGvodBPqzHOKauy10asLMDI0sUpvb+1sxlzff3udZvfg==}
@@ -6030,16 +5358,8 @@ packages:
   parse5@8.0.1:
     resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
 
-  path-key@3.1.1:
-    resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
-    engines: {node: '>=8'}
-
   path-parse@1.0.7:
     resolution: {integrity: sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw==}
-
-  path-scurry@1.11.1:
-    resolution: {integrity: sha512-Xa4Nw17FS9ApQFJ9umLiJS4orGjm7ZzwUrwamcGQuHSzDyth9boKDaycYdDcZDuqYATXw4HFXgaqWTctW/v1HA==}
-    engines: {node: '>=16 || 14 >=14.18'}
 
   path-scurry@2.0.2:
     resolution: {integrity: sha512-3O/iVVsJAPsOnpwWIeD+d6z/7PmqApyQePUtCndjatj/9I5LylHvt5qluFaBT3I5h3r1ejfR056c+FCv+NnNXg==}
@@ -6086,26 +5406,9 @@ packages:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
     engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
 
-  process-nextick-args@2.0.1:
-    resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
-
-  process@0.11.10:
-    resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
-    engines: {node: '>= 0.6.0'}
-
-  proper-lockfile@4.1.2:
-    resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
-
-  properties-reader@3.0.1:
-    resolution: {integrity: sha512-WPn+h9RGEExOKdu4bsF4HksG/uzd3cFq3MFtq8PsFeExPse5Ha/VOjQNyHhjboBFwGXGev6muJYTSPAOkROq2g==}
-    engines: {node: '>=18'}
-
   protobufjs@7.6.5:
     resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
     engines: {node: '>=12.0.0'}
-
-  pump@3.0.4:
-    resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
 
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
@@ -6151,20 +5454,6 @@ packages:
     resolution: {integrity: sha512-7urDNDyx3oJt9NGkymzT3qudju76BoJhT6ICWclx6274zxMeSUOhyiceHscSBk4Lfbs0IYpjOjUwLkaOzrsJdQ==}
     engines: {node: '>=22.13'}
 
-  readable-stream@2.3.8:
-    resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
-
-  readable-stream@3.6.2:
-    resolution: {integrity: sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA==}
-    engines: {node: '>= 6'}
-
-  readable-stream@4.7.0:
-    resolution: {integrity: sha512-oIGGmcpTLwPga8Bn6/Z75SVaH1z5dUut2ibSyAMVhmUggWpmDn2dapB0n7f8nwaSiRtepAsfJyfXIO5DCVAODg==}
-    engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
-
-  readdir-glob@1.1.3:
-    resolution: {integrity: sha512-v05I2k7xN8zXvPD9N+z/uhXPaj0sUFCe2rcWZIpBsqxfP7xXFQ0tipAd/wjj1YxWyWtUS5IDJpOG82JKt2EAVA==}
-
   recast@0.23.19:
     resolution: {integrity: sha512-T98lym7kH+pnZmRaD8yDRdaNqyUbwnbEBx0MuchrzMFOEMray4AO3ZJoTUZ5r78Ao78X/OhzW0DL8GB85w/I2w==}
     engines: {node: '>= 4'}
@@ -6185,6 +5474,10 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  require-in-the-middle@8.0.1:
+    resolution: {integrity: sha512-QT7FVMXfWOYFbeRBF6nu+I6tr2Tf3u0q8RIEjNob/heKY/nh7drD/k7eeMFmSQgnTtCzLDcCu/XEnpW2wk4xCQ==}
+    engines: {node: '>=9.3.0 || >=8.10.0 <9.0.0'}
+
   resolve-from@4.0.0:
     resolution: {integrity: sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g==}
     engines: {node: '>=4'}
@@ -6200,10 +5493,6 @@ packages:
     resolution: {integrity: sha512-TyeJ1zif53BPfHootBGwPRYT1RUt6oGWsaQr8UyZW/eAm9bKoijtvruSDEmZHm92CwS9nj7/fWttqPCgzep8CA==}
     engines: {node: '>= 0.4'}
     hasBin: true
-
-  retry@0.12.0:
-    resolution: {integrity: sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==}
-    engines: {node: '>= 4'}
 
   rimraf@6.1.3:
     resolution: {integrity: sha512-LKg+Cr2ZF61fkcaK1UdkH2yEBBKnYjTyWzTJT6KNPcSPaiT7HSdhtMXQuN5wkTX0Xu72KQ1l8S42rlmexS2hSA==}
@@ -6251,15 +5540,6 @@ packages:
   rxjs@7.8.2:
     resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
 
-  safe-buffer@5.1.2:
-    resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
-
-  safe-buffer@5.2.1:
-    resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
-
-  safer-buffer@2.1.2:
-    resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
-
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
     engines: {node: '>=v12.22.7'}
@@ -6281,23 +5561,12 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  shebang-command@2.0.0:
-    resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
-    engines: {node: '>=8'}
-
-  shebang-regex@3.0.0:
-    resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
-    engines: {node: '>=8'}
-
   shell-quote@1.9.0:
     resolution: {integrity: sha512-Iov+JwFv/2HcTpcwNMKd8+IWNb8tboQJNQTkAY/LLVK7gGH9jy+LGkVqPxfekHl+yMmiqXszdGWXgkfml7hjqA==}
     engines: {node: '>= 0.4'}
 
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
-
-  signal-exit@3.0.7:
-    resolution: {integrity: sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==}
 
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
@@ -6319,18 +5588,8 @@ packages:
     resolution: {integrity: sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==}
     engines: {node: '>=0.10.0'}
 
-  split-ca@1.0.1:
-    resolution: {integrity: sha512-Q5thBSxp5t8WPTTJQS59LrGqOZqOsrhDGDVm8azCqIBjSBd7nd9o2PM+mDulQQkh8h//4U6hFZnc/mul8t5pWQ==}
-
   sprintf-js@1.0.3:
     resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
-
-  ssh-remote-port-forward@1.0.4:
-    resolution: {integrity: sha512-x0LV1eVDwjf1gmG7TTnfqIzf+3VPRz7vrNIjX6oYLbeCrf/PeVY6hkT68Mg+q02qXxQhrLjB0jfgvhevoCRmLQ==}
-
-  ssh2@1.17.0:
-    resolution: {integrity: sha512-wPldCk3asibAjQ/kziWQQt1Wh3PgDFpC0XpwclzKcdT1vql6KeYxf5LIt4nlFkUeR8WuphYMKqUA56X4rjbfgQ==}
-    engines: {node: '>=10.16.0'}
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
@@ -6353,9 +5612,6 @@ packages:
       vite-plus:
         optional: true
 
-  streamx@2.28.0:
-    resolution: {integrity: sha512-1Yowhzjf0ivGMrTIkY9hav5TxobO9qIVqUE41fiCGMGgc3CLlf4MY+9AHmZqBWgDTue0fY9zWjYFVyf6Diuobw==}
-
   string-argv@0.3.2:
     resolution: {integrity: sha512-aqD2Q0144Z+/RqG52NeHEkZauTAUWJO8c6yTftGJKO3Tja5tUgIfmIl6kExvhtxSDP7fXB6DvzkfMpCd/F3G+Q==}
     engines: {node: '>=0.6.19'}
@@ -6364,19 +5620,9 @@ packages:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
     engines: {node: '>=8'}
 
-  string-width@5.1.2:
-    resolution: {integrity: sha512-HnLOCR3vjcY8beoNLtcjZ5/nxn2afmME6lhrDrebokqMap+XbeW8n9TXpPDOqdGK5qcI3oT0GKTW6wC7EMiVqA==}
-    engines: {node: '>=12'}
-
   string-width@7.2.0:
     resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
     engines: {node: '>=18'}
-
-  string_decoder@1.1.1:
-    resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
-
-  string_decoder@1.3.0:
-    resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
 
   strip-ansi@6.0.1:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
@@ -6436,29 +5682,6 @@ packages:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
 
-  tar-fs@2.1.5:
-    resolution: {integrity: sha512-OboTd8mmMhZDNPV+UjQcK9yKAatXu2aJ+r1w4im1Otd4M4fl2hwvdoXUxIYHFTHWK/3y3FarBP70v3vwmGlOxw==}
-
-  tar-fs@3.1.3:
-    resolution: {integrity: sha512-/hU4AXnIdZu+Gvl1pk0oI5f5HxWsCJRtY2aFaJdk9VvyL48DWU6iU5WAIPG+wIi1YvWA6eTJvIviP/tMAZZNwQ==}
-
-  tar-stream@2.2.0:
-    resolution: {integrity: sha512-ujeqbceABgwMZxEJnk2HDY2DlnUZ+9oEcb1KzTVfYHio0UE6dG71n60d8D2I4qNvleWrrXpmjpt7vZeF1LnMZQ==}
-    engines: {node: '>=6'}
-
-  tar-stream@3.2.0:
-    resolution: {integrity: sha512-ojzvCvVaNp6aOTFmG7jaRD0meowIAuPc3cMMhSgKiVWws1GyHbGd/xvnyuRKcKlMpt3qvxx6r0hreCNITP9hIg==}
-
-  teex@1.0.1:
-    resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
-
-  testcontainers@12.1.0:
-    resolution: {integrity: sha512-YjDLqIITuhGLMnM10yhg3oV6lIG5IMpz1R1DPBZoOOks83q7i7IVpeSWRTiyl7roozjiyLmwIoLK/KY8OnZmIA==}
-    engines: {node: '>= 22.22'}
-
-  text-decoder@1.2.7:
-    resolution: {integrity: sha512-vlLytXkeP4xvEq2otHeJfSQIRyWxo/oZGEbXrtEEF9Hnmrdly59sUbzZ/QgyWuLYHctCHxFF4tRQZNQ9k60ExQ==}
-
   thingies@2.6.0:
     resolution: {integrity: sha512-rMHRjmlFLM1R96UYPvpmnc3LYtdFrT33JIB7L9hetGue1qAPfn1N2LJeEjxUSidu1Iku+haLZXDuEXUHNGO/lg==}
     engines: {node: '>=10.18'}
@@ -6502,10 +5725,6 @@ packages:
     resolution: {integrity: sha512-GgouD1B+sWwvkaEq8vXC15DjQitxbvs12oIXELpconwm+Tg3zfcEv4jgzq3vtKverDXsg3VI8aRgNL2Nra0Iog==}
     hasBin: true
 
-  tmp@0.2.7:
-    resolution: {integrity: sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==}
-    engines: {node: '>=14.14'}
-
   totalist@3.0.1:
     resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
     engines: {node: '>=6'}
@@ -6531,17 +5750,6 @@ packages:
   ts-dedent@2.3.0:
     resolution: {integrity: sha512-JfJeIHke7y2egdGGgRAvpCwYFUsHlM2gPcrVOxFkznt/4uzQ7HFmvE63iFHVLBJNDuyDOQgijDK/tXH/f6Msjg==}
     engines: {node: '>=6.10'}
-
-  tsconfck@3.1.6:
-    resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
-    engines: {node: ^18 || >=20}
-    deprecated: unmaintained
-    hasBin: true
-    peerDependencies:
-      typescript: ^5.0.0
-    peerDependenciesMeta:
-      typescript:
-        optional: true
 
   tsconfig-paths@4.2.0:
     resolution: {integrity: sha512-NoZ4roiN7LnbKn9QqE1amc9DJfzvZXxF4xDavcOWt1BPkdx+m+0gJuPM+S0vCe7zTJMYUP0R8pO2XMr+Y8oLIg==}
@@ -6603,9 +5811,6 @@ packages:
     resolution: {integrity: sha512-AswgMPnpOoaVZHrrSBejETzEbuIA69OVGwfkHwfrY0A23VjWXBANzgq9+OymWOHAIArB7D1+1z498WY8fGg1Jw==}
     hasBin: true
 
-  tweetnacl@0.14.5:
-    resolution: {integrity: sha512-KXXFFdAbFXY4geFIwoyNK+f5Z1b7swfXABfL7HXCmoIWMKU3dmS26672A4EeQtDzLKy7SXmfBu51JolvEKwtGA==}
-
   type-fest@5.8.0:
     resolution: {integrity: sha512-YGYEVz3Fm5iy/AybuA0oyNFq7H4CgQNfRp/qfe8nurE1kuCeNm3/vfm9X4Mtl+qLyaKJUh5xrFZwogr41SMjYA==}
     engines: {node: '>=20'}
@@ -6627,9 +5832,6 @@ packages:
 
   unconfig-core@7.5.0:
     resolution: {integrity: sha512-Su3FauozOGP44ZmKdHy2oE6LPjk51M/TRRjHv2HNCWiDvfvCoxC2lno6jevMA91MYAdCdwP05QnWdWpSbncX/w==}
-
-  undici-types@5.26.5:
-    resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
@@ -6674,17 +5876,9 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  util-deprecate@1.0.2:
-    resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
-
   verkit@0.3.2:
     resolution: {integrity: sha512-zj/ob3UsvJGN0whEAKFp53REA5X66hvffVqoCtVQAakJKnKlH+/PcOfMoFwIG/o4rElqLv/ycAFlx8ZlXUorCg==}
     engines: {node: '>=18.12.0'}
-
-  vite-tsconfig-paths@6.1.1:
-    resolution: {integrity: sha512-2cihq7zliibCCZ8P9cKJrQBkfgdvcFkOOc3Y02o3GWUDLgqjWsZudaoiuOwO/gzTzy17cS5F7ZPo4bsnS4DGkg==}
-    peerDependencies:
-      vite: ^8
 
   vite@8.2.1:
     resolution: {integrity: sha512-EU/eS7BH3XROHh2YnBefjM6DBKA6ZeMZEYQbj7NLWg5wHYlhB8B/Mayd5XsgWq+NFYccDOTemRpdETWR6Ka/lw==}
@@ -6789,11 +5983,6 @@ packages:
     resolution: {integrity: sha512-1to4zXBxmXHV3IiSSEInrreIlu02vUOvrhxJJH5vcxYTBDAx51cqZiKdyTxlecdKNSjj8EcxGBxNf6Vg+945gw==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
 
-  which@2.0.2:
-    resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
-    engines: {node: '>= 8'}
-    hasBin: true
-
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
@@ -6803,16 +5992,9 @@ packages:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
 
-  wrap-ansi@8.1.0:
-    resolution: {integrity: sha512-si7QWI6zUMq56bESFvagtmzMdGOtoxfR+Sez11Mobfc7tm+VkUckk9bW2UeffTGVUbOksxmSw0AA2gs8g71NCQ==}
-    engines: {node: '>=12'}
-
   wrap-ansi@9.0.2:
     resolution: {integrity: sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==}
     engines: {node: '>=18'}
-
-  wrappy@1.0.2:
-    resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
   write-file-atomic@5.0.1:
     resolution: {integrity: sha512-+QU2zd6OTD8XWIJCbffaiQeH9U73qIqafo1x6V1snCWYGJf6cVE0cDR4D8xRzcEnfI21IFrUPzPGtcPf8AC+Rw==}
@@ -6884,10 +6066,6 @@ packages:
   zimmerframe@1.1.4:
     resolution: {integrity: sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ==}
 
-  zip-stream@6.0.1:
-    resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
-    engines: {node: '>= 14'}
-
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
@@ -6954,10 +6132,6 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       jsesc: 3.1.0
 
-  '@babel/helper-annotate-as-pure@7.29.7':
-    dependencies:
-      '@babel/types': 7.29.8
-
   '@babel/helper-compilation-targets@7.29.7':
     dependencies:
       '@babel/compat-data': 7.29.7
@@ -6966,27 +6140,7 @@ snapshots:
       lru-cache: 5.1.1
       semver: 6.3.1
 
-  '@babel/helper-create-class-features-plugin@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/helper-replace-supers': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
-      '@babel/traverse': 7.29.7(supports-color@10.2.2)
-      semver: 6.3.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-globals@7.29.7': {}
-
-  '@babel/helper-member-expression-to-functions@7.29.7(supports-color@10.2.2)':
-    dependencies:
-      '@babel/traverse': 7.29.7(supports-color@10.2.2)
-      '@babel/types': 7.29.8
-    transitivePeerDependencies:
-      - supports-color
 
   '@babel/helper-module-imports@7.29.7(supports-color@10.2.2)':
     dependencies:
@@ -7004,28 +6158,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-optimise-call-expression@7.29.7':
-    dependencies:
-      '@babel/types': 7.29.8
-
-  '@babel/helper-plugin-utils@7.29.7': {}
-
-  '@babel/helper-replace-supers@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/helper-skip-transparent-expression-wrappers@7.29.7(supports-color@10.2.2)':
-    dependencies:
-      '@babel/traverse': 7.29.7(supports-color@10.2.2)
-      '@babel/types': 7.29.8
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-string-parser@7.29.7': {}
 
   '@babel/helper-validator-identifier@7.29.7': {}
@@ -7040,76 +6172,6 @@ snapshots:
   '@babel/parser@7.29.8':
     dependencies:
       '@babel/types': 7.29.8
-
-  '@babel/plugin-proposal-decorators@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-transform-destructuring@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-explicit-resource-management@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-transform-destructuring': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-typescript@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
-      '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/preset-typescript@7.28.5(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/helper-validator-option': 7.29.7
-      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
-      '@babel/plugin-transform-modules-commonjs': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
 
   '@babel/runtime@7.29.7': {}
 
@@ -7135,8 +6197,6 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
-
-  '@balena/dockerignore@1.0.2': {}
 
   '@bcoe/v8-coverage@1.0.2': {}
 
@@ -7301,6 +6361,19 @@ snapshots:
   '@csstools/css-tokenizer@4.0.0':
     optional: true
 
+  '@effect/opentelemetry@4.0.0-rc.112(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)':
+    dependencies:
+      '@opentelemetry/semantic-conventions': 1.43.0
+      effect: 4.0.0-rc.112
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      '@opentelemetry/resources': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node': 2.2.0(@opentelemetry/api@1.9.1)
+
   '@effect/platform-node-shared@4.0.0-rc.112(effect@4.0.0-rc.112)':
     dependencies:
       '@types/ws': 8.18.1
@@ -7367,6 +6440,7 @@ snapshots:
     dependencies:
       '@emnapi/wasi-threads': 1.2.2
       tslib: 2.8.1
+    optional: true
 
   '@emnapi/core@1.9.2':
     dependencies:
@@ -7382,6 +6456,7 @@ snapshots:
   '@emnapi/runtime@1.11.2':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@emnapi/runtime@1.9.2':
     dependencies:
@@ -7396,6 +6471,7 @@ snapshots:
   '@emnapi/wasi-threads@1.2.2':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
@@ -7487,13 +6563,6 @@ snapshots:
       '@grpc/proto-loader': 0.8.1
       '@js-sdsl/ordered-map': 4.4.2
 
-  '@grpc/proto-loader@0.7.15':
-    dependencies:
-      lodash.camelcase: 4.3.0
-      long: 5.3.2
-      protobufjs: 7.6.5
-      yargs: 17.7.3
-
   '@grpc/proto-loader@0.8.1':
     dependencies:
       lodash.camelcase: 4.3.0
@@ -7502,15 +6571,6 @@ snapshots:
       yargs: 17.7.3
 
   '@gwhitney/detect-indent@7.0.1': {}
-
-  '@isaacs/cliui@8.0.2':
-    dependencies:
-      string-width: 5.1.2
-      string-width-cjs: string-width@4.2.3
-      strip-ansi: 7.2.0
-      strip-ansi-cjs: strip-ansi@6.0.1
-      wrap-ansi: 8.1.0
-      wrap-ansi-cjs: wrap-ansi@7.0.0
 
   '@istanbuljs/schema@0.1.6': {}
 
@@ -7685,12 +6745,6 @@ snapshots:
     dependencies:
       '@jsr/std__bytes': 1.0.6
 
-  '@kwsites/file-exists@1.1.1(supports-color@10.2.2)':
-    dependencies:
-      debug: 4.4.3(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
   '@microsoft/api-extractor-model@7.33.8(@types/node@24.13.2)':
     dependencies:
       '@microsoft/tsdoc': 0.16.0
@@ -7785,6 +6839,7 @@ snapshots:
       '@emnapi/core': 1.11.2
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.3
+    optional: true
 
   '@napi-rs/wasm-runtime@1.2.2(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)':
     dependencies:
@@ -7793,11 +6848,260 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@noble/hashes@1.8.0': {}
-
   '@noble/hashes@2.4.0': {}
 
+  '@opentelemetry/api-logs@0.208.0':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+
   '@opentelemetry/api@1.9.1': {}
+
+  '@opentelemetry/context-async-hooks@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+
+  '@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/exporter-logs-otlp-grpc@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@grpc/grpc-js': 1.14.4
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-grpc-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-logs-otlp-http@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-logs-otlp-proto@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-metrics-otlp-grpc@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@grpc/grpc-js': 1.14.4
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-grpc-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-metrics-otlp-http@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-metrics-otlp-proto@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-prometheus@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-trace-otlp-grpc@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@grpc/grpc-js': 1.14.4
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-grpc-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-trace-otlp-http@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/exporter-zipkin@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/instrumentation@0.208.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      import-in-the-middle: 2.0.6
+      require-in-the-middle: 8.0.1(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@opentelemetry/otlp-exporter-base@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/otlp-grpc-exporter-base@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@grpc/grpc-js': 1.14.4
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-transformer': 0.208.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/otlp-transformer@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+      protobufjs: 7.6.5
+
+  '@opentelemetry/propagator-b3@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/propagator-jaeger@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/sdk-node@0.208.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/api-logs': 0.208.0
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-logs-otlp-grpc': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-logs-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-logs-otlp-proto': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-grpc': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-metrics-otlp-proto': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-prometheus': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-grpc': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-proto': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-zipkin': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/instrumentation': 0.208.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/propagator-b3': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/propagator-jaeger': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-logs': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/context-async-hooks': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.1)
+
+  '@opentelemetry/sdk-trace@2.11.0(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/core': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources': 2.11.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions': 1.43.0
+
+  '@opentelemetry/semantic-conventions@1.43.0': {}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     optional: true
@@ -7907,6 +7211,7 @@ snapshots:
       '@emnapi/core': 1.11.2
       '@emnapi/runtime': 1.11.2
       '@napi-rs/wasm-runtime': 1.2.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)
+    optional: true
 
   '@oxc-parser/binding-win32-arm64-msvc@0.127.0':
     optional: true
@@ -8069,9 +7374,6 @@ snapshots:
     optional: true
 
   '@oxlint/plugins@1.77.0': {}
-
-  '@pkgjs/parseargs@0.11.0':
-    optional: true
 
   '@pnpm/constants@10.0.0': {}
 
@@ -8514,113 +7816,154 @@ snapshots:
   '@sveltejs/acorn-typescript@1.0.13(acorn@8.18.0)':
     dependencies:
       acorn: 8.18.0
+    optional: true
 
   '@systemfsoftware/arethetypeswrong-cli@4.2.0': {}
 
-  '@systemfsoftware/effect-cell-types@5.0.1(effect@4.0.0-rc.112)':
+  '@systemfsoftware/effect-cell-types@8.3.0(effect@4.0.0-rc.112)':
     dependencies:
       effect: 4.0.0-rc.112
 
-  '@systemfsoftware/stryker-js-cli@4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)':
+  '@systemfsoftware/stryker-ignorer-effect-schema-declarations@0.1.0(rolldown@1.2.3)':
     dependencies:
-      '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
-      '@noble/hashes': 1.8.0
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js': 0.1.0
-      '@systemfsoftware/stryker-js-html-reporter': 0.1.0(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
-      effect: 4.0.0-rc.112
+      '@systemfsoftware/stryker-ignorer-interface': 0.1.0
+      '@systemfsoftware/stryker-ignorer-kit': 0.1.0(rolldown@1.2.3)
     transitivePeerDependencies:
-      - bufferutil
-      - redis
-      - supports-color
-      - svelte
-      - utf-8-validate
+      - rolldown
 
-  '@systemfsoftware/stryker-js-html-reporter@0.1.0(effect@4.0.0-rc.112)':
+  '@systemfsoftware/stryker-ignorer-in-source-vitest-block@0.1.0(rolldown@1.2.3)':
     dependencies:
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js': 0.1.0
-      effect: 4.0.0-rc.112
-      mutation-testing-elements: 3.7.3
-      mutation-testing-metrics: 3.7.3
-      mutation-testing-report-schema: 3.7.3
+      '@systemfsoftware/stryker-ignorer-interface': 0.1.0
+      '@systemfsoftware/stryker-ignorer-kit': 0.1.0(rolldown@1.2.3)
+    transitivePeerDependencies:
+      - rolldown
 
-  '@systemfsoftware/stryker-js-instrumenter@2.0.1(supports-color@10.2.2)(svelte@5.55.1)':
+  '@systemfsoftware/stryker-ignorer-interface@0.1.0': {}
+
+  '@systemfsoftware/stryker-ignorer-kit@0.1.0(rolldown@1.2.3)':
     dependencies:
-      '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.8
-      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/plugin-transform-explicit-resource-management': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
-      '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
+      '@oxc-project/types': 0.140.0
+      '@systemfsoftware/stryker-ignorer-interface': 0.1.0
+      oxc-parser: 0.140.0
+      oxc-walker: 1.1.1(@oxc-project/types@0.140.0)(oxc-parser@0.140.0)(rolldown@1.2.3)
+    transitivePeerDependencies:
+      - rolldown
+
+  '@systemfsoftware/stryker-js-instrumenter@8.0.0(rolldown@1.2.3)(svelte@5.55.1)':
+    dependencies:
       '@eslint-community/regexpp': 4.12.2
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js': 0.1.0
+      '@oxc-project/types': 0.140.0
+      '@systemfsoftware/effect-cell-types': 8.3.0(effect@4.0.0-rc.112)
       angular-html-parser: 10.4.0
       effect: 4.0.0-rc.112
+      oxc-parser: 0.140.0
+      oxc-walker: 1.1.1(@oxc-project/types@0.140.0)(oxc-parser@0.140.0)(rolldown@1.2.3)
     optionalDependencies:
       svelte: 5.55.1
     transitivePeerDependencies:
-      - supports-color
+      - rolldown
 
-  '@systemfsoftware/stryker-js-platform-node@0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)':
+  '@systemfsoftware/stryker-js-plugin-interface@7.0.0(rolldown@1.2.3)(svelte@5.55.1)':
     dependencies:
-      '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
-      '@noble/hashes': 1.8.0
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js': 0.1.0
-      '@systemfsoftware/stryker-js-instrumenter': 2.0.1(supports-color@10.2.2)(svelte@5.55.1)
-      diff-match-patch: 1.0.5
+      '@systemfsoftware/stryker-js-instrumenter': 8.0.0(rolldown@1.2.3)(svelte@5.55.1)
       effect: 4.0.0-rc.112
-      minimatch: 10.2.5
-      mutation-testing-report-schema: 3.7.3
     transitivePeerDependencies:
+      - rolldown
+      - svelte
+
+  '@systemfsoftware/stryker-js-plugin-runtime@5.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(svelte@5.55.1)':
+    dependencies:
+      '@effect/opentelemetry': 4.0.0-rc.112(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)
+      '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/exporter-trace-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
+      '@systemfsoftware/stryker-js-plugin-interface': 7.0.0(rolldown@1.2.3)(svelte@5.55.1)
+      effect: 4.0.0-rc.112
+    transitivePeerDependencies:
+      - '@opentelemetry/api-logs'
+      - '@opentelemetry/resources'
+      - '@opentelemetry/sdk-logs'
+      - '@opentelemetry/sdk-metrics'
+      - '@opentelemetry/sdk-trace-node'
+      - '@opentelemetry/sdk-trace-web'
+      - '@opentelemetry/semantic-conventions'
       - bufferutil
       - redis
+      - rolldown
+      - svelte
+      - utf-8-validate
+
+  '@systemfsoftware/stryker-js-typescript-checker@7.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(supports-color@10.2.2)(svelte@5.55.1)':
+    dependencies:
+      '@opentelemetry/exporter-trace-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node': 0.208.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
+      '@systemfsoftware/effect-cell-types': 8.3.0(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js-instrumenter': 8.0.0(rolldown@1.2.3)(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-plugin-interface': 7.0.0(rolldown@1.2.3)(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-plugin-runtime': 5.0.2(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.3)(svelte@5.55.1)
+      effect: 4.0.0-rc.112
+      typescript: 7.0.2
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
+      - '@opentelemetry/resources'
+      - '@opentelemetry/sdk-logs'
+      - '@opentelemetry/sdk-metrics'
+      - '@opentelemetry/sdk-trace-node'
+      - '@opentelemetry/sdk-trace-web'
+      - '@opentelemetry/semantic-conventions'
+      - bufferutil
+      - redis
+      - rolldown
       - supports-color
       - svelte
       - utf-8-validate
 
-  '@systemfsoftware/stryker-js-typescript-checker@3.0.1':
+  '@systemfsoftware/stryker-js-vitest-runner@7.0.0(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.112)(supports-color@10.2.2)(vitest@4.1.10)':
     dependencies:
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js': 0.1.0
-      effect: 4.0.0-rc.112
-      typescript: 7.0.2
-
-  '@systemfsoftware/stryker-js-vitest-runner@2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)':
-    dependencies:
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js': 0.1.0
+      '@opentelemetry/exporter-trace-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-node': 0.208.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
+      '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
+      '@systemfsoftware/effect-cell-types': 8.3.0(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
       vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - supports-color
 
-  '@systemfsoftware/stryker-js@0.1.0':
+  '@systemfsoftware/stryker-js@9.0.0(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
-      effect: 4.0.0-rc.112
-      mutation-testing-report-schema: 3.7.3
-
-  '@systemfsoftware/stryker-plugins@1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)':
-    dependencies:
-      '@systemfsoftware/stryker-js': 0.1.0
-      effect: 4.0.0-rc.112
-      typescript: 7.0.2
-
-  '@systemfsoftware/stryker-test-contribution@1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)':
-    dependencies:
-      '@systemfsoftware/stryker-js': 0.1.0
-      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)(svelte@5.55.1)
+      '@effect/opentelemetry': 4.0.0-rc.112(@opentelemetry/api-logs@0.208.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.112)
+      '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@noble/hashes': 2.4.0
+      '@opentelemetry/api': 1.9.1
+      '@opentelemetry/exporter-metrics-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/exporter-trace-otlp-http': 0.208.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics': 2.2.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
+      '@systemfsoftware/effect-cell-types': 8.3.0(effect@4.0.0-rc.112)
       effect: 4.0.0-rc.112
     transitivePeerDependencies:
+      - '@opentelemetry/api-logs'
+      - '@opentelemetry/resources'
+      - '@opentelemetry/sdk-logs'
+      - '@opentelemetry/sdk-trace-node'
+      - '@opentelemetry/sdk-trace-web'
+      - '@opentelemetry/semantic-conventions'
       - bufferutil
       - redis
-      - supports-color
-      - svelte
       - utf-8-validate
+
+  '@systemfsoftware/stryker-test-contribution@3.0.2(effect@4.0.0-rc.112)(rolldown@1.2.3)(svelte@5.55.1)':
+    dependencies:
+      '@systemfsoftware/stryker-js-plugin-interface': 7.0.0(rolldown@1.2.3)(svelte@5.55.1)
+      effect: 4.0.0-rc.112
+    transitivePeerDependencies:
+      - rolldown
+      - svelte
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -8677,6 +8020,7 @@ snapshots:
   '@tybys/wasm-util@0.10.3':
     dependencies:
       tslib: 2.8.1
+    optional: true
 
   '@types/argparse@1.0.38': {}
 
@@ -8710,28 +8054,11 @@ snapshots:
 
   '@types/deep-eql@4.0.2': {}
 
-  '@types/diff-match-patch@1.0.36': {}
-
-  '@types/docker-modem@3.0.6':
-    dependencies:
-      '@types/node': 25.9.5
-      '@types/ssh2': 1.15.5
-
-  '@types/dockerode@4.0.1':
-    dependencies:
-      '@types/docker-modem': 3.0.6
-      '@types/node': 25.9.5
-      '@types/ssh2': 1.15.5
-
   '@types/doctrine@0.0.9': {}
 
   '@types/estree@1.0.8': {}
 
   '@types/estree@1.0.9': {}
-
-  '@types/node@18.19.130':
-    dependencies:
-      undici-types: 5.26.5
 
   '@types/node@24.13.2':
     dependencies:
@@ -8753,20 +8080,8 @@ snapshots:
 
   '@types/scheduler@0.26.0': {}
 
-  '@types/ssh2-streams@0.1.13':
-    dependencies:
-      '@types/node': 25.9.5
-
-  '@types/ssh2@0.5.52':
-    dependencies:
-      '@types/node': 25.9.5
-      '@types/ssh2-streams': 0.1.13
-
-  '@types/ssh2@1.15.5':
-    dependencies:
-      '@types/node': 18.19.130
-
-  '@types/trusted-types@2.0.7': {}
+  '@types/trusted-types@2.0.7':
+    optional: true
 
   '@types/ws@8.18.1':
     dependencies:
@@ -9041,9 +8356,9 @@ snapshots:
 
   '@yuku-toolchain/types@0.8.4': {}
 
-  abort-controller@3.0.0:
+  acorn-import-attributes@1.9.5(acorn@8.18.0):
     dependencies:
-      event-target-shim: 5.0.1
+      acorn: 8.18.0
 
   acorn@8.18.0: {}
 
@@ -9078,30 +8393,6 @@ snapshots:
 
   ansis@4.3.1: {}
 
-  archiver-utils@5.0.2:
-    dependencies:
-      glob: 10.5.0
-      graceful-fs: 4.2.11
-      is-stream: 2.0.1
-      lazystream: 1.0.1
-      lodash: 4.18.1
-      normalize-path: 3.0.0
-      readable-stream: 4.7.0
-
-  archiver@7.0.1:
-    dependencies:
-      archiver-utils: 5.0.2
-      async: 3.2.6
-      buffer-crc32: 1.0.0
-      readable-stream: 4.7.0
-      readdir-glob: 1.1.3
-      tar-stream: 3.2.0
-      zip-stream: 6.0.1
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
-
   argparse@1.0.10:
     dependencies:
       sprintf-js: 1.0.3
@@ -9114,13 +8405,10 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  aria-query@5.3.1: {}
+  aria-query@5.3.1:
+    optional: true
 
   aria-query@5.3.2: {}
-
-  asn1@0.2.6:
-    dependencies:
-      safer-buffer: 2.1.2
 
   assertion-error@2.0.1: {}
 
@@ -9134,69 +8422,17 @@ snapshots:
       estree-walker: 3.0.3
       js-tokens: 10.0.0
 
-  async-lock@1.4.1: {}
-
-  async@3.2.6: {}
-
-  axobject-query@4.1.0: {}
-
-  b4a@1.8.1: {}
-
-  balanced-match@1.0.2: {}
+  axobject-query@4.1.0:
+    optional: true
 
   balanced-match@4.0.4: {}
 
-  bare-events@2.9.1: {}
-
-  bare-fs@4.8.0:
-    dependencies:
-      bare-events: 2.9.1
-      bare-path: 3.1.1
-      bare-stream: 2.13.3(bare-events@2.9.1)
-      bare-url: 2.4.7
-      fast-fifo: 1.3.2
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-
-  bare-path@3.1.1: {}
-
-  bare-stream@2.13.3(bare-events@2.9.1):
-    dependencies:
-      b4a: 1.8.1
-      streamx: 2.28.0
-      teex: 1.0.1
-    optionalDependencies:
-      bare-events: 2.9.1
-    transitivePeerDependencies:
-      - react-native-b4a
-
-  bare-url@2.4.7:
-    dependencies:
-      bare-path: 3.1.1
-
-  base64-js@1.5.1: {}
-
   baseline-browser-mapping@2.10.38: {}
-
-  bcrypt-pbkdf@1.0.2:
-    dependencies:
-      tweetnacl: 0.14.5
 
   bidi-js@1.0.3:
     dependencies:
       require-from-string: 2.0.2
     optional: true
-
-  bl@4.1.0:
-    dependencies:
-      buffer: 5.7.1
-      inherits: 2.0.4
-      readable-stream: 3.6.2
-
-  brace-expansion@2.1.4:
-    dependencies:
-      balanced-match: 1.0.2
 
   brace-expansion@5.0.6:
     dependencies:
@@ -9210,26 +8446,9 @@ snapshots:
       node-releases: 2.0.48
       update-browserslist-db: 1.2.3(browserslist@4.28.4)
 
-  buffer-crc32@1.0.0: {}
-
-  buffer@5.7.1:
-    dependencies:
-      base64-js: 1.5.1
-      ieee754: 1.2.1
-
-  buffer@6.0.3:
-    dependencies:
-      base64-js: 1.5.1
-      ieee754: 1.2.1
-
-  buildcheck@0.0.7:
-    optional: true
-
   bundle-name@4.1.0:
     dependencies:
       run-applescript: 7.1.0
-
-  byline@5.0.0: {}
 
   cac@7.0.0: {}
 
@@ -9251,7 +8470,7 @@ snapshots:
 
   check-error@2.1.3: {}
 
-  chownr@1.1.4: {}
+  cjs-module-lexer@2.2.1: {}
 
   cliui@8.0.1:
     dependencies:
@@ -9265,7 +8484,8 @@ snapshots:
       strip-ansi: 7.2.0
       wrap-ansi: 9.0.2
 
-  clsx@2.1.1: {}
+  clsx@2.1.1:
+    optional: true
 
   cluster-key-slot@1.1.2: {}
 
@@ -9274,14 +8494,6 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
-
-  compress-commons@6.0.2:
-    dependencies:
-      crc-32: 1.2.2
-      crc32-stream: 6.0.0
-      is-stream: 2.0.1
-      normalize-path: 3.0.0
-      readable-stream: 4.7.0
 
   concurrently@10.0.5:
     dependencies:
@@ -9307,8 +8519,6 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  core-util-is@1.0.3: {}
-
   cosmiconfig-typescript-loader@6.3.0(@types/node@25.9.5)(cosmiconfig@9.0.2(typescript@7.0.2))(typescript@7.0.2):
     dependencies:
       '@types/node': 25.9.5
@@ -9324,25 +8534,6 @@ snapshots:
       parse-json: 5.2.0
     optionalDependencies:
       typescript: 7.0.2
-
-  cpu-features@0.0.10:
-    dependencies:
-      buildcheck: 0.0.7
-      nan: 2.28.0
-    optional: true
-
-  crc-32@1.2.2: {}
-
-  crc32-stream@6.0.0:
-    dependencies:
-      crc-32: 1.2.2
-      readable-stream: 4.7.0
-
-  cross-spawn@7.0.6:
-    dependencies:
-      path-key: 3.1.1
-      shebang-command: 2.0.0
-      which: 2.0.2
 
   css-tree@3.2.1:
     dependencies:
@@ -9388,35 +8579,10 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  devalue@5.9.1: {}
-
-  diff-match-patch@1.0.5: {}
+  devalue@5.9.1:
+    optional: true
 
   diff@8.0.4: {}
-
-  docker-compose@1.4.2:
-    dependencies:
-      yaml: 2.9.0
-
-  docker-modem@5.0.7(supports-color@10.2.2):
-    dependencies:
-      debug: 4.4.3(supports-color@10.2.2)
-      readable-stream: 3.6.2
-      split-ca: 1.0.1
-      ssh2: 1.17.0
-    transitivePeerDependencies:
-      - supports-color
-
-  dockerode@5.0.1(supports-color@10.2.2):
-    dependencies:
-      '@balena/dockerignore': 1.0.2
-      '@grpc/grpc-js': 1.14.4
-      '@grpc/proto-loader': 0.7.15
-      docker-modem: 5.0.7(supports-color@10.2.2)
-      protobufjs: 7.6.5
-      tar-fs: 2.1.5
-    transitivePeerDependencies:
-      - supports-color
 
   doctrine@3.0.0:
     dependencies:
@@ -9430,8 +8596,6 @@ snapshots:
     optionalDependencies:
       oxc-resolver: 11.24.2
 
-  eastasianwidth@0.2.0: {}
-
   effect@4.0.0-rc.112:
     dependencies:
       fast-check: 4.9.0
@@ -9443,13 +8607,7 @@ snapshots:
 
   emoji-regex@8.0.0: {}
 
-  emoji-regex@9.2.2: {}
-
   empathic@2.0.1: {}
-
-  end-of-stream@1.4.5:
-    dependencies:
-      once: 1.4.0
 
   entities@8.0.0:
     optional: true
@@ -9497,13 +8655,15 @@ snapshots:
 
   escalade@3.2.0: {}
 
-  esm-env@1.2.2: {}
+  esm-env@1.2.2:
+    optional: true
 
   esprima@4.0.1: {}
 
   esrap@2.3.6:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+    optional: true
 
   estree-walker@2.0.2: {}
 
@@ -9513,16 +8673,6 @@ snapshots:
 
   esutils@2.0.3: {}
 
-  event-target-shim@5.0.1: {}
-
-  events-universal@1.0.1:
-    dependencies:
-      bare-events: 2.9.1
-    transitivePeerDependencies:
-      - bare-abort-controller
-
-  events@3.3.0: {}
-
   expect-type@1.4.0: {}
 
   fast-check@4.9.0:
@@ -9531,8 +8681,6 @@ snapshots:
 
   fast-deep-equal@3.1.3: {}
 
-  fast-fifo@1.3.2: {}
-
   fast-uri@3.1.2: {}
 
   fdir@6.5.0(picomatch@4.0.5):
@@ -9540,13 +8688,6 @@ snapshots:
       picomatch: 4.0.5
 
   fflate@0.8.3: {}
-
-  foreground-child@3.3.1:
-    dependencies:
-      cross-spawn: 7.0.6
-      signal-exit: 4.1.0
-
-  fs-constants@1.0.0: {}
 
   fs-extra@11.3.5:
     dependencies:
@@ -9568,8 +8709,6 @@ snapshots:
 
   get-east-asian-width@1.6.0: {}
 
-  get-port@5.1.1: {}
-
   get-tsconfig@5.0.0-beta.5:
     dependencies:
       resolve-pkg-maps: 1.0.0
@@ -9577,15 +8716,6 @@ snapshots:
   glob-to-regex.js@1.2.0(tslib@2.8.1):
     dependencies:
       tslib: 2.8.1
-
-  glob@10.5.0:
-    dependencies:
-      foreground-child: 3.3.1
-      jackspeak: 3.4.3
-      minimatch: 9.0.9
-      minipass: 7.1.3
-      package-json-from-dist: 1.0.1
-      path-scurry: 1.11.1
 
   glob@13.0.6:
     dependencies:
@@ -9596,8 +8726,6 @@ snapshots:
   global-directory@5.0.0:
     dependencies:
       ini: 6.0.0
-
-  globrex@0.1.2: {}
 
   graceful-fs@4.2.11: {}
 
@@ -9622,12 +8750,17 @@ snapshots:
 
   hyperdyperid@1.2.0: {}
 
-  ieee754@1.2.1: {}
-
   import-fresh@3.3.1:
     dependencies:
       parent-module: 1.0.1
       resolve-from: 4.0.0
+
+  import-in-the-middle@2.0.6:
+    dependencies:
+      acorn: 8.18.0
+      acorn-import-attributes: 1.9.5(acorn@8.18.0)
+      cjs-module-lexer: 2.2.1
+      module-details-from-path: 1.0.4
 
   import-lazy@4.0.0: {}
 
@@ -9636,8 +8769,6 @@ snapshots:
   imurmurhash@0.1.4: {}
 
   indent-string@4.0.0: {}
-
-  inherits@2.0.4: {}
 
   ini@6.0.0: {}
 
@@ -9664,19 +8795,14 @@ snapshots:
 
   is-reference@3.0.3:
     dependencies:
-      '@types/estree': 1.0.8
-
-  is-stream@2.0.1: {}
+      '@types/estree': 1.0.9
+    optional: true
 
   is-windows@1.0.2: {}
 
   is-wsl@3.1.1:
     dependencies:
       is-inside-container: 1.0.0
-
-  isarray@1.0.0: {}
-
-  isexe@2.0.0: {}
 
   istanbul-lib-coverage@3.2.2: {}
 
@@ -9690,12 +8816,6 @@ snapshots:
     dependencies:
       html-escaper: 2.0.2
       istanbul-lib-report: 3.0.1
-
-  jackspeak@3.4.3:
-    dependencies:
-      '@isaacs/cliui': 8.0.2
-    optionalDependencies:
-      '@pkgjs/parseargs': 0.11.0
 
   jiti@2.6.1: {}
 
@@ -9754,10 +8874,6 @@ snapshots:
       universalify: 2.0.1
     optionalDependencies:
       graceful-fs: 4.2.11
-
-  lazystream@1.0.1:
-    dependencies:
-      readable-stream: 2.3.8
 
   lightningcss-android-arm64@1.33.0:
     optional: true
@@ -9818,19 +8934,16 @@ snapshots:
     optionalDependencies:
       yaml: 2.9.0
 
-  locate-character@3.0.0: {}
+  locate-character@3.0.0:
+    optional: true
 
   lodash.camelcase@4.3.0: {}
 
   lodash.clonedeep@4.5.0: {}
 
-  lodash@4.18.1: {}
-
   long@5.3.2: {}
 
   loupe@3.2.1: {}
-
-  lru-cache@10.4.3: {}
 
   lru-cache@11.5.2: {}
 
@@ -9886,21 +8999,11 @@ snapshots:
     dependencies:
       brace-expansion: 5.0.6
 
-  minimatch@5.1.9:
-    dependencies:
-      brace-expansion: 2.1.4
-
-  minimatch@9.0.9:
-    dependencies:
-      brace-expansion: 2.1.4
-
   minimist@1.2.8: {}
 
   minipass@7.1.3: {}
 
-  mkdirp-classic@0.5.3: {}
-
-  mkdirp@3.0.1: {}
+  module-details-from-path@1.0.4: {}
 
   mrmime@2.0.1: {}
 
@@ -9922,17 +9025,6 @@ snapshots:
     optionalDependencies:
       msgpackr-extract: 3.0.4
 
-  mutation-testing-elements@3.7.3: {}
-
-  mutation-testing-metrics@3.7.3:
-    dependencies:
-      mutation-testing-report-schema: 3.7.3
-
-  mutation-testing-report-schema@3.7.3: {}
-
-  nan@2.28.0:
-    optional: true
-
   nanoid@3.3.18: {}
 
   node-gyp-build-optional-packages@5.2.2:
@@ -9942,13 +9034,7 @@ snapshots:
 
   node-releases@2.0.48: {}
 
-  normalize-path@3.0.0: {}
-
   obug@2.1.4: {}
-
-  once@1.4.0:
-    dependencies:
-      wrappy: 1.0.2
 
   open@10.2.0:
     dependencies:
@@ -10029,6 +9115,12 @@ snapshots:
       '@oxc-resolver/binding-win32-arm64-msvc': 11.24.2
       '@oxc-resolver/binding-win32-x64-msvc': 11.24.2
 
+  oxc-walker@1.1.1(@oxc-project/types@0.140.0)(oxc-parser@0.140.0)(rolldown@1.2.3):
+    optionalDependencies:
+      '@oxc-project/types': 0.140.0
+      oxc-parser: 0.140.0
+      rolldown: 1.2.3
+
   oxlint-tsgolint@7.0.2001:
     optionalDependencies:
       '@oxlint-tsgolint/darwin-arm64': 7.0.2001
@@ -10079,14 +9171,7 @@ snapshots:
       entities: 8.0.0
     optional: true
 
-  path-key@3.1.1: {}
-
   path-parse@1.0.7: {}
-
-  path-scurry@1.11.1:
-    dependencies:
-      lru-cache: 10.4.3
-      minipass: 7.1.3
 
   path-scurry@2.0.2:
     dependencies:
@@ -10126,23 +9211,6 @@ snapshots:
       ansi-styles: 5.2.0
       react-is: 17.0.2
 
-  process-nextick-args@2.0.1: {}
-
-  process@0.11.10: {}
-
-  proper-lockfile@4.1.2:
-    dependencies:
-      graceful-fs: 4.2.11
-      retry: 0.12.0
-      signal-exit: 3.0.7
-
-  properties-reader@3.0.1(supports-color@10.2.2):
-    dependencies:
-      '@kwsites/file-exists': 1.1.1(supports-color@10.2.2)
-      mkdirp: 3.0.1
-    transitivePeerDependencies:
-      - supports-color
-
   protobufjs@7.6.5:
     dependencies:
       '@protobufjs/aspromise': 1.1.2
@@ -10156,11 +9224,6 @@ snapshots:
       '@protobufjs/utf8': 1.1.2
       '@types/node': 25.9.5
       long: 5.3.2
-
-  pump@3.0.4:
-    dependencies:
-      end-of-stream: 1.4.5
-      once: 1.4.0
 
   punycode@2.3.1:
     optional: true
@@ -10211,34 +9274,6 @@ snapshots:
       js-yaml: 4.2.0
       strip-bom: 5.0.0
 
-  readable-stream@2.3.8:
-    dependencies:
-      core-util-is: 1.0.3
-      inherits: 2.0.4
-      isarray: 1.0.0
-      process-nextick-args: 2.0.1
-      safe-buffer: 5.1.2
-      string_decoder: 1.1.1
-      util-deprecate: 1.0.2
-
-  readable-stream@3.6.2:
-    dependencies:
-      inherits: 2.0.4
-      string_decoder: 1.3.0
-      util-deprecate: 1.0.2
-
-  readable-stream@4.7.0:
-    dependencies:
-      abort-controller: 3.0.0
-      buffer: 6.0.3
-      events: 3.3.0
-      process: 0.11.10
-      string_decoder: 1.3.0
-
-  readdir-glob@1.1.3:
-    dependencies:
-      minimatch: 5.1.9
-
   recast@0.23.19:
     dependencies:
       ast-types: 0.16.1
@@ -10267,6 +9302,13 @@ snapshots:
 
   require-from-string@2.0.2: {}
 
+  require-in-the-middle@8.0.1(supports-color@10.2.2):
+    dependencies:
+      debug: 4.4.3(supports-color@10.2.2)
+      module-details-from-path: 1.0.4
+    transitivePeerDependencies:
+      - supports-color
+
   resolve-from@4.0.0: {}
 
   resolve-from@5.0.0: {}
@@ -10279,8 +9321,6 @@ snapshots:
       is-core-module: 2.16.2
       path-parse: 1.0.7
       supports-preserve-symlinks-flag: 1.0.0
-
-  retry@0.12.0: {}
 
   rimraf@6.1.3:
     dependencies:
@@ -10382,12 +9422,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  safe-buffer@5.1.2: {}
-
-  safe-buffer@5.2.1: {}
-
-  safer-buffer@2.1.2: {}
-
   saxes@6.0.0:
     dependencies:
       xmlchars: 2.2.0
@@ -10401,17 +9435,9 @@ snapshots:
 
   semver@7.8.5: {}
 
-  shebang-command@2.0.0:
-    dependencies:
-      shebang-regex: 3.0.0
-
-  shebang-regex@3.0.0: {}
-
   shell-quote@1.9.0: {}
 
   siginfo@2.0.0: {}
-
-  signal-exit@3.0.7: {}
 
   signal-exit@4.1.0: {}
 
@@ -10429,22 +9455,7 @@ snapshots:
 
   source-map@0.6.1: {}
 
-  split-ca@1.0.1: {}
-
   sprintf-js@1.0.3: {}
-
-  ssh-remote-port-forward@1.0.4:
-    dependencies:
-      '@types/ssh2': 0.5.52
-      ssh2: 1.17.0
-
-  ssh2@1.17.0:
-    dependencies:
-      asn1: 0.2.6
-      bcrypt-pbkdf: 1.0.2
-    optionalDependencies:
-      cpu-features: 0.0.10
-      nan: 2.28.0
 
   stackback@0.0.2: {}
 
@@ -10477,15 +9488,6 @@ snapshots:
       - react
       - utf-8-validate
 
-  streamx@2.28.0:
-    dependencies:
-      events-universal: 1.0.1
-      fast-fifo: 1.3.2
-      text-decoder: 1.2.7
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-
   string-argv@0.3.2: {}
 
   string-width@4.2.3:
@@ -10494,25 +9496,11 @@ snapshots:
       is-fullwidth-code-point: 3.0.0
       strip-ansi: 6.0.1
 
-  string-width@5.1.2:
-    dependencies:
-      eastasianwidth: 0.2.0
-      emoji-regex: 9.2.2
-      strip-ansi: 7.2.0
-
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.6.0
       get-east-asian-width: 1.6.0
       strip-ansi: 7.2.0
-
-  string_decoder@1.1.1:
-    dependencies:
-      safe-buffer: 5.1.2
-
-  string_decoder@1.3.0:
-    dependencies:
-      safe-buffer: 5.2.1
 
   strip-ansi@6.0.1:
     dependencies:
@@ -10553,7 +9541,7 @@ snapshots:
       '@jridgewell/remapping': 2.3.5
       '@jridgewell/sourcemap-codec': 1.5.5
       '@sveltejs/acorn-typescript': 1.0.13(acorn@8.18.0)
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       '@types/trusted-types': 2.0.7
       acorn: 8.18.0
       aria-query: 5.3.1
@@ -10568,85 +9556,12 @@ snapshots:
       zimmerframe: 1.1.4
     transitivePeerDependencies:
       - '@typescript-eslint/types'
+    optional: true
 
   symbol-tree@3.2.4:
     optional: true
 
   tagged-tag@1.0.0: {}
-
-  tar-fs@2.1.5:
-    dependencies:
-      chownr: 1.1.4
-      mkdirp-classic: 0.5.3
-      pump: 3.0.4
-      tar-stream: 2.2.0
-
-  tar-fs@3.1.3:
-    dependencies:
-      pump: 3.0.4
-      tar-stream: 3.2.0
-    optionalDependencies:
-      bare-fs: 4.8.0
-      bare-path: 3.1.1
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
-
-  tar-stream@2.2.0:
-    dependencies:
-      bl: 4.1.0
-      end-of-stream: 1.4.5
-      fs-constants: 1.0.0
-      inherits: 2.0.4
-      readable-stream: 3.6.2
-
-  tar-stream@3.2.0:
-    dependencies:
-      b4a: 1.8.1
-      bare-fs: 4.8.0
-      fast-fifo: 1.3.2
-      streamx: 2.28.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
-
-  teex@1.0.1:
-    dependencies:
-      streamx: 2.28.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - react-native-b4a
-
-  testcontainers@12.1.0(supports-color@10.2.2):
-    dependencies:
-      '@balena/dockerignore': 1.0.2
-      '@types/dockerode': 4.0.1
-      archiver: 7.0.1
-      async-lock: 1.4.1
-      byline: 5.0.0
-      debug: 4.4.3(supports-color@10.2.2)
-      docker-compose: 1.4.2
-      dockerode: 5.0.1(supports-color@10.2.2)
-      get-port: 5.1.1
-      proper-lockfile: 4.1.2
-      properties-reader: 3.0.1(supports-color@10.2.2)
-      ssh-remote-port-forward: 1.0.4
-      tar-fs: 3.1.3
-      tmp: 0.2.7
-      undici: 8.10.0
-    transitivePeerDependencies:
-      - bare-abort-controller
-      - bare-buffer
-      - react-native-b4a
-      - supports-color
-
-  text-decoder@1.2.7:
-    dependencies:
-      b4a: 1.8.1
-    transitivePeerDependencies:
-      - react-native-b4a
 
   thingies@2.6.0(tslib@2.8.1):
     dependencies:
@@ -10679,8 +9594,6 @@ snapshots:
       tldts-core: 7.4.10
     optional: true
 
-  tmp@0.2.7: {}
-
   totalist@3.0.1: {}
 
   tough-cookie@6.0.2:
@@ -10700,10 +9613,6 @@ snapshots:
   tree-kill@1.2.2: {}
 
   ts-dedent@2.3.0: {}
-
-  tsconfck@3.1.6(typescript@7.0.2):
-    optionalDependencies:
-      typescript: 7.0.2
 
   tsconfig-paths@4.2.0:
     dependencies:
@@ -10760,8 +9669,6 @@ snapshots:
       '@turbo/windows-64': 2.10.12
       '@turbo/windows-arm64': 2.10.12
 
-  tweetnacl@0.14.5: {}
-
   type-fest@5.8.0:
     dependencies:
       tagged-tag: 1.0.0
@@ -10798,8 +9705,6 @@ snapshots:
       '@quansync/fs': 1.0.0
       quansync: 1.0.0
 
-  undici-types@5.26.5: {}
-
   undici-types@7.18.2: {}
 
   undici-types@7.24.6: {}
@@ -10833,19 +9738,7 @@ snapshots:
     dependencies:
       react: 19.2.8
 
-  util-deprecate@1.0.2: {}
-
   verkit@0.3.2: {}
-
-  vite-tsconfig-paths@6.1.1(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)):
-    dependencies:
-      debug: 4.4.3(supports-color@10.2.2)
-      globrex: 0.1.2
-      tsconfck: 3.1.6(typescript@7.0.2)
-      vite: 8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
 
   vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0):
     dependencies:
@@ -10916,10 +9809,6 @@ snapshots:
       - '@noble/hashes'
     optional: true
 
-  which@2.0.2:
-    dependencies:
-      isexe: 2.0.0
-
   why-is-node-running@2.3.0:
     dependencies:
       siginfo: 2.0.0
@@ -10931,19 +9820,11 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
-  wrap-ansi@8.1.0:
-    dependencies:
-      ansi-styles: 6.2.3
-      string-width: 5.1.2
-      strip-ansi: 7.2.0
-
   wrap-ansi@9.0.2:
     dependencies:
       ansi-styles: 6.2.3
       string-width: 7.2.0
       strip-ansi: 7.2.0
-
-  wrappy@1.0.2: {}
 
   write-file-atomic@5.0.1:
     dependencies:
@@ -10971,7 +9852,8 @@ snapshots:
 
   yallist@3.1.1: {}
 
-  yaml@2.9.0: {}
+  yaml@2.9.0:
+    optional: true
 
   yargs-parser@21.1.1: {}
 
@@ -11035,10 +9917,5 @@ snapshots:
       '@yuku-parser/binding-win32-arm64': 0.8.4
       '@yuku-parser/binding-win32-x64': 0.8.4
 
-  zimmerframe@1.1.4: {}
-
-  zip-stream@6.0.1:
-    dependencies:
-      archiver-utils: 5.0.2
-      compress-commons: 6.0.2
-      readable-stream: 4.7.0
+  zimmerframe@1.1.4:
+    optional: true

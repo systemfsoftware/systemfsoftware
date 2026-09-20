@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Emits the mutation matrix: every workspace project that owns a
-// `stryker.config.json`.
+// `stryker.config.ts` or `stryker.config.json`.
 //
 // The predicate is "a mutation target is a workspace project", and this script
 // IS that predicate. The version it replaced approximated it by walking the
@@ -23,7 +23,7 @@ import path from 'node:path'
 
 const IMPORTERS_KEY = 'importers:'
 const ROOT_IMPORTER = '.'
-const STRYKER_CONFIG = 'stryker.config.json'
+const STRYKER_CONFIGS = ['stryker.config.ts', 'stryker.config.json']
 
 /**
  * The workspace project directories pnpm resolved, excluding the root.
@@ -99,12 +99,12 @@ export function discoverMutationTargets(root, changedPaths = null) {
     throw new Error(`No pnpm-lock.yaml at ${root}, so the workspace projects cannot be read.`)
   }
   const targets = readWorkspaceProjects(fs.readFileSync(lockfile, 'utf8'))
-    .filter((project) => fs.existsSync(path.join(root, project, STRYKER_CONFIG)))
+    .filter((project) => STRYKER_CONFIGS.some((name) => fs.existsSync(path.join(root, project, name))))
     .sort()
   assertNoNestedTargets(targets)
   if (changedPaths === null || changedPaths.length === 0) return targets
   const isStrykerToolchainChange = changedPaths.some(
-    (p) => p.startsWith('packages/stryker-js/') || p === 'stryker.config.base.json',
+    (p) => p.startsWith('packages/toolchain/stryker-config/') || p.startsWith('packages/stryker-js/'),
   )
   if (isStrykerToolchainChange) return targets
   const touched = (project) =>
@@ -149,7 +149,7 @@ function selftest() {
     fs.writeFileSync(path.join(root, 'pnpm-lock.yaml'), lock)
     for (const dir of dirs) {
       fs.mkdirSync(path.join(root, dir), { recursive: true })
-      fs.writeFileSync(path.join(root, dir, STRYKER_CONFIG), '{}\n')
+      fs.writeFileSync(path.join(root, dir, STRYKER_CONFIGS[1]), '{}\n')
     }
     return root
   }

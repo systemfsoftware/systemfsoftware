@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url'
 
 const packageDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const forbiddenFiles = ['stryker.config.json', 'vitest.config.ts', 'tsconfig.node.json']
+const forbiddenFiles = ['stryker.config.json', 'stryker.config.ts', 'vitest.config.ts', 'tsconfig.node.json']
 const forbiddenScripts = ['test', 'test:run', 'mutation', 'mutation:full']
 const forbiddenDependencies = [
   'vitest',
   '@vitest/coverage-v8',
   '@systemfsoftware/vitest-config',
+  '@systemfsoftware/stryker-js',
   '@systemfsoftware/stryker-js-vitest-runner',
-  '@systemfsoftware/stryker-js-engine',
   '@systemfsoftware/stryker-js-typescript-checker',
 ]
 

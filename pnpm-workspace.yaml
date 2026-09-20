@@ -64,12 +64,12 @@ catalogs:
     "@oxlint/plugins": ^1.77.0
     oxlint-tsgolint: 7.0.2001
   stryker:
-    semver: ^7.8.5
-    "@systemfsoftware/stryker-js-cli": ^4.0.1
-    "@systemfsoftware/stryker-js-typescript-checker": ^3.0.1
-    "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1
-    "@systemfsoftware/stryker-plugins": ^1.0.1
-    "@systemfsoftware/stryker-test-contribution": ^1.0.1
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": ^0.1.0
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": ^0.1.0
+    "@systemfsoftware/stryker-js": ^9.0.0
+    "@systemfsoftware/stryker-js-typescript-checker": ^7.0.2
+    "@systemfsoftware/stryker-js-vitest-runner": ^7.0.0
+    "@systemfsoftware/stryker-test-contribution": ^3.0.2
     "mutation-testing-elements": 3.7.3
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
@@ -86,7 +86,6 @@ packages:
   - packages/atom/effect-atom/
   - packages/atom/effect-atom-react/
   - packages/oxlint-plugin/
-  - packages/stryker-js/
   - packages/toolchain/
   - packages/effect-gherkin-spec/
   - packages/storybook-gherkin/
@@ -117,15 +116,7 @@ packages:
   - packages/oxlint-plugin/oxlint-plugin-test-placement/
   - packages/oxlint-plugin/oxlint-config/
   - packages/oxlint-plugin/all/
-  - packages/stryker-js/stryker-js/
-  - packages/stryker-js/stryker-js-cli/
-  - packages/stryker-js/stryker-js-engine/
-  - packages/stryker-js/stryker-js-html-reporter/
-  - packages/stryker-js/stryker-js-instrumenter/
-  - packages/stryker-js/stryker-js-typescript-checker/
-  - packages/stryker-js/stryker-js-vitest-runner/
-  - packages/stryker-js/stryker-plugins/
-  - packages/stryker-js/stryker-test-contribution/
+  - packages/toolchain/stryker-config/
   - packages/toolchain/tsconfig/
   - packages/toolchain/tsdown-config/
   - packages/toolchain/vitest-config/
