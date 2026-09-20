@@ -40,7 +40,14 @@ export {
   makeFeature,
 } from './Feature.js'
 export { checkSoftFailures, resolveScenarioArgs } from './FeatureRuntime.js'
-export type { OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './FeatureRuntime.js'
+export type {
+  HeadlessPipelineRejected,
+  OutlineFn,
+  ScenarioBody,
+  ScenarioFn,
+  ScenarioOptions,
+  ValidScenarioPipeline,
+} from './FeatureRuntime.js'
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './OutlineExpand.js'
 export type { OutlineRow, TemplateToken } from './OutlineExpand.js'
 export { StepError } from './StepError.schema.js'
