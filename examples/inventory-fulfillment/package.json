@@ -27,6 +27,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
+    "drizzle-kit": "catalog:",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "pg": "catalog:",
