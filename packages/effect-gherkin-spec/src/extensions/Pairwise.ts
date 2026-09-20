@@ -1,8 +1,8 @@
 import type { Context } from 'effect'
 import { Effect, Layer } from 'effect'
 
-import type { GherkinEffect, StepText } from '../DoNotation.js'
-import { resolveText, stepWrap } from '../DoNotation.js'
+import type { GherkinEffect, GivenStage, InitialStage, StepText, WhenStage } from '../DoNotation.js'
+import { resolveText, StageTypeId, stageWhen, stepWrap } from '../DoNotation.js'
 import type { StepError } from '../StepError.schema.js'
 
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
@@ -25,12 +25,16 @@ export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
 ) => {
   type DualReq = RA | RB
   const bindPairwise = (text: StepText) => {
-    function step<N extends string, A extends object, Out, E>(
+    function step<N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(
       name: N,
       f: (scope: NoInfer<A>) => (svc: Service) => Effect.Effect<Out, E, never>,
     ): <E1, R1>(
       self: GherkinEffect<A, E1, R1>,
-    ) => GherkinEffect<A & Record<N, PairwiseResult<Out>>, E1 | StepError, R1 | RA | RB>
+    ) => GherkinEffect<
+      Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage,
+      E1 | StepError,
+      R1 | RA | RB
+    >
     function step<E>(
       name: string,
       f: (scope: object) => (svc: Service) => Effect.Effect<unknown, E, never>,
@@ -60,6 +64,7 @@ export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
                       aLabel: matrix.a.name,
                       bLabel: matrix.b.name,
                     },
+                    ...stageWhen,
                   })),
                 )
               ),

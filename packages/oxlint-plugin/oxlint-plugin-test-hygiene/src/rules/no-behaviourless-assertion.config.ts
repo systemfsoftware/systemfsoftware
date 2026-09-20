@@ -27,5 +27,7 @@ export const meta = {
   schema: [],
   messages: {
     behaviourlessAssertion: BEHAVIOURLESS_ASSERTION_MESSAGE,
+    gherkinEmptyCallback: 'Expected: a Then/And/But step callback that asserts on the scope or invokes behaviour. ' +
+      'Actual: the step callback is empty or contains no assertions/effects, performing no verification.',
   },
 } as const

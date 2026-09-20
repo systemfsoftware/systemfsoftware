@@ -247,9 +247,11 @@ Feature('Health Latch Lifecycle')
             yield* TestClock.adjust(Duration.millis(10))
             yield* health.ready.await
             const count = yield* Ref.get(s.counterRef)
-            expect(count).toBeGreaterThanOrEqual(1)
-            return { health }
+            return { health, count }
           })),
+        Then('the worker has completed at least one tick')((s) => {
+          expect(s.result.count).toBeGreaterThanOrEqual(1)
+        }),
       ),
     )
 
@@ -289,12 +291,11 @@ Feature('Health Latch Lifecycle')
             })
             const health = yield* run.supervisor(sup)
             yield* TestClock.adjust(Duration.millis(10))
-            yield* health.ready.await
             return { health }
           })),
+        Then('the supervisor ready latch opens')((s) => s.result.health.ready.await),
       ),
     )
-
     scenario(
       'Closing supervisor pause gate delays child restart until reopened',
       Gherkin.Do.pipe(

@@ -3,8 +3,28 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { BEHAVIOUR_NODES, EXPECT, meta, SKIP_WALK_KEYS, TEST_FILE } from './no-behaviourless-assertion.config.js'
 
 export type Options = []
-export type MessageIds = 'behaviourlessAssertion'
+export type MessageIds = 'behaviourlessAssertion' | 'gherkinEmptyCallback'
 
+const GHERKIN_TAP_KEYWORDS: Record<string, true> = {
+  Then: true,
+  And: true,
+  But: true,
+}
+
+const isGherkinTapCall = (node: ESTree.CallExpression): boolean => {
+  if (node.callee.type !== 'CallExpression') return false
+  const outerCallee = node.callee.callee
+  return outerCallee.type === 'Identifier' && GHERKIN_TAP_KEYWORDS[outerCallee.name] === true
+}
+
+const isEmptyCallback = (node: ESTree.Node): boolean => {
+  if (node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression') {
+    if (node.body !== null && node.body.type === 'BlockStatement') {
+      return node.body.body.length === 0
+    }
+  }
+  return false
+}
 const isNode = (value: unknown): value is ESTree.Node => typeof value === 'object' && value !== null && 'type' in value
 
 /**
@@ -61,6 +81,13 @@ export const noBehaviourlessAssertion = defineRule({
 
     return {
       CallExpression(node: ESTree.CallExpression) {
+        if (isGherkinTapCall(node)) {
+          const firstArg = node.arguments[0]
+          if (firstArg !== undefined && isEmptyCallback(firstArg)) {
+            context.report({ node, messageId: 'gherkinEmptyCallback' })
+            return
+          }
+        }
         const expectCall = expectCallOf(node)
         if (expectCall === undefined) return
         const subject = expectCall.arguments[0]

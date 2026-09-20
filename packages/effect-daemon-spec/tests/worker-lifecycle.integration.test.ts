@@ -84,14 +84,16 @@ Feature('Poll Worker Lifecycle')
             yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countWhilePaused = yield* CounterRef.read(s.counterRef)
-            expect(countWhilePaused).toBe(countBeforePause)
             yield* health.paused.open
             yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countAfterResume = yield* CounterRef.read(s.counterRef)
-            expect(countAfterResume).toBeGreaterThan(countWhilePaused)
-            return { health }
+            return { countBeforePause, countWhilePaused, countAfterResume }
           })),
+        Then('the counter remains stable while paused and increments after resume')((s) => {
+          expect(s.result.countWhilePaused).toBe(s.result.countBeforePause)
+          expect(s.result.countAfterResume).toBeGreaterThan(s.result.countWhilePaused)
+        }),
       ),
     )
 

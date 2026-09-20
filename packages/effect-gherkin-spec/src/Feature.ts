@@ -1,10 +1,11 @@
 /// <reference types="vitest/globals" />
 import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import type { TestOptions } from 'vitest'
-import { Gherkin, type ScopeMap } from './DoNotation.js'
+import { Gherkin, type ScopeMap, type VitestTaskContext, VitestTaskRef } from './DoNotation.js'
 import {
   createOutlineFnNoFresh,
   createOutlineFnWithFresh,
@@ -84,6 +85,15 @@ const selectLayeredMode = <R>(
   methodsIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>,
   mode: RegisterMode,
 ) => pickMode(methodsIt.effect, mode)
+const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
+
+const toTaskContext = (ctx: unknown): VitestTaskContext | null => {
+  if (isTaskContext(ctx)) return ctx
+  return null
+}
+
+const wrapWithTask = <A, E, R>(effect: Effect.Effect<A, E, R>, ctx: unknown): Effect.Effect<A, E, R> =>
+  effect.pipe(Effect.provideService(VitestTaskRef, toTaskContext(ctx)))
 
 export type FeatureBuilderBoth<
   RShared,
@@ -122,7 +132,47 @@ export type FeatureBuilderWithScenarioLayer<
 export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
   readonly liveClock: () => FeatureBuilder<S>
   body: (body: FeatureBody<never, never, never, S>) => void
+  /**
+   * Provide a shared fixture layer across all scenarios in this feature suite.
+   *
+   * Maps to Vitest's `worker` or file-level fixture scope. Resources acquired in this layer
+   * are allocated once when the suite starts and released at suite completion.
+   *
+   * @example
+   * ```ts
+   * // Bridging a Vitest callback-based fixture:
+   * const DatabaseFixture = Layer.scoped(
+   *   Database,
+   *   Effect.acquireRelease(
+   *     Effect.sync(() => createDatabase()),
+   *     (db) => Effect.sync(() => db.teardown())
+   *   )
+   * )
+   *
+   * Feature('User management').withLayer(DatabaseFixture)
+   * ```
+   */
   withLayer: <RShared>(layer: Layer.Layer<RShared>, opts?: FeatureLayerOptions) => FeatureBuilderWithLayer<RShared, S>
+  /**
+   * Provide a per-scenario fresh fixture layer.
+   *
+   * Maps to Vitest's `test` fixture scope (`test.extend({ fixture: async ({}, use) => { ... use(val); cleanup(); } })`).
+   * Resources are allocated fresh before each scenario and automatically torn down via their
+   * `Scope` finalizer (`Effect.acquireRelease`) when the scenario completes, regardless of success or failure.
+   *
+   * @example
+   * ```ts
+   * const TempDirFixture = Layer.scoped(
+   *   TempDirectory,
+   *   Effect.acquireRelease(
+   *     Effect.sync(() => makeTempDir()),
+   *     (dir) => Effect.sync(() => removeTempDir(dir))
+   *   )
+   * )
+   *
+   * Feature('File processing').withScenarioLayer(TempDirFixture)
+   * ```
+   */
   withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(
     layer: Layer.Layer<RFresh, never, RFreshReq>,
   ) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
@@ -155,13 +205,13 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       const scenario = createScenarioNoFresh<never>((scenName, effect, mode) => {
         selectUnlayeredMode(effectIt, mode, useLiveClock)(
           scenName,
-          () => effect,
+          (ctx) => wrapWithTask(effect, ctx),
         )
       }, () => bg)
       const scenarioOutline = createOutlineFnNoFresh<never>((scenName, effect, mode) => {
         selectUnlayeredMode(effectIt, mode, useLiveClock)(
           scenName,
-          () => effect,
+          (ctx) => wrapWithTask(effect, ctx),
         )
       }, () => bg)
       body({
@@ -193,14 +243,14 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       let bg: ScenarioBody<RFresh | RFreshReq> | null = null
       const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,
@@ -234,10 +284,10 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
 
     const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioNoFresh<RShared>((scenName, effect, mode) => {
-        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+        selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
       }, () => bg)
       const scenarioOutline = createOutlineFnNoFresh<RShared>((scenName, effect, mode) => {
-        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+        selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
       }, () => bg)
       body({
         scenario,
@@ -279,14 +329,14 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+          selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+          selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,

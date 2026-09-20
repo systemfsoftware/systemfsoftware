@@ -3,7 +3,8 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
-import type { GherkinEffect, ScopeIdentifiers, ScopeMap, ScopeServices } from './DoNotation.js'
+import type { GherkinEffect, GivenStage, ScopeIdentifiers, ScopeMap, ScopeServices, ThenStage } from './DoNotation.js'
+import { makeFreshSoftContext, SoftFailuresRef } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
 import { StepError } from './StepError.schema.js'
 
@@ -51,9 +52,26 @@ const applyScenarioOpts = <R, A, E>(
   return applyDefinedOpts(effect, opts)
 }
 
+export const checkSoftFailures = <R>(
+  effect: Effect.Effect<void, StepError, R>,
+): Effect.Effect<void, StepError, R> =>
+  Effect.gen(function*() {
+    yield* effect
+    const soft = yield* SoftFailuresRef
+    const failures = soft.getFailures()
+    if (failures.length > 0) {
+      const messages = failures.map((f) => `${f.keyword} ${f.text}: ${String(f.cause)}`)
+      return yield* StepError.make({
+        keyword: 'then',
+        text: 'soft assertions failed',
+        cause: messages.join('\n'),
+      })
+    }
+  }).pipe(Effect.provideService(SoftFailuresRef, makeFreshSoftContext()))
+
 const normalizePipeline = <R>(
   pipeline: Effect.Effect<unknown, StepError, R>,
-): Effect.Effect<void, StepError, R> => pipeline.pipe(Effect.asVoid)
+): Effect.Effect<void, StepError, R> => checkSoftFailures(pipeline.pipe(Effect.asVoid))
 
 const composeWithBackground = <R>(
   pipeline: Effect.Effect<unknown, StepError, R>,
@@ -312,15 +330,31 @@ export const createOutlineFnWithFresh = <RShared, RFresh, RFreshReq>(
   return Object.assign(base, { skip, only })
 }
 
+export type HeadlessPipelineRejected =
+  'Scenario pipeline must conclude with at least one Then step, not end on Given or When'
+
+export type ValidScenarioPipeline<P> = P extends GherkinEffect<infer S, infer _E, infer _R> ? S extends ThenStage ? P
+  : HeadlessPipelineRejected
+  : P
+
 type ScenarioCallable<RShared, RFresh, RFreshReq> = {
-  <TName extends string, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
+  <
+    TName extends string,
+    RPipe extends RShared | RFresh | RFreshReq | Scope.Scope,
+    P extends Effect.Effect<unknown, StepError, RPipe>,
+  >(
     name: ScenarioTitle<TName>,
-    pipeline: Effect.Effect<unknown, StepError, RPipe>,
+    pipeline: P & ValidScenarioPipeline<P>,
   ): void
-  <TName extends string, RExtra, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra>(
+  <
+    TName extends string,
+    RExtra,
+    RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra,
+    P extends Effect.Effect<unknown, StepError, RPipe>,
+  >(
     name: ScenarioTitle<TName>,
     opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
-    pipeline: Effect.Effect<unknown, StepError, RPipe>,
+    pipeline: P & ValidScenarioPipeline<P>,
   ): void
 }
 
@@ -342,7 +376,7 @@ export type FeatureBody<
   readonly scenario: ScenarioFn<RShared, RFresh, RFreshReq>
   readonly background: (pipeline: Effect.Effect<unknown, StepError, RShared | RFresh | RFreshReq>) => void
   readonly scenarioOutline: OutlineFn<RShared, RFresh, RFreshReq>
-  readonly scope: GherkinEffect<ScopeServices<S>, never, ScopeIdentifiers<S>>
+  readonly scope: GherkinEffect<ScopeServices<S> & GivenStage, never, ScopeIdentifiers<S>>
   readonly Do: Effect.Effect<object, never, never>
 }) => void
 
