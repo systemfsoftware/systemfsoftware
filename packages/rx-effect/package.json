@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/rx-effect",
   "license": "Apache-2.0",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -48,6 +48,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -61,8 +62,7 @@
     "rimraf": "catalog:",
     "rxjs": "^7.8.2",
     "tsdown": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/all": "workspace:^"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers",

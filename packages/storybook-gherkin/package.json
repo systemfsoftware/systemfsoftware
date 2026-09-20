@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/storybook-gherkin",
   "license": "Apache-2.0",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -60,6 +60,7 @@
     "@microsoft/api-extractor": "catalog:",
     "@storybook/addon-vitest": "catalog:",
     "@storybook/react-vite": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -78,8 +79,7 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/all": "workspace:^"
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "exports": {
