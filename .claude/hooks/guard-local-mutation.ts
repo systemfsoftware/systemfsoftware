@@ -11,7 +11,7 @@
 //
 // Precision matters more than reach here. `mutation` appears inside package
 // names (@systemfsoftware/stryker-js-mutation-run), report paths
-// (reports/mutation-report.json) and script names that are not mutation runs
+// (reports/mutation/mutation.json) and script names that are not mutation runs
 // (merge-mutation-reports.mjs). Only a bare script operand or the stryker
 // binary itself is a run, so the matcher works on the operand list rather than
 // on a substring of the command.
@@ -218,7 +218,7 @@ const SELFTEST: readonly (readonly [string, boolean])[] = [
   ['pnpm --filter @systemfsoftware/stryker-js-mutation-run build', false],
   ['pnpm --filter @systemfsoftware/stryker-plugins test', false],
   ['node scripts/tools/merge-mutation-reports.mjs --selftest', false],
-  ['cat packages/hex-schema/reports/mutation-report.json', false],
+  ['cat packages/hex-schema/reports/mutation/mutation.json', false],
   ['pnpm check:local', false],
   ['TURBO_CONCURRENCY=100% pnpm gate:tasks --force', false],
   ['git log --oneline --grep mutation', false],

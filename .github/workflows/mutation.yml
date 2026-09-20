@@ -98,9 +98,9 @@ jobs:
       - uses: actions/cache/restore@v6
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main
+          key: ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-main
           restore-keys: |
-            ${{ runner.os }}-stryker-${{ matrix.package }}-
+            ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-
 
       # Advisory: a mutation score below threshold never fails this job — the
       # merged report in the `report` job carries that verdict. A run that never
@@ -130,7 +130,7 @@ jobs:
         if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-${{ github.run_id }}
+          key: ${{ runner.os }}-stryker-js-9-${{ matrix.package }}-${{ github.run_id }}
 
       - name: Record part metadata
         if: always()
@@ -152,7 +152,7 @@ jobs:
           name: mutation-part-${{ steps.sanitize.outputs.name }}
           path: |
             ${{ matrix.package }}/reports/mutation-part.json
-            ${{ matrix.package }}/reports/mutation-report.json
+            ${{ matrix.package }}/reports/mutation/mutation.json
             ${{ matrix.package }}/reports/mutation-stream.jsonl
           if-no-files-found: ignore
           retention-days: 1
