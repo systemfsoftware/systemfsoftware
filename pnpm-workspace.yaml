@@ -66,10 +66,10 @@ catalogs:
   stryker:
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": ^0.1.0
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": ^0.1.0
-    "@systemfsoftware/stryker-js": ^6.1.0
-    "@systemfsoftware/stryker-js-typescript-checker": ^7.0.0
-    "@systemfsoftware/stryker-js-vitest-runner": ^6.0.0
-    "@systemfsoftware/stryker-test-contribution": ^3.0.1
+    "@systemfsoftware/stryker-js": ^8.0.0
+    "@systemfsoftware/stryker-js-typescript-checker": ^7.0.2
+    "@systemfsoftware/stryker-js-vitest-runner": ^7.0.0
+    "@systemfsoftware/stryker-test-contribution": ^3.0.2
     "mutation-testing-elements": 3.7.3
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
