@@ -197,7 +197,7 @@ importers:
     devDependencies:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../../../packages/oxlint-plugin/oxlint-config
+        version: link:../../../packages/oxlint-presets/oxlint-config
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
@@ -212,7 +212,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../../oxlint-plugin/all
+        version: link:../../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -221,7 +221,7 @@ importers:
         version: link:../../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
+        version: link:../../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -270,7 +270,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../../oxlint-plugin/all
+        version: link:../../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -279,7 +279,7 @@ importers:
         version: link:../../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
+        version: link:../../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -360,7 +360,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -369,7 +369,7 @@ importers:
         version: link:../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -415,7 +415,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -430,7 +430,7 @@ importers:
         version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/stryker-config':
         specifier: workspace:^
         version: link:../toolchain/stryker-config
@@ -496,13 +496,13 @@ importers:
         version: 4.0.0-rc.116(effect@4.0.0-rc.116)(vitest@5.0.1)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -551,13 +551,13 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -609,7 +609,7 @@ importers:
         version: 4.2.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -649,13 +649,13 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -700,7 +700,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -709,7 +709,7 @@ importers:
         version: link:../effect-schema-recursion-budget
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -764,7 +764,7 @@ importers:
         version: link:../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -828,7 +828,7 @@ importers:
         version: link:../effect-schema-law
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -870,7 +870,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -882,7 +882,7 @@ importers:
         version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/stryker-config':
         specifier: workspace:^
         version: link:../toolchain/stryker-config
@@ -952,7 +952,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -964,7 +964,7 @@ importers:
         version: link:../effect-memfs
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -998,73 +998,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/oxlint-plugin/all:
-    dependencies:
-      '@effect/tsgo':
-        specifier: 'catalog:'
-        version: 0.45.0
-      '@systemfsoftware/oxlint-plugin':
-        specifier: workspace:^
-        version: link:../oxlint-plugin
-      '@systemfsoftware/oxlint-plugin-effect-dmmf':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-dmmf
-      '@systemfsoftware/oxlint-plugin-effect-entrypoint':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-entrypoint
-      '@systemfsoftware/oxlint-plugin-effect-schema':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-schema
-      '@systemfsoftware/oxlint-plugin-effect-workflow':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-workflow
-      '@systemfsoftware/oxlint-plugin-property-testing':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-property-testing
-      '@systemfsoftware/oxlint-plugin-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-recommended
-      '@systemfsoftware/oxlint-plugin-test-hygiene':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-hygiene
-      '@systemfsoftware/oxlint-plugin-test-placement':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-placement
-    devDependencies:
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.2
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.116
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.82.0(oxlint-tsgolint@7.0.2001)
-      oxlint-tsgolint:
-        specifier: catalog:oxlint
-        version: 7.0.2001
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
 
   packages/oxlint-plugin/import-origin:
     dependencies:
@@ -1124,70 +1057,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-
-  packages/oxlint-plugin/oxlint-config:
-    dependencies:
-      '@effect/tsgo':
-        specifier: 'catalog:'
-        version: 0.45.0
-      '@systemfsoftware/oxlint-plugin':
-        specifier: workspace:^
-        version: link:../oxlint-plugin
-      '@systemfsoftware/oxlint-plugin-effect-dmmf':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-dmmf
-      '@systemfsoftware/oxlint-plugin-effect-entrypoint':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-entrypoint
-      '@systemfsoftware/oxlint-plugin-effect-schema':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-schema
-      '@systemfsoftware/oxlint-plugin-effect-workflow':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-workflow
-      '@systemfsoftware/oxlint-plugin-property-testing':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-property-testing
-      '@systemfsoftware/oxlint-plugin-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-recommended
-      '@systemfsoftware/oxlint-plugin-test-hygiene':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-hygiene
-      '@systemfsoftware/oxlint-plugin-test-placement':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-placement
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.82.0(oxlint-tsgolint@7.0.2001)
-      oxlint-tsgolint:
-        specifier: catalog:oxlint
-        version: 7.0.2001
-    devDependencies:
-      '@systemfsoftware/oxlint-plugin-effect-native':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-native
-      '@systemfsoftware/oxlint-plugin-structure':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-structure
-      '@systemfsoftware/oxlint-plugin-tag-discipline':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-tag-discipline
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.2
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/oxlint-plugin/oxlint-plugin:
     dependencies:
@@ -1658,33 +1527,6 @@ importers:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/oxlint-plugin/oxlint-plugin-recommended:
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.2.0
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/tsdown-config':
-        specifier: workspace:^
-        version: link:../../toolchain/tsdown-config
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.82.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
   packages/oxlint-plugin/oxlint-plugin-structure:
     dependencies:
       '@oxc-project/types':
@@ -1968,6 +1810,164 @@ importers:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  packages/oxlint-presets/all:
+    dependencies:
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.45.0
+      '@systemfsoftware/oxlint-plugin':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin
+      '@systemfsoftware/oxlint-plugin-effect-dmmf':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-dmmf
+      '@systemfsoftware/oxlint-plugin-effect-entrypoint':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-entrypoint
+      '@systemfsoftware/oxlint-plugin-effect-schema':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-schema
+      '@systemfsoftware/oxlint-plugin-effect-workflow':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-workflow
+      '@systemfsoftware/oxlint-plugin-property-testing':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-property-testing
+      '@systemfsoftware/oxlint-plugin-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-recommended
+      '@systemfsoftware/oxlint-plugin-test-hygiene':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-test-hygiene
+      '@systemfsoftware/oxlint-plugin-test-placement':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-test-placement
+    devDependencies:
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../oxlint-config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../toolchain/tsdown-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.116
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      oxlint-tsgolint:
+        specifier: catalog:oxlint
+        version: 7.0.2001
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/oxlint-presets/oxlint-config:
+    dependencies:
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.45.0
+      '@systemfsoftware/oxlint-plugin':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin
+      '@systemfsoftware/oxlint-plugin-effect-dmmf':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-dmmf
+      '@systemfsoftware/oxlint-plugin-effect-entrypoint':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-entrypoint
+      '@systemfsoftware/oxlint-plugin-effect-schema':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-schema
+      '@systemfsoftware/oxlint-plugin-effect-workflow':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-workflow
+      '@systemfsoftware/oxlint-plugin-property-testing':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-property-testing
+      '@systemfsoftware/oxlint-plugin-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-recommended
+      '@systemfsoftware/oxlint-plugin-test-hygiene':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-test-hygiene
+      '@systemfsoftware/oxlint-plugin-test-placement':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-test-placement
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      oxlint-tsgolint:
+        specifier: catalog:oxlint
+        version: 7.0.2001
+    devDependencies:
+      '@systemfsoftware/oxlint-plugin-effect-native':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-effect-native
+      '@systemfsoftware/oxlint-plugin-structure':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-structure
+      '@systemfsoftware/oxlint-plugin-tag-discipline':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/oxlint-plugin-tag-discipline
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/oxlint-presets/oxlint-plugin-recommended:
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.59.1(@types/node@26.6.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../toolchain/tsdown-config
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/rx-effect:
     devDependencies:
       '@effect/vitest':
@@ -1978,7 +1978,7 @@ importers:
         version: 7.59.1(@types/node@26.6.2)
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -1987,7 +1987,7 @@ importers:
         version: link:../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -2042,13 +2042,13 @@ importers:
         version: 10.6.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rollup@4.62.4)(storybook@10.6.0(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.0))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       '@systemfsoftware/all':
         specifier: workspace:^
-        version: link:../oxlint-plugin/all
+        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../oxlint-plugin/oxlint-config
+        version: link:../oxlint-presets/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig

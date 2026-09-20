@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-plugin/all"
+    "directory": "packages/oxlint-presets/all"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/all#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-presets/all#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Complete oxlint preset for Effect and cell architecture: bundles all custom rule plugins (workflow, schema, entrypoint, property testing, test placement, hygiene) with type-aware correctness settings in a single config.",
   "keywords": [

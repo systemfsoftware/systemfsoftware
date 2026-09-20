@@ -49,7 +49,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-plugin/oxlint-config"
+    "directory": "packages/oxlint-presets/oxlint-config"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-config#readme"
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-presets/oxlint-config#readme"
 }
