@@ -4,9 +4,6 @@ import {
   CHECK_SITE_NAME,
   EXPORTED_FIX,
   EXPORTED_NAME,
-  LEGACY_ACTUAL,
-  LEGACY_EXPECTED,
-  LEGACY_FIX,
   MISSING_ACTUAL,
   MISSING_EXPECTED,
   MISSING_FIX,
@@ -22,19 +19,9 @@ const discardsError = () => ({
   data: { name: NAME, expected: MISSING_EXPECTED, actual: MISSING_ACTUAL, fix: MISSING_FIX },
 })
 
-const legacyError = () => ({
-  messageId: 'legacyArbitraryFunction',
-  data: { name: NAME, expected: LEGACY_EXPECTED, actual: LEGACY_ACTUAL, fix: LEGACY_FIX },
-})
-
 const exportedDiscardsError = () => ({
   messageId: 'filterDiscards',
   data: { name: EXPORTED_NAME, expected: MISSING_EXPECTED, actual: MISSING_ACTUAL, fix: EXPORTED_FIX },
-})
-
-const exportedLegacyError = () => ({
-  messageId: 'legacyArbitraryFunction',
-  data: { name: EXPORTED_NAME, expected: LEGACY_EXPECTED, actual: LEGACY_ACTUAL, fix: LEGACY_FIX },
 })
 
 ruleTester.run('schema-filter-constructive-generation', schemaFilterConstructiveGeneration, {
@@ -47,26 +34,6 @@ const prime = Schema.makeFilter((v: number) => isPrime(v), {
   arbitrary: { constraint: { integer: true, ordered: { order: Order.Number, minimum: 2 } } },
 })
 const Prime = Schema.Finite.check(prime)`,
-      filename: '/repo/pkg/src/domain.schema.ts',
-    },
-    {
-      name: 'Should_Pass_When_InlineFilterCarriesCandidate',
-      code: `import { Schema } from 'effect'
-const palindrome = Schema.makeFilter((v: string) => isPalindrome(v), {
-  expected: 'a palindrome',
-  arbitrary: { candidate: { weight: 5, make: (fc) => fc.string().map(halfToPalindrome) } },
-})
-const Palindrome = Schema.String.check(palindrome)`,
-      filename: '/repo/pkg/src/domain.schema.ts',
-    },
-    {
-      name: 'Should_Pass_When_SharedBindingCarriesMetadata',
-      code: `import { Schema as S } from 'effect'
-const uniqueSlots = S.makeFilter((g: Group) => uniqueIds(g.slots), {
-  expected: 'unique slot ids',
-  arbitrary: { candidate: { weight: 5, make: (fc) => slotArb.map(dedupeById) } },
-})
-const Group = S.Struct({ slots: S.Array(Slot) }).check(uniqueSlots)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
@@ -90,21 +57,6 @@ const prime = Schema.makeFilter((v: number) => isPrime(v), {
   arbitraryConstraint: { number: 'integer', minimum: 2 },
 })
 const Prime = Schema.Finite.check(prime)`,
-      filename: '/repo/pkg/src/domain.schema.ts',
-    },
-    {
-      name: 'Should_Pass_When_NodeOverrideIsToCodecArbitrary',
-      code: `import { Schema } from 'effect'
-const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Name = Schema.String.annotate({ toCodecArbitrary: () => nameLink }).check(bare)`,
-      filename: '/repo/pkg/src/domain.schema.ts',
-    },
-    {
-      name: 'Should_Pass_When_OverrideLivesOnLocalReceiverDeclaration',
-      code: `import { Schema } from 'effect'
-const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Person = Schema.Struct({ name: Schema.String }).annotate({ toCodecArbitrary: () => nameLink })
-const Named = Person.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
@@ -154,6 +106,37 @@ const prime = Schema.makeFilter((v: number) => isPrime(v), {
 const Prime = check(prime)(Schema.Finite)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
+    {
+      name: 'Should_Pass_When_StructFilterHasNoAnnotations',
+      code: `import { Schema as S } from 'effect'
+const uniqueSlots = S.makeFilter((g: Group) => uniqueIds(g.slots), { expected: 'unique slot ids' })
+const Group = S.Struct({ slots: S.Array(Slot) }).check(uniqueSlots)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_DeclareReceiverCarriesToCodecArbitraryOverride',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
+const Name = Schema.declare<string>(() => {}).annotate({ toCodecArbitrary: () => nameLink }).check(bare)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_StructFilterCarriesArbitraryConstraint',
+      code: `import { Schema } from 'effect'
+const sized = Schema.makeFilter((g: Record<string, string>) => Object.keys(g).length >= 2, {
+  arbitraryConstraint: { minProperties: 2 },
+})
+const Bag = Schema.Record({ key: Schema.String, value: Schema.String }).check(sized)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_OverrideLivesOnLocalStructDeclaration',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
+const Person = Schema.Struct({ name: Schema.String }).annotate({ toCodecArbitrary: () => nameLink })
+const Named = Person.check(bare)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
   ],
   invalid: [
     {
@@ -173,10 +156,21 @@ const X = Schema.Finite.check(bare)`,
       errors: [discardsError()],
     },
     {
-      name: 'Should_Fail_When_SharedBindingHasNoMetadata',
+      name: 'Should_Fail_When_InlineFilterCarriesCandidate',
       code: `import { Schema } from 'effect'
-const uniqueSlots = Schema.makeFilter((g: Group) => uniqueIds(g.slots), { expected: 'unique slot ids' })
-const Group = Schema.Struct({ slots: Schema.Array(Slot) }).check(uniqueSlots)`,
+const palindrome = Schema.makeFilter((v: string) => isPalindrome(v), {
+  expected: 'a palindrome',
+  arbitrary: { candidate: { weight: 5, make: (fc) => fc.string().map(halfToPalindrome) } },
+})
+const Palindrome = Schema.String.check(palindrome)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
+      name: 'Should_Fail_When_NodeOverrideIsToCodecArbitraryOnScalar',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
+const Name = Schema.String.annotate({ toCodecArbitrary: () => nameLink }).check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [discardsError()],
     },
@@ -186,7 +180,7 @@ const Group = Schema.Struct({ slots: Schema.Array(Slot) }).check(uniqueSlots)`,
 const bare = Schema.makeFilter((v: number) => v > 0, { arbitrary: (fc) => fc.integer({ min: 1 }) })
 const X = Schema.Finite.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
-      errors: [legacyError()],
+      errors: [discardsError()],
     },
     {
       name: 'Should_Fail_When_FilterGroupHasNoAnnotations',
@@ -252,11 +246,11 @@ const X = Schema.Finite.check(bare)`,
       errors: [exportedDiscardsError()],
     },
     {
-      name: 'Should_Fail_When_ExportedFilterIsLegacy',
+      name: 'Should_Fail_When_ExportedFilterCarriesFunctionValuedArbitrary',
       code: `import { Schema } from 'effect'
 export const bare = Schema.makeFilter((v: number) => v > 0, { arbitrary: (fc) => fc.integer({ min: 1 }) })`,
       filename: '/repo/pkg/src/filters.schema.ts',
-      errors: [exportedLegacyError()],
+      errors: [exportedDiscardsError()],
     },
     {
       name: 'Should_Fail_When_CheckIsDestructured',
