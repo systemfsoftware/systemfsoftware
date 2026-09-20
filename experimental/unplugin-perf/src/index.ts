@@ -102,8 +102,9 @@ async function main(): Promise<void> {
       graphFanout: 50,
       // One partitioned external, the config chain and the delivered file's own
       // entry. Nothing here may grow with the envelope's size.
-      lstatBudget: 8,
       partitionExternalInputs: true,
+      readBudget: 0,
+      syscallBudget: 1,
       unrelatedDirectoryCount: 100,
     }),
   );
@@ -132,6 +133,8 @@ async function main(): Promise<void> {
       graphFanout: sharedClosureModules,
       graphGlobals: 50,
       partitionExternalInputs: false,
+      readBudget: 0,
+      syscallBudget: 1,
       unrelatedDirectoryCount: 100,
     }),
   );
@@ -154,13 +157,11 @@ async function main(): Promise<void> {
       emitExternalKey: false,
       graphFanout: sharedClosureModules,
       graphGlobals: 50,
-      // What the producer declared: its reported dependencies (the chain
-      // sibling and every external) plus the universal inputs. The globals and
-      // the reach that the declaration drops must not reappear, which is the
-      // claim this scenario exists to hold, so the budget sits below the
-      // undeclared scenario above rather than at a round number.
-      lstatBudget: 60,
+      // The producer-declared dependencies must collapse into the generation's
+      // shared proof, leaving only the delivered module's metadata check.
       partitionExternalInputs: false,
+      readBudget: 0,
+      syscallBudget: 1,
       unrelatedDirectoryCount: 100,
     }),
   );
@@ -279,16 +280,12 @@ interface MeasureOptions {
    * for a graph-bearing envelope.
    */
   graphGlobals?: number;
-  /**
-   * Metadata calls one delivery may spend on the file's own derived inputs.
-   *
-   * The term the declaration path owns: it is the size of what the producer
-   * declared, or the whole reference closure when it declared nothing, so a
-   * scenario states the number its own envelope justifies.
-   */
-  lstatBudget?: number;
   /** Give each module one disjoint external edge instead of the whole union. */
   partitionExternalInputs?: boolean;
+  /** Source-byte reads one unchanged delivery may perform. */
+  readBudget?: number;
+  /** Total filesystem calls one unchanged delivery may perform. */
+  syscallBudget?: number;
   /** Unrelated nested project directories used to gate membership-stat cost. */
   unrelatedDirectoryCount?: number;
 }
@@ -298,6 +295,7 @@ interface TransformHarness {
   cache: Map<string, Promise<unknown>>;
   counters: {
     bytes: number;
+    exists: number;
     lstats: number;
     probes: number;
     readdirs: number;
@@ -313,6 +311,7 @@ function createTransformHarness(
 ): TransformHarness {
   const counters = {
     bytes: 0,
+    exists: 0,
     lstats: 0,
     probes: 0,
     readdirs: 0,
@@ -320,6 +319,10 @@ function createTransformHarness(
     stats: 0,
   };
   const cache = adapter.createTtscTransformCache({
+    exists: (location: string) => {
+      counters.exists += 1;
+      return fs.existsSync(location);
+    },
     // `lstat` is the metadata call every derived input's validation makes
     // first, so leaving it uncounted hid the largest per-delivery term behind
     // the ones below (samchon/ttsc#1261).
@@ -363,6 +366,7 @@ function createTransformHarness(
 /** Every counted filesystem call, which is what a delivery actually costs. */
 function totalSyscalls(harness: TransformHarness): number {
   return (
+    harness.counters.exists +
     harness.counters.lstats +
     harness.counters.probes +
     harness.counters.readdirs +
@@ -373,6 +377,7 @@ function totalSyscalls(harness: TransformHarness): number {
 
 function resetCounters(harness: TransformHarness): void {
   harness.counters.bytes = 0;
+  harness.counters.exists = 0;
   harness.counters.lstats = 0;
   harness.counters.probes = 0;
   harness.counters.readdirs = 0;
@@ -475,13 +480,12 @@ async function measureRepeatedPasses(
 }
 
 /**
- * An fs probe pair (`existsSync` + `realpathSync.native`) is what one
- * `pathIdentityKey` call costs on macOS. A bounded watch-input derivation pays
- * that once per distinct graph path per generation, so the amortized budget
- * below is per module: well above the fixed point, far below the
- * O(edges)-per-delivery defect this scenario reproduces.
+ * Every graph identity is memoized while the generation is captured. Sibling
+ * deliveries must therefore spend no filesystem probes deriving their watch
+ * inputs. This exact budget catches even a constant residual cost instead of
+ * merely ruling out the original O(edges)-per-delivery defect.
  */
-const GRAPH_PROBES_PER_MODULE_BUDGET = 64;
+const GRAPH_PROBES_PER_MODULE_BUDGET = 0;
 
 /**
  * Drive a build-scoped run over a graph-bearing envelope and count the fs
@@ -542,12 +546,13 @@ async function measureGraphBuild(
     ? fs.readFileSync(runLog, "utf8").length
     : 0;
   const edges = options.count * (options.graphFanout ?? 0) + options.count - 1;
-  const probesPerModule = harness.counters.probes / rest.length;
+  const identityProbes = harness.counters.exists + harness.counters.probes;
+  const probesPerModule = identityProbes / rest.length;
   console.log(
     `  N=${String(options.count).padStart(3)}  ` +
       `E=${String(edges).padStart(6)}  ` +
       `pluginRuns=${String(pluginRuns).padStart(3)}  ` +
-      `probes=${String(harness.counters.probes).padStart(9)}  ` +
+      `probes=${String(identityProbes).padStart(9)}  ` +
       `probes/file=${probesPerModule.toFixed(1).padStart(9)}  ` +
       `${elapsedMs.toFixed(0).padStart(7)}ms`,
   );
@@ -571,9 +576,8 @@ async function measureGraphBuild(
  * module reaches the same externals and the same globals — the shape a real
  * program has, since a program's global-scope declarations belong to all of it
  * — so reads grow with that shared set unless one generation's proof of an
- * input is reused across its sibling deliveries. Both are gated by the same
- * per-file read budget; the stat budget is per scenario, because missing
- * resolution candidates cannot be proven absent by metadata.
+ * input is reused across its sibling deliveries. Every shape is gated by the
+ * same zero-read, one-filesystem-call steady-state contract.
  */
 async function measureServeValidation(
   adapter: Adapter,
@@ -629,6 +633,7 @@ async function measureServeValidation(
       `shared=${options.partitionExternalInputs === true ? "no " : "yes"}  ` +
       `pluginRuns=${String(pluginRuns).padStart(3)}  ` +
       `reads/file=${(harness.counters.reads / options.count).toFixed(1).padStart(5)}  ` +
+      `exists/file=${(harness.counters.exists / options.count).toFixed(1).padStart(6)}  ` +
       `lstats/file=${(harness.counters.lstats / options.count).toFixed(1).padStart(6)}  ` +
       `stats/file=${(harness.counters.stats / options.count).toFixed(1).padStart(6)}  ` +
       `syscalls/file=${(totalSyscalls(harness) / options.count).toFixed(1).padStart(6)}  ` +
@@ -636,12 +641,17 @@ async function measureServeValidation(
   );
   const readsPerFile = harness.counters.reads / options.count;
   const statsPerFile = harness.counters.stats / options.count;
-  const lstatsPerFile = harness.counters.lstats / options.count;
+  const syscallsPerFile = totalSyscalls(harness) / options.count;
   if (pluginRuns !== 1) {
     return `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: pluginRuns=${pluginRuns} (expected 1)`;
   }
-  if (readsPerFile > 16) {
-    return `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: reads/file=${readsPerFile.toFixed(1)} exceeds the per-file validation budget of 16`;
+  const readBudget = options.readBudget ?? 16;
+  if (readsPerFile > readBudget) {
+    return `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: reads/file=${readsPerFile.toFixed(1)} exceeds the per-file validation budget of ${readBudget}`;
+  }
+  const syscallBudget = options.syscallBudget ?? 16;
+  if (syscallsPerFile > syscallBudget) {
+    return `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: syscalls/file=${syscallsPerFile.toFixed(1)} exceeds the per-file resource budget of ${syscallBudget}`;
   }
   // Every serve scenario now holds the membership budget itself. The one term
   // that used to make a shared closure state a budget of its own — one failed
@@ -651,10 +661,7 @@ async function measureServeValidation(
   if (statsPerFile > MEMBERSHIP_STAT_BUDGET) {
     return `serve validation N=${options.count} dirs=${options.unrelatedDirectoryCount}: stats/file=${statsPerFile.toFixed(1)} exceeds the budget of ${MEMBERSHIP_STAT_BUDGET}`;
   }
-  const lstatBudget = options.lstatBudget;
-  return lstatBudget === undefined || lstatsPerFile <= lstatBudget
-    ? undefined
-    : `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: lstats/file=${lstatsPerFile.toFixed(1)} exceeds the budget of ${lstatBudget}`;
+  return undefined;
 }
 
 /**
