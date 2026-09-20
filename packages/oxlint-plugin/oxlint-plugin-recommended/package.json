@@ -39,18 +39,19 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown -l warn && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; node scripts/guard-no-behavior.mjs && oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

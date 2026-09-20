@@ -12,7 +12,7 @@
   "description": "Workflow.make boundary locator for oxlint rules: every Workflow.make(...) call in a file, its resolved decision body, and containment queries. Shared by the plugins that judge decision bodies.",
   "type": "module",
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown -l warn",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@systemfsoftware/oxlint-import-origin": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",

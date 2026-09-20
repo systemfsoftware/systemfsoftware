@@ -7,7 +7,11 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
-    "./eager-entry-budget": "./src/eager-entry-budget.mjs"
+    "./eager-entry-budget": "./src/eager-entry-budget.mjs",
+    "./quiet-build": "./src/quiet-build.ts"
+  },
+  "bin": {
+    "api-extractor-quiet": "./src/api-extractor-quiet.ts"
   },
   "files": [
     "src"

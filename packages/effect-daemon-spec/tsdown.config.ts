@@ -1,3 +1,4 @@
+import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
 import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
@@ -24,6 +25,7 @@ const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<s
 }
 
 export default defineConfig({
+  ...quietBuild,
   clean: false,
   entry: {
     index: './src/mod.ts',
