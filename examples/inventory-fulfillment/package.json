@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "lint": "oxlint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --incremental",
     "spike": "tsx spike/spike.ts"
   },
   "dependencies": {
@@ -17,11 +20,18 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
     "pg": "catalog:",
     "tsx": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

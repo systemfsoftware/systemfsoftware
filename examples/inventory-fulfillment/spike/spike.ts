@@ -18,6 +18,7 @@ import { createServer } from 'node:http'
 
 import { NodeHttpClient, NodeHttpServer } from '@effect/platform-node'
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
+import { type PGlite } from '@electric-sql/pglite'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { sql } from 'drizzle-orm'
@@ -134,7 +135,8 @@ const program = Effect.gen(function*() {
   )
   yield* db.execute(sql`INSERT INTO spike_items (id, qty, version) VALUES ('sku-1', 5, 1)`)
   const inserted = yield* db.select().from(spikeItems).where(eq(spikeItems.id, 'sku-1'))
-  if (inserted.length !== 1 || inserted[0].qty !== 5) {
+  const leg1Row = inserted[0]
+  if (leg1Row === undefined || leg1Row.qty !== 5) {
     return yield* Effect.die(new Error('leg 1: PGlite roundtrip lost the row'))
   }
   console.log('[1] PGlite session roundtrip: OK (sku-1 qty=5)')
@@ -159,7 +161,8 @@ const program = Effect.gen(function*() {
     return yield* Effect.die(new Error('leg 2: stale CAS version unexpectedly matched'))
   }
   const afterMiss = yield* db.select().from(spikeItems).where(eq(spikeItems.id, 'sku-1'))
-  if (afterMiss[0].version !== 2) {
+  const afterMissRow = afterMiss[0]
+  if (afterMissRow === undefined || afterMissRow.version !== 2) {
     return yield* Effect.die(new Error('leg 2: failed CAS mutated the row'))
   }
   console.log(`[2] transactional CAS: OK (hit rows=${casHit.length}, stale rows=${casMiss.length})`)
@@ -169,7 +172,7 @@ const program = Effect.gen(function*() {
   // session, so it gets a promise-mode drizzle view over the SAME raw PGlite
   // instance. One database, two dialect views.
   const rawPglite = yield* Pglite.PgliteClient
-  const authDb = drizzle({ client: rawPglite.pglite })
+  const authDb = drizzle({ client: rawPglite.pglite as PGlite })
   const auth = betterAuth({
     baseURL: 'http://spike.local',
     database: drizzleAdapter(authDb, {
@@ -185,7 +188,7 @@ const program = Effect.gen(function*() {
     secret: 'spike-only-secret-never-production',
   })
 
-  const signUp = yield* Effect.tryPromise({
+  yield* Effect.tryPromise({
     try: () =>
       auth.api.signUpEmail({
         body: { email: 'spike@example.test', password: 'spike-password-123', name: 'Spike' },
