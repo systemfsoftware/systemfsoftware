@@ -8,7 +8,7 @@
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { And, But, Gherkin, Given, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Result } from 'effect'
+import { Chunk, Effect, Result } from 'effect'
 import { Schema } from 'effect'
 import { expect } from 'vitest'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
@@ -22,6 +22,16 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       Given('initial state')('x', () => Effect.succeed(42)),
       Then('x equals 42')((s) => {
         expect(s).toEqual(expect.objectContaining({ x: 42 }))
+      }),
+    ),
+  )
+
+  scenario(
+    'A step assertion verifies Effect values using value equality',
+    Gherkin.Do.pipe(
+      Given('a list of numbers in a Chunk')('items', () => Effect.succeed(Chunk.make(1, 2, 3))),
+      Then('the items match an identical Chunk by value equality')((s) => {
+        expect(s.items).toEqual(Chunk.make(1, 2, 3))
       }),
     ),
   )
