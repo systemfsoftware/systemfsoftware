@@ -1,5 +1,44 @@
-import { Cause, Context, Effect } from 'effect'
+import { Cause, Context, Duration, Effect, Schedule } from 'effect'
 import { StepError } from './StepError.schema.js'
+
+export interface PollOptions {
+  /**
+   * The interval between poll attempts.
+   * Default: '50 millis'
+   */
+  readonly interval?: Duration.Input | undefined
+  /**
+   * Maximum duration to wait before timing out and failing.
+   * Default: '5 seconds'
+   */
+  readonly timeout?: Duration.Input | undefined
+}
+
+const readInterval = (opts: PollOptions | undefined): Duration.Input | undefined => {
+  if (opts === undefined) return undefined
+  return opts.interval
+}
+
+const fallbackInterval = (val: Duration.Input | undefined): Duration.Input => {
+  if (val !== undefined) return val
+  return '50 millis'
+}
+
+const readTimeout = (opts: PollOptions | undefined): Duration.Input | undefined => {
+  if (opts === undefined) return undefined
+  return opts.timeout
+}
+
+const fallbackTimeout = (val: Duration.Input | undefined): Duration.Input => {
+  if (val !== undefined) return val
+  return '5 seconds'
+}
+
+export const pollSchedule = (opts?: PollOptions) => {
+  const interval = fallbackInterval(readInterval(opts))
+  const timeout = fallbackTimeout(readTimeout(opts))
+  return Schedule.spaced(interval).pipe(Schedule.upTo({ duration: timeout }))
+}
 
 export interface StepAssertionFailure {
   readonly keyword: string
@@ -160,6 +199,113 @@ const tapSoft =
         return runSoftBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
       },
     )
+const evaluatePollRaw = <E2, R2>(
+  raw: Effect.Effect<unknown, E2, R2> | void,
+  keyword: string,
+  resolvedText: string,
+): Effect.Effect<void, StepError, R2> => {
+  if (Effect.isEffect(raw)) {
+    return raw.pipe(
+      Effect.catch((err) =>
+        StepError.make({
+          keyword,
+          text: resolvedText,
+          cause: err,
+        })
+      ),
+      Effect.asVoid,
+    )
+  }
+  return Effect.void
+}
+
+const evaluatePoll = <A extends object, E2, R2>(
+  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+  scope: GherkinScope<A>,
+  keyword: string,
+  resolvedText: string,
+): Effect.Effect<void, StepError, R2> => {
+  try {
+    return evaluatePollRaw(f(scope), keyword, resolvedText)
+  } catch (e) {
+    return StepError.make({
+      keyword,
+      text: resolvedText,
+      cause: e,
+    })
+  }
+}
+
+const runPollBody = <A extends object, E2, R2>(
+  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+  scope: GherkinScope<A>,
+  keyword: string,
+  resolvedText: string,
+  opts?: PollOptions,
+): Effect.Effect<void, StepError, R2> => {
+  const evaluate = Effect.suspend(() => evaluatePoll(f, scope, keyword, resolvedText))
+  return evaluate.pipe(Effect.retry(pollSchedule(opts)))
+}
+
+const tapPoll =
+  (keyword: string, text: StepText, opts?: PollOptions) =>
+  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never>(
+    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  ) =>
+  <E1, R1>(
+    self: GherkinEffect<A, E1, R1>,
+  ): GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2> =>
+    Effect.flatMap(
+      self,
+      (scope): Effect.Effect<GherkinScope<Omit<A, typeof StageTypeId> & ThenStage>, StepError, R2> => {
+        const resolvedText = resolveText(text, scope)
+        const nextScope = { ...scope, ...stageThen }
+        return runPollBody(f, scope, keyword, resolvedText, opts).pipe(Effect.as(nextScope))
+      },
+    )
+
+const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
+  function step<N extends string, A extends object & (InitialStage | GivenStage | WhenStage), B, E2, R2>(
+    name: N,
+    f: (a: NoInfer<A>) => Effect.Effect<B, E2, R2>,
+  ): <E1, R1>(
+    self: GherkinEffect<A, E1, R1>,
+  ) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>
+  function step<A extends object & (InitialStage | GivenStage | WhenStage), E2 = never, R2 = never>(
+    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  ): <E1, R1>(
+    self: GherkinEffect<A, E1, R1>,
+  ) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>
+  function step<E2, R2>(...args: BindStepTapArgs<E2, R2> | BindStepBindArgs<E2, R2>) {
+    if (args.length === 1) {
+      const f = args[0]
+      return <E1, R1>(self: GherkinEffect<object, E1, R1>) =>
+        self.pipe(
+          Effect.flatMap((scope) => {
+            const resolvedText = resolveText(text, scope)
+            const nextScope = { ...scope, ...stageWhen }
+            return runPollBody(f, scope, keyword, resolvedText, opts).pipe(Effect.as(nextScope))
+          }),
+        )
+    }
+    const [name, f] = args
+    return <E1, R1>(self: GherkinEffect<object, E1, R1>) =>
+      self.pipe(
+        Effect.flatMap((scope) => {
+          const resolvedText = resolveText(text, scope)
+          const retrying = stepWrap(
+            keyword,
+            resolvedText,
+            Effect.suspend(() => f(scope)).pipe(Effect.retry(pollSchedule(opts))),
+          )
+          return retrying.pipe(
+            Effect.map((b) => ({ ...scope, [name]: b, ...stageWhen })),
+          )
+        }),
+      )
+  }
+  return step
+}
 
 type BindStepTapArgs<E, R> = [f: (scope: object) => Effect.Effect<unknown, E, R> | void]
 type BindStepBindArgs<E, R> = [name: string, f: (scope: object) => Effect.Effect<unknown, E, R>]
@@ -241,15 +387,20 @@ const bindWhen = (keyword: 'when', text: StepText) => {
 }
 
 const _given = (text: StepText) => bindGiven('given', text)
-const _when = (text: StepText) => bindWhen('when', text)
+const _when = Object.assign((text: StepText) => bindWhen('when', text), {
+  poll: (text: StepText, opts?: PollOptions) => bindPoll('when', text, opts),
+})
 const _then = Object.assign((text: StepText) => tapThen('then', text), {
   soft: (text: StepText) => tapSoft('then', text),
+  poll: (text: StepText, opts?: PollOptions) => tapPoll('then', text, opts),
 })
 const _and = Object.assign((text: StepText) => tapThen('and', text), {
   soft: (text: StepText) => tapSoft('and', text),
+  poll: (text: StepText, opts?: PollOptions) => tapPoll('and', text, opts),
 })
 const _but = Object.assign((text: StepText) => tapThen('but', text), {
   soft: (text: StepText) => tapSoft('but', text),
+  poll: (text: StepText, opts?: PollOptions) => tapPoll('but', text, opts),
 })
 
 const emptyScope: GherkinScope<InitialStage> = {

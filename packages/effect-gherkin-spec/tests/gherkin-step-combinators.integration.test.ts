@@ -17,8 +17,9 @@ import {
   Then,
   When,
 } from '@systemfsoftware/effect-gherkin-spec'
-import { Chunk, Effect, Result } from 'effect'
+import { Chunk, Effect, Fiber, Result } from 'effect'
 import { Schema } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
@@ -556,6 +557,94 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
           throw new Error('Expected soft assertions to fail')
         },
       })
+    }),
+  )
+
+  scenario(
+    'An asynchronous condition that takes several attempts eventually passes',
+    Effect.gen(function*() {
+      let attempts = 0
+      const pipeline = Gherkin.Do.pipe(
+        Given('initial counter state')('ready', () => Effect.succeed(true)),
+        Then.poll('condition eventually becomes true', {
+          interval: '10 millis',
+          timeout: '500 millis',
+        })(() => {
+          attempts++
+          if (attempts < 3) {
+            throw new Error('not yet satisfied')
+          }
+        }),
+      )
+      const fiber = yield* Effect.forkChild(pipeline)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('10 millis')
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('10 millis')
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('10 millis')
+      yield* Fiber.join(fiber)
+      expect(attempts).toBe(3)
+    }),
+  )
+
+  scenario(
+    'A condition that never becomes true fails with a step error upon timeout',
+    Effect.gen(function*() {
+      const pipeline = Gherkin.Do.pipe(
+        Given('initial state')('ready', () => Effect.succeed(true)),
+        Then.poll('condition never becomes true', {
+          interval: '10 millis',
+          timeout: '50 millis',
+        })(() => {
+          throw new Error('unreachable condition')
+        }),
+      )
+      const fiber = yield* Effect.forkChild(pipeline)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('100 millis')
+      const result = yield* Fiber.join(fiber).pipe(Effect.result)
+      Result.match(result, {
+        onFailure: (err) => {
+          expect(err).toBeInstanceOf(StepError)
+          expect(String(err.cause)).toContain('unreachable condition')
+        },
+        onSuccess: () => {
+          throw new Error('Expected poll to timeout and fail')
+        },
+      })
+    }),
+  )
+
+  scenario(
+    'A polling When step retries until action succeeds and binds result',
+    Effect.gen(function*() {
+      let calls = 0
+      const pipeline = Gherkin.Do.pipe(
+        Given('initial state')('x', () => Effect.succeed(10)),
+        When.poll('deferred service responds', {
+          interval: '10 millis',
+          timeout: '500 millis',
+        })('response', () => {
+          calls++
+          if (calls < 3) {
+            return Effect.fail('service unavailable')
+          }
+          return Effect.succeed('service ready')
+        }),
+        Then('the response is recorded')((s) => {
+          expect(s.response).toBe('service ready')
+        }),
+      )
+      const fiber = yield* Effect.forkChild(pipeline)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('10 millis')
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('10 millis')
+      yield* Effect.yieldNow
+      yield* TestClock.adjust('10 millis')
+      yield* Fiber.join(fiber)
+      expect(calls).toBe(3)
     }),
   )
 })

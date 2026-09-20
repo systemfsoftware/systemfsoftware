@@ -6,6 +6,7 @@ export type {
   GherkinScope,
   GivenStage,
   InitialStage,
+  PollOptions,
   ScopeIdentifiers,
   ScopeMap,
   ScopeServices,
@@ -14,7 +15,7 @@ export type {
   ThenStage,
   WhenStage,
 } from './DoNotation.js'
-export { stageGiven, stageInitial, stageThen, StageTypeId, stageWhen } from './DoNotation.js'
+export { pollSchedule, stageGiven, stageInitial, stageThen, StageTypeId, stageWhen } from './DoNotation.js'
 export type { PairwiseMatrix, PairwiseResult } from './extensions/Pairwise.js'
 export { pairwiseFor } from './extensions/Pairwise.js'
 export {
