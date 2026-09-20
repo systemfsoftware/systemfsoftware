@@ -9,7 +9,7 @@ export const ACTUAL =
   'the arbitrary is assembled from fast-check constructors alone, so the generator can emit shapes the schema never declared and the suite stays green while exercising almost nothing' as const
 
 export const FIX =
-  'delete the block, or grow the schema the input needs and derive the arbitrary from it — Schema.toArbitrary(schema)(fc) is the sanctioned derivation; nothing rewrites a hand-built generator into a property' as const
+  'delete the block, or grow the schema the input needs and derive the arbitrary from it — Arbitrary.schema(schema) is the sanctioned derivation; nothing rewrites a hand-built generator into a property' as const
 
 export const EFFECT_SOURCE = 'effect' as const
 
@@ -19,10 +19,10 @@ export const STOCK_EXPECTED =
   'the arbitrary derives from a schema this module (or a sibling) declares for its own contract — a domain schema — never from a stock Schema member or stock composition at the prop site' as const
 
 export const STOCK_ACTUAL =
-  'the toArbitrary root is Schema.String, Schema.Int, or another stock member — the filter and map chains on it are the hand-built generator, relocated behind a schema-looking call' as const
+  'the Arbitrary.schema root is Schema.String, Schema.Int, or another stock member — the filter and map chains on it are the hand-built generator, relocated behind a schema-looking call' as const
 
 export const STOCK_FIX =
-  'declare the domain schema that states the shape — its filter carries the format, its arbitrary annotation carries the generator — and derive through S.toArbitrary(ThatSchema)(fc)' as const
+  'declare the domain schema that states the shape — its filter carries the format, its arbitrary annotation carries the generator — and derive through Arbitrary.schema(ThatSchema)' as const
 
 export const FASTCHECK_PACKAGE = 'fast-check' as const
 

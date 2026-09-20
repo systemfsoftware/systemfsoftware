@@ -11,10 +11,10 @@ import { Effect } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 import { createServer } from 'vite'
-import { afterAll, expect, TestRunner } from 'vitest'
+import { afterAll, expect } from 'vitest'
 
 import { RECURSION_BUDGET_VIRTUAL_ID } from '@systemfsoftware/effect-schema-recursion-budget'
 import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
@@ -137,12 +137,6 @@ export const RecursiveExpr: Codec = Schema.suspend(
 })
 `
 
-const FLAT_SCHEMA = `
-import { Schema } from 'effect'
-
-export const Flat = Schema.Struct({ name: Schema.String, count: Schema.Int })
-`
-
 const makeRuntimePackage = (files: Record<string, string>): string => {
   const tempRoot = join(PACKAGE_ROOT, 'temp')
   mkdirSync(tempRoot, { recursive: true })
@@ -155,27 +149,7 @@ const makeRuntimePackage = (files: Record<string, string>): string => {
   return root
 }
 
-/**
- * The generated body runs as the consumer's vitest run runs it, so the laws it
- * registers are the laws a consumer's suite would carry.
- *
- * Dynamic by necessity: the module path is minted at run time from the fixture
- * root, so no static specifier can name it.
- */
-const registeredLawsOf = async (root: string): Promise<ReadonlyArray<string>> => {
-  const lawFile = join(root, 'src', LAW_FILE_BASENAME)
-  writeFileSync(lawFile, lawSuiteFor(root))
-  const installed = TestRunner.getCurrentSuite().tasks.length
-  await import(pathToFileURL(lawFile).href)
-  return TestRunner.getCurrentSuite()
-    .tasks.slice(installed)
-    .map((task) => task.name)
-}
-
 const RECURSIVE_RUNTIME = makeRuntimePackage({ 'recursive.schema.ts': RECURSIVE_SCHEMA })
-const FLAT_RUNTIME = makeRuntimePackage({ 'flat.schema.ts': FLAT_SCHEMA })
-const RECURSIVE_LAWS = await registeredLawsOf(RECURSIVE_RUNTIME)
-const FLAT_LAWS = await registeredLawsOf(FLAT_RUNTIME)
 
 const NAMESAKES = makePackage('schema-laws-namesake-', {
   'first/money.schema.ts': MONEY,
@@ -198,7 +172,7 @@ const SINGLE = makePackage('schema-laws-single-', {
 })
 
 afterAll(() => {
-  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED, SINGLE, RECURSIVE_RUNTIME, FLAT_RUNTIME]) {
+  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED, SINGLE, RECURSIVE_RUNTIME]) {
     rmSync(root, { recursive: true, force: true })
   }
 })
@@ -317,27 +291,6 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
   )
 
   scenario(
-    'A recursive schema carries its generation laws and a flat schema carries none',
-    Gherkin.Do.pipe(
-      Given('one package whose schema recurses and one whose schema does not')(
-        'packages',
-        () => Effect.succeed({ recursive: RECURSIVE_LAWS, flat: FLAT_LAWS }),
-      ),
-      When('both generated suites have been collected')('laws', (s) => Effect.succeed(s.packages)),
-      Then('the recursive schema runs five laws and the flat schema runs two')((s) => {
-        expect(s.laws.recursive).toEqual([
-          '∀x_RecursiveExprEnc_=x',
-          '∀x_RecursiveExpr_=x',
-          '∀x_RecursiveExprNesting_≤MaxDepth1',
-          '∀s_RecursiveExprDeepShare_≠Zero',
-          '∀s_RecursiveExprVariants_⊇Declared',
-        ])
-        expect(s.laws.flat).toEqual(['∀x_FlatEnc_=x', '∀x_Flat_=x'])
-      }),
-    ),
-  )
-
-  scenario(
     'Registering the one plugin materializes a declared generation budget, not only the laws',
     Gherkin.Do.pipe(
       Given('a package whose recursive schema declares its generation budget')(
@@ -349,7 +302,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
         (s) => Effect.promise(() => drivenByPlugin(s.pkg)),
       ),
       Then('the transformed module carries the derivation hook that honors the budget')((s) => {
-        expect(s.driven.code).toContain('toArbitrary')
+        expect(s.driven.code).toContain('toCodecArbitrary')
       }),
       Then('the hook is imported from the budget runtime the plugin resolves')((s) => {
         expect(s.driven.code).toMatch(

@@ -14,7 +14,6 @@ const _default: {
     rules: {
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
-        'no-unrun-effect-test': Rule;
         'pbt-naming': Rule;
     };
     configs: {

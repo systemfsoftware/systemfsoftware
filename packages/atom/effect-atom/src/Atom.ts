@@ -2980,7 +2980,7 @@ const makeStreamPull = <A, E>(
   pullSignal: Writable<number>,
   pullAtom: Atom<PullResult<A, E>>,
 ): Writable<PullResult<A, E>, void> =>
-  writable(pullAtom.read, function(ctx, _) {
+  writable(pullAtom.read, function(ctx) {
     ctx.set(pullSignal, ctx.get(pullSignal) + 1)
   })
 

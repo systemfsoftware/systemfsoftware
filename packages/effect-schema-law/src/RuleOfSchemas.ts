@@ -1,6 +1,5 @@
 import { it } from '@effect/vitest'
 import { Exit, Schema, Schema as S } from 'effect'
-import { FastCheck as fc } from 'effect/testing'
 
 /**
  * The two laws, as decisions over one schema's own values.
@@ -56,9 +55,8 @@ export const ruleOfSchemas = <A, I>(
   schema: S.Codec<A, I>,
 ): void => {
   const { encodeStable, roundTrips } = lawsOf(schema)
-  const arbitrary = S.toArbitrary(schema)(fc)
+  const options = { arbitrary: { runs: 100 } }
+  it.prop(`∀x_${name}Enc_=x`, [schema], ([value]) => encodeStable(value), options)
 
-  it.prop(`∀x_${name}Enc_=x`, [arbitrary], ([value]) => encodeStable(value))
-
-  it.prop(`∀x_${name}_=x`, [arbitrary], ([value]) => roundTrips(value))
+  it.prop(`∀x_${name}_=x`, [schema], ([value]) => roundTrips(value), options)
 }

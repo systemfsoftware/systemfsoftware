@@ -39,8 +39,8 @@ const GUARD = 'if (import.meta.vitest !== void 0) {'
 const GUARD_END = '}'
 
 const SCHEMA_IMPORTS = `import { Schema, Exit } from 'effect'
-const { FastCheck: fc } = await import('effect/testing')
-const roundTrips = Schema.toArbitrary(Schema.String)(fc)
+import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
+const roundTrips = Arbitrary.schema(Schema.String)
 const decide = (s: string): boolean => s.length > 0`
 
 ruleTester.run('prop-generated-law-duplicate', propGeneratedLawDuplicate, {

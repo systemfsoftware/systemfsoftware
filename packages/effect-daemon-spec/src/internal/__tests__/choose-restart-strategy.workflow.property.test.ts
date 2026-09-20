@@ -1,6 +1,5 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Array, Match, Option, Schema } from 'effect'
-import { FastCheck as fc } from 'effect/testing'
+import { Array, Match, Option } from 'effect'
 import { chooseRestartStrategy, type RestartDecisionOutcome } from '../choose-restart-strategy.workflow.js'
 import { DecideInput, type RestartStrategy } from '../RestartDecision.schema.js'
 
@@ -61,26 +60,26 @@ const RESTARTING = { exitSuccess: false, intensityExceeded: false } as const
 describe('chooseRestartStrategy — invariants', () => {
   it.prop(
     '→Succeeded_Exit_=Continue',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: true }))) === 'Continue',
   )
 
   it.prop(
     '→Failed∧Exceeded_Decide_=Exhausted',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) =>
       tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: false, intensityExceeded: true }))) === 'Exhausted',
   )
 
   it.prop(
     '→Failed∧¬Exceeded_Decide_=Restart',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => tagOf(chooseRestartStrategy(commandWith(input, RESTARTING))) === 'Restart',
   )
 
   it.prop(
     '→Restart_Indices_≠∅',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => {
       const indices = indicesOf(chooseRestartStrategy(commandWith(input, RESTARTING)))
       return indices !== null && indices.length > 0
@@ -91,7 +90,7 @@ describe('chooseRestartStrategy — invariants', () => {
 describe('chooseRestartStrategy — restart index invariants', () => {
   it.prop(
     '→OneForOne_Indices_={Failed}',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => {
       const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'one_for_one' })))
       return indices !== null && indices.length === 1 && indices[0] === input.failedIndex
@@ -100,7 +99,7 @@ describe('chooseRestartStrategy — restart index invariants', () => {
 
   it.prop(
     '→OneForAll_Indices_=All',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => {
       const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'one_for_all' })))
       return indices !== null &&
@@ -112,7 +111,7 @@ describe('chooseRestartStrategy — restart index invariants', () => {
 
   it.prop(
     '→RestForOne_Indices_=Failed..End',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => {
       const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'rest_for_one' })))
       return indices !== null &&
@@ -124,7 +123,7 @@ describe('chooseRestartStrategy — restart index invariants', () => {
 
   it.prop(
     '∀s_Indices_⊇Ascending',
-    [Schema.toArbitrary(DecideInput)(fc)],
+    [DecideInput],
     ([input]) => {
       const indices = indicesOf(chooseRestartStrategy(commandWith(input, RESTARTING)))
       if (indices === null) return false

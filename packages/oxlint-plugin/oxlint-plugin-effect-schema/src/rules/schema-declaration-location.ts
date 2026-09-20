@@ -64,9 +64,9 @@ export const schemaMemberOf = (node: ESTree.Node | null, getScope: GetScope): ES
 
 /**
  * Schema members that consume a schema and return a non-schema value — a
- * decoder, an encoder, an arbitrary, or a JSON-schema document. A const
- * initialized to one of these is a *use* of a schema, not a declaration, so
- * it is out of scope for the placement rule.
+ * decoder, an encoder, or a JSON-schema document. A const initialized to one
+ * of these is a *use* of a schema, not a declaration, so it is out of scope
+ * for the placement rule.
  *
  * The codec entries are the complete `export const decode*` / `encode*` surface
  * of `repos/effect/packages/effect/src/Schema.ts` — 29 exports — minus the three
@@ -104,7 +104,6 @@ export const SCHEMA_USE_MEMBERS: Record<string, true> = {
   encodeUnknownPromise: true,
   encodeUnknownResult: true,
   encodeUnknownSync: true,
-  toArbitrary: true,
   toJsonSchemaDocument: true,
   is: true,
   isSchema: true,

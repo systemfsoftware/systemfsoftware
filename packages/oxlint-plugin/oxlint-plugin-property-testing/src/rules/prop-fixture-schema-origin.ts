@@ -185,7 +185,7 @@ const declaresGenerationIntent = (annotate: ESTree.CallExpression): boolean => {
     (property) =>
       property.type === 'Property' &&
       property.key.type === 'Identifier' &&
-      (property.key.name === 'toArbitrary' || property.key.name === 'recursionBudget'),
+      (property.key.name === 'toCodecArbitrary' || property.key.name === 'recursionBudget'),
   )
 }
 

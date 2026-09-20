@@ -71,7 +71,8 @@ ${GUARD_END}`,
       code: `${IMPORTS}
 ${GUARD}
 const Cons = S.suspend(() => S.Struct({ _tag: S.Literal('Cons'), tail: Chain }))
-const Chain = S.Union([Lit, Cons]).annotate({ identifier: 'Chain', toArbitrary: (fc) => fc.integer() })
+const Chain = S.Union([Lit, Cons]).annotate({ identifier: 'Chain', toCodecArbitrary: () => Schema.link() })
+
 ${GUARD_END}`,
       filename: FILENAME,
     },

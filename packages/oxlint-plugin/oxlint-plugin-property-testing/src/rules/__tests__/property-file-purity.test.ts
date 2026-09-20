@@ -52,8 +52,8 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       filename: PROPERTY_FILE,
     },
     {
-      name: 'Should_Pass_When_FastCheckImport_InPropertyFile',
-      code: `import { FastCheck as fc } from 'effect'\nit.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      name: 'Should_Pass_When_SchemaArbitrary_InPropertyFile',
+      code: `import { Schema } from 'effect'\nit.prop('∀s_X_=x', [Schema.String], ([s]) => s === s)`,
       filename: PROPERTY_FILE,
     },
     {
@@ -67,9 +67,9 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       filename: 'src/sort.spec.ts',
     },
     {
-      name: 'Should_Pass_When_FastCheckImport_InNonTestFile',
+      name: 'Should_Pass_When_ArbitraryImport_InNonTestFile',
       code:
-        `import { type FastCheck, Schema as S } from 'effect'\nconst arb = () => (fc: typeof FastCheck) => fc.string()`,
+        `import { Schema as S } from 'effect'\nimport * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'\nconst arb = () => Arbitrary.schema(S.String)`,
       filename: 'src/codec.ts',
     },
     {
@@ -266,6 +266,16 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
             actual: 'FastCheck imported by a file that is not .property.test.ts',
             fix: 'move the property test to a *.property.test.ts file; this file keeps plain it() scenario tests only',
           },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_FastCheckPackageImport_InSnapshotFile',
+      code: `import * as fc from 'fast-check'\nit('snapshot', () => { fc.sample(arb, { seed: 1, numRuns: 10 }) })`,
+      filename: SNAPSHOT_FILE,
+      errors: [
+        {
+          messageId: 'fastCheckImport',
         },
       ],
     },

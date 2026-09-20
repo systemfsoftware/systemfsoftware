@@ -70,7 +70,7 @@
     "@systemfsoftware/effect-schema-law": "workspace:*",
     "effect": "catalog:peers",
     "vite": ">5.0.0",
-    "vitest": "*"
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "exports": {

@@ -1,3 +1,4 @@
+import * as ByteSize from 'effect/ByteSize'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
@@ -66,6 +67,15 @@ const isObject = (value: unknown): value is object => {
   return value !== null
 }
 
+const nameFromObject = (entry: object): string => {
+  if ('name' in entry) return stringIfString(entry.name)
+  return ''
+}
+
+const toGlobPath = (entry: unknown): string => {
+  if (!isObject(entry)) return stringIfString(entry)
+  return nameFromObject(entry)
+}
 const stringIfString = (value: unknown): string => {
   if (typeof value === 'string') return value
   return ''
@@ -170,10 +180,10 @@ const numberOrNull = (value: number): number | null => {
   return numberUnlessNaN(value)
 }
 
-const sizeOrNull = (value: number): FileSystem.Size | null => {
+const sizeOrNull = (value: number): ByteSize.ByteSize | null => {
   const n = numberOrNull(value)
   if (n === null) return null
-  return FileSystem.Size(n)
+  return ByteSize.bytes(n)
 }
 
 const makeFileInfo = (stat: Stat): FileSystem.File.Info => ({
@@ -188,32 +198,29 @@ const makeFileInfo = (stat: Stat): FileSystem.File.Info => ({
   nlink: Option.fromNullishOr(numberOrNull(stat.nlink)),
   uid: Option.fromNullishOr(numberOrNull(stat.uid)),
   gid: Option.fromNullishOr(numberOrNull(stat.gid)),
-  size: FileSystem.Size(Number(stat.size)),
+  size: ByteSize.bytes(Number(stat.size)),
   blksize: Option.fromNullishOr(sizeOrNull(stat.blksize)),
   blocks: Option.fromNullishOr(numberOrNull(stat.blocks)),
 })
 
 const applySeek = (
   cursor: Cursor,
-  off: FileSystem.Size,
+  off: bigint,
   from: FileSystem.SeekMode,
-): FileSystem.Size => {
+): bigint => {
   if (from === 'start') {
     cursor.position = off
-    return FileSystem.Size(cursor.position)
+    return cursor.position
   }
   cursor.position = cursor.position + off
-  return FileSystem.Size(cursor.position)
+  return cursor.position
 }
 
 const seekCursor = (
   cursor: Cursor,
-  offset: FileSystem.SizeInput,
+  offset: bigint,
   from: FileSystem.SeekMode,
-): Effect.Effect<FileSystem.Size> => {
-  const off = FileSystem.Size(offset)
-  return Effect.sync(() => applySeek(cursor, off, from))
-}
+): Effect.Effect<bigint> => Effect.sync(() => applySeek(cursor, offset, from))
 
 const optionFromNonemptyRead = (
   bytesRead: number,
@@ -281,7 +288,7 @@ const clampCursor = (cursor: Cursor, len: number): void => {
   }
 }
 
-const lengthOrZero = (length?: FileSystem.SizeInput): number => Number(length ?? 0)
+const lengthOrZero = (length?: number): number => length ?? 0
 
 const makeFile = (handle: FileHandle): FileSystem.File => {
   const cursor: Cursor = { position: 0n }
@@ -295,7 +302,7 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       try: () => handle.sync(),
       catch: toPlatformError('sync'),
     }),
-    seek(offset: FileSystem.SizeInput, from: FileSystem.SeekMode) {
+    seek(offset: bigint, from: FileSystem.SeekMode) {
       return seekCursor(cursor, offset, from)
     },
     read(buffer: Uint8Array) {
@@ -305,27 +312,26 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       }).pipe(
         Effect.map(({ bytesRead }) => {
           cursor.position = cursor.position + BigInt(bytesRead)
-          return FileSystem.Size(bytesRead)
+          return bytesRead
         }),
       )
     },
-    readAlloc(size: FileSystem.SizeInput) {
-      const sizeNumber = Number(size)
+    readAlloc(size: number) {
       return Effect.suspend(() => {
-        const buf = Buffer.allocUnsafeSlow(sizeNumber)
+        const buf = Buffer.allocUnsafeSlow(size)
         return Effect.tryPromise({
-          try: () => handle.read(buf, 0, sizeNumber, Number(cursor.position)),
+          try: () => handle.read(buf, 0, size, Number(cursor.position)),
           catch: toPlatformError('readAlloc'),
         }).pipe(
           Effect.map(({ bytesRead }) => {
             cursor.position = cursor.position + BigInt(bytesRead)
-            return optionFromRead(bytesRead, sizeNumber, buf)
+            return optionFromRead(bytesRead, size, buf)
           }),
         )
       })
     },
-    truncate(length?: FileSystem.SizeInput) {
-      const len = lengthOrZero(length)
+    truncate(length?: number) {
+      const len = length ?? 0
       return Effect.tryPromise({
         try: () => handle.truncate(len),
         catch: toPlatformError('truncate'),
@@ -338,7 +344,7 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       }).pipe(
         Effect.map(({ bytesWritten }) => {
           cursor.position = cursor.position + BigInt(bytesWritten)
-          return FileSystem.Size(bytesWritten)
+          return bytesWritten
         }),
       )
     },
@@ -660,13 +666,18 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
   const watch: FileSystem.FileSystem['watch'] = (_path, _options) => Stream.empty
 
   const glob: FileSystem.FileSystem['glob'] = (pattern, options) =>
-    Effect.tryPromise({
-      try: () =>
-        nfs.promises.glob(pattern, {
-          ...globCwdFromOptions(options),
-          ...globExcludeFromOptions(options),
-        }),
-      catch: toPlatformError('glob'),
+    Effect.gen(function*() {
+      const matches = yield* Effect.tryPromise({
+        try: () =>
+          Array.fromAsync(
+            nfs.promises.glob(pattern, {
+              ...globCwdFromOptions(options),
+              ...globExcludeFromOptions(options),
+            }),
+          ),
+        catch: toPlatformError('glob'),
+      })
+      return matches.map(toGlobPath)
     })
 
   return FileSystem.make({

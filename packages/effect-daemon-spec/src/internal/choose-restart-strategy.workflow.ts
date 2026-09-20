@@ -98,14 +98,17 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
+  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
 
   /**
    * A supervision tree with a failed child: a total, and a failed index inside it. The schema's
    * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
    * rather than a wider one the decision never sees.
    */
-  const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
+  const tree = Arbitrary.map(
+    Arbitrary.schema(DecideInput),
+    (input) => [input.totalChildren, input.failedIndex] as const,
+  )
 
   const previousOrNegInf = (xs: readonly number[], i: number): number =>
     Option.getOrElse(Option.fromNullishOr(xs[i - 1]), () => Number.NEGATIVE_INFINITY)

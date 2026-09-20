@@ -12,7 +12,6 @@ const _default: {
         name: string;
     };
     rules: {
-        'ban-effect-schema-imports': Rule;
         'ban-data-taggederror': Rule;
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;

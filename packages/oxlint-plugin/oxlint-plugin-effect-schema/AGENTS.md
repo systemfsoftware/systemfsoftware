@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/oxlint-plugin-effect-schema`
 
-Shared conventions: `packages/oxlint-plugin/AGENTS.md`. Owns the Effect Schema rules (`ban-effect-schema-imports`, `ban-data-taggederror`, `no-manual-tag-property`).
+Shared conventions: `packages/oxlint-plugin/AGENTS.md`. Owns the Effect Schema rules (`ban-data-taggederror`, `no-manual-tag-property`).
 
 ## Rules
 

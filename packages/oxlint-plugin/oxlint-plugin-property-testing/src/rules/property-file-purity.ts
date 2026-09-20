@@ -70,26 +70,37 @@ const createPropertyFileVisitors = (context: Context) => ({
   },
 })
 
+const FAST_CHECK_IMPORT_DATA = {
+  name: 'FastCheck import in a scenario test file',
+  expected: `property tests (and every FastCheck usage) live in ${PROPERTY_TEST_SUFFIX} files`,
+  actual: `FastCheck imported by a file that is not ${PROPERTY_TEST_SUFFIX}`,
+  fix: 'move the property test to a *.property.test.ts file; this file keeps plain it() scenario tests only',
+} as const
+
+const reportFastCheckImport = (context: Context, node: ESTree.Node): void => {
+  context.report({
+    node,
+    messageId: 'fastCheckImport',
+    data: FAST_CHECK_IMPORT_DATA,
+  })
+}
+
 const createScenarioFileVisitors = (context: Context) => ({
   ImportDeclaration(node: ESTree.ImportDeclaration) {
+    if (node.source.value === 'fast-check' || node.source.value.startsWith('fast-check/')) {
+      reportFastCheckImport(context, node)
+      return
+    }
     for (const specifier of node.specifiers) {
       if (
         specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier' &&
         specifier.imported.name === 'FastCheck'
       ) {
-        context.report({
-          node: specifier,
-          messageId: 'fastCheckImport',
-          data: {
-            name: 'FastCheck import in a scenario test file',
-            expected: `property tests (and every FastCheck usage) live in ${PROPERTY_TEST_SUFFIX} files`,
-            actual: `FastCheck imported by a file that is not ${PROPERTY_TEST_SUFFIX}`,
-            fix: 'move the property test to a *.property.test.ts file; this file keeps plain it() scenario tests only',
-          },
-        })
+        reportFastCheckImport(context, specifier)
       }
     }
   },
+
   CallExpression(node: ESTree.CallExpression) {
     if (!isPropCallee(node.callee)) return
     context.report({

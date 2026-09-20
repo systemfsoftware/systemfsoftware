@@ -75,18 +75,29 @@ export const noLoggingInCatch = defineRule({
 
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
-        if (node.source.value !== EFFECT_MODULE) return
-
+        const source = node.source.value
         for (const spec of node.specifiers) {
-          if (spec.type === 'ImportNamespaceSpecifier') {
-            trackedEffectImports.add(spec.local.name)
+          if (source === EFFECT_MODULE) {
+            if (
+              spec.type === 'ImportSpecifier' &&
+              spec.imported.type === 'Identifier' &&
+              spec.imported.name === 'Effect'
+            ) {
+              trackedEffectImports.add(spec.local.name)
+            }
+            continue
           }
-          if (
-            spec.type === 'ImportSpecifier' &&
-            spec.imported.type === 'Identifier' &&
-            spec.imported.name === 'Effect'
-          ) {
-            trackedEffectImports.add(spec.local.name)
+          if (source === 'effect/Effect') {
+            if (spec.type === 'ImportNamespaceSpecifier' || spec.type === 'ImportDefaultSpecifier') {
+              trackedEffectImports.add(spec.local.name)
+            }
+            if (
+              spec.type === 'ImportSpecifier' &&
+              spec.imported.type === 'Identifier' &&
+              spec.imported.name === 'Effect'
+            ) {
+              trackedEffectImports.add(spec.local.name)
+            }
           }
         }
       },

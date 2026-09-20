@@ -49,9 +49,34 @@ const objectPropertyOf = (object: ESTree.Node, key: string): PropertyNode | null
 const hasSpread = (object: ESTree.ObjectExpression): boolean =>
   object.properties.some((property) => property.type === 'SpreadElement')
 
+const FILTER_CONSTRAINT_KEYS = [
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'minLength',
+  'maxLength',
+  'minSize',
+  'maxSize',
+  'minProperties',
+  'maxProperties',
+  'patterns',
+  'number',
+  'uniqueBy',
+  'order',
+] as const
+
+const constraintObjectVerdict = (value: ESTree.Node): 'yes' | 'no' | 'opaque' => {
+  if (value.type !== 'ObjectExpression') return 'opaque'
+  if (hasSpread(value)) return 'opaque'
+  return FILTER_CONSTRAINT_KEYS.some((key) => objectPropertyOf(value, key) !== null) ? 'yes' : 'no'
+}
+
 const hasConstructiveMetadata = (annotations: ESTree.Node | null): 'yes' | 'legacy' | 'no' | 'opaque' => {
   if (annotations === null) return 'no'
   if (annotations.type !== 'ObjectExpression') return 'opaque'
+  const arbitraryConstraint = objectPropertyOf(annotations, 'arbitraryConstraint')
+  if (arbitraryConstraint !== null) return constraintObjectVerdict(arbitraryConstraint.value)
   const arbitrary = objectPropertyOf(annotations, 'arbitrary')
   if (arbitrary === null) return hasSpread(annotations) ? 'opaque' : 'no'
   const value = arbitrary.value
@@ -73,7 +98,7 @@ const carriesNodeOverride = (node: ESTree.Node | null, depth: number): boolean =
       node.callee.property.name === 'annotate'
     ) {
       const annotations = node.arguments[1] !== undefined ? node.arguments.find(isNotSpread) : node.arguments[0]
-      if (annotations !== undefined && objectPropertyOf(annotations, 'toArbitrary') !== null) return true
+      if (annotations !== undefined && objectPropertyOf(annotations, 'toCodecArbitrary') !== null) return true
     }
     return carriesNodeOverride(node.callee.type === 'MemberExpression' ? node.callee.object : null, depth + 1)
   }
@@ -102,7 +127,7 @@ const localInitOf = (identifier: IdentifierNode, getScope: GetScope, node: ESTre
  * An override silences the gate only when the chain it rides on is a schema
  * chain: it bottoms out at the Schema vocabulary or at a local const whose
  * initializer is one. A foreign object that happens to have an `annotate`
- * method carrying a `toArbitrary` key (`builder.annotate({ toArbitrary })`)
+ * method carrying a `toCodecArbitrary` key (`builder.annotate({ toCodecArbitrary })`)
  * never silences the gate — that shape is a silencer, not an override.
  */
 const tracesToSchema = (node: ESTree.Node | null, getScope: GetScope, depth: number): boolean => {

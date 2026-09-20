@@ -82,7 +82,6 @@ export const SCHEMA_USE_MEMBERS: Record<string, true> = {
   encodeUnknownPromise: true,
   encodeUnknownResult: true,
   encodeUnknownSync: true,
-  toArbitrary: true,
   toJsonSchemaDocument: true,
 }
 

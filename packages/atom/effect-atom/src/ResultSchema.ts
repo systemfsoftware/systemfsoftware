@@ -3,6 +3,7 @@ import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import { hasProperty } from 'effect/Predicate'
 import * as Schema_ from 'effect/Schema'
+import * as SchemaGetter from 'effect/SchemaGetter'
 import * as SchemaIssue from 'effect/SchemaIssue'
 import * as SchemaParser from 'effect/SchemaParser'
 import * as SchemaTransformation from 'effect/SchemaTransformation'
@@ -191,11 +192,26 @@ export const Schema = <
         )
       },
       toEquivalence: Equal.asEquivalence,
-      // The wire codec is JSON-based: an `undefined` defect — at any depth —
-      // does not survive it. The schema's input space is therefore the
-      // wire-representable subset: Fail of the error schema, or Die of a JSON
-      // value.
-      toArbitrary: () => (fc) => fc.constant(initial(false)),
+      // Native arbitrary compiles Declaration via toCodecArbitrary. The previous
+      // `toArbitrary` constructed `Initial`; keep that constructor, now as a
+      // Schema link, until Cause/Defect generation is a real encoded subset.
+      toCodecArbitrary: () =>
+        Schema_.link<
+          Result<(A | typeof Schema_.Never)['Type'], (E | typeof Schema_.Never)['Type']>
+        >()(
+          Schema_.TaggedStruct('Initial', { waiting: Schema_.Boolean }),
+          {
+            decode: SchemaGetter.transform((encoded) =>
+              initial<(A | typeof Schema_.Never)['Type'], (E | typeof Schema_.Never)['Type']>(
+                encoded.waiting,
+              )
+            ),
+            encode: SchemaGetter.transform((result) => ({
+              _tag: 'Initial' as const,
+              waiting: result.waiting,
+            })),
+          },
+        ),
       toFormatter: ([value, cause]) => (t) => {
         function formatRest(rest: typeof t) {
           if (hasProperty(rest, 'cause')) {

@@ -42,5 +42,4 @@ export interface FileHandle {
   truncate(len?: number): Promise<void>
   close(): Promise<void>
 }
-
 export type Contents = memfs.DirectoryJSON

@@ -18,7 +18,8 @@ const RUNTIME_FILES: ReadonlyArray<string> = [
 ]
 
 const ANNOTATION_KEY = 'recursionBudget'
-const HOOK_KEY = 'toArbitrary'
+const HOOK_KEY = 'toCodecArbitrary'
+
 const SUSPEND_MEMBER = 'suspend'
 const ANNOTATE_MEMBER = 'annotate'
 const INJECTED_ALIAS = '__esRecursionBudget'
@@ -111,6 +112,7 @@ const injectionOf = (declarator: OxcNode): Injection | undefined => {
   const rawProperties = options['properties']
   const properties: ReadonlyArray<unknown> = Array.isArray(rawProperties) ? rawProperties : []
   if (propertyNamed(properties, HOOK_KEY) !== undefined) return undefined
+
   const budget = propertyNamed(properties, ANNOTATION_KEY)
   if (budget === undefined) return undefined
   const value: unknown = budget['value']
@@ -123,16 +125,15 @@ const injectionOf = (declarator: OxcNode): Injection | undefined => {
   }
 }
 
-const hookTextFor = (code: string, moduleId: string, injection: Injection): string => {
+const hookTextFor = (code: string, injection: Injection): string => {
   const budgetText = code.slice(injection.budgetStart, injection.budgetEnd)
-  const depthIdentifier = JSON.stringify(`${moduleId}#${injection.binding}`)
-  return `, toArbitrary: ${INJECTED_ALIAS}(() => ${injection.binding}, ${budgetText}, ${depthIdentifier})`
+  return `, ${HOOK_KEY}: ${INJECTED_ALIAS}(() => ${injection.binding}, ${budgetText})`
 }
 
-const splice = (code: string, moduleId: string, injections: ReadonlyArray<Injection>, importAt: number): string => {
+const splice = (code: string, injections: ReadonlyArray<Injection>, importAt: number): string => {
   let out = code
   for (const injection of [...injections].sort((left, right) => right.insertAt - left.insertAt)) {
-    out = out.slice(0, injection.insertAt) + hookTextFor(code, moduleId, injection) + out.slice(injection.insertAt)
+    out = out.slice(0, injection.insertAt) + hookTextFor(code, injection) + out.slice(injection.insertAt)
   }
   const importLine = `import { budgetToArbitrary as ${INJECTED_ALIAS} } from '${RECURSION_BUDGET_VIRTUAL_ID}'\n`
   return out.slice(0, importAt) + importLine + out.slice(importAt)
@@ -172,6 +173,6 @@ export const recursionBudgetTransform = (): RecursionBudgetPlugin => ({
       const injection = injectionOf(declarator)
       if (injection !== undefined) injections.push(injection)
     }
-    return injections.length === 0 ? undefined : splice(code, moduleId, injections, anchor.start)
+    return injections.length === 0 ? undefined : splice(code, injections, anchor.start)
   },
 })

@@ -309,7 +309,7 @@ _Aliases:_ `contrived arbitrary`
 
 ### Recursion budget
 
-The declared generation contract for a recursive schema union: a ceiling (`maxDepth`), a shape (`depthSize` leaf-decay toward the terminal branch), and one depth identifier per recursive cycle — stated by the schema through a `toArbitrary` annotation instead of inherited from effect's hidden per-suspend constant. Termination, deep reachability, and variant coverage are the laws that pin it. Decode and encode are untouched, so the budget is generation-only. Distinct from a plain depth cap: ceiling and shape are separate knobs, and raising the ceiling without the decay diverges expected tree size.
+The declared generation contract for a recursive schema union: a ceiling (`maxDepth`) and a shape (`depthSize` leaf-decay toward the terminal branch), stated on the `Schema.suspend` at the recursion point. Effect v4's native derivation has no per-schema depth knob — recursive cost is bounded by the `size` option at the call site — so a materializer (the recursion-budget Vite transform) rewrites the annotation into a `toCodecArbitrary` hook that validates the budget and the cycle shape, and the generated laws translate the ceiling into that `size` and assert nesting against it. Termination, deep reachability, and variant coverage are the laws that pin it. Decode and encode are untouched, so the budget is generation-only. Distinct from a plain depth cap: the hook cannot bound depth, it can only refuse a cycle that has no terminal branch — the ceiling is honored where generation is requested, not where it is declared.
 
 ### Recursion laws
 

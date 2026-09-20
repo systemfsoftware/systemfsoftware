@@ -1,14 +1,19 @@
 export const EFFECT_MODULE = 'effect' as const
 
 export const CATCH_METHODS: ReadonlySet<string> = new Set([
-  'catchAll',
-  'catchTag',
-  'catchAllCause',
-  'catchSome',
-  'catchSomeCause',
+  'catch',
+  'catchCause',
+  'catchCauseFilter',
+  'catchCauseIf',
+  'catchDefect',
+  'catchEager',
+  'catchFilter',
   'catchIf',
-  'orElse',
-  'orElseFail',
+  'catchNoSuchElement',
+  'catchReason',
+  'catchReasons',
+  'catchTag',
+  'catchTags',
   'orElseSucceed',
 ])
 
@@ -16,9 +21,11 @@ export const EFFECT_LOG_METHODS: ReadonlySet<string> = new Set([
   'log',
   'logDebug',
   'logError',
+  'logFatal',
   'logWarning',
   'logInfo',
   'logTrace',
+  'logWithLevel',
 ])
 
 export const CONSOLE_LOG_METHODS: ReadonlySet<string> = new Set([

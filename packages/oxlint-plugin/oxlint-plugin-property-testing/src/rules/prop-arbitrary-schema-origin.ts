@@ -99,9 +99,10 @@ const importSourceOf = (argument: ESTree.Expression | null | undefined): string 
 }
 
 /**
- * A guard-local `const { FastCheck: fc } = await import('effect/testing')` is the corpus's
- * canonical generator binding. Resolve it to the same import edge a static import would
- * produce, so the dynamic idiom cannot hide a hand-built arbitrary behind an opaque verdict.
+ * A guard-local `const { FastCheck: fc } = await import('effect/testing')` is a
+ * hand-built generator binding. Resolve it to the same import edge a static import
+ * would produce, so the dynamic idiom cannot hide a hand-built arbitrary behind
+ * an opaque verdict.
  */
 const dynamicEdgeOf = (
   declarator: ESTree.VariableDeclarator,
@@ -127,6 +128,7 @@ const dynamicEdgeOf = (
 
 const vocabularyOf = (edge: ImportEdge): Verdict => {
   if (SCHEMA_SOURCE_PATTERN.test(edge.source)) return 'schema'
+  if (edge.source.startsWith('effect/unstable/arbitrary')) return 'schema'
   if (edge.source === EFFECT_SOURCE && edge.imported !== null) {
     if (SCHEMA_NAMESPACE_NAMES[edge.imported] === true) return 'schema'
     if (FASTCHECK_NAMESPACE_NAMES[edge.imported] === true) return 'handBuilt'
@@ -157,6 +159,15 @@ export class Provenance {
     if (resolved.kind !== 'import') return false
     const edge = this.imports.get(name)
     return edge !== undefined && edge.source === EFFECT_SOURCE && edge.imported === 'Schema'
+  }
+
+  isArbitraryNamespaceBinding(name: string, node: ESTree.Node): boolean {
+    const resolved = resolveLocal(name, node, this.getScope)
+    if (resolved.kind !== 'import') return false
+    const edge = this.imports.get(name)
+    if (edge === undefined) return false
+    if (edge.source.startsWith('effect/unstable/arbitrary')) return true
+    return edge.source === EFFECT_SOURCE && edge.imported === 'Arbitrary'
   }
 
   classifyCall(name: string, node: ESTree.Node): 'codec' | 'domain' | 'unknown' {
@@ -302,13 +313,11 @@ const stockArgVerdict = (provenance: Provenance, arg: ESTree.Node | undefined): 
 
 const checkArbitraryFactory = (provenance: Provenance, context: Context, call: ESTree.CallExpression): void => {
   const callee = call.callee
-  if (
-    callee.type !== 'MemberExpression' ||
-    callee.property.type !== 'Identifier' ||
-    callee.property.name !== 'toArbitrary'
-  ) {
-    return
-  }
+  if (callee.type !== 'MemberExpression' || callee.property.type !== 'Identifier') return
+  const isToArbitrary = callee.property.name === 'toArbitrary'
+  const isArbitrarySchema = callee.property.name === 'schema' && callee.object.type === 'Identifier' &&
+    provenance.isArbitraryNamespaceBinding(callee.object.name, call)
+  if (!isToArbitrary && !isArbitrarySchema) return
   const arg = call.arguments[0]
   if (arg === undefined) return
   if (stockArgVerdict(provenance, arg)) {
@@ -383,7 +392,7 @@ export const propArbitrarySchemaOrigin = defineRule({
             value.type === 'CallExpression' &&
             value.callee.type === 'MemberExpression' &&
             value.callee.property.type === 'Identifier' &&
-            value.callee.property.name === 'toArbitrary'
+            (value.callee.property.name === 'toArbitrary' || value.callee.property.name === 'schema')
           ) {
             factories.push(value)
           }

@@ -669,7 +669,7 @@ export interface WriteContext<A> {
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-CY18l71z.d.ts:662:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CloF-M4q.d.ts:662:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
 
 // (No @packageDocumentation comment for this package)
 
