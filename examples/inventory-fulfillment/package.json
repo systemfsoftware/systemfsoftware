@@ -1,0 +1,27 @@
+{
+  "name": "@systemfsoftware/example-inventory-fulfillment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike": "tsx spike/spike.ts"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-pg": "catalog:",
+    "@effect/sql-pglite": "catalog:",
+    "@electric-sql/pglite": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:"
+  }
+}
