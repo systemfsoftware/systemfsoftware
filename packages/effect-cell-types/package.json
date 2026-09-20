@@ -34,11 +34,11 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
@@ -52,6 +52,7 @@
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",

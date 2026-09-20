@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/atom/effect-atom-react#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "React bindings for effect-atom — forked under systemfsoftware from tim-smart/effect-atom.",
+  "description": "React bindings for effect-atom \u2014 forked under systemfsoftware from tim-smart/effect-atom.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -33,7 +33,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm dts:check && pnpm api:check",
+    "build": "tsdown -l warn && pnpm dts:check && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
@@ -41,7 +41,7 @@
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
@@ -61,6 +61,7 @@
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",

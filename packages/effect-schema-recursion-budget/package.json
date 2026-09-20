@@ -35,12 +35,12 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
@@ -54,6 +54,7 @@
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",

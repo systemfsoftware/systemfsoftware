@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/rx-effect#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Bridge RxJS and Effect-TS — turn an Observable into a typed Effect Stream with backpressure and proper interruption.",
+  "description": "Bridge RxJS and Effect-TS \u2014 turn an Observable into a typed Effect Stream with backpressure and proper interruption.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -37,12 +37,12 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor run",
+    "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
@@ -53,6 +53,7 @@
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",

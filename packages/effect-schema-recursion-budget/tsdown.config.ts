@@ -1,3 +1,4 @@
+import { quietBuild } from '@systemfsoftware/tsdown-config/quiet-build'
 import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
@@ -27,6 +28,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
+  ...quietBuild,
   entry: { index: './src/mod.ts', 'recursion-budget-runtime': './src/recursion-budget-runtime.ts' },
   format: 'esm',
   dts: true,
