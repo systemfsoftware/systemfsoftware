@@ -41,10 +41,8 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
-    "@effect/tsgo": "catalog:",
     "@systemfsoftware/oxlint-plugin-dmmf-workflow": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-test-discipline": "workspace:^",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint"
   },

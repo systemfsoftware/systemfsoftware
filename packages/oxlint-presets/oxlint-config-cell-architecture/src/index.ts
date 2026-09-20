@@ -1,19 +1,53 @@
-import { recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
-import dmmfConfig, { jsPlugins as dmmfJsPlugins, promoteWarnToError } from '@systemfsoftware/oxlint-config-dmmf'
 import cellArchitecture from '@systemfsoftware/oxlint-plugin-cell-architecture'
-import effectPlatform from '@systemfsoftware/oxlint-plugin-effect-platform'
 import type { OxlintConfig } from 'oxlint'
 
 export const jsPlugins: readonly string[] = [
-  ...dmmfJsPlugins,
-  import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-platform'),
   import.meta.resolve('@systemfsoftware/oxlint-plugin-cell-architecture'),
 ]
 
+export const plugins: NonNullable<OxlintConfig['plugins']> = [
+  'typescript',
+  'import',
+  'jsdoc',
+  'oxc',
+  'promise',
+]
+
+export const options: NonNullable<OxlintConfig['options']> = {
+  typeAware: true,
+}
+
 export const rules: NonNullable<OxlintConfig['rules']> = {
-  ...effectPlatform.configs.recommended.rules,
   ...cellArchitecture.configs.recommended.rules,
 }
+
+export const ignorePatterns: readonly string[] = [
+  '**/node_modules/**',
+  '**/dist/**',
+  '**/lib/**',
+  '**/esm/**',
+  '**/cjs/**',
+  '**/build/**',
+  '**/out/**',
+  '**/.tshy/**',
+  '**/.tshy-build/**',
+  '**/.turbo/**',
+  '**/coverage/**',
+  '**/.stryker-tmp/**',
+  '**/__pycache__/**',
+  '**/*.d.ts',
+  '**/*.tsbuildinfo',
+  '**/*.mjs',
+  '**/.claude/**',
+  '**/.opencode/**',
+  '**/.sisyphus/**',
+  '**/.repo/**',
+  '**/.worktrees/**',
+  '**/.issues/**',
+  '**/.papi/**',
+  '**/submodules/**',
+  '**/repos/**',
+]
 
 const noNodeBuiltinImports: NonNullable<OxlintConfig['rules']>['no-restricted-imports'] = [
   'error',
@@ -40,15 +74,17 @@ const noNodeBuiltinImports: NonNullable<OxlintConfig['rules']>['no-restricted-im
 ]
 
 const cellArchitectureConfig: OxlintConfig = {
-  extends: [dmmfConfig],
+  plugins: [...plugins],
   jsPlugins: [...jsPlugins],
+  options: { ...options },
+  categories: { correctness: 'error' },
+  ignorePatterns: [...ignorePatterns],
   overrides: [
     {
       files: ['**/src/**', '**/*.test.ts'],
       rules: {
         ...rules,
         'no-restricted-imports': noNodeBuiltinImports,
-        ...promoteWarnToError(tsgoRecommended.rules),
       },
     },
     {

@@ -1,22 +1,23 @@
 {
-  "name": "@systemfsoftware/oxlint-config-cell-architecture",
+  "name": "@systemfsoftware/oxlint-config-recommended",
   "license": "Apache-2.0",
   "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/oxlint-presets/oxlint-config-cell-architecture"
+    "directory": "packages/oxlint-presets/oxlint-config-recommended"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-presets/oxlint-config-cell-architecture#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-presets/oxlint-config-recommended#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Shareable Oxlint configuration for Cell Architecture: cell boundary isolation, tag discipline, internal JSDoc export restrictions, and Node builtin bans.",
+  "description": "Recommended Oxlint configuration: combines DMMF, Cell Architecture, Effect Platform, Test Discipline, and TSGo presets.",
   "keywords": [
     "oxlint",
     "oxlint-config",
     "preset",
-    "cell-architecture",
+    "recommended",
     "dmmf",
+    "cell-architecture",
     "effect",
     "effect-platform",
     "typescript"
@@ -41,8 +42,13 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
-    "@systemfsoftware/oxlint-plugin-cell-architecture": "workspace:^",
-    "oxlint": "catalog:oxlint"
+    "@effect/tsgo": "catalog:",
+    "@systemfsoftware/oxlint-config-cell-architecture": "workspace:^",
+    "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-platform": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-discipline": "workspace:^",
+    "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint"
   },
   "devDependencies": {
     "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
@@ -52,6 +58,7 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:"
@@ -59,6 +66,7 @@
   "peerDependencies": {
     "effect": "catalog:peers",
     "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint",
     "typescript": ">=5.0.0"
   },
   "publishConfig": {
