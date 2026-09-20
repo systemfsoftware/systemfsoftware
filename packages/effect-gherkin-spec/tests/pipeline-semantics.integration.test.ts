@@ -1,14 +1,3 @@
-/**
- * Pipeline Semantics Integration Tests
- *
- * Proves that Gherkin pipelines execute directly as pure Effect values:
- * - scope accumulation through step bindings
- * - non-binding tap steps leave scope intact
- * - failing steps short-circuit with typed StepError
- * - checkSoftFailures aggregates soft assertions
- * - virtual-time polling with TestClock
- * - VitestTaskRef receives step-lifecycle notice and error annotations
- */
 import {
   And,
   checkSoftFailures,
@@ -32,36 +21,30 @@ const Feature = makeFeature({ it, layer })
 Feature('Gherkin pipeline execution semantics').body(({ scenario }) => {
   scenario(
     'A multi-step pipeline accumulates bindings into scope',
-    Effect.gen(function*() {
-      const scope = yield* Gherkin.Do.pipe(
-        Given('an initial baseline value')('base', () => Effect.succeed(10)),
-        When('a multiplier is applied to the baseline')('derived', (s) => Effect.succeed(s.base * 2)),
-      )
-
-      expect(scope).toEqual(expect.objectContaining({ base: 10, derived: 20 }))
-      expect(Object.keys(scope).sort()).toEqual(['base', 'derived'])
-    }),
+    Gherkin.Do.pipe(
+      Given('an initial baseline value')('base', () => Effect.succeed(10)),
+      When('a multiplier is applied to the baseline')('derived', (s) => Effect.succeed(s.base * 2)),
+      Then('the accumulated scope contains both base and derived values')((s) => {
+        expect(s.base).toBe(10)
+        expect(s.derived).toBe(20)
+      }),
+    ),
   )
 
   scenario(
     'Tap steps inspect scope without adding or mutating bindings',
-    Effect.gen(function*() {
-      let inspectedValue = 0
-
-      const scope = yield* Gherkin.Do.pipe(
-        Given('an authenticated session token')('token', () => Effect.succeed('tok_test_123')),
-        Then('the token matches the expected format')((s) => {
-          inspectedValue = s.token.length
-          expect(s.token).toBe('tok_test_123')
-        }),
-        And('the token remains accessible in subsequent tap steps')((s) => {
-          expect(s.token).toBe('tok_test_123')
-        }),
-      )
-
-      expect(inspectedValue).toBe(12)
-      expect(Object.keys(scope)).toEqual(['token'])
-    }),
+    Gherkin.Do.pipe(
+      Given('an authenticated session token')('token', () => Effect.succeed('tok_test_123')),
+      Then('the token matches the expected format')((s) => {
+        expect(s.token).toBe('tok_test_123')
+      }),
+      And('the token remains accessible in subsequent tap steps')((s) => {
+        expect(s.token).toBe('tok_test_123')
+      }),
+      Then('the scope keys are preserved without excess bindings')((s) => {
+        expect(Object.keys(s)).toEqual(['token'])
+      }),
+    ),
   )
 
   scenario(
@@ -125,19 +108,23 @@ Feature('Gherkin pipeline execution semantics').body(({ scenario }) => {
   scenario(
     'When poll retries deterministically under virtual TestClock without wall-clock waits',
     Effect.gen(function*() {
-      let attempts = 0
+      const attemptsRef = yield* Ref.make(0)
 
       const pipeline = Gherkin.Do.pipe(
         Given('a service deployment')('ready', () => Effect.succeed(true)),
         When.poll('the service converges to healthy', {
           interval: '10 millis',
           timeout: '500 millis',
-        })(() => {
-          attempts++
-          if (attempts < 3) {
-            throw new Error('not yet healthy')
-          }
-        }),
+        })(() =>
+          Ref.updateAndGet(attemptsRef, (n) => n + 1).pipe(
+            Effect.flatMap((n) => {
+              if (n < 3) {
+                return Effect.fail('not yet healthy')
+              }
+              return Effect.void
+            }),
+          )
+        ),
       )
 
       const fiber = yield* Effect.forkChild(pipeline)
@@ -149,6 +136,7 @@ Feature('Gherkin pipeline execution semantics').body(({ scenario }) => {
       yield* TestClock.adjust('10 millis')
       yield* Fiber.join(fiber)
 
+      const attempts = yield* Ref.get(attemptsRef)
       expect(attempts).toBe(3)
     }),
   )
@@ -156,10 +144,10 @@ Feature('Gherkin pipeline execution semantics').body(({ scenario }) => {
   scenario(
     'VitestTaskRef records step-lifecycle notice and error annotations with typed context',
     Effect.gen(function*() {
-      const annotations: Array<{ message: string; type: string | undefined }> = []
+      const recordedAnnotations: Array<{ message: string; type: string | undefined }> = []
       const fakeCtx: VitestTaskContext = {
         annotate: (message: string, type?: string) => {
-          annotations.push({ message, type })
+          recordedAnnotations.push({ message, type })
         },
       }
 
@@ -171,11 +159,11 @@ Feature('Gherkin pipeline execution semantics').body(({ scenario }) => {
         Effect.provideService(VitestTaskRef, fakeCtx),
       )
 
-      expect(annotations).toHaveLength(2)
-      expect(annotations[0]?.message).toMatch(/^\[GIVEN\] a validated credential record - passed \(\d+ms\)$/)
-      expect(annotations[0]?.type).toBe('notice')
-      expect(annotations[1]?.message).toMatch(/^\[THEN\] the credential is valid - passed \(\d+ms\)$/)
-      expect(annotations[1]?.type).toBe('notice')
+      expect(recordedAnnotations).toHaveLength(2)
+      expect(recordedAnnotations[0]?.message).toMatch(/^\[GIVEN\] a validated credential record - passed \(\d+ms\)$/)
+      expect(recordedAnnotations[0]?.type).toBe('notice')
+      expect(recordedAnnotations[1]?.message).toMatch(/^\[THEN\] the credential is valid - passed \(\d+ms\)$/)
+      expect(recordedAnnotations[1]?.type).toBe('notice')
     }),
   )
 })

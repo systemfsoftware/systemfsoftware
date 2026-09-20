@@ -9,7 +9,6 @@
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, pairwiseFor, StepError, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref, Result } from 'effect'
-import { UnknownError } from 'effect/Cause'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -43,21 +42,47 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
   )
 
   scenario(
-    'A failure on one side surfaces as a step failure',
+    'A failure on side B specifically attributes the step error to side B',
     Effect.gen(function*() {
       const workload = (w: { readonly value: string }) => {
         if (w.value === 'side-a') {
           return Effect.succeed(true)
         }
-        return Effect.fail(new UnknownError(new Error('boom')))
+        return Effect.fail('side_b_defect')
       }
       const piped = Gherkin.Do.pipe(
-        PairwiseAB('boom on B only')('dual', (_s) => workload),
-        Then('unreachable')(() => Effect.void),
+        PairwiseAB('executing widget operation')('dual', (_s) => workload),
+        Then('unreachable step')(() => Effect.void),
       )
       const result = yield* Effect.result(piped)
       if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
       expect(result.failure).toBeInstanceOf(StepError)
+      expect(result.failure.keyword).toBe('pairwise')
+      expect(result.failure.text).toBe('executing widget operation [B]')
+      expect(result.failure.cause).toBe('side_b_defect')
+    }),
+  )
+
+  scenario(
+    'A failure on side A halts execution immediately and never evaluates side B',
+    Effect.gen(function*() {
+      let sideBExecuted = false
+      const workload = (w: { readonly value: string }) => {
+        if (w.value === 'side-a') {
+          return Effect.fail('side_a_fatal')
+        }
+        sideBExecuted = true
+        return Effect.succeed(true)
+      }
+      const piped = Gherkin.Do.pipe(
+        PairwiseAB('executing widget operation')('dual', (_s) => workload),
+        Then('unreachable step')(() => Effect.void),
+      )
+      const result = yield* Effect.result(piped)
+      if (!Result.isFailure(result)) throw new Error('Expected Result.failure')
+      expect(result.failure).toBeInstanceOf(StepError)
+      expect(result.failure.cause).toBe('side_a_fatal')
+      expect(sideBExecuted).toBe(false)
     }),
   )
 
