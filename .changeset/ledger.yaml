@@ -1589,6 +1589,10 @@
   intents:
     - reporter-stage-opaque
     - stryker-family-root-rewire
+"@systemfsoftware/stryker-js-engine@4.0.1":
+  dir: packages/stryker-js/stryker-js-engine
+  intents:
+    - export-entry-types
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
@@ -1639,6 +1643,10 @@
   dir: packages/stryker-js/stryker-js-html-reporter
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/stryker-js-html-reporter@3.0.4":
+  dir: packages/stryker-js/stryker-js-html-reporter
+  intents:
+    - export-entry-types
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
@@ -1698,6 +1706,10 @@
   dir: packages/stryker-js/stryker-js-instrumenter
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/stryker-js-instrumenter@6.0.2":
+  dir: packages/stryker-js/stryker-js-instrumenter
+  intents:
+    - export-entry-types
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -1938,6 +1950,10 @@
   dir: packages/stryker-js/stryker-js-typescript-checker
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/stryker-js-typescript-checker@5.0.5":
+  dir: packages/stryker-js/stryker-js-typescript-checker
+  intents:
+    - export-entry-types
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -2020,6 +2036,10 @@
   dir: packages/stryker-js/stryker-js-vitest-runner
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/stryker-js-vitest-runner@4.0.5":
+  dir: packages/stryker-js/stryker-js-vitest-runner
+  intents:
+    - export-entry-types
 "@systemfsoftware/stryker-js@0.1.0":
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
@@ -2086,6 +2106,10 @@
     - run-mutant-tested-rename
     - stryker-js-dead-entries
     - stryker-js-single-root-entry
+"@systemfsoftware/stryker-js@4.0.1":
+  dir: packages/stryker-js/stryker-js
+  intents:
+    - entry-points-pruned
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
