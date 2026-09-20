@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/hex-schema",
   "license": "Apache-2.0",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -49,6 +49,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
@@ -68,8 +69,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/all": "workspace:^"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

@@ -51,6 +51,11 @@
   dir: packages/oxlint-plugin/all
   intents:
     - oxlint-preset-cell-rules-retired
+"@systemfsoftware/all@2.1.1":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - effect-rc116-vitest5-deps
+    - rare-bars-sip
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -185,6 +190,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-atom-react@0.8.2":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -239,6 +248,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-atom@3.2.2":
+  dir: packages/atom/effect-atom
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -327,6 +340,10 @@
   dir: packages/effect-cell-types
   intents:
     - cell-adt-parity
+"@systemfsoftware/effect-cell-types@8.3.1":
+  dir: packages/effect-cell-types
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -357,6 +374,10 @@
     - loop-tags-ship-as-values
     - peer-ranges-accept-compatible-rc
     - published-types-omit-internal
+"@systemfsoftware/effect-daemon-spec@3.0.11":
+  dir: packages/effect-daemon-spec
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/effect-daemon-spec@3.0.2":
   dir: packages/core/effect/daemon-spec
   intents:
@@ -431,6 +452,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-gherkin-spec@4.1.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - vitest-5-peers
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -470,6 +495,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-memfs@2.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-bytesize
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -508,6 +537,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-discovery@1.0.4":
+  dir: packages/effect-schema-discovery
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -552,6 +585,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-extensions@0.9.9":
+  dir: packages/effect-schema-extensions
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -594,6 +631,11 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-law@2.2.0":
+  dir: packages/effect-schema-law
+  intents:
+    - schema-v4-arbitrary
+    - vitest-5-peers
 "@systemfsoftware/effect-schema-recursion-budget@0.0.0":
   dir: packages/effect-schema-recursion-budget
   intents:
@@ -603,6 +645,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-recursion-budget@0.1.0":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - schema-v4-arbitrary
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -650,6 +696,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-schema-vite@2.2.0":
+  dir: packages/effect-schema-vite
+  intents:
+    - vitest-5-peers
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -702,6 +752,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/hex-schema@1.8.9":
+  dir: packages/hex-schema
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/npm-package@0.2.0":
   dir: packages/npm-package
   intents:
@@ -723,6 +777,10 @@
   dir: packages/npm-package
   intents:
     - api-extractor-rollout
+"@systemfsoftware/npm-package@0.2.5":
+  dir: packages/npm-package
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -822,6 +880,10 @@
   dir: omp/plugins/omp-typescript-discipline
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/omp-typescript-discipline@1.0.5":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/oxlint-config@0.1.0":
   dir: packages/oxlint-plugin/oxlint-config
   intents:
@@ -945,6 +1007,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
   intents:
     - oxlint-no-pseudo-gherkin
+"@systemfsoftware/oxlint-plugin-effect-dmmf@6.0.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -980,6 +1046,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
   intents:
     - runtime-construction-placement
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.1.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -1039,6 +1109,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
   intents:
     - scoping-rebuild-cascade
+"@systemfsoftware/oxlint-plugin-effect-schema@5.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-v4-arbitrary
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -1099,6 +1173,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
   intents:
     - oxlint-plugin-effect-workflow-patch-variant-name-set-split
+"@systemfsoftware/oxlint-plugin-effect-workflow@5.1.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -1142,6 +1220,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-property-testing
   intents:
     - fanout-rule-retired
+"@systemfsoftware/oxlint-plugin-property-testing@2.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-property-testing
+  intents:
+    - schema-v4-arbitrary
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -1172,6 +1254,15 @@
   dir: packages/oxlint-plugin/oxlint-plugin-recommended
   intents:
     - recommended-set-gains-new-rules
+"@systemfsoftware/oxlint-plugin-recommended@1.3.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - effect-rc116-vitest5-deps
+    - rare-bars-sip
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
@@ -1259,6 +1350,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-placement
   intents:
     - oxlint-no-pseudo-gherkin
+"@systemfsoftware/oxlint-plugin-test-placement@3.5.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-placement
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
@@ -1319,6 +1414,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin
   intents:
     - recommended-set-gains-new-rules
+"@systemfsoftware/oxlint-plugin@4.0.3":
+  dir: packages/oxlint-plugin/oxlint-plugin
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -1352,6 +1451,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/rx-effect@0.7.6":
+  dir: packages/rx-effect
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/storybook-gherkin@1.0.0":
   dir: packages/storybook-gherkin
   intents:
@@ -1395,6 +1498,10 @@
   dir: packages/storybook-gherkin
   intents:
     - api-extractor-rollout
+"@systemfsoftware/storybook-gherkin@3.0.5":
+  dir: packages/storybook-gherkin
+  intents:
+    - effect-rc116-vitest5-deps
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -2224,3 +2331,7 @@
   dir: packages/toolchain/tsconfig
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/tsconfig@1.3.5":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - effect-rc116-vitest5-deps

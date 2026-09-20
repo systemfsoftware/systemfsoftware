@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-extensions",
   "license": "Apache-2.0",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -55,6 +55,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -66,8 +67,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/all": "workspace:^"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

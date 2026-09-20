@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-daemon-spec",
   "license": "Apache-2.0",
-  "version": "3.0.10",
+  "version": "3.0.11",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -55,6 +55,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.59.1",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -77,8 +78,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/all": "workspace:^"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

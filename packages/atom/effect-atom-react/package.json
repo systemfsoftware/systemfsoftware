@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom-react",
   "license": "Apache-2.0",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -56,6 +56,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -80,8 +81,7 @@
     "scheduler": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/all": "workspace:^"
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "exports": {

@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-recursion-budget",
   "license": "Apache-2.0",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -48,13 +48,13 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
-    "@systemfsoftware/vitest-config": "workspace:^",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
