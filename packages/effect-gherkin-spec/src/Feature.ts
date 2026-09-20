@@ -122,7 +122,47 @@ export type FeatureBuilderWithScenarioLayer<
 export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
   readonly liveClock: () => FeatureBuilder<S>
   body: (body: FeatureBody<never, never, never, S>) => void
+  /**
+   * Provide a shared fixture layer across all scenarios in this feature suite.
+   *
+   * Maps to Vitest's `worker` or file-level fixture scope. Resources acquired in this layer
+   * are allocated once when the suite starts and released at suite completion.
+   *
+   * @example
+   * ```ts
+   * // Bridging a Vitest callback-based fixture:
+   * const DatabaseFixture = Layer.scoped(
+   *   Database,
+   *   Effect.acquireRelease(
+   *     Effect.sync(() => createDatabase()),
+   *     (db) => Effect.sync(() => db.teardown())
+   *   )
+   * )
+   *
+   * Feature('User management').withLayer(DatabaseFixture)
+   * ```
+   */
   withLayer: <RShared>(layer: Layer.Layer<RShared>, opts?: FeatureLayerOptions) => FeatureBuilderWithLayer<RShared, S>
+  /**
+   * Provide a per-scenario fresh fixture layer.
+   *
+   * Maps to Vitest's `test` fixture scope (`test.extend({ fixture: async ({}, use) => { ... use(val); cleanup(); } })`).
+   * Resources are allocated fresh before each scenario and automatically torn down via their
+   * `Scope` finalizer (`Effect.acquireRelease`) when the scenario completes, regardless of success or failure.
+   *
+   * @example
+   * ```ts
+   * const TempDirFixture = Layer.scoped(
+   *   TempDirectory,
+   *   Effect.acquireRelease(
+   *     Effect.sync(() => makeTempDir()),
+   *     (dir) => Effect.sync(() => removeTempDir(dir))
+   *   )
+   * )
+   *
+   * Feature('File processing').withScenarioLayer(TempDirFixture)
+   * ```
+   */
   withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(
     layer: Layer.Layer<RFresh, never, RFreshReq>,
   ) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
