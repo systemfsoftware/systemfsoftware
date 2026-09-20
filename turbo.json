@@ -28,8 +28,7 @@
         "dist/**"
       ],
       "dependsOn": [
-        "^build",
-        "^api:check"
+        "^build"
       ]
     },
     "typecheck": {
@@ -46,9 +45,7 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "^api:check",
-        "build",
-        "api:check"
+        "build"
       ],
       "cache": true
     },
@@ -68,9 +65,7 @@
       "outputLogs": "errors-only",
       "dependsOn": [
         "^build",
-        "^api:check",
-        "build",
-        "api:check"
+        "build"
       ],
       "outputs": [
         "coverage/**"
@@ -153,8 +148,6 @@
         "oxlint.config.ts",
         "tsconfig.json",
         "tsconfig.*.json",
-        "$TURBO_ROOT$/packages/oxlint-presets/*/src/**",
-        "$TURBO_ROOT$/packages/oxlint-presets/*/package.json",
         "$TURBO_ROOT$/packages/toolchain/tsconfig/*.json",
         "$TURBO_ROOT$/packages/toolchain/tsconfig/bundler/**",
         "$TURBO_ROOT$/packages/toolchain/tsconfig/tsc/**",
@@ -163,9 +156,7 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "^api:check",
-        "build",
-        "api:check"
+        "build"
       ],
       "env": [
         "NODE_ENV",
