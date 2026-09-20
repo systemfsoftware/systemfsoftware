@@ -136,6 +136,9 @@ const sourceAndTestOverrides: NonNullable<OxlintConfig['overrides']> = [
     rules: {
       ...rules,
       ...promoteWarnToError(tsgoCorrectness.rules),
+      'effecttsgo/global-date-in-effect': 'error',
+      'effecttsgo/global-timers-in-effect': 'error',
+      'effecttsgo/new-promise': 'error',
     },
   },
 ]

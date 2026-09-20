@@ -1,4 +1,4 @@
-# AGENTS.md — `@systemfsoftware/oxlint-plugin-effect-workflow`
+# AGENTS.md — `@systemfsoftware/oxlint-plugin-dmmf-workflow`
 
 Shared conventions: `packages/oxlint-plugin/AGENTS.md`. Rules here gate `CONSTITUTION.md` Articles I–II.
 
@@ -11,7 +11,7 @@ Shared conventions: `packages/oxlint-plugin/AGENTS.md`. Rules here gate `CONSTIT
 ## Verification
 
 ```bash
-pnpm --filter @systemfsoftware/oxlint-plugin-effect-workflow typecheck
-pnpm --filter @systemfsoftware/oxlint-plugin-effect-workflow test
-pnpm --filter @systemfsoftware/oxlint-plugin-effect-workflow lint
+pnpm --filter @systemfsoftware/oxlint-plugin-dmmf-workflow typecheck
+pnpm --filter @systemfsoftware/oxlint-plugin-dmmf-workflow test
+pnpm --filter @systemfsoftware/oxlint-plugin-dmmf-workflow lint
 ```

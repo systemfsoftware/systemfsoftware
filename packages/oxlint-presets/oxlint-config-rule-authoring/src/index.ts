@@ -47,6 +47,9 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
 }
 
 const config: OxlintConfig = {
+  options: {
+    typeAware: true,
+  },
   categories: {
     correctness: 'error',
   },

@@ -5,7 +5,7 @@ export default defineConfig({
   extends: [dmmf],
   overrides: [
     {
-      files: ['**/src/**'],
+      files: ['**/src/**', '!**/*.workflow.ts'],
       rules: {
         complexity: ['error', { max: 20, variant: 'modified' }],
       },
