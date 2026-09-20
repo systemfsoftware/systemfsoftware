@@ -38,7 +38,7 @@ class Ledger extends Context.Service<Ledger, {
 const LedgerRecording = Layer.sync(Ledger, () => {
   const lines: string[] = []
   return {
-    lines: Effect.sync(() => lines),
+    lines: Effect.succeed(lines),
     append: (line: string) =>
       Effect.sync(() => {
         lines.push(line)
@@ -78,7 +78,10 @@ const innerCellThatFails = Sandwich.read((bytes: Bytes) => Effect.fail(new Malfo
 
 const itemCell = Sandwich.read((command: Command) => {
   const decoded = new Decoded({ length: command.id.length })
-  return command.id === 'bad' ? Effect.fail(new Malformed({ length: decoded.length })) : Effect.succeed(decoded)
+  if (command.id === 'bad') {
+    return Effect.fail(new Malformed({ length: decoded.length }))
+  }
+  return Effect.succeed(decoded)
 }).decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
   Effect.sync(() => render(outcome))
 )
@@ -92,6 +95,11 @@ const readingBackCell = Sandwich.read((line: string) => Effect.succeed(new Decod
   admitDecodedCommand,
 ).write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
   Effect.flatMap(Ledger, (ledger) => ledger.append(`second:${render(outcome)}:${raw.length}`))
+)
+
+const standaloneProvided = Cell.provide(
+  Cell.map(answeringCell, (res) => `completed:${res}`),
+  LedgerRecording,
 )
 
 Feature('Composing cell workflows through algebraic combinators')
@@ -170,13 +178,7 @@ Feature('Composing cell workflows through algebraic combinators')
         ),
         When('the pipeline is pre-configured with the audit ledger')(
           'exit',
-          ({ cmd }) => {
-            const standalone = Cell.provide(
-              Cell.map(answeringCell, (res) => `completed:${res}`),
-              LedgerRecording,
-            )
-            return Effect.exit(standalone.run(cmd))
-          },
+          ({ cmd }) => Effect.exit(standaloneProvided.run(cmd)),
         ),
         Then('the command processes successfully to completion')(({ exit }) => {
           expect(exit).toStrictEqual(Exit.succeed('completed:admitted:4'))
@@ -201,15 +203,19 @@ Feature('Composing cell workflows through algebraic combinators')
           When('evaluating a gated stage')(
             'run',
             () => {
-              const option = row.admittedBytes === null
-                ? Option.none<Bytes>()
-                : Option.some<Bytes>({ bytes: row.admittedBytes })
+              let option = Option.none<Bytes>()
+              if (row.admittedBytes !== null) {
+                option = Option.some<Bytes>({ bytes: row.admittedBytes })
+              }
               const gated = Cell.gate(readerCell(option), innerCell)
               return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response }))
             },
           ),
           Then('the gated execution yields the expected optional result')((s) => {
-            const expected = row.expectedResult === null ? Option.none<Bytes>() : Option.some(row.expectedResult)
+            let expected: Option.Option<string | Bytes> = Option.none()
+            if (row.expectedResult !== null) {
+              expected = Option.some(row.expectedResult)
+            }
             expect(s.run.response).toStrictEqual(expected)
           }),
         ),
@@ -232,9 +238,10 @@ Feature('Composing cell workflows through algebraic combinators')
           When('a gated pipeline encounters an upstream or downstream fault')(
             'run',
             () => {
-              const cell = row.failingStage === 'gate'
-                ? Cell.gate(readerThatFails, innerCell)
-                : Cell.gate(readerCell(Option.some({ bytes: 'abcd' })), innerCellThatFails)
+              let cell = Cell.gate(readerCell(Option.some({ bytes: 'abcd' })), innerCellThatFails)
+              if (row.failingStage === 'gate') {
+                cell = Cell.gate(readerThatFails, innerCell)
+              }
               return Effect.map(Effect.exit(cell.run({ id: 'abcd' })), (exit) => ({ exit }))
             },
           ),

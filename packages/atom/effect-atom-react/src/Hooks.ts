@@ -27,6 +27,47 @@ function useStore<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): A {
 
 const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<Atom.Atom<unknown>>>()
 
+function initialValuesSetFor(
+  registry: AtomRegistry.Registry,
+): WeakSet<Atom.Atom<unknown>> {
+  const existing = initialValuesSet.get(registry)
+  if (existing !== undefined) {
+    return existing
+  }
+  return createInitialValuesSet(registry)
+}
+
+function createInitialValuesSet(
+  registry: AtomRegistry.Registry,
+): WeakSet<Atom.Atom<unknown>> {
+  const set = new WeakSet<Atom.Atom<unknown>>()
+  initialValuesSet.set(registry, set)
+  return set
+}
+
+function seedInitialValueIfNew(
+  set: WeakSet<Atom.Atom<unknown>>,
+  registry: AtomRegistry.Registry,
+  atom: Atom.Atom<unknown>,
+  value: unknown,
+): void {
+  if (set.has(atom)) {
+    return
+  }
+  set.add(atom)
+  registry.setInitialValue(atom, value)
+}
+
+function seedInitialValues(
+  registry: AtomRegistry.Registry,
+  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>,
+): void {
+  const set = initialValuesSetFor(registry)
+  for (const [atom, value] of initialValues) {
+    seedInitialValueIfNew(set, registry, atom, value)
+  }
+}
+
 /**
  * Seeds initial atom values in the current React atom registry.
  *
@@ -40,22 +81,10 @@ const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<Atom.Atom<un
  * Each atom is initialized at most once for a given registry by this hook, so
  * later calls for the same atom in that registry are ignored.
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>): void => {
-  const registry = React.useContext(RegistryContext)
-  let set = initialValuesSet.get(registry)
-  if (set === undefined) {
-    set = new WeakSet()
-    initialValuesSet.set(registry, set)
-  }
-  for (const [atom, value] of initialValues) {
-    if (!set.has(atom)) {
-      set.add(atom)
-      registry.setInitialValue(atom, value)
-    }
-  }
+  seedInitialValues(React.useContext(RegistryContext), initialValues)
 }
 
 /**
@@ -75,7 +104,6 @@ export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom
  * @see {@link useAtom} for reading and updating a writable atom from one component
  * @see {@link useAtomRef} for reading an `AtomRef` directly
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomValue: {
@@ -112,7 +140,6 @@ function mountAtom<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): void
  * @see {@link useAtomSet} for mounting a writable atom while returning a setter
  * @see {@link useAtomRefresh} for mounting an atom while returning a refresh callback
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
@@ -135,7 +162,6 @@ export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
  * @see {@link useAtomSetResult} for a setter that resolves once the write settles
  * @see {@link useAtomUpdate} for a setter that applies an updater function
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void => {
@@ -162,7 +188,6 @@ export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void 
  *
  * @see {@link useAtomSet} for writing without waiting for settlement
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomSetResult = <A, E, W>(
@@ -187,7 +212,6 @@ export const useAtomSetResult = <A, E, W>(
  *
  * @see {@link useAtomSet} for writing a complete value
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R) => W) => void => {
@@ -214,7 +238,6 @@ export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R
  *
  * @see {@link useAtomMount} for mounting an atom without returning a refresh callback
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
@@ -237,7 +260,6 @@ export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
  * @see {@link useAtomValue} for subscribing to an atom without a setter
  * @see {@link useAtomSet} for updating a writable atom without subscribing to its value
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtom = <R, W>(
@@ -261,34 +283,160 @@ const atomPromiseMap = {
   >(),
 }
 
+function booleanOrFalse(value: boolean | undefined): boolean {
+  if (value === undefined) {
+    return false
+  }
+  return value
+}
+
+function suspendOnWaitingFrom(options?: {
+  readonly suspendOnWaiting?: boolean | undefined
+}): boolean {
+  if (options === undefined) {
+    return false
+  }
+  return booleanOrFalse(options.suspendOnWaiting)
+}
+
+function includeFailureFrom(options?: {
+  readonly includeFailure?: boolean | undefined
+}): boolean {
+  if (options === undefined) {
+    return false
+  }
+  return booleanOrFalse(options.includeFailure)
+}
+
+function promiseRegistries(
+  suspendOnWaiting: boolean,
+): WeakMap<AtomRegistry.Registry, WeakMap<Atom.Atom<unknown>, Promise<void>>> {
+  if (suspendOnWaiting) {
+    return atomPromiseMap.suspendOnWaiting
+  }
+  return atomPromiseMap.default
+}
+
+function createAtomPromiseMap(
+  registries: WeakMap<AtomRegistry.Registry, WeakMap<Atom.Atom<unknown>, Promise<void>>>,
+  registry: AtomRegistry.Registry,
+): WeakMap<Atom.Atom<unknown>, Promise<void>> {
+  const map = new WeakMap<Atom.Atom<unknown>, Promise<void>>()
+  registries.set(registry, map)
+  return map
+}
+
+function promiseMapFor(
+  registry: AtomRegistry.Registry,
+  suspendOnWaiting: boolean,
+): WeakMap<Atom.Atom<unknown>, Promise<void>> {
+  const registries = promiseRegistries(suspendOnWaiting)
+  const existing = registries.get(registry)
+  if (existing !== undefined) {
+    return existing
+  }
+  return createAtomPromiseMap(registries, registry)
+}
+
+function waitingBlocks<A, E>(
+  result: AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>,
+  suspendOnWaiting: boolean,
+): boolean {
+  if (suspendOnWaiting === false) {
+    return false
+  }
+  return result.waiting
+}
+
+function resultIsPending<A, E>(
+  result: AsyncResult.Result<A, E>,
+  suspendOnWaiting: boolean,
+): boolean {
+  if (AsyncResult.isInitial(result)) {
+    return true
+  }
+  return waitingBlocks(result, suspendOnWaiting)
+}
+
+function shouldKeepPending<A, E>(
+  settled: boolean,
+  result: AsyncResult.Result<A, E>,
+  suspendOnWaiting: boolean,
+): boolean {
+  if (settled) {
+    return true
+  }
+  return resultIsPending(result, suspendOnWaiting)
+}
+
+function settleAtomPromise(
+  state: { settled: boolean },
+  dispose: () => void,
+  resolve: () => void,
+  map: WeakMap<Atom.Atom<unknown>, Promise<void>>,
+  atom: Atom.Atom<unknown>,
+): void {
+  state.settled = true
+  dispose()
+  resolve()
+  map.delete(atom)
+}
+
+function onAtomPromiseResult<A, E>(
+  state: { settled: boolean },
+  result: AsyncResult.Result<A, E>,
+  suspendOnWaiting: boolean,
+  dispose: () => void,
+  resolve: () => void,
+  map: WeakMap<Atom.Atom<unknown>, Promise<void>>,
+  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+): void {
+  if (shouldKeepPending(state.settled, result, suspendOnWaiting)) {
+    return
+  }
+  settleAtomPromise(state, dispose, resolve, map, atom)
+}
+
+function createAtomPromise<A, E>(
+  registry: AtomRegistry.Registry,
+  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  suspendOnWaiting: boolean,
+  map: WeakMap<Atom.Atom<unknown>, Promise<void>>,
+): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  const state = { settled: false }
+  const dispose = registry.subscribe(atom, (result) => {
+    onAtomPromiseResult(state, result, suspendOnWaiting, dispose, resolve, map, atom)
+  })
+  map.set(atom, promise)
+  return promise
+}
+
 function atomToPromise<A, E>(
   registry: AtomRegistry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
 ): Promise<void> {
-  const registries = suspendOnWaiting ? atomPromiseMap.suspendOnWaiting : atomPromiseMap.default
-  let map = registries.get(registry)
-  if (map === undefined) {
-    map = new WeakMap()
-    registries.set(registry, map)
-  }
+  const map = promiseMapFor(registry, suspendOnWaiting)
   const cached = map.get(atom)
   if (cached !== undefined) {
     return cached
   }
-  const { promise, resolve } = Promise.withResolvers<void>()
-  let settled = false
-  const dispose = registry.subscribe(atom, (result) => {
-    if (settled || AsyncResult.isInitial(result) || (suspendOnWaiting && result.waiting)) {
-      return
-    }
-    settled = true
-    dispose()
-    resolve()
-    map.delete(atom)
-  })
-  map.set(atom, promise)
-  return promise
+  return createAtomPromise(registry, atom, suspendOnWaiting, map)
+}
+
+function isReadyResult<A, E>(
+  value: AsyncResult.Result<A, E>,
+  suspendOnWaiting: boolean,
+): value is AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
+  if (AsyncResult.isInitial(value)) {
+    return false
+  }
+  return waitingBlocks(value, suspendOnWaiting) === false
+}
+
+function throwForSuspense(error: Error): never {
+  throw error
 }
 
 function atomResultOrSuspend<A, E>(
@@ -297,10 +445,35 @@ function atomResultOrSuspend<A, E>(
   suspendOnWaiting: boolean,
 ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
   const value = useStore(registry, atom)
-  if (AsyncResult.isInitial(value) || (suspendOnWaiting && value.waiting)) {
-    throw atomToPromise(registry, atom, suspendOnWaiting)
+  if (isReadyResult(value, suspendOnWaiting)) {
+    return value
   }
-  return value
+  // @ts-expect-error React Suspense requires throwing a thenable promise.
+  throwForSuspense(atomToPromise(registry, atom, suspendOnWaiting))
+}
+
+function failureResultOrThrow<A, E>(
+  result: AsyncResult.Failure<A, E>,
+  options?: {
+    readonly includeFailure?: boolean | undefined
+  },
+): AsyncResult.Failure<A, E> {
+  if (includeFailureFrom(options)) {
+    return result
+  }
+  throw Cause.squash(result.cause)
+}
+
+function resolveAtomSuspense<A, E>(
+  result: AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>,
+  options?: {
+    readonly includeFailure?: boolean | undefined
+  },
+): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
+  if (AsyncResult.isFailure(result)) {
+    return failureResultOrThrow(result, options)
+  }
+  return result
 }
 
 /**
@@ -324,7 +497,6 @@ function atomResultOrSuspend<A, E>(
  *
  * @see {@link useAtomValue} for reading the raw `AsyncResult` value without Suspense
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomSuspense = <A, E>(
@@ -335,14 +507,10 @@ export const useAtomSuspense = <A, E>(
   },
 ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> => {
   const registry = React.useContext(RegistryContext)
-  const result = atomResultOrSuspend(registry, atom, options?.suspendOnWaiting ?? false)
-  if (AsyncResult.isFailure(result)) {
-    if (options?.includeFailure) {
-      return result
-    }
-    throw Cause.squash(result.cause)
-  }
-  return result
+  return resolveAtomSuspense(
+    atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
+    options,
+  )
 }
 
 /**
@@ -362,7 +530,6 @@ export const useAtomSuspense = <A, E>(
  *
  * @see {@link useAtomValue} for reading an atom value during render instead of running a callback
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomSubscribe = <A>(
@@ -395,7 +562,6 @@ export const useAtomSubscribe = <A>(
  * @see {@link useAtomValue} for reading an `Atom` from the current registry
  * @see {@link useAtomRefPropValue} for reading a property ref value
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
@@ -420,7 +586,6 @@ export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
  * @see {@link useAtomRef} for subscribing to an atom ref value
  * @see {@link useAtomRefPropValue} for subscribing directly to a property value
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomRefProp = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
@@ -444,7 +609,6 @@ export const useAtomRefProp = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, pr
  * @see {@link useAtomRefProp} for returning the property ref directly
  * @see {@link useAtomRef} for subscribing to a whole atom ref value
  *
- * @category hooks
  * @since 4.0.0
  */
 export const useAtomRefPropValue = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K] =>

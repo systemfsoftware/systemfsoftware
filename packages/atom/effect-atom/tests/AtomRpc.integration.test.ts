@@ -7,23 +7,26 @@ import { Effect, Layer, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import { expect } from 'vitest'
 
+const finiteNumber = Schema.decodeUnknownSync(Schema.Finite)
+type FiniteNumber = Schema.Schema.Type<typeof Schema.Finite>
+
 const Feature = makeFeature({ it, layer })
 
 const Group = RpcGroup.make(
   Rpc.make('getUser', {
     payload: Schema.Struct({ id: Schema.FiniteFromString }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
   }),
   Rpc.make('createUser', {
     payload: Schema.Struct({ name: Schema.String }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
   }),
 )
 
 const StreamGroup = RpcGroup.make(
   Rpc.make('getItems', {
-    payload: Schema.Struct({ count: Schema.Number }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    payload: Schema.Struct({ count: Schema.Finite }),
+    success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
     stream: true,
   }),
 )
@@ -39,7 +42,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             Effect.sync(() => {
               let callCount = 0
               const makeEffect = Effect.succeed(
-                (tag: string, payload: { readonly id: number }) => {
+                (tag: string, payload: { readonly id: FiniteNumber }) => {
                   callCount++
                   if (tag !== 'getUser') {
                     return Effect.die(`unexpected tag: ${tag}`)
@@ -84,7 +87,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           Effect.sync(() => {
             let callCount = 0
             const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: number }) => {
+              (tag: string, payload: { readonly id: FiniteNumber }) => {
                 callCount++
                 return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
               },
@@ -123,7 +126,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
                 if (tag !== 'createUser') {
                   return Effect.die(`unexpected tag: ${tag}`)
                 }
-                return Effect.succeed({ id: 1, name: payload.name })
+                return Effect.succeed({ id: finiteNumber(1), name: payload.name })
               },
             )
             const Client = AtomRpc.Service()('Client', {
@@ -165,8 +168,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
                   return Effect.die(`unexpected tag: ${tag}`)
                 }
                 return Stream.fromIterable([
-                  { id: 1, name: 'first' },
-                  { id: 2, name: 'second' },
+                  { id: finiteNumber(1), name: 'first' },
+                  { id: finiteNumber(2), name: 'second' },
                 ])
               },
             )
@@ -215,13 +218,13 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             Effect.sync(() => {
               let callCount = 0
               const makeEffect = Effect.succeed(
-                (tag: string, payload: { readonly id?: number; readonly name?: string }) => {
+                (tag: string, payload: { readonly id?: FiniteNumber; readonly name?: string }) => {
                   callCount++
                   if (tag === 'getUser') {
-                    return Effect.succeed({ id: 1, name: 'user-1' })
+                    return Effect.succeed({ id: finiteNumber(1), name: 'user-1' })
                   }
                   if (tag === 'createUser') {
-                    return Effect.succeed({ id: 1, name: payload.name ?? '' })
+                    return Effect.succeed({ id: finiteNumber(1), name: payload.name ?? '' })
                   }
                   return Effect.die(`unexpected tag: ${tag}`)
                 },
@@ -272,7 +275,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         Given('a page that builds its rpc client with a protocol function')('ctx', () =>
           Effect.sync(() => {
             const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: number }) => {
+              (tag: string, payload: { readonly id: FiniteNumber }) => {
                 if (tag !== 'getUser') {
                   return Effect.die(`unexpected tag: ${tag}`)
                 }
@@ -314,7 +317,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           Effect.sync(() => {
             let callCount = 0
             const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: number }) => {
+              (tag: string, payload: { readonly id: FiniteNumber }) => {
                 callCount++
                 if (tag !== 'getUser') {
                   return Effect.die(`unexpected tag: ${tag}`)

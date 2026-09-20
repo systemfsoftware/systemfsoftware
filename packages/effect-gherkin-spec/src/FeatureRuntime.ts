@@ -16,22 +16,39 @@ export type ScenarioBody<R = never> = Effect.Effect<unknown, StepError, R>
 
 export type RegisterMode = 'run' | 'skip' | 'only'
 
+const applyWhenBothPresent = <R, A, E>(
+  effect: Effect.Effect<A, E, R>,
+  scenarioLayer: Layer.Layer<never>,
+  extra: Layer.Layer<never> | undefined,
+): Effect.Effect<A, E, R> => {
+  if (extra === void 0) {
+    return effect.pipe(Effect.provide(Layer.fresh(scenarioLayer)))
+  }
+  return effect.pipe(Effect.provide(Layer.mergeAll(Layer.fresh(scenarioLayer), extra)))
+}
+
+const applyWhenScenarioMissing = <R, A, E>(
+  effect: Effect.Effect<A, E, R>,
+  extra: Layer.Layer<never> | undefined,
+): Effect.Effect<A, E, R> => {
+  if (extra === void 0) return effect
+  return effect.pipe(Effect.provide(extra))
+}
+
+const applyDefinedOpts = <R, A, E>(
+  effect: Effect.Effect<A, E, R>,
+  opts: ScenarioOptions<never, never>,
+): Effect.Effect<A, E, R> => {
+  if (opts.scenarioLayer === void 0) return applyWhenScenarioMissing(effect, opts.layer)
+  return applyWhenBothPresent(effect, opts.scenarioLayer, opts.layer)
+}
+
 const applyScenarioOpts = <R, A, E>(
   effect: Effect.Effect<A, E, R>,
   opts: ScenarioOptions<never, never> | null,
 ): Effect.Effect<A, E, R> => {
-  if (opts?.scenarioLayer !== void 0 && opts.layer !== void 0) {
-    return effect.pipe(
-      Effect.provide(Layer.mergeAll(Layer.fresh(opts.scenarioLayer), opts.layer)),
-    )
-  }
-  if (opts?.scenarioLayer !== void 0) {
-    return effect.pipe(Effect.provide(Layer.fresh(opts.scenarioLayer)))
-  }
-  if (opts?.layer !== void 0) {
-    return effect.pipe(Effect.provide(opts.layer))
-  }
-  return effect
+  if (opts === null) return effect
+  return applyDefinedOpts(effect, opts)
 }
 
 const normalizePipeline = <R>(
@@ -56,6 +73,21 @@ const buildScenarioNoFresh = <R>(
   return applyScenarioOpts(effect, opts)
 }
 
+const provideFreshOptional = <R, A, E>(
+  effect: Effect.Effect<A, E, R>,
+  layer: Layer.Layer<never> | undefined,
+): Effect.Effect<A, E, R> => {
+  if (layer === void 0) return effect
+  return effect.pipe(Effect.provide(Layer.fresh(layer)))
+}
+
+const layersFromOpts = (
+  opts: ScenarioOptions<never, never> | null,
+): ScenarioOptions<never, never> => {
+  if (opts === null) return {}
+  return opts
+}
+
 const buildScenarioWithFresh = <RShared, RFresh, RFreshReq>(
   pipeline: Effect.Effect<unknown, StepError, RShared | RFresh | RFreshReq>,
   opts: ScenarioOptions<never, never> | null,
@@ -63,14 +95,10 @@ const buildScenarioWithFresh = <RShared, RFresh, RFreshReq>(
   featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
 ): Effect.Effect<void, StepError, RShared | RFreshReq> => {
   const composed = composeWithBackground(pipeline, background)
-  let result = composed
-  if (opts?.scenarioLayer !== void 0) {
-    result = result.pipe(Effect.provide(Layer.fresh(opts.scenarioLayer)))
-  }
-  if (opts?.layer !== void 0) {
-    result = result.pipe(Effect.provide(opts.layer))
-  }
-  return result.pipe(Effect.provide(Layer.fresh(featureScenarioLayer)))
+  const layers = layersFromOpts(opts)
+  const withScenario = provideFreshOptional(composed, layers.scenarioLayer)
+  const withExtra = applyWhenScenarioMissing(withScenario, layers.layer)
+  return withExtra.pipe(Effect.provide(Layer.fresh(featureScenarioLayer)))
 }
 
 /**
@@ -123,6 +151,47 @@ export type OutlineFn<RShared = never, RFresh = never, RFreshReq = never> =
     readonly only: OutlineCallable<RShared, RFresh, RFreshReq>
   }
 
+const optsOrNull = (
+  opts: ScenarioOptions<never, never> | undefined,
+): ScenarioOptions<never, never> | null => {
+  if (opts === void 0) return null
+  return opts
+}
+
+type OutlineRowRef<Row> = {
+  readonly title: string
+  readonly row: Row
+}
+
+const registerOutlineRows = <R, Row>(
+  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+  rows: readonly OutlineRowRef<Row>[],
+  mode: RegisterMode,
+  build: (row: Row) => Effect.Effect<void, StepError, R>,
+): void => {
+  for (const { title, row } of rows) {
+    register(title, build(row), mode)
+  }
+}
+
+const registerOutlineResult = <R, Row extends Record<string, unknown>>(
+  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+  name: string,
+  expanded: Result.Result<readonly OutlineRowRef<Row>[], string>,
+  mode: RegisterMode,
+  build: (row: Row) => Effect.Effect<void, StepError, R>,
+): void => {
+  if (Result.isFailure(expanded)) {
+    register(
+      name,
+      Effect.fail(StepError.make({ keyword: 'scenarioOutline', text: expanded.failure, cause: void 0 })),
+      mode,
+    )
+    return
+  }
+  registerOutlineRows(register, expanded.success, mode, build)
+}
+
 const makeOutlineCallableNoFresh = <R = never>(
   register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
   getBackground: () => Effect.Effect<unknown, StepError, R> | null,
@@ -149,20 +218,13 @@ const makeOutlineCallableNoFresh = <R = never>(
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, R>,
     opts?: ScenarioOptions<never, never>,
   ): void {
-    const expanded = expandOutline(name, examples)
-    if (Result.isFailure(expanded)) {
-      register(
-        name,
-        Effect.fail(StepError.make({ keyword: 'scenarioOutline', text: expanded.failure, cause: void 0 })),
-        mode,
-      )
-      return
-    }
-    for (const { title, row } of expanded.success) {
-      const pipeline = stepFactory(row)
-      const scenarioEffect = buildScenarioNoFresh<R>(pipeline, opts ?? null, getBackground())
-      register(title, scenarioEffect, mode)
-    }
+    registerOutlineResult(
+      register,
+      name,
+      expandOutline(name, examples),
+      mode,
+      (row) => buildScenarioNoFresh<R>(stepFactory(row), optsOrNull(opts), getBackground()),
+    )
   }
   return outlineFn
 }
@@ -207,25 +269,19 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RShared | RFresh | RFreshReq>,
     opts?: ScenarioOptions<never, never>,
   ): void {
-    const expanded = expandOutline(name, examples)
-    if (Result.isFailure(expanded)) {
-      register(
-        name,
-        Effect.fail(StepError.make({ keyword: 'scenarioOutline', text: expanded.failure, cause: void 0 })),
-        mode,
-      )
-      return
-    }
-    for (const { title, row } of expanded.success) {
-      const pipeline = stepFactory(row)
-      const scenarioEffect = buildScenarioWithFresh<RShared, RFresh, RFreshReq>(
-        pipeline,
-        opts ?? null,
-        getBackground(),
-        featureScenarioLayer,
-      )
-      register(title, scenarioEffect, mode)
-    }
+    registerOutlineResult(
+      register,
+      name,
+      expandOutline(name, examples),
+      mode,
+      (row) =>
+        buildScenarioWithFresh<RShared, RFresh, RFreshReq>(
+          stepFactory(row),
+          optsOrNull(opts),
+          getBackground(),
+          featureScenarioLayer,
+        ),
+    )
   }
   return outlineFn
 }
@@ -290,33 +346,63 @@ export type FeatureBody<
   readonly Do: Effect.Effect<object, never, never>
 }) => void
 
-const isScenarioOpts = (v: unknown): v is ScenarioOptions =>
-  typeof v === 'object' && v !== null && ('scenarioLayer' in v || 'layer' in v)
+const isObjectValue = (v: unknown): v is object => {
+  if (typeof v !== 'object') return false
+  return v !== null
+}
+
+const hasScenarioOptKey = (v: object): boolean => {
+  if ('scenarioLayer' in v) return true
+  return 'layer' in v
+}
+
+const isScenarioOpts = (v: unknown): v is ScenarioOptions => {
+  if (!isObjectValue(v)) return false
+  return hasScenarioOptKey(v)
+}
+
+const missingPipelineArgs = <R>(): {
+  pipeline: Effect.Effect<unknown, StepError, R>
+  opts: null
+} => ({
+  pipeline: Effect.fail(
+    StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
+  ),
+  opts: null,
+})
+
+const missingPipelineWithOpts = <R>(): {
+  pipeline: Effect.Effect<unknown, StepError, R>
+  opts: null
+} => ({
+  pipeline: Effect.fail(
+    StepError.make({ keyword: 'scenario', text: 'pipeline is required when options are provided', cause: void 0 }),
+  ),
+  opts: null,
+})
+
+const resolveOptsAndPipeline = <R>(
+  opts: ScenarioOptions<never, never>,
+  third: Effect.Effect<unknown, StepError, R> | undefined,
+): { pipeline: Effect.Effect<unknown, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
+  if (third === void 0) return missingPipelineWithOpts<R>()
+  return { pipeline: third, opts }
+}
+
+const resolvePresentSecond = <R>(
+  second: Effect.Effect<unknown, StepError, R> | ScenarioOptions<never, never>,
+  third: Effect.Effect<unknown, StepError, R> | undefined,
+): { pipeline: Effect.Effect<unknown, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
+  if (!isScenarioOpts(second)) return { pipeline: second, opts: null }
+  return resolveOptsAndPipeline(second, third)
+}
 
 export const resolveScenarioArgs = <R>(
   second: Effect.Effect<unknown, StepError, R> | ScenarioOptions<never, never> | undefined,
   third: Effect.Effect<unknown, StepError, R> | undefined,
 ): { pipeline: Effect.Effect<unknown, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
-  if (second === void 0) {
-    return {
-      pipeline: Effect.fail(
-        StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
-      ),
-      opts: null,
-    }
-  }
-  if (!isScenarioOpts(second)) {
-    return { pipeline: second, opts: null }
-  }
-  if (third === void 0) {
-    return {
-      pipeline: Effect.fail(
-        StepError.make({ keyword: 'scenario', text: 'pipeline is required when options are provided', cause: void 0 }),
-      ),
-      opts: null,
-    }
-  }
-  return { pipeline: third, opts: second }
+  if (second === void 0) return missingPipelineArgs<R>()
+  return resolvePresentSecond(second, third)
 }
 
 const makeScenarioCallableNoFresh = <R>(

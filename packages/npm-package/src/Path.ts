@@ -10,18 +10,29 @@
 
 const isSeparator = (code: number): boolean => code === 47 /* / */ || code === 92 /* \ */
 
-export const ensureTrailingDirectorySeparator = (path: string): string => {
-  if (path.length === 0) return '/'
-  return isSeparator(path.charCodeAt(path.length - 1)) ? path : `${path}/`
+const withTrailingSeparator = (path: string): string => {
+  if (isSeparator(path.charCodeAt(path.length - 1))) return path
+  return `${path}/`
 }
 
-export const combinePaths = (base: string, relative: string): string => {
-  if (relative.length === 0) return base
+export const ensureTrailingDirectorySeparator = (path: string): string => {
+  if (path.length === 0) return '/'
+  return withTrailingSeparator(path)
+}
+
+const joinNormalized = (base: string, relative: string): string => {
   const normalized = relative.replaceAll('\\', '/')
   if (normalized.startsWith('/')) return normalized
   return ensureTrailingDirectorySeparator(base.replaceAll('\\', '/')) + normalized
 }
 
+export const combinePaths = (base: string, relative: string): string => {
+  if (relative.length === 0) return base
+  return joinNormalized(base, relative)
+}
+
 /** Anchor a package-relative path under an absolute base, leaving an already-absolute path alone. */
-export const posixJoin = (base: string, relative: string): string =>
-  relative.startsWith('/') ? relative : `${base}/${relative}`
+export const posixJoin = (base: string, relative: string): string => {
+  if (relative.startsWith('/')) return relative
+  return `${base}/${relative}`
+}

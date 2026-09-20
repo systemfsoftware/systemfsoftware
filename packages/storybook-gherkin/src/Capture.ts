@@ -21,10 +21,11 @@ export function capture<Name extends string, A>(
   name: Name,
   options?: { readonly schema?: Schema.Codec<A, string>; readonly default?: string },
 ): Capture<Name, A> {
+  const resolved = options ?? {}
   return {
     ...CaptureTag,
     name,
-    schema: options?.schema,
-    default: options?.default,
+    schema: resolved.schema,
+    default: resolved.default,
   }
 }

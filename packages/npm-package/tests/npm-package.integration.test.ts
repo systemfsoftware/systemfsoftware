@@ -6,17 +6,23 @@ import {
   packTree,
   toDirectoryJSON,
 } from '@systemfsoftware/npm-package'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
+const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+
+const uint8Of = (value: string | Uint8Array | null | undefined): Uint8Array => {
+  if (value instanceof Uint8Array) return value
+  return new Uint8Array()
+}
 
 Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenario }) => {
   scenario(
     'Should_TolerateZeroPaddedGzip_When_TrailingZerosAppended',
     Effect.sync(() => {
       const tree = {
-        'package.json': JSON.stringify({ name: 'pad-test', version: '0.0.1' }),
+        'package.json': jsonString({ name: 'pad-test', version: '0.0.1' }),
         'index.js': 'hi',
       }
       const original = createPackage(tree, 'pad-test', '0.0.1')
@@ -46,7 +52,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
     'Should_Fail_When_PackageJsonLacksName',
     Effect.sync(() => {
       const tarball = packTree(
-        { 'package.json': JSON.stringify({ version: '1.0.0' }), 'index.js': 'hi' },
+        { 'package.json': jsonString({ version: '1.0.0' }), 'index.js': 'hi' },
         'missing-name',
       )
       expect(() => createPackageFromTarballData(tarball)).toThrow(/Invalid package\.json/)
@@ -57,7 +63,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
     'Should_Fail_When_PackageJsonLacksVersion',
     Effect.sync(() => {
       const tarball = packTree(
-        { 'package.json': JSON.stringify({ name: 'missing-version' }), 'index.js': 'hi' },
+        { 'package.json': jsonString({ name: 'missing-version' }), 'index.js': 'hi' },
         'missing-version',
       )
       expect(() => createPackageFromTarballData(tarball)).toThrow(/Invalid package\.json/)
@@ -69,7 +75,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
     Effect.sync(() => {
       const scoped = '@scope/name'
       const tree = {
-        'package.json': JSON.stringify({ name: scoped, version: '2.0.0' }),
+        'package.json': jsonString({ name: scoped, version: '2.0.0' }),
         'index.js': 'scoped',
         'lib/util.js': 'util',
       }
@@ -97,7 +103,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
       )
       const pkg = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
           'relative.js': 'rel',
           '/node_modules/demo/absolute.js': 'abs',
         },
@@ -111,7 +117,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
       expect(() =>
         createPackage(
           {
-            'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+            'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
             '/node_modules/other/index.js': 'bad',
           },
           'demo',
@@ -126,7 +132,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
     Effect.sync(() => {
       const pkg = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
           'a/b.js': '1',
           'a/c.js': '2',
           'd.js': '3',
@@ -151,7 +157,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
       const binary = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x81])
       const pkg = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'bin-test', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'bin-test', version: '1.0.0' }),
           'text.txt': 'hello',
           'asset.bin': binary,
         },
@@ -161,11 +167,11 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
       expect(pkg.tryReadFile('/node_modules/bin-test/text.txt')).toBe('hello')
       const bytes = pkg.tryReadBytes('/node_modules/bin-test/asset.bin')
       expect(bytes instanceof Uint8Array).toBe(true)
-      expect(Array.from(bytes as Uint8Array)).toEqual(Array.from(binary))
+      expect(Array.from(uint8Of(bytes))).toEqual(Array.from(binary))
       const tarball = packPackage(pkg)
       const extracted = createPackageFromTarballData(tarball)
       const extractedBytes = extracted.tryReadBytes('/node_modules/bin-test/asset.bin')
-      expect(Array.from(extractedBytes as Uint8Array)).toEqual(Array.from(binary))
+      expect(Array.from(uint8Of(extractedBytes))).toEqual(Array.from(binary))
     }),
   )
 
@@ -174,7 +180,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
     Effect.sync(() => {
       const base = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'base', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'base', version: '1.0.0' }),
           '/node_modules/base/shared.txt': 'base',
           '/node_modules/base/only-base.txt': 'base-only',
         },
@@ -183,7 +189,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
       )
       const other = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'other', version: '9.9.9' }),
+          'package.json': jsonString({ name: 'other', version: '9.9.9' }),
           '/node_modules/base/shared.txt': 'other-wins',
           '/node_modules/base/only-other.txt': 'other-only',
         },
@@ -205,7 +211,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
     'Should_ProjectToDirectoryJSON_When_TreeHasStringAndBinaryEntries',
     Effect.sync(() => {
       const files = {
-        'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+        'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
         'index.js': 'hi',
         'asset.bin': new Uint8Array([1, 2, 3]),
       }
@@ -215,7 +221,7 @@ Feature('npm-package in-memory file tree and tarball round-trip').body(({ scenar
       const jsonKeys = Object.keys(dirJson).sort()
       expect(jsonKeys).toEqual(pkgPaths)
       expect(dirJson['/node_modules/demo/index.js']).toBe('hi')
-      const bin = dirJson['/node_modules/demo/asset.bin'] as Uint8Array
+      const bin = uint8Of(dirJson['/node_modules/demo/asset.bin'])
       expect(bin instanceof Uint8Array).toBe(true)
       expect(Array.from(bin)).toEqual([1, 2, 3])
       const withNull: Record<string, string | Uint8Array | null> = {

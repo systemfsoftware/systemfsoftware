@@ -77,7 +77,8 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

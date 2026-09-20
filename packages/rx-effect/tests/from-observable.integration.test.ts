@@ -29,6 +29,12 @@ const Feature = makeFeature({ it, layer })
 const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<readonly A[], E, never> =>
   Stream.runCollect(stream).pipe(Effect.map((chunk) => Array.from(chunk)))
 
+const errorMessage = (e: unknown): string => {
+  if (e instanceof Error) return e.message
+  if (typeof e === 'string') return e
+  return 'unknown-error'
+}
+
 Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) => {
   scenario(
     'An observable that emits three values then completes yields those three values to the stream',
@@ -113,7 +119,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
       ),
       When('the stream is collected with a string mapper')('outcome', (s) =>
         collectValues(
-          fromObservable((e) => String(e instanceof Error ? e.message : e))(s.observable),
+          fromObservable(errorMessage)(s.observable),
         ).pipe(Effect.result)),
       Then('the call fails with the mapped message')((s) => {
         expect(s.outcome).toEqual(Result.fail('boom'))
@@ -135,7 +141,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge').body(({ scenario }) =
       ),
       When('the stream is collected with a string mapper')('outcome', (s) =>
         collectValues(
-          fromObservable((e) => String(e instanceof Error ? e.message : e))(s.observable),
+          fromObservable(errorMessage)(s.observable),
         ).pipe(Effect.result)),
       Then('the call fails with the full multi-line string')((s) => {
         expect(s.outcome).toEqual(Result.fail('line one\nline two'))

@@ -20,7 +20,7 @@ Feature('Restoring saved page state')
         Given('a page that will receive saved state for an atom it has not loaded yet')('ctx', () =>
           Effect.sync(() => {
             const temperature = Atom.make(18).pipe(
-              Atom.serializable({ key: 'fresh-temperature', schema: Schema.Number }),
+              Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
             )
             const savedPage = AtomRegistry.make()
             savedPage.set(temperature, 23)
@@ -38,10 +38,10 @@ Feature('Restoring saved page state')
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.sync(() => true)),
+        When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('the saved value is already on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
           })
         ),
       ),
@@ -71,10 +71,10 @@ Feature('Restoring saved page state')
               return {}
             }),
         ),
-        When('the page is shown')('shown', () => Effect.sync(() => true)),
+        When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('the value that was set is still on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
           })
         ),
       ),

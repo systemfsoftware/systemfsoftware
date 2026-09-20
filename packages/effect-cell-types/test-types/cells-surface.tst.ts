@@ -239,7 +239,13 @@ describe('the provide that clears the services', () => {
 
 describe('the combinator algebra', () => {
   it('Should_PreserveEveryChannel_When_MappingTheResponse', () => {
-    const mapped = pipe(outputCell, Cell.map((verdict: boolean): number => (verdict ? 1 : 0)))
+    const mapped = pipe(
+      outputCell,
+      Cell.map((verdict: boolean): number => {
+        if (verdict) return 1
+        return 0
+      }),
+    )
     expect(mapped).type.toBe<Cell.Cell<Output, number, WriteErr, Bus>>()
   })
 
@@ -364,7 +370,7 @@ describe('the variance the Cell carries', () => {
 
   it('Should_PipeThePipedResult_When_NestingInstancePipes', () => {
     const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
-    const piped = cell.pipe(Cell.map((response: void): number => (response === undefined ? 1 : 1)))
+    const piped = cell.pipe(Cell.map((_response: void): number => 1))
     expect(piped).type.toBe<Cell.Cell<Cmd, number, never, never>>()
     expect(piped.pipe(Cell.map((count: number): string => `${count}`))).type.toBe<
       Cell.Cell<Cmd, string, never, never>

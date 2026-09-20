@@ -184,6 +184,157 @@ const isChildIntensityBudgetDone = (
       }),
   })
 
+const childEpochOnRestartable = <R>(
+  ctx: SupervisionContext<R>,
+  idx: number,
+  childIntensityOpt: Option.Option<IntensityTracker>,
+  supIntensity: IntensityTracker,
+  cause: Cause.Cause<never>,
+): Effect.Effect<EpochStep, never, never> =>
+  Effect.gen(function*() {
+    const childIntensityBudgetDone = yield* isChildIntensityBudgetDone(childIntensityOpt)
+    if (childIntensityBudgetDone) {
+      return StopEpoch.make()
+    }
+    return yield* restartDescription({
+      strategy: 'one_for_one',
+      failedIndex: idx,
+      totalChildren: ctx.booted.length,
+      ctx,
+      cause,
+      onRestart: () => Effect.void,
+    }).run(supIntensity)
+  })
+
+const childEpochOnFailure = <R>(
+  ctx: SupervisionContext<R>,
+  child: BootedChild<R>,
+  idx: number,
+  childIntensityOpt: Option.Option<IntensityTracker>,
+  supIntensity: IntensityTracker,
+  cause: Cause.Cause<never>,
+): Effect.Effect<EpochStep, never, never> => {
+  if (child.childPolicy.restart === 'temporary') {
+    return Effect.succeed(StopEpoch.make())
+  }
+  return childEpochOnRestartable(ctx, idx, childIntensityOpt, supIntensity, cause)
+}
+
+const childEpochOnExit = <R>(
+  ctx: SupervisionContext<R>,
+  child: BootedChild<R>,
+  idx: number,
+  childIntensityOpt: Option.Option<IntensityTracker>,
+  supIntensity: IntensityTracker,
+  exit: Exit.Exit<void, never>,
+): Effect.Effect<EpochStep, never, never> => {
+  if (Exit.isSuccess(exit)) {
+    return Effect.succeed(StopEpoch.make())
+  }
+  return childEpochOnFailure(ctx, child, idx, childIntensityOpt, supIntensity, exit.cause)
+}
+
+const groupEpochOnRestartable = <R>(
+  strategy: Exclude<RestartStrategy, 'one_for_one'>,
+  ctx: SupervisionContext<R>,
+  failedIdx: number,
+  childIntensityTrackers: readonly Option.Option<IntensityTracker>[],
+  intensity: IntensityTracker,
+  cursor: Ref.Ref<number>,
+  cause: Cause.Cause<never>,
+): Effect.Effect<EpochStep, never, never> =>
+  Effect.gen(function*() {
+    const cIntForFailed = Option.flatten(Arr.get(childIntensityTrackers, failedIdx))
+    const childIntensityBudgetDone = yield* isChildIntensityBudgetDone(cIntForFailed)
+    if (childIntensityBudgetDone) {
+      return StopEpoch.make()
+    }
+    return yield* restartDescription({
+      strategy,
+      failedIndex: failedIdx,
+      totalChildren: ctx.booted.length,
+      ctx,
+      cause,
+      onRestart: (decision) => Ref.set(cursor, decision.indices[0]),
+    }).run(intensity)
+  })
+
+const groupEpochOnFailedChild = <R>(
+  strategy: Exclude<RestartStrategy, 'one_for_one'>,
+  ctx: SupervisionContext<R>,
+  failedBooted: BootedChild<R>,
+  failedIdx: number,
+  childIntensityTrackers: readonly Option.Option<IntensityTracker>[],
+  intensity: IntensityTracker,
+  cursor: Ref.Ref<number>,
+  cause: Cause.Cause<never>,
+): Effect.Effect<EpochStep, never, never> => {
+  if (failedBooted.childPolicy.restart === 'temporary') {
+    return Effect.succeed(StopEpoch.make())
+  }
+  return groupEpochOnRestartable(
+    strategy,
+    ctx,
+    failedIdx,
+    childIntensityTrackers,
+    intensity,
+    cursor,
+    cause,
+  )
+}
+
+const groupEpochOnFailure = <R>(
+  strategy: Exclude<RestartStrategy, 'one_for_one'>,
+  ctx: SupervisionContext<R>,
+  startIdx: number,
+  failedOffset: number,
+  childIntensityTrackers: readonly Option.Option<IntensityTracker>[],
+  intensity: IntensityTracker,
+  cursor: Ref.Ref<number>,
+  cause: Cause.Cause<never>,
+): Effect.Effect<EpochStep, never, never> => {
+  const failedIdx = startIdx + failedOffset
+  const failedBootedOpt = Option.fromNullishOr(ctx.booted[failedIdx])
+  if (Option.isNone(failedBootedOpt)) {
+    return Effect.succeed(StopEpoch.make())
+  }
+  return groupEpochOnFailedChild(
+    strategy,
+    ctx,
+    failedBootedOpt.value,
+    failedIdx,
+    childIntensityTrackers,
+    intensity,
+    cursor,
+    cause,
+  )
+}
+
+const groupEpochOnExit = <R>(
+  strategy: Exclude<RestartStrategy, 'one_for_one'>,
+  ctx: SupervisionContext<R>,
+  startIdx: number,
+  childIntensityTrackers: readonly Option.Option<IntensityTracker>[],
+  intensity: IntensityTracker,
+  cursor: Ref.Ref<number>,
+  failedOffset: number,
+  firstExit: Exit.Exit<void, never>,
+): Effect.Effect<EpochStep, never, never> => {
+  if (Exit.isSuccess(firstExit)) {
+    return Effect.succeed(StopEpoch.make())
+  }
+  return groupEpochOnFailure(
+    strategy,
+    ctx,
+    startIdx,
+    failedOffset,
+    childIntensityTrackers,
+    intensity,
+    cursor,
+    firstExit.cause,
+  )
+}
+
 const superviseChild = <R>(
   ctx: SupervisionContext<R>,
   child: SupervisionContext<R>['booted'][number],
@@ -201,25 +352,7 @@ const superviseChild = <R>(
           yield* ctx.health.paused.await
           const fiber = yield* Effect.forkScoped(child.run, { startImmediately: true })
           const exit = yield* Fiber.await(fiber)
-          if (!Exit.isSuccess(exit)) {
-            if (child.childPolicy.restart === 'temporary') {
-              return StopEpoch.make()
-            }
-
-            const childIntensityBudgetDone = yield* isChildIntensityBudgetDone(childIntensityOpt)
-            if (childIntensityBudgetDone) {
-              return StopEpoch.make()
-            }
-            return yield* restartDescription({
-              strategy: 'one_for_one',
-              failedIndex: idx,
-              totalChildren: ctx.booted.length,
-              ctx,
-              cause: exit.cause,
-              onRestart: () => Effect.void,
-            }).run(supIntensity)
-          }
-          return StopEpoch.make()
+          return yield* childEpochOnExit(ctx, child, idx, childIntensityOpt, supIntensity, exit)
         })
 
         const epochResult = yield* runSupervisionEpochWithBackoff(attempt, ctx)
@@ -274,34 +407,16 @@ const runGroup = <R>(
           yield* Effect.forkScoped(openAllReady(ctx), { startImmediately: true })
 
           const [failedOffset, firstExit] = yield* raceForExit(fibers)
-          if (!Exit.isSuccess(firstExit)) {
-            const failedIdx = startIdx + failedOffset
-            const failedBootedOpt = Option.fromNullishOr(ctx.booted[failedIdx])
-            if (Option.isNone(failedBootedOpt)) {
-              return StopEpoch.make()
-            }
-            const failedBooted = failedBootedOpt.value
-
-            if (failedBooted.childPolicy.restart === 'temporary') {
-              return StopEpoch.make()
-            }
-
-            const cIntForFailed = Option.flatten(Arr.get(childIntensityTrackers, failedIdx))
-            const childIntensityBudgetDone = yield* isChildIntensityBudgetDone(cIntForFailed)
-            if (childIntensityBudgetDone) {
-              return StopEpoch.make()
-            }
-            return yield* restartDescription({
-              strategy,
-              failedIndex: failedIdx,
-              totalChildren: ctx.booted.length,
-              ctx,
-              cause: firstExit.cause,
-              onRestart: (decision) =>
-                Ref.set(cursor, decision.indices[0]),
-            }).run(intensity)
-          }
-          return StopEpoch.make()
+          return yield* groupEpochOnExit(
+            strategy,
+            ctx,
+            startIdx,
+            childIntensityTrackers,
+            intensity,
+            cursor,
+            failedOffset,
+            firstExit,
+          )
         })
 
         const epochResult = yield* runSupervisionEpochWithBackoff(attempt, ctx)

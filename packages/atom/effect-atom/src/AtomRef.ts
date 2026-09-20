@@ -12,11 +12,11 @@
 import * as Equal from 'effect/Equal'
 import type { Equal as EqualType } from 'effect/Equal'
 import * as Hash from 'effect/Hash'
+import { hasProperty } from 'effect/Predicate'
 
 /**
  * The literal type used to identify `AtomRef` values.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export type TypeId = '~effect/reactivity/AtomRef'
@@ -24,7 +24,6 @@ export type TypeId = '~effect/reactivity/AtomRef'
 /**
  * The runtime type id used to identify `AtomRef` values.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const TypeId: TypeId = '~effect/reactivity/AtomRef'
@@ -38,7 +37,6 @@ export const TypeId: TypeId = '~effect/reactivity/AtomRef'
  * `map` for creating derived read-only references. Equality and hashing are based
  * on the current value.
  *
- * @category models
  * @since 4.0.0
  */
 export interface ReadonlyRef<A> extends EqualType {
@@ -57,7 +55,6 @@ export interface ReadonlyRef<A> extends EqualType {
  * It supports replacing the whole value, updating it from the current value, and
  * creating mutable references to nested properties.
  *
- * @category models
  * @since 4.0.0
  */
 export interface AtomRef<A> extends ReadonlyRef<A> {
@@ -74,7 +71,6 @@ export interface AtomRef<A> extends ReadonlyRef<A> {
  * The collection can push, insert, and remove item refs, and `toArray` returns the
  * current raw item values.
  *
- * @category models
  * @since 4.0.0
  */
 export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
@@ -87,7 +83,6 @@ export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
 /**
  * Creates a mutable reactive reference initialized with the supplied value.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
@@ -100,20 +95,100 @@ export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
  * Each item is wrapped in an `AtomRef`, and changes to item refs notify the
  * collection subscribers.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items)
 
-const isReadonlyRef = (u: unknown): u is ReadonlyRef<unknown> => typeof u === 'object' && u !== null && TypeId in u
+const isReadonlyRef = (u: unknown): u is ReadonlyRef<unknown> => hasProperty(u, TypeId)
 
 const isArrayWithProp = <A, K extends keyof A>(value: A, _prop: K): value is A & Array<A[K]> => Array.isArray(value)
+
+const hasProp = <A, K extends PropertyKey>(value: A, prop: K): boolean => {
+  if (value != null) {
+    return propInObject(value, prop)
+  }
+  return false
+}
+
+const propInObject = (value: NonNullable<unknown>, prop: PropertyKey): boolean => {
+  const boxed: unknown = Object(value)
+  return hasKey(boxed, prop)
+}
+
+const isInTarget = (value: unknown): value is object => {
+  if (typeof value === 'object') {
+    return value !== null
+  }
+  return typeof value === 'function'
+}
+
+const hasKey = (value: unknown, prop: PropertyKey): boolean => {
+  if (isInTarget(value)) {
+    return prop in value
+  }
+  return false
+}
+
+const emitIfChanged = <B>(next: B, previous: B, f: (value: B) => void): B => {
+  if (Equal.equals(next, previous)) {
+    return previous
+  }
+  f(next)
+  return next
+}
+
+const emitPropIfPresent = <A, K extends keyof A>(
+  prop: K,
+  a: A,
+  previous: A[K],
+  f: (value: A[K]) => void,
+): A[K] => {
+  if (hasProp(a, prop)) {
+    return emitIfChanged(a[prop], previous, f)
+  }
+  return previous
+}
 
 const keyState = {
   count: 0,
   generate() {
     return `AtomRef-${this.count++}`
   },
+}
+type Listener<A> = {
+  readonly f: (a: A) => void
+  prev: Listener<A> | null
+  next: Listener<A> | null
+}
+
+const linkListener = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): void => {
+  if (self.listeners !== null) {
+    self.listeners.prev = listener
+  }
+}
+
+const unlinkIfHead = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): void => {
+  if (self.listeners === listener) {
+    self.listeners = listener.next
+  }
+}
+
+const unlinkPrev = <A>(listener: Listener<A>): void => {
+  if (listener.prev !== null) {
+    listener.prev.next = listener.next
+  }
+}
+
+const unlinkNext = <A>(listener: Listener<A>): void => {
+  if (listener.next !== null) {
+    listener.next.prev = listener.prev
+  }
+}
+
+const unlinkListener = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): void => {
+  unlinkIfHead(self, listener)
+  unlinkPrev(listener)
+  unlinkNext(listener)
 }
 
 class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
@@ -149,33 +224,17 @@ class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
       prev: null,
       next: this.listeners,
     }
-    if (this.listeners) {
-      this.listeners.prev = listener
-    }
+    linkListener(this, listener)
     this.listeners = listener
 
     return () => {
-      if (this.listeners === listener) {
-        this.listeners = listener.next
-      }
-      if (listener.prev) {
-        listener.prev.next = listener.next
-      }
-      if (listener.next) {
-        listener.next.prev = listener.prev
-      }
+      unlinkListener(this, listener)
     }
   }
 
   map<B>(f: (a: A) => B): ReadonlyRef<B> {
     return new MapRefImpl(this, f)
   }
-}
-
-type Listener<A> = {
-  readonly f: (a: A) => void
-  prev: Listener<A> | null
-  next: Listener<A> | null
 }
 
 class AtomRefImpl<A> extends ReadonlyRefImpl<A> implements AtomRef<A> {
@@ -251,23 +310,16 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     return Hash.hash(this.value)
   }
   get value() {
-    if (this.parent.value && this._prop in (this.parent.value as object)) {
-      this.previous = this.parent.value[this._prop]
+    const parentValue = this.parent.value
+    if (hasProp(parentValue, this._prop)) {
+      this.previous = parentValue[this._prop]
     }
     return this.previous
   }
   subscribe(f: (a: A[K]) => void): () => void {
     let previous = this.value
     return this.parent.subscribe((a) => {
-      if (!a || !(this._prop in (a as object))) {
-        return
-      }
-      const next = a[this._prop]
-      if (Equal.equals(next, previous)) {
-        return
-      }
-      previous = next
-      f(next)
+      previous = emitPropIfPresent(this._prop, a, previous, f)
     })
   }
   map<C>(f: (a: A[K]) => C): ReadonlyRef<C> {

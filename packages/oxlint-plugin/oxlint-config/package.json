@@ -8,7 +8,8 @@
   "exports": {
     "./package.json": "./package.json",
     "./base": "./src/oxlint-config.base.ts",
-    "./strict": "./src/oxlint-config.strict.ts"
+    "./strict": "./src/oxlint-config.strict.ts",
+    "./vite": "./src/oxlint-config.vite.ts"
   },
   "files": [
     "src"
@@ -16,8 +17,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental && tsc --noEmit -p tsconfig.test.json",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "test": "vitest run"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {
     "@effect/tsgo": "^0.36.5",

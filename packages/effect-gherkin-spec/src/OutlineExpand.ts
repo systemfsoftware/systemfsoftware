@@ -2,18 +2,29 @@ import * as Result from 'effect/Result'
 
 export type TemplateToken = { tag: string; rest: string }
 
+const closedToken = (remainder: string, openIdx: number): TemplateToken | null => {
+  const closeIdx = remainder.indexOf('>', openIdx)
+  if (closeIdx === -1) return null
+  return {
+    tag: remainder.slice(openIdx + 1, closeIdx),
+    rest: remainder.slice(closeIdx + 1),
+  }
+}
+
+const nextToken = (remainder: string): TemplateToken | null => {
+  const openIdx = remainder.indexOf('<')
+  if (openIdx === -1) return null
+  return closedToken(remainder, openIdx)
+}
+
 export const tokenizeTemplate = (template: string): readonly TemplateToken[] => {
   const tokens: TemplateToken[] = []
   let remainder = template
-  while (remainder.length > 0) {
-    const openIdx = remainder.indexOf('<')
-    if (openIdx === -1) break
-    const closeIdx = remainder.indexOf('>', openIdx)
-    if (closeIdx === -1) break
-    const tag = remainder.slice(openIdx + 1, closeIdx)
-    const rest = remainder.slice(closeIdx + 1)
-    tokens.push({ tag, rest })
-    remainder = rest
+  let token = nextToken(remainder)
+  while (token !== null) {
+    tokens.push(token)
+    remainder = token.rest
+    token = nextToken(remainder)
   }
   return tokens
 }
@@ -23,26 +34,38 @@ export interface OutlineRow<Row> {
   readonly title: string
 }
 
-export const stringifyForTitle = (value: unknown): string => {
-  if (typeof value === 'undefined') return 'undefined'
+type JsTypeof =
+  | 'undefined'
+  | 'object'
+  | 'boolean'
+  | 'number'
+  | 'bigint'
+  | 'string'
+  | 'symbol'
+  | 'function'
+
+const stringifyObjectValue = (value: unknown): string => {
   if (value === null) return 'null'
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return String(value)
-  }
-  if (typeof value === 'symbol') return value.toString()
-  if (typeof value === 'function') return Function.prototype.toString.call(value)
-  const encoded = JSON.stringify(value)
-  if (encoded === void 0) {
-    return 'unknown'
-  }
-  return encoded
+  return JSON.stringify(value)
 }
 
-export const renderTitle = (
+const stringifyByType: Record<JsTypeof, (value: unknown) => string> = {
+  undefined: () => 'undefined',
+  boolean: (value) => String(value),
+  number: (value) => String(value),
+  bigint: (value) => String(value),
+  string: (value) => String(value),
+  symbol: (value) => String(value),
+  function: (value) => Function.prototype.toString.call(value),
+  object: stringifyObjectValue,
+}
+
+export const stringifyForTitle = (value: unknown): string => stringifyByType[typeof value](value)
+
+const replaceTags = (
   template: string,
   row: Record<string, unknown>,
-  stringify: (value: unknown) => string = stringifyForTitle,
+  stringify: (value: unknown) => string,
 ): string => {
   let result = template
   for (const [key, value] of Object.entries(row)) {
@@ -51,27 +74,61 @@ export const renderTitle = (
   return result
 }
 
+export const renderTitle = (
+  template: string,
+  row: Record<string, unknown>,
+  stringify: (value: unknown) => string = stringifyForTitle,
+): string => replaceTags(template, row, stringify)
+
+const formatAvailableKeys = (rowKeys: Set<string>): string => {
+  const joined = [...rowKeys].join(', ')
+  if (joined === '') return '(none)'
+  return joined
+}
+
+const validateRowTags = (
+  row: Record<string, unknown>,
+  index: number,
+  tags: readonly TemplateToken[],
+): Result.Result<void, string> => {
+  const rowKeys = new Set(Object.keys(row))
+  const missing = tags.map((token) => token.tag).find((tag) => rowKeys.has(tag) === false)
+  if (missing === undefined) return Result.succeed(undefined)
+  return Result.fail(
+    `scenarioOutline: template tag <${missing}> has no matching row key` +
+      ` on row ${index} (available: ${formatAvailableKeys(rowKeys)})`,
+  )
+}
+
+const firstRowFailure = (
+  results: readonly Result.Result<void, string>[],
+): Result.Result<void, string> => {
+  const failed = results.find(Result.isFailure)
+  if (failed === undefined) return Result.succeed(undefined)
+  return failed
+}
+
+const expandRows = <Row extends Record<string, unknown>>(
+  name: string,
+  rows: readonly Row[],
+  stringify: (value: unknown) => string,
+): Result.Result<readonly OutlineRow<Row>[], string> =>
+  Result.map(
+    firstRowFailure(rows.map((row, index) => validateRowTags(row, index, tokenizeTemplate(name)))),
+    () => rows.map((row) => ({ row, title: renderTitle(name, row, stringify) })),
+  )
+
+const expandNonEmpty = <Row extends Record<string, unknown>>(
+  name: string,
+  rows: readonly Row[],
+  stringify: (value: unknown) => string,
+): Result.Result<readonly OutlineRow<Row>[], string> => {
+  if (rows.length === 0) return Result.succeed([])
+  return expandRows(name, rows, stringify)
+}
+
 export const expandOutline = <Row extends Record<string, unknown>>(
   name: string,
   rows: readonly Row[],
   stringify: (value: unknown) => string = stringifyForTitle,
-): Result.Result<readonly OutlineRow<Row>[], string> => {
-  if (rows.length === 0) return Result.succeed([])
-
-  const templateTokens = tokenizeTemplate(name)
-  if (templateTokens.length > 0) {
-    for (const [index, row] of rows.entries()) {
-      const rowKeys = new Set(Object.keys(row))
-      for (const { tag } of templateTokens) {
-        if (!rowKeys.has(tag)) {
-          return Result.fail(
-            `scenarioOutline: template tag <${tag}> has no matching row key` +
-              ` on row ${index} (available: ${[...rowKeys].join(', ') || '(none)'})`,
-          )
-        }
-      }
-    }
-  }
-
-  return Result.succeed(rows.map((row) => ({ row, title: renderTitle(name, row, stringify) })))
-}
+): Result.Result<readonly OutlineRow<Row>[], string> => expandNonEmpty(name, rows, stringify)

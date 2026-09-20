@@ -2,6 +2,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { DecideInput } from './RestartDecision.schema.js'
@@ -106,39 +107,88 @@ if (import.meta.vitest !== void 0) {
    */
   const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
 
-  const ascendingDistinct = (xs: readonly number[]): boolean =>
-    xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
+  const previousOrNegInf = (xs: readonly number[], i: number): number =>
+    Option.getOrElse(Option.fromNullishOr(xs[i - 1]), () => Number.NEGATIVE_INFINITY)
+
+  const isAscendingAt = (xs: readonly number[], i: number, x: number): boolean =>
+    Match.value(i === 0).pipe(
+      Match.when(true, () => true),
+      Match.when(false, () => x > previousOrNegInf(xs, i)),
+      Match.exhaustive,
+    )
+
+  const ascendingDistinct = (xs: readonly number[]): boolean => xs.every((x, i) => isAscendingAt(xs, i, x))
 
   const subset = (inner: readonly number[], outer: readonly number[]): boolean => inner.every((x) => outer.includes(x))
+
+  const isChildIndex = (x: number, total: number): boolean =>
+    Match.value(x >= 0).pipe(
+      Match.when(true, () => x < total),
+      Match.when(false, () => false),
+      Match.exhaustive,
+    )
+
+  const allIndicesInTree = (indices: readonly number[], total: number): boolean =>
+    indices.every((x) => isChildIndex(x, total))
+
+  const restartSetIsValid = (
+    strategy: RestartStrategyName,
+    failedIndex: number,
+    total: number,
+  ): boolean => {
+    const indices = restartIndicesFor(strategy, failedIndex, total)
+    return Match.value(ascendingDistinct(indices)).pipe(
+      Match.when(true, () => allIndicesInTree(indices, total)),
+      Match.when(false, () => false),
+      Match.exhaustive,
+    )
+  }
 
   /**
    * Whatever the strategy, a restart set is a set of real child indices in a stable order: a
    * mutant that reversed the order, repeated an index, or ran one past the last child breaks it.
    */
-  it.prop('∀t_RestartSet_⊆Children', [tree], ([[total, failedIndex]]) =>
-    RESTART_STRATEGIES.every((strategy) => {
-      const indices = restartIndicesFor(strategy, failedIndex, total)
-      return ascendingDistinct(indices) && indices.every((x) => x >= 0 && x < total)
-    }))
+  it.prop(
+    '∀t_RestartSet_⊆Children',
+    [tree],
+    ([[total, failedIndex]]) => RESTART_STRATEGIES.every((strategy) => restartSetIsValid(strategy, failedIndex, total)),
+  )
+
+  const blastRadiusWidens = (total: number, failedIndex: number): boolean => {
+    const one = restartIndicesFor('one_for_one', failedIndex, total)
+    const rest = restartIndicesFor('rest_for_one', failedIndex, total)
+    const all = restartIndicesFor('one_for_all', failedIndex, total)
+    return Match.value(subset(one, rest)).pipe(
+      Match.when(true, () => subset(rest, all)),
+      Match.when(false, () => false),
+      Match.exhaustive,
+    )
+  }
 
   /**
    * The three strategies are ordered by blast radius, and the ordering is containment:
    * one_for_one restarts the failed child, rest_for_one that child and its juniors, one_for_all
    * every child. An off-by-one in any branch breaks a containment the branch itself cannot see.
    */
-  it.prop('∀t_BlastRadius_⊆Widening', [tree], ([[total, failedIndex]]) => {
-    const one = restartIndicesFor('one_for_one', failedIndex, total)
-    const rest = restartIndicesFor('rest_for_one', failedIndex, total)
-    const all = restartIndicesFor('one_for_all', failedIndex, total)
-    return subset(one, rest) && subset(rest, all)
-  })
+  it.prop('∀t_BlastRadius_⊆Widening', [tree], ([[total, failedIndex]]) => blastRadiusWidens(total, failedIndex))
+
+  const oneForAllCoversTree = (total: number, failedIndex: number): boolean =>
+    restartIndicesFor('one_for_all', failedIndex, total).length === total
+
+  const restForOneIsSuffix = (total: number, failedIndex: number): boolean =>
+    restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex
+
+  const cardinalityMatchesStrategy = (total: number, failedIndex: number): boolean =>
+    Match.value(oneForAllCoversTree(total, failedIndex)).pipe(
+      Match.when(true, () => restForOneIsSuffix(total, failedIndex)),
+      Match.when(false, () => false),
+      Match.exhaustive,
+    )
 
   /** one_for_all covers the whole tree, and rest_for_one exactly the failed child's suffix. */
   it.prop(
     '∀t_Cardinality_=Strategy',
     [tree],
-    ([[total, failedIndex]]) =>
-      restartIndicesFor('one_for_all', failedIndex, total).length === total &&
-      restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
+    ([[total, failedIndex]]) => cardinalityMatchesStrategy(total, failedIndex),
   )
 }

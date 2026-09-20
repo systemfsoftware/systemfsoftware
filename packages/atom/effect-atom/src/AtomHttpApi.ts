@@ -33,9 +33,246 @@ import { schemaCodec } from './ResultSchema.js'
 // after rc.108); replicate them against the public .success/.error schema sets.
 const getSuccessSchemas = (endpoint: HttpApiEndpoint.Top): readonly [Schema.Top, ...Array<Schema.Top>] => {
   const [first, ...rest] = Array.from(endpoint.success)
-  return first === undefined ? [HttpApiSchema.NoContent] : [first, ...rest]
+  if (first === undefined) {
+    return [HttpApiSchema.NoContent]
+  }
+  return [first, ...rest]
 }
 const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): readonly Schema.Top[] => Array.from(endpoint.error)
+
+const isNonNullObject = (value: unknown): value is object => {
+  if (typeof value !== 'object') {
+    return false
+  }
+  return value !== null
+}
+
+const isObjectOrFunction = (value: unknown): value is object =>
+  [typeof value === 'function', isNonNullObject(value)].includes(true)
+
+const hasGroupIdentifier = (candidate: object, group: string): boolean => {
+  if (!('identifier' in candidate)) {
+    return false
+  }
+  return candidate.identifier === group
+}
+
+const isGroupCandidate = (candidate: unknown, group: string): candidate is object => {
+  if (!isObjectOrFunction(candidate)) {
+    return false
+  }
+  return hasGroupIdentifier(candidate, group)
+}
+
+const objectOrUndefined = (value: unknown): object | undefined => {
+  if (!isNonNullObject(value)) {
+    return undefined
+  }
+  return value
+}
+
+const endpointsOf = (candidate: object): object | undefined => {
+  if (!('endpoints' in candidate)) {
+    return undefined
+  }
+  return objectOrUndefined(candidate.endpoints)
+}
+
+const isEndpointWithId = (definition: object, endpoint: string): definition is HttpApiEndpoint.Top => {
+  if (!HttpApiEndpoint.isHttpApiEndpoint(definition)) {
+    return false
+  }
+  return definition.identifier === endpoint
+}
+
+const isMatchingEndpoint = (definition: unknown, endpoint: string): definition is HttpApiEndpoint.Top => {
+  if (!isObjectOrFunction(definition)) {
+    return false
+  }
+  return isEndpointWithId(definition, endpoint)
+}
+
+const matchingEndpoint = (
+  endpoints: object,
+  endpoint: string,
+): HttpApiEndpoint.Top | undefined => {
+  const values: ReadonlyArray<unknown> = Object.values(endpoints)
+  return values.find((definition): definition is HttpApiEndpoint.Top => isMatchingEndpoint(definition, endpoint))
+}
+
+const findEndpointInGroup = (
+  candidate: object,
+  endpoint: string,
+): HttpApiEndpoint.Top | undefined => {
+  const endpoints = endpointsOf(candidate)
+  if (endpoints === undefined) {
+    return undefined
+  }
+  return matchingEndpoint(endpoints, endpoint)
+}
+
+const requireEndpoint = (
+  candidate: object,
+  group: string,
+  endpoint: string,
+): HttpApiEndpoint.Top => {
+  const found = findEndpointInGroup(candidate, endpoint)
+  if (found === undefined) {
+    throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
+  }
+  return found
+}
+
+const endpointFor = (
+  groups: ReadonlyArray<unknown>,
+  group: string,
+  endpoint: string,
+): HttpApiEndpoint.Top => {
+  const candidate = groups.find((value): value is object => isGroupCandidate(value, group))
+  if (candidate === undefined) {
+    throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
+  }
+  return requireEndpoint(candidate, group, endpoint)
+}
+
+interface EndpointRequest {
+  readonly params?: unknown
+  readonly query?: unknown
+  readonly payload?: unknown
+  readonly headers?: unknown
+  readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
+}
+
+interface EndpointCall {
+  (
+    request: EndpointRequest,
+  ): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
+}
+
+const isEndpointCall = (u: unknown): u is EndpointCall => typeof u === 'function'
+
+const propertyOf = (client: unknown, group: string): unknown => {
+  if (!isObjectOrFunction(client)) {
+    return undefined
+  }
+  return Reflect.get(client, group)
+}
+
+const groupEntryOf = (client: unknown, group: string): object => {
+  const groupEntry = propertyOf(client, group)
+  if (!isNonNullObject(groupEntry)) {
+    throw new Error(`Unknown API group: ${group}`)
+  }
+  return groupEntry
+}
+
+const callFromGroup = (
+  groupEntry: object,
+  group: string,
+  endpoint: string,
+  request: EndpointRequest,
+): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> => {
+  const call: unknown = Reflect.get(groupEntry, endpoint)
+  if (!isEndpointCall(call)) {
+    throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
+  }
+  return call(request)
+}
+
+const callEndpoint = (
+  client: unknown,
+  group: string,
+  endpoint: string,
+  request: EndpointRequest,
+): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> =>
+  callFromGroup(groupEntryOf(client, group), group, endpoint, request)
+
+const isDieError = (
+  e: HttpClientError.HttpClientError | Schema.SchemaError | Error,
+): e is HttpClientError.HttpClientError | Schema.SchemaError => {
+  if (Schema.isSchemaError(e)) {
+    return true
+  }
+  return HttpClientError.isHttpClientError(e)
+}
+
+const catchError = (
+  e: HttpClientError.HttpClientError | Schema.SchemaError | Error,
+): Effect.Effect<never, Error> => {
+  if (isDieError(e)) {
+    return Effect.die(e)
+  }
+  return Effect.fail(e)
+}
+
+const catchErrors = Effect.catch(catchError)
+
+const runtimeFactoryOf = (runtime: Atom.RuntimeFactory | undefined): Atom.RuntimeFactory => {
+  if (runtime === undefined) {
+    return Atom.runtime
+  }
+  return runtime
+}
+
+const responseModeOrDecoded = (
+  responseMode: HttpApiEndpoint.ClientResponseMode | undefined,
+): HttpApiEndpoint.ClientResponseMode => {
+  if (responseMode === undefined) {
+    return 'decoded-only'
+  }
+  return responseMode
+}
+
+const responseModeFromOptions = (
+  options?: {
+    readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
+  },
+): HttpApiEndpoint.ClientResponseMode => {
+  if (options === undefined) {
+    return 'decoded-only'
+  }
+  return responseModeOrDecoded(options.responseMode)
+}
+
+type ReactivityKeys = readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>
+
+const withReactivityKeys = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  reactivityKeys: ReactivityKeys | undefined,
+): Effect.Effect<A, E, R | Reactivity.Reactivity> => {
+  if (reactivityKeys === undefined) {
+    return effect
+  }
+  return Reactivity.mutation(effect, reactivityKeys)
+}
+
+const hasSerializationKey = (key: string | undefined): key is string => {
+  if (key === undefined) {
+    return false
+  }
+  return key !== ''
+}
+
+const durationFromInput = (timeToLive: Duration.Input | undefined): Duration.Duration | undefined => {
+  if (timeToLive === undefined) {
+    return undefined
+  }
+  return Duration.fromInputUnsafe(timeToLive)
+}
+
+const applyQueryTtl = <A>(atom: Atom.Atom<A>, timeToLive: Duration.Duration): Atom.Atom<A> => {
+  if (Duration.isFinite(timeToLive)) {
+    return Atom.setIdleTTL(atom, timeToLive)
+  }
+  return Atom.keepAlive(atom)
+}
+
+const withQueryTtl = <A>(atom: Atom.Atom<A>, timeToLive: Duration.Duration | undefined): Atom.Atom<A> => {
+  if (timeToLive === undefined) {
+    return atom
+  }
+  return applyQueryTtl(atom, timeToLive)
+}
 
 /**
  * A `Context.Service` for an HTTP API client integrated with atom reactivity.
@@ -45,7 +282,6 @@ const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): readonly Schema.Top[] =
  * It exposes the generated HTTP API client, an atom runtime, mutation helpers that
  * return `AtomResultFn`s, and query helpers that return atoms of endpoint results.
  *
- * @category services
  * @since 4.0.0
  */
 export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpApiGroup.Constraint>
@@ -183,7 +419,6 @@ declare global {
  * response transforms, base URL, and runtime factory used by the query and
  * mutation helpers.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const Service =
@@ -220,83 +455,17 @@ export const Service =
       service,
       HttpApiClient.make(options.api, options),
     )
-    const httpClient = options.httpClient
-    const runtime = (options.runtime ?? Atom.runtime)(
-      typeof httpClient === 'function'
-        ? (get) =>
-          Layer.provide(
-            layer,
-            httpClient(get),
-          )
-        : Layer.provide(layer, httpClient),
-    )
 
-    const catchErrors = Effect.catch(
-      (e: HttpClientError.HttpClientError | Schema.SchemaError | Error) =>
-        Schema.isSchemaError(e) || HttpClientError.isHttpClientError(e) ? Effect.die(e) : Effect.fail(e),
-    )
-
-    interface EndpointCall {
-      (request: {
-        readonly params?: unknown
-        readonly query?: unknown
-        readonly payload?: unknown
-        readonly headers?: unknown
-        readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
-      }): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
-    }
-    const isEndpointCall = (u: unknown): u is EndpointCall => typeof u === 'function'
-
-    const endpointFor = (group: string, endpoint: string): HttpApiEndpoint.Top => {
-      for (const candidate of Object.values(options.api.groups)) {
-        if (
-          (typeof candidate !== 'object' || candidate === null) && typeof candidate !== 'function' ||
-          'identifier' in candidate === false || candidate.identifier !== group
-        ) {
-          continue
-        }
-        if (!('endpoints' in candidate) || typeof candidate.endpoints !== 'object' || candidate.endpoints === null) {
-          break
-        }
-        for (const definition of Object.values(candidate.endpoints)) {
-          if (
-            (typeof definition === 'object' && definition !== null || typeof definition === 'function') &&
-            HttpApiEndpoint.isHttpApiEndpoint(definition) && definition.identifier === endpoint
-          ) {
-            return definition
-          }
-        }
-        break
+    const clientLayer = (
+      httpClient: typeof options.httpClient,
+    ) => {
+      if (typeof httpClient === 'function') {
+        return (get: Atom.AtomContext) => Layer.provide(layer, httpClient(get))
       }
-      throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
+      return Layer.provide(layer, httpClient)
     }
 
-    const callEndpoint = (
-      client: HttpApiClient.Client<Groups, never, never>,
-      group: string,
-      endpoint: string,
-      request: {
-        readonly params?: unknown
-        readonly query?: unknown
-        readonly payload?: unknown
-        readonly headers?: unknown
-        readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
-      },
-    ): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> => {
-      const groupEntry: unknown = (typeof client === 'object' && client !== null) || typeof client === 'function'
-        ? Reflect.get(client, group)
-        : undefined
-      if (typeof groupEntry !== 'object' || groupEntry === null) {
-        throw new Error(`Unknown API group: ${group}`)
-      }
-      const call: unknown = Reflect.get(groupEntry, endpoint)
-      if (!isEndpointCall(call)) {
-        throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
-      }
-      return call(request)
-    }
-
-    const resultSchema = schemaCodec
+    const runtime = runtimeFactoryOf(options.runtime)(clientLayer(options.httpClient))
 
     const mutationFamily = Atom.family(({ endpoint, group, responseMode }: MutationKey) => {
       const fnAtom = runtime.fn<{
@@ -312,22 +481,20 @@ export const Service =
             ...opts,
             responseMode,
           }))
-          return yield* opts.reactivityKeys
-            ? Reactivity.mutation(effect, opts.reactivityKeys)
-            : effect
+          return yield* withReactivityKeys(effect, opts.reactivityKeys)
         }),
       )
-      if (responseMode === 'decoded-only') {
-        const definition = endpointFor(group, endpoint)
-        return Atom.serializable(fnAtom, {
-          key: `AtomHttpApi:mutation:${group}:${endpoint}`,
-          schema: resultSchema(
-            Schema.Union(getSuccessSchemas(definition)),
-            Schema.Union(getErrorSchemas(definition)),
-          ),
-        })
+      if (responseMode !== 'decoded-only') {
+        return fnAtom
       }
-      return fnAtom
+      const definition = endpointFor(Object.values(options.api.groups), group, endpoint)
+      return Atom.serializable(fnAtom, {
+        key: `AtomHttpApi:mutation:${group}:${endpoint}`,
+        schema: schemaCodec(
+          Schema.Union(getSuccessSchemas(definition)),
+          Schema.Union(getErrorSchemas(definition)),
+        ),
+      })
     })
 
     type MutationReturn<
@@ -393,34 +560,62 @@ export const Service =
       return mutationFamily({
         group,
         endpoint,
-        responseMode: options?.responseMode ?? 'decoded-only',
+        responseMode: responseModeFromOptions(options),
       })
     }
 
-    const queryFamily = Atom.family((opts: QueryKey) => {
-      let atom = runtime.atom(
-        service.use((client) => catchErrors(callEndpoint(client, opts.group, opts.endpoint, opts))),
-      )
-      if (opts.reactivityKeys) {
-        atom = runtime.factory.withReactivity(opts.reactivityKeys)(atom)
+    const withQueryReactivity = <A extends Atom.Atom<unknown>>(
+      atom: A,
+      reactivityKeys: ReactivityKeys | undefined,
+    ): A => {
+      if (reactivityKeys === undefined) {
+        return atom
       }
-      if (opts.responseMode === 'decoded-only' && opts.serializationKey) {
-        const endpoint = endpointFor(opts.group, opts.endpoint)
-        atom = Atom.serializable(atom, {
-          key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${opts.serializationKey}`,
-          schema: resultSchema(
-            Schema.Union(getSuccessSchemas(endpoint)),
-            Schema.Union(getErrorSchemas(endpoint)),
+      return runtime.factory.withReactivity(reactivityKeys)(atom)
+    }
+
+    const serializeIfKeyed = (
+      atom: Atom.Atom<unknown>,
+      opts: QueryKey,
+    ): Atom.Atom<unknown> => {
+      const serializationKey = opts.serializationKey
+      if (!hasSerializationKey(serializationKey)) {
+        return atom
+      }
+      const endpoint = endpointFor(Object.values(options.api.groups), opts.group, opts.endpoint)
+      return Atom.serializable(atom, {
+        key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${serializationKey}`,
+        schema: schemaCodec(
+          Schema.Union(getSuccessSchemas(endpoint)),
+          Schema.Union(getErrorSchemas(endpoint)),
+        ),
+      })
+    }
+
+    const withQuerySerialization = (
+      atom: Atom.Atom<unknown>,
+      opts: QueryKey,
+    ): Atom.Atom<unknown> => {
+      if (opts.responseMode !== 'decoded-only') {
+        return atom
+      }
+      return serializeIfKeyed(atom, opts)
+    }
+
+    const queryFamily = Atom.family((opts: QueryKey) =>
+      withQueryTtl(
+        withQuerySerialization(
+          withQueryReactivity(
+            runtime.atom(
+              service.use((client) => catchErrors(callEndpoint(client, opts.group, opts.endpoint, opts))),
+            ),
+            opts.reactivityKeys,
           ),
-        })
-      }
-      if (opts.timeToLive) {
-        atom = Duration.isFinite(opts.timeToLive)
-          ? Atom.setIdleTTL(atom, opts.timeToLive)
-          : Atom.keepAlive(atom)
-      }
-      return atom
-    })
+          opts,
+        ),
+        opts.timeToLive,
+      )
+    )
 
     type QueryRequest<
       Endpoint extends HttpApiEndpoint.Constraint,
@@ -520,11 +715,9 @@ export const Service =
         query: request.query,
         payload: request.payload,
         headers: request.headers,
-        responseMode: request.responseMode ?? 'decoded-only',
+        responseMode: responseModeOrDecoded(request.responseMode),
         reactivityKeys: request.reactivityKeys,
-        timeToLive: request.timeToLive
-          ? Duration.fromInputUnsafe(request.timeToLive)
-          : undefined,
+        timeToLive: durationFromInput(request.timeToLive),
         serializationKey: request.serializationKey,
       }
       return queryFamily(key)

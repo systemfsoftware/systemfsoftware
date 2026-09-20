@@ -9,6 +9,7 @@
  */
 'use client'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
+import type { Registry } from '@systemfsoftware/effect-atom/Registry'
 import * as React from 'react'
 import { RegistryContext } from './RegistryContext.js'
 
@@ -16,12 +17,80 @@ import { RegistryContext } from './RegistryContext.js'
  * Props for a boundary that applies dehydrated Atom values to the nearest
  * {@link RegistryContext} while rendering its children.
  *
- * @category components
  * @since 4.0.0
  */
 export interface HydrationBoundaryProps {
   state?: Iterable<Hydration.DehydratedAtomValue>
   children?: React.ReactNode
+}
+
+type PartitionedAtoms = {
+  readonly newAtoms: Array<Hydration.DehydratedAtomValue>
+  readonly existingAtoms: Array<Hydration.DehydratedAtomValue>
+}
+
+function pushPartitionedAtom(
+  newAtoms: Array<Hydration.DehydratedAtomValue>,
+  existingAtoms: Array<Hydration.DehydratedAtomValue>,
+  nodes: ReadonlyMap<unknown, unknown>,
+  dehydratedAtom: Hydration.DehydratedAtomValue,
+): void {
+  const existingNode = nodes.get(dehydratedAtom.key)
+  if (existingNode === undefined) {
+    newAtoms.push(dehydratedAtom)
+    return
+  }
+  existingAtoms.push(dehydratedAtom)
+}
+
+function partitionDehydratedAtoms(
+  nodes: ReadonlyMap<unknown, unknown>,
+  dehydratedAtoms: Array<Hydration.DehydratedAtomValue>,
+): PartitionedAtoms {
+  const newAtoms: Array<Hydration.DehydratedAtomValue> = []
+  const existingAtoms: Array<Hydration.DehydratedAtomValue> = []
+  for (const dehydratedAtom of dehydratedAtoms) {
+    pushPartitionedAtom(newAtoms, existingAtoms, nodes, dehydratedAtom)
+  }
+  return { newAtoms, existingAtoms }
+}
+
+function hydrateNewAtoms(
+  registry: Registry,
+  newAtoms: Array<Hydration.DehydratedAtomValue>,
+): void {
+  if (newAtoms.length === 0) {
+    return
+  }
+  Hydration.hydrate(registry, newAtoms)
+}
+
+function existingAtomsOrUndefined(
+  existingAtoms: Array<Hydration.DehydratedAtomValue>,
+): Array<Hydration.DehydratedAtomValue> | undefined {
+  if (existingAtoms.length === 0) {
+    return undefined
+  }
+  return existingAtoms
+}
+
+function queueHydrationFromState(
+  registry: Registry,
+  state: Iterable<Hydration.DehydratedAtomValue>,
+): Array<Hydration.DehydratedAtomValue> | undefined {
+  const partitioned = partitionDehydratedAtoms(registry.getNodes(), Array.from(state))
+  hydrateNewAtoms(registry, partitioned.newAtoms)
+  return existingAtomsOrUndefined(partitioned.existingAtoms)
+}
+
+function queueHydration(
+  registry: Registry,
+  state: Iterable<Hydration.DehydratedAtomValue> | undefined,
+): Array<Hydration.DehydratedAtomValue> | undefined {
+  if (state === undefined) {
+    return undefined
+  }
+  return queueHydrationFromState(registry, state)
 }
 
 /**
@@ -42,7 +111,6 @@ export interface HydrationBoundaryProps {
  * @see `Hydration.dehydrate` for producing dehydrated Atom state
  * @see `Hydration.hydrate` for lower-level non-React hydration
  *
- * @category components
  * @since 4.0.0
  */
 export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
@@ -66,43 +134,16 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
   // If the transition is aborted, we will have hydrated any _new_ Atom values, but
   // we throw away the fresh data for any existing ones to avoid unexpectedly
   // updating the UI.
-  const hydrationQueue: Hydration.DehydratedAtomValue[] | undefined = React.useMemo(() => {
-    if (state) {
-      const dehydratedAtoms = Array.from(state)
-      const nodes = registry.getNodes()
-
-      const newDehydratedAtoms: Hydration.DehydratedAtomValue[] = []
-      const existingDehydratedAtoms: Hydration.DehydratedAtomValue[] = []
-
-      for (const dehydratedAtom of dehydratedAtoms) {
-        const existingNode = nodes.get(dehydratedAtom.key)
-
-        if (!existingNode) {
-          // This is a new Atom value, safe to hydrate immediately
-          newDehydratedAtoms.push(dehydratedAtom)
-        } else {
-          // This Atom value already exists, queue it for later hydration
-          existingDehydratedAtoms.push(dehydratedAtom)
-        }
-      }
-
-      if (newDehydratedAtoms.length > 0) {
-        // It's actually fine to call this with state that already exists
-        // in the registry, or is older. hydrate() is idempotent.
-        Hydration.hydrate(registry, newDehydratedAtoms)
-      }
-
-      if (existingDehydratedAtoms.length > 0) {
-        return existingDehydratedAtoms
-      }
-    }
-    return undefined
-  }, [registry, state])
+  const hydrationQueue: Array<Hydration.DehydratedAtomValue> | undefined = React.useMemo(
+    () => queueHydration(registry, state),
+    [registry, state],
+  )
 
   React.useEffect(() => {
-    if (hydrationQueue) {
-      Hydration.hydrate(registry, hydrationQueue)
+    if (hydrationQueue === undefined) {
+      return
     }
+    Hydration.hydrate(registry, hydrationQueue)
   }, [registry, hydrationQueue])
 
   return React.createElement(React.Fragment, {}, children)

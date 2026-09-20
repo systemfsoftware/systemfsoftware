@@ -12,7 +12,7 @@ import {
   OutlineMissingCapture,
   UnresolvedCapture,
 } from './Errors.schema.js'
-import type { ExampleRow, PlayContext, Step, StepContext, StepModel } from './Steps.js'
+import type { ConcreteKeyword, ExampleRow, PlayContext, Step, StepContext, StepModel } from './Steps.js'
 import { displayPattern, isStep, renderStepText, resolveKeywords, StepTag } from './Steps.js'
 
 export interface StorySpec<TArgs = unknown> {
@@ -98,7 +98,10 @@ export interface Feature<M, TArgs = unknown> {
   readonly rule: (name: string) => RuleScope<TArgs>
 }
 
-const displayKeyword = (model: StepModel): string => model.keyword === 'Star' ? '*' : model.keyword
+const displayKeyword = (model: StepModel): string => {
+  if (model.keyword === 'Star') return '*'
+  return model.keyword
+}
 
 const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>): StepContext<TArgs> => ({
   canvas: ctx.canvas,
@@ -115,12 +118,6 @@ const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>): StepContext<TArgs> =>
   context: ctx,
 })
 
-/**
- * Total classification of an interpreted program's `Exit`, shared by the play
- * edge and the step bridge: interruption resolves silently, success returns
- * the value, and any other cause is rethrown as the original error instance
- * (`Cause.squash`) so Storybook's panel keeps the matcher diff.
- */
 const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined =>
   Exit.match(exit, {
     onSuccess: (value) => value,
@@ -130,17 +127,6 @@ const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined =>
     },
   })
 
-/**
- * One scenario step, composed as an Effect. Storybook's instrumented `step`
- * expects a promise whose settlement tracks the step's work, so the body runs
- * in a child fiber that settles a deferred; the bridge promise given to
- * `stepCtx.step` awaits that deferred and rejects with the step's original error.
- * The bridge interprets only this pure signalling effect; user code runs in
- * the single play-edge interpretation. The `ensuring` finalizer interrupts
- * the child on every parent exit — success (no-op on a joined fiber),
- * failure, and interruption — so an independently failed `stepCtx.step` never
- * orphans a running step body.
- */
 const runStep = <TArgs>(
   step: Step<TArgs>,
   values: Readonly<Record<string, string>>,
@@ -181,7 +167,6 @@ const executeSteps = <TArgs>(
   return Effect.forEach(ordered, (s) => runStep(s, values, stepCtx), { discard: true })
 }
 
-/** The single interpretation edge of the package. */
 const interpretPlay = <A, E>(
   context: Context.Context<never>,
   program: Effect.Effect<A, E>,
@@ -197,59 +182,152 @@ const sortKeys = (keys: readonly string[]): readonly string[] => {
   return sorted
 }
 
+const assertNonEmptyScenario = (fullName: string, models: readonly StepModel[]): void => {
+  if (models.length === 0) {
+    throw EmptyScenario.make({ scenario: fullName })
+  }
+}
+
+const isThen = (r: { readonly resolved: ConcreteKeyword }): boolean => r.resolved === 'Then'
+
+const assertHasThen = (fullName: string, models: readonly StepModel[]): void => {
+  if (!resolveKeywords(models).some(isThen)) {
+    throw MissingThen.make({ scenario: fullName })
+  }
+}
+
+const captureIsBound = (
+  cap: { readonly default: string | undefined; readonly name: string },
+  withRecord: Readonly<Record<string, string>>,
+): boolean => {
+  if (cap.default !== undefined) return true
+  return Object.prototype.hasOwnProperty.call(withRecord, cap.name)
+}
+
+const assertCaptureBound = (
+  fullName: string,
+  stepModel: StepModel,
+  cap: { readonly default: string | undefined; readonly name: string },
+  withRecord: Readonly<Record<string, string>>,
+): void => {
+  if (captureIsBound(cap, withRecord)) return
+  throw UnresolvedCapture.make({
+    scenario: fullName,
+    step: displayPattern(stepModel),
+    capture: cap.name,
+  })
+}
+
+const assertCapturesBound = (
+  fullName: string,
+  stepModel: StepModel,
+  withRecord: Readonly<Record<string, string>>,
+): void => {
+  for (const cap of stepModel.captures) {
+    assertCaptureBound(fullName, stepModel, cap, withRecord)
+  }
+}
+
 const validateScenarioSteps = (
   fullName: string,
   models: readonly StepModel[],
   withRecord: Readonly<Record<string, string>>,
 ): void => {
-  if (models.length === 0) {
-    throw EmptyScenario.make({ scenario: fullName })
-  }
-  if (!resolveKeywords(models).some((r) => r.resolved === 'Then')) {
-    throw MissingThen.make({ scenario: fullName })
-  }
+  assertNonEmptyScenario(fullName, models)
+  assertHasThen(fullName, models)
   for (const stepModel of models) {
-    for (const cap of stepModel.captures) {
-      const hasDefault = cap.default !== undefined
-      const hasWith = Object.prototype.hasOwnProperty.call(withRecord, cap.name)
-      if (!hasDefault && !hasWith) {
-        throw UnresolvedCapture.make({
-          scenario: fullName,
-          step: displayPattern(stepModel),
-          capture: cap.name,
-        })
-      }
-    }
+    assertCapturesBound(fullName, stepModel, withRecord)
   }
 }
 
 const isScenarioOptions = <TArgs>(value: StepArg<TArgs> | ScenarioOptions): value is ScenarioOptions =>
   !isStep<TArgs>(value) && !Array.isArray(value)
 
+const optionsIfPresent = <TArgs>(
+  firstArg: StepArg<TArgs> | ScenarioOptions,
+): ScenarioOptions | undefined => {
+  if (!isScenarioOptions<TArgs>(firstArg)) return undefined
+  return firstArg
+}
+
+const readOptions = <TArgs>(
+  rest: readonly (StepArg<TArgs> | ScenarioOptions)[],
+): ScenarioOptions | undefined => {
+  const firstArg = rest[0]
+  if (firstArg === undefined) return undefined
+  return optionsIfPresent(firstArg)
+}
+
+const bodyAfterOptions = <TArgs>(
+  rest: readonly (StepArg<TArgs> | ScenarioOptions)[],
+  options: ScenarioOptions | undefined,
+): readonly (StepArg<TArgs> | ScenarioOptions)[] => {
+  if (options === undefined) return rest
+  return rest.slice(1)
+}
+
+const pushInnerStep = <TArgs>(steps: Step<TArgs>[], inner: unknown): void => {
+  if (!isStep<TArgs>(inner)) {
+    throw new TypeError(`Steps group contains a non-step value of type ${typeof inner}`)
+  }
+  steps.push(inner)
+}
+
+const pushStepGroup = <TArgs>(steps: Step<TArgs>[], item: readonly unknown[]): void => {
+  for (const inner of item) {
+    pushInnerStep(steps, inner)
+  }
+}
+
+const pushIfGroup = <TArgs>(
+  steps: Step<TArgs>[],
+  item: StepArg<TArgs> | ScenarioOptions,
+): void => {
+  if (Array.isArray(item)) {
+    pushStepGroup(steps, item)
+    return
+  }
+  throw new TypeError(`Scenario arguments must be steps or step groups; got type ${typeof item}`)
+}
+
+const pushScenarioItem = <TArgs>(
+  steps: Step<TArgs>[],
+  item: StepArg<TArgs> | ScenarioOptions,
+): void => {
+  if (isStep<TArgs>(item)) {
+    steps.push(item)
+    return
+  }
+  pushIfGroup(steps, item)
+}
+
 const parseScenarioArgs = <TArgs>(
   rest: readonly (StepArg<TArgs> | ScenarioOptions)[],
 ): { readonly options: ScenarioOptions | undefined; readonly steps: readonly Step<TArgs>[] } => {
-  const firstArg: StepArg<TArgs> | ScenarioOptions | undefined = rest[0]
-  const options: ScenarioOptions | undefined = firstArg !== undefined && isScenarioOptions<TArgs>(firstArg)
-    ? firstArg
-    : undefined
-  const body = options === undefined ? rest : rest.slice(1)
+  const options = readOptions(rest)
+  const body = bodyAfterOptions(rest, options)
   const steps: Step<TArgs>[] = []
   for (const item of body) {
-    if (isStep<TArgs>(item)) {
-      steps.push(item)
-    } else if (Array.isArray(item)) {
-      for (const inner of item) {
-        if (!isStep<TArgs>(inner)) {
-          throw new TypeError(`Steps group contains a non-step value of type ${typeof inner}`)
-        }
-        steps.push(inner)
-      }
-    } else {
-      throw new TypeError(`Scenario arguments must be steps or step groups; got type ${typeof item}`)
-    }
+    pushScenarioItem(steps, item)
   }
   return { options, steps }
+}
+
+const qualifyName = (prefix: string, name: string): string => {
+  if (prefix === '') return name
+  return `${prefix}: ${name}`
+}
+
+const recordOrEmpty = (
+  value: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> => {
+  if (value === undefined) return {}
+  return value
+}
+
+const withRecordOf = (options: ScenarioOptions | undefined): Readonly<Record<string, string>> => {
+  if (options === undefined) return {}
+  return recordOrEmpty(options.with)
 }
 
 const makeScenario = <TArgs>(
@@ -271,8 +349,8 @@ const makeScenario = <TArgs>(
     ...rest: readonly (StepArg<TArgs> | ScenarioOptions)[]
   ): unknown {
     const { options, steps } = parseScenarioArgs(rest)
-    const fullName = prefix === '' ? name : `${prefix}: ${name}`
-    const withRecord: Readonly<Record<string, string>> = options?.with ?? {}
+    const fullName = qualifyName(prefix, name)
+    const withRecord = withRecordOf(options)
     validateScenarioSteps(fullName, steps.map((s) => s.model), withRecord)
     return {
       name: fullName,
@@ -283,38 +361,102 @@ const makeScenario = <TArgs>(
   return scenario
 }
 
+const assertOutlineNonEmpty = (rows: readonly ExampleRow[], fullName: string): void => {
+  if (rows.length === 0) throw OutlineEmpty.make({ outline: fullName })
+}
+
+const isNotName = (k: string): boolean => k !== 'name'
+
+const keysExceptName = (row: object): readonly string[] => sortKeys(Object.keys(row).filter(isNotName))
+
+const firstRowKeys = (rows: readonly ExampleRow[]): readonly string[] => {
+  const first = rows[0]
+  if (first === undefined) return []
+  return keysExceptName(first)
+}
+
+const rememberRowName = (seen: Set<string>, row: ExampleRow, fullName: string): void => {
+  if (seen.has(row.name)) {
+    throw OutlineDuplicateRowName.make({ outline: fullName, name: row.name })
+  }
+  seen.add(row.name)
+}
+
+const keyAtMatches = (actual: readonly string[], expected: readonly string[], i: number): boolean =>
+  actual[i] === expected[i]
+
+const keysMatch = (actual: readonly string[], expected: readonly string[]): boolean => {
+  if (actual.length !== expected.length) return false
+  return actual.every((_, i) => keyAtMatches(actual, expected, i))
+}
+
+const assertKeysConsistent = (row: ExampleRow, firstKeys: readonly string[], fullName: string): void => {
+  const actual = keysExceptName(row)
+  if (keysMatch(actual, firstKeys)) return
+  throw OutlineInconsistentKeys.make({
+    outline: fullName,
+    row: row.name,
+    expected: [...firstKeys],
+    actual: [...actual],
+  })
+}
+
+const assertRowHasCapture = (row: ExampleRow, cap: string, fullName: string): void => {
+  if (Object.prototype.hasOwnProperty.call(row, cap)) return
+  throw OutlineMissingCapture.make({
+    outline: fullName,
+    row: row.name,
+    capture: cap,
+  })
+}
+
+const assertRowCaptures = (
+  row: ExampleRow,
+  captureNames: ReadonlySet<string>,
+  fullName: string,
+): void => {
+  for (const cap of captureNames) {
+    assertRowHasCapture(row, cap, fullName)
+  }
+}
+
+const validateOneRow = (
+  seenRowNames: Set<string>,
+  row: ExampleRow,
+  firstKeys: readonly string[],
+  captureNames: ReadonlySet<string>,
+  fullName: string,
+): void => {
+  rememberRowName(seenRowNames, row, fullName)
+  assertKeysConsistent(row, firstKeys, fullName)
+  assertRowCaptures(row, captureNames, fullName)
+}
+
 const validateOutlineRows = (
   rows: readonly ExampleRow[],
   captureNames: ReadonlySet<string>,
   fullName: string,
 ): void => {
-  if (rows.length === 0) throw OutlineEmpty.make({ outline: fullName })
+  assertOutlineNonEmpty(rows, fullName)
   const seenRowNames = new Set<string>()
-  const firstKeys = sortKeys(Object.keys(rows[0] ?? {}).filter((k) => k !== 'name'))
+  const firstKeys = firstRowKeys(rows)
   for (const row of rows) {
-    if (seenRowNames.has(row.name)) {
-      throw OutlineDuplicateRowName.make({ outline: fullName, name: row.name })
-    }
-    seenRowNames.add(row.name)
-    const actual = sortKeys(Object.keys(row).filter((k) => k !== 'name'))
-    if (actual.length !== firstKeys.length || actual.some((k, i) => k !== firstKeys[i])) {
-      throw OutlineInconsistentKeys.make({
-        outline: fullName,
-        row: row.name,
-        expected: [...firstKeys],
-        actual: [...actual],
-      })
-    }
-    for (const cap of captureNames) {
-      if (!Object.prototype.hasOwnProperty.call(row, cap)) {
-        throw OutlineMissingCapture.make({
-          outline: fullName,
-          row: row.name,
-          capture: cap,
-        })
-      }
-    }
+    validateOneRow(seenRowNames, row, firstKeys, captureNames, fullName)
   }
+}
+
+const addModelCaptures = (captureNames: Set<string>, m: StepModel): void => {
+  for (const c of m.captures) {
+    captureNames.add(c.name)
+  }
+}
+
+const collectCaptureNames = (models: readonly StepModel[]): Set<string> => {
+  const captureNames = new Set<string>()
+  for (const m of models) {
+    addModelCaptures(captureNames, m)
+  }
+  return captureNames
 }
 
 const makeOutline = <TArgs>(
@@ -336,20 +478,14 @@ const makeOutline = <TArgs>(
     ...rest: readonly (StepArg<TArgs> | ScenarioOptions)[]
   ): OutlineBuilder<TArgs> {
     const { options, steps } = parseScenarioArgs(rest)
-    const fullName = prefix === '' ? name : `${prefix}: ${name}`
-    const withRecord: Readonly<Record<string, string>> = options?.with ?? {}
+    const fullName = qualifyName(prefix, name)
+    const withRecord = withRecordOf(options)
     const models = steps.map((s) => s.model)
-    if (models.length === 0) {
-      throw EmptyScenario.make({ scenario: fullName })
-    }
-    if (!resolveKeywords(models).some((r) => r.resolved === 'Then')) {
-      throw MissingThen.make({ scenario: fullName })
-    }
-    const captureNames = new Set<string>()
-    for (const m of models) for (const c of m.captures) captureNames.add(c.name)
+    assertNonEmptyScenario(fullName, models)
+    assertHasThen(fullName, models)
+    const captureNames = collectCaptureNames(models)
 
     const buildRowSpec = (row: ExampleRow): StorySpec<TArgs> => {
-      // Row values are fixed at declaration time; merge once, like makeScenario.
       const values = { ...withRecord, ...rowValuesFor(row) }
       return {
         name: `${fullName} — ${row.name}`,
@@ -377,18 +513,34 @@ const makeOutline = <TArgs>(
   return outline
 }
 
+const assertResolvedGiven = <TArgs>(step: Step<TArgs>, resolved: ConcreteKeyword): void => {
+  if (resolved === 'Given') return
+  throw BackgroundNotGiven.make({
+    step: displayPattern(step.model),
+    resolved,
+  })
+}
+
+const assertBackgroundResolved = <TArgs>(
+  step: Step<TArgs>,
+  resolvedEntry: { readonly resolved: ConcreteKeyword } | undefined,
+): void => {
+  if (resolvedEntry === undefined) return
+  assertResolvedGiven(step, resolvedEntry.resolved)
+}
+
+const assertBackgroundStep = <TArgs>(
+  step: Step<TArgs> | undefined,
+  resolvedEntry: { readonly resolved: ConcreteKeyword } | undefined,
+): void => {
+  if (step === undefined) return
+  assertBackgroundResolved(step, resolvedEntry)
+}
+
 const makeBackground = <TArgs>(background: Step<TArgs>[]) => (...steps: readonly Step<TArgs>[]): void => {
   const resolvedKeywords = resolveKeywords(steps.map((s) => s.model))
   for (let i = 0; i < steps.length; i++) {
-    const step = steps[i]
-    const resolvedEntry = resolvedKeywords[i]
-    if (step === undefined || resolvedEntry === undefined) continue
-    if (resolvedEntry.resolved !== 'Given') {
-      throw BackgroundNotGiven.make({
-        step: displayPattern(step.model),
-        resolved: resolvedEntry.resolved,
-      })
-    }
+    assertBackgroundStep(steps[i], resolvedKeywords[i])
   }
   background.push(...steps)
 }
@@ -412,6 +564,11 @@ const makeFeature = <M, TArgs = unknown>(
   return feature
 }
 
+const contextOf = (options: FeatureOptions): Context.Context<never> => {
+  if (options.context === undefined) return Context.empty()
+  return options.context
+}
+
 /**
  * Declare a feature: a story set whose scenarios execute as CSF `play`
  * functions. `options.context` (default `Context.empty()`) is the Effect
@@ -419,7 +576,7 @@ const makeFeature = <M, TArgs = unknown>(
  * at the play edge.
  */
 export const feature = <M>(meta: M, options: FeatureOptions = {}): Feature<M> =>
-  makeFeature<M>(meta, options.context ?? Context.empty())
+  makeFeature<M>(meta, contextOf(options))
 
 export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
 

@@ -35,7 +35,10 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
             Effect.sync(() => {
               function Comp({ id }: { readonly id: string }) {
                 const result = useAtomSuspense(s.ctx.atom)
-                const value = AsyncResult.isSuccess(result) ? result.value : 0
+                let value = 0
+                if (AsyncResult.isSuccess(result)) {
+                  value = result.value
+                }
                 return React.createElement('div', { 'data-testid': `${id}-value` }, value)
               }
 

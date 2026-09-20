@@ -111,7 +111,7 @@ Feature('Server-side rendering of React atom hooks')
               const atomBasic = Atom.make(0).pipe(
                 Atom.serializable({
                   key: 'basic',
-                  schema: Schema.Number,
+                  schema: Schema.Finite,
                 }),
               )
               const makeAtomResult = (key: string, effect: Effect.Effect<number, string>) =>
@@ -119,7 +119,7 @@ Feature('Server-side rendering of React atom hooks')
                   Atom.serializable({
                     key,
                     schema: AsyncResult.Schema({
-                      success: Schema.Number,
+                      success: Schema.Finite,
                       error: Schema.String,
                     }),
                   }),
@@ -185,7 +185,7 @@ Feature('Server-side rendering of React atom hooks')
               return { ssrHtml }
             }),
         ),
-        When('the rendered markup is inspected')('result', () => Effect.sync(() => true)),
+        When('the rendered markup is inspected')('result', () => Effect.succeed(true)),
         Then('the dehydrated values are present in the markup')((s) => {
           expect(s.ctx.ssrHtml).toContain('data-testid="value">1<')
           expect(s.ctx.ssrHtml).toContain('data-testid="value-1">123<')
@@ -199,7 +199,7 @@ Feature('Server-side rendering of React atom hooks')
       'Deferred hydration state is applied when the streaming promise settles',
       Gherkin.Do.pipe(
         Given('a pending serializable atom dehydrated as a deferred promise')('ctx', () =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const latch = Latch.makeUnsafe()
             let start = 0
             let stop = 0
@@ -214,7 +214,7 @@ Feature('Server-side rendering of React atom hooks')
               Atom.serializable({
                 key: 'test',
                 schema: AsyncResult.Schema({
-                  success: Schema.Number,
+                  success: Schema.Finite,
                 }),
               }),
             )
@@ -258,14 +258,16 @@ Feature('Server-side rendering of React atom hooks')
         When('the server-side value settles and the streaming data is applied')(
           'settled',
           (s) =>
-            Effect.promise(async () => {
+            Effect.promise(() => {
               Effect.runSync(s.ctx.latch.open)
-              await Effect.runPromise(s.ctx.latch.await)
-              await vi.waitFor(() => {
-                const snapshot = s.ctx.hydrationRegistry.get(s.ctx.atom)
-                expect(AsyncResult.isSuccess(snapshot)).toBe(true)
-              })
-              return AsyncResult.getOrThrow(s.ctx.hydrationRegistry.get(s.ctx.atom))
+              return Effect.runPromise(s.ctx.latch.await)
+                .then(() =>
+                  vi.waitFor(() => {
+                    const snapshot = s.ctx.hydrationRegistry.get(s.ctx.atom)
+                    expect(AsyncResult.isSuccess(snapshot)).toBe(true)
+                  })
+                )
+                .then(() => AsyncResult.getOrThrow(s.ctx.hydrationRegistry.get(s.ctx.atom)))
             }),
         ),
         Then('the deferred value is applied to the hydration registry once')((s) => {

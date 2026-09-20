@@ -61,7 +61,8 @@
     "rimraf": "catalog:",
     "rxjs": "^7.8.2",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^"
   },
   "peerDependencies": {
     "effect": "catalog:peers",

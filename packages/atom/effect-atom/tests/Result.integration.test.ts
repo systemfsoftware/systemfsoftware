@@ -4,6 +4,141 @@ import { Cause, Effect, Equal, Hash, Option, Predicate, Result as EffectResult, 
 import { expect } from 'vitest'
 import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.schema.js'
 
+type SampleResult = Schema.Schema.Type<typeof resultSchema>
+type TaggedSample = Schema.Schema.Type<typeof taggedSchema>
+
+const rememberedSuccess = <A, E>(
+  result: Result.Result<A, E>,
+): Option.Option<Result.Success<A, E>> => {
+  if (Result.isSuccess(result)) {
+    return Option.some(result)
+  }
+  if (Result.isFailure(result)) {
+    return result.previousSuccess
+  }
+  return Option.none()
+}
+
+const sameResultTag = (first: SampleResult, second: SampleResult): boolean => {
+  if (Result.isInitial(first) && Result.isInitial(second)) {
+    return true
+  }
+  if (Result.isSuccess(first) && Result.isSuccess(second)) {
+    return true
+  }
+  if (Result.isFailure(first) && Result.isFailure(second)) {
+    return true
+  }
+  return false
+}
+
+const waitingPreservesTagAndValue = (
+  result: SampleResult,
+  waited: SampleResult,
+  touched: SampleResult,
+): boolean => {
+  if (Result.isInitial(result)) {
+    return Result.isInitial(waited) && Result.isInitial(touched)
+  }
+  if (Result.isSuccess(result)) {
+    return Result.isSuccess(waited) && Equal.equals(waited.value, result.value) &&
+      Result.isSuccess(touched) && Equal.equals(touched.value, result.value)
+  }
+  return Result.isFailure(waited) && Result.isFailure(touched)
+}
+
+const exitRoundtripHolds = (result: SampleResult): boolean => {
+  const roundtripped = Result.fromExit(Result.toExit(result))
+  if (Result.isInitial(result)) {
+    return Result.isFailure(roundtripped)
+  }
+  if (Result.isSuccess(result)) {
+    return Equal.equals(roundtripped, Result.success(result.value))
+  }
+  return Equal.equals(roundtripped, Result.failure(result.cause))
+}
+
+const errorOrDefect = (cause: Cause.Cause<unknown>): 'error' | 'defect' => {
+  if (EffectResult.isSuccess(Cause.findError(cause))) {
+    return 'error'
+  }
+  return 'defect'
+}
+
+const matchRouteHolds = (result: SampleResult, routed: string): boolean => {
+  if (Result.isInitial(result)) {
+    return routed === 'initial'
+  }
+  if (Result.isSuccess(result)) {
+    return routed === 'success'
+  }
+  return routed === 'failure'
+}
+
+const matchWithErrorHolds = (result: SampleResult, routed: string): boolean => {
+  if (Result.isInitial(result)) {
+    return routed === 'initial'
+  }
+  if (Result.isSuccess(result)) {
+    return routed === 'success'
+  }
+  return routed === errorOrDefect(result.cause)
+}
+
+const matchWithWaitingHolds = (result: SampleResult, routed: string): boolean => {
+  if (result.waiting) {
+    return routed === 'waiting'
+  }
+  if (Result.isInitial(result)) {
+    return routed === 'waiting'
+  }
+  if (Result.isSuccess(result)) {
+    return routed === 'success'
+  }
+  return routed === errorOrDefect(result.cause)
+}
+
+const flatMapInitialAndSuccessHolds = (result: SampleResult): boolean => {
+  if (Result.isInitial(result)) {
+    return Equal.equals(Result.flatMap(result, () => Result.success(0)), result)
+  }
+  if (Result.isSuccess(result)) {
+    return Equal.equals(
+      Result.flatMap(result, (n: number) => Result.success(n + 1)),
+      Result.success(result.value + 1),
+    )
+  }
+  return true
+}
+
+const builderFirstHandler = (result: SampleResult): string => {
+  if (Result.isInitial(result)) {
+    return 'initial'
+  }
+  if (result.waiting) {
+    return 'waiting'
+  }
+  if (Result.isSuccess(result)) {
+    return 'success'
+  }
+  return 'failure'
+}
+
+const isTaggedError = (e: unknown): e is TaggedError => Predicate.hasProperty(e, 'code')
+
+const taggedErrorCode = (result: TaggedSample): number => {
+  if (!Result.isFailure(result)) {
+    return -1
+  }
+  return Option.getOrElse(
+    Option.map(
+      Option.filter(Cause.findErrorOption(result.cause), isTaggedError),
+      (e) => e.code,
+    ),
+    () => -1,
+  )
+}
+
 const Feature = makeFeature({ it, layer })
 
 Feature('Keeping the last good answer on screen when a retry fails')
@@ -16,7 +151,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
             let attempt = 0
             const atom = Atom.make(Effect.suspend(() => {
               attempt++
-              return attempt === 1 ? Effect.succeed(10) : Effect.fail('server unavailable' as const)
+              if (attempt === 1) {
+                return Effect.succeed(10)
+              }
+              return Effect.fail('server unavailable' as const)
             }))
             const page = Registry.make()
             return { page, atom }
@@ -157,19 +295,14 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) =>
-                (() => {
-                  const replaced = Result.replacePrevious(first, Option.some(second))
-                  const expected = Result.isSuccess(second)
-                    ? Option.some(second)
-                    : Result.isFailure(second)
-                    ? second.previousSuccess
-                    : Option.none()
-                  return Result.isFailure(first)
-                    ? (Result.isFailure(replaced) && Equal.equals(replaced.previousSuccess, expected))
-                    : Equal.equals(replaced, first)
-                })()
-              )
+              s.samples.every(([first, second]) => {
+                const replaced = Result.replacePrevious(first, Option.some(second))
+                const expected = rememberedSuccess(second)
+                if (Result.isFailure(first)) {
+                  return Result.isFailure(replaced) && Equal.equals(replaced.previousSuccess, expected)
+                }
+                return Equal.equals(replaced, first)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -224,17 +357,14 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) =>
-                !Result.isFailure(first) || (() => {
-                  const rebuilt = Result.fromExitWithPrevious(Result.toExit(first), Option.some(second))
-                  const expected = Result.isSuccess(second)
-                    ? Option.some(second)
-                    : Result.isFailure(second)
-                    ? second.previousSuccess
-                    : Option.none()
-                  return Result.isFailure(rebuilt) && Equal.equals(rebuilt.previousSuccess, expected)
-                })()
-              )
+              s.samples.every(([first, second]) => {
+                if (!Result.isFailure(first)) {
+                  return true
+                }
+                const rebuilt = Result.fromExitWithPrevious(Result.toExit(first), Option.some(second))
+                const expected = rememberedSuccess(second)
+                return Result.isFailure(rebuilt) && Equal.equals(rebuilt.previousSuccess, expected)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -250,14 +380,15 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const routed = Result.builder(result).onError(() => 'typed' as const).orElse(() => 'other' as const)
-                  const hasTypedError = Result.isFailure(result) &&
-                    EffectResult.isSuccess(Cause.findError(result.cause))
-                  return routed === (hasTypedError ? 'typed' : 'other')
-                })()
-              )
+              s.samples.every((result) => {
+                const routed = Result.builder(result).onError(() => 'typed' as const).orElse(() => 'other' as const)
+                const hasTypedError = Result.isFailure(result) &&
+                  EffectResult.isSuccess(Cause.findError(result.cause))
+                if (hasTypedError) {
+                  return routed === 'typed'
+                }
+                return routed === 'other'
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -273,7 +404,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) => first['_tag'] === second['_tag'] || !Equal.equals(first, second))
+              s.samples.every(([first, second]) => sameResultTag(first, second) || !Equal.equals(first, second))
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -289,19 +420,12 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const waited = Result.waiting(result)
-                  const touched = Result.waiting(result, { touch: true })
-                  const tagAndValuePreserved = Result.isInitial(result)
-                    ? (Result.isInitial(waited) && Result.isInitial(touched))
-                    : Result.isSuccess(result)
-                    ? (Result.isSuccess(waited) && Equal.equals(waited.value, result.value) &&
-                      Result.isSuccess(touched) && Equal.equals(touched.value, result.value))
-                    : (Result.isFailure(waited) && Result.isFailure(touched))
-                  return waited.waiting === true && touched.waiting === true && tagAndValuePreserved
-                })()
-              )
+              s.samples.every((result) => {
+                const waited = Result.waiting(result)
+                const touched = Result.waiting(result, { touch: true })
+                return waited.waiting === true && touched.waiting === true &&
+                  waitingPreservesTagAndValue(result, waited, touched)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -336,11 +460,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                result.waiting
-                  ? Equal.equals(result, Result.waiting(result))
-                  : !Equal.equals(result, Result.waiting(result))
-              )
+              s.samples.every((result) => {
+                const equal = Equal.equals(result, Result.waiting(result))
+                if (result.waiting) {
+                  return equal
+                }
+                return !equal
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -375,16 +501,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
           'ok',
-          (s) =>
-            Effect.sync(() =>
-              s.samples.every((result) =>
-                Result.isInitial(result)
-                  ? Result.isFailure(Result.fromExit(Result.toExit(result)))
-                  : Result.isSuccess(result)
-                  ? Equal.equals(Result.fromExit(Result.toExit(result)), Result.success(result.value))
-                  : Equal.equals(Result.fromExit(Result.toExit(result)), Result.failure(result.cause))
-              )
-            ),
+          (s) => Effect.sync(() => s.samples.every((result) => exitRoundtripHolds(result))),
         ),
         Then('every draw satisfies the law')((s) => {
           expect(s.ok).toBe(true)
@@ -529,13 +646,14 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const err = Result.error(result)
-                  const hasTypedCause = Result.isFailure(result) && Option.isSome(Cause.findErrorOption(result.cause))
-                  return hasTypedCause ? Option.isSome(err) : Option.isNone(err)
-                })()
-              )
+              s.samples.every((result) => {
+                const err = Result.error(result)
+                const hasTypedCause = Result.isFailure(result) && Option.isSome(Cause.findErrorOption(result.cause))
+                if (hasTypedCause) {
+                  return Option.isSome(err)
+                }
+                return Option.isNone(err)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -551,20 +669,14 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const routedd = Result.match(result, {
-                    onInitial: () => 'initial',
-                    onFailure: () => 'failure',
-                    onSuccess: () => 'success',
-                  })
-                  return Result.isInitial(result)
-                    ? routedd === 'initial'
-                    : Result.isSuccess(result)
-                    ? routedd === 'success'
-                    : routedd === 'failure'
-                })()
-              )
+              s.samples.every((result) => {
+                const routedd = Result.match(result, {
+                  onInitial: () => 'initial',
+                  onFailure: () => 'failure',
+                  onSuccess: () => 'success',
+                })
+                return matchRouteHolds(result, routedd)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -580,19 +692,15 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const routedd = Result.matchWithError(result, {
-                    onInitial: () => 'initial',
-                    onError: () => 'error',
-                    onDefect: () => 'defect',
-                    onSuccess: () => 'success',
-                  })
-                  if (Result.isInitial(result)) return routedd === 'initial'
-                  if (Result.isSuccess(result)) return routedd === 'success'
-                  return routedd === (EffectResult.isSuccess(Cause.findError(result.cause)) ? 'error' : 'defect')
-                })()
-              )
+              s.samples.every((result) => {
+                const routedd = Result.matchWithError(result, {
+                  onInitial: () => 'initial',
+                  onError: () => 'error',
+                  onDefect: () => 'defect',
+                  onSuccess: () => 'success',
+                })
+                return matchWithErrorHolds(result, routedd)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -608,20 +716,15 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const routedd = Result.matchWithWaiting(result, {
-                    onWaiting: () => 'waiting',
-                    onError: () => 'error',
-                    onDefect: () => 'defect',
-                    onSuccess: () => 'success',
-                  })
-                  if (result.waiting) return routedd === 'waiting'
-                  if (Result.isInitial(result)) return routedd === 'waiting'
-                  if (Result.isSuccess(result)) return routedd === 'success'
-                  return routedd === (EffectResult.isSuccess(Cause.findError(result.cause)) ? 'error' : 'defect')
-                })()
-              )
+              s.samples.every((result) => {
+                const routedd = Result.matchWithWaiting(result, {
+                  onWaiting: () => 'waiting',
+                  onError: () => 'error',
+                  onDefect: () => 'defect',
+                  onSuccess: () => 'success',
+                })
+                return matchWithWaitingHolds(result, routedd)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -635,19 +738,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
           'ok',
-          (s) =>
-            Effect.sync(() =>
-              s.samples.every((result) =>
-                Result.isInitial(result)
-                  ? Equal.equals(Result.flatMap(result, () => Result.success(0)), result)
-                  : Result.isSuccess(result)
-                  ? Equal.equals(
-                    Result.flatMap(result, (n: number) => Result.success(n + 1)),
-                    Result.success(result.value + 1),
-                  )
-                  : true
-              )
-            ),
+          (s) => Effect.sync(() => s.samples.every((result) => flatMapInitialAndSuccessHolds(result))),
         ),
         Then('every draw satisfies the law')((s) => {
           expect(s.ok).toBe(true)
@@ -685,22 +776,22 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) =>
-                (() => {
-                  const bothSucceeded = Result.isSuccess(first) && Result.isSuccess(second)
-                  const list = Result.all([first, 7, second])
-                  const record = Result.all({ first, marker: 7, second })
-                  const listOk = Result.isSuccess(list)
-                    ? (bothSucceeded && Equal.equals(list.value[0], first.value) && Equal.equals(list.value[1], 7) &&
-                      Equal.equals(list.value[2], second.value))
-                    : !bothSucceeded
-                  const recordOk = Result.isSuccess(record)
-                    ? (bothSucceeded && Equal.equals(record.value.first, first.value) &&
-                      Equal.equals(record.value.marker, 7) && Equal.equals(record.value.second, second.value))
-                    : !bothSucceeded
-                  return listOk && recordOk
-                })()
-              )
+              s.samples.every(([first, second]) => {
+                const bothSucceeded = Result.isSuccess(first) && Result.isSuccess(second)
+                const list = Result.all([first, 7, second])
+                const record = Result.all({ first, marker: 7, second })
+                let listOk = !bothSucceeded
+                if (Result.isSuccess(list)) {
+                  listOk = bothSucceeded && Equal.equals(list.value[0], first.value) &&
+                    Equal.equals(list.value[1], 7) && Equal.equals(list.value[2], second.value)
+                }
+                let recordOk = !bothSucceeded
+                if (Result.isSuccess(record)) {
+                  recordOk = bothSucceeded && Equal.equals(record.value.first, first.value) &&
+                    Equal.equals(record.value.marker, 7) && Equal.equals(record.value.second, second.value)
+                }
+                return listOk && recordOk
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -716,20 +807,11 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (() => {
-                  const routedd = Result.builder(result).onInitial(() => 'initial').onWaiting(() => 'waiting')
-                    .onSuccess(() => 'success').onFailure(() => 'failure').orElse(() => 'other')
-                  const expected = Result.isInitial(result)
-                    ? 'initial'
-                    : result.waiting
-                    ? 'waiting'
-                    : Result.isSuccess(result)
-                    ? 'success'
-                    : 'failure'
-                  return routedd === expected
-                })()
-              )
+              s.samples.every((result) => {
+                const routedd = Result.builder(result).onInitial(() => 'initial').onWaiting(() => 'waiting')
+                  .onSuccess(() => 'success').onFailure(() => 'failure').orElse(() => 'other')
+                return routedd === builderFirstHandler(result)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -767,18 +849,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
             s.samples.every((result) => {
               const byTag = Result.builder(result).onErrorTag('T', (e) => e.code).orElse(() => -1)
               const byTags = Result.builder(result).onErrorTag(['T'], (e) => e.code).orElse(() => -1)
-              const expected = Result.isFailure(result)
-                ? Option.getOrElse(
-                  Option.map(
-                    Option.filter(
-                      Cause.findErrorOption(result.cause),
-                      (e): e is TaggedError => Predicate.hasProperty(e, '_tag') && e['_tag'] === 'T',
-                    ),
-                    (e) => e.code,
-                  ),
-                  () => -1,
-                )
-                : -1
+              const expected = taggedErrorCode(result)
               return Equal.equals(byTag, expected) && Equal.equals(byTags, expected)
             })
           )),
@@ -817,13 +888,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
               s.samples.every((result) =>
                 (() => {
                   if (!Result.isFailure(result)) {
-                    return Result.builder(result).onSuccess(() => 's').orElse(() => 'o') ===
-                      (Result.isSuccess(result) ? 's' : 'o')
+                    const routed = Result.builder(result).onSuccess(() => 's').orElse(() => 'o')
+                    if (Result.isSuccess(result)) {
+                      return routed === 's'
+                    }
+                    return routed === 'o'
                   }
                   const handled = Result.builder(result).onDefect((received) => received).orElse(() => null)
-                  return EffectResult.isSuccess(Cause.findDefect(result.cause))
-                    ? Equal.equals(handled, Cause.squash(result.cause))
-                    : handled === null
+                  if (EffectResult.isSuccess(Cause.findDefect(result.cause))) {
+                    return Equal.equals(handled, Cause.squash(result.cause))
+                  }
+                  return handled === null
                 })()
               )
             ),
@@ -860,7 +935,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
           'ok',
-          (s) => Effect.sync(() => s.samples.every((result) => Result.builder(result).orNull() === null)),
+          (s) =>
+            Effect.sync(() =>
+              s.samples.every((result) => {
+                const value: unknown = Result.builder(result).orNull()
+                return value === null
+              })
+            ),
         ),
         Then('every draw satisfies the law')((s) => {
           expect(s.ok).toBe(true)
@@ -902,7 +983,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                       result.value + 1,
                     )
                   }
-                  if (Result.isInitial(result)) return Result.builder(result).render() === null
+                  if (Result.isInitial(result)) {
+                    const rendered: unknown = Result.builder(result).render()
+                    return rendered === null
+                  }
                   let threw = false
                   try {
                     Result.builder(result).render()
@@ -933,7 +1017,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                   const decoded = Schema.decodeUnknownOption(noValue)(Schema.encodeSync(resultSchema)(result))
                   const expectRejected = Result.isSuccess(result) ||
                     (Result.isFailure(result) && Option.isSome(result.previousSuccess))
-                  return expectRejected ? Option.isNone(decoded) : Option.isSome(decoded)
+                  if (expectRejected) {
+                    return Option.isNone(decoded)
+                  }
+                  return Option.isSome(decoded)
                 })()
               )
             ),
@@ -1011,12 +1098,16 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                Equal.equals(
+              s.samples.every((result) => {
+                let expected = 0
+                if (Result.isSuccess(result)) {
+                  expected = result.value + 1
+                }
+                return Equal.equals(
                   Result.builder(result).pipe((b) => b.onSuccess((n: number) => n + 1).orElse(() => 0)),
-                  Result.isSuccess(result) ? result.value + 1 : 0,
+                  expected,
                 )
-              )
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -1108,11 +1199,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               s.samples.every((result) =>
                 (() => {
                   const failed = Result.failWithPrevious('boom', { previous: Option.some(result) })
-                  const expected = Result.isSuccess(result)
-                    ? Option.some(result)
-                    : Result.isFailure(result)
-                    ? result.previousSuccess
-                    : Option.none()
+                  const expected = rememberedSuccess(result)
                   return Result.isFailure(failed) && failed.waiting === false &&
                     Equal.equals(failed.previousSuccess, expected) &&
                     Equal.equals(Result.error(failed), Option.some('boom'))

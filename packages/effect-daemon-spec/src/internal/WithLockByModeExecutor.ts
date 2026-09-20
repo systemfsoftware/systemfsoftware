@@ -38,6 +38,21 @@ export type LockBinding =
  * The worker and the supervisor make the same choice over the same cases, so it is
  * made here once rather than in each of them.
  */
+const withKeyedLock = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  spec: KeyedLockConfig,
+  lock: LeaderLock['Service'],
+): Effect.Effect<A | void, E | LeaderLockAcquireError, R> => {
+  if (spec.mode === 'required') {
+    return withLeaderLock(
+      self,
+      { key: spec.key, mode: 'required', acquireRetryBackoff: spec.acquireRetryBackoff },
+      lock,
+    )
+  }
+  return withLeaderLock(self, { key: spec.key, mode: 'optional' }, lock)
+}
+
 /** @internal */
 export const withLockByMode = <A, E, R>(
   self: Effect.Effect<A, E, R>,
@@ -46,12 +61,5 @@ export const withLockByMode = <A, E, R>(
   if (binding.kind === 'unlocked') {
     return self
   }
-  if (binding.spec.mode === 'required') {
-    return withLeaderLock(
-      self,
-      { key: binding.spec.key, mode: 'required', acquireRetryBackoff: binding.spec.acquireRetryBackoff },
-      binding.lock,
-    )
-  }
-  return withLeaderLock(self, { key: binding.spec.key, mode: 'optional' }, binding.lock)
+  return withKeyedLock(self, binding.spec, binding.lock)
 }

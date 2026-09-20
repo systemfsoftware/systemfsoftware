@@ -27,6 +27,31 @@ export const stepWrap = <A, E, R>(
 
 export type GherkinEffect<A extends object, E, R> = Effect.Effect<GherkinScope<A>, E, R>
 
+const wrapTapResult = <A extends object, E2, R2>(
+  raw: Effect.Effect<unknown, E2, R2> | void,
+  scope: GherkinScope<A>,
+  keyword: string,
+  resolvedText: string,
+): Effect.Effect<GherkinScope<A>, StepError, R2> => {
+  if (Effect.isEffect(raw)) {
+    return stepWrap(keyword, resolvedText, raw).pipe(Effect.as(scope))
+  }
+  return Effect.succeed(scope)
+}
+
+const runTapBody = <A extends object, E2, R2>(
+  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+  scope: GherkinScope<A>,
+  keyword: string,
+  resolvedText: string,
+): Effect.Effect<GherkinScope<A>, StepError, R2> => {
+  try {
+    return wrapTapResult(f(scope), scope, keyword, resolvedText)
+  } catch (e) {
+    return Effect.fail(StepError.make({ keyword, text: resolvedText, cause: e }))
+  }
+}
+
 const tapStep = (keyword: string, text: StepText) =>
 <A extends object, E2 = never, R2 = never>(
   f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
@@ -34,16 +59,7 @@ const tapStep = (keyword: string, text: StepText) =>
 <E1, R1>(self: GherkinEffect<A, E1, R1>): GherkinEffect<A, E1 | StepError, R1 | R2> =>
   Effect.flatMap(self, (scope): Effect.Effect<GherkinScope<A>, StepError, R2> => {
     const resolvedText = resolveText(text, scope)
-    let raw: Effect.Effect<unknown, E2, R2> | void
-    try {
-      raw = f(scope)
-    } catch (e) {
-      return Effect.fail(StepError.make({ keyword, text: resolvedText, cause: e }))
-    }
-    if (Effect.isEffect(raw)) {
-      return stepWrap(keyword, resolvedText, raw).pipe(Effect.as(scope))
-    }
-    return Effect.succeed(scope)
+    return runTapBody(f, scope, keyword, resolvedText)
   })
 
 type BindStepTapArgs<E, R> = [f: (scope: object) => Effect.Effect<unknown, E, R> | void]

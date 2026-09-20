@@ -54,8 +54,8 @@ Feature('Scoped atoms that belong to one part of the page')
             }),
         ),
         Then('the widget shows the updated counter')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
           })
         ),
       ),
@@ -81,10 +81,10 @@ Feature('Scoped atoms that belong to one part of the page')
             )
             return {}
           })),
-        When('the greeting is shown')('shown', () => Effect.sync(() => true)),
+        When('the greeting is shown')('shown', () => Effect.succeed(true)),
         Then('the input name is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
           })
         ),
       ),
@@ -125,8 +125,8 @@ Feature('Scoped atoms that belong to one part of the page')
             })
           })),
         Then('the original atom is still on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
           })
         ),
       ),
@@ -159,10 +159,10 @@ Feature('Scoped atoms that belong to one part of the page')
               return {}
             }),
         ),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the error boundary reports the missing provider')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
           })
         ),
       ),

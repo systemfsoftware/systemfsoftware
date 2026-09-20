@@ -11,6 +11,13 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
+const orEmpty = <A>(value: A | undefined): A | Record<never, never> => {
+  if (typeof value === 'undefined') {
+    return {}
+  }
+  return value
+}
+
 export const stream = <
   S,
   TICK,
@@ -29,8 +36,8 @@ export const stream = <
   [WorkerTypeId]: WorkerTypeId,
   name: opts.name,
   loop: { ...StreamLoopTag, stream: opts.stream },
-  child: opts.child ?? {},
+  child: orEmpty(opts.child),
   tick: opts.tick,
-  tickHooks: opts.tickHooks ?? {},
+  tickHooks: orEmpty(opts.tickHooks),
   lock: opts.lock,
 })

@@ -40,25 +40,13 @@ export const isAtomRegistry: (u: unknown) => u is Registry;
 // @public
 export const layer: Layer.Layer<AtomRegistry>;
 
+// Warning: (ae-forgotten-export) The symbol "RegistryMakeOptions" needs to be exported by the entry point Registry.d.ts
+//
 // @public
-export const layerOptions: (options?: {
-    readonly initialValues?: Iterable<readonly [Atom<unknown>, unknown]> | undefined;
-    readonly scheduleTask?: ((f: () => void) => () => void) | undefined;
-    readonly timeoutResolution?: number | undefined;
-    readonly defaultIdleTTL?: number | undefined;
-    readonly now?: (() => number) | undefined;
-    readonly scheduleTimer?: ((f: () => void, delayMillis: number) => () => void) | undefined;
-}) => Layer.Layer<AtomRegistry>;
+export const layerOptions: (options?: RegistryMakeOptions) => Layer.Layer<AtomRegistry>;
 
 // @public
-export const make: (options?: {
-    readonly initialValues?: Iterable<readonly [Atom<unknown>, unknown]> | undefined;
-    readonly scheduleTask?: ((f: () => void) => () => void) | undefined;
-    readonly timeoutResolution?: number | undefined;
-    readonly defaultIdleTTL?: number | undefined;
-    readonly now?: (() => number) | undefined;
-    readonly scheduleTimer?: ((f: () => void, delayMillis: number) => () => void) | undefined;
-}) => Registry;
+export const make: (options?: RegistryMakeOptions) => Registry;
 
 // @public
 export const mount: {
@@ -205,8 +193,10 @@ export class RegistryImpl implements Registry {
     }): () => void;
     // (undocumented)
     sweepBucket(bucket: number): void;
+    // Warning: (ae-forgotten-export) The symbol "TimeoutBucket" needs to be exported by the entry point Registry.d.ts
+    //
     // (undocumented)
-    readonly timeoutBuckets: Map<number, readonly [nodes: Set<NodeImpl<unknown>>, cancel: () => void]>;
+    readonly timeoutBuckets: Map<number, TimeoutBucket>;
     // (undocumented)
     readonly timeoutResolution: number;
     // (undocumented)
@@ -233,8 +223,8 @@ export const TypeId: TypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-Ciqh8CR3.d.ts:362:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
-// dist/Atom-Ciqh8CR3.d.ts:362:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CY18l71z.d.ts:334:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CY18l71z.d.ts:334:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
 
 // (No @packageDocumentation comment for this package)
 

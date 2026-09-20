@@ -82,10 +82,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.sync(() => true)),
+        When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('the seeded value is already on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
           })
         ),
       ),
@@ -125,8 +125,8 @@ Feature('Reading and changing shared values from on-screen widgets')
             })
           })),
         Then('the widget shows the recomputed reading')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
           })
         ),
       ),
@@ -197,9 +197,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             })
           })),
         Then('the view shows the new value and the rest of the record is untouched')((s) =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('name')).toHaveTextContent('grace')
-            expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('name')).toHaveTextContent('grace').then(() => {
+              expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
+            })
           })
         ),
       ),
@@ -210,7 +211,13 @@ Feature('Reading and changing shared values from on-screen widgets')
       Gherkin.Do.pipe(
         Given('a form whose save button reports success or failure')('ctx', () =>
           Effect.sync(() => {
-            const draft = Atom.fn((n: number) => n > 0 ? Effect.succeed(n) : Effect.fail<'rejected'>('rejected'))
+            const saveDraft = (n: number): Effect.Effect<number, 'rejected'> => {
+              if (n > 0) {
+                return Effect.succeed(n)
+              }
+              return Effect.fail('rejected')
+            }
+            const draft = Atom.fn(saveDraft)
             let save: (n: number) => Effect.Effect<number, 'rejected'> = () =>
               Effect.die(new Error('save called before the form rendered'))
             function Form() {
@@ -236,7 +243,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             }),
         ),
         Then('the first save is reported as accepted and the second as rejected')((s) => {
-          const acceptedValue = Exit.isSuccess(s.outcomes.accepted) ? s.outcomes.accepted.value : null
+          let acceptedValue: number | null = null
+          if (Exit.isSuccess(s.outcomes.accepted)) {
+            acceptedValue = s.outcomes.accepted.value
+          }
           expect(acceptedValue).toBe(5)
           expect(Exit.isFailure(s.outcomes.rejected)).toBe(true)
         }),
@@ -262,10 +272,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the transformed value is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
           })
         ),
       ),
@@ -294,10 +304,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the failure is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
           })
         ),
       ),
@@ -311,7 +321,7 @@ Feature('Reading and changing shared values from on-screen widgets')
           () =>
             Effect.sync(() => {
               const temperature = Atom.make(18).pipe(
-                Atom.serializable({ key: 'temperature', schema: Schema.Number }),
+                Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
               )
               const registry = AtomRegistry.make()
               registry.set(temperature, 18)
@@ -337,10 +347,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             }),
         ),
         When('the page settles after the saved data is committed')('settled', () =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
           })),
-        Then('the newer saved value is what ends up on screen')(() => Effect.sync(() => true)),
+        Then('the newer saved value is what ends up on screen')(() => Effect.succeed(true)),
       ),
     )
 

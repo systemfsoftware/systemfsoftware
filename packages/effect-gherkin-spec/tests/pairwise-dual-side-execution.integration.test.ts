@@ -45,11 +45,14 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
   scenario(
     'A failure on one side surfaces as a step failure',
     Effect.gen(function*() {
+      const workload = (w: { readonly value: string }) => {
+        if (w.value === 'side-a') {
+          return Effect.succeed(true)
+        }
+        return Effect.fail(new UnknownError(new Error('boom')))
+      }
       const piped = Gherkin.Do.pipe(
-        PairwiseAB('boom on B only')('dual', (_s) => (w) =>
-          w.value === 'side-a'
-            ? Effect.succeed(true)
-            : Effect.fail(new UnknownError(new Error('boom')))),
+        PairwiseAB('boom on B only')('dual', (_s) => workload),
         Then('unreachable')(() => Effect.void),
       )
       const result = yield* Effect.result(piped)

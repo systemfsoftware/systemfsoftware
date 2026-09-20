@@ -21,7 +21,6 @@ import * as AsyncResult from './Result.js'
 /**
  * Marker interface for entries in a dehydrated atom registry state.
  *
- * @category models
  * @since 4.0.0
  */
 export interface DehydratedAtom {
@@ -36,7 +35,6 @@ export interface DehydratedAtom {
  * It stores the atom serialization key, encoded value, and dehydration
  * timestamp.
  *
- * @category models
  * @since 4.0.0
  */
 export interface DehydratedAtomValue extends DehydratedAtom {
@@ -65,7 +63,6 @@ const pendingResults = new WeakMap<DehydratedAtomValue, Deferred.Deferred<unknow
  * or carried as a pending update that completes when the atom leaves the
  * initial state.
  *
- * @category dehydration
  * @since 4.0.0
  */
 export const dehydrate = (
@@ -77,42 +74,162 @@ export const dehydrate = (
     readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
   },
 ): DehydratedAtomValue[] => {
-  const encodeInitialResultMode = options?.encodeInitialAs ?? 'ignore'
+  const encodeInitialResultMode = encodeInitialMode(options)
   const arr: DehydratedAtomValue[] = []
   const now = Effect.runSync(Clock.currentTimeMillis)
   registry.getNodes().forEach((node, key) => {
-    if (!Atom.isSerializable(node.atom)) return
-    const atom = node.atom
-    const value = node.value()
-    const isInitial = AsyncResult.isAsyncResult(value) && AsyncResult.isInitial(value)
-    if (encodeInitialResultMode === 'ignore' && isInitial) return
-    // Serializable atoms are always registered under their serialization key
-    // (see `Registry.atomKey`), so a serializable node's map key is a string.
-    if (typeof key !== 'string') return
-    const serializer = atom[Atom.SerializableTypeId]
-    const encodedValue = serializer.encode(value)
-    const entry: DehydratedAtomValue = {
-      '~effect/reactivity/DehydratedAtom': true,
-      key,
-      value: encodedValue,
-      dehydratedAt: now,
-    }
-
-    // Create a Deferred that completes when the atom moves out of Initial state
-    if (encodeInitialResultMode === 'deferred' && isInitial) {
-      const deferred = Deferred.makeUnsafe<unknown>()
-      const unsubscribe = registry.subscribe(atom, (newValue) => {
-        if (AsyncResult.isAsyncResult(newValue) && !AsyncResult.isInitial(newValue)) {
-          Deferred.doneUnsafe(deferred, Effect.succeed(serializer.encode(newValue)))
-          unsubscribe()
-        }
-      })
-      pendingResults.set(entry, deferred)
-    }
-
-    arr.push(entry)
+    dehydrateNode(registry, node, key, encodeInitialResultMode, now, arr)
   })
   return arr
+}
+
+const encodeInitialMode = (
+  options?: {
+    readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
+  },
+): 'ignore' | 'deferred' | 'value-only' => {
+  if (options === undefined) {
+    return 'ignore'
+  }
+  return encodeInitialOrIgnore(options.encodeInitialAs)
+}
+
+const encodeInitialOrIgnore = (
+  mode: 'ignore' | 'deferred' | 'value-only' | undefined,
+): 'ignore' | 'deferred' | 'value-only' => {
+  if (mode === undefined) {
+    return 'ignore'
+  }
+  return mode
+}
+
+const isInitialResult = (value: unknown): boolean => {
+  if (!AsyncResult.isAsyncResult(value)) {
+    return false
+  }
+  return AsyncResult.isInitial(value)
+}
+
+const dehydrateNode = (
+  registry: AtomRegistry.Registry,
+  node: { readonly atom: Atom.Atom<unknown>; readonly value: () => unknown },
+  key: unknown,
+  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
+  now: number,
+  arr: DehydratedAtomValue[],
+): void => {
+  if (!Atom.isSerializable(node.atom)) {
+    return
+  }
+  dehydrateSerializable(
+    registry,
+    node.atom,
+    node.atom[Atom.SerializableTypeId],
+    node.value(),
+    key,
+    encodeInitialResultMode,
+    now,
+    arr,
+  )
+}
+
+const shouldSkipInitial = (
+  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
+  isInitial: boolean,
+): boolean => {
+  if (encodeInitialResultMode !== 'ignore') {
+    return false
+  }
+  return isInitial
+}
+
+const dehydrateSerializable = (
+  registry: AtomRegistry.Registry,
+  atom: Atom.Atom<unknown>,
+  serializer: { readonly encode: (value: unknown) => unknown },
+  value: unknown,
+  key: unknown,
+  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
+  now: number,
+  arr: DehydratedAtomValue[],
+): void => {
+  const isInitial = isInitialResult(value)
+  if (shouldSkipInitial(encodeInitialResultMode, isInitial)) {
+    return
+  }
+  dehydrateKeyed(registry, atom, serializer, value, key, encodeInitialResultMode, isInitial, now, arr)
+}
+
+const dehydrateKeyed = (
+  registry: AtomRegistry.Registry,
+  atom: Atom.Atom<unknown>,
+  serializer: { readonly encode: (value: unknown) => unknown },
+  value: unknown,
+  key: unknown,
+  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
+  isInitial: boolean,
+  now: number,
+  arr: DehydratedAtomValue[],
+): void => {
+  if (typeof key !== 'string') {
+    return
+  }
+  const entry: DehydratedAtomValue = {
+    '~effect/reactivity/DehydratedAtom': true,
+    key,
+    value: serializer.encode(value),
+    dehydratedAt: now,
+  }
+  attachDeferred(registry, atom, serializer, entry, encodeInitialResultMode, isInitial)
+  arr.push(entry)
+}
+
+const shouldAttachDeferred = (
+  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
+  isInitial: boolean,
+): boolean => {
+  if (encodeInitialResultMode !== 'deferred') {
+    return false
+  }
+  return isInitial
+}
+
+const isSettledResult = (newValue: unknown): boolean => {
+  if (!AsyncResult.isAsyncResult(newValue)) {
+    return false
+  }
+  return !AsyncResult.isInitial(newValue)
+}
+
+const attachDeferred = (
+  registry: AtomRegistry.Registry,
+  atom: Atom.Atom<unknown>,
+  serializer: { readonly encode: (value: unknown) => unknown },
+  entry: DehydratedAtomValue,
+  encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
+  isInitial: boolean,
+): void => {
+  if (!shouldAttachDeferred(encodeInitialResultMode, isInitial)) {
+    return
+  }
+  const deferred = Deferred.makeUnsafe<unknown>()
+  const unsubscribe = registry.subscribe(atom, (newValue) => {
+    completeDeferred(deferred, unsubscribe, serializer, newValue)
+  })
+  pendingResults.set(entry, deferred)
+}
+
+const completeDeferred = (
+  deferred: Deferred.Deferred<unknown>,
+  unsubscribe: () => void,
+  serializer: { readonly encode: (value: unknown) => unknown },
+  newValue: unknown,
+): void => {
+  if (!isSettledResult(newValue)) {
+    return
+  }
+  Deferred.doneUnsafe(deferred, Effect.succeed(serializer.encode(newValue)))
+  unsubscribe()
 }
 
 /**
@@ -134,7 +251,6 @@ export const dehydrate = (
  * the registry. Callers that need the state fully settled — tests, SSR flushes
  * — can join it; fire-and-forget callers can ignore it.
  *
- * @category hydration
  * @since 4.0.0
  */
 export const hydrate = (
@@ -143,16 +259,25 @@ export const hydrate = (
 ): Fiber.Fiber<void, never> => {
   const pending: Effect.Effect<void>[] = []
   for (const datom of dehydratedState) {
-    registry.setSerializable(datom.key, datom.value)
-
-    const result = pendingResults.get(datom)
-    if (result === undefined) continue
-    pending.push(
-      Effect.flatMap(Deferred.await(result), (resolvedValue) =>
-        Effect.sync(() => {
-          registry.setSerializable(datom.key, resolvedValue)
-        })),
-    )
+    hydrateOne(registry, pending, datom)
   }
   return Effect.runFork(Effect.forEach(pending, (effect) => effect, { discard: true }))
+}
+
+const hydrateOne = (
+  registry: AtomRegistry.Registry,
+  pending: Effect.Effect<void>[],
+  datom: DehydratedAtomValue,
+): void => {
+  registry.setSerializable(datom.key, datom.value)
+  const result = pendingResults.get(datom)
+  if (result === undefined) {
+    return
+  }
+  pending.push(
+    Effect.flatMap(Deferred.await(result), (resolvedValue) =>
+      Effect.sync(() => {
+        registry.setSerializable(datom.key, resolvedValue)
+      })),
+  )
 }

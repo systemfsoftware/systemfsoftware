@@ -1,4 +1,4 @@
-import base from '@systemfsoftware/oxlint-config/base'
+import all from '@systemfsoftware/all'
 import { defineConfig } from 'oxlint'
 
-export default defineConfig({ extends: [base] })
+export default defineConfig({ extends: [all] })

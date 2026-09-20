@@ -19,7 +19,6 @@ import * as React from 'react'
  * Used as the computed property key and marker value stored on `ScopedAtom`
  * objects.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export type TypeId = '~@effect/atom-react/ScopedAtom'
@@ -32,7 +31,6 @@ export type TypeId = '~@effect/atom-react/ScopedAtom'
  * Used as the computed property key and marker value stored on `ScopedAtom`
  * objects.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
@@ -63,7 +61,6 @@ export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
  * renderToStaticMarkup(React.createElement(App)) // => "<div>0</div>"
  * ```
  *
- * @category models
  * @since 4.0.0
  */
 export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
@@ -72,6 +69,32 @@ export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
   Provider: [Input] extends [never] ? React.FC<{ readonly children?: React.ReactNode | undefined }>
     : React.FC<{ readonly children?: React.ReactNode | undefined; readonly value: Input }>
   Context: React.Context<A | undefined>
+}
+
+function hasNoParameters<A extends Atom.Atom<unknown>, Input>(
+  factory: (() => A) | ((input: Input) => A),
+): factory is () => A {
+  return factory.length === 0
+}
+
+function createScopedAtomFromInput<A extends Atom.Atom<unknown>, Input>(
+  factory: (input: Input) => A,
+  value: Input | undefined,
+): A {
+  if (value === undefined) {
+    throw new Error('ScopedAtom Provider requires a value')
+  }
+  return factory(value)
+}
+
+function createScopedAtom<A extends Atom.Atom<unknown>, Input>(
+  factory: (() => A) | ((input: Input) => A),
+  value: Input | undefined,
+): A {
+  if (hasNoParameters(factory)) {
+    return factory()
+  }
+  return createScopedAtomFromInput(factory, value)
 }
 
 /**
@@ -120,7 +143,6 @@ export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
  * renderToStaticMarkup(React.createElement(App)) // => "<span>Ada</span>"
  * ```
  *
- * @category constructors
  * @since 4.0.0
  */
 export const make = <A extends Atom.Atom<unknown>, Input = never>(
@@ -136,18 +158,10 @@ export const make = <A extends Atom.Atom<unknown>, Input = never>(
     return atom
   }
 
-  const hasNoParameters = (factory: (() => A) | ((input: Input) => A)): factory is () => A => factory.length === 0
-
   const Provider: React.FC<{ readonly children?: React.ReactNode | undefined; readonly value?: Input }> = (props) => {
     const atom = React.useRef<A | null>(null)
     if (atom.current === null) {
-      if (hasNoParameters(f)) {
-        atom.current = f()
-      } else if (props.value !== undefined) {
-        atom.current = f(props.value)
-      } else {
-        throw new Error('ScopedAtom Provider requires a value')
-      }
+      atom.current = createScopedAtom(f, props.value)
     }
     return React.createElement(Context.Provider, { value: atom.current }, props.children)
   }

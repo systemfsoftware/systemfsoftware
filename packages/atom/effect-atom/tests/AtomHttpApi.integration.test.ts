@@ -36,7 +36,7 @@ const MutationApi = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
     HttpApiEndpoint.post('create', '/users', {
       payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
     }),
   ),
 )
@@ -48,7 +48,7 @@ const QueryAndMutationApi = HttpApi.make('api').add(
     }),
     HttpApiEndpoint.post('create', '/users', {
       payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
     }),
   ),
 )
@@ -57,7 +57,7 @@ const ApiWithRejection = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
     HttpApiEndpoint.post('create', '/users', {
       payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      success: Schema.Struct({ id: Schema.Finite, name: Schema.String }),
       error: Schema.Struct({ message: Schema.String }),
     }),
   ),
@@ -127,8 +127,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             })),
         ),
         Then('both parts agree the profile is still loading, not a stale or broken value')((s) => {
-          expect(s.result.firstReading.waiting || s.result.firstReading._tag === 'Initial').toBe(true)
-          expect(s.result.secondReading.waiting || s.result.secondReading._tag === 'Initial').toBe(true)
+          expect(s.result.firstReading.waiting || Result.isInitial(s.result.firstReading)).toBe(true)
+          expect(s.result.secondReading.waiting || Result.isInitial(s.result.secondReading)).toBe(true)
         }),
       ),
     )

@@ -9,6 +9,7 @@
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { And, But, Gherkin, Given, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result } from 'effect'
+import { Schema } from 'effect'
 import { expect } from 'vitest'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
@@ -200,8 +201,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Result.match(result, {
         onFailure: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(Schema.is(StepError)(err)).toBe(true)
+          if (Schema.is(StepError)(err)) {
             expect(err.keyword).toBe('given')
           }
         },
@@ -220,8 +221,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Result.match(result, {
         onFailure: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(Schema.is(StepError)(err)).toBe(true)
+          if (Schema.is(StepError)(err)) {
             expect(err.keyword).toBe('when')
           }
         },
@@ -242,8 +243,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Result.match(result, {
         onFailure: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(Schema.is(StepError)(err)).toBe(true)
+          if (Schema.is(StepError)(err)) {
             expect(err.keyword).toBe('then')
           }
         },
@@ -264,8 +265,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Result.match(result, {
         onFailure: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(Schema.is(StepError)(err)).toBe(true)
+          if (Schema.is(StepError)(err)) {
             expect(err.keyword).toBe('and')
           }
         },
@@ -286,8 +287,8 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       Result.match(result, {
         onFailure: (err) => {
-          expect(err).toBeInstanceOf(StepError)
-          if (err instanceof StepError) {
+          expect(Schema.is(StepError)(err)).toBe(true)
+          if (Schema.is(StepError)(err)) {
             expect(err.keyword).toBe('but')
           }
         },
