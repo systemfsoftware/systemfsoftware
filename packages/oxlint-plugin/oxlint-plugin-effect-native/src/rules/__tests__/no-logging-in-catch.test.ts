@@ -21,14 +21,14 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_UsingEffectLogOutsideCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.log('hello')
       `,
     },
     {
       name: 'Should_Pass_When_UsingEffectLogErrorOutsideCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.logError('error')
       `,
     },
@@ -37,10 +37,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_UsingTapErrorBeforeCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.tapError((e) => Effect.logError(e)),
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
       `,
     },
@@ -49,18 +49,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CatchAllReturnsPureValue',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
       `,
     },
     {
       name: 'Should_Pass_When_CatchAllWithNonLogEffect',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.succeed(e.message))
+          Effect.catch((e) => Effect.succeed(e.message))
         )
       `,
     },
@@ -69,7 +69,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CatchTagReturnsPureValue',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.catchTag('Error', () => Effect.succeed(0))
         )
@@ -80,9 +80,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CatchAllCauseReturnsVoid',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAllCause(() => Effect.void)
+          Effect.catchCause(() => Effect.void)
         )
       `,
     },
@@ -91,9 +91,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_OrElseWithoutLogging',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
-          Effect.orElse(() => Effect.succeed(1))
+          Effect.catch(() => Effect.succeed(1))
         )
       `,
     },
@@ -102,9 +102,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_OrElseFailWithoutLogging',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('a').pipe(
-          Effect.orElseFail(() => new Error('b'))
+          Effect.catch(() => new Error('b'))
         )
       `,
     },
@@ -113,7 +113,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_OrElseSucceedWithoutLogging',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
           Effect.orElseSucceed(() => 42)
         )
@@ -124,9 +124,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CatchSomeWithoutLogging',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
-          Effect.catchSome((e) => Effect.succeed(1))
+          Effect.catchFilter((e) => Effect.succeed(1))
         )
       `,
     },
@@ -135,9 +135,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CatchSomeCauseWithoutLogging',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
-          Effect.catchSomeCause(() => Effect.succeed(1))
+          Effect.catchCauseFilter(() => Effect.succeed(1))
         )
       `,
     },
@@ -146,7 +146,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CatchIfWithoutLogging',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
           Effect.catchIf(
             (e) => e === 'error',
@@ -160,7 +160,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_LoggingInCatchIfPredicate',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
           Effect.catchIf(
             (e) => { console.log(e); return true },
@@ -188,11 +188,21 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
       `,
     },
 
+    {
+      name: 'Should_Pass_When_BarrelNamespaceIsNotTheEffectExport',
+      code: `
+        import * as Effect from 'effect'
+        Effect.succeed(1).pipe(
+          Effect.catch(() => Effect.log('hello'))
+        )
+      `,
+    },
+
     // --- Correct: Shadowed Effect variable ---
     {
       name: 'Should_Pass_When_EffectIsShadowed',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const Effect = { log: (x: string) => x }
         Effect.log('hello')
       `,
@@ -214,7 +224,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         import { Effect as E } from 'effect'
         const E = { log: (x: string) => x, catchAll: (fn: Function) => fn(), succeed: (x: number) => x }
         E.succeed(1).pipe(
-          E.catchAll(() => E.log('hello'))
+          E.catch(() => E.log('hello'))
         )
       `,
     },
@@ -223,9 +233,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_UsingNonLogMethodsInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.sync(() => 42))
+          Effect.catch(() => Effect.sync(() => 42))
         )
       `,
     },
@@ -234,7 +244,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_EffectGenWithoutCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.gen(function*() {
           yield* Effect.log('hello')
           return 1
@@ -246,14 +256,14 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_LoggingInEffectGenRootLevel',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const program = Effect.gen(function*() {
           yield* Effect.log('start')
           const result = yield* Effect.tryPromise(() => fetch('/api'))
           yield* Effect.log('end')
           return result
         }).pipe(
-          Effect.catchAll(() => Effect.succeed(null))
+          Effect.catch(() => Effect.succeed(null))
         )
       `,
     },
@@ -262,10 +272,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_NonEffectPipeArgument',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.map((x) => x + 1),
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
       `,
     },
@@ -274,10 +284,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_EffectNotShadowedButDifferentVariable',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const MyEffect = { log: () => {} }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
       `,
     },
@@ -286,9 +296,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_EmptyCatchCallback',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.void)
+          Effect.catch(() => Effect.void)
         )
       `,
     },
@@ -297,7 +307,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_NonCatchMethod',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.map((x) => x + 1)
         )
@@ -308,7 +318,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_ConsoleLogOutsideCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         console.log('outside')
         Effect.succeed(1)
       `,
@@ -318,9 +328,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeWithoutLoggingInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(Effect.map((x) => x + 1)))
+          Effect.catch(() => Effect.succeed(0).pipe(Effect.map((x) => x + 1)))
         )
       `,
     },
@@ -329,10 +339,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PlainFunctionCallInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const recover: () => Effect.Effect<number>
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => recover())
+          Effect.catch(() => recover())
         )
       `,
     },
@@ -352,7 +362,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
       code: `
         import * as Effect from 'some-other-lib'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.log('hello'))
+          Effect.catch(() => Effect.log('hello'))
         )
       `,
     },
@@ -361,10 +371,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_ShadowedEffectInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const Effect = { log: (x: string) => x, catchAll: (fn: Function) => fn(), succeed: (x: number) => x }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.log('hello'))
+          Effect.catch(() => Effect.log('hello'))
         )
       `,
     },
@@ -373,10 +383,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_OtherVariableDoesNotAffectTracking',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const NotEffect = { log: (x: string) => x }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
       `,
     },
@@ -385,10 +395,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_DestructuringDoesNotUnshadow',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const { log } = console
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
       `,
     },
@@ -397,10 +407,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_NonPipeChainedCallInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const transform: { run: (e: Effect.Effect<number>) => number }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(transform.run(Effect.succeed(0))))
+          Effect.catch(() => Effect.succeed(transform.run(Effect.succeed(0))))
         )
       `,
     },
@@ -409,10 +419,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_ComputedPropertyInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const method = 'log'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect[method]('hello'))
+          Effect.catch(() => Effect[method]('hello'))
         )
       `,
     },
@@ -421,10 +431,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_StringLiteralComputedCallInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const obj: { log: (msg: string) => void }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             obj['log']('hello')
             return Effect.succeed(0)
           })
@@ -436,10 +446,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_CallExpressionCalleeObjectInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const getLogger: () => { log: (msg: string) => void }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             getLogger().log('hello')
             return Effect.succeed(0)
           })
@@ -451,10 +461,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_OtherMemberExpressionInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const logger: { log: (msg: string) => void }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             logger.log('hello')
             return Effect.succeed(0)
           })
@@ -466,9 +476,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_ConsoleTraceInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             console.trace('trace')
             return Effect.succeed(0)
           })
@@ -500,7 +510,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_NonFunctionArgToCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.catchTag('MyError', () => Effect.succeed(0))
         )
@@ -511,10 +521,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeArgIsNotMemberExpression',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const myFn: (x: number) => number
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(myFn))
+          Effect.catch(() => Effect.succeed(0).pipe(myFn))
         )
       `,
     },
@@ -523,10 +533,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeArgHasNonIdentifierObject',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const getEffectModule: () => { log: typeof Effect.log }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(getEffectModule().log))
+          Effect.catch(() => Effect.succeed(0).pipe(getEffectModule().log))
         )
       `,
     },
@@ -535,10 +545,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeArgHasNonEffectNamespace',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const Other: { log: (x: number) => number }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(Other.log))
+          Effect.catch(() => Effect.succeed(0).pipe(Other.log))
         )
       `,
     },
@@ -547,9 +557,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeArgHasNonLogProperty',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(Effect.map))
+          Effect.catch(() => Effect.succeed(0).pipe(Effect.map))
         )
       `,
     },
@@ -558,10 +568,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeArgHasComputedProperty',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const key = 'log'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(Effect[key]))
+          Effect.catch(() => Effect.succeed(0).pipe(Effect[key]))
         )
       `,
     },
@@ -570,9 +580,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_PipeCalleeHasStringLiteralProperty',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0)['pipe'](Effect.log))
+          Effect.catch(() => Effect.succeed(0)['pipe'](Effect.log))
         )
       `,
     },
@@ -581,9 +591,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_LoggingAfterCatchBlock',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const program = Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0))
+          Effect.catch(() => Effect.succeed(0))
         )
         Effect.log('after catch')
       `,
@@ -593,9 +603,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_InnerFunctionExitsWithoutAffectingStack',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             const fn = (cb: () => void) => cb()
             fn(() => {})
             return Effect.succeed(0)
@@ -608,10 +618,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_NonPipeMethodChainInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const chain: { apply: (e: Effect.Effect<number>) => Effect.Effect<number> }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => chain.apply(Effect.succeed(0)))
+          Effect.catch(() => chain.apply(Effect.succeed(0)))
         )
       `,
     },
@@ -620,9 +630,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_MemberExpressionAssignedInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             const ref = Effect.log
             return Effect.succeed(0)
           })
@@ -634,7 +644,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_EffectLogInPipeOutsideCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(Effect.log)
       `,
     },
@@ -643,10 +653,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_EffectLogAsArgToNonPipeInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const apply: (fn: unknown) => unknown
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             apply(Effect.log)
             return Effect.succeed(0)
           })
@@ -658,10 +668,10 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Pass_When_EffectLogRefInNonPipeCallInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         declare const wrap: { run: (...fns: unknown[]) => unknown }
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             wrap.run(Effect.log)
             return Effect.succeed(0)
           })
@@ -674,9 +684,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_LoggingAfterInnerFunctionInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             const fn = (cb: () => void) => cb()
             fn(() => {})
             Effect.log('still in catch')
@@ -688,9 +698,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -701,18 +711,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.log(e))
+          Effect.catch((e) => Effect.log(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -723,18 +733,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogErrorInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.logError(e))
+          Effect.catch((e) => Effect.logError(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.logError',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.logError inside catchAll',
+          actual: 'Effect.logError inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -745,18 +755,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogWarningInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.logWarning(e))
+          Effect.catch((e) => Effect.logWarning(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.logWarning',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.logWarning inside catchAll',
+          actual: 'Effect.logWarning inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -767,18 +777,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogDebugInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.logDebug(e))
+          Effect.catch((e) => Effect.logDebug(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.logDebug',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.logDebug inside catchAll',
+          actual: 'Effect.logDebug inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -789,18 +799,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInfoInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.logInfo(e))
+          Effect.catch((e) => Effect.logInfo(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.logInfo',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.logInfo inside catchAll',
+          actual: 'Effect.logInfo inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -811,18 +821,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogTraceInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => Effect.logTrace(e))
+          Effect.catch((e) => Effect.logTrace(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.logTrace',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.logTrace inside catchAll',
+          actual: 'Effect.logTrace inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -833,7 +843,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchTag',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.catchTag('Error', () => Effect.log('error'))
         )
@@ -855,18 +865,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchAllCause',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAllCause(() => Effect.log('cause'))
+          Effect.catchCause(() => Effect.log('cause'))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAllCause',
+          catchMethod: 'catchCause',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAllCause',
+          actual: 'Effect.log inside catchCause',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -877,18 +887,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchSome',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
-          Effect.catchSome(() => Effect.log('some')),
+          Effect.catchFilter(() => Effect.log('some')),
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchSome',
+          catchMethod: 'catchFilter',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchSome',
+          actual: 'Effect.log inside catchFilter',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -899,18 +909,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchSomeCause',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
-          Effect.catchSomeCause(() => Effect.log('some cause')),
+          Effect.catchCauseFilter(() => Effect.log('some cause')),
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchSomeCause',
+          catchMethod: 'catchCauseFilter',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchSomeCause',
+          actual: 'Effect.log inside catchCauseFilter',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -921,7 +931,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchIf',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
           Effect.catchIf(
             (e) => true,
@@ -946,18 +956,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInOrElse',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
-          Effect.orElse(() => Effect.log('else'))
+          Effect.catch(() => Effect.log('else'))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'orElse',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside orElse',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -968,9 +978,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInOrElseFail',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('a').pipe(
-          Effect.orElseFail(() => {
+          Effect.catch(() => {
             Effect.log('fail')
             return new Error('b')
           })
@@ -980,9 +990,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'orElseFail',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside orElseFail',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -993,7 +1003,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInOrElseSucceed',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.fail('error').pipe(
           Effect.orElseSucceed(() => {
             Effect.log('succeed')
@@ -1018,9 +1028,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_ConsoleLogInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             console.log(e)
             return Effect.succeed(0)
           })
@@ -1030,9 +1040,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.log inside catchAll',
+          actual: 'console.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1043,9 +1053,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_ConsoleErrorInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             console.error(e)
             return Effect.succeed(0)
           })
@@ -1055,9 +1065,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.error',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.error inside catchAll',
+          actual: 'console.error inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1068,9 +1078,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_ConsoleWarnInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             console.warn(e)
             return Effect.succeed(0)
           })
@@ -1080,9 +1090,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.warn',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.warn inside catchAll',
+          actual: 'console.warn inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1093,9 +1103,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_ConsoleInfoInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             console.info(e)
             return Effect.succeed(0)
           })
@@ -1105,9 +1115,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.info',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.info inside catchAll',
+          actual: 'console.info inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1118,9 +1128,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_ConsoleDebugInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             console.debug(e)
             return Effect.succeed(0)
           })
@@ -1130,9 +1140,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.debug',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.debug inside catchAll',
+          actual: 'console.debug inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1143,9 +1153,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_NestedEffectLogInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             const inner = Effect.log(e)
             return inner
           })
@@ -1155,9 +1165,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1170,16 +1180,16 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
       code: `
         import { Effect as E } from 'effect'
         E.succeed(1).pipe(
-          E.catchAll((e) => E.log(e))
+          E.catch((e) => E.log(e))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'E.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'E.log inside catchAll',
+          actual: 'E.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1190,9 +1200,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_MultipleLogsInCatchAll',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll((e) => {
+          Effect.catch((e) => {
             console.log('first')
             console.error('second')
             return Effect.succeed(0)
@@ -1204,9 +1214,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
           messageId: 'noLoggingInCatch',
           data: {
             name: 'console.log',
-            catchMethod: 'catchAll',
+            catchMethod: 'catch',
             expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-            actual: 'console.log inside catchAll',
+            actual: 'console.log inside catch',
             fix:
               'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
           },
@@ -1215,9 +1225,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
           messageId: 'noLoggingInCatch',
           data: {
             name: 'console.error',
-            catchMethod: 'catchAll',
+            catchMethod: 'catch',
             expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-            actual: 'console.error inside catchAll',
+            actual: 'console.error inside catch',
             fix:
               'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
           },
@@ -1229,7 +1239,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_LoggingThenRecoveringInCatchTag',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.catchTag('DatabaseError', (e) => {
             Effect.logError(\`DB Error: \${e}\`)
@@ -1254,18 +1264,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogPassedToPipeInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(Effect.log))
+          Effect.catch(() => Effect.succeed(0).pipe(Effect.log))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1276,18 +1286,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogErrorPassedToPipeInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.succeed(0).pipe(Effect.logError))
+          Effect.catch(() => Effect.succeed(0).pipe(Effect.logError))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.logError',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.logError inside catchAll',
+          actual: 'Effect.logError inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1298,18 +1308,18 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_FunctionExpressionInCatch',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(function(e) { return Effect.log(e) })
+          Effect.catch(function(e) { return Effect.log(e) })
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1320,9 +1330,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_ConsoleLogInCatchWithFunctionExpression',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(function(e) {
+          Effect.catch(function(e) {
             console.log(e)
             return Effect.succeed(0)
           })
@@ -1332,9 +1342,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.log inside catchAll',
+          actual: 'console.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1347,16 +1357,16 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
       code: `
         import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.log('error'))
+          Effect.catch(() => Effect.log('error'))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1367,9 +1377,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogInCatchBeforeShadowing',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.log('error'))
+          Effect.catch(() => Effect.log('error'))
         )
         const Effect = { log: (x: string) => x }
       `,
@@ -1377,9 +1387,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1390,19 +1400,19 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_OtherVarDeclDoesNotUnshadowEffect',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const other = 42
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.log('error'))
+          Effect.catch(() => Effect.log('error'))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1413,19 +1423,19 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_DestructuringDoesNotUnshadowEffect',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         const { log } = console
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => Effect.log('error'))
+          Effect.catch(() => Effect.log('error'))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'Effect.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'Effect.log inside catchAll',
+          actual: 'Effect.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1438,7 +1448,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
       code: `
         import { Effect } from 'effect'
         Effect.succeed(1).pipe(
-          Effect.catchAll(() => {
+          Effect.catch(() => {
             console.log('error')
             return Effect.succeed(0)
           })
@@ -1448,9 +1458,9 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
         messageId: 'noLoggingInCatch',
         data: {
           name: 'console.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'console.log inside catchAll',
+          actual: 'console.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1463,16 +1473,16 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
       code: `
         import { Effect as E } from 'effect'
         E.succeed(1).pipe(
-          E.catchAll(() => E.succeed(0).pipe(E.log))
+          E.catch(() => E.succeed(0).pipe(E.log))
         )
       `,
       errors: [{
         messageId: 'noLoggingInCatch',
         data: {
           name: 'E.log',
-          catchMethod: 'catchAll',
+          catchMethod: 'catch',
           expected: 'Use Effect.tapError, Effect.tap, or logging outside the catch block',
-          actual: 'E.log inside catchAll',
+          actual: 'E.log inside catch',
           fix:
             'Move logging to Effect.tapError before the catch, or handle error recovery without side effects in catch',
         },
@@ -1483,7 +1493,7 @@ ruleTester.run('no-logging-in-catch', noLoggingInCatch, {
     {
       name: 'Should_Report_When_EffectLogViaPipeInCatchTag',
       code: `
-        import * as Effect from 'effect'
+        import { Effect } from 'effect'
         Effect.succeed(1).pipe(
           Effect.catchTag('Error', () => Effect.succeed(0).pipe(Effect.log))
         )
