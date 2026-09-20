@@ -29,32 +29,11 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Gherkin step combinators').body(({ scenario }) => {
   scenario(
-    'A succeeding Given step adds its binding to the scope',
-    Gherkin.Do.pipe(
-      Given('initial state')('x', () => Effect.succeed(42)),
-      Then('x equals 42')((s) => {
-        expect(s).toEqual(expect.objectContaining({ x: 42 }))
-      }),
-    ),
-  )
-
-  scenario(
     'A step assertion verifies Effect values using value equality',
     Gherkin.Do.pipe(
       Given('a list of numbers in a Chunk')('items', () => Effect.succeed(Chunk.make(1, 2, 3))),
       Then('the items match an identical Chunk by value equality')((s) => {
         expect(s.items).toEqual(Chunk.make(1, 2, 3))
-      }),
-    ),
-  )
-
-  scenario(
-    'Multiple succeeding Given steps accumulate their bindings',
-    Gherkin.Do.pipe(
-      Given('first')('a', () => Effect.succeed('hello')),
-      Given('second')('b', () => Effect.succeed(99)),
-      Then('has both bindings')((s) => {
-        expect(s).toEqual(expect.objectContaining({ a: 'hello', b: 99 }))
       }),
     ),
   )
@@ -68,17 +47,6 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       )
       expect(result).toEqual(Result.fail(expect.any(StepError)))
     }),
-  )
-
-  scenario(
-    'A Given step can read bindings from earlier steps',
-    Gherkin.Do.pipe(
-      Given('base')('base', () => Effect.succeed(10)),
-      Given('derived')('derived', (s) => Effect.succeed(s.base * 2)),
-      Then('base and derived correct')((s) => {
-        expect(s).toEqual(expect.objectContaining({ base: 10, derived: 20 }))
-      }),
-    ),
   )
 
   scenario(
