@@ -378,6 +378,10 @@
   dir: packages/effect-daemon-spec
   intents:
     - effect-rc116-vitest5-deps
+"@systemfsoftware/effect-daemon-spec@3.0.12":
+  dir: packages/effect-daemon-spec
+  intents:
+    - schema-filter-constructive-generation-cross-field
 "@systemfsoftware/effect-daemon-spec@3.0.2":
   dir: packages/core/effect/daemon-spec
   intents:
@@ -456,6 +460,10 @@
   dir: packages/effect-gherkin-spec
   intents:
     - vitest-5-peers
+"@systemfsoftware/effect-gherkin-spec@4.2.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - some-numbers-swim
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -1113,6 +1121,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
   intents:
     - schema-v4-arbitrary
+"@systemfsoftware/oxlint-plugin-effect-schema@5.5.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-filter-constructive-generation-cross-field
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -1263,6 +1275,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
     - effect-rc116-vitest5-deps
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.11":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
+  intents:
+    - puny-socks-dream
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
