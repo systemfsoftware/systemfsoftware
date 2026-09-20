@@ -126,5 +126,17 @@ ruleTester.run('no-behaviourless-assertion', noBehaviourlessAssertion, {
       code: `${imports}expect(CEILING_MS.length).toBe(4)`,
       errors: [{ messageId: 'behaviourlessAssertion' }],
     },
+    {
+      name: 'Should_Fail_When_GherkinThenStepHasEmptyCallback',
+      filename: 'tests/feature.integration.test.ts',
+      code: `Then('the item is verified')(() => {})`,
+      errors: [{ messageId: 'gherkinEmptyCallback' }],
+    },
+    {
+      name: 'Should_Fail_When_GherkinAndStepHasEmptyCallback',
+      filename: 'tests/feature.integration.test.ts',
+      code: `And('another condition')(() => {})`,
+      errors: [{ messageId: 'gherkinEmptyCallback' }],
+    },
   ],
 })
