@@ -207,7 +207,7 @@ export async function startViteServer(
   // os.tmpdir(), even though Node can stat that alias. Give Vite the same long
   // physical root its resolver will put into the resolved module id.
   const viteRoot = fs.realpathSync.native(fixture.app);
-  return viteCreateServer({
+  const server = await viteCreateServer({
     appType: "custom",
     configFile: false,
     logLevel: "silent",
@@ -216,15 +216,12 @@ export async function startViteServer(
     optimizeDeps: { include: [], noDiscovery: true },
     plugins: [unpluginVite()],
     root: viteRoot,
-    // `watch: null` disables the server's own chokidar watcher: these
-    // scenarios assert the adapter's filesystem poll (which must work exactly
-    // where chokidar does not look), and a chokidar instance can outlive
-    // `server.close()` and hold the test runner process open. A scenario that
-    // asserts what the adapter hands to Vite's watch graph therefore drives
-    // the adapter's own hooks instead, through
-    // {@link collectServeWatchRegistrations}.
-    server: { hmr: false, middlewareMode: true, watch: null },
+    // These scenarios exercise the real watching serve lifecycle. The private
+    // compiler watcher owns node_modules and missing-resolution predicates.
+    server: { host: "127.0.0.1", port: 0 },
   });
+  await server.listen();
+  return server;
 }
 
 /** Transform the entry module through the dev server and return its code. */
@@ -237,7 +234,34 @@ export async function requestMainModule(server: any): Promise<string> {
       result.code.length !== 0,
     `vite serve must answer the entry module request with transformed code; received: ${JSON.stringify(result)}`,
   );
+  await waitForViteWatchRegistration(server);
   return result.code;
+}
+
+/** Wait for the host to own runtime subscriptions before ending its lifecycle. */
+export async function waitForViteWatchRegistration(server: any): Promise<void> {
+  const files = new Set<string>();
+  for (const environment of Object.values(server.environments) as any[]) {
+    for (const file of environment.moduleGraph.fileToModulesMap.keys()) {
+      if (
+        !/(?:^|[/\\])node_modules(?:[/\\]|$)/.test(file) &&
+        fs.existsSync(file)
+      )
+        files.add(path.resolve(file));
+    }
+  }
+  // Vite adds outside-root runtime imports asynchronously. Closing during that
+  // registration can strand its Chokidar subscription after server.close().
+  // Observe the public watch inventory instead of delaying by an assumed time.
+  await waitFor(() => {
+    const watched = new Set(
+      Object.entries(server.watcher.getWatched()).flatMap(
+        ([directory, names]) =>
+          (names as string[]).map((name) => path.resolve(directory, name)),
+      ),
+    );
+    return [...files].every((file) => watched.has(file));
+  }, "Vite runtime watch registration");
 }
 
 /** Look up the entry module's node in the server's client module graph. */
@@ -251,31 +275,21 @@ export async function mainModuleNode(server: any): Promise<any> {
   return node;
 }
 
-/**
- * Replace every reload channel's `send` with a recorder so a scenario can
- * assert the adapter announced a full reload without a connected client.
- */
-export function spyReloadEvents(server: any): Array<{ type?: string }> {
+/** Observe reload messages through a real HMR WebSocket client. */
+export async function observeReloadEvents(
+  server: any,
+): Promise<Array<{ type?: string }>> {
   const events: Array<{ type?: string }> = [];
-  const seen = new Set<object>();
-  for (const channel of [
-    server.ws,
-    server.hot,
-    server.environments?.client?.hot,
-  ]) {
-    if (
-      channel === null ||
-      channel === undefined ||
-      typeof channel.send !== "function" ||
-      seen.has(channel)
-    ) {
-      continue;
-    }
-    seen.add(channel);
-    channel.send = (payload: { type?: string }) => {
-      events.push(payload);
-    };
-  }
+  const address = server.httpServer.address();
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/`, "vite-hmr");
+  socket.addEventListener("message", (message) => {
+    const payload = JSON.parse(String(message.data));
+    if (payload.type === "full-reload") events.push(payload);
+  });
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
   return events;
 }
 
@@ -317,21 +331,7 @@ export async function buildFixture(
   return TestUnpluginProject.collectRollupOutputCode(chunks);
 }
 
-/**
- * Drive the Vite adapter's own hooks over the fixture, with no dev server.
- *
- * The watcher-presence branch is a decision the adapter makes from the resolved
- * config, so a scenario that asserts it needs a resolved config and a transform
- * context, not a running server. Starting a server with Vite's chokidar watcher
- * would assert the same branch through a file-watch backend that can outlive
- * `server.close()` and hold the test runner process open, which is why every
- * server scenario in this file keeps `watch: null`.
- *
- * `configureServer` is deliberately not called: without an attached server the
- * missing-input poll routes nothing, so every derived watch input reaches
- * `this.addWatchFile` and the returned list is exactly what the adapter hands
- * to Vite's watch graph.
- */
+/** Check the watcherless registration branch through the adapter's public hooks. */
 export async function collectServeWatchRegistrations(
   fixture: IViteServeCandidateFixture,
   options: { watching: boolean },
