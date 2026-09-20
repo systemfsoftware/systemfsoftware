@@ -1,0 +1,91 @@
+{
+  "name": "@systemfsoftware/oxlint-plugin-cell-architecture",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugin/oxlint-plugin-cell-architecture"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-plugin-cell-architecture#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Oxlint rules enforcing Cell Architecture boundary isolation, tag discipline, and export structure.",
+  "keywords": [
+    "oxlint",
+    "oxlint-plugin",
+    "oxc",
+    "lint",
+    "linter",
+    "lint-rules",
+    "effect",
+    "effect-ts",
+    "structure",
+    "barrel",
+    "jsdoc",
+    "property-testing"
+  ],
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/oxlint-plugin-cell-architecture.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown -l warn && pnpm api:check",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@oxc-project/types": "catalog:",
+    "@oxlint/plugins": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
+    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/oxlint-plugin-cell-architecture.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}
