@@ -129,7 +129,12 @@ export const andThen: {
     make((input) =>
       Effect.flatMap(
         self.run(input),
-        (response) => typeof that === 'function' ? that(response).run(response) : that.run(response),
+        (response) => {
+          if (typeof that === 'function') {
+            return that(response).run(response)
+          }
+          return that.run(response)
+        },
       )
     ),
 )

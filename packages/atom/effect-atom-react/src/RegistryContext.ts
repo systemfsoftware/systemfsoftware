@@ -17,7 +17,6 @@ import * as Scheduler from 'scheduler'
  * Schedules Atom registry work with React's scheduler at low priority and
  * returns a cancellation function for the scheduled task.
  *
- * @category context
  * @since 4.0.0
  */
 export function scheduleTask(f: () => void): () => void {
@@ -38,13 +37,88 @@ export function scheduleTask(f: () => void): () => void {
  *
  * @see {@link RegistryProvider} for creating and providing a registry for a React subtree
  *
- * @category context
  * @since 4.0.0
  */
 export const RegistryContext = React.createContext<AtomRegistry.Registry>(AtomRegistry.make({
   scheduleTask,
   defaultIdleTTL: 400,
 }))
+
+type RegistryProviderOptions = {
+  readonly children?: React.ReactNode | undefined
+  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
+  readonly scheduleTask?: ((f: () => void) => () => void) | undefined
+  readonly timeoutResolution?: number | undefined
+  readonly defaultIdleTTL?: number | undefined
+}
+
+type RegistryRef = {
+  readonly registry: AtomRegistry.Registry
+  timeout?: ReturnType<typeof setTimeout> | undefined
+}
+
+function scheduleTaskFrom(options: RegistryProviderOptions): (f: () => void) => () => void {
+  if (options.scheduleTask === undefined) {
+    return scheduleTask
+  }
+  return options.scheduleTask
+}
+
+function createRegistryState(options: RegistryProviderOptions): RegistryRef {
+  return {
+    registry: AtomRegistry.make({
+      scheduleTask: scheduleTaskFrom(options),
+      initialValues: options.initialValues,
+      timeoutResolution: options.timeoutResolution,
+      defaultIdleTTL: options.defaultIdleTTL,
+    }),
+  }
+}
+
+function clearTimeoutIfSet(current: RegistryRef): void {
+  if (current.timeout === undefined) {
+    return
+  }
+  clearTimeout(current.timeout)
+}
+
+function cancelPendingDispose(current: RegistryRef | null): void {
+  if (current === null) {
+    return
+  }
+  clearTimeoutIfSet(current)
+}
+
+function disposeRegistryRef(ref: React.RefObject<RegistryRef | null>): void {
+  const current = ref.current
+  if (current === null) {
+    return
+  }
+  current.registry.dispose()
+  ref.current = null
+}
+
+function assignDisposeTimeout(ref: React.RefObject<RegistryRef | null>): void {
+  const current = ref.current
+  if (current === null) {
+    return
+  }
+  // React lifecycle timing, not Effect timing: the dispose is deferred so a
+  // remount - StrictMode's double invoke, or fast refresh - reclaims the same
+  // registry instead of losing it. There is no fiber here to carry an
+  // `Effect.sleep` and none to interrupt it on the remount that cancels this.
+  // @effect-diagnostics-next-line globalTimers:off
+  current.timeout = setTimeout(() => {
+    disposeRegistryRef(ref)
+  }, 500)
+}
+
+function scheduleDelayedDispose(ref: React.RefObject<RegistryRef | null>): void {
+  if (ref.current === null) {
+    return
+  }
+  assignDisposeTimeout(ref)
+}
 
 /**
  * Provides a stable `AtomRegistry` to a React subtree, optionally seeding
@@ -69,49 +143,18 @@ export const RegistryContext = React.createContext<AtomRegistry.Registry>(AtomRe
  *
  * @see {@link RegistryContext} for the React context supplied by this provider
  *
- * @category context
  * @since 4.0.0
  */
-export const RegistryProvider = (options: {
-  readonly children?: React.ReactNode | undefined
-  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
-  readonly scheduleTask?: ((f: () => void) => () => void) | undefined
-  readonly timeoutResolution?: number | undefined
-  readonly defaultIdleTTL?: number | undefined
-}) => {
-  const ref = React.useRef<{
-    readonly registry: AtomRegistry.Registry
-    timeout?: ReturnType<typeof setTimeout> | undefined
-  }>(null)
+export const RegistryProvider = (options: RegistryProviderOptions) => {
+  const ref = React.useRef<RegistryRef | null>(null)
   if (ref.current === null) {
-    ref.current = {
-      registry: AtomRegistry.make({
-        scheduleTask: options.scheduleTask ?? scheduleTask,
-        initialValues: options.initialValues,
-        timeoutResolution: options.timeoutResolution,
-        defaultIdleTTL: options.defaultIdleTTL,
-      }),
-    }
+    ref.current = createRegistryState(options)
   }
   React.useEffect(() => {
-    const current = ref.current
-    if (current?.timeout !== undefined) {
-      clearTimeout(current.timeout)
-    }
+    cancelPendingDispose(ref.current)
     return () => {
-      if (ref.current === null) {
-        return
-      }
-      // React lifecycle timing, not Effect timing: the dispose is deferred so a
-      // remount - StrictMode's double invoke, or fast refresh - reclaims the same
-      // registry instead of losing it. There is no fiber here to carry an
-      // `Effect.sleep` and none to interrupt it on the remount that cancels this.
-      // @effect-diagnostics-next-line globalTimers:off
-      ref.current.timeout = setTimeout(() => {
-        ref.current?.registry.dispose()
-        ref.current = null
-      }, 500)
+      scheduleDelayedDispose(ref)
     }
   }, [ref])
-  return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options?.children)
+  return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options.children)
 }

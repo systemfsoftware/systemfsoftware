@@ -28,6 +28,10 @@ export class Malformed extends S.TaggedError<Malformed>()('Malformed', {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
+export class InfraCrashError extends S.TaggedError<InfraCrashError>()('InfraCrashError', {
+  message: S.String,
+}) {}
+
 export const admitDecodedCommand = Workflow.make(
   Decoded,
   (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>

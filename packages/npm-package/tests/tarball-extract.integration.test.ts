@@ -1,9 +1,15 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage, createPackageFromTarballData, packPackage, packTree } from '@systemfsoftware/npm-package'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
+const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+
+const uint8Of = (value: string | Uint8Array | undefined): Uint8Array => {
+  if (value instanceof Uint8Array) return value
+  return new Uint8Array()
+}
 
 Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)').body(({ scenario }) => {
   scenario(
@@ -11,7 +17,7 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)').bod
     Effect.sync(() => {
       const original = createPackage(
         {
-          'package.json': JSON.stringify({
+          'package.json': jsonString({
             name: 'extract-pack-test',
             version: '1.0.0',
             main: './dist/index.js',
@@ -41,7 +47,7 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)').bod
 
       const treeTarball = packTree(
         {
-          'package.json': JSON.stringify({
+          'package.json': jsonString({
             name: 'extract-pack-test',
             version: '1.0.0',
             main: './dist/index.js',
@@ -64,7 +70,7 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)').bod
       const binary = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x81])
       const original = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'bin-test', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'bin-test', version: '1.0.0' }),
           'asset.bin': binary,
         },
         'bin-test',
@@ -73,7 +79,7 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)').bod
 
       const extracted = createPackageFromTarballData(packPackage(original))
       const bytes = extracted.tryReadBytes('/node_modules/bin-test/asset.bin')
-      expect(Array.from(bytes as Uint8Array)).toEqual(Array.from(binary))
+      expect(Array.from(uint8Of(bytes))).toEqual(Array.from(binary))
     }).pipe(
       Effect.mapError((cause) =>
         new StepError({ keyword: 'scenario', text: 'binary bytes did not round-trip', cause })

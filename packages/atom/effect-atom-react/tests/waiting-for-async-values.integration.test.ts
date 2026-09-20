@@ -11,6 +11,7 @@ import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { expect } from 'vitest'
+import { Unavailable } from './__fixtures__/Unavailable.schema.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -43,16 +44,22 @@ Feature('Waiting for asynchronous values')
               return { source }
             }),
         ),
-        When('the value is delivered to the widget')('settled', (s) =>
-          Effect.promise(async () => {
-            await act(async () => {
-              await Effect.runPromise(Deferred.succeed(s.ctx.source, 5))
-            })
-          })),
+        When('the value is delivered to the widget')(
+          'settled',
+          (s) =>
+            Effect.promise(() => {
+              const next = act(() => Effect.runPromise(Deferred.succeed(s.ctx.source, 5)))
+              return Promise.resolve(next)
+            }),
+        ),
         Then('the loaded value is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('loaded-value')).toHaveTextContent('5')
-          })
+          Effect.promise(() => screen.findByTestId('loaded-value')).pipe(
+            Effect.tap((el) =>
+              Effect.sync(() => {
+                expect(el).toHaveTextContent('5')
+              })
+            ),
+          )
         ),
       ),
     )
@@ -94,23 +101,27 @@ Feature('Waiting for asynchronous values')
         When('the first value arrives, the reader asks for a refresh, and the newer value arrives')(
           'settled',
           (s) =>
-            Effect.promise(async () => {
-              await act(async () => {
-                await Effect.runPromise(Deferred.succeed(s.ctx.pending[0], 1))
-              })
-              await expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('1')
-              await act(async () => {
-                s.ctx.refresh()()
-              })
-              await expect.poll(() => s.ctx.pending.length).toBe(2)
-              await act(async () => {
-                await Effect.runPromise(Deferred.succeed(s.ctx.pending[1], 2))
-              })
-            }),
+            Effect.promise(() =>
+              Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(s.ctx.pending[0], 1))))
+                .then(function firstValue() {
+                  return expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('1')
+                })
+                .then(function refresh() {
+                  return Promise.resolve(act(() => {
+                    s.ctx.refresh()()
+                  }))
+                })
+                .then(function waitPending() {
+                  return expect.poll(() => s.ctx.pending.length).toBe(2)
+                })
+                .then(function secondValue() {
+                  return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(s.ctx.pending[1], 2))))
+                })
+            ),
         ),
         Then('the widget shows the refreshed value')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('2')
+          Effect.promise(function showRefreshed() {
+            return expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('2')
           })
         ),
       ),
@@ -121,7 +132,7 @@ Feature('Waiting for asynchronous values')
       Gherkin.Do.pipe(
         Given('a widget backed by a value that fails, wrapped in an error boundary')('ctx', () =>
           Effect.sync(() => {
-            const failing = Atom.make(Effect.fail(new Error('unavailable')))
+            const failing = Atom.make(Effect.fail(new Unavailable()))
             function Widget() {
               useAtomSuspense(failing)
               return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
@@ -143,11 +154,14 @@ Feature('Waiting for asynchronous values')
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.sync(() => true)),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the error boundary shows the failure message and the widget is not rendered')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load')
-            expect(screen.queryByTestId('unexpected-widget')).toBeNull()
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load').then(
+              () => {
+                expect(screen.queryByTestId('unexpected-widget')).toBeNull()
+              },
+            )
           })
         ),
       ),

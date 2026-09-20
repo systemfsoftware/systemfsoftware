@@ -19,7 +19,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               const savedValue = base.pipe(
                 Atom.serializable({
                   key: 'k1',
-                  schema: Schema.Number,
+                  schema: Schema.Finite,
                 }),
               )
               const page = Registry.make({ defaultIdleTTL: 5 })
@@ -59,7 +59,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               const savedValue = base.pipe(
                 Atom.serializable({
                   key: 'k-eff',
-                  schema: Result.Schema({ success: Schema.Number }),
+                  schema: Result.Schema({ success: Schema.Finite }),
                 }),
               )
               const page = Registry.make({ defaultIdleTTL: 5 })
@@ -96,7 +96,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               const stillLoading = Atom.make(Deferred.await(source)).pipe(
                 Atom.serializable({
                   key: 'k-pending',
-                  schema: Result.Schema({ success: Schema.Number }),
+                  schema: Result.Schema({ success: Schema.Finite }),
                 }),
               )
               const savedPage = Registry.make()
@@ -133,7 +133,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             const stillLoading = Atom.make(Deferred.await(source)).pipe(
               Atom.serializable({
                 key: 'k-pending-default',
-                schema: Result.Schema({ success: Schema.Number }),
+                schema: Result.Schema({ success: Schema.Finite }),
               }),
             )
             const page = Registry.make()
@@ -154,12 +154,15 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           () =>
             Effect.sync(() => {
               const gate = Atom.make('loading')
-              const stillLoading = Atom.readable<Result.Result<number, never>>((get) =>
-                get(gate) === 'ready' ? Result.success(42) : Result.initial(true)
-              ).pipe(
+              const stillLoading = Atom.readable<Result.Result<number, never>>((get) => {
+                if (get(gate) === 'ready') {
+                  return Result.success(42)
+                }
+                return Result.initial(true)
+              }).pipe(
                 Atom.serializable({
                   key: 'k-refresh',
-                  schema: Result.Schema({ success: Schema.Number }),
+                  schema: Result.Schema({ success: Schema.Finite }),
                 }),
               )
               const savedPage = Registry.make()
@@ -198,7 +201,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             const savedValue = Atom.make(42).pipe(
               Atom.serializable({
                 key: 'k-plain',
-                schema: Schema.Number,
+                schema: Schema.Finite,
               }),
             )
             const plainValue = Atom.make('not saved')

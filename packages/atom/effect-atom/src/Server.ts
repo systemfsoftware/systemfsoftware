@@ -16,7 +16,6 @@ import * as AsyncResult from './Result.js'
 /**
  * The type id used to mark atoms with a server-side read override.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const ServerValueTypeId = '~effect-atom/atom/Atom/ServerValue' as const
@@ -24,7 +23,6 @@ export const ServerValueTypeId = '~effect-atom/atom/Atom/ServerValue' as const
 /**
  * Server-side read override attached to an atom by `withServerValue`.
  *
- * @category models
  * @since 4.0.0
  */
 export type ServerValue<A> = {
@@ -36,7 +34,6 @@ const isServerValue = <A>(self: Atom<A>): self is Atom<A> & ServerValue<A> => Se
 /**
  * Sets the value of an Atom when read on the server.
  *
- * @category transforming
  * @since 4.0.0
  */
 export const withServerValue: {
@@ -55,7 +52,6 @@ export const withServerValue: {
  * Sets an `AsyncResult` atom's server-side value to
  * `AsyncResult.initial(true)`.
  *
- * @category transforming
  * @since 4.0.0
  */
 export const withServerValueInitial = <A extends Atom<AsyncResult.Result<unknown, unknown>>>(self: A): A => {
@@ -72,7 +68,6 @@ export const withServerValueInitial = <A extends Atom<AsyncResult.Result<unknown
  *
  * Nested reads performed by the override are resolved against the same registry.
  *
- * @category getters
  * @since 4.0.0
  */
 export const getServerValue: {
@@ -80,8 +75,10 @@ export const getServerValue: {
   <A>(self: Atom<A>, registry: Registry): A
 } = dual(
   2,
-  <A>(self: Atom<A>, registry: Registry): A =>
-    isServerValue(self)
-      ? self[ServerValueTypeId]((atom) => registry.get(atom))
-      : registry.get(self),
+  <A>(self: Atom<A>, registry: Registry): A => {
+    if (isServerValue(self)) {
+      return self[ServerValueTypeId]((atom) => registry.get(atom))
+    }
+    return registry.get(self)
+  },
 )

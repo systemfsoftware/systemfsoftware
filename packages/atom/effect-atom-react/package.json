@@ -80,7 +80,8 @@
     "scheduler": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^"
   },
   "publishConfig": {
     "exports": {

@@ -25,11 +25,11 @@ import type * as Atom from './Atom.js'
 import { NodeImpl, runInternalBatch } from './AtomNode.js'
 import { hostNow, hostScheduleTimer } from './internal/HostTimer.js'
 import * as Result from './Result.js'
+import type { Failure, Success } from './Result.js'
 
 /**
  * The literal type used to identify `AtomRegistry` services and values.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export type TypeId = '~effect-atom/atom/Registry'
@@ -37,7 +37,6 @@ export type TypeId = '~effect-atom/atom/Registry'
 /**
  * The runtime type id used to identify `AtomRegistry` services and values.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const TypeId: TypeId = '~effect-atom/atom/Registry'
@@ -45,7 +44,6 @@ export const TypeId: TypeId = '~effect-atom/atom/Registry'
 /**
  * Returns `true` when the value has the `AtomRegistry` type id.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isAtomRegistry = (u: unknown): u is Registry => hasProperty(u, TypeId)
@@ -59,7 +57,6 @@ export const isAtomRegistry = (u: unknown): u is Registry => hasProperty(u, Type
  * It also manages scheduler configuration, serializable preloaded values, and node
  * addition/removal callbacks.
  *
- * @category models
  * @since 4.0.0
  */
 export interface Registry {
@@ -105,7 +102,6 @@ export interface Registry {
  * Nodes expose the current value, parent and child dependency links, listener set,
  * and current lifecycle state.
  *
- * @category models
  * @since 4.0.0
  */
 export interface Node<A> {
@@ -122,6 +118,15 @@ export interface Node<A> {
   currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed'
 }
 
+type RegistryMakeOptions = {
+  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
+  readonly scheduleTask?: ((f: () => void) => () => void) | undefined
+  readonly timeoutResolution?: number | undefined
+  readonly defaultIdleTTL?: number | undefined
+  readonly now?: (() => number) | undefined
+  readonly scheduleTimer?: ((f: () => void, delayMillis: number) => () => void) | undefined
+}
+
 /**
  * Creates an `AtomRegistry`.
  *
@@ -131,27 +136,23 @@ export interface Node<A> {
  * configure timeout bucket resolution, and set a default idle time-to-live for
  * unused atoms.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const make = (
-  options?: {
-    readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
-    readonly scheduleTask?: ((f: () => void) => () => void) | undefined
-    readonly timeoutResolution?: number | undefined
-    readonly defaultIdleTTL?: number | undefined
-    readonly now?: (() => number) | undefined
-    readonly scheduleTimer?: ((f: () => void, delayMillis: number) => () => void) | undefined
-  },
-): Registry =>
-  new RegistryImpl(
-    options?.initialValues,
-    options?.scheduleTask,
-    options?.timeoutResolution,
-    options?.defaultIdleTTL,
-    options?.now,
-    options?.scheduleTimer,
+  options?: RegistryMakeOptions,
+): Registry => {
+  if (options === undefined) {
+    return new RegistryImpl()
+  }
+  return new RegistryImpl(
+    options.initialValues,
+    options.scheduleTask,
+    options.timeoutResolution,
+    options.defaultIdleTTL,
+    options.now,
+    options.scheduleTimer,
   )
+}
 
 /**
  * Service tag for the active atom runtime cache.
@@ -161,7 +162,6 @@ export const make = (
  * Use to access or provide the registry that stores atom values,
  * dependencies, subscriptions, and disposal state for a reactive lifetime.
  *
- * @category services
  * @since 4.0.0
  */
 export class AtomRegistry extends Context.Service<AtomRegistry, Registry>()(TypeId) {}
@@ -174,17 +174,9 @@ export class AtomRegistry extends Context.Service<AtomRegistry, Registry>()(Type
  *
  * The registry is disposed when the layer scope is finalized.
  *
- * @category layers
  * @since 4.0.0
  */
-export const layerOptions = (options?: {
-  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
-  readonly scheduleTask?: ((f: () => void) => () => void) | undefined
-  readonly timeoutResolution?: number | undefined
-  readonly defaultIdleTTL?: number | undefined
-  readonly now?: (() => number) | undefined
-  readonly scheduleTimer?: ((f: () => void, delayMillis: number) => () => void) | undefined
-}): Layer.Layer<AtomRegistry> =>
+export const layerOptions = (options?: RegistryMakeOptions): Layer.Layer<AtomRegistry> =>
   Layer.effect(
     AtomRegistry,
     Effect.gen(function*() {
@@ -198,7 +190,6 @@ export const layerOptions = (options?: {
 /**
  * The default layer that provides a fresh `AtomRegistry`.
  *
- * @category layers
  * @since 4.0.0
  */
 export const layer: Layer.Layer<AtomRegistry> = layerOptions()
@@ -215,7 +206,6 @@ export const layer: Layer.Layer<AtomRegistry> = layerOptions()
  * The stream emits the current value immediately, emits subsequent changes, and
  * unsubscribes from the registry when the stream scope closes.
  *
- * @category converting
  * @since 4.0.0
  */
 export const toStream: {
@@ -239,6 +229,13 @@ export const toStream: {
     ),
 )
 
+function resultToEffect<A, E>(result: Success<A, E> | Failure<A, E>): Effect.Effect<A, E> {
+  if (Result.isSuccess(result)) {
+    return Effect.succeed(result.value)
+  }
+  return Effect.failCause(result.cause)
+}
+
 /**
  * Converts an `AsyncResult` atom in this registry into a stream of successful
  * values.
@@ -248,7 +245,6 @@ export const toStream: {
  * Initial results are skipped, failures fail the stream with their cause, and
  * duplicate stream values are dropped with `Stream.changes`.
  *
- * @category converting
  * @since 4.0.0
  */
 export const toStreamResult: {
@@ -259,12 +255,99 @@ export const toStreamResult: {
   <A, E>(self: Registry, atom: Atom.Atom<Result.Result<A, E>>): Stream.Stream<A, E> =>
     toStream(self, atom).pipe(
       Stream.filter(Result.isNotInitial),
-      Stream.mapEffect((result) =>
-        Result.isSuccess(result) ? Effect.succeed(result.value) : Effect.failCause(result.cause)
-      ),
+      Stream.mapEffect(resultToEffect),
       Stream.changes,
     ),
 )
+
+function suspendOnWaitingFrom(options?: {
+  readonly suspendOnWaiting?: boolean | undefined
+}): boolean {
+  if (options === undefined) {
+    return false
+  }
+  return booleanOrFalse(options.suspendOnWaiting)
+}
+
+function booleanOrFalse(value: boolean | undefined): boolean {
+  if (value === undefined) {
+    return false
+  }
+  return value
+}
+
+function shouldWaitForNonInitial<A, E>(
+  result: Success<A, E> | Failure<A, E>,
+  suspendOnWaiting: boolean,
+): boolean {
+  if (suspendOnWaiting === false) {
+    return false
+  }
+  return result.waiting
+}
+
+function resumeNonInitialIfSettled<A, E>(
+  value: Success<A, E> | Failure<A, E>,
+  suspendOnWaiting: boolean,
+  resume: (effect: Effect.Effect<A, E>) => void,
+  cancel: () => void,
+): void {
+  if (shouldWaitForNonInitial(value, suspendOnWaiting)) {
+    return
+  }
+  resume(Result.toExit(value))
+  cancel()
+}
+
+function onSubscribedResult<A, E>(
+  value: Result.Result<A, E>,
+  suspendOnWaiting: boolean,
+  resume: (effect: Effect.Effect<A, E>) => void,
+  cancel: () => void,
+): void {
+  if (Result.isInitial(value)) {
+    return
+  }
+  resumeNonInitialIfSettled(value, suspendOnWaiting, resume, cancel)
+}
+
+function subscribeUntilSettled<A, E>(
+  self: Registry,
+  atom: Atom.Atom<Result.Result<A, E>>,
+  suspendOnWaiting: boolean,
+  resume: (effect: Effect.Effect<A, E>) => void,
+): Effect.Effect<void> {
+  const cancel = self.subscribe(atom, (value) => {
+    onSubscribedResult(value, suspendOnWaiting, resume, cancel)
+  })
+  return Effect.sync(cancel)
+}
+
+function resumeSettledOrSubscribe<A, E>(
+  self: Registry,
+  atom: Atom.Atom<Result.Result<A, E>>,
+  result: Success<A, E> | Failure<A, E>,
+  suspendOnWaiting: boolean,
+  resume: (effect: Effect.Effect<A, E>) => void,
+): void | Effect.Effect<void> {
+  if (shouldWaitForNonInitial(result, suspendOnWaiting)) {
+    return subscribeUntilSettled(self, atom, suspendOnWaiting, resume)
+  }
+  return resume(Result.toExit(result))
+}
+
+function getResultCallback<A, E>(
+  self: Registry,
+  atom: Atom.Atom<Result.Result<A, E>>,
+  suspendOnWaiting: boolean,
+  resume: (effect: Effect.Effect<A, E>) => void,
+): void | Effect.Effect<void> {
+  const result = self.get(atom)
+  if (Result.isInitial(result)) {
+    return subscribeUntilSettled(self, atom, suspendOnWaiting, resume)
+  }
+  return resumeSettledOrSubscribe(self, atom, result, suspendOnWaiting, resume)
+}
 
 /**
  * Reads an `AsyncResult` atom from this registry as an effect.
@@ -274,7 +357,6 @@ export const toStreamResult: {
  * The effect waits for the result to leave `Initial`, and also waits through
  * waiting results when `suspendOnWaiting` is enabled.
  *
- * @category converting
  * @since 4.0.0
  */
 export const getResult: {
@@ -289,20 +371,8 @@ export const getResult: {
   <A, E>(self: Registry, atom: Atom.Atom<Result.Result<A, E>>, options?: {
     readonly suspendOnWaiting?: boolean | undefined
   }): Effect.Effect<A, E> => {
-    const suspendOnWaiting = options?.suspendOnWaiting ?? false
-    return Effect.callback((resume) => {
-      const result = self.get(atom)
-      if (!Result.isInitial(result) && !(suspendOnWaiting && result.waiting)) {
-        return resume(Result.toExit(result))
-      }
-      const cancel = self.subscribe(atom, (value) => {
-        if (!Result.isInitial(value) && !(suspendOnWaiting && value.waiting)) {
-          resume(Result.toExit(value))
-          cancel()
-        }
-      })
-      return Effect.sync(cancel)
-    })
+    const suspendOnWaiting = suspendOnWaitingFrom(options)
+    return Effect.callback((resume) => getResultCallback(self, atom, suspendOnWaiting, resume))
   },
 )
 
@@ -314,7 +384,6 @@ export const getResult: {
  * The atom is subscribed with a no-op listener and the subscription is released
  * when the scope finalizer runs.
  *
- * @category converting
  * @since 4.0.0
  */
 export const mount: {
@@ -352,8 +421,12 @@ interface SerializableAtom {
 const isSerializableAtom = (atom: Atom.Atom<unknown>): atom is Atom.Atom<unknown> & SerializableAtom =>
   SerializableTypeId in atom
 
-const atomKey = <A>(atom: Atom.Atom<A>): Atom.Atom<A> | string =>
-  isSerializableAtom(atom) ? atom[SerializableTypeId].key : atom
+function atomKey<A>(atom: Atom.Atom<A>): Atom.Atom<A> | string {
+  if (isSerializableAtom(atom)) {
+    return atom[SerializableTypeId].key
+  }
+  return atom
+}
 
 /**
  * Nodes are stored in one heterogeneous map keyed by `atomKey`. A node found
@@ -362,6 +435,369 @@ const atomKey = <A>(atom: Atom.Atom<A>): Atom.Atom<A> | string =>
  */
 const isNodeImplFor = <A>(atom: Atom.Atom<A>, node: NodeImpl<unknown>): node is NodeImpl<A> =>
   atomKey(node.atom) === atomKey(atom)
+
+type TimeoutBucket = readonly [nodes: Set<NodeImpl<unknown>>, cancel: () => void]
+
+function nowOrHost(now: (() => number) | undefined): () => number {
+  if (now === undefined) {
+    return hostNow
+  }
+  return now
+}
+
+function scheduleTimerOrHost(
+  scheduleTimer: ((f: () => void, delayMillis: number) => () => void) | undefined,
+): (f: () => void, delayMillis: number) => () => void {
+  if (scheduleTimer === undefined) {
+    return hostScheduleTimer
+  }
+  return scheduleTimer
+}
+
+function timeoutResolutionFromIdleTTL(defaultIdleTTL: number | undefined): number {
+  if (defaultIdleTTL === undefined) {
+    return 1000
+  }
+  return Math.round(defaultIdleTTL / 2)
+}
+
+function resolveTimeoutResolution(
+  timeoutResolution: number | undefined,
+  defaultIdleTTL: number | undefined,
+): number {
+  if (timeoutResolution === undefined) {
+    return timeoutResolutionFromIdleTTL(defaultIdleTTL)
+  }
+  return timeoutResolution
+}
+
+function applyInitialValues(
+  registry: RegistryImpl,
+  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined,
+): void {
+  if (initialValues === undefined) {
+    return
+  }
+  setEachInitialValue(registry, initialValues)
+}
+
+function setEachInitialValue(
+  registry: RegistryImpl,
+  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>,
+): void {
+  for (const [atom, value] of initialValues) {
+    registry.setInitialValue(atom, value)
+  }
+}
+
+function resolveInitialValueTarget<A>(atom: Atom.Atom<A>): Atom.Atom<A> {
+  let target = atom
+  while (target.initialValueTarget !== undefined) {
+    target = target.initialValueTarget
+  }
+  return target
+}
+
+function valueOptionIfForAtom<A>(atom: Atom.Atom<A>, node: NodeImpl<unknown>): Option.Option<A> {
+  if (isNodeImplFor(atom, node) === false) {
+    return Option.none()
+  }
+  return node.valueOption()
+}
+
+function applyDecodedSerializable(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  atom: Atom.Atom<unknown> & SerializableAtom,
+  encoded: unknown,
+): void {
+  let decoded: unknown
+  try {
+    decoded = atom[SerializableTypeId].decode(encoded)
+  } catch {
+    return
+  }
+  assignDecodedSerializable(registry, node, atom, decoded)
+}
+
+function assignDecodedSerializable(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  atom: Atom.Atom<unknown>,
+  decoded: unknown,
+): void {
+  const target = resolveInitialValueTarget(atom)
+  if (target === atom) {
+    node.setValue(decoded)
+    return
+  }
+  registry.ensureNode(target).setInitialValue(decoded)
+}
+
+function applySerializableValue(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  encoded: unknown,
+): void {
+  const atom = node.atom
+  if (isSerializableAtom(atom) === false) {
+    return
+  }
+  applyDecodedSerializable(registry, node, atom, encoded)
+}
+
+function notifyIfImmediate<A>(
+  node: NodeImpl<A>,
+  f: (_: A) => void,
+  options: { readonly immediate?: boolean } | undefined,
+): void {
+  if (options === undefined) {
+    return
+  }
+  notifyIfImmediateFlag(node, f, options.immediate)
+}
+
+function notifyIfImmediateFlag<A>(
+  node: NodeImpl<A>,
+  f: (_: A) => void,
+  immediate: boolean | undefined,
+): void {
+  if (immediate === true) {
+    f(node.value())
+  }
+}
+
+function atomIdleTtlIsActive(registry: RegistryImpl, atom: Atom.Atom<unknown>): boolean {
+  if (atom.idleTTL === 0) {
+    return false
+  }
+  return hasIdleTtl(registry, atom)
+}
+
+function hasIdleTtl(registry: RegistryImpl, atom: Atom.Atom<unknown>): boolean {
+  if (atom.idleTTL !== undefined) {
+    return true
+  }
+  return registry.defaultIdleTTL !== undefined
+}
+
+function notifyNodeAdded(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+  if (registry.onNodeAdded === undefined) {
+    return
+  }
+  registry.onNodeAdded(node)
+}
+
+function notifyNodeRemoved(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+  if (registry.onNodeRemoved === undefined) {
+    return
+  }
+  registry.onNodeRemoved(node)
+}
+
+function createAndStoreNode<A>(
+  registry: RegistryImpl,
+  atom: Atom.Atom<A>,
+  key: Atom.Atom<A> | string,
+): NodeImpl<A> {
+  const node = registry.createNode(atom)
+  registry.nodes.set(key, node)
+  notifyNodeAdded(registry, node)
+  return node
+}
+
+function existingOrCreateNode<A>(
+  registry: RegistryImpl,
+  atom: Atom.Atom<A>,
+  key: Atom.Atom<A> | string,
+  existing: NodeImpl<unknown>,
+): NodeImpl<A> {
+  if (isNodeImplFor(atom, existing)) {
+    return reuseExistingNode(registry, atom, existing)
+  }
+  return createAndStoreNode(registry, atom, key)
+}
+
+function reuseExistingNode<A>(
+  registry: RegistryImpl,
+  atom: Atom.Atom<A>,
+  existing: NodeImpl<A>,
+): NodeImpl<A> {
+  if (registry.atomHasTtl(atom)) {
+    registry.removeNodeTimeout(existing)
+  }
+  return existing
+}
+
+function nodeForKey<A>(
+  registry: RegistryImpl,
+  atom: Atom.Atom<A>,
+  key: Atom.Atom<A> | string,
+): NodeImpl<A> {
+  const existing = registry.nodes.get(key)
+  if (existing === undefined) {
+    return createAndStoreNode(registry, atom, key)
+  }
+  return existingOrCreateNode(registry, atom, key, existing)
+}
+
+function applyPreloadedIfStringKey<A>(
+  registry: RegistryImpl,
+  node: NodeImpl<A>,
+  key: Atom.Atom<A> | string,
+): void {
+  if (typeof key !== 'string') {
+    return
+  }
+  applyPreloadedSerializable(registry, node, key)
+}
+
+function applyPreloadedSerializable(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  key: string,
+): void {
+  if (registry.preloadedSerializable.has(key) === false) {
+    return
+  }
+  const encoded = registry.preloadedSerializable.get(key)
+  registry.preloadedSerializable.delete(key)
+  applySerializableValue(registry, node, encoded)
+}
+
+function atomLabel<A>(atom: Atom.Atom<A>): string {
+  if (atom.label === undefined) {
+    return 'unknown'
+  }
+  return atom.label[0]
+}
+
+function throwIfDisposed<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
+  if (registry.disposed) {
+    throw new Error(`Cannot access Atom ${atomLabel(atom)}: registry is disposed`)
+  }
+}
+
+function scheduleRemovalUnlessKeepAlive<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
+  if (atom.keepAlive) {
+    return
+  }
+  registry.scheduleAtomRemoval(atom)
+}
+
+function removeNodeIfCanBeRemoved(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+  if (node.canBeRemoved) {
+    registry.removeNode(node)
+  }
+}
+
+function removeAtomIfIdle(registry: RegistryImpl, atom: Atom.Atom<unknown>): void {
+  const node = registry.nodes.get(atomKey(atom))
+  if (node === undefined) {
+    return
+  }
+  removeNodeIfCanBeRemoved(registry, node)
+}
+
+function evictNode(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+  registry.nodes.delete(atomKey(node.atom))
+  node.remove()
+  notifyNodeRemoved(registry, node)
+}
+
+function evictNodeIfIdle(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+  if (node.canBeRemoved) {
+    evictNode(registry, node)
+  }
+}
+
+function idleTtlOf(atom: Atom.Atom<unknown>, defaultIdleTTL: number | undefined): number | undefined {
+  if (atom.idleTTL === undefined) {
+    return defaultIdleTTL
+  }
+  return atom.idleTTL
+}
+
+function remainingAfterSweep(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  nodeIdleTTL: number,
+  currentSweepTTL: number,
+): number | undefined {
+  const idleTTL = nodeIdleTTL - currentSweepTTL
+  if (idleTTL <= 0) {
+    evictNodeIfIdle(registry, node)
+    return undefined
+  }
+  return idleTTL
+}
+
+function remainingIdleTtl(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  nodeIdleTTL: number,
+  currentSweepTTL: number | null,
+): number | undefined {
+  if (currentSweepTTL === null) {
+    return nodeIdleTTL
+  }
+  return remainingAfterSweep(registry, node, nodeIdleTTL, currentSweepTTL)
+}
+
+function timeoutBucketFor(registry: RegistryImpl, idleTTL: number): number {
+  const ttl = Math.ceil(idleTTL / registry.timeoutResolution) * registry.timeoutResolution
+  const timestamp = registry.now() + ttl
+  return timestamp - (timestamp % registry.timeoutResolution) + registry.timeoutResolution
+}
+
+function createTimeoutBucket(registry: RegistryImpl, bucket: number): TimeoutBucket {
+  const nodes = new Set<NodeImpl<unknown>>()
+  const cancel = registry.scheduleTimer(() => registry.sweepBucket(bucket), bucket - registry.now())
+  const entry: TimeoutBucket = [nodes, cancel]
+  registry.timeoutBuckets.set(bucket, entry)
+  return entry
+}
+
+function ensureTimeoutBucket(registry: RegistryImpl, bucket: number): TimeoutBucket {
+  const existing = registry.timeoutBuckets.get(bucket)
+  if (existing !== undefined) {
+    return existing
+  }
+  return createTimeoutBucket(registry, bucket)
+}
+
+function addNodeToTimeoutBucket(registry: RegistryImpl, node: NodeImpl<unknown>, idleTTL: number): void {
+  const bucket = timeoutBucketFor(registry, idleTTL)
+  const entry = ensureTimeoutBucket(registry, bucket)
+  entry[0].add(node)
+  registry.nodeTimeoutBucket.set(node, bucket)
+}
+
+function dropNodeFromTimeoutBucket(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  bucket: number,
+): void {
+  const entry = registry.timeoutBuckets.get(bucket)
+  if (entry === undefined) {
+    return
+  }
+  removeNodeFromBucketEntry(registry, node, bucket, entry)
+}
+
+function removeNodeFromBucketEntry(
+  registry: RegistryImpl,
+  node: NodeImpl<unknown>,
+  bucket: number,
+  entry: TimeoutBucket,
+): void {
+  const [nodes, cancel] = entry
+  nodes.delete(node)
+  if (nodes.size === 0) {
+    cancel()
+    registry.timeoutBuckets.delete(bucket)
+  }
+}
 
 /**
  * Concrete registry used by the package implementation.
@@ -391,35 +827,19 @@ export class RegistryImpl implements Registry {
     this.schedulerAsync = new MixedScheduler('async', scheduleTask)
     this.dispatcher = this.schedulerAsync.makeDispatcher()
     this.defaultIdleTTL = defaultIdleTTL
-    this.now = now ?? hostNow
-    this.scheduleTimer = scheduleTimer ?? hostScheduleTimer
-
-    if (timeoutResolution === undefined && defaultIdleTTL !== undefined) {
-      this.timeoutResolution = Math.round(defaultIdleTTL / 2)
-    } else {
-      this.timeoutResolution = timeoutResolution ?? 1000
-    }
-    if (initialValues !== undefined) {
-      for (const [atom, value] of initialValues) {
-        this.setInitialValue(atom, value)
-      }
-    }
+    this.now = nowOrHost(now)
+    this.scheduleTimer = scheduleTimerOrHost(scheduleTimer)
+    this.timeoutResolution = resolveTimeoutResolution(timeoutResolution, defaultIdleTTL)
+    applyInitialValues(this, initialValues)
   }
 
   setInitialValue<A>(atom: Atom.Atom<A>, value: A): void {
-    let target = atom
-    while (target.initialValueTarget) {
-      target = target.initialValueTarget
-    }
-    this.ensureNode(target).setInitialValue(value)
+    this.ensureNode(resolveInitialValueTarget(atom)).setInitialValue(value)
   }
 
   readonly nodes = new Map<Atom.Atom<unknown> | string, NodeImpl<unknown>>()
   readonly preloadedSerializable = new Map<string, unknown>()
-  readonly timeoutBuckets = new Map<
-    number,
-    readonly [nodes: Set<NodeImpl<unknown>>, cancel: () => void]
-  >()
+  readonly timeoutBuckets = new Map<number, TimeoutBucket>()
   readonly nodeTimeoutBucket = new Map<NodeImpl<unknown>, number>()
   disposed = false
 
@@ -433,10 +853,10 @@ export class RegistryImpl implements Registry {
 
   getRaw<A>(atom: Atom.Atom<A>): Option.Option<A> {
     const node = this.nodes.get(atomKey(atom))
-    if (node === undefined || !isNodeImplFor(atom, node)) {
+    if (node === undefined) {
       return Option.none()
     }
-    return node.valueOption()
+    return valueOptionIfForAtom(atom, node)
   }
 
   set<R, W>(atom: Atom.Writable<R, W>, value: W): void {
@@ -449,27 +869,7 @@ export class RegistryImpl implements Registry {
       this.preloadedSerializable.set(key, encoded)
       return
     }
-    this.applySerializableValue(node, encoded)
-  }
-
-  private applySerializableValue(node: NodeImpl<unknown>, encoded: unknown): void {
-    const atom = node.atom
-    if (!isSerializableAtom(atom)) return
-    let decoded: unknown
-    try {
-      decoded = atom[SerializableTypeId].decode(encoded)
-    } catch {
-      return
-    }
-    let target: Atom.Atom<unknown> = atom
-    while (target.initialValueTarget) {
-      target = target.initialValueTarget
-    }
-    if (target === atom) {
-      node.setValue(decoded)
-    } else {
-      this.ensureNode(target).setInitialValue(decoded)
-    }
+    applySerializableValue(this, node, encoded)
   }
 
   modify<R, W, A>(atom: Atom.Writable<R, W>, f: (_: R) => [returnValue: A, nextValue: W]): A {
@@ -494,9 +894,7 @@ export class RegistryImpl implements Registry {
 
   subscribe<A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: { readonly immediate?: boolean }): () => void {
     const node = this.ensureNode(atom)
-    if (options?.immediate) {
-      f(node.value())
-    }
+    notifyIfImmediate(node, f, options)
     const remove = node.subscribe(function() {
       f(node._value)
     })
@@ -513,39 +911,22 @@ export class RegistryImpl implements Registry {
   }
 
   atomHasTtl(atom: Atom.Atom<unknown>): boolean {
-    return !atom.keepAlive && atom.idleTTL !== 0 && (atom.idleTTL !== undefined || this.defaultIdleTTL !== undefined)
+    if (atom.keepAlive) {
+      return false
+    }
+    return atomIdleTtlIsActive(this, atom)
   }
 
   ensureNode<A>(atom: Atom.Atom<A>): NodeImpl<A> {
     const key = atomKey(atom)
-    let node: NodeImpl<A>
-    const existing = this.nodes.get(key)
-    if (existing !== undefined && isNodeImplFor(atom, existing)) {
-      node = existing
-      if (this.atomHasTtl(atom)) {
-        this.removeNodeTimeout(node)
-      }
-    } else {
-      node = this.createNode(atom)
-      this.nodes.set(key, node)
-      this.onNodeAdded?.(node)
-    }
-    if (typeof key === 'string' && this.preloadedSerializable.has(key)) {
-      const encoded = this.preloadedSerializable.get(key)
-      this.preloadedSerializable.delete(key)
-      this.applySerializableValue(node, encoded)
-    }
+    const node = nodeForKey(this, atom, key)
+    applyPreloadedIfStringKey(this, node, key)
     return node
   }
 
   createNode<A>(atom: Atom.Atom<A>): NodeImpl<A> {
-    if (this.disposed) {
-      throw new Error(`Cannot access Atom ${atom.label?.[0] ?? 'unknown'}: registry is disposed`)
-    }
-
-    if (!atom.keepAlive) {
-      this.scheduleAtomRemoval(atom)
-    }
+    throwIfDisposed(this, atom)
+    scheduleRemovalUnlessKeepAlive(this, atom)
     return new NodeImpl(this, atom)
   }
 
@@ -555,87 +936,55 @@ export class RegistryImpl implements Registry {
 
   scheduleAtomRemoval(atom: Atom.Atom<unknown>): void {
     this.dispatcher.scheduleTask(() => {
-      const node = this.nodes.get(atomKey(atom))
-      if (node !== undefined && node.canBeRemoved) {
-        this.removeNode(node)
-      }
+      removeAtomIfIdle(this, atom)
     }, 0)
   }
 
   scheduleNodeRemoval(node: NodeImpl<unknown>): void {
     this.dispatcher.scheduleTask(() => {
-      if (node.canBeRemoved) {
-        this.removeNode(node)
-      }
+      removeNodeIfCanBeRemoved(this, node)
     }, 0)
   }
 
   removeNode(node: NodeImpl<unknown>): void {
     if (this.atomHasTtl(node.atom)) {
       this.setNodeTimeout(node)
-    } else {
-      this.nodes.delete(atomKey(node.atom))
-      node.remove()
-      this.onNodeRemoved?.(node)
+      return
     }
+    evictNode(this, node)
   }
 
   setNodeTimeout(node: NodeImpl<unknown>): void {
     if (this.nodeTimeoutBucket.has(node)) {
       return
     }
+    this.setNodeTimeoutIfIdle(node)
+  }
 
-    // Clock and delayed scheduling come from the host seam (`now` /
-    // `scheduleTimer`), so consumers can drive idle eviction deterministically
-    // instead of sleeping real time (see internal/host-timer.ts).
-    const nodeIdleTTL = node.atom.idleTTL ?? this.defaultIdleTTL
+  private setNodeTimeoutIfIdle(node: NodeImpl<unknown>): void {
+    const nodeIdleTTL = idleTtlOf(node.atom, this.defaultIdleTTL)
     if (nodeIdleTTL === undefined) {
       return
     }
-    let idleTTL = nodeIdleTTL
-    if (this.#currentSweepTTL !== null) {
-      idleTTL -= this.#currentSweepTTL
-      if (idleTTL <= 0) {
-        if (node.canBeRemoved) {
-          this.nodes.delete(atomKey(node.atom))
-          node.remove()
-          this.onNodeRemoved?.(node)
-        }
-        return
-      }
-    }
-    const ttl = Math.ceil(idleTTL / this.timeoutResolution) * this.timeoutResolution
-    const timestamp = this.now() + ttl
-    const bucket = timestamp - (timestamp % this.timeoutResolution) + this.timeoutResolution
+    this.scheduleOrEvictIdleNode(node, nodeIdleTTL)
+  }
 
-    let entry = this.timeoutBuckets.get(bucket)
-    if (entry === undefined) {
-      entry = [
-        new Set<NodeImpl<unknown>>(),
-        this.scheduleTimer(() => this.sweepBucket(bucket), bucket - this.now()),
-      ]
-      this.timeoutBuckets.set(bucket, entry)
+  private scheduleOrEvictIdleNode(node: NodeImpl<unknown>, nodeIdleTTL: number): void {
+    const remaining = remainingIdleTtl(this, node, nodeIdleTTL, this.#currentSweepTTL)
+    if (remaining === undefined) {
+      return
     }
-    entry[0].add(node)
-    this.nodeTimeoutBucket.set(node, bucket)
+    addNodeToTimeoutBucket(this, node, remaining)
   }
 
   removeNodeTimeout(node: NodeImpl<unknown>): void {
     const bucket = this.nodeTimeoutBucket.get(node)
-    if (bucket === undefined) return
-    this.nodeTimeoutBucket.delete(node)
-    this.scheduleNodeRemoval(node)
-
-    const entry = this.timeoutBuckets.get(bucket)
-    if (entry === undefined) {
+    if (bucket === undefined) {
       return
     }
-    const [nodes, cancel] = entry
-    nodes.delete(node)
-    if (nodes.size === 0) {
-      cancel()
-      this.timeoutBuckets.delete(bucket)
-    }
+    this.nodeTimeoutBucket.delete(node)
+    this.scheduleNodeRemoval(node)
+    dropNodeFromTimeoutBucket(this, node, bucket)
   }
 
   #currentSweepTTL: number | null = null
@@ -644,21 +993,45 @@ export class RegistryImpl implements Registry {
     if (entry === undefined) {
       return
     }
-    this.timeoutBuckets.delete(bucket)
-    const nodes = entry[0]
+    this.sweepBucketEntry(bucket, entry)
+  }
 
-    nodes.forEach((node) => {
-      this.nodeTimeoutBucket.delete(node)
-      if (!node.canBeRemoved) return
-      this.nodes.delete(atomKey(node.atom))
-      this.onNodeRemoved?.(node)
-      const idleTTL = node.atom.idleTTL ?? this.defaultIdleTTL
-      if (idleTTL !== undefined) {
-        this.#currentSweepTTL = idleTTL
-      }
-      node.remove()
-      this.#currentSweepTTL = null
+  private sweepBucketEntry(bucket: number, entry: TimeoutBucket): void {
+    this.timeoutBuckets.delete(bucket)
+    entry[0].forEach((node) => {
+      this.sweepIdleNode(node)
     })
+  }
+
+  private sweepIdleNode(node: NodeImpl<unknown>): void {
+    this.nodeTimeoutBucket.delete(node)
+    this.sweepIdleNodeIfRemovable(node)
+  }
+
+  private sweepIdleNodeIfRemovable(node: NodeImpl<unknown>): void {
+    if (node.canBeRemoved === false) {
+      return
+    }
+    this.sweepRemoveNode(node)
+  }
+
+  private sweepRemoveNode(node: NodeImpl<unknown>): void {
+    this.nodes.delete(atomKey(node.atom))
+    notifyNodeRemoved(this, node)
+    this.removeNodeWithSweepTtl(node)
+  }
+
+  private removeNodeWithSweepTtl(node: NodeImpl<unknown>): void {
+    this.assignSweepTtl(idleTtlOf(node.atom, this.defaultIdleTTL))
+    node.remove()
+    this.#currentSweepTTL = null
+  }
+
+  private assignSweepTtl(idleTTL: number | undefined): void {
+    if (idleTTL === undefined) {
+      return
+    }
+    this.#currentSweepTTL = idleTTL
   }
 
   reset(): void {
@@ -668,7 +1041,7 @@ export class RegistryImpl implements Registry {
 
     this.nodes.forEach((node) => {
       node.remove()
-      this.onNodeRemoved?.(node)
+      notifyNodeRemoved(this, node)
     })
     this.nodes.clear()
   }

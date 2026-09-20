@@ -2,26 +2,13 @@ import type { OxlintConfig, OxlintOverride } from 'oxlint'
 
 const OBSERVER_FILES = ['**/*.test.ts', '**/tests/**', '**/__tests__/**'] as const
 
+const SOURCE_AND_TEST_FILES = ['**/src/**', '**/*.test.ts'] as const
+
 /** @public */
 export const plugins = ['typescript', 'import', 'unicorn', 'vitest'] as const
 
 /** @public */
 export const options = { typeAware: true } as const
-
-/** @public */
-export const overrides: OxlintOverride[] = [
-  {
-    files: [...OBSERVER_FILES],
-    rules: {
-      'vitest/expect-expect': 'error',
-      'vitest/valid-expect': 'error',
-      'vitest/no-conditional-in-test': 'error',
-      'vitest/no-focused-tests': 'error',
-      'vitest/no-disabled-tests': 'error',
-      'vitest/no-identical-title': 'error',
-    },
-  },
-]
 
 /** @public */
 export const rules: NonNullable<OxlintConfig['rules']> = {
@@ -63,13 +50,30 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   'import/no-mutable-exports': 'error',
   'no-var': 'error',
 }
+/** @public */
+export const overrides: OxlintOverride[] = [
+  {
+    files: [...SOURCE_AND_TEST_FILES],
+    rules: { ...rules },
+  },
+  {
+    files: [...OBSERVER_FILES],
+    rules: {
+      'vitest/expect-expect': 'error',
+      'vitest/valid-expect': 'error',
+      'vitest/no-conditional-in-test': 'error',
+      'vitest/no-focused-tests': 'error',
+      'vitest/no-disabled-tests': 'error',
+      'vitest/no-identical-title': 'error',
+    },
+  },
+]
 
 /** @public */
 const recommended: OxlintConfig = {
   plugins: [...plugins],
   options: { ...options },
   categories: { correctness: 'error' },
-  rules: { ...rules },
   overrides: [...overrides],
 }
 

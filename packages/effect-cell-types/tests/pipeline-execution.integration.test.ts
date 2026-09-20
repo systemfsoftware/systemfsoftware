@@ -38,7 +38,7 @@ class Ledger extends Context.Service<Ledger, {
 const LedgerRecording = Layer.sync(Ledger, () => {
   const lines: string[] = []
   return {
-    lines: Effect.sync(() => lines),
+    lines: Effect.succeed(lines),
     append: (line: string) =>
       Effect.sync(() => {
         lines.push(line)

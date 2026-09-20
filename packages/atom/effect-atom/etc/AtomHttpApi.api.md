@@ -75,8 +75,8 @@ export namespace t {
 
 // Warnings were encountered during analysis:
 //
-// dist/AtomHttpApi.d.ts:65:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomHttpApi.d.ts
-// dist/AtomHttpApi.d.ts:69:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomHttpApi.d.ts
+// dist/AtomHttpApi.d.ts:63:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomHttpApi.d.ts
+// dist/AtomHttpApi.d.ts:67:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomHttpApi.d.ts
 
 // (No @packageDocumentation comment for this package)
 

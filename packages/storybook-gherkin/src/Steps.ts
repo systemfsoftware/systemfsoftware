@@ -1,5 +1,5 @@
 import { Array as Arr, Effect, Match, Schema } from 'effect'
-import type { screen, UserEventObject, within } from 'storybook/test'
+import type { screen, UserEventObject } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
 
 import type { Capture } from './Capture.js'
@@ -25,19 +25,35 @@ export interface StepModel {
 
 export type ExampleRow = { readonly name: string } & Readonly<Record<string, string>>
 
+const emptyIfMissing = (part: string | undefined): string => {
+  if (part === undefined) return ''
+  return part
+}
+
 const joinStep = (
   step: StepModel,
   renderHole: (cap: CaptureModel) => string,
 ): string =>
   [
-    step.parts[0] ?? '',
-    ...step.captures.flatMap((cap, i) => [renderHole(cap), step.parts[i + 1] ?? '']),
+    emptyIfMissing(step.parts[0]),
+    ...step.captures.flatMap((cap, i) => [renderHole(cap), emptyIfMissing(step.parts[i + 1])]),
   ].join('')
 
 export const displayPattern = (step: StepModel): string => joinStep(step, (cap) => `{${cap.name}}`)
 
+const firstString = (left: string | undefined, right: string): string => {
+  if (left !== undefined) return left
+  return right
+}
+
+const holeText = (cap: CaptureModel, values: Readonly<Record<string, string>>): string => {
+  const fromValues = values[cap.name]
+  if (fromValues !== undefined) return fromValues
+  return firstString(cap.default, `{${cap.name}}`)
+}
+
 export const renderStepText = (step: StepModel, values: Readonly<Record<string, string>>): string =>
-  joinStep(step, (cap) => values[cap.name] ?? cap.default ?? `{${cap.name}}`)
+  joinStep(step, (cap) => holeText(cap, values))
 
 const resolveKeyword = (keyword: Keyword, previous: ConcreteKeyword): ConcreteKeyword =>
   Match.value(keyword).pipe(
@@ -60,7 +76,7 @@ export const resolveKeywords = <S extends { readonly keyword: Keyword }>(
   })[1]
 }
 
-export type Canvas = ReturnType<typeof within>
+export type Canvas = typeof screen
 
 export type StepFn = (label: string, fn: () => Promise<void>) => Promise<void> | void
 
@@ -152,6 +168,48 @@ export type StepCtor = {
   ): StepBuilder<THoles, TArgs>
 }
 
+const partAt = (statics: TemplateStringsArray, index: number): string => emptyIfMissing(statics[index])
+
+const appendLiteral = (current: string, literal: string, trailing: string): string => current + literal + trailing
+
+const consumeNonStringHole = (
+  current: string,
+  hole: Exclude<Hole, string>,
+  trailing: string,
+  parts: string[],
+  captures: CaptureModel[],
+): string => {
+  if (typeof hole === 'number') return appendLiteral(current, String(hole), trailing)
+  parts.push(current)
+  captures.push({ name: hole.name, schema: hole.schema, default: hole.default })
+  return trailing
+}
+
+const consumeHole = (
+  current: string,
+  hole: Hole,
+  trailing: string,
+  parts: string[],
+  captures: CaptureModel[],
+): string => {
+  if (typeof hole === 'string') return appendLiteral(current, hole, trailing)
+  return consumeNonStringHole(current, hole, trailing, parts, captures)
+}
+
+const rememberCapture = (model: StepModel, seen: Set<string>, cap: CaptureModel): void => {
+  if (seen.has(cap.name)) {
+    throw DuplicateCapture.make({ step: displayPattern(model), name: cap.name })
+  }
+  seen.add(cap.name)
+}
+
+const assertUniqueCaptures = (model: StepModel, captures: readonly CaptureModel[]): void => {
+  const seen = new Set<string>()
+  for (const cap of captures) {
+    rememberCapture(model, seen, cap)
+  }
+}
+
 const buildModel = (
   keyword: Keyword,
   statics: TemplateStringsArray,
@@ -159,28 +217,28 @@ const buildModel = (
 ): StepModel => {
   const parts: string[] = []
   const captures: CaptureModel[] = []
-  let current = statics[0] ?? ''
+  let current = partAt(statics, 0)
   for (const [i, hole] of holes.entries()) {
-    if (typeof hole === 'string') {
-      current += hole + (statics[i + 1] ?? '')
-    } else if (typeof hole === 'number') {
-      current += String(hole) + (statics[i + 1] ?? '')
-    } else {
-      parts.push(current)
-      current = statics[i + 1] ?? ''
-      captures.push({ name: hole.name, schema: hole.schema, default: hole.default })
-    }
+    current = consumeHole(current, hole, partAt(statics, i + 1), parts, captures)
   }
   parts.push(current)
   const model: StepModel = { keyword, parts, captures }
-  const seen = new Set<string>()
-  for (const cap of captures) {
-    if (seen.has(cap.name)) {
-      throw DuplicateCapture.make({ step: displayPattern(model), name: cap.name })
-    }
-    seen.add(cap.name)
-  }
+  assertUniqueCaptures(model, captures)
   return model
+}
+
+const captureRaw = (
+  cap: CaptureModel,
+  values: Readonly<Record<string, string>>,
+): string | undefined => {
+  const fromValues = values[cap.name]
+  if (fromValues !== undefined) return fromValues
+  return cap.default
+}
+
+const rawOrEmpty = (raw: string | undefined): string => {
+  if (raw === undefined) return ''
+  return raw
 }
 
 const decodeCapture = (
@@ -188,14 +246,14 @@ const decodeCapture = (
   values: Readonly<Record<string, string>>,
   model: StepModel,
 ): Effect.Effect<unknown, CaptureDecodeFailed> => {
-  const raw = values[cap.name] ?? cap.default
+  const raw = captureRaw(cap, values)
   if (cap.schema === undefined) return Effect.succeed(raw)
   return Schema.decodeEffect(cap.schema)(raw).pipe(
     Effect.mapError((error) =>
       CaptureDecodeFailed.make({
         step: displayPattern(model),
         capture: cap.name,
-        value: raw ?? '',
+        value: rawOrEmpty(raw),
         cause: error,
       })
     ),
@@ -242,9 +300,22 @@ export const And: StepCtor = makeStepCtor('And')
 export const But: StepCtor = makeStepCtor('But')
 export const Star: StepCtor = makeStepCtor('Star')
 
+const isNonNullObject = (value: unknown): value is object => {
+  if (typeof value !== 'object') return false
+  return value !== null
+}
+
+const hasModelAndRun = (value: object): boolean => {
+  if (!('model' in value)) return false
+  return 'run' in value
+}
+
+const hasStepFields = (value: object): boolean => {
+  if (Reflect.get(value, '_tag') !== STEP_TAG) return false
+  return hasModelAndRun(value)
+}
+
 export const isStep = <TArgs>(value: unknown): value is Step<TArgs> => {
-  if (typeof value !== 'object' || value === null) return false
-  return Reflect.get(value, '_tag') === STEP_TAG &&
-    'model' in value &&
-    'run' in value
+  if (!isNonNullObject(value)) return false
+  return hasStepFields(value)
 }

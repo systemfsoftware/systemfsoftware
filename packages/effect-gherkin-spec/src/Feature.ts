@@ -38,15 +38,12 @@ export type EffectVitestBindings = Pick<typeof EffectVitest, 'layer'> & {
   readonly it: Vitest.Methods
 }
 
-const selectDescribeMode = (mode: DescribeMode) => {
-  if (mode === 'skip') {
-    return describe.skip
-  }
-  if (mode === 'only') {
-    return describe.only
-  }
-  return describe
-}
+const selectDescribeMode = (mode: DescribeMode) =>
+  ({
+    skip: describe.skip,
+    only: describe.only,
+    describe,
+  })[mode]
 
 const invokeDescribe = (
   mode: DescribeMode,
@@ -65,15 +62,12 @@ const invokeDescribe = (
 const pickMode = <R>(
   family: Vitest.Tester<R>,
   mode: RegisterMode,
-) => {
-  if (mode === 'skip') {
-    return family.skip
-  }
-  if (mode === 'only') {
-    return family.only
-  }
-  return family
-}
+) =>
+  ({
+    skip: family.skip,
+    only: family.only,
+    run: family,
+  })[mode]
 
 const selectUnlayeredMode = (
   methodsIt: Vitest.Methods,
@@ -460,7 +454,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         suiteOpts,
         useLiveClock,
         layerDef,
-        opts?.excludeTestServices ?? false,
+        Boolean(opts?.excludeTestServices),
         featureScenarioLayer,
         scopeMap,
       ),
@@ -493,7 +487,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         suiteOpts,
         useLiveClock,
         layerDef,
-        opts?.excludeTestServices ?? false,
+        Boolean(opts?.excludeTestServices),
         scopeMap,
       ),
     withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(

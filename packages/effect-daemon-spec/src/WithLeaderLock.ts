@@ -8,15 +8,12 @@ export interface LeaderLockOptions {
   readonly acquireRetryBackoff?: Schedule.Schedule<Duration.Duration>
 }
 
-/**
- * Runs `self` while holding the named leader lock.
- */
-export function withLeaderLock<A, E, R>(
+const acquireWithLock = <A, E, R>(
   self: Effect.Effect<A, E, R>,
   options: LeaderLockOptions,
   lock: LeaderLock['Service'],
-): Effect.Effect<A | void, E | LeaderLockAcquireError, R> {
-  const acquire = Effect.gen(function*() {
+): Effect.Effect<A | void, E | LeaderLockAcquireError, R> =>
+  Effect.gen(function*() {
     const out = yield* lock.withLock(options.key, self)
     if (Option.isSome(out)) {
       return out.value
@@ -27,19 +24,39 @@ export function withLeaderLock<A, E, R>(
       Match.exhaustive,
     )
   })
-  const retryOnce = (
-    current: Schedule.Schedule<Duration.Duration>,
-  ): Effect.Effect<A | void, E | LeaderLockAcquireError, R> =>
-    Effect.retry(acquire, {
-      schedule: current,
-      while: Predicate.isTagged('LeaderLockNotAcquired'),
-    }).pipe(
-      Effect.catchTag('LeaderLockNotAcquired', () => retryOnce(current)),
-    )
-  const backoff = options.acquireRetryBackoff
-  if (options.mode === 'required' && backoff !== null && typeof backoff === 'object') {
-    const schedule: Schedule.Schedule<Duration.Duration> = backoff
-    return retryOnce(schedule)
+
+const retryAcquire = <A, E, R>(
+  acquire: Effect.Effect<A | void, E | LeaderLockAcquireError, R>,
+  current: Schedule.Schedule<Duration.Duration>,
+): Effect.Effect<A | void, E | LeaderLockAcquireError, R> =>
+  Effect.retry(acquire, {
+    schedule: current,
+    while: Predicate.isTagged('LeaderLockNotAcquired'),
+  }).pipe(
+    Effect.catchTag('LeaderLockNotAcquired', () => retryAcquire(acquire, current)),
+  )
+
+const withRequiredBackoff = <A, E, R>(
+  acquire: Effect.Effect<A | void, E | LeaderLockAcquireError, R>,
+  backoff: Schedule.Schedule<Duration.Duration> | undefined,
+): Effect.Effect<A | void, E | LeaderLockAcquireError, R> => {
+  if (typeof backoff === 'undefined') {
+    return acquire
   }
-  return acquire
+  return retryAcquire(acquire, backoff)
+}
+
+/**
+ * Runs `self` while holding the named leader lock.
+ */
+export function withLeaderLock<A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  options: LeaderLockOptions,
+  lock: LeaderLock['Service'],
+): Effect.Effect<A | void, E | LeaderLockAcquireError, R> {
+  const acquire = acquireWithLock(self, options, lock)
+  if (options.mode !== 'required') {
+    return acquire
+  }
+  return withRequiredBackoff(acquire, options.acquireRetryBackoff)
 }

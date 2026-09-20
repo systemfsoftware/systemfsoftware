@@ -13,6 +13,13 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
+const orEmpty = <A>(value: A | undefined): A | Record<never, never> => {
+  if (typeof value === 'undefined') {
+    return {}
+  }
+  return value
+}
+
 export const subscription = <
   AE,
   AR,
@@ -41,8 +48,8 @@ export const subscription = <
   [WorkerTypeId]: WorkerTypeId,
   name: opts.name,
   loop: { ...SubscriptionLoopTag, acquire: Effect.asVoid(opts.acquire) },
-  child: opts.child ?? {},
+  child: orEmpty(opts.child),
   tick: opts.tick,
-  tickHooks: opts.tickHooks ?? {},
+  tickHooks: orEmpty(opts.tickHooks),
   lock: opts.lock,
 })

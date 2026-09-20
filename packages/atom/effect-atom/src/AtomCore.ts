@@ -15,7 +15,6 @@ export const PipeInspectableProto = {
 /**
  * Type-level identifier used to recognize `Atom` values.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export type TypeId = '~effect/reactivity/Atom'
@@ -23,7 +22,6 @@ export type TypeId = '~effect/reactivity/Atom'
 /**
  * Runtime identifier attached to `Atom` values and used by `isAtom`.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const TypeId: TypeId = '~effect/reactivity/Atom'
@@ -31,7 +29,6 @@ export const TypeId: TypeId = '~effect/reactivity/Atom'
 /**
  * Type-level identifier used to recognize writable atoms.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export type WritableTypeId = '~effect/reactivity/Atom/Writable'
@@ -39,7 +36,6 @@ export type WritableTypeId = '~effect/reactivity/Atom/Writable'
 /**
  * Runtime identifier attached to writable atoms and used by `isWritable`.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
@@ -47,7 +43,6 @@ export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
 /**
  * Returns `true` when a value is an `Atom`.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
@@ -55,7 +50,6 @@ export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
 /**
  * Returns a copy of an atom with an idle time-to-live: finite durations dispose it after inactivity, while an infinite duration keeps it alive.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const setIdleTTL: {
@@ -70,7 +64,7 @@ export const setIdleTTL: {
   const copy = {
     ...self,
     keepAlive: !isFinite,
-    idleTTL: isFinite ? Duration.toMillis(duration) : undefined,
+    idleTTL: idleTtlMillis(duration, isFinite),
   }
   Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(self))
   return copy
@@ -103,7 +97,6 @@ export const WritableProto = {
 /**
  * Returns `true` when an atom is writable.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isWritable = <R, W>(atom: Atom<R>): atom is Writable<R, W> => WritableTypeId in atom
@@ -111,7 +104,6 @@ export const isWritable = <R, W>(atom: Atom<R>): atom is Writable<R, W> => Writa
 /**
  * Creates a read-only atom from a read function and an optional custom refresh registration callback.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const readable = <A>(
@@ -123,7 +115,7 @@ export const readable = <A>(
     keepAlive: false,
     lazy: true,
     read,
-    ...(refresh === undefined ? {} : { refresh }),
+    ...optionalRefresh(refresh),
   }
   return self
 }
@@ -131,7 +123,6 @@ export const readable = <A>(
 /**
  * Creates a writable atom from read and write functions, with an optional custom refresh registration callback.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const writable = <R, W>(
@@ -145,14 +136,93 @@ export const writable = <R, W>(
     lazy: true,
     read,
     write,
-    ...(refresh === undefined ? {} : { refresh }),
+    ...optionalRefresh(refresh),
   }
   return self
 }
 
+const idleTtlMillis = (duration: Duration.Duration, isFinite: boolean): number | undefined => {
+  if (isFinite) {
+    return Duration.toMillis(duration)
+  }
+  return undefined
+}
+
+const optionalRefresh = (
+  refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+): { readonly refresh: (f: <A>(atom: Atom<A>) => void) => void } | Record<string, never> => {
+  if (refresh === undefined) {
+    return {}
+  }
+  return { refresh }
+}
+
+const defaultRefresh = <A>(self: Atom<A>): (f: <B>(atom: Atom<B>) => void) => void => {
+  if (self.refresh !== undefined) {
+    return self.refresh
+  }
+  return function(refresh) {
+    refresh(self)
+  }
+}
+
+const transformReadable = <A, B>(
+  self: Atom<A>,
+  f: (get: AtomContext, atom: Atom<A>) => B,
+): Atom<B> =>
+  readable(
+    (get) => f(get, self),
+    defaultRefresh(self),
+  )
+
+const transformWritable = <A, B>(
+  self: Writable<A, unknown>,
+  f: (get: AtomContext, atom: Atom<A>) => B,
+): Atom<B> =>
+  writable(
+    (get) => f(get, self),
+    function(ctx, value) {
+      ctx.set(self, value)
+    },
+    defaultRefresh(self),
+  )
+
+const transformAtom = <A, B>(
+  self: Atom<A>,
+  f: (get: AtomContext, atom: Atom<A>) => B,
+): Atom<B> => {
+  if (isWritable(self)) {
+    return transformWritable(self, f)
+  }
+  return transformReadable(self, f)
+}
+
+const applyInitialValueTarget = <B>(
+  atom: Atom<B>,
+  options?: {
+    readonly initialValueTarget?: Atom<B> | undefined
+  },
+): void => {
+  if (options === undefined) {
+    return
+  }
+  assignInitialValueTarget(atom, options.initialValueTarget)
+}
+
+const assignInitialValueTarget = <B>(
+  atom: Atom<B>,
+  initialValueTarget: Atom<B> | undefined,
+): void => {
+  if (initialValueTarget === undefined) {
+    return
+  }
+  const mutable: Mutable<Atom<B>> = atom
+  mutable.initialValueTarget = getInitialValueTarget(initialValueTarget)
+}
+
 const getInitialValueTarget = <A>(atom: Atom<A>): Atom<A> => {
   let target = atom
-  while (target.initialValueTarget) {
+  while (target.initialValueTarget != null) {
     target = target.initialValueTarget
   }
   return target
@@ -168,7 +238,6 @@ const getInitialValueTarget = <A>(atom: Atom<A>): Atom<A> => {
  * forwards writes to the source. `initialValueTarget` controls which atom receives
  * preloaded initial values for the derived atom.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const transform: {
@@ -196,28 +265,8 @@ export const transform: {
       readonly initialValueTarget?: Atom<B> | undefined
     },
   ): Atom<B> => {
-    const atom = removeTtl(
-      isWritable(self)
-        ? writable(
-          (get) => f(get, self),
-          function(ctx, value) {
-            ctx.set(self, value)
-          },
-          self.refresh ?? function(refresh) {
-            refresh(self)
-          },
-        )
-        : readable(
-          (get) => f(get, self),
-          self.refresh ?? function(refresh) {
-            refresh(self)
-          },
-        ),
-    )
-    if (options?.initialValueTarget) {
-      const mutable: Mutable<Atom<B>> = atom
-      mutable.initialValueTarget = getInitialValueTarget(options.initialValueTarget)
-    }
+    const atom = removeTtl(transformAtom(self, f))
+    applyInitialValueTarget(atom, options)
     return atom
   },
 )

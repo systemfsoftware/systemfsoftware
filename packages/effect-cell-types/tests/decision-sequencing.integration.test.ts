@@ -84,13 +84,18 @@ Feature('Sequencing dependent decisions')
         Gherkin.Do.pipe(
           When('evaluating an infallible decision')(
             'run',
-            () =>
-              Effect.map(
-                (row.composite ? totalCell(totalPairAdmitTaggedCommands) : totalCell()).run(
+            () => {
+              let targetCell = totalCell()
+              if (row.composite) {
+                targetCell = totalCell(totalPairAdmitTaggedCommands)
+              }
+              return Effect.map(
+                targetCell.run(
                   new SettleCommand({ decision: new Admitted({ length: row.decisionLength }), ctx: row.ctx }),
                 ),
                 (response) => ({ response }),
-              ),
+              )
+            },
           ),
           Then('the decision output matches the resolved conclusion')((s) => {
             expect(s.run.response).toBe(row.expectedResponse)

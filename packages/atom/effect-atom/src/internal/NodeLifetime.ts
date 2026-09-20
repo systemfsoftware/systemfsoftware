@@ -11,14 +11,43 @@ export interface NodeLifetimeInput {
   readonly defaultIdleTTL: number | undefined
 }
 
-/** @internal */
-export const decideNodeFate = (input: NodeLifetimeInput): NodeFate => {
-  if (input.keepAlive || input.listenerCount > 0 || input.childCount > 0 || !input.isLive || input.isWaiting) {
-    return { _tag: 'Alive' }
+const isPinned = (input: NodeLifetimeInput): boolean => {
+  const flags = [
+    input.keepAlive,
+    input.listenerCount > 0,
+    input.childCount > 0,
+    !input.isLive,
+    input.isWaiting,
+  ]
+  return flags.includes(true)
+}
+
+const fateFromDefaultTtl = (ttlMillis: number | undefined): NodeFate => {
+  if (ttlMillis === undefined) {
+    return { _tag: 'RemoveNow' }
   }
+  return { _tag: 'RemoveAfterTtl', ttlMillis }
+}
+
+const fateFromIdleTtl = (input: NodeLifetimeInput): NodeFate => {
+  const ttlMillis = input.idleTTL
+  if (ttlMillis === undefined) {
+    return fateFromDefaultTtl(input.defaultIdleTTL)
+  }
+  return { _tag: 'RemoveAfterTtl', ttlMillis }
+}
+
+const fateFromTtl = (input: NodeLifetimeInput): NodeFate => {
   if (input.idleTTL === 0) {
     return { _tag: 'RemoveNow' }
   }
-  const ttlMillis = input.idleTTL ?? input.defaultIdleTTL
-  return ttlMillis === undefined ? { _tag: 'RemoveNow' } : { _tag: 'RemoveAfterTtl', ttlMillis }
+  return fateFromIdleTtl(input)
+}
+
+/** @internal */
+export const decideNodeFate = (input: NodeLifetimeInput): NodeFate => {
+  if (isPinned(input)) {
+    return { _tag: 'Alive' }
+  }
+  return fateFromTtl(input)
 }

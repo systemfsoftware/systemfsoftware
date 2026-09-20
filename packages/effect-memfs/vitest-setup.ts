@@ -3,6 +3,14 @@ import { FastCheck as fc } from 'effect/testing'
 const isStrykerWorker = typeof process !== 'undefined' && process.env['STRYKER_MUTATOR_WORKER'] !== undefined
 const isCi = typeof process !== 'undefined' && process.env['CI'] === 'true'
 
-const numRuns = isStrykerWorker ? 30 : isCi ? 1000 : 100
+const numRunsFromCi = (): number => {
+  if (isCi) return 1000
+  return 100
+}
 
-fc.configureGlobal({ numRuns })
+const numRunsFromEnv = (): number => {
+  if (isStrykerWorker) return 30
+  return numRunsFromCi()
+}
+
+fc.configureGlobal({ numRuns: numRunsFromEnv() })

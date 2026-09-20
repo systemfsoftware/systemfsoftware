@@ -13,6 +13,13 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
+const orEmpty = <A>(value: A | undefined): A | Record<never, never> => {
+  if (typeof value === 'undefined') {
+    return {}
+  }
+  return value
+}
+
 type PollShape<W, D, WE, WR> =
   | {
     readonly name: string
@@ -49,9 +56,9 @@ export const poll = <
       [WorkerTypeId]: WorkerTypeId,
       name: opts.name,
       loop: { ...PollLoopTag, gate, interval: opts.interval },
-      child: opts.child ?? {},
+      child: orEmpty(opts.child),
       tick: opts.tick,
-      tickHooks: opts.tickHooks ?? {},
+      tickHooks: orEmpty(opts.tickHooks),
       lock: opts.lock,
     }
   }
@@ -61,9 +68,9 @@ export const poll = <
     [WorkerTypeId]: WorkerTypeId,
     name: opts.name,
     loop: { ...PollLoopTag, gate, interval: opts.interval },
-    child: opts.child ?? {},
+    child: orEmpty(opts.child),
     tick: opts.tick,
-    tickHooks: opts.tickHooks ?? {},
+    tickHooks: orEmpty(opts.tickHooks),
     lock: opts.lock,
   }
 }

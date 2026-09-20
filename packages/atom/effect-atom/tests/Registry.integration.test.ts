@@ -1,7 +1,9 @@
 import { Atom, Registry, Result } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Fiber, Latch, Option, Schema, Stream } from 'effect'
+import { Cause, Effect, Exit, Fiber, HashSet, Latch, Option, Schema, Stream } from 'effect'
 import { expect, vi } from 'vitest'
+
+const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
 
 const Feature = makeFeature({ it, layer })
 
@@ -94,7 +96,12 @@ Feature('Keeping a value that is still loading available to every reader')
               let useFirst = true
               const first = Atom.make('first')
               const second = Atom.make('second')
-              const switching = Atom.readable((get) => get(useFirst ? first : second)).pipe(Atom.keepAlive)
+              const switching = Atom.readable((get) => {
+                if (useFirst) {
+                  return get(first)
+                }
+                return get(second)
+              }).pipe(Atom.keepAlive)
               const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
               return {
                 page,
@@ -114,9 +121,14 @@ Feature('Keeping a value that is still loading available to every reader')
             s.ctx.page.refresh(s.ctx.switching)
             const after = s.ctx.page.get(s.ctx.switching)
             vi.advanceTimersByTime(100)
-            const keys = new Set(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             vi.useRealTimers()
-            return { before, after, hasFirst: keys.has(s.ctx.first), hasSecond: keys.has(s.ctx.second) }
+            return {
+              before,
+              after,
+              hasFirst: HashSet.has(keys, s.ctx.first),
+              hasSecond: HashSet.has(keys, s.ctx.second),
+            }
           })),
         Then('the abandoned source is gone and the followed one stays')((s) => {
           expect(s.nodes.before).toBe('first')
@@ -158,7 +170,9 @@ Feature('Keeping a value that is still loading available to every reader')
               s.ctx.setStored(2)
               s.ctx.latch.closeUnsafe()
               s.ctx.page.refresh(s.ctx.source)
-              const pending = Effect.runFork(Registry.getResult(s.ctx.page, s.ctx.source, { suspendOnWaiting: true }))
+              const pending = yield* Effect.forkChild(
+                Registry.getResult(s.ctx.page, s.ctx.source, { suspendOnWaiting: true }),
+              )
               s.ctx.latch.openUnsafe()
               const settled = yield* Fiber.join(pending)
               return { first, settled }
@@ -207,9 +221,9 @@ Feature('Keeping a value that is still loading available to every reader')
             s.ctx.page.get(s.ctx.first)
             s.ctx.page.get(s.ctx.second)
             vi.advanceTimersByTime(100)
-            const keys = new Set(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             vi.useRealTimers()
-            return { hasFirst: keys.has(s.ctx.first), hasSecond: keys.has(s.ctx.second) }
+            return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
         Then('both are gone')((s) => {
           expect(s.nodes.hasFirst).toBe(false)
@@ -266,8 +280,8 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.gen(function*() {
             yield* Effect.scoped(Registry.mount(s.ctx.page, s.ctx.value))
             yield* Effect.yieldNow
-            const keys = new Set(s.ctx.page.getNodes().keys())
-            return { hasValue: keys.has(s.ctx.value) }
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            return { hasValue: HashSet.has(keys, s.ctx.value) }
           })),
         Then('the value is gone')((s) => {
           expect(s.nodes.hasValue).toBe(false)
@@ -457,16 +471,19 @@ Feature('Keeping a value that is still loading available to every reader')
           'answers',
           (s) =>
             Effect.gen(function*() {
-              const fromLoading = Effect.runFork(Registry.getResult(s.ctx.page, s.ctx.loading))
+              const fromLoading = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.loading))
+              yield* Effect.yieldNow
               s.ctx.page.set(s.ctx.loading, Result.success(20))
               const waited = yield* Fiber.join(fromLoading)
-              const fromWaiting = Effect.runFork(
+              const fromWaiting = yield* Effect.forkChild(
                 Registry.getResult(s.ctx.page, s.ctx.waiting, { suspendOnWaiting: true }),
               )
+              yield* Effect.yieldNow
               s.ctx.page.set(s.ctx.waiting, Result.success(1, { waiting: true }))
               s.ctx.page.set(s.ctx.waiting, Result.success(2))
               const waitedThrough = yield* Fiber.join(fromWaiting)
-              const fromFlicker = Effect.runFork(Registry.getResult(s.ctx.page, s.ctx.flickering))
+              const fromFlicker = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.flickering))
+              yield* Effect.yieldNow
               s.ctx.page.set(s.ctx.flickering, Result.initial(true))
               s.ctx.page.set(s.ctx.flickering, Result.success(30))
               const waitedPastFlicker = yield* Fiber.join(fromFlicker)
@@ -686,7 +703,7 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a serializable value that has already been read')('ctx', () =>
           Effect.sync(() => {
-            const direct = Atom.make(2).pipe(Atom.serializable({ key: 'direct-key', schema: Schema.Number }))
+            const direct = Atom.make(2).pipe(Atom.serializable({ key: 'direct-key', schema: Schema.Finite }))
             const page = Registry.make()
             return { page, direct }
           })),
@@ -708,7 +725,7 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             const source = Atom.make(1)
             const derived = Atom.transform(source, (get) => get(source), { initialValueTarget: source }).pipe(
-              Atom.serializable({ key: 'derived-key', schema: Schema.Number }),
+              Atom.serializable({ key: 'derived-key', schema: Schema.Finite }),
             )
             const page = Registry.make()
             return { page, source, derived }
@@ -732,7 +749,7 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a serializable value that has a listener but has never been read')('ctx', () =>
           Effect.sync(() => {
-            const direct = Atom.make(2).pipe(Atom.serializable({ key: 'unread-key', schema: Schema.Number }))
+            const direct = Atom.make(2).pipe(Atom.serializable({ key: 'unread-key', schema: Schema.Finite }))
             const page = Registry.make()
             return { page, direct }
           })),
@@ -803,11 +820,13 @@ Feature('Keeping a value that is still loading available to every reader')
             try {
               s.ctx.page.get(Atom.make(2))
             } catch (error) {
-              message = error instanceof Error
-                ? error.message
-                : typeof error === 'string'
-                ? error
-                : JSON.stringify(error)
+              if (error instanceof Error) {
+                message = error.message
+              } else if (typeof error === 'string') {
+                message = error
+              } else {
+                message = jsonString(error)
+              }
             }
             return { remaining, message }
           })),
@@ -838,14 +857,14 @@ Feature('Keeping a value that is still loading available to every reader')
             const node = maybeNode
             const before = node.currentState()
             vi.advanceTimersByTime(100)
-            const keys = new Set(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             const after = node.currentState()
             vi.useRealTimers()
             return {
               before,
               after,
-              hasDerived: keys.has(s.ctx.derived),
-              hasSource: keys.has(s.ctx.source),
+              hasDerived: HashSet.has(keys, s.ctx.derived),
+              hasSource: HashSet.has(keys, s.ctx.source),
             }
           })),
         Then('the source was swept in the same pass right after the derived value')((s) => {
@@ -874,11 +893,11 @@ Feature('Keeping a value that is still loading available to every reader')
               s.ctx.page.get(s.ctx.derived)
               s.ctx.page.subscribe(s.ctx.source, () => {})
               vi.advanceTimersByTime(100)
-              const keys = new Set(s.ctx.page.getNodes().keys())
+              const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
               vi.useRealTimers()
               return {
-                hasDerived: keys.has(s.ctx.derived),
-                hasSource: keys.has(s.ctx.source),
+                hasDerived: HashSet.has(keys, s.ctx.derived),
+                hasSource: HashSet.has(keys, s.ctx.source),
               }
             }),
         ),
@@ -903,14 +922,15 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             s.ctx.page.get(s.ctx.derived)
             vi.advanceTimersByTime(15)
-            const afterFirstWindow = new Set(s.ctx.page.getNodes().keys())
+            const afterFirstWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             vi.advanceTimersByTime(100)
-            const afterSecondWindow = new Set(s.ctx.page.getNodes().keys())
+            const afterSecondWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             vi.useRealTimers()
             return {
-              hasDerivedAfterFirst: afterFirstWindow.has(s.ctx.derived),
-              hasSourceAfterFirst: afterFirstWindow.has(s.ctx.source),
-              hasSourceAfterSecond: afterSecondWindow.has(s.ctx.source),
+              hasDerivedAfterFirst: HashSet.has(afterFirstWindow, s.ctx.derived),
+              hasDerivedAfterSecond: HashSet.has(afterSecondWindow, s.ctx.derived),
+              hasSourceAfterFirst: HashSet.has(afterFirstWindow, s.ctx.source),
+              hasSourceAfterSecond: HashSet.has(afterSecondWindow, s.ctx.source),
             }
           })),
         Then('the child is swept first and the parent is swept in its own later window')((s) => {
@@ -939,9 +959,9 @@ Feature('Keeping a value that is still loading available to every reader')
             s.ctx.page.get(s.ctx.first)
             s.ctx.page.get(s.ctx.second)
             vi.advanceTimersByTime(100)
-            const keys = new Set(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             vi.useRealTimers()
-            return { hasFirst: keys.has(s.ctx.first), hasSecond: keys.has(s.ctx.second) }
+            return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
         Then('both are swept only after being left alone again')((s) => {
           expect(s.result.hasFirst).toBe(false)
@@ -968,8 +988,8 @@ Feature('Keeping a value that is still loading available to every reader')
             const before = maybeNode.currentState()
             cancel()
             yield* Effect.yieldNow
-            const keys = new Set(s.ctx.page.getNodes().keys())
-            return { before, hasValue: keys.has(s.ctx.value) }
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            return { before, hasValue: HashSet.has(keys, s.ctx.value) }
           })),
         Then('the never-built value was removed once the listener left')((s) => {
           expect(s.result.before).toBe('uninitialized')
@@ -1064,7 +1084,12 @@ Feature('Keeping a value that is still loading available to every reader')
               const first = Atom.make(1)
               const second = Atom.make(2)
               let useFirst = true
-              const switching = Atom.readable((get) => get(useFirst ? first : second))
+              const switching = Atom.readable((get) => {
+                if (useFirst) {
+                  return get(first)
+                }
+                return get(second)
+              })
               const page = Registry.make()
               return {
                 page,
@@ -1084,11 +1109,11 @@ Feature('Keeping a value that is still loading available to every reader')
             s.ctx.flip()
             s.ctx.page.refresh(s.ctx.switching)
             const value = s.ctx.page.get(s.ctx.switching)
-            const keys = new Set(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             return {
               value,
-              hasFirst: keys.has(s.ctx.first),
-              hasSecond: keys.has(s.ctx.second),
+              hasFirst: HashSet.has(keys, s.ctx.first),
+              hasSecond: HashSet.has(keys, s.ctx.second),
             }
           })),
         Then('the abandoned source is kept because it is still in use, and the new one is followed')((s) => {

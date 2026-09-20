@@ -12,6 +12,7 @@ import {
   admitDecodedCommand,
   Admitted,
   Decoded,
+  InfraCrashError,
   type Malformed,
   Rejected,
 } from './__fixtures__/admit-decoded-command.workflow.js'
@@ -36,7 +37,7 @@ class AuditService extends Context.Service<AuditService, {
 const AuditServiceLive = Layer.sync(AuditService, () => {
   const log: AuditRecord[] = []
   return {
-    entries: Effect.sync(() => log),
+    entries: Effect.succeed(log),
     record: (orderId, summary) =>
       Effect.sync(() => {
         log.push({ orderId, summary })
@@ -57,7 +58,7 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
 
 const primaryProcessor = Sandwich.read((order: AdmissionOrder) => {
   if (order.id === 'infra-crash') {
-    return Effect.fail(new Error('Gateway unavailable'))
+    return Effect.fail(new InfraCrashError({ message: 'Gateway unavailable' }))
   }
   return Effect.succeed(new Decoded({ length: order.id.length }))
 })

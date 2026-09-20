@@ -38,10 +38,10 @@ Feature('Seeding and listening to shared values')
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.sync(() => true)),
+        When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('only the first seed is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
+          Effect.promise(() => {
+            return expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
           })
         ),
       ),

@@ -56,7 +56,8 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",

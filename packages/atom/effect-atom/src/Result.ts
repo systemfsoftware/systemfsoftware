@@ -59,7 +59,6 @@ export type { Failure, Initial, Result, Success } from './ResultValues.js'
 /**
  * Rebuilds an `Result` with new success and failure types while preserving the variant of another result.
  *
- * @category utility types
  * @since 4.0.0
  */
 export type With<R extends Result<unknown, unknown>, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E>
@@ -70,7 +69,6 @@ export type With<R extends Result<unknown, unknown>, A, E> = R extends Initial<i
 /**
  * Returns whether an `Result` is currently waiting for an asynchronous computation or refresh to finish.
  *
- * @category predicates
  * @since 4.0.0
  */
 export const isWaiting = <A, E>(result: Result<A, E>): boolean => result.waiting
@@ -78,28 +76,33 @@ export const isWaiting = <A, E>(result: Result<A, E>): boolean => result.waiting
 /**
  * Converts an `Exit` into a `Success` when it succeeds or a `Failure` carrying the exit cause when it fails.
  *
- * @category constructors
  * @since 4.0.0
  */
-export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A, E> =>
-  Exit.isSuccess(exit) ? success(exit.value) : failure(exit.cause)
+export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A, E> => {
+  if (Exit.isSuccess(exit)) {
+    return success(exit.value)
+  }
+  return failure(exit.cause)
+}
 
 /**
  * Converts an `Exit` to a result, preserving the latest previous success when the exit is a failure.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const fromExitWithPrevious = <A, E>(
   exit: Exit.Exit<A, E>,
   previous: Option.Option<Result<A, E>>,
-): Success<A, E> | Failure<A, E> =>
-  Exit.isSuccess(exit) ? success(exit.value) : failureWithPrevious(exit.cause, { previous })
+): Success<A, E> | Failure<A, E> => {
+  if (Exit.isSuccess(exit)) {
+    return success(exit.value)
+  }
+  return failureWithPrevious(exit.cause, { previous })
+}
 
 /**
  * Creates a waiting result from an optional previous result, using `Initial(true)` when no previous result exists.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const waitingFrom = <A, E>(previous: Option.Option<Result<A, E>>): Result<A, E> => {
@@ -112,7 +115,6 @@ export const waitingFrom = <A, E>(previous: Option.Option<Result<A, E>>): Result
 /**
  * Returns `true` when an `Result` is in the `Initial` state.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isInitial = <A, E>(result: Result<A, E>): result is Initial<A, E> => isTagged(result, 'Initial')
@@ -120,7 +122,6 @@ export const isInitial = <A, E>(result: Result<A, E>): result is Initial<A, E> =
 /**
  * Returns `true` when an `Result` is either `Success` or `Failure`.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isNotInitial = <A, E>(result: Result<A, E>): result is Success<A, E> | Failure<A, E> => !isInitial(result)
@@ -128,7 +129,6 @@ export const isNotInitial = <A, E>(result: Result<A, E>): result is Success<A, E
 /**
  * Returns `true` when an `Result` is a `Success`.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isSuccess = <A, E>(result: Result<A, E>): result is Success<A, E> => isTagged(result, 'Success')
@@ -136,7 +136,6 @@ export const isSuccess = <A, E>(result: Result<A, E>): result is Success<A, E> =
 /**
  * Returns `true` when an `Result` is a `Failure`.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isFailure = <A, E>(result: Result<A, E>): result is Failure<A, E> => isTagged(result, 'Failure')
@@ -144,16 +143,28 @@ export const isFailure = <A, E>(result: Result<A, E>): result is Failure<A, E> =
 /**
  * Returns `true` when an `Result` is a `Failure` whose cause contains only interruptions.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isInterrupted = <A, E>(result: Result<A, E>): result is Failure<A, E> =>
   isFailure(result) && Cause.hasInterruptsOnly(result.cause)
 
+const previousSuccessFromNonSuccess = <A, E>(result: Initial<A, E> | Failure<A, E>): Option.Option<Success<A, E>> => {
+  if (isFailure(result)) {
+    return result.previousSuccess
+  }
+  return Option.none()
+}
+
+const previousSuccessFromResult = <A, E>(result: Result<A, E>): Option.Option<Success<A, E>> => {
+  if (isSuccess(result)) {
+    return Option.some(result)
+  }
+  return previousSuccessFromNonSuccess(result)
+}
+
 /**
  * Creates a `Failure` result from a `Cause`, carrying forward the latest success stored in a previous result.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const failureWithPrevious = <A, E>(
@@ -164,19 +175,13 @@ export const failureWithPrevious = <A, E>(
   },
 ): Failure<A, E> =>
   failure(cause, {
-    previousSuccess: Option.flatMap(options.previous, (result) =>
-      isSuccess(result)
-        ? Option.some(result)
-        : isFailure(result)
-        ? result.previousSuccess
-        : Option.none()),
+    previousSuccess: Option.flatMap(options.previous, previousSuccessFromResult),
     waiting: options.waiting,
   })
 
 /**
  * Creates a `Failure` result from a typed error, wrapping it in `Cause.fail`.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const fail = <E, A = never>(error: E, options?: {
@@ -187,7 +192,6 @@ export const fail = <E, A = never>(error: E, options?: {
 /**
  * Creates a `Failure` result from a typed error while carrying forward the latest success stored in a previous result.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const failWithPrevious = <A, E>(
@@ -198,26 +202,41 @@ export const failWithPrevious = <A, E>(
   },
 ): Failure<A, E> => failureWithPrevious(Cause.fail(error), options)
 
+type TouchOptions = {
+  readonly touch?: boolean | undefined
+}
+
+const maybeTouchDefined = <R extends Result<unknown, unknown>>(self: R, options: TouchOptions): R => {
+  if (options.touch === true) {
+    return touch(self)
+  }
+  return self
+}
+
+const maybeTouch = <R extends Result<unknown, unknown>>(self: R, options: TouchOptions | undefined): R => {
+  if (options === undefined) {
+    return self
+  }
+  return maybeTouchDefined(self, options)
+}
+
 /**
  * Marks an `Result` as waiting, optionally touching the timestamp when the result is a `Success`.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const waiting = <R extends Result<unknown, unknown>>(self: R, options?: {
   readonly touch?: boolean | undefined
 }): R => {
   if (self.waiting) {
-    return options?.touch ? touch(self) : self
+    return maybeTouch(self, options)
   }
-  const result = { ...self, waiting: true }
-  return options?.touch ? touch(result) : result
+  return maybeTouch({ ...self, waiting: true }, options)
 }
 
 /**
  * Refreshes the timestamp of a `Success` result while preserving its value and waiting flag; non-success results are returned unchanged.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const touch = <A extends Result<unknown, unknown>>(result: A): A => {
@@ -231,7 +250,6 @@ export const touch = <A extends Result<unknown, unknown>>(result: A): A => {
  * Replaces a `Failure` value's stored previous success with the latest success
  * found in another result.
  *
- * @category combinators
  * @since 4.0.0
  */
 export function replacePrevious<R extends Result<unknown, unknown>, XE, A>(
@@ -242,19 +260,13 @@ export function replacePrevious(
   self: Result<unknown, unknown>,
   previous: Option.Option<Result<unknown, unknown>>,
 ): Result<unknown, unknown> {
-  return isFailure(self) ? failureWithPrevious(self.cause, { previous, waiting: self.waiting }) : self
+  if (isFailure(self)) {
+    return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
+  }
+  return self
 }
 
-/**
- * Returns the current success value, or the previous success value stored in a failure, as an `Option`.
- *
- * @category accessors
- * @since 4.0.0
- */
-export const value = <A, E>(self: Result<A, E>): Option.Option<A> => {
-  if (isSuccess(self)) {
-    return Option.some(self.value)
-  }
+const valueFromNonSuccess = <A, E>(self: Initial<A, E> | Failure<A, E>): Option.Option<A> => {
   if (isFailure(self)) {
     return Option.map(self.previousSuccess, (s) => s.value)
   }
@@ -262,9 +274,20 @@ export const value = <A, E>(self: Result<A, E>): Option.Option<A> => {
 }
 
 /**
+ * Returns the current success value, or the previous success value stored in a failure, as an `Option`.
+ *
+ * @since 4.0.0
+ */
+export const value = <A, E>(self: Result<A, E>): Option.Option<A> => {
+  if (isSuccess(self)) {
+    return Option.some(self.value)
+  }
+  return valueFromNonSuccess(self)
+}
+
+/**
  * Returns the available value from `value`, or evaluates the fallback when no current or previous success exists.
  *
- * @category accessors
  * @since 4.0.0
  */
 export const getOrElse: {
@@ -275,7 +298,6 @@ export const getOrElse: {
 /**
  * Returns the available value from `value`, or throws `NoSuchElementError` when no current or previous success exists.
  *
- * @category accessors
  * @since 4.0.0
  */
 export const getOrThrow = <A, E>(self: Result<A, E>): A =>
@@ -284,25 +306,37 @@ export const getOrThrow = <A, E>(self: Result<A, E>): A =>
 /**
  * Returns the failure cause when the result is a `Failure`, otherwise `None`.
  *
- * @category accessors
  * @since 4.0.0
  */
-export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> =>
-  isFailure(self) ? Option.some(self.cause) : Option.none()
+export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> => {
+  if (isFailure(self)) {
+    return Option.some(self.cause)
+  }
+  return Option.none()
+}
 
 /**
  * Returns the first typed error from a failure cause, or `None` for successes, initial results, defects, and interrupt-only causes.
  *
- * @category accessors
  * @since 4.0.0
  */
-export const error = <A, E>(self: Result<A, E>): Option.Option<E> =>
-  isFailure(self) ? Cause.findErrorOption(self.cause) : Option.none()
+export const error = <A, E>(self: Result<A, E>): Option.Option<E> => {
+  if (isFailure(self)) {
+    return Cause.findErrorOption(self.cause)
+  }
+  return Option.none()
+}
+
+const toExitNonSuccess = <A, E>(self: Initial<A, E> | Failure<A, E>): Exit.Exit<A, E | Cause.NoSuchElementError> => {
+  if (isFailure(self)) {
+    return Exit.failCause(self.cause)
+  }
+  return Exit.fail(new Cause.NoSuchElementError())
+}
 
 /**
  * Converts a result to an `Exit`, succeeding with a success value, failing with a failure cause, or failing with `NoSuchElementError` for `Initial`.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const toExit: {
@@ -314,16 +348,22 @@ export const toExit: {
   if (isSuccess(self)) {
     return Exit.succeed(self.value)
   }
+  return toExitNonSuccess(self)
+}
+
+const mapNonSuccess = <E, A, B>(self: Initial<A, E> | Failure<A, E>, f: (a: A) => B): Result<B, E> => {
   if (isFailure(self)) {
-    return Exit.failCause(self.cause)
+    return failure(self.cause, {
+      previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
+      waiting: self.waiting,
+    })
   }
-  return Exit.fail(new Cause.NoSuchElementError())
+  return initial(self.waiting)
 }
 
 /**
  * Maps the success value of an `Result`, also mapping any previous success stored in a failure while leaving initial results unchanged.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const map: {
@@ -333,14 +373,28 @@ export const map: {
   if (isSuccess(self)) {
     return success(f(self.value), self)
   }
+  return mapNonSuccess(self, f)
+})
+
+const successOption = <A, E>(next: Result<A, E>): Option.Option<Success<A, E>> => {
+  if (isSuccess(next)) {
+    return Option.some(next)
+  }
+  return Option.none()
+}
+
+const flatMapNonSuccess = <E, A, B, E2>(
+  self: Initial<A, E> | Failure<A, E>,
+  f: (a: A, prev: Success<A, E>) => Result<B, E2>,
+): Result<B, E | E2> => {
   if (isFailure(self)) {
-    return failure(self.cause, {
-      previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
+    return failure<B, E | E2>(self.cause, {
+      previousSuccess: Option.flatMap(self.previousSuccess, (s) => successOption(f(s.value, s))),
       waiting: self.waiting,
     })
   }
   return initial(self.waiting)
-})
+}
 
 /**
  * Maps the success value of an `Result` and flattens the result.
@@ -355,7 +409,6 @@ export const map: {
  * Initial results are left unchanged. Failures preserve their cause and remap
  * the stored previous success when the mapping function returns a success.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const flatMap: {
@@ -372,23 +425,29 @@ export const flatMap: {
     if (isSuccess(self)) {
       return f(self.value, self)
     }
-    if (isFailure(self)) {
-      return failure<B, E | E2>(self.cause, {
-        previousSuccess: Option.flatMap(self.previousSuccess, (s) => {
-          const next = f(s.value, s)
-          return isSuccess(next) ? Option.some(next) : Option.none()
-        }),
-        waiting: self.waiting,
-      })
-    }
-    return initial(self.waiting)
+    return flatMapNonSuccess(self, f)
   },
 )
+
+type MatchHandlers<A, E, X, Y, Z> = {
+  readonly onInitial: (_: Initial<A, E>) => X
+  readonly onFailure: (_: Failure<A, E>) => Y
+  readonly onSuccess: (_: Success<A, E>) => Z
+}
+
+const matchNonSuccess = <A, E, X, Y, Z>(
+  self: Initial<A, E> | Failure<A, E>,
+  options: MatchHandlers<A, E, X, Y, Z>,
+): X | Y | Z => {
+  if (isFailure(self)) {
+    return options.onFailure(self)
+  }
+  return options.onInitial(self)
+}
 
 /**
  * Pattern matches an `Result` by calling the handler for `Initial`, `Failure`, or `Success`.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const match: {
@@ -410,16 +469,43 @@ export const match: {
   if (isSuccess(self)) {
     return options.onSuccess(self)
   }
+  return matchNonSuccess(self, options)
+})
+
+type ErrorHandlers<A, E, X, Y> = {
+  readonly onError: (error: E, _: Failure<A, E>) => X
+  readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+}
+
+const matchFailureErrorOrDefect = <A, E, X, Y>(
+  self: Failure<A, E>,
+  options: ErrorHandlers<A, E, X, Y>,
+): X | Y => {
+  const result = Cause.findError(self.cause)
+  if (Either.isFailure(result)) {
+    return options.onDefect(Cause.squash(result.failure), self)
+  }
+  return options.onError(result.success, self)
+}
+
+type MatchWithErrorHandlers<A, E, W, X, Y, Z> = ErrorHandlers<A, E, X, Y> & {
+  readonly onInitial: (_: Initial<A, E>) => W
+  readonly onSuccess: (_: Success<A, E>) => Z
+}
+
+const matchWithErrorNonSuccess = <A, E, W, X, Y, Z>(
+  self: Initial<A, E> | Failure<A, E>,
+  options: MatchWithErrorHandlers<A, E, W, X, Y, Z>,
+): W | X | Y | Z => {
   if (isFailure(self)) {
-    return options.onFailure(self)
+    return matchFailureErrorOrDefect(self, options)
   }
   return options.onInitial(self)
-})
+}
 
 /**
  * Pattern matches a result, handling successes and initials directly while splitting failures into typed errors or squashed non-error causes passed to `onDefect`.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const matchWithError: {
@@ -444,20 +530,37 @@ export const matchWithError: {
   if (isSuccess(self)) {
     return options.onSuccess(self)
   }
-  if (isFailure(self)) {
-    const result = Cause.findError(self.cause)
-    if (Either.isFailure(result)) {
-      return options.onDefect(Cause.squash(result.failure), self)
-    }
-    return options.onError(result.success, self)
-  }
-  return options.onInitial(self)
+  return matchWithErrorNonSuccess(self, options)
 })
+
+type MatchWithWaitingHandlers<A, E, W, X, Y, Z> = ErrorHandlers<A, E, X, Y> & {
+  readonly onWaiting: (_: Result<A, E>) => W
+  readonly onSuccess: (_: Success<A, E>) => Z
+}
+
+const matchWithWaitingNonSuccess = <A, E, W, X, Y, Z>(
+  self: Initial<A, E> | Failure<A, E>,
+  options: MatchWithWaitingHandlers<A, E, W, X, Y, Z>,
+): W | X | Y | Z => {
+  if (isFailure(self)) {
+    return matchFailureErrorOrDefect(self, options)
+  }
+  return options.onWaiting(self)
+}
+
+const matchWithWaitingSettled = <A, E, W, X, Y, Z>(
+  self: Result<A, E>,
+  options: MatchWithWaitingHandlers<A, E, W, X, Y, Z>,
+): W | X | Y | Z => {
+  if (isSuccess(self)) {
+    return options.onSuccess(self)
+  }
+  return matchWithWaitingNonSuccess(self, options)
+}
 
 /**
  * Pattern matches a result by calling `onWaiting` for waiting or initial states, otherwise handling successes and splitting failures into typed errors or squashed non-error causes.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const matchWithWaiting: {
@@ -482,23 +585,12 @@ export const matchWithWaiting: {
   if (self.waiting) {
     return options.onWaiting(self)
   }
-  if (isSuccess(self)) {
-    return options.onSuccess(self)
-  }
-  if (isFailure(self)) {
-    const e = Cause.findError(self.cause)
-    if (Either.isFailure(e)) {
-      return options.onDefect(Cause.squash(e.failure), self)
-    }
-    return options.onError(e.success, self)
-  }
-  return options.onWaiting(self)
+  return matchWithWaitingSettled(self, options)
 })
 
 /**
  * Combines an iterable or record of `Result` and plain values into one `Result`, returning the first non-success result or a success of the collected values marked waiting when any input success is waiting.
  *
- * @category combinators
  * @since 4.0.0
  */
 type AllSuccess<Arg> = [Arg] extends [readonly unknown[]] ? {
@@ -522,40 +614,127 @@ export function all(results: Iterable<unknown> | Record<string, unknown>): Resul
   return allImpl(results)
 }
 
-const allImpl = (results: Iterable<unknown> | Record<string, unknown>): Result<unknown, unknown> => {
-  let waiting = false
-  if (isIterable(results)) {
-    const successes: unknown[] = []
-    for (const result of results) {
-      if (!isResult(result)) {
-        successes.push(result)
-        continue
-      }
-      if (!isSuccess(result)) {
-        return result
-      }
-      successes.push(result.value)
-      if (result.waiting) {
-        waiting = true
-      }
-    }
-    return success(successes, { waiting })
+type CollectDone = {
+  readonly done: true
+  readonly result: Result<unknown, unknown>
+}
+
+type CollectContinue = {
+  readonly done: false
+  readonly waiting: boolean
+  readonly value: unknown
+}
+
+type CollectOutcome = CollectDone | CollectContinue
+
+const collectSuccessItem = (result: Success<unknown, unknown>, waiting: boolean): CollectContinue => {
+  if (result.waiting) {
+    return { done: false, waiting: true, value: result.value }
   }
-  const successes: Record<string, unknown> = {}
+  return { done: false, waiting, value: result.value }
+}
+
+const collectResultItem = (result: Result<unknown, unknown>, waiting: boolean): CollectOutcome => {
+  if (!isSuccess(result)) {
+    return { done: true, result }
+  }
+  return collectSuccessItem(result, waiting)
+}
+
+const collectItem = (result: unknown, waiting: boolean): CollectOutcome => {
+  if (!isResult(result)) {
+    return { done: false, waiting, value: result }
+  }
+  return collectResultItem(result, waiting)
+}
+
+type AllArrayState = {
+  waiting: boolean
+  early: Result<unknown, unknown> | undefined
+  successes: unknown[]
+}
+
+const applyArrayContinue = (state: AllArrayState, outcome: CollectContinue): void => {
+  state.waiting = outcome.waiting
+  state.successes.push(outcome.value)
+}
+
+const applyArrayOutcome = (state: AllArrayState, outcome: CollectOutcome): void => {
+  if (outcome.done) {
+    state.early = outcome.result
+    return
+  }
+  applyArrayContinue(state, outcome)
+}
+
+const collectIntoArray = (state: AllArrayState, result: unknown): void => {
+  if (state.early !== undefined) {
+    return
+  }
+  applyArrayOutcome(state, collectItem(result, state.waiting))
+}
+
+const finishArray = (state: AllArrayState): Result<unknown, unknown> => {
+  if (state.early !== undefined) {
+    return state.early
+  }
+  return success(state.successes, { waiting: state.waiting })
+}
+
+const allIterable = (results: Iterable<unknown>): Result<unknown, unknown> => {
+  const state: AllArrayState = { waiting: false, early: undefined, successes: [] }
+  for (const result of results) {
+    collectIntoArray(state, result)
+  }
+  return finishArray(state)
+}
+
+type AllRecordState = {
+  waiting: boolean
+  early: Result<unknown, unknown> | undefined
+  successes: Record<string, unknown>
+}
+
+const applyRecordContinue = (state: AllRecordState, key: string, outcome: CollectContinue): void => {
+  state.waiting = outcome.waiting
+  state.successes[key] = outcome.value
+}
+
+const applyRecordOutcome = (state: AllRecordState, key: string, outcome: CollectOutcome): void => {
+  if (outcome.done) {
+    state.early = outcome.result
+    return
+  }
+  applyRecordContinue(state, key, outcome)
+}
+
+const collectIntoRecord = (state: AllRecordState, key: string, result: unknown): void => {
+  if (state.early !== undefined) {
+    return
+  }
+  applyRecordOutcome(state, key, collectItem(result, state.waiting))
+}
+
+const finishRecord = (state: AllRecordState): Result<unknown, unknown> => {
+  if (state.early !== undefined) {
+    return state.early
+  }
+  return success(state.successes, { waiting: state.waiting })
+}
+
+const allRecord = (results: Record<string, unknown>): Result<unknown, unknown> => {
+  const state: AllRecordState = { waiting: false, early: undefined, successes: {} }
   for (const [key, result] of Object.entries(results)) {
-    if (!isResult(result)) {
-      successes[key] = result
-      continue
-    }
-    if (!isSuccess(result)) {
-      return result
-    }
-    successes[key] = result.value
-    if (result.waiting) {
-      waiting = true
-    }
+    collectIntoRecord(state, key, result)
   }
-  return success(successes, { waiting })
+  return finishRecord(state)
+}
+
+const allImpl = (results: Iterable<unknown> | Record<string, unknown>): Result<unknown, unknown> => {
+  if (isIterable(results)) {
+    return allIterable(results)
+  }
+  return allRecord(results)
 }
 
 type BuilderFor<A extends Result<unknown, unknown>> = Builder<
@@ -569,7 +748,6 @@ type BuilderFor<A extends Result<unknown, unknown>> = Builder<
 /**
  * Creates a typed builder for rendering an `Result` by handling waiting, initial, success, error, defect, interrupt, and failure cases.
  *
- * @category constructors
  * @since 4.0.0
  */
 export function builder<A extends Result<unknown, unknown>>(self: A): BuilderFor<A>
@@ -589,7 +767,6 @@ export function builder(self: Result<unknown, unknown>): unknown {
 /**
  * Type marker used by `Builder` to track whether defect failures still need to be handled.
  *
- * @category utility types
  * @since 4.0.0
  */
 export interface Defect {
@@ -599,7 +776,6 @@ export interface Defect {
 /**
  * Type marker used by `Builder` to track whether interrupt failures still need to be handled.
  *
- * @category utility types
  * @since 4.0.0
  */
 export interface Interrupt {
@@ -609,7 +785,6 @@ export interface Interrupt {
 /**
  * Fluent renderer for `Result` values that tracks unhandled cases at the type level and exposes `exhaustive` only after all possible cases are handled.
  *
- * @category models
  * @since 4.0.0
  */
 export type Builder<Out, A, E, I, F> =
@@ -668,6 +843,35 @@ export type Builder<Out, A, E, I, F> =
     }
     : unknown)
 
+const errorMatchesTag = (tag: string | readonly string[], e: unknown): boolean => {
+  if (typeof tag === 'string') {
+    return isTagged(e, tag)
+  }
+  return tag.some((t) => isTagged(e, t))
+}
+
+const defectOption = <A, E, B>(
+  result: Failure<A, E>,
+  f: (defect: unknown, result: Failure<A, E>) => B,
+): Option.Option<B> => {
+  const defect = Cause.findDefect(result.cause)
+  if (Either.isFailure(defect)) {
+    return Option.none()
+  }
+  return Option.some(f(defect.success, result))
+}
+
+const interruptOption = <A, E, B>(
+  result: Failure<A, E>,
+  f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B,
+): Option.Option<B> => {
+  const interruptors = Cause.filterInterruptors(result.cause)
+  if (Either.isFailure(interruptors)) {
+    return Option.none()
+  }
+  return Option.some(f(interruptors.success, result))
+}
+
 class BuilderImpl<Out, A, E> {
   constructor(result: Result<A, E>) {
     this.result = result
@@ -687,13 +891,25 @@ class BuilderImpl<Out, A, E> {
     refinement: Predicate<Result<A, E>>,
     f: (result: Result<A, E>) => Option.Option<C>,
   ): BuilderImpl<Out | C, A, E> {
-    if (Option.isNone(this.output) && refinement(this.result)) {
-      const b = f(this.result)
-      if (Option.isSome(b)) {
-        this.output = b
-      }
+    if (Option.isNone(this.output)) {
+      this.tryWhen(refinement, f)
     }
     return this
+  }
+
+  private tryWhen<C>(
+    refinement: Predicate<Result<A, E>>,
+    f: (result: Result<A, E>) => Option.Option<C>,
+  ): void {
+    if (refinement(this.result)) {
+      this.captureWhen(f(this.result))
+    }
+  }
+
+  private captureWhen(value: Option.Option<unknown>): void {
+    if (Option.isSome(value)) {
+      this.output = value
+    }
   }
 
   pipe() {
@@ -740,23 +956,17 @@ class BuilderImpl<Out, A, E> {
     f: (error: E, result: Failure<A, E>) => B,
   ): BuilderImpl<Out | B, A, E> {
     return this.onErrorIf(
-      (e) => typeof tag === 'string' ? isTagged(e, tag) : tag.some((t) => isTagged(e, t)),
+      (e) => errorMatchesTag(tag, e),
       f,
     )
   }
 
   onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
-    return this.when(isFailure, (result) => {
-      const defect = Cause.findDefect(result.cause)
-      return Either.isFailure(defect) ? Option.none() : Option.some(f(defect.success, result))
-    })
+    return this.when(isFailure, (result) => defectOption(result, f))
   }
 
   onInterrupt<B>(f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
-    return this.when(isFailure, (result) => {
-      const interruptors = Cause.filterInterruptors(result.cause)
-      return Either.isFailure(interruptors) ? Option.none() : Option.some(f(interruptors.success, result))
-    })
+    return this.when(isFailure, (result) => interruptOption(result, f))
   }
 
   orElse<B>(orElse: LazyArg<B>): Out | B
@@ -773,7 +983,12 @@ class BuilderImpl<Out, A, E> {
   render(): unknown {
     if (Option.isSome(this.output)) {
       return this.output.value
-    } else if (isFailure(this.result)) {
+    }
+    return this.renderMissing()
+  }
+
+  private renderMissing(): unknown {
+    if (isFailure(this.result)) {
       throw Cause.squash(this.result.cause)
     }
     return null

@@ -7,13 +7,12 @@ import * as SchemaIssue from 'effect/SchemaIssue'
 import * as SchemaParser from 'effect/SchemaParser'
 import * as SchemaTransformation from 'effect/SchemaTransformation'
 import { failure, initial, isResult, success } from './ResultValues.js'
-import type { Result } from './ResultValues.js'
+import type { Failure, Result, Success } from './ResultValues.js'
 
 /**
  * Schema interface for `Result` values, retaining the schemas used for
  * success values and failure errors.
  *
- * @category schemas
  * @since 4.0.0
  */
 export interface Schema<
@@ -30,10 +29,22 @@ export interface Schema<
   readonly error: Error | typeof Schema_.Never
 }
 
+const schemaOrNever = <A extends Schema_.Constraint>(
+  schema: A | undefined,
+): A | typeof Schema_.Never => {
+  if (schema === undefined) {
+    return Schema_.Never
+  }
+  return schema
+}
+
+const isSuccessResult = <A, E>(result: Result<A, E>): result is Success<A, E> => hasProperty(result, 'value')
+
+const isFailureResult = <A, E>(result: Result<A, E>): result is Failure<A, E> => hasProperty(result, 'cause')
+
 /**
  * Creates a schema for `Result` values using optional schemas for success values and failure errors.
  *
- * @category schemas
  * @since 4.0.0
  */
 export const Schema = <
@@ -45,22 +56,16 @@ export const Schema = <
     readonly error?: E | undefined
   },
 ): Schema<A, E> => {
-  const success_ = options.success ?? Schema_.Never
-  const error_ = options.error ?? Schema_.Never
+  const success_ = schemaOrNever(options.success)
+  const error_ = schemaOrNever(options.error)
   const schema = Schema_.declareConstructor<
     Result<(A | typeof Schema_.Never)['Type'], (E | typeof Schema_.Never)['Type']>,
     Result<(A | typeof Schema_.Never)['Encoded'], (E | typeof Schema_.Never)['Encoded']>
   >()(
     [success_, Schema_.Cause(error_, Schema_.Defect())],
     ([value, cause]) => (input, ast, options) => {
-      if (!isResult(input)) {
-        return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
-      }
-      if (!hasProperty(input, 'value') && !hasProperty(input, 'cause')) {
-        return Effect.succeed(initial(input.waiting))
-      }
-      if (hasProperty(input, 'cause')) {
-        const prevSuccessEffect = input.previousSuccess.pipe(
+      const parseFailureKnown = (failed: Failure<unknown, unknown>) => {
+        const prevSuccessEffect = failed.previousSuccess.pipe(
           Option.map((ps) =>
             Effect.mapBothEager(
               SchemaParser.decodeUnknownEffect(value)(ps.value, options),
@@ -81,7 +86,7 @@ export const Schema = <
           Option.getOrElse(() => Effect.succeedNone),
         )
         const causeEffect = Effect.mapErrorEager(
-          SchemaParser.decodeUnknownEffect(cause)(input.cause, options),
+          SchemaParser.decodeUnknownEffect(cause)(failed.cause, options),
           (issue) => new SchemaIssue.Composite(ast, [new SchemaIssue.Pointer(['cause'], issue)], input, options),
         )
         return Effect.flatMapEager(
@@ -90,18 +95,36 @@ export const Schema = <
             Effect.mapEager(causeEffect, (cause) =>
               failure(cause, {
                 previousSuccess,
-                waiting: input.waiting,
+                waiting: failed.waiting,
               })),
         )
       }
-      return Effect.mapBothEager(
-        SchemaParser.decodeUnknownEffect(value)(input.value, options),
-        {
-          onSuccess: (value) => success(value, input),
-          onFailure: (issue) =>
-            new SchemaIssue.Composite(ast, [new SchemaIssue.Pointer(['value'], issue)], input, options),
-        },
-      )
+
+      const parseSuccessOrInitial = (known: Result<unknown, unknown>) => {
+        if (isSuccessResult(known)) {
+          return Effect.mapBothEager(
+            SchemaParser.decodeUnknownEffect(value)(known.value, options),
+            {
+              onSuccess: (value) => success(value, known),
+              onFailure: (issue) =>
+                new SchemaIssue.Composite(ast, [new SchemaIssue.Pointer(['value'], issue)], input, options),
+            },
+          )
+        }
+        return Effect.succeed(initial(known.waiting))
+      }
+
+      const parseKnown = (known: Result<unknown, unknown>) => {
+        if (isFailureResult(known)) {
+          return parseFailureKnown(known)
+        }
+        return parseSuccessOrInitial(known)
+      }
+
+      if (!isResult(input)) {
+        return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
+      }
+      return parseKnown(input)
     },
     {
       expected: 'Result',
@@ -111,49 +134,58 @@ export const Schema = <
           waiting: Schema_.Boolean,
           timestamp: Schema_.Finite,
         })
+        const encodedSchema = Schema_.Union([
+          Schema_.TaggedStruct('Initial', { waiting: Schema_.Boolean }),
+          SuccessSchema,
+          Schema_.TaggedStruct('Failure', {
+            cause,
+            previousSuccess: Schema_.Option(SuccessSchema),
+            waiting: Schema_.Boolean,
+          }),
+        ])
         return Schema_.link<
           Result<(A | typeof Schema_.Never)['Encoded'], (E | typeof Schema_.Never)['Encoded']>
         >()(
-          Schema_.Union([
-            Schema_.TaggedStruct('Initial', { waiting: Schema_.Boolean }),
-            SuccessSchema,
-            Schema_.TaggedStruct('Failure', {
-              cause,
-              previousSuccess: Schema_.Option(SuccessSchema),
-              waiting: Schema_.Boolean,
-            }),
-          ]),
+          encodedSchema,
           SchemaTransformation.transform({
             decode: (encoded) => {
+              function decodeRest(rest: typeof encoded) {
+                if (hasProperty(rest, 'cause')) {
+                  return failure(rest.cause, {
+                    previousSuccess: Option.map(rest.previousSuccess, (ps) => success(ps.value, ps)),
+                    waiting: rest.waiting,
+                  })
+                }
+                return initial<(A | typeof Schema_.Never)['Encoded'], (E | typeof Schema_.Never)['Encoded']>(
+                  rest.waiting,
+                )
+              }
               if (hasProperty(encoded, 'value')) {
                 return success(encoded.value, { waiting: encoded.waiting, timestamp: encoded.timestamp })
               }
-              if (hasProperty(encoded, 'cause')) {
-                return failure(encoded.cause, {
-                  previousSuccess: Option.map(encoded.previousSuccess, (ps) => success(ps.value, ps)),
-                  waiting: encoded.waiting,
-                })
-              }
-              return initial(encoded.waiting)
+              return decodeRest(encoded)
             },
-            encode(result) {
+            encode(result): (typeof encodedSchema)['Type'] {
+              function encodeRest(rest: typeof result): (typeof encodedSchema)['Type'] {
+                if (hasProperty(rest, 'cause')) {
+                  return {
+                    _tag: 'Failure',
+                    cause: rest.cause,
+                    previousSuccess: rest.previousSuccess,
+                    waiting: rest.waiting,
+                  }
+                }
+                return { _tag: 'Initial', waiting: rest.waiting }
+              }
               if (hasProperty(result, 'value')) {
                 return {
-                  _tag: 'Success' as const,
+                  _tag: 'Success',
                   value: result.value,
                   waiting: result.waiting,
                   timestamp: result.timestamp,
                 }
               }
-              if (hasProperty(result, 'cause')) {
-                return {
-                  _tag: 'Failure' as const,
-                  cause: result.cause,
-                  previousSuccess: result.previousSuccess,
-                  waiting: result.waiting,
-                }
-              }
-              return { _tag: 'Initial' as const, waiting: result.waiting }
+              return encodeRest(result)
             },
           }),
         )
@@ -165,13 +197,16 @@ export const Schema = <
       // value.
       toArbitrary: () => (fc) => fc.constant(initial(false)),
       toFormatter: ([value, cause]) => (t) => {
+        function formatRest(rest: typeof t) {
+          if (hasProperty(rest, 'cause')) {
+            return `Result.Failure(${cause(rest.cause)}, ${rest.waiting})`
+          }
+          return `Result.Initial(${rest.waiting})`
+        }
         if (hasProperty(t, 'value')) {
           return `Result.Success(${value(t.value)}, ${t.waiting}, ${t.timestamp})`
         }
-        if (hasProperty(t, 'cause')) {
-          return `Result.Failure(${cause(t.cause)}, ${t.waiting})`
-        }
-        return `Result.Initial(${t.waiting})`
+        return formatRest(t)
       },
     },
   )

@@ -6,6 +6,8 @@ import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, Subscr
 import { KeyValueStore } from 'effect/unstable/persistence'
 import { expect, vi } from 'vitest'
 
+const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+
 const Feature = makeFeature({ it, layer })
 
 Feature('Deriving values from other values on a page')
@@ -379,7 +381,7 @@ Feature('Deriving values from other values on a page')
             const remembered = Atom.kvs({
               runtime,
               key: 'count',
-              schema: Schema.Number,
+              schema: Schema.Finite,
               defaultValue: () => 0,
             })
             const page = Registry.make()
@@ -413,7 +415,7 @@ Feature('Deriving values from other values on a page')
         Given('a value remembered in the page address')('ctx', () =>
           Effect.sync(() => {
             const plain = Atom.searchParam('q')
-            const decoded = Atom.searchParam('n', { schema: Schema.NumberFromString })
+            const decoded = Atom.searchParam('n', { schema: Schema.FiniteFromString })
             const page = Registry.make()
             return { plain, decoded, page }
           })),
@@ -1054,11 +1056,11 @@ Feature('Deriving values from other values on a page')
           s,
         ) => {
           expect(s.readings.viewBefore).toBe(0)
-          expect(Result.isSuccess(s.readings.effectBefore as Result.Result<number, unknown>)).toBe(true)
-          expect(Result.isSuccess(s.readings.functionBefore as Result.Result<number, unknown>)).toBe(true)
-          expect(Result.isFailure(s.readings.brokenBefore as Result.Result<unknown, unknown>)).toBe(true)
+          expect(Result.isResult(s.readings.effectBefore) && Result.isSuccess(s.readings.effectBefore)).toBe(true)
+          expect(Result.isResult(s.readings.functionBefore) && Result.isSuccess(s.readings.functionBefore)).toBe(true)
+          expect(Result.isResult(s.readings.brokenBefore) && Result.isFailure(s.readings.brokenBefore)).toBe(true)
           expect(s.readings.viewWritten).toBe(5)
-          expect(Result.isSuccess(s.readings.effectWritten as Result.Result<number, unknown>)).toBe(true)
+          expect(Result.isResult(s.readings.effectWritten) && Result.isSuccess(s.readings.effectWritten)).toBe(true)
 
           expect(s.readings.viewChanged).toBe(9)
         }),
@@ -1215,7 +1217,7 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a saved value and a fresh page seeded with it')('ctx', () =>
           Effect.sync(() => {
-            const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Number }))
+            const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
             const page = Registry.make({ initialValues: [Atom.initialValue(count, 10)] })
             return { page, count }
           })),
@@ -1237,7 +1239,7 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a page already showing a saved value')('ctx', () =>
           Effect.sync(() => {
-            const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Number }))
+            const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
             const page = Registry.make()
             return { page, count }
           })),
@@ -1259,7 +1261,7 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a saved value arriving before the page is asked about it')('ctx', () =>
           Effect.sync(() => {
-            const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Number }))
+            const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
             const page = Registry.make()
             page.setSerializable('count', 42)
             return { page, count }
@@ -1280,7 +1282,7 @@ Feature('Deriving values from other values on a page')
               vi.useFakeTimers()
               const base = Atom.make(0)
               const derived = base.pipe(Atom.withRefresh(1000))
-              const saved = derived.pipe(Atom.serializable({ key: 'derived', schema: Schema.Number }))
+              const saved = derived.pipe(Atom.serializable({ key: 'derived', schema: Schema.Finite }))
               const page = Registry.make()
               const unmount = page.mount(saved)
               return { page, saved, unmount }
@@ -1312,7 +1314,7 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const named = Atom.make(0).pipe(
               Atom.withLabel('my-count'),
-              Atom.serializable({ key: 'named', schema: Schema.Number }),
+              Atom.serializable({ key: 'named', schema: Schema.Finite }),
             )
             const page = Registry.make()
             page.mount(named)
@@ -1635,7 +1637,7 @@ Feature('Deriving values from other values on a page')
         Given('a page remembering a value in a store that answers only after a signal')('ctx', () =>
           Effect.sync(() => {
             const storage = new Map<string, string>()
-            storage.set('known-key', JSON.stringify(42))
+            storage.set('known-key', jsonString(42))
             const gate = Deferred.makeUnsafe<void>()
             const DelayedKVS = Layer.succeed(
               KeyValueStore.KeyValueStore,
@@ -1657,7 +1659,7 @@ Feature('Deriving values from other values on a page')
             const remembered = Atom.kvs({
               runtime: kvsRuntime,
               key: 'known-key',
-              schema: Schema.Number,
+              schema: Schema.Finite,
               defaultValue: () => 0,
             })
             const page = Registry.make()
@@ -1682,7 +1684,7 @@ Feature('Deriving values from other values on a page')
         Then('the fallback showed while loading, then the stored value appeared and the store was untouched')((s) => {
           expect(s.readings.whileLoading).toBe(0)
           expect(s.readings.loaded).toBe(42)
-          expect(s.readings.stored).toBe(JSON.stringify(42))
+          expect(s.readings.stored).toBe(jsonString(42))
         }),
       ),
     )
@@ -1692,7 +1694,7 @@ Feature('Deriving values from other values on a page')
         Given('a page remembering a value in a store that answers only after a signal')('ctx', () =>
           Effect.sync(() => {
             const storage = new Map<string, string>()
-            storage.set('known-key', JSON.stringify(42))
+            storage.set('known-key', jsonString(42))
             const gate = Deferred.makeUnsafe<void>()
             const DelayedKVS = Layer.succeed(
               KeyValueStore.KeyValueStore,
@@ -1717,7 +1719,7 @@ Feature('Deriving values from other values on a page')
             const remembered = Atom.kvs({
               runtime: kvsRuntime,
               key: 'known-key',
-              schema: Schema.Number,
+              schema: Schema.Finite,
               defaultValue: () => 0,
             })
             const page = Registry.make()
@@ -1769,7 +1771,7 @@ Feature('Deriving values from other values on a page')
                 mode: 'async',
                 runtime: kvsRuntime,
                 key: 'fresh-key',
-                schema: Schema.Number,
+                schema: Schema.Finite,
                 defaultValue: () => 0,
               })
               const page = Registry.make()
@@ -1798,7 +1800,7 @@ Feature('Deriving values from other values on a page')
           expect(Result.isInitial(s.readings.whileLoading)).toBe(true)
           expect(Result.isSuccess(s.readings.loaded) && s.readings.loaded.value === 0).toBe(true)
           expect(Result.isSuccess(s.readings.afterWrite) && s.readings.afterWrite.value === 99).toBe(true)
-          expect(s.readings.stored).toBe(JSON.stringify(99))
+          expect(s.readings.stored).toBe(jsonString(99))
         }),
       ),
     )

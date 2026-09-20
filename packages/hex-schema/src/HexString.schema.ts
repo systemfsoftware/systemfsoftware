@@ -1,7 +1,11 @@
 import { Schema as S, SchemaTransformation } from 'effect'
 import { StrictHex } from './StrictHex.schema.js'
 
-const toStrictHex = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2) : hex).toLowerCase()
+const strip0x = (hex: string): string => {
+  if (hex.startsWith('0x')) return hex.slice(2)
+  return hex
+}
+const toStrictHex = (hex: string): string => strip0x(hex).toLowerCase()
 
 export const HexString = S.String.pipe(
   S.annotate({

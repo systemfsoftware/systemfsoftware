@@ -207,6 +207,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -259,6 +262,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -343,6 +349,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -392,6 +401,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.58.7
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -467,6 +479,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -513,6 +528,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -599,6 +617,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -644,6 +665,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -802,6 +826,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -878,6 +905,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -923,6 +953,9 @@ importers:
 
   packages/oxlint-plugin/all:
     dependencies:
+      '@effect/tsgo':
+        specifier: ^0.36.5
+        version: 0.36.5
       '@systemfsoftware/oxlint-plugin':
         specifier: workspace:^
         version: link:../oxlint-plugin
@@ -1832,6 +1865,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -1890,6 +1926,9 @@ importers:
       '@storybook/react-vite':
         specifier: 'catalog:'
         version: 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0

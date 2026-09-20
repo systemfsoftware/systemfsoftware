@@ -4,4 +4,9 @@ import { FastCheck as fc } from 'effect/testing'
 
 addEqualityTesters()
 
-fc.configureGlobal({ numRuns: isCI ? 1000 : 100 })
+const numRuns = 100
+if (isCI) {
+  fc.configureGlobal({ numRuns: 1000 })
+} else {
+  fc.configureGlobal({ numRuns })
+}

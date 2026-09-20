@@ -1,7 +1,8 @@
+import { isCI } from '@systemfsoftware/vitest-config'
 import { FastCheck as fc } from 'effect/testing'
 
-const isCi = typeof process !== 'undefined' && process.env['CI'] === 'true'
-
-const numRuns = isCi ? 1000 : 100
-
-fc.configureGlobal({ numRuns })
+if (isCI) {
+  fc.configureGlobal({ numRuns: 1000 })
+} else {
+  fc.configureGlobal({ numRuns: 100 })
+}

@@ -28,7 +28,6 @@ const now = () => Effect.runSync(Clock.currentTimeMillis)
 /**
  * Type-level identifier used to recognize `Result` values.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export type TypeId = '~effect-atom/atom/Result'
@@ -36,7 +35,6 @@ export type TypeId = '~effect-atom/atom/Result'
 /**
  * Runtime identifier attached to `Result` values and used by `isResult`.
  *
- * @category type IDs
  * @since 4.0.0
  */
 export const TypeId: TypeId = '~effect-atom/atom/Result'
@@ -53,7 +51,6 @@ export declare namespace Result {
    * Common prototype fields implemented by every `Result` variant, including
    * pipeability, the type marker, phantom type members, and the `waiting` flag.
    *
-   * @category models
    * @since 4.0.0
    */
   export interface Proto<A, E> extends Pipeable {
@@ -67,7 +64,6 @@ export declare namespace Result {
   /**
    * Extracts the success value type from an `Result`.
    *
-   * @category utility types
    * @since 4.0.0
    */
   export type Success<R> = R extends Result<infer A, infer _> ? A : never
@@ -75,7 +71,6 @@ export declare namespace Result {
   /**
    * Extracts the failure error type from an `Result`.
    *
-   * @category utility types
    * @since 4.0.0
    */
   export type Failure<R> = R extends Result<infer _, infer E> ? E : never
@@ -85,7 +80,6 @@ export declare namespace Result {
  * Represents the state of an asynchronous value as `Initial`, `Success`, or
  * `Failure`, with a `waiting` flag for in-flight refreshes.
  *
- * @category models
  * @since 4.0.0
  */
 export type Result<A, E = never> = Initial<A, E> | Success<A, E> | Failure<A, E>
@@ -152,7 +146,6 @@ export type InitialTag = typeof InitialTag
 /**
  * Initial `Result` state before a success value or failure cause is available.
  *
- * @category models
  * @since 4.0.0
  */
 export interface Initial<A, E = never> extends Result.Proto<A, E>, InitialTag {}
@@ -164,7 +157,6 @@ export type SuccessTag = typeof SuccessTag
  * Successful `Result` containing the current value, its timestamp, and the
  * shared waiting flag.
  *
- * @category models
  * @since 4.0.0
  */
 export interface Success<A, E = never> extends Result.Proto<A, E>, SuccessTag {
@@ -179,7 +171,6 @@ export type FailureTag = typeof FailureTag
  * Failed `Result` containing a failure cause and the latest previous success
  * when one is available.
  *
- * @category models
  * @since 4.0.0
  */
 export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
@@ -190,7 +181,6 @@ export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
 /**
  * Returns `true` when a value is an `Result`.
  *
- * @category guards
  * @since 4.0.0
  */
 export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProperty(u, TypeId)
@@ -198,7 +188,6 @@ export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProper
 /**
  * Creates an `Initial` result, optionally marking it as waiting.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const initial = <A = never, E = never>(waiting = false): Initial<A, E> => {
@@ -210,11 +199,68 @@ export const initial = <A = never, E = never>(waiting = false): Initial<A, E> =>
   return result
 }
 
+type WaitingOptions = {
+  readonly waiting?: boolean | undefined
+}
+
+type TimestampOptions = {
+  readonly timestamp?: number | undefined
+}
+
+type PreviousSuccessOptions<A, E> = {
+  readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+}
+
+const waitingFromDefined = (options: WaitingOptions): boolean => {
+  if (options.waiting === undefined) {
+    return false
+  }
+  return options.waiting
+}
+
+const waitingOption = (options: WaitingOptions | undefined): boolean => {
+  if (options === undefined) {
+    return false
+  }
+  return waitingFromDefined(options)
+}
+
+const timestampFromDefined = (options: TimestampOptions): number => {
+  if (options.timestamp === undefined) {
+    return now()
+  }
+  return options.timestamp
+}
+
+const timestampOption = (options: TimestampOptions | undefined): number => {
+  if (options === undefined) {
+    return now()
+  }
+  return timestampFromDefined(options)
+}
+
+const previousSuccessFromDefined = <A, E>(
+  options: PreviousSuccessOptions<A, E>,
+): Option.Option<Success<A, E>> => {
+  if (options.previousSuccess === undefined) {
+    return Option.none()
+  }
+  return options.previousSuccess
+}
+
+const previousSuccessOption = <A, E>(
+  options: PreviousSuccessOptions<A, E> | undefined,
+): Option.Option<Success<A, E>> => {
+  if (options === undefined) {
+    return Option.none()
+  }
+  return previousSuccessFromDefined(options)
+}
+
 /**
  * Creates a `Success` result with a value and optional `waiting` flag or
  * timestamp override.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const success = <A, E = never>(value: A, options?: {
@@ -225,8 +271,8 @@ export const success = <A, E = never>(value: A, options?: {
     ...ResultProto,
     ...SuccessTag,
     value,
-    waiting: options?.waiting ?? false,
-    timestamp: options?.timestamp ?? now(),
+    waiting: waitingOption(options),
+    timestamp: timestampOption(options),
   }
   return result
 }
@@ -235,7 +281,6 @@ export const success = <A, E = never>(value: A, options?: {
  * Creates a `Failure` result from a `Cause`, optionally preserving a previous
  * success and marking the result as waiting.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const failure = <A, E = never>(
@@ -249,10 +294,8 @@ export const failure = <A, E = never>(
     ...ResultProto,
     ...FailureTag,
     cause,
-    ...(options?.previousSuccess === undefined
-      ? { previousSuccess: Option.none() }
-      : { previousSuccess: options.previousSuccess }),
-    waiting: options?.waiting ?? false,
+    previousSuccess: previousSuccessOption(options),
+    waiting: waitingOption(options),
   }
   return result
 }

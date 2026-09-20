@@ -4,9 +4,11 @@ declare const Buffer: {
   from(data: Uint8Array): Uint8Array
 }
 
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message)
+function assert(condition: boolean, message: string): asserts condition {
+  if (condition) return
+  throw new Error(message)
 }
+
 export class Package {
   #files: Record<string, string | Uint8Array> = {}
   readonly packageName: string
@@ -34,6 +36,10 @@ export class Package {
     if (file === undefined) {
       return undefined
     }
+    return this.decodeStoredFile(path, file)
+  }
+
+  private decodeStoredFile(path: string, file: string | Uint8Array): string {
     if (typeof file === 'string') {
       return file
     }
@@ -55,20 +61,12 @@ export class Package {
   }
 
   directoryExists(path: string): boolean {
-    path = ensureTrailingDirectorySeparator(path)
-    for (const file in this.#files) {
-      if (file.startsWith(path)) {
-        return true
-      }
-    }
-    return false
+    const prefix = ensureTrailingDirectorySeparator(path)
+    return Object.keys(this.#files).some((file) => file.startsWith(prefix))
   }
 
-  listFiles(directory = '/'): string[] {
-    directory = ensureTrailingDirectorySeparator(directory)
-    return directory === '/'
-      ? Object.keys(this.#files)
-      : Object.keys(this.#files).filter((f) => f.startsWith(directory))
+  listFiles(directory?: string): string[] {
+    return listPackageFiles(this.#files, directory)
   }
 
   /**
@@ -81,6 +79,86 @@ export class Package {
     const files = { ...this.#files, ...other.#files }
     return new Package(files, this.packageName, this.packageVersion, this.resolvedUrl)
   }
+}
+
+function directoryWithRoot(directory: string | undefined): string {
+  if (directory === undefined) return '/'
+  return directory
+}
+
+function listFilesWithPrefix(
+  files: Record<string, string | Uint8Array>,
+  prefix: string,
+): string[] {
+  if (prefix === '/') return Object.keys(files)
+  return Object.keys(files).filter((f) => f.startsWith(prefix))
+}
+
+function listPackageFiles(
+  files: Record<string, string | Uint8Array>,
+  directory: string | undefined,
+): string[] {
+  return listFilesWithPrefix(files, ensureTrailingDirectorySeparator(directoryWithRoot(directory)))
+}
+
+function defaultPackageName(packageName: string | undefined): string {
+  if (packageName === undefined) return 'test'
+  return packageName
+}
+
+function defaultPackageVersion(packageVersion: string | undefined): string {
+  if (packageVersion === undefined) return '1.0.0'
+  return packageVersion
+}
+
+function collectPackageFiles(
+  files: Record<string, string | Uint8Array>,
+  packageName: string,
+): Record<string, string | Uint8Array> {
+  const prefix = `/node_modules/${packageName}/`
+  const packageFiles: Record<string, string | Uint8Array> = {}
+  for (const [name, content] of Object.entries(files)) {
+    assignPackageFile(packageFiles, prefix, packageName, name, content)
+  }
+  return packageFiles
+}
+
+function collectDirectoryJSON(
+  files: Record<string, string | Uint8Array>,
+  packageName: string,
+): DirectoryJSON {
+  const prefix = `/node_modules/${packageName}/`
+  const out: DirectoryJSON = {}
+  for (const [name, content] of Object.entries(files)) {
+    out[directoryKey(name, packageName, prefix)] = directoryValue(content)
+  }
+  return out
+}
+
+function assignPackageFile(
+  packageFiles: Record<string, string | Uint8Array>,
+  prefix: string,
+  packageName: string,
+  name: string,
+  content: string | Uint8Array,
+): void {
+  if (!name.startsWith('/')) {
+    packageFiles[posixJoin(`/node_modules/${packageName}`, name)] = content
+    return
+  }
+  assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
+  packageFiles[name] = content
+}
+
+function packageWithJson(
+  packageFiles: Record<string, string | Uint8Array>,
+  packageName: string,
+  packageVersion: string,
+  prefix: string,
+): Package {
+  const pkg = new Package(packageFiles, packageName, packageVersion)
+  assert(pkg.fileExists(`${prefix}package.json`), 'Must contain package.json')
+  return pkg
 }
 
 /**
@@ -100,26 +178,34 @@ export class Package {
  */
 export function createPackage(
   files: Record<string, string | Uint8Array>,
-  packageName = 'test',
-  packageVersion = '1.0.0',
+  packageName?: string,
+  packageVersion?: string,
 ): Package {
-  const prefix = `/node_modules/${packageName}/`
-  const packageFiles: Record<string, string | Uint8Array> = {}
-  for (const [name, content] of Object.entries(files)) {
-    if (name.startsWith('/')) {
-      assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
-      packageFiles[name] = content
-    } else {
-      packageFiles[posixJoin(`/node_modules/${packageName}`, name)] = content
-    }
-  }
-
-  const pkg = new Package(packageFiles, packageName, packageVersion)
-  assert(pkg.fileExists(`${prefix}package.json`), 'Must contain package.json')
-  return pkg
+  const name = defaultPackageName(packageName)
+  return packageWithJson(
+    collectPackageFiles(files, name),
+    name,
+    defaultPackageVersion(packageVersion),
+    `/node_modules/${name}/`,
+  )
 }
 
 export type DirectoryJSON = Record<string, string | Uint8Array | null>
+
+function directoryKey(name: string, packageName: string, prefix: string): string {
+  if (!name.startsWith('/')) {
+    return posixJoin(`/node_modules/${packageName}`, name)
+  }
+  assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
+  return name
+}
+
+function directoryValue(content: string | Uint8Array): string | Uint8Array {
+  if (typeof content === 'string') return content
+  // memfs `fromJSON` only treats `string | Buffer` as file content;
+  // a plain Uint8Array would be misinterpreted as a directory.
+  return Buffer.from(content)
+}
 
 /**
  * Project an authored package tree to a memfs {@link DirectoryJSON} that
@@ -136,24 +222,9 @@ export type DirectoryJSON = Record<string, string | Uint8Array | null>
  */
 export function toDirectoryJSON(
   files: Record<string, string | Uint8Array>,
-  packageName = 'test',
+  packageName?: string,
 ): DirectoryJSON {
-  const prefix = `/node_modules/${packageName}/`
-  const out: DirectoryJSON = {}
-  for (const [name, content] of Object.entries(files)) {
-    const key = name.startsWith('/') ? name : posixJoin(`/node_modules/${packageName}`, name)
-    if (name.startsWith('/')) {
-      assert(name.startsWith(prefix), `Unexpected absolute fixture path: ${name}`)
-    }
-    if (typeof content === 'string') {
-      out[key] = content
-    } else {
-      // memfs `fromJSON` only treats `string | Buffer` as file content;
-      // a plain Uint8Array would be misinterpreted as a directory.
-      out[key] = Buffer.from(content)
-    }
-  }
-  return out
+  return collectDirectoryJSON(files, defaultPackageName(packageName))
 }
 
 export function createPackageFromTarballData(tarball: Uint8Array): Package {

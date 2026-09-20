@@ -14,16 +14,21 @@ import { defineConfig } from 'oxlint'
 export default defineConfig({
   extends: [base],
 
-  rules: {
-    // A condition that cannot change the outcome is a dead branch: the mutation
-    // gate reports it as a survivor that no test can kill.
-    'typescript/no-unnecessary-condition': 'error',
+  overrides: [
+    {
+      files: ['**/src/**', '**/*.test.ts'],
+      rules: {
+        // A condition that cannot change the outcome is a dead branch: the mutation
+        // gate reports it as a survivor that no test can kill.
+        'typescript/no-unnecessary-condition': 'error',
 
-    // `if (hook.async)` on `boolean | undefined` reads the same whether the
-    // field is absent or false — the exact shape of the bugs fixed today.
-    'typescript/strict-boolean-expressions': 'error',
+        // `if (hook.async)` on `boolean | undefined` reads the same whether the
+        // field is absent or false — the exact shape of the bugs fixed today.
+        'typescript/strict-boolean-expressions': 'error',
 
-    // `!` asserts away precisely the null the type system is warning about.
-    'typescript/no-non-null-assertion': 'error',
-  },
+        // `!` asserts away precisely the null the type system is warning about.
+        'typescript/no-non-null-assertion': 'error',
+      },
+    },
+  ],
 })

@@ -77,8 +77,8 @@ export namespace t {
 
 // Warnings were encountered during analysis:
 //
-// dist/AtomRpc.d.ts:64:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomRpc.d.ts
-// dist/AtomRpc.d.ts:70:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomRpc.d.ts
+// dist/AtomRpc.d.ts:62:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomRpc.d.ts
+// dist/AtomRpc.d.ts:68:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomRpc.d.ts
 
 // (No @packageDocumentation comment for this package)
 

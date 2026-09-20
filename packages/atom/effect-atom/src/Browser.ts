@@ -27,7 +27,6 @@ import { readable, transform, writable } from './AtomCore.js'
  * It listens for `visibilitychange` events on `window` and removes the listener
  * when the atom is disposed.
  *
- * @category constants
  * @since 4.0.0
  */
 export const windowFocusSignal: Atom<number> = readable((get) => {
@@ -53,7 +52,6 @@ export const windowFocusSignal: Atom<number> = readable((get) => {
  * The derived atom also subscribes to the source atom so normal source updates are
  * forwarded to its own value.
  *
- * @category constructors
  * @since 4.0.0
  */
 export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
@@ -79,7 +77,6 @@ export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
  * This helper is browser-only because `windowFocusSignal` depends on `window` and
  * `document.visibilityState`.
  *
- * @category combinators
  * @since 4.0.0
  */
 export const refreshOnWindowFocus: <A extends Atom<unknown>>(self: A) => WithoutSerializable<A> = makeRefreshOnSignal(
@@ -97,7 +94,6 @@ export const refreshOnWindowFocus: <A extends Atom<unknown>>(self: A) => Without
  *
  * If you pass a schema, it has to be synchronous and have no context.
  *
- * @category constructors
  * @since 4.0.0
  */
 export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = never>(
@@ -114,64 +110,186 @@ export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = 
 ): Writable<string | Option.Option<S['Type']> | S['Type'], string | Option.Option<S['Type']>> {
   type R = string | Option.Option<S['Type']> | S['Type']
   type W = string | Option.Option<S['Type']>
-  const decode = options?.schema && Schema.decodeExit(options.schema)
-  const encode = options?.schema && Schema.encodeExit(options.schema)
+  const decode = schemaDecoder(options)
+  const encode = schemaEncoder(options)
   return writable<R, W>(
     (get): R => {
       if (typeof window === 'undefined') {
-        return decode ? Option.none() : ''
+        return readWithoutWindow()
       }
-      const handleUpdate = () => {
-        if (searchParamState.updating) return
-        const searchParams = new URLSearchParams(window.location.search)
-        const newValue = searchParams.get(name) || ''
-        if (decode) {
-          get.setSelf(Exit.getSuccess(decode(newValue)))
-        } else if (newValue !== Option.getOrUndefined(get.self())) {
-          get.setSelf(newValue)
-        }
-      }
-      window.addEventListener('popstate', handleUpdate)
-      window.addEventListener('pushstate', handleUpdate)
-      get.addFinalizer(() => {
-        window.removeEventListener('popstate', handleUpdate)
-        window.removeEventListener('pushstate', handleUpdate)
-      })
-      const value = new URLSearchParams(window.location.search).get(name) || ''
-      return decode ? Exit.getSuccess(decode(value)) : value
+      return readWithWindow(get)
     },
     (ctx: WriteContext<R>, value: W) => {
       if (typeof window === 'undefined') {
         ctx.setSelf(value)
         return
       }
-      if (encode) {
-        const encoded = Option.flatMap(
-          Option.isOption(value) ? value : Option.none(),
-          (v) => Exit.getSuccess(encode(v)),
-        )
-        searchParamState.updates.set(name, Option.getOrElse(encoded, () => ''))
-        if (Option.isOption(value)) {
-          ctx.setSelf(Option.zipRight(encoded, value))
-        }
-      } else if (typeof value === 'string') {
-        searchParamState.updates.set(name, value)
-        ctx.setSelf(value)
-      }
-      const generation = ++searchParamState.generation
-      Effect.runFork(
-        Effect.sleep('500 millis').pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              if (searchParamState.generation === generation) {
-                updateSearchParams()
-              }
-            }),
-          ),
-        ),
-      )
+      writeWithWindow(ctx, value)
     },
   )
+
+  function readWithoutWindow(): R {
+    if (decode !== undefined) {
+      return Option.none()
+    }
+    return ''
+  }
+
+  function readWithWindow(get: {
+    readonly addFinalizer: (f: () => void) => void
+    readonly setSelf: (value: R) => void
+    readonly self: () => Option.Option<R>
+  }): R {
+    const handleUpdate = () => {
+      if (searchParamState.updating === true) {
+        return
+      }
+      applyWindowUpdate(get)
+    }
+    window.addEventListener('popstate', handleUpdate)
+    window.addEventListener('pushstate', handleUpdate)
+    get.addFinalizer(() => {
+      window.removeEventListener('popstate', handleUpdate)
+      window.removeEventListener('pushstate', handleUpdate)
+    })
+    const value = paramOrEmpty(new URLSearchParams(window.location.search).get(name))
+    return decodeSearchValue(value)
+  }
+
+  function applyWindowUpdate(get: {
+    readonly setSelf: (value: R) => void
+    readonly self: () => Option.Option<R>
+  }): void {
+    const newValue = paramOrEmpty(new URLSearchParams(window.location.search).get(name))
+    if (decode !== undefined) {
+      get.setSelf(Exit.getSuccess(decode(newValue)))
+      return
+    }
+    applyPlainWindowUpdate(get, newValue)
+  }
+
+  function applyPlainWindowUpdate(
+    get: {
+      readonly setSelf: (value: R) => void
+      readonly self: () => Option.Option<R>
+    },
+    newValue: string,
+  ): void {
+    if (newValue !== Option.getOrUndefined(get.self())) {
+      get.setSelf(newValue)
+    }
+  }
+
+  function decodeSearchValue(value: string): R {
+    if (decode !== undefined) {
+      return Exit.getSuccess(decode(value))
+    }
+    return value
+  }
+
+  function writeWithWindow(ctx: WriteContext<R>, value: W): void {
+    const encoder = encode
+    if (encoder !== undefined) {
+      writeEncoded(ctx, value, encoder)
+    } else {
+      writePlain(ctx, value)
+    }
+    scheduleSearchParamUpdate()
+  }
+
+  function writeEncoded(
+    ctx: WriteContext<R>,
+    value: W,
+    encoder: NonNullable<typeof encode>,
+  ): void {
+    const encoded = Option.flatMap(
+      optionValue(value),
+      (v) => Exit.getSuccess(encoder(v)),
+    )
+    searchParamState.updates.set(name, Option.getOrElse(encoded, () => ''))
+    if (Option.isOption(value)) {
+      ctx.setSelf(Option.zipRight(encoded, value))
+    }
+  }
+
+  function writePlain(ctx: WriteContext<R>, value: W): void {
+    if (typeof value === 'string') {
+      searchParamState.updates.set(name, value)
+      ctx.setSelf(value)
+    }
+  }
+}
+
+const optionValue = <A>(value: A | Option.Option<A>): Option.Option<A> => {
+  if (Option.isOption(value)) {
+    return value
+  }
+  return Option.none()
+}
+
+const scheduleSearchParamUpdate = (): void => {
+  const generation = ++searchParamState.generation
+  Effect.runFork(
+    Effect.sleep('500 millis').pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          runScheduledSearchParamUpdate(generation)
+        }),
+      ),
+    ),
+  )
+}
+
+const runScheduledSearchParamUpdate = (generation: number): void => {
+  if (searchParamState.generation === generation) {
+    updateSearchParams()
+  }
+}
+
+const schemaDecoder = <S extends Schema.ConstraintCodec<unknown, string>>(
+  options?: {
+    readonly schema?: S | undefined
+  },
+) => {
+  if (options === undefined) {
+    return undefined
+  }
+  return schemaCodec(options.schema, Schema.decodeExit)
+}
+
+const schemaEncoder = <S extends Schema.ConstraintCodec<unknown, string>>(
+  options?: {
+    readonly schema?: S | undefined
+  },
+) => {
+  if (options === undefined) {
+    return undefined
+  }
+  return schemaCodec(options.schema, Schema.encodeExit)
+}
+
+const schemaCodec = <S extends Schema.ConstraintCodec<unknown, string>, C>(
+  schema: S | undefined,
+  codec: (schema: S) => C,
+): C | undefined => {
+  if (schema === undefined) {
+    return undefined
+  }
+  return codec(schema)
+}
+
+const paramOrEmpty = (value: string | null): string => {
+  if (value === null) {
+    return ''
+  }
+  return emptyToEmpty(value)
+}
+
+const emptyToEmpty = (value: string): string => {
+  if (value === '') {
+    return ''
+  }
+  return value
 }
 
 const searchParamState = {
@@ -184,14 +302,18 @@ function updateSearchParams() {
   searchParamState.updating = true
   const searchParams = new URLSearchParams(window.location.search)
   for (const [key, value] of searchParamState.updates.entries()) {
-    if (value.length > 0) {
-      searchParams.set(key, value)
-    } else {
-      searchParams.delete(key)
-    }
+    applySearchParam(searchParams, key, value)
   }
   searchParamState.updates.clear()
   const newUrl = `${window.location.pathname}?${searchParams.toString()}`
   window.history.pushState({}, '', newUrl)
   searchParamState.updating = false
+}
+
+const applySearchParam = (searchParams: URLSearchParams, key: string, value: string): void => {
+  if (value.length > 0) {
+    searchParams.set(key, value)
+    return
+  }
+  searchParams.delete(key)
 }

@@ -1,9 +1,10 @@
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage } from '@systemfsoftware/npm-package'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
+const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
 
 Feature('Package tree constructor — file-tree to Package projection (pure tree)').body(({ scenario }) => {
   scenario(
@@ -11,7 +12,7 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
     Effect.sync(() => {
       const pkg = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
           '/node_modules/demo/index.d.ts': 'export declare const x: number',
         },
         'demo',
@@ -29,7 +30,7 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
       expect(() =>
         createPackage(
           {
-            'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+            'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
             '/node_modules/other/index.d.ts': 'export {}',
           },
           'demo',
@@ -60,7 +61,7 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
       const content = 'export declare const x: number'
       const pkg = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+          'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
           'index.d.ts': new TextEncoder().encode(content),
         },
         'demo',
@@ -77,7 +78,7 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
     Effect.sync(() => {
       const pkg = createPackage(
         {
-          'package.json': JSON.stringify({ name: 'other', version: '9.9.9' }),
+          'package.json': jsonString({ name: 'other', version: '9.9.9' }),
           'index.d.ts': 'export {}',
         },
         'demo',

@@ -11,7 +11,6 @@ import { screen as screen_2 } from 'storybook/test';
 import { Simplify } from 'type-fest';
 import { UnionToIntersection } from 'type-fest';
 import { UserEventObject } from 'storybook/test';
-import { within } from 'storybook/test';
 import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
@@ -26,7 +25,7 @@ export class BackgroundNotGiven extends BackgroundNotGiven_base {}
 export const But: StepCtor;
 
 // @public (undocumented)
-export type Canvas = ReturnType<typeof within>;
+export type Canvas = typeof screen_2;
 
 // @public (undocumented)
 export type CapsOf<THoles extends readonly Hole[]> = THoles extends readonly [] ? {} : Simplify<UnionToIntersection<{ [K in keyof THoles]: THoles[K] extends Capture<infer N, infer A> ? { [P in N]: A; } : {}; }[number]>>;
