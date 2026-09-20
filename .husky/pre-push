@@ -1,26 +1,58 @@
 #!/usr/bin/env sh
-set -e
+# Refuse any push whose tip does not contain remote main.
+# The remote tip is the source of truth: local main can be stale while looking
+# fine, so read origin/main, never local main or the checked-out branch.
+#
+# Reads the pushed refs from stdin (git pre-push protocol):
+#   <local-ref> <local-sha> <remote-ref> <remote-sha>
+# Testing the pushed object, not HEAD, is what makes this correct from a linked
+# worktree and for `git push origin main` while another branch is checked out.
+#
+# Fails closed: if the remote cannot be read (auth, network, host key), the push
+# is refused. Only a reachable remote that has no main yet (new repo) is allowed.
+set -eu
+
 remote=origin
 
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
-if [ "$branch" != "main" ]; then
-  exit 0
+# Read remote main without --exit-code so a missing ref is not an error; only a
+# transport failure is. Capture the raw output and the status separately: piping
+# into cut would report cut's status, not ls-remote's.
+main_ref=$(git ls-remote --heads "$remote" refs/heads/main 2>/dev/null) && ls_status=0 || ls_status=$?
+if [ "$ls_status" -ne 0 ]; then
+  echo "pre-push: cannot read $remote (git ls-remote exit $ls_status)." >&2
+  echo "pre-push: refusing push; fix remote access and retry." >&2
+  exit 1
 fi
 
-main_sha=$(git ls-remote --heads "$remote" main 2>/dev/null | cut -f1)
+# Reachable but no main yet — new repo, nothing to enforce against.
+if [ -z "$main_ref" ]; then
+  exit 0
+fi
+main_sha=$(printf '%s\n' "$main_ref" | cut -f1)
 if [ -z "$main_sha" ]; then
-  exit 0
+  echo "pre-push: could not resolve $remote main SHA." >&2
+  exit 1
 fi
 
+# Ensure the remote tip object is present locally; fetch if missing.
 if ! git cat-file -e "$main_sha^{commit}" 2>/dev/null; then
-  git fetch --quiet "$remote" main || {
+  git fetch --quiet "$remote" refs/heads/main || {
     echo "pre-push: could not fetch $remote main." >&2
     exit 1
   }
 fi
 
-if ! git merge-base --is-ancestor "$main_sha" HEAD; then
-  echo "pre-push: main is behind $remote/main ($main_sha)." >&2
-  echo "Rebase or merge $remote/main before pushing main." >&2
-  exit 1
-fi
+# Gate every ref being pushed: its tip must contain the remote main commit.
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Deletion (all-zero local sha) carries no tree to test — skip.
+  case "$local_sha" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+  if ! git merge-base --is-ancestor "$main_sha" "$local_sha"; then
+    echo "pre-push: refusing $remote_ref — its tip ($local_sha) is behind $remote/main ($main_sha)." >&2
+    echo "Rebase or merge $remote/main before pushing." >&2
+    status=1
+  fi
+done
+exit "$status"
