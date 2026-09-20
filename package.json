@@ -37,7 +37,7 @@
     "concurrently": "^10.0.5",
     "estree-walker": "^3",
     "husky": "^9.1.7",
-    "lint-staged": "^17.1.0",
+    "lint-staged": "^17.5.1",
     "oxc-parser": "catalog:",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
