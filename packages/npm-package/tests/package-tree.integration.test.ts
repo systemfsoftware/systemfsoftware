@@ -1,10 +1,10 @@
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage } from '@systemfsoftware/npm-package'
-import { Effect, Schema } from 'effect'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
-const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+const jsonString = (value: unknown): string => JSON.stringify(value)
 
 Feature('Package tree constructor — file-tree to Package projection (pure tree)').body(({ scenario }) => {
   scenario(

@@ -6,11 +6,11 @@ import {
   packTree,
   toDirectoryJSON,
 } from '@systemfsoftware/npm-package'
-import { Effect, Schema } from 'effect'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
-const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+const jsonString = (value: unknown): string => JSON.stringify(value)
 
 const uint8Of = (value: string | Uint8Array | null | undefined): Uint8Array => {
   if (value instanceof Uint8Array) return value

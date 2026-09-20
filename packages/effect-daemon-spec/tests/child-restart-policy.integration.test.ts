@@ -245,9 +245,9 @@ Feature('Per-child restart policy')
               const exhaustions = yield* spy.getExhaustions()
               const healthyOpen = yield* supHealth.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(false),
-                  onSuccess: () => Effect.succeed(true),
+                Effect.match({
+                  onFailure: () => false,
+                  onSuccess: () => true,
                 }),
               )
               return { exhaustions, healthyOpen }

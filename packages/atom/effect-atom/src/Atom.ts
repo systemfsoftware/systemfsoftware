@@ -3702,8 +3702,8 @@ export const serializable: {
     label: serializableLabel(self, options.key),
     [SerializableTypeId]: {
       key: options.key,
-      encode: Schema.encodeSync(codecJson),
-      decode: Schema.decodeSync(codecJson),
+      encode: (value: A): SerializableJson => Option.getOrThrow(Schema.encodeOption(codecJson)(value)),
+      decode: (encoded: SerializableJson): A => Option.getOrThrow(Schema.decodeOption(codecJson)(encoded)),
     },
   })
 })

@@ -214,9 +214,9 @@ Feature('Health Latch Lifecycle')
             const st = yield* Metric.value(gh)
             const healthyClosed = yield* health.healthy.await.pipe(
               Effect.timeout('0 millis'),
-              Effect.matchEffect({
-                onFailure: () => Effect.succeed(true),
-                onSuccess: () => Effect.succeed(false),
+              Effect.match({
+                onFailure: () => true,
+                onSuccess: () => false,
               }),
             )
             return { st, healthyClosed }

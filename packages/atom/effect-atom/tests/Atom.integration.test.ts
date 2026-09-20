@@ -6,8 +6,6 @@ import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, Subscr
 import { KeyValueStore } from 'effect/unstable/persistence'
 import { expect, vi } from 'vitest'
 
-const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
-
 const Feature = makeFeature({ it, layer })
 
 Feature('Deriving values from other values on a page')
@@ -1637,7 +1635,7 @@ Feature('Deriving values from other values on a page')
         Given('a page remembering a value in a store that answers only after a signal')('ctx', () =>
           Effect.sync(() => {
             const storage = new Map<string, string>()
-            storage.set('known-key', jsonString(42))
+            storage.set('known-key', '42')
             const gate = Deferred.makeUnsafe<void>()
             const DelayedKVS = Layer.succeed(
               KeyValueStore.KeyValueStore,
@@ -1684,7 +1682,7 @@ Feature('Deriving values from other values on a page')
         Then('the fallback showed while loading, then the stored value appeared and the store was untouched')((s) => {
           expect(s.readings.whileLoading).toBe(0)
           expect(s.readings.loaded).toBe(42)
-          expect(s.readings.stored).toBe(jsonString(42))
+          expect(s.readings.stored).toBe('42')
         }),
       ),
     )
@@ -1694,7 +1692,7 @@ Feature('Deriving values from other values on a page')
         Given('a page remembering a value in a store that answers only after a signal')('ctx', () =>
           Effect.sync(() => {
             const storage = new Map<string, string>()
-            storage.set('known-key', jsonString(42))
+            storage.set('known-key', '42')
             const gate = Deferred.makeUnsafe<void>()
             const DelayedKVS = Layer.succeed(
               KeyValueStore.KeyValueStore,
@@ -1800,7 +1798,7 @@ Feature('Deriving values from other values on a page')
           expect(Result.isInitial(s.readings.whileLoading)).toBe(true)
           expect(Result.isSuccess(s.readings.loaded) && s.readings.loaded.value === 0).toBe(true)
           expect(Result.isSuccess(s.readings.afterWrite) && s.readings.afterWrite.value === 99).toBe(true)
-          expect(s.readings.stored).toBe(jsonString(99))
+          expect(s.readings.stored).toBe('99')
         }),
       ),
     )

@@ -3,11 +3,11 @@ import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Schema, Stream } from 'effect'
+import { Effect, Layer, Option, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import { expect } from 'vitest'
 
-const finiteNumber = Schema.decodeUnknownSync(Schema.Finite)
+const finiteNumber = (u: unknown): FiniteNumber => Option.getOrThrow(Schema.decodeUnknownOption(Schema.Finite)(u))
 type FiniteNumber = Schema.Schema.Type<typeof Schema.Finite>
 
 const Feature = makeFeature({ it, layer })

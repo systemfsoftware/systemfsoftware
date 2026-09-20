@@ -199,9 +199,11 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'ok',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                Equal.equals(Schema.decodeSync(resultSchema)(Schema.encodeSync(resultSchema)(result)), result)
-              )
+              s.samples.every((result) => {
+                const enc = Option.getOrThrow(Schema.encodeOption(resultSchema)(result))
+                const dec = Option.getOrThrow(Schema.decodeOption(resultSchema)(enc))
+                return Equal.equals(dec, result)
+              })
             ),
         ),
         Then('every draw satisfies the law')((s) => {
@@ -1014,7 +1016,8 @@ Feature('Keeping the last good answer on screen when a retry fails')
               s.samples.every((result) =>
                 (() => {
                   const noValue = Result.Schema({ error: Schema.String })
-                  const decoded = Schema.decodeUnknownOption(noValue)(Schema.encodeSync(resultSchema)(result))
+                  const encoded = Option.getOrThrow(Schema.encodeOption(resultSchema)(result))
+                  const decoded = Schema.decodeUnknownOption(noValue)(encoded)
                   const expectRejected = Result.isSuccess(result) ||
                     (Result.isFailure(result) && Option.isSome(result.previousSuccess))
                   if (expectRejected) {
@@ -1041,7 +1044,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
               s.samples.every((result) =>
                 (() => {
                   const codex = Schema.toCodecJson(resultSchema)
-                  return Equal.equals(Schema.decodeSync(codex)(Schema.encodeSync(codex)(result)), result)
+                  const enc = Option.getOrThrow(Schema.encodeOption(codex)(result))
+                  const dec = Option.getOrThrow(Schema.decodeOption(codex)(enc))
+                  return Equal.equals(dec, result)
                 })()
               )
             ),

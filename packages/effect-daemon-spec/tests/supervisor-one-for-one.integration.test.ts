@@ -229,9 +229,9 @@ Feature('OneForOne Strategy')
             yield* TestClock.adjust(Duration.millis(10))
             const open = yield* health.ready.await.pipe(
               Effect.timeout('0 millis'),
-              Effect.matchEffect({
-                onFailure: () => Effect.succeed(false),
-                onSuccess: () => Effect.succeed(true),
+              Effect.match({
+                onFailure: () => false,
+                onSuccess: () => true,
               }),
             )
             const a = yield* Ref.get(s.counters.a)

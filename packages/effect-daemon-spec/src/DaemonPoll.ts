@@ -51,7 +51,7 @@ export const poll = <
   },
 >(opts: O): WorkerRecord<TICK, THOOKS, CHILD, LCK, PollLoop<WE, WR>> => {
   if (typeof opts.prereq === 'undefined') {
-    const gate = Effect.succeed(Option.some(Effect.asVoid(opts.work)))
+    const gate = Effect.succeedSome(Effect.asVoid(opts.work))
     return {
       [WorkerTypeId]: WorkerTypeId,
       name: opts.name,

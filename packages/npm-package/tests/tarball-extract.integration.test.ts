@@ -1,10 +1,10 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage, createPackageFromTarballData, packPackage, packTree } from '@systemfsoftware/npm-package'
-import { Effect, Schema } from 'effect'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
-const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+const jsonString = (value: unknown): string => JSON.stringify(value)
 
 const uint8Of = (value: string | Uint8Array | undefined): Uint8Array => {
   if (value instanceof Uint8Array) return value

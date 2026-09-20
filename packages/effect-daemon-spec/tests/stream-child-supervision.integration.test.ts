@@ -64,9 +64,9 @@ Feature('Stream child supervision')
               const starts = yield* Ref.get(s.streamStarts)
               const healthyOpen = yield* health.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(false),
-                  onSuccess: () => Effect.succeed(true),
+                Effect.match({
+                  onFailure: () => false,
+                  onSuccess: () => true,
                 }),
               )
               return { restarts, starts, healthyOpen }
@@ -133,9 +133,9 @@ Feature('Stream child supervision')
               const exhaustions = yield* s.spy.getExhaustions()
               const healthyOpen = yield* health.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(false),
-                  onSuccess: () => Effect.succeed(true),
+                Effect.match({
+                  onFailure: () => false,
+                  onSuccess: () => true,
                 }),
               )
               return { exhaustions, healthyOpen }

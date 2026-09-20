@@ -20,7 +20,7 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {
-    "@effect/tsgo": "^0.45.0",
+    "@effect/tsgo": "catalog:",
     "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
