@@ -1,6 +1,6 @@
 import { addEqualityTesters } from '@effect/vitest'
 import { isCI } from '@systemfsoftware/vitest-config'
-import { FastCheck as fc } from 'effect/testing'
+import * as fc from 'fast-check'
 
 addEqualityTesters()
 

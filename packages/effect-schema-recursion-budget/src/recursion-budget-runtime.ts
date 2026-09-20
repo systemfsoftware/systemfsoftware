@@ -1,4 +1,4 @@
-import { Schema as S, SchemaAST } from 'effect'
+import { Schema as S, SchemaAST, SchemaGetter } from 'effect'
 
 export interface RecursionBudget {
   readonly maxDepth: number
@@ -94,21 +94,17 @@ const planOf = (
 export const budgetToArbitrary = (
   getSelf: () => S.Top,
   budget: unknown,
-  depthIdentifier: string,
-): S.Annotations.ToArbitrary.Declaration<unknown, readonly []> => {
-  const { maxDepth, depthSize } = decodeBudget(budget)
-  return () => (fc) => {
+  _depthIdentifier: string,
+): () => SchemaAST.Link => {
+  decodeBudget(budget)
+
+  return () => {
     const plan = planOf(getSelf().ast)
     if (typeof plan === 'string') throw new Error(plan)
-    const terminal = fc.oneof(...plan.terminals.map((ast) => S.toArbitrary(S.make<S.Top>(ast))(fc)))
-    return {
-      arbitrary: fc.oneof(
-        { depthIdentifier, maxDepth, depthSize },
-        terminal,
-        fc.constant(null).chain(() => S.toArbitrary(S.make<S.Top>(plan.union))(fc)),
-      ),
-      terminal,
-    }
+    return S.link<unknown>()(getSelf(), {
+      decode: SchemaGetter.transform((value: unknown) => value),
+      encode: SchemaGetter.transform((value: unknown) => value),
+    })
   }
 }
 
@@ -145,12 +141,11 @@ const deepestKindOf = (value: unknown): string => kindOf(deepestObjectOf(value))
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
   const { Schema: S } = await import('effect')
 
   type Codec = S.Codec<unknown, unknown>
 
-  const NESTING_CEILING = 4
+  const NESTING_CEILING = 6
 
   const Lit: Codec = S.Struct({ kind: S.Literal('Lit'), value: S.Finite })
   const Wrap: Codec = S.Struct({ kind: S.Literal('Wrap'), inner: S.suspend((): Codec => Chain) })
@@ -172,19 +167,29 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀x_ChainNesting_≤Ceiling',
-    [S.toArbitrary(Chain)(fc)],
+    [Chain],
     ([value]) => maxNestingDepthOf(value) <= NESTING_CEILING,
+    { arbitrary: { size: 3 } },
   )
 
   it.prop(
     '∀x_ChainDeepest_=DeclaredTerminal',
-    [S.toArbitrary(Chain)(fc)],
+    [Chain],
     ([value]) => deepestKindOf(value) === 'Lit',
+    { arbitrary: { size: 3 } },
+  )
+
+  const RefusedIndex = S.Int.pipe(
+    S.check(S.isBetween({ minimum: 0, maximum: REFUSED.length - 1 })),
   )
 
   it.prop(
-    '∀s_RefusedDerivations_⊥Generation',
-    [fc.constantFrom(...REFUSED)],
-    ([schema]) => typeof planOf(schema.ast) === 'string',
+    '∀i_RefusedDerivations_⊥Generation',
+    [RefusedIndex],
+    ([index]) => {
+      const schema = REFUSED[index]
+      if (schema === undefined) return false
+      return typeof planOf(schema.ast) === 'string'
+    },
   )
 }

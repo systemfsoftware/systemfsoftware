@@ -176,12 +176,12 @@ export const encodeMessage = Schema.encodeSync`,
       errors: [codecError('encodeMessage')],
     },
     {
-      name: 'Should_Report_When_SchemaFileExportsAnArbitraryBuiltFromALocalSchema',
+      name: 'Should_Report_When_SchemaFileExportsACodecBuiltFromALocalSchema',
       code: `import { Schema as S } from 'effect'
 export const Envelope = S.Struct({ body: S.String })
-export const envelopeArb = S.toArbitrary(Envelope)`,
+export const decodeEnvelope = S.decodeUnknownSync(Envelope)`,
       filename: SCHEMA_FILE,
-      errors: [codecError('envelopeArb')],
+      errors: [codecError('decodeEnvelope')],
     },
     {
       name: 'Should_Report_When_SchemaFileExportsAnEncodeWithPipeChain',

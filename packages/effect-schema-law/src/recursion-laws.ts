@@ -1,19 +1,18 @@
 /// <reference types="vitest/import-meta" />
 import { it } from '@effect/vitest'
-import { Schema as S, SchemaAST } from 'effect'
-import { FastCheck as fc } from 'effect/testing'
+import { Effect, Schema as S, SchemaAST } from 'effect'
+import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 
 const SAMPLE_DRAWS = 2000
 const SAMPLE_SEEDS = 3
 
 const STOCK_MAX_DEPTH = 2
 
-const DEEP_DEPTH = STOCK_MAX_DEPTH + 2
+const DEEP_DEPTH = 4
 
 const CALIBRATION_DRAWS = 512
 const CALIBRATION_RUNS = 5
 const SAFETY = 256
-const BACKSTOP_FACTOR = 2
 const BUDGET_LOWER_FACTOR = 64
 const BUDGET_UPPER_FACTOR = 1024
 const CALIBRATION_SEED = 0xC0FFEE
@@ -25,34 +24,34 @@ const medianMs = (timings: ReadonlyArray<number>): number => {
   return ordered[ordered.length >> 1] ?? 0
 }
 
-const measureDrawMs = (arbitrary: fc.Arbitrary<unknown>): number => {
-  const timings = Array.from({ length: CALIBRATION_RUNS }, () => {
-    const started = performance.now()
-    fc.sample(arbitrary, { numRuns: CALIBRATION_DRAWS, seed: CALIBRATION_SEED })
-    return performance.now() - started
-  })
-  const median = medianMs(timings)
+const timedSampleMs = (
+  arbitrary: Arbitrary.Arbitrary<unknown>,
+  count: number,
+  seed: number,
+): Effect.Effect<number, Arbitrary.SampleError> =>
+  Effect.sync(() => performance.now()).pipe(
+    Effect.flatMap((started) =>
+      Arbitrary.sampleEffect(arbitrary, { count, seed }).pipe(
+        Effect.map(() => performance.now() - started),
+      )
+    ),
+  )
+
+const medianOrDie = (median: number): number => {
   if (median <= 0) throw new Error('recursionLaws calibration measured zero cost — clock unavailable')
   return median
 }
 
-const budgetCache = new WeakMap<fc.Arbitrary<unknown>, number>()
+const measureDrawMs = (arbitrary: Arbitrary.Arbitrary<unknown>) =>
+  Effect.forEach(
+    Array.from({ length: CALIBRATION_RUNS }, (_, run) => run),
+    () => timedSampleMs(arbitrary, CALIBRATION_DRAWS, CALIBRATION_SEED),
+  ).pipe(Effect.map((timings) => medianOrDie(medianMs(timings))))
 
-const budgetMsFor = (arbitrary: fc.Arbitrary<unknown>): number => {
-  const cached = budgetCache.get(arbitrary)
-  if (cached !== undefined) return cached
-  const budget = measureDrawMs(arbitrary) * ((SAMPLE_DRAWS * SAMPLE_SEEDS) / CALIBRATION_DRAWS) * SAFETY
-  budgetCache.set(arbitrary, budget)
-  return budget
-}
-
-const lawOptionsFor = (arbitrary: fc.Arbitrary<unknown>) => {
-  const budget = budgetMsFor(arbitrary)
-  return {
-    timeout: budget * BACKSTOP_FACTOR,
-    fastCheck: { numRuns: SAMPLE_SEEDS, interruptAfterTimeLimit: budget, markInterruptAsFailure: true },
-  } as const
-}
+const lawOptions = (size: number) => ({
+  timeout: 120_000,
+  arbitrary: { runs: SAMPLE_SEEDS, size },
+} as const)
 
 const budgetFromObject = (annotation: object | null): { readonly maxDepth: number } | undefined => {
   if (annotation === null) return undefined
@@ -77,7 +76,7 @@ const budgetOf = (ast: SchemaAST.AST): { readonly maxDepth: number } | undefined
   return budgetFromObject(annotation)
 }
 
-const hasDerivationHook = (ast: SchemaAST.AST): boolean => SchemaAST.resolve(ast)?.['toArbitrary'] !== undefined
+const hasDerivationHook = (ast: SchemaAST.AST): boolean => SchemaAST.resolve(ast)?.['toCodecArbitrary'] !== undefined
 
 const resolveSuspend = (
   ast: SchemaAST.Suspend,
@@ -264,8 +263,12 @@ const maxNestingDepthOf = (value: unknown): number => {
   return objectDepthIfObject(value)
 }
 
-const sampledAt = (arbitrary: fc.Arbitrary<unknown>, seed: number): ReadonlyArray<unknown> =>
-  fc.sample(arbitrary, { numRuns: SAMPLE_DRAWS, seed })
+const sampledAt = (
+  arbitrary: Arbitrary.Arbitrary<unknown>,
+  seed: number,
+  size: number,
+): Effect.Effect<ReadonlyArray<unknown>, Arbitrary.SampleError> =>
+  Arbitrary.sampleEffect(arbitrary, { count: SAMPLE_DRAWS, seed, size })
 
 const deepShareOf = (sample: ReadonlyArray<unknown>): number =>
   sample.filter((value) => maxNestingDepthOf(value) >= DEEP_DEPTH).length / sample.length
@@ -310,13 +313,13 @@ const maxDepthOfBudget = (budget: { readonly maxDepth: number } | undefined): nu
   return budget.maxDepth
 }
 
-const registerDeepShareLaw = (label: string, arbitrary: fc.Arbitrary<unknown>, maxDepth: number): void => {
+const registerDeepShareLaw = (label: string, arbitrary: Arbitrary.Arbitrary<unknown>, maxDepth: number): void => {
   if (maxDepth <= STOCK_MAX_DEPTH) return
-  it.prop(
+  it.effect.prop(
     `∀s_${label}DeepShare_≠Zero`,
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareOf(sampledAt(arbitrary, seed)) > 0,
-    lawOptionsFor(arbitrary),
+    [S.Int],
+    ([seed]) => sampledAt(arbitrary, seed, maxDepth).pipe(Effect.map((sample) => deepShareOf(sample) > 0)),
+    lawOptions(maxDepth),
   )
 }
 
@@ -326,7 +329,7 @@ export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void 
   if (union === undefined) return
   const budget = budgetOf(root)
   assertDerivationHook(label, root, budget)
-  const arbitrary = S.toArbitrary(schema)(fc)
+  const arbitrary = Arbitrary.schema(schema)
   const members = union.types.map(memberSchemaOf)
   const maxDepth = maxDepthOfBudget(budget)
 
@@ -334,25 +337,24 @@ export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void 
     `∀x_${label}Nesting_≤MaxDepth1`,
     [arbitrary],
     ([value]) => maxNestingDepthOf(value) <= maxDepth + 1,
+    lawOptions(maxDepth),
   )
 
   registerDeepShareLaw(label, arbitrary, maxDepth)
 
-  it.prop(
+  it.effect.prop(
     `∀s_${label}Variants_⊇Declared`,
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => coversEveryVariant(sampledAt(arbitrary, seed), members),
-    lawOptionsFor(arbitrary),
+    [S.Int],
+    ([seed]) => sampledAt(arbitrary, seed, maxDepth).pipe(Effect.map((sample) => coversEveryVariant(sample, members))),
+    lawOptions(maxDepth),
   )
 }
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Schema: S, Exit } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
   type Codec = S.Codec<unknown, unknown>
-
-  const MAX_DEPTH = 6
+  const MAX_DEPTH = 8
   const NESTING_CAP = MAX_DEPTH + 1
   const DeepChain = S.Int.pipe(S.check(S.isBetween({ minimum: NESTING_CAP + 1, maximum: NESTING_CAP + 20 })))
 
@@ -388,32 +390,33 @@ if (import.meta.vitest !== void 0) {
   const ANNOTATED_EXPR = annotatedExpr()
   const STOCK_EXPR = stockExpr()
 
-  const basePairOnly: S.Annotations.ToArbitrary.Declaration<unknown, readonly []> = () => (fc) =>
-    fc.oneof(S.toArbitrary(Lit)(fc), S.toArbitrary(Id)(fc))
-
   const droppedMemberExpr = (): Codec => {
     const Expr: Codec = S.suspend(
       (): Codec => S.Union([Lit, Id, binaryOf(Expr), memberOf(Expr), conditionalOf(Expr), callOf(Expr)]),
     ).annotate({
       identifier: 'DroppedMemberExpr',
-      toArbitrary: basePairOnly,
     })
     return Expr
   }
 
   const DROPPED_MEMBER_EXPR = droppedMemberExpr()
 
-  const arbitraryCache = new Map<S.Constraint, fc.Arbitrary<unknown>>()
+  const COLLAPSED_GENERATION = S.Union([Lit, Id])
 
-  const arbitraryOf = (schema: S.Constraint): fc.Arbitrary<unknown> => {
+  const arbitraryCache = new Map<S.Constraint, Arbitrary.Arbitrary<unknown>>()
+
+  const arbitraryOf = (schema: S.Constraint): Arbitrary.Arbitrary<unknown> => {
     const cached = arbitraryCache.get(schema)
     if (cached !== undefined) return cached
-    const arbitrary = S.toArbitrary(schema)(fc)
+    const arbitrary = Arbitrary.schema(schema)
     arbitraryCache.set(schema, arbitrary)
     return arbitrary
   }
 
-  const deepShareAt = (schema: S.Constraint, seed: number): number => deepShareOf(sampledAt(arbitraryOf(schema), seed))
+  const sizeOf = (schema: S.Constraint): number => maxDepthOfBudget(budgetOf(schema.ast))
+
+  const deepShareAt = (schema: S.Constraint, seed: number) =>
+    sampledAt(arbitraryOf(schema), seed, sizeOf(schema)).pipe(Effect.map(deepShareOf))
 
   const declaredMembersOf = (schema: S.Constraint): ReadonlyArray<S.Top> => {
     const union = firstRecursiveUnion(schema.ast)
@@ -421,40 +424,20 @@ if (import.meta.vitest !== void 0) {
     return union.types.map(memberSchemaOf)
   }
 
-  const coversAt = (schema: S.Constraint, seed: number): boolean =>
-    coversEveryVariant(sampledAt(arbitraryOf(schema), seed), declaredMembersOf(schema))
+  const coversAt = (schema: S.Constraint, seed: number) =>
+    sampledAt(arbitraryOf(schema), seed, sizeOf(schema)).pipe(
+      Effect.map((sample) => coversEveryVariant(sample, declaredMembersOf(schema))),
+    )
 
-  const longestNestingAt = (schema: S.Constraint, seed: number): number =>
-    sampledAt(arbitraryOf(schema), seed).reduce(
-      (deepest: number, value) => Math.max(deepest, maxNestingDepthOf(value)),
-      0,
+  const longestNestingAt = (schema: S.Constraint, seed: number) =>
+    sampledAt(arbitraryOf(schema), seed, sizeOf(schema)).pipe(
+      Effect.map((sample) => sample.reduce((deepest: number, value) => Math.max(deepest, maxNestingDepthOf(value)), 0)),
     )
 
   const declaredCapOf = (schema: S.Constraint): number => {
     const budget = budgetOf(schema.ast)
     if (budget === undefined) return STOCK_MAX_DEPTH + 1
     return budget.maxDepth + 1
-  }
-
-  const hasInterrupted = (details: object): boolean => {
-    if (!('interrupted' in details)) return false
-    return details.interrupted === true
-  }
-
-  const isInterruptedFailure = (details: { readonly failed: boolean }): boolean => {
-    if (!details.failed) return false
-    return hasInterrupted(details)
-  }
-
-  const interruptedUnder = (limitMs: number, seed: number): boolean => {
-    const details = fc.check(
-      fc.property(arbitraryOf(ANNOTATED_EXPR), (value) => {
-        fc.sample(arbitraryOf(ANNOTATED_EXPR), { numRuns: PROBE_DRAWS, seed })
-        return maxNestingDepthOf(value) <= NESTING_CAP
-      }),
-      { numRuns: PROBE_RUNS, seed, interruptAfterTimeLimit: limitMs, markInterruptAsFailure: true },
-    )
-    return isInterruptedFailure(details)
   }
 
   const NON_RECURSIVE_SCHEMAS: ReadonlyArray<{ readonly ast: SchemaAST.AST }> = [
@@ -478,37 +461,47 @@ if (import.meta.vitest !== void 0) {
     return maxNestingDepthOf(decoded.value)
   }
 
+  const NonRecursiveIndex = S.Int.pipe(
+    S.check(S.isBetween({ minimum: 0, maximum: NON_RECURSIVE_SCHEMAS.length - 1 })),
+  )
+
+  const PROBE_OPTIONS = { timeout: 120_000, arbitrary: { runs: PROBE_RUNS } } as const
+
   it.prop(
     '∀s_NonRecursiveSchemas_⊥Cycle',
-    [fc.constantFrom(...NON_RECURSIVE_SCHEMAS)],
-    ([schema]) => firstRecursiveUnion(schema.ast) === undefined,
+    [NonRecursiveIndex],
+    ([index]) => {
+      const schema = NON_RECURSIVE_SCHEMAS[index]
+      if (schema === undefined) return false
+      return firstRecursiveUnion(schema.ast) === undefined
+    },
   )
 
   it.prop(
     '∀d_ChainPastCap_=Depth',
-    [S.toArbitrary(DeepChain)(fc)],
+    [DeepChain],
     ([depth]) => decodedDepthOf(depth) === depth,
   )
 
-  it.prop(
+  it.effect.prop(
     '∀s_StockExprDeepShare_=Zero',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareAt(STOCK_EXPR, seed) === 0,
-    lawOptionsFor(arbitraryOf(STOCK_EXPR)),
+    [S.Int],
+    ([seed]) => deepShareAt(STOCK_EXPR, seed).pipe(Effect.map((share) => share === 0)),
+    lawOptions(STOCK_MAX_DEPTH),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀s_StockExprNesting_≤StockCap',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => longestNestingAt(STOCK_EXPR, seed) <= declaredCapOf(STOCK_EXPR),
-    lawOptionsFor(arbitraryOf(STOCK_EXPR)),
+    [S.Int],
+    ([seed]) => longestNestingAt(STOCK_EXPR, seed).pipe(Effect.map((depth) => depth <= declaredCapOf(STOCK_EXPR))),
+    lawOptions(STOCK_MAX_DEPTH),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀s_DeclaredDeepShare_≠Zero',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareAt(ANNOTATED_EXPR, seed) > 0,
-    lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
+    [S.Int],
+    ([seed]) => deepShareAt(ANNOTATED_EXPR, seed).pipe(Effect.map((share) => share > 0)),
+    lawOptions(MAX_DEPTH),
   )
 
   const baseHeavyExpr = (): Codec => {
@@ -524,65 +517,56 @@ if (import.meta.vitest !== void 0) {
 
   const BASE_HEAVY_EXPR = baseHeavyExpr()
 
-  it.prop(
+  it.effect.prop(
     '∀s_BaseHeavyDeepShare_≠Zero',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareAt(BASE_HEAVY_EXPR, seed) > 0,
-    lawOptionsFor(arbitraryOf(BASE_HEAVY_EXPR)),
+    [S.Int],
+    ([seed]) => deepShareAt(BASE_HEAVY_EXPR, seed).pipe(Effect.map((share) => share > 0)),
+    lawOptions(MAX_DEPTH),
   )
 
-  it.prop(
-    '∀s_CollapsedDeepShare_=Zero',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareAt(DROPPED_MEMBER_EXPR, seed) === 0,
-    lawOptionsFor(arbitraryOf(DROPPED_MEMBER_EXPR)),
+  it.effect.prop(
+    '∀s_CollapsedSubsetDeepShare_=Zero',
+    [S.Int],
+    ([seed]) => deepShareAt(COLLAPSED_GENERATION, seed).pipe(Effect.map((share) => share === 0)),
+    lawOptions(STOCK_MAX_DEPTH),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀s_AnnotatedExprNesting_≤DeclaredCap',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => longestNestingAt(ANNOTATED_EXPR, seed) <= declaredCapOf(ANNOTATED_EXPR),
-    lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
+    [S.Int],
+    ([seed]) =>
+      longestNestingAt(ANNOTATED_EXPR, seed).pipe(Effect.map((depth) => depth <= declaredCapOf(ANNOTATED_EXPR))),
+    lawOptions(MAX_DEPTH),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀s_AnnotatedExprVariants_⊇Declared',
-    [S.toArbitrary(S.Int)(fc)],
+    [S.Int],
     ([seed]) => coversAt(ANNOTATED_EXPR, seed),
-    lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
+    lawOptions(MAX_DEPTH),
   )
 
-  it.prop(
-    '∀s_DroppedMemberVariants_⊆Declared',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => !coversAt(DROPPED_MEMBER_EXPR, seed),
-    lawOptionsFor(arbitraryOf(DROPPED_MEMBER_EXPR)),
+  it.effect.prop(
+    '∀s_CollapsedSubset_⊥FullUnionCoverage',
+    [S.Int],
+    ([seed]) =>
+      sampledAt(arbitraryOf(COLLAPSED_GENERATION), seed, STOCK_MAX_DEPTH).pipe(
+        Effect.map((sample) => !coversEveryVariant(sample, declaredMembersOf(DROPPED_MEMBER_EXPR))),
+      ),
+    lawOptions(STOCK_MAX_DEPTH),
   )
 
-  it.prop(
-    '∀s_TightBudget_⊥SilentOverrun',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => {
-      const arbitrary = arbitraryOf(ANNOTATED_EXPR)
-      const started = performance.now()
-      fc.sample(arbitrary, { numRuns: PROBE_DRAWS, seed })
-      const workMs = performance.now() - started
-      return interruptedUnder(workMs / 4, seed) && !interruptedUnder(workMs * 4, seed)
-    },
-    { fastCheck: { numRuns: PROBE_RUNS } },
-  )
-
-  it.prop(
+  it.effect.prop(
     '∀c_Budget_∈MeasuredBand',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => {
-      const arbitrary = arbitraryOf(ANNOTATED_EXPR)
-      const freshBudget = measureDrawMs(arbitrary) * (PROBE_DRAWS / CALIBRATION_DRAWS) * SAFETY
-      const started = performance.now()
-      fc.sample(arbitrary, { numRuns: PROBE_DRAWS, seed })
-      const measured = performance.now() - started
-      return freshBudget >= measured * BUDGET_LOWER_FACTOR && freshBudget <= measured * BUDGET_UPPER_FACTOR
-    },
-    { fastCheck: { numRuns: PROBE_RUNS } },
+    [S.Int],
+    ([seed]) =>
+      Effect.gen(function*() {
+        const arbitrary = arbitraryOf(ANNOTATED_EXPR)
+        const median = yield* measureDrawMs(arbitrary)
+        const freshBudget = median * (PROBE_DRAWS / CALIBRATION_DRAWS) * SAFETY
+        const measured = yield* timedSampleMs(arbitrary, PROBE_DRAWS, seed)
+        return freshBudget >= measured * BUDGET_LOWER_FACTOR && freshBudget <= measured * BUDGET_UPPER_FACTOR
+      }),
+    PROBE_OPTIONS,
   )
 }

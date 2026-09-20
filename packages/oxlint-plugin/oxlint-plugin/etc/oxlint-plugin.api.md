@@ -12,13 +12,9 @@ const _default: {
         name: string;
     };
     rules: {
-        'no-date-now-in-effect': Rule;
         'no-logging-in-catch': Rule;
         'no-native-map-in-effect': Rule;
         'no-native-set-in-effect': Rule;
-        'no-native-setinterval-in-effect': Rule;
-        'no-native-settimeout-in-effect': Rule;
-        'no-new-promise-in-effect': Rule;
         'no-new-worker-with-wasm-import': Rule;
         'ban-classes': Rule;
         'ban-error-string': Rule;

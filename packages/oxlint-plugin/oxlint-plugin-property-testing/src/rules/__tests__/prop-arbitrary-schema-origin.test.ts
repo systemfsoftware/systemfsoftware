@@ -70,11 +70,10 @@ ${GUARD_END}`,
       filename: FILENAME,
     },
     {
-      name: 'Should_StaySilent_When_ArbitraryIsTheToArbitraryAnnotation',
-      code: `import { Schema } from 'effect'
-import * as fc from 'fast-check'
+      name: 'Should_StaySilent_When_ArbitraryIsArbitrarySchemaDerivation',
+      code: `import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 ${GUARD}
-it.prop('p', [Schema.toArbitrary(UserSchema)(fc)], ([u]) => u !== null)
+it.prop('p', [Arbitrary.schema(UserSchema)], ([u]) => u !== null)
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -201,20 +200,21 @@ ${GUARD_END}`,
       filename: FILENAME,
     },
     {
-      name: 'Should_StaySilent_When_ToArbitraryDerivesFromADomainBinding',
+      name: 'Should_StaySilent_When_ArbitrarySchemaDerivesFromADomainBinding',
       code: `import { Schema } from 'effect'
+import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 const Money = Schema.String
 ${GUARD}
-it.prop('p', [Schema.toArbitrary(Money)(fc)], ([s]) => s === s)
+it.prop('p', [Arbitrary.schema(Money)], ([s]) => s === s)
 ${GUARD_END}`,
       filename: FILENAME,
     },
     {
-      name: 'Should_StaySilent_When_ToArbitraryDerivesFromAnImportedSchema',
-      code: `import { Schema } from 'effect'
+      name: 'Should_StaySilent_When_ArbitrarySchemaDerivesFromAnImportedSchema',
+      code: `import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import { Money } from './money.schema.js'
 ${GUARD}
-it.prop('p', [Schema.toArbitrary(Money)(fc).filter((s) => s.length > 0)], ([s]) => s === s)
+it.prop('p', [Arbitrary.schema(Money).filter((s) => s.length > 0)], ([s]) => s === s)
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -431,10 +431,11 @@ ${GUARD_END}`,
       errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
     },
     {
-      name: 'Should_Report_When_ToArbitraryRootIsAStockMember',
+      name: 'Should_Report_When_ArbitrarySchemaRootIsAStockMember',
       code: `import { Schema } from 'effect'
+import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 ${GUARD}
-it.prop('p', [Schema.toArbitrary(Schema.String)(fc).filter((s) => s.length > 0)], ([s]) => s === s)
+it.prop('p', [Arbitrary.schema(Schema.String).filter((s) => s.length > 0)], ([s]) => s === s)
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'stockDerivedArbitrary', data: STOCK_DATA }],
@@ -460,10 +461,11 @@ ${GUARD_END}`,
       errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
     },
     {
-      name: 'Should_Report_When_ToArbitraryRootIsAStockComposition',
+      name: 'Should_Report_When_ArbitrarySchemaRootIsAStockComposition',
       code: `import { Schema } from 'effect'
+import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 ${GUARD}
-it.prop('p', [Schema.toArbitrary(Schema.Union([Schema.Literal('a'), Schema.String]))(fc)], ([s]) => s === s)
+it.prop('p', [Arbitrary.schema(Schema.Union([Schema.Literal('a'), Schema.String]))], ([s]) => s === s)
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'stockDerivedArbitrary', data: STOCK_DATA }],

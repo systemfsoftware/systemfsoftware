@@ -77,8 +77,7 @@ export const ANONYMOUS_CLASS = '<anonymous>' as const
 /**
  * Test and fixture paths are out of scope: a class that only exists to exercise
  * production code is not authoring drift in the product surface. Mirrors the
- * in-rule boundary `no-date-now-in-effect` and `no-either-tag-assertions`
- * already draw.
+ * in-rule boundary `no-either-tag-assertions` already draws.
  */
 export const TEST_OR_FIXTURE_PATH = /(^|\/)(__tests__|__fixtures__|tests|testResources)\/|\.(test|spec)\.[cm]?[jt]sx?$/
 

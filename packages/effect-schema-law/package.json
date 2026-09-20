@@ -67,7 +67,7 @@
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",
     "effect": "catalog:peers",
-    "vitest": "*"
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "exports": {

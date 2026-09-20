@@ -12,7 +12,6 @@ const _default: {
         name: string;
     };
     rules: {
-        'ban-effect-schema-imports': Rule;
         'ban-data-taggederror': Rule;
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
@@ -32,14 +31,12 @@ const _default: {
         'no-silent-return': Rule;
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
-        'require-effect-fastcheck': Rule;
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;
         'prop-fixture-schema-origin': Rule;
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
-        'no-unrun-effect-test': Rule;
         'pbt-naming': Rule;
         'in-source-test-prop-only': Rule;
         'in-source-test-targets-private': Rule;

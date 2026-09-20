@@ -22,7 +22,8 @@ const HAND_WRITTEN = `import { Schema as S } from 'effect'
 
 export const Expr = S.suspend((): S.Schema<unknown> => S.Union([S.String])).annotate({
   recursionBudget: { maxDepth: 6, depthSize: 'small' },
-  toArbitrary: () => () => fc.constant('x'),
+  toCodecArbitrary: () => Schema.link<unknown>()(S.String, { decode: SchemaGetter.transform((x: unknown) => x), encode: SchemaGetter.transform((x: unknown) => x) }),
+
 })
 `
 
@@ -57,7 +58,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
       When('the schema-laws pipeline processes that module')('code', (s) => Effect.sync(() => processed(s.source))),
       Then('the processed module carries a generation hook bound to the schema declaration')((s) => {
         expect(s.code).toContain(
-          `toArbitrary: __esRecursionBudget(() => Expr, { maxDepth: 6, depthSize: 'small' }, "${MODULE_ID}#Expr")`,
+          `toCodecArbitrary: __esRecursionBudget(() => Expr, { maxDepth: 6, depthSize: 'small' }, "${MODULE_ID}#Expr")`,
         )
       }),
       Then('the hook arrives from the recursion-budget runtime module')((s) => {

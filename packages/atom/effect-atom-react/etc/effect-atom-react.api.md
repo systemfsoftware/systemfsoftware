@@ -29,10 +29,17 @@ export const make: <A extends Atom.Atom<unknown>, Input = never>(f: (() => A) | 
 // @public
 export const RegistryContext: React_2.Context<AtomRegistry.Registry>;
 
-// Warning: (ae-forgotten-export) The symbol "RegistryProviderOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export const RegistryProvider: (options: RegistryProviderOptions) => React_2.FunctionComponentElement<React_2.ProviderProps<AtomRegistry.Registry>>;
+
+// @public (undocumented)
+export type RegistryProviderOptions = {
+    readonly children?: React_2.ReactNode | undefined;
+    readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined;
+    readonly scheduleTask?: ((f: () => void) => () => void) | undefined;
+    readonly timeoutResolution?: number | undefined;
+    readonly defaultIdleTTL?: number | undefined;
+};
 
 // @public
 export function scheduleTask(f: () => void): () => void;

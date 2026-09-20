@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-plugin-effect-schema#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for Effect Schema declarations: import path, tagged errors, and schema file shape.",
+  "description": "Oxlint rules for Effect Schema declarations: tagged errors and schema file shape.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -48,7 +48,7 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@oxc-project/types": "^0.140.0",
+    "@oxc-project/types": "catalog:",
     "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
@@ -67,6 +67,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
+    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

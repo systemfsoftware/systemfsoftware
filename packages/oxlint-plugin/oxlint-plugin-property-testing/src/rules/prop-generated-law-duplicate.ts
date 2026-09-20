@@ -45,6 +45,7 @@ const CODEC_ACCESSORS: Record<string, true> = {
   toEquivalence: true,
   toEncoded: true,
   toArbitrary: true,
+  toCodecArbitrary: true,
   Exit: true,
 }
 

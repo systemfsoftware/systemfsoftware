@@ -83,17 +83,27 @@ const Username = Schema.String.check(Schema.isMinLength(3), Schema.isMaxLength(2
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
-      name: 'Should_Pass_When_NodeOverridePrecedesCheck',
+      name: 'Should_Pass_When_InlineFilterCarriesArbitraryConstraint',
+      code: `import { Schema } from 'effect'
+const prime = Schema.makeFilter((v: number) => isPrime(v), {
+  expected: 'a prime number',
+  arbitraryConstraint: { number: 'integer', minimum: 2 },
+})
+const Prime = Schema.Finite.check(prime)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_NodeOverrideIsToCodecArbitrary',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Name = Schema.String.annotate({ toArbitrary: () => (fc) => fc.constantFrom('Alice', 'Dante') }).check(bare)`,
+const Name = Schema.String.annotate({ toCodecArbitrary: () => nameLink }).check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
       name: 'Should_Pass_When_OverrideLivesOnLocalReceiverDeclaration',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Person = Schema.Struct({ name: Schema.String }).annotate({ toArbitrary: () => (fc) => fc.constant({ name: 'x' }) })
+const Person = Schema.Struct({ name: Schema.String }).annotate({ toCodecArbitrary: () => nameLink })
 const Named = Person.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
@@ -155,6 +165,14 @@ const X = Schema.Finite.check(bare)`,
       errors: [discardsError()],
     },
     {
+      name: 'Should_Fail_When_ArbitraryConstraintIsEmptyObject',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: number) => v > 0, { arbitraryConstraint: {} })
+const X = Schema.Finite.check(bare)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
       name: 'Should_Fail_When_SharedBindingHasNoMetadata',
       code: `import { Schema } from 'effect'
 const uniqueSlots = Schema.makeFilter((g: Group) => uniqueIds(g.slots), { expected: 'unique slot ids' })
@@ -182,7 +200,7 @@ const X = Schema.String.check(pair)`,
       name: 'Should_Fail_When_OverrideComesAfterCheck',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Name = Schema.String.check(bare).annotate({ toArbitrary: () => (fc) => fc.constant('') })`,
+const Name = Schema.String.check(bare).annotate({ toCodecArbitrary: () => nameLink })`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [discardsError()],
     },
@@ -263,7 +281,15 @@ const X = check(bare)(Schema.Finite)`,
       code: `import { Schema } from 'effect'
 import { builder } from './builder.js'
 const bare = Schema.makeFilter((v: number) => v > 0)
-const X = builder.annotate({ toArbitrary: () => (fc) => fc.integer({ min: 1 }) }).check(bare)`,
+const X = builder.annotate({ toCodecArbitrary: () => nameLink }).check(bare)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
+      name: 'Should_Fail_When_DeadToArbitraryAnnotateDoesNotSilence',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
+const Name = Schema.String.annotate({ toArbitrary: () => (fc) => fc.constantFrom('Alice', 'Dante') }).check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [discardsError()],
     },

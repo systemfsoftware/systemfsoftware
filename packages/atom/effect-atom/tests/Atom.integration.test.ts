@@ -705,7 +705,7 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const latches: Latch.Latch[] = []
             let done = 0
-            const task = Atom.fn((_: number) => {
+            const task = Atom.fn((_input: number) => {
               const latch = Latch.makeUnsafe()
               latches.push(latch)
               return latch.await.pipe(Effect.tap(() => Effect.sync(() => done++)))

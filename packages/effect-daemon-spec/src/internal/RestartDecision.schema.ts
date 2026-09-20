@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Schema, SchemaAST, SchemaGetter } from 'effect'
 import { MAX_CHILDREN_CEILING } from '../SupervisorDynamic.js'
 
 /** @internal */
@@ -34,46 +34,97 @@ const failedIndexAddressesAChild = (input: {
  */
 const BOUND_MESSAGE = 'failedIndex must be < totalChildren'
 
+type DecideInputFields = {
+  readonly strategy: RestartStrategy
+  readonly totalChildren: number
+  readonly failedIndex: number
+  readonly exitSuccess: boolean
+  readonly intensityExceeded: boolean
+}
+
+/**
+ * Constructive generation for the cross-field invariant. `failedIndexSeed` is independent
+ * of `totalChildren` and always in `0 .. MAX-1`; the command's `failedIndex` is that seed
+ * modulo `totalChildren`, so every generated sample satisfies `failedIndex < totalChildren`.
+ *
+ * `FilterConstraint` cannot express a relation between two fields. rc.116's constructor
+ * for that case is `toCodecArbitrary`, not an empty `arbitraryConstraint`.
+ */
+const DecideInputGenerated = Schema.Struct({
+  strategy: RestartStrategy,
+  totalChildren: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: MAX_CHILDREN_CEILING }))),
+  failedIndexSeed: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: MAX_CHILDREN_CEILING - 1 }))),
+  exitSuccess: Schema.Boolean,
+  intensityExceeded: Schema.Boolean,
+})
+
+const commandFromGenerated = (generated: typeof DecideInputGenerated.Type): DecideInputFields => ({
+  strategy: generated.strategy,
+  totalChildren: generated.totalChildren,
+  failedIndex: generated.failedIndexSeed % generated.totalChildren,
+  exitSuccess: generated.exitSuccess,
+  intensityExceeded: generated.intensityExceeded,
+})
+
+const generatedFromCommand = (command: DecideInputFields) => ({
+  strategy: command.strategy,
+  totalChildren: command.totalChildren,
+  failedIndexSeed: command.failedIndex,
+  exitSuccess: command.exitSuccess,
+  intensityExceeded: command.intensityExceeded,
+})
+
+const generatedLink = (): SchemaAST.Link =>
+  Schema.link<DecideInputFields>()(DecideInputGenerated, {
+    decode: SchemaGetter.transform(commandFromGenerated),
+    encode: SchemaGetter.transform(generatedFromCommand),
+  })
+
 /**
  * The command's field map and cross-field check, named so the class below extends a binding
  * rather than an inline factory call. An anonymous base adds a new `ae-forgotten-export`
  * `*_base` warning to the committed API report, which this package fixes at the source
  * instead of suppressing.
+ *
+ * `failedIndex` is at most `MAX_CHILDREN_CEILING - 1` because it must be strictly less
+ * than `totalChildren`, whose own maximum is the ceiling.
+ *
+ * The constructor hangs on the node as `toCodecArbitrary` *before* the check: a filter
+ * cannot construct a cross-field sample, and `.pipe(Schema.check)` would hide the
+ * annotation from the gate (the check receiver would be `Schema`, not this struct).
  */
 const DecideInputBase = Schema.Struct({
   strategy: RestartStrategy,
   totalChildren: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: MAX_CHILDREN_CEILING }))),
-  failedIndex: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: MAX_CHILDREN_CEILING }))),
+  failedIndex: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: MAX_CHILDREN_CEILING - 1 }))),
   exitSuccess: Schema.Boolean,
   intensityExceeded: Schema.Boolean,
-}).pipe(
-  Schema.check(
+})
+  .annotate({ toCodecArbitrary: generatedLink })
+  .check(
     Schema.makeFilter(failedIndexAddressesAChild, {
       message: BOUND_MESSAGE,
-      arbitrary: {
-        candidate: {
-          weight: 20,
-          make: (fc) =>
-            fc.integer({ min: 1, max: MAX_CHILDREN_CEILING }).chain((totalChildren) =>
-              fc.record({
-                strategy: fc.constantFrom('one_for_one', 'one_for_all', 'rest_for_one'),
-                totalChildren: fc.constant(totalChildren),
-                failedIndex: fc.integer({ min: 0, max: totalChildren - 1 }),
-                exitSuccess: fc.boolean(),
-                intensityExceeded: fc.boolean(),
-              })
-            ),
-        },
-      },
     }),
-  ),
-)
+  )
 
 /**
  * The restart command. A `Schema.Class` rather than a `Schema.Struct` because `Workflow.make`
  * takes the command's class as its first argument, and a struct carries no `identifier` and
  * no `extend` — the constraint refuses it. Every field schema and the cross-field check are
  * the ones the struct carried.
+ *
+ * Class-level `toCodecArbitrary` is what `Arbitrary.schema(DecideInput)` compiles. The
+ * self-reference is `Schema.suspend`, the same delay recursive schemas use: the thunk
+ * runs at derivation time, after the class exists. The return type is `SchemaAST.Link`
+ * so the heritage expression does not infer a cycle through `DecideInput`.
  */
 /** @internal */
-export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(DecideInputBase) {}
+export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(DecideInputBase, {
+  toCodecArbitrary: (): SchemaAST.Link =>
+    Schema.link<DecideInput>()(DecideInputGenerated, {
+      decode: SchemaGetter.transform((generated) =>
+        Schema.decodeSync(Schema.suspend(() => DecideInput))(commandFromGenerated(generated))
+      ),
+      encode: SchemaGetter.transform(generatedFromCommand),
+    }),
+}) {}

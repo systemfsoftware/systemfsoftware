@@ -42,9 +42,9 @@ ruleTester.run('no-nested-quantification', noNestedQuantification, {
       filename: FILENAME,
       code: `
 import { it } from '@effect/vitest'
-import { FastCheck as fc } from 'effect'
+import { Schema } from 'effect'
 
-it.prop('p', [fc.constant([1, 2, 3])], ([pool]) => {
+it.prop('p', [Schema.Array(Schema.Number)], ([pool]) => {
   return pool.length > 0
 })
 `,
@@ -54,7 +54,6 @@ it.prop('p', [fc.constant([1, 2, 3])], ([pool]) => {
       filename: FILENAME,
       code: `
 import { it } from '@effect/vitest'
-import { FastCheck as fc } from 'effect'
 import { costly } from '../kernel.js'
 
 it.prop('p', [fc.constant([1, 2, 3]), gen], ([pool, drawn]) => {
