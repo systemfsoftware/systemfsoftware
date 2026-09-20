@@ -330,13 +330,23 @@ const tapPoll =
     )
 
 const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
-  function step<N extends string, A extends object & (InitialStage | GivenStage | WhenStage), B, E2, R2>(
+  function step<
+    N extends string,
+    A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
+    B,
+    E2,
+    R2,
+  >(
     name: N,
     f: (a: NoInfer<A>) => Effect.Effect<B, E2, R2>,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
   ) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>
-  function step<A extends object & (InitialStage | GivenStage | WhenStage), E2 = never, R2 = never>(
+  function step<
+    A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
+    E2 = never,
+    R2 = never,
+  >(
     f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
@@ -414,13 +424,23 @@ const bindGiven = (keyword: 'given', text: StepText) => {
 }
 
 const bindWhen = (keyword: 'when', text: StepText) => {
-  function step<N extends string, A extends object & (InitialStage | GivenStage | WhenStage), B, E2, R2>(
+  function step<
+    N extends string,
+    A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
+    B,
+    E2,
+    R2,
+  >(
     name: N,
     f: (a: NoInfer<A>) => Effect.Effect<B, E2, R2>,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
   ) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>
-  function step<A extends object & (InitialStage | GivenStage | WhenStage), E2 = never, R2 = never>(
+  function step<
+    A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
+    E2 = never,
+    R2 = never,
+  >(
     f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
