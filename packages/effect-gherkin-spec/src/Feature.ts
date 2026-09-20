@@ -1,10 +1,11 @@
 /// <reference types="vitest/globals" />
 import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import type { TestOptions } from 'vitest'
-import { Gherkin, type ScopeMap } from './DoNotation.js'
+import { Gherkin, type ScopeMap, type VitestTaskContext, VitestTaskRef } from './DoNotation.js'
 import {
   createOutlineFnNoFresh,
   createOutlineFnWithFresh,
@@ -84,6 +85,15 @@ const selectLayeredMode = <R>(
   methodsIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>,
   mode: RegisterMode,
 ) => pickMode(methodsIt.effect, mode)
+const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
+
+const toTaskContext = (ctx: unknown): VitestTaskContext | null => {
+  if (isTaskContext(ctx)) return ctx
+  return null
+}
+
+const wrapWithTask = <A, E, R>(effect: Effect.Effect<A, E, R>, ctx: unknown): Effect.Effect<A, E, R> =>
+  effect.pipe(Effect.provideService(VitestTaskRef, toTaskContext(ctx)))
 
 export type FeatureBuilderBoth<
   RShared,
@@ -195,13 +205,13 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       const scenario = createScenarioNoFresh<never>((scenName, effect, mode) => {
         selectUnlayeredMode(effectIt, mode, useLiveClock)(
           scenName,
-          () => effect,
+          (ctx) => wrapWithTask(effect, ctx),
         )
       }, () => bg)
       const scenarioOutline = createOutlineFnNoFresh<never>((scenName, effect, mode) => {
         selectUnlayeredMode(effectIt, mode, useLiveClock)(
           scenName,
-          () => effect,
+          (ctx) => wrapWithTask(effect, ctx),
         )
       }, () => bg)
       body({
@@ -233,14 +243,14 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       let bg: ScenarioBody<RFresh | RFreshReq> | null = null
       const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, () => effect)
+          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,
@@ -274,10 +284,10 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
 
     const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioNoFresh<RShared>((scenName, effect, mode) => {
-        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+        selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
       }, () => bg)
       const scenarioOutline = createOutlineFnNoFresh<RShared>((scenName, effect, mode) => {
-        selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+        selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
       }, () => bg)
       body({
         scenario,
@@ -319,14 +329,14 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
       const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+          selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,
       )
       const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(
         (scenName, effect, mode) => {
-          selectLayeredMode(scopedIt, mode)(scenName, () => effect)
+          selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
         },
         () => bg,
         featureScenarioLayer,

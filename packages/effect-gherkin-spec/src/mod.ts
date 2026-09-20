@@ -13,9 +13,18 @@ export type {
   Stage,
   StepText,
   ThenStage,
+  VitestTaskContext,
   WhenStage,
 } from './DoNotation.js'
-export { pollSchedule, stageGiven, stageInitial, stageThen, StageTypeId, stageWhen } from './DoNotation.js'
+export {
+  pollSchedule,
+  stageGiven,
+  stageInitial,
+  stageThen,
+  StageTypeId,
+  stageWhen,
+  VitestTaskRef,
+} from './DoNotation.js'
 export type { PairwiseMatrix, PairwiseResult } from './extensions/Pairwise.js'
 export { pairwiseFor } from './extensions/Pairwise.js'
 export {

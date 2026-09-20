@@ -1,4 +1,4 @@
-import { Cause, Context, Duration, Effect, Schedule } from 'effect'
+import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { StepError } from './StepError.schema.js'
 
 export interface PollOptions {
@@ -67,13 +67,74 @@ export const SoftFailuresRef: Context.Reference<SoftFailuresContext> = Context.R
     defaultValue: makeFreshSoftContext,
   },
 )
+export interface VitestTaskContext {
+  readonly annotate?: ((message: string, type?: string) => Promise<void> | void) | undefined
+  readonly task?: {
+    readonly annotations?: readonly unknown[] | undefined
+  } | undefined
+}
 
+export const VitestTaskRef: Context.Reference<VitestTaskContext | null> = Context.Reference<VitestTaskContext | null>(
+  '@systemfsoftware/effect-gherkin-spec/VitestTask',
+  {
+    defaultValue: () => null,
+  },
+)
+
+const dispatchAnnotate = (
+  annotate: ((msg: string, type?: string) => Promise<void> | void) | undefined,
+  message: string,
+  type: string,
+): Effect.Effect<void> => {
+  if (typeof annotate === 'function') {
+    return Effect.promise(() => Promise.resolve(annotate(message, type)))
+  }
+  return Effect.void
+}
+
+const recordAnnotation = (
+  ctx: VitestTaskContext | null,
+  message: string,
+  type: string,
+): Effect.Effect<void> => {
+  if (ctx === null) return Effect.void
+  return dispatchAnnotate(ctx.annotate, message, type)
+}
+
+const annotateStepResult = (
+  taskCtx: VitestTaskContext | null,
+  keyword: string,
+  resolvedText: string,
+  duration: number,
+  isSuccess: boolean,
+): Effect.Effect<void> => {
+  if (isSuccess) {
+    return recordAnnotation(taskCtx, `[${keyword.toUpperCase()}] ${resolvedText} - passed (${duration}ms)`, 'notice')
+  }
+  return recordAnnotation(taskCtx, `[${keyword.toUpperCase()}] ${resolvedText} - failed (${duration}ms)`, 'error')
+}
+
+const annotateStep = <A, E, R>(
+  keyword: string,
+  resolvedText: string,
+  body: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.gen(function*() {
+    const taskCtx = yield* VitestTaskRef
+    const startTime = yield* Clock.currentTimeMillis
+    const exit = yield* Effect.exit(body)
+    const endTime = yield* Clock.currentTimeMillis
+    const duration = endTime - startTime
+    yield* annotateStepResult(taskCtx, keyword, resolvedText, duration, Exit.isSuccess(exit))
+    return yield* exit
+  })
 const recordSoftFailure = (keyword: string, text: string, cause: unknown) =>
-  SoftFailuresRef.pipe(
-    Effect.map((soft) => {
-      soft.record({ keyword, text, cause })
-    }),
-  )
+  Effect.gen(function*() {
+    const soft = yield* SoftFailuresRef
+    soft.record({ keyword, text, cause })
+    const taskCtx = yield* VitestTaskRef
+    yield* recordAnnotation(taskCtx, `[${keyword.toUpperCase()}] ${text} - soft-failed`, 'error')
+  })
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
 
 const GherkinScopeTypeId: unique symbol = Symbol.for('@systemfsoftware/gherkin/GherkinScope')
@@ -106,10 +167,12 @@ export const stepWrap = <A, E, R>(
   keyword: string,
   text: string,
   body: Effect.Effect<A, E, R>,
-): Effect.Effect<A, StepError, R> =>
-  body.pipe(
+): Effect.Effect<A, StepError, R> => {
+  const annotated = annotateStep(keyword, text, body)
+  return annotated.pipe(
     Effect.catchCause((cause) => Effect.fail(StepError.make({ keyword, text, cause: Cause.squash(cause) }))),
   )
+}
 
 export type GherkinEffect<A extends object, E, R> = Effect.Effect<GherkinScope<A>, E, R>
 
@@ -124,7 +187,7 @@ const wrapTapResult = <A extends object, E2, R2>(
   if (Effect.isEffect(raw)) {
     return stepWrap(keyword, resolvedText, raw).pipe(Effect.as(scope))
   }
-  return Effect.succeed(scope)
+  return stepWrap(keyword, resolvedText, Effect.void).pipe(Effect.as(scope))
 }
 
 const runTapBody = <A extends object, E2, R2>(
@@ -136,7 +199,9 @@ const runTapBody = <A extends object, E2, R2>(
   try {
     return wrapTapResult(f(scope), scope, keyword, resolvedText)
   } catch (e) {
-    return Effect.fail(StepError.make({ keyword, text: resolvedText, cause: e }))
+    return stepWrap(keyword, resolvedText, StepError.make({ keyword, text: resolvedText, cause: e })).pipe(
+      Effect.as(scope),
+    )
   }
 }
 

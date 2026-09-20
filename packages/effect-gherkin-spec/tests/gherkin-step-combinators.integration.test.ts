@@ -15,6 +15,8 @@ import {
   Given,
   StepError,
   Then,
+  type VitestTaskContext,
+  VitestTaskRef,
   When,
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Chunk, Effect, Fiber, Result } from 'effect'
@@ -645,6 +647,95 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
       yield* TestClock.adjust('10 millis')
       yield* Fiber.join(fiber)
       expect(calls).toBe(3)
+    }),
+  )
+
+  scenario(
+    'Step execution writes progress and timing annotations to the reporting context',
+    Effect.gen(function*() {
+      const annotations: Array<{ message: string; type?: string | undefined }> = []
+      const reporterCtx: VitestTaskContext = {
+        annotate: (message: string, type?: string) => {
+          annotations.push({ message, type })
+        },
+      }
+
+      yield* Gherkin.Do.pipe(
+        Given('an active user account')('userId', () => Effect.succeed('usr_123')),
+        When('the user updates their notification preferences')((s) => Effect.succeed(s.userId)),
+        Then('the preferences are stored successfully')((s) => {
+          expect(s.userId).toBe('usr_123')
+        }),
+        Effect.provideService(VitestTaskRef, reporterCtx),
+      )
+
+      expect(annotations).toHaveLength(3)
+      expect(annotations[0]?.message).toMatch(/^\[GIVEN\] an active user account - passed \(\d+ms\)$/)
+      expect(annotations[0]?.type).toBe('notice')
+      expect(annotations[1]?.message).toMatch(
+        /^\[WHEN\] the user updates their notification preferences - passed \(\d+ms\)$/,
+      )
+      expect(annotations[1]?.type).toBe('notice')
+      expect(annotations[2]?.message).toMatch(/^\[THEN\] the preferences are stored successfully - passed \(\d+ms\)$/)
+      expect(annotations[2]?.type).toBe('notice')
+    }),
+  )
+
+  scenario(
+    'A failed step emits a failure diagnostic to the reporting context',
+    Effect.gen(function*() {
+      const annotations: Array<{ message: string; type?: string | undefined }> = []
+      const reporterCtx: VitestTaskContext = {
+        annotate: (message: string, type?: string) => {
+          annotations.push({ message, type })
+        },
+      }
+
+      const result = yield* Gherkin.Do.pipe(
+        Given('an initial order submission')('orderId', () => Effect.succeed('ord_999')),
+        Then('the inventory reservation confirms')((s) => {
+          expect(s.orderId).toBe('ord_000')
+        }),
+        Effect.provideService(VitestTaskRef, reporterCtx),
+        Effect.result,
+      )
+
+      expect(Result.isFailure(result)).toBe(true)
+      expect(annotations).toHaveLength(2)
+      expect(annotations[0]?.message).toMatch(/^\[GIVEN\] an initial order submission - passed \(\d+ms\)$/)
+      expect(annotations[1]?.message).toMatch(/^\[THEN\] the inventory reservation confirms - failed \(\d+ms\)$/)
+      expect(annotations[1]?.type).toBe('error')
+    }),
+  )
+
+  scenario(
+    'A soft assertion failure emits an error diagnostic without interrupting subsequent steps',
+    Effect.gen(function*() {
+      const annotations: Array<{ message: string; type?: string | undefined }> = []
+      const reporterCtx: VitestTaskContext = {
+        annotate: (message: string, type?: string) => {
+          annotations.push({ message, type })
+        },
+      }
+
+      const pipeline = Gherkin.Do.pipe(
+        Given('a provisioned server instance')('serverId', () => Effect.succeed('srv_alpha')),
+        Then.soft('the health check responds with healthy')((s) => {
+          expect(s.serverId).toBe('srv_beta')
+        }),
+        And('the audit log records the check')((s) => {
+          expect(s.serverId).toBe('srv_alpha')
+        }),
+        Effect.provideService(VitestTaskRef, reporterCtx),
+      )
+
+      const result = yield* checkSoftFailures(pipeline.pipe(Effect.asVoid)).pipe(Effect.result)
+      expect(Result.isFailure(result)).toBe(true)
+      expect(annotations[0]?.message).toMatch(/^\[GIVEN\] a provisioned server instance - passed \(\d+ms\)$/)
+      expect(annotations[1]?.message).toBe('[THEN] the health check responds with healthy - soft-failed')
+      expect(annotations[1]?.type).toBe('error')
+      expect(annotations[2]?.message).toMatch(/^\[AND\] the audit log records the check - passed \(\d+ms\)$/)
+      expect(annotations[2]?.type).toBe('notice')
     }),
   )
 })
