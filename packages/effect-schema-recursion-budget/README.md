@@ -31,7 +31,6 @@ One `Schema.suspend` at the recursion point, members referencing the union bindi
 
 - the terminal branch past the ceiling is every member the cycle cannot reach;
 - the recursive branch is the union derived lazily per generated value, the same shape effect's own `Schema.suspend` derivation uses;
-- the depth identifier is derived from the module and binding, so two annotated cycles never share one — two schemas cannot silently share a budget.
 
 ```ts
 // vitest.config.ts

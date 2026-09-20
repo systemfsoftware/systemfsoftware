@@ -317,16 +317,15 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       )
     },
     readAlloc(size: number) {
-      const sizeNumber = Number(size)
       return Effect.suspend(() => {
-        const buf = Buffer.allocUnsafeSlow(sizeNumber)
+        const buf = Buffer.allocUnsafeSlow(size)
         return Effect.tryPromise({
-          try: () => handle.read(buf, 0, sizeNumber, Number(cursor.position)),
+          try: () => handle.read(buf, 0, size, Number(cursor.position)),
           catch: toPlatformError('readAlloc'),
         }).pipe(
           Effect.map(({ bytesRead }) => {
             cursor.position = cursor.position + BigInt(bytesRead)
-            return optionFromRead(bytesRead, sizeNumber, buf)
+            return optionFromRead(bytesRead, size, buf)
           }),
         )
       })

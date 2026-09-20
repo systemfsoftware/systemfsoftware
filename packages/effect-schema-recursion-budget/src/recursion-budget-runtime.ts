@@ -94,14 +94,12 @@ const planOf = (
 export const budgetToArbitrary = (
   getSelf: () => S.Top,
   budget: unknown,
-  _depthIdentifier: string,
 ): () => SchemaAST.Link => {
   decodeBudget(budget)
-
   return () => {
     const plan = planOf(getSelf().ast)
     if (typeof plan === 'string') throw new Error(plan)
-    return S.link<unknown>()(getSelf(), {
+    return S.link<unknown>()(S.make(plan.union), {
       decode: SchemaGetter.transform((value: unknown) => value),
       encode: SchemaGetter.transform((value: unknown) => value),
     })

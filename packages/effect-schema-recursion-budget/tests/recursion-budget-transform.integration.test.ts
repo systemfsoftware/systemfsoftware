@@ -58,7 +58,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
       When('the schema-laws pipeline processes that module')('code', (s) => Effect.sync(() => processed(s.source))),
       Then('the processed module carries a generation hook bound to the schema declaration')((s) => {
         expect(s.code).toContain(
-          `toCodecArbitrary: __esRecursionBudget(() => Expr, { maxDepth: 6, depthSize: 'small' }, "${MODULE_ID}#Expr")`,
+          `toCodecArbitrary: __esRecursionBudget(() => Expr, { maxDepth: 6, depthSize: 'small' })`,
         )
       }),
       Then('the hook arrives from the recursion-budget runtime module')((s) => {
