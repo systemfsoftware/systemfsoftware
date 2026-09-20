@@ -159,6 +159,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@systemfsoftware/oxlint-config-rule-authoring':
+        specifier: workspace:^
+        version: link:packages/oxlint-presets/oxlint-config-rule-authoring
       '@systemfsoftware/stryker-js':
         specifier: catalog:stryker
         version: 10.0.1(@opentelemetry/api-logs@0.208.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.208.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.2.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.116)(redis@6.2.1(@opentelemetry/api@1.9.1))
@@ -210,18 +213,15 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config
+        version: link:../../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -268,18 +268,15 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../../oxlint-presets/oxlint-config
+        version: link:../../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -358,18 +355,15 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:*
         version: link:../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -413,9 +407,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.59.1
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -428,9 +419,9 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/stryker-config':
         specifier: workspace:^
         version: link:../toolchain/stryker-config
@@ -494,15 +485,12 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.116(effect@4.0.0-rc.116)(vitest@5.0.1)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -549,15 +537,12 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -607,9 +592,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -647,15 +632,12 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -698,18 +680,15 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/effect-schema-recursion-budget':
         specifier: workspace:^
         version: link:../effect-schema-recursion-budget
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -762,9 +741,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -826,9 +805,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -868,9 +847,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -880,9 +856,9 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/stryker-config':
         specifier: workspace:^
         version: link:../toolchain/stryker-config
@@ -950,9 +926,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -962,9 +935,9 @@ importers:
       '@systemfsoftware/effect-memfs':
         specifier: workspace:^
         version: link:../effect-memfs
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -2235,6 +2208,9 @@ importers:
 
   packages/oxlint-presets/oxlint-config-cell-architecture:
     dependencies:
+      '@effect/tsgo':
+        specifier: 'catalog:'
+        version: 0.45.0
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-config-dmmf
@@ -2251,6 +2227,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/oxlint-config-rule-authoring':
+        specifier: workspace:^
+        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -2297,6 +2276,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/oxlint-config-rule-authoring':
+        specifier: workspace:^
+        version: link:../oxlint-config-rule-authoring
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -2382,18 +2364,15 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -2446,15 +2425,12 @@ importers:
       '@storybook/react-vite':
         specifier: 'catalog:'
         version: 10.6.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rollup@4.62.4)(storybook@10.6.0(@types/react@19.3.0)(prettier@3.9.6)(react@19.3.0))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../oxlint-presets/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
-      '@systemfsoftware/oxlint-config':
+      '@systemfsoftware/oxlint-config-cell-architecture':
         specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config
+        version: link:../oxlint-presets/oxlint-config-cell-architecture
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig

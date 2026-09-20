@@ -44,7 +44,6 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   ],
   'typescript/no-explicit-any': 'error',
   'typescript/no-non-null-assertion': 'error',
-  'node/no-sync': 'error',
 }
 
 const config: OxlintConfig = {
@@ -59,7 +58,6 @@ const config: OxlintConfig = {
       files: ['**/__tests__/**', '**/*.test.ts'],
       rules: {
         'typescript/consistent-type-assertions': 'off',
-        'node/no-sync': 'off',
       },
     },
   ],

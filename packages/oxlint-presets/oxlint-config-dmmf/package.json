@@ -49,6 +49,7 @@
     "oxlint-tsgolint": "catalog:oxlint"
   },
   "devDependencies": {
+    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

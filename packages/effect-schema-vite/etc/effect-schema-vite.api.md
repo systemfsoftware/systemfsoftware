@@ -6,10 +6,10 @@
 
 import { Plugin as Plugin_2 } from 'vite';
 
-// @public
+// @public (undocumented)
 export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => string;
 
-// @public
+// @public (undocumented)
 export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2;
 
 // @public

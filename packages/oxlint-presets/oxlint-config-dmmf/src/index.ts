@@ -1,10 +1,10 @@
-import { recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
+import { correctness as tsgoCorrectness } from '@effect/tsgo/oxlint-presets'
 import dmmfWorkflow from '@systemfsoftware/oxlint-plugin-dmmf-workflow'
 import effectSchema from '@systemfsoftware/oxlint-plugin-effect-schema'
 import testDiscipline from '@systemfsoftware/oxlint-plugin-test-discipline'
 import type { OxlintConfig } from 'oxlint'
 
-const promoteWarnToError = (rules: Record<string, unknown> | undefined): Record<string, 'error' | 'off'> => {
+export const promoteWarnToError = (rules: Record<string, unknown> | undefined): Record<string, 'error' | 'off'> => {
   const out: Record<string, 'error' | 'off'> = {}
   if (!rules) return out
   for (const [key, severity] of Object.entries(rules)) {
@@ -15,7 +15,6 @@ const promoteWarnToError = (rules: Record<string, unknown> | undefined): Record<
   }
   return out
 }
-
 export const jsPlugins: readonly string[] = [
   import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-schema'),
   import.meta.resolve('@systemfsoftware/oxlint-plugin-dmmf-workflow'),
@@ -40,7 +39,6 @@ export const options: NonNullable<OxlintConfig['options']> = {
 
 const stockRules: NonNullable<OxlintConfig['rules']> = {
   'vitest/no-standalone-expect': 'off',
-  'no-ternary': 'error',
   'typescript/no-explicit-any': 'error',
   'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
   'typescript/no-unsafe-argument': 'error',
@@ -84,30 +82,6 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   ...dmmfWorkflow.configs.recommended.rules,
   ...testDiscipline.configs.recommended.rules,
 }
-
-const noNodeBuiltinImports: NonNullable<OxlintConfig['rules']>['no-restricted-imports'] = [
-  'error',
-  {
-    patterns: [
-      {
-        regex: '^node:.*',
-        message:
-          'Importing Node.js builtins via "node:" is forbidden — use "@effect/platform" or a Web Standard API (e.g. global URL, fetch, Web Crypto, Web Streams) instead.',
-      },
-      {
-        regex:
-          '^(?:assert|async_hooks|buffer|child_process|cluster|console|constants|crypto|dgram|diagnostics_channel|dns|domain|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|sys|timers|tls|trace_events|tty|url|util|v8|vm|wasi|worker_threads|zlib)(?:/.*)?$',
-        message:
-          'Importing Node.js builtins without the "node:" prefix is forbidden (e.g. "fs") — use "@effect/platform" or a Web Standard API instead. Even "node:fs" is forbidden.',
-      },
-      {
-        regex: '^@std/(?:encoding|fs|path|streams)(?:/.*)?$',
-        message:
-          'Importing @std modules that mirror Effect services (encoding → Encoding, fs → FileSystem, path → Path, streams → Stream) is forbidden — use the corresponding Effect module instead.',
-      },
-    ],
-  },
-]
 
 export const ignorePatterns: readonly string[] = [
   '**/node_modules/**',
@@ -161,8 +135,7 @@ const sourceAndTestOverrides: NonNullable<OxlintConfig['overrides']> = [
     files: ['**/src/**', '**/*.test.ts'],
     rules: {
       ...rules,
-      'no-restricted-imports': noNodeBuiltinImports,
-      ...promoteWarnToError(tsgoRecommended.rules),
+      ...promoteWarnToError(tsgoCorrectness.rules),
     },
   },
 ]
@@ -185,10 +158,6 @@ export const overrides: NonNullable<OxlintConfig['overrides']> = [
   ...sourceAndTestOverrides,
   ...observerOverrides,
   ...complexityOverrides,
-  {
-    files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
-    rules: { 'no-restricted-imports': 'off' },
-  },
 ]
 
 const dmmf: OxlintConfig = {

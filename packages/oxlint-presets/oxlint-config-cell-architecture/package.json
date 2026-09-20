@@ -41,12 +41,14 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
+    "@effect/tsgo": "catalog:",
     "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-architecture": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-platform": "workspace:^",
     "oxlint": "catalog:oxlint"
   },
   "devDependencies": {
+    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

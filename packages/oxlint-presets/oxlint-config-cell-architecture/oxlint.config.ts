@@ -1,8 +1,6 @@
+import ruleAuthoring from '@systemfsoftware/oxlint-config-rule-authoring'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  categories: {
-    correctness: 'error',
-  },
-  plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn', 'oxc'],
+  extends: [ruleAuthoring],
 })

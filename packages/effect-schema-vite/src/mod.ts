@@ -32,29 +32,46 @@ export const LAW_FILE_BASENAME = 'schema-laws.test.ts' as const
  *
  * @since 1.4.0
  */
+const formatSpecifier = (baseDir: string, filePath: string): string => {
+  const rel = relative(baseDir, filePath).replace(/\.ts$/, '')
+  return rel.startsWith('.') ? rel : `./${rel}`
+}
+
+const incrementCount = (counts: Map<string, number>, name: string): void => {
+  const prev = counts.get(name)
+  counts.set(name, prev !== undefined ? prev + 1 : 1)
+}
+
+const buildNameCounts = (schemas: readonly FoundSchema[]): ReadonlyMap<string, number> => {
+  const counts = new Map<string, number>()
+  for (const s of schemas) incrementCount(counts, s.name)
+  return counts
+}
+
+const schemaLabelOf = (s: FoundSchema, count: number, specifier: string): string => {
+  if (count > 1) return `${s.name} (${specifier})`
+  return s.name
+}
+
 export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
   const schemas = findExportedSchemas(srcDir)
   if (schemas.length === 0) return '// no schemas found\nexport {}\n'
 
-  const specifierOf = (filePath: string): string => {
-    const rel = relative(dirname(lawFilePath), filePath).replace(/\.ts$/, '')
-    return rel.startsWith('.') ? rel : `./${rel}`
-  }
-
-  const nameCount = new Map<string, number>()
-  for (const s of schemas) nameCount.set(s.name, (nameCount.get(s.name) ?? 0) + 1)
-
-  const labelOf = (s: FoundSchema): string =>
-    (nameCount.get(s.name) ?? 0) > 1 ? `${s.name} (${specifierOf(s.filePath)})` : s.name
+  const baseDir = dirname(lawFilePath)
+  const nameCount = buildNameCounts(schemas)
 
   return [
     `import { recursionLaws, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
-    schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
+    schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(formatSpecifier(baseDir, s.filePath))}`)
+      .join('\n'),
     '',
     schemas
-      .map((s, i) =>
-        `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})\nrecursionLaws(${quote(labelOf(s))}, schema_${i})`
-      )
+      .map((s, i) => {
+        const spec = formatSpecifier(baseDir, s.filePath)
+        const count = nameCount.get(s.name) ?? 0
+        const label = schemaLabelOf(s, count, spec)
+        return `ruleOfSchemas(${quote(label)}, schema_${i})\nrecursionLaws(${quote(label)}, schema_${i})`
+      })
       .join('\n'),
   ].join('\n')
 }
@@ -82,6 +99,26 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
  * })
  * ```
  */
+const isLawTarget = (lawFile: string | undefined): boolean => {
+  if (lawFile === undefined) return false
+  return lawFile.endsWith(`/${LAW_FILE_BASENAME}`)
+}
+
+const targetLawFile = (id: string): string | undefined => {
+  const [lawFile] = id.split('?')
+  if (isLawTarget(lawFile)) return lawFile
+  return undefined
+}
+
+const defaultDir = (dir: string | undefined): string => {
+  if (dir !== undefined) return dir
+  return 'src'
+}
+
+const resolveTargetDir = (options: InlineSchemaTestsOptions | undefined): string => {
+  if (options !== undefined) return defaultDir(options.dir)
+  return 'src'
+}
 export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin => {
   const budgets = recursionBudgetTransform()
   let config: ResolvedConfig
@@ -97,11 +134,9 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     },
 
     transform(code, id) {
-      const lawFile = id.split('?')[0]
-      if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) {
-        return budgets.transform(code, id)
-      }
-      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'))
+      const lawFile = targetLawFile(id)
+      if (lawFile === undefined) return budgets.transform(code, id)
+      return generateSchemaLaws(lawFile, resolve(config.root, resolveTargetDir(options)))
     },
   }
 }
