@@ -182,7 +182,7 @@ export const gate: {
       Effect.flatMap(self.run(input), (read): Effect.Effect<Option.Option<A>, E2, R2> =>
         Option.match(read, {
           onNone: () => Effect.succeed(Option.none<A>()),
-          onSome: (raw) => Effect.map(inner.run(raw), Option.some),
+          onSome: (raw) => Effect.asSome(inner.run(raw)),
         }))
     ),
 )

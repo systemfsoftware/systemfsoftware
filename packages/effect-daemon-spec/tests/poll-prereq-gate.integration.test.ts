@@ -151,7 +151,7 @@ Feature('Poll Prereq Gate')
           Effect.gen(function*() {
             const worker = Daemon.poll({
               name: 'gate-root',
-              prereq: Effect.succeed(Option.some(1)),
+              prereq: Effect.succeedSome(1),
               work: () =>
                 Effect.currentSpan.pipe(
                   Effect.flatMap((span) => Ref.update(s.workSpanRooted, (arr) => [...arr, Option.isNone(span.parent)])),
@@ -188,7 +188,7 @@ Feature('Poll Prereq Gate')
           Effect.gen(function*() {
             const worker = Daemon.poll({
               name: 'gate-attrs',
-              prereq: Effect.succeed(Option.some(1)),
+              prereq: Effect.succeedSome(1),
               work: () =>
                 Effect.currentSpan.pipe(
                   Effect.flatMap((span) => Ref.set(s.attrs, Option.some(span.attributes))),
@@ -284,7 +284,7 @@ Feature('Poll Prereq Gate')
           Effect.gen(function*() {
             const worker = Daemon.poll({
               name: 'gate-work-fail',
-              prereq: Effect.succeed(Option.some(7)),
+              prereq: Effect.succeedSome(7),
               work: () =>
                 recordWorkSpan(s.workSpanNames).pipe(
                   Effect.andThen(Effect.fail('work-boom')),

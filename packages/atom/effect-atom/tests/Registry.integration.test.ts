@@ -3,8 +3,6 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Cause, Effect, Exit, Fiber, HashSet, Latch, Option, Schema, Stream } from 'effect'
 import { expect, vi } from 'vitest'
 
-const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
-
 const Feature = makeFeature({ it, layer })
 
 Feature('Keeping a value that is still loading available to every reader')
@@ -822,10 +820,6 @@ Feature('Keeping a value that is still loading available to every reader')
             } catch (error) {
               if (error instanceof Error) {
                 message = error.message
-              } else if (typeof error === 'string') {
-                message = error
-              } else {
-                message = jsonString(error)
               }
             }
             return { remaining, message }

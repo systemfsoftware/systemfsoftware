@@ -1,5 +1,5 @@
 import { it } from '@effect/vitest'
-import { Exit, Schema, Schema as S } from 'effect'
+import { Option, Schema, Schema as S } from 'effect'
 
 /**
  * The two laws, as decisions over one schema's own values.
@@ -22,23 +22,37 @@ const lawsOf = <A, I>(schema: S.Codec<A, I>): {
   /** `∀x. dec(enc(x)) === x` — round-trip identity, by the schema's type equivalence. */
   readonly roundTrips: (value: A) => boolean
 } => {
-  const decodeExit = Schema.decodeExit(schema)
-  const encodeSync = Schema.encodeSync(schema)
+  const decodeOption = Schema.decodeOption(schema)
+  const encodeOption = Schema.encodeOption(schema)
   const typeEq = S.toEquivalence(schema)
   const encodedEq = S.toEquivalence(S.toEncoded(schema))
 
-  return {
-    encodeStable: (value) => {
-      const encoded = encodeSync(value)
-      const result = decodeExit(encoded)
-      if (Exit.isFailure(result)) return false
-      return encodedEq(encodeSync(result.value), encoded)
-    },
-    roundTrips: (value) => {
-      const result = decodeExit(encodeSync(value))
-      return Exit.isSuccess(result) && typeEq(result.value, value)
-    },
-  }
+  const encodeStable = (value: A): boolean =>
+    encodeOption(value).pipe(
+      Option.flatMap(decodeOption),
+      Option.flatMap(encodeOption),
+      Option.match({
+        onNone: () => false,
+        onSome: (enc) =>
+          encodeOption(value).pipe(
+            Option.match({
+              onNone: () => false,
+              onSome: (orig) => encodedEq(enc, orig),
+            }),
+          ),
+      }),
+    )
+
+  const roundTrips = (value: A): boolean =>
+    encodeOption(value).pipe(
+      Option.flatMap(decodeOption),
+      Option.match({
+        onNone: () => false,
+        onSome: (dec) => typeEq(dec, value),
+      }),
+    )
+
+  return { encodeStable, roundTrips }
 }
 
 /**

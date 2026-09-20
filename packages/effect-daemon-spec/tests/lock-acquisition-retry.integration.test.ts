@@ -96,9 +96,9 @@ Feature('Lock acquisition retry on contention')
                     yield* TestClock.adjust(Duration.millis(200))
                     return yield* supHealth.ready.await.pipe(
                       Effect.timeout('0 millis'),
-                      Effect.matchEffect({
-                        onFailure: () => Effect.succeed(false),
-                        onSuccess: () => Effect.succeed(true),
+                      Effect.match({
+                        onFailure: () => false,
+                        onSuccess: () => true,
                       }),
                     )
                   })),
@@ -184,9 +184,9 @@ Feature('Lock acquisition retry on contention')
                     yield* TestClock.adjust(Duration.millis(200))
                     return yield* supHealth.ready.await.pipe(
                       Effect.timeout('0 millis'),
-                      Effect.matchEffect({
-                        onFailure: () => Effect.succeed(false),
-                        onSuccess: () => Effect.succeed(true),
+                      Effect.match({
+                        onFailure: () => false,
+                        onSuccess: () => true,
                       }),
                     )
                   })),
@@ -281,9 +281,9 @@ Feature('Lock acquisition retry on contention')
                     const countAfterRelease = yield* Ref.get(s.state.counter)
                     const ready = yield* supHealth.ready.await.pipe(
                       Effect.timeout('0 millis'),
-                      Effect.matchEffect({
-                        onFailure: () => Effect.succeed(false),
-                        onSuccess: () => Effect.succeed(true),
+                      Effect.match({
+                        onFailure: () => false,
+                        onSuccess: () => true,
                       }),
                     )
                     return { countAfterContention, countAfterRelease, ready }

@@ -15,7 +15,7 @@ export class LeaderLock extends Context.Service<LeaderLock, LeaderLockService>()
   static readonly Noop: Layer.Layer<LeaderLock> = Layer.succeed(
     LeaderLock,
     LeaderLock.of({
-      withLock: (_key, self) => Effect.map(self, Option.some),
+      withLock: (_key, self) => Effect.asSome(self),
     }),
   )
 }

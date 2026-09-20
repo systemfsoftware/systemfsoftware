@@ -343,7 +343,7 @@ const superviseChild = <R>(
   Effect.gen(function*() {
     const childIntensityOpt = yield* Option.match(Option.fromNullishOr(child.childPolicy.intensity), {
       onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
-      onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
+      onSome: (cfg: IntensityConfig) => Effect.asSome(makeIntensity(cfg.restarts, cfg.window)),
     })
     const loop = (): Supervision<R> =>
       Effect.gen(function*() {
@@ -393,7 +393,7 @@ const runGroup = <R>(
         const childIntensityTrackers = yield* Effect.forEach(ctx.booted, (b: BootedChild<R>) =>
           Option.match(Option.fromNullishOr(b.childPolicy.intensity), {
             onNone: () => Effect.succeed(Option.none<IntensityTracker>()),
-            onSome: (cfg: IntensityConfig) => Effect.map(makeIntensity(cfg.restarts, cfg.window), Option.some),
+            onSome: (cfg: IntensityConfig) => Effect.asSome(makeIntensity(cfg.restarts, cfg.window)),
           }))
         const cursor = yield* Ref.make(0)
         const attempt = Effect.gen(function*() {

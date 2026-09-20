@@ -31,7 +31,7 @@
     "@commitlint/config-conventional": "^21",
     "@commitlint/config-pnpm-scopes": "^21",
     "@commitlint/types": "^21",
-    "@effect/tsgo": "^0.45.0",
+    "@effect/tsgo": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/stryker-js": "catalog:stryker",
     "concurrently": "^10",

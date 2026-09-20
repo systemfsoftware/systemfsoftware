@@ -1,11 +1,11 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { type Contents, MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { type DirectoryJSON, toDirectoryJSON } from '@systemfsoftware/npm-package'
-import { Effect, Schema } from 'effect'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
-const jsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))
+const jsonString = (value: unknown): string => JSON.stringify(value)
 
 const volumeOf = (contents: DirectoryJSON): Contents => {
   const volume: Contents = {}

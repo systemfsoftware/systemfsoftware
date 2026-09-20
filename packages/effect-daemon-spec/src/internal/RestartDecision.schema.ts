@@ -122,9 +122,7 @@ const DecideInputBase = Schema.Struct({
 export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(DecideInputBase, {
   toCodecArbitrary: (): SchemaAST.Link =>
     Schema.link<DecideInput>()(DecideInputGenerated, {
-      decode: SchemaGetter.transform((generated) =>
-        Schema.decodeSync(Schema.suspend(() => DecideInput))(commandFromGenerated(generated))
-      ),
+      decode: SchemaGetter.transform((generated) => new DecideInput(commandFromGenerated(generated))),
       encode: SchemaGetter.transform(generatedFromCommand),
     }),
 }) {}

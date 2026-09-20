@@ -52,9 +52,9 @@ Feature('Supervisor exhaustion via DaemonReporter')
             yield* TestClock.adjust(Duration.seconds(2))
             const healthyOpen = yield* supHealth.healthy.await.pipe(
               Effect.timeout('0 millis'),
-              Effect.matchEffect({
-                onFailure: () => Effect.succeed(false),
-                onSuccess: () => Effect.succeed(true),
+              Effect.match({
+                onFailure: () => false,
+                onSuccess: () => true,
               }),
             )
             const exhaustions = yield* spy.getExhaustions()

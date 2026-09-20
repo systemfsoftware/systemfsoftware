@@ -68,9 +68,9 @@ Feature('Supervisor cooldown recovery')
               const exhaustionsMid = yield* s.spy.getExhaustions()
               const unhealthyMid = yield* health.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(true),
-                  onSuccess: () => Effect.succeed(false),
+                Effect.match({
+                  onFailure: () => true,
+                  onSuccess: () => false,
                 }),
               )
               yield* TestClock.adjust(Duration.seconds(2))
@@ -78,9 +78,9 @@ Feature('Supervisor cooldown recovery')
               const runsAfter = yield* Ref.get(s.state.runsAfterCooldown)
               const healthyFinal = yield* health.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(false),
-                  onSuccess: () => Effect.succeed(true),
+                Effect.match({
+                  onFailure: () => false,
+                  onSuccess: () => true,
                 }),
               )
               const exhaustionsFinal = yield* s.spy.getExhaustions()
@@ -165,9 +165,9 @@ Feature('Supervisor cooldown recovery')
               const exhaustionsMid = yield* s.spy.getExhaustions()
               const unhealthyMid = yield* health.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(true),
-                  onSuccess: () => Effect.succeed(false),
+                Effect.match({
+                  onFailure: () => true,
+                  onSuccess: () => false,
                 }),
               )
               yield* TestClock.adjust(Duration.seconds(2))
@@ -175,9 +175,9 @@ Feature('Supervisor cooldown recovery')
               const runsAfter = yield* Ref.get(s.state.runsAfterCooldown)
               const healthyFinal = yield* health.healthy.await.pipe(
                 Effect.timeout('0 millis'),
-                Effect.matchEffect({
-                  onFailure: () => Effect.succeed(false),
-                  onSuccess: () => Effect.succeed(true),
+                Effect.match({
+                  onFailure: () => false,
+                  onSuccess: () => true,
                 }),
               )
               const exhaustionsFinal = yield* s.spy.getExhaustions()
