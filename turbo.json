@@ -137,15 +137,15 @@
         "!**/*.md"
       ],
       "outputs": [
-        "reports/mutation-report.html",
-        "reports/mutation-report.json"
+        "reports/mutation/mutation.html",
+        "reports/mutation/mutation.json"
       ],
       "env": [
         "NODE_ENV",
         "CI",
         "AGENT"
       ],
-      "cache": true
+      "cache": false
     },
     "lint": {
       "inputs": [

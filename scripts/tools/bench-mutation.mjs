@@ -69,7 +69,7 @@ const pkgDirOf = (pkgName) => {
   throw new Error(`package not found: ${pkgName}`)
 }
 
-const reportPathOf = (dir) => path.join(ROOT, dir, 'reports/mutation-report.json')
+const reportPathOf = (dir) => path.join(ROOT, dir, 'reports/mutation/mutation.json')
 
 const run = (pkg, opts) =>
   new Promise((resolve) => {

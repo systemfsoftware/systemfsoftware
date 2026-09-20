@@ -37,14 +37,14 @@ export interface SummaryInput {
 type ReportState = { reportText: string | null; streamText: string | null }
 
 async function loadState(reportsDir: string, readFile: (path: string) => Promise<string>): Promise<ReportState> {
-  const reportText = await readFile(`${reportsDir}/mutation-report.json`).catch(() => null)
+  const reportText = await readFile(`${reportsDir}/mutation/mutation.json`).catch(() => null)
   const streamText = await readFile(`${reportsDir}/mutation-stream.jsonl`).catch(() => null)
   return { reportText, streamText }
 }
 
 export async function buildSummary(input: SummaryInput): Promise<string> {
   const state = await loadState(input.reportsDir, input.readFile)
-  const reportPath = `${input.reportsDir}/mutation-report.json`
+  const reportPath = `${input.reportsDir}/mutation/mutation.json`
   const streamPath = `${input.reportsDir}/mutation-stream.jsonl`
   const lines = [`#### Mutation · **${input.package}**`, '', `- **Stryker outcome**: **${input.outcome}**`]
 
@@ -101,7 +101,7 @@ async function selftest(): Promise<boolean> {
     package: 'pkg/complete',
     outcome: 'success',
     reportsDir: '/r',
-    readFile: readFileFor({ '/r/mutation-report.json': '{"schemaVersion":"1.0","files":{}}' }),
+    readFile: readFileFor({ '/r/mutation/mutation.json': '{"schemaVersion":"1.0","files":{}}' }),
   })
   if (!complete.includes('(complete)')) failures.push('complete')
 
@@ -109,7 +109,7 @@ async function selftest(): Promise<boolean> {
     package: 'pkg/unparseable',
     outcome: 'failure',
     reportsDir: '/r',
-    readFile: readFileFor({ '/r/mutation-report.json': '{ not json' }),
+    readFile: readFileFor({ '/r/mutation/mutation.json': '{ not json' }),
   })
   if (!unparseable.includes('present but not a valid Stryker report')) failures.push('unparseable')
 
@@ -147,9 +147,9 @@ async function selftest(): Promise<boolean> {
       package: 'pkg',
       outcome: 'failure',
       reportsDir: '/r',
-      readFile: readFileFor({ '/r/mutation-report.json': '{"schemaVersion":"1.0","files":{}}' }),
+      readFile: readFileFor({ '/r/mutation/mutation.json': '{"schemaVersion":"1.0","files":{}}' }),
     },
-    await loadState('/r', readFileFor({ '/r/mutation-report.json': '{"schemaVersion":"1.0","files":{}}' })),
+    await loadState('/r', readFileFor({ '/r/mutation/mutation.json': '{"schemaVersion":"1.0","files":{}}' })),
   )
   if (requirePass !== null) failures.push('require-pass')
 

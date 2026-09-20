@@ -16,9 +16,6 @@
 "@systemfsoftware/omp-typescript-discipline": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
-"@systemfsoftware/stryker-js-cli": none
-"@systemfsoftware/stryker-plugins": none
-"@systemfsoftware/stryker-test-contribution": none
 "@systemfsoftware/tsconfig": none
 ---
 

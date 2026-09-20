@@ -7,8 +7,8 @@ const envConcurrency = process.env['STRYKER_CONCURRENCY'] ??
 export const sharedConfig = {
   packageManager: 'pnpm',
   reporters: isAgent || isCI ? ['json', 'html'] : ['progress', 'html', 'json'],
-  htmlReporter: { fileName: 'reports/mutation-report.html' },
-  jsonReporter: { fileName: 'reports/mutation-report.json' },
+  htmlReporter: { fileName: 'reports/mutation/mutation.html' },
+  jsonReporter: { fileName: 'reports/mutation/mutation.json' },
   coverageAnalysis: 'perTest',
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',
