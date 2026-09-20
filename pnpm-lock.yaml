@@ -363,6 +363,9 @@ importers:
       '@systemfsoftware/tsdown-config':
         specifier: workspace:^
         version: link:../toolchain/tsdown-config
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.2
