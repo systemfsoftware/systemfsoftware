@@ -1,3 +1,4 @@
+import type { OxlintOverride } from 'oxlint'
 import { entrypointInterpretsOnce } from './rules/entrypoint-interprets-once.js'
 import { entrypointNoExports } from './rules/entrypoint-no-exports.js'
 import { entrypointNoPromiseWrapper } from './rules/entrypoint-no-promise-wrapper.js'
@@ -24,6 +25,43 @@ const recommendedRules = {
   [rule('no-new-worker-with-wasm-import')]: 'error',
 } as const
 
+export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-restricted-imports'] = [
+  'error',
+  {
+    patterns: [
+      {
+        regex: '^node:.*',
+        message:
+          'Importing Node.js builtins via "node:" is forbidden — use "@effect/platform" or a Web Standard API (e.g. global URL, fetch, Web Crypto, Web Streams) instead.',
+      },
+      {
+        regex:
+          '^(?:assert|async_hooks|buffer|child_process|cluster|console|constants|crypto|dgram|diagnostics_channel|dns|domain|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|sys|timers|tls|trace_events|tty|url|util|v8|vm|wasi|worker_threads|zlib)(?:/.*)?$',
+        message:
+          'Importing Node.js builtins without the "node:" prefix is forbidden (e.g. "fs") — use "@effect/platform" or a Web Standard API instead. Even "node:fs" is forbidden.',
+      },
+      {
+        regex: '^@std/(?:encoding|fs|path|streams)(?:/.*)?$',
+        message:
+          'Importing @std modules that mirror Effect services (encoding → Encoding, fs → FileSystem, path → Path, streams → Stream) is forbidden — use the corresponding Effect module instead.',
+      },
+    ],
+  },
+]
+
+const platformOverrides: OxlintOverride[] = [
+  {
+    files: ['**/src/**', '**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': noNodeBuiltinImports,
+    },
+  },
+  {
+    files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
+]
+
 export default {
   meta: {
     name: PLUGIN_NAME,
@@ -42,6 +80,7 @@ export default {
   configs: {
     recommended: {
       rules: recommendedRules,
+      overrides: platformOverrides,
     },
   },
 }

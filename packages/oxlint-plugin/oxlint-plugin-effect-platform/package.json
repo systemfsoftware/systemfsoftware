@@ -51,7 +51,8 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
-    "@oxlint/plugins": "catalog:oxlint"
+    "@oxlint/plugins": "catalog:oxlint",
+    "oxlint": "catalog:oxlint"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",

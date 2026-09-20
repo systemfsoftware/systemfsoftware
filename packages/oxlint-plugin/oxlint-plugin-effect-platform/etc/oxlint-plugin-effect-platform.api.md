@@ -4,6 +4,7 @@
 
 ```ts
 
+import { OxlintOverride } from 'oxlint';
 import { Rule } from '@oxlint/plugins';
 
 // @public (undocumented)
@@ -27,10 +28,14 @@ const _default: {
             rules: {
                 readonly [x: string]: "error";
             };
+            overrides: OxlintOverride[];
         };
     };
 };
 export default _default;
+
+// @public (undocumented)
+export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-restricted-imports'];
 
 // (No @packageDocumentation comment for this package)
 

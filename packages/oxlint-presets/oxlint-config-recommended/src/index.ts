@@ -90,6 +90,7 @@ const recommendedConfig: OxlintConfig = {
   overrides: [
     ...sourceAndTestOverrides,
     ...observerOverrides,
+    ...effectPlatform.configs.recommended.overrides,
   ],
 }
 
