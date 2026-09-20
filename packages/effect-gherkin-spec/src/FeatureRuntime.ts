@@ -4,6 +4,7 @@ import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
 import type { GherkinEffect, GivenStage, ScopeIdentifiers, ScopeMap, ScopeServices, ThenStage } from './DoNotation.js'
+import { makeFreshSoftContext, SoftFailuresRef } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
 import { StepError } from './StepError.schema.js'
 
@@ -51,9 +52,26 @@ const applyScenarioOpts = <R, A, E>(
   return applyDefinedOpts(effect, opts)
 }
 
+export const checkSoftFailures = <R>(
+  effect: Effect.Effect<void, StepError, R>,
+): Effect.Effect<void, StepError, R> =>
+  Effect.gen(function*() {
+    yield* effect
+    const soft = yield* SoftFailuresRef
+    const failures = soft.getFailures()
+    if (failures.length > 0) {
+      const messages = failures.map((f) => `${f.keyword} ${f.text}: ${String(f.cause)}`)
+      return yield* StepError.make({
+        keyword: 'then',
+        text: 'soft assertions failed',
+        cause: messages.join('\n'),
+      })
+    }
+  }).pipe(Effect.provideService(SoftFailuresRef, makeFreshSoftContext()))
+
 const normalizePipeline = <R>(
   pipeline: Effect.Effect<unknown, StepError, R>,
-): Effect.Effect<void, StepError, R> => pipeline.pipe(Effect.asVoid)
+): Effect.Effect<void, StepError, R> => checkSoftFailures(pipeline.pipe(Effect.asVoid))
 
 const composeWithBackground = <R>(
   pipeline: Effect.Effect<unknown, StepError, R>,

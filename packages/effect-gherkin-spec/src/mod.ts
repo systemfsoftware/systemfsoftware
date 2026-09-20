@@ -29,7 +29,7 @@ export {
   type FeatureSuiteOptions,
   makeFeature,
 } from './Feature.js'
-export { resolveScenarioArgs } from './FeatureRuntime.js'
+export { checkSoftFailures, resolveScenarioArgs } from './FeatureRuntime.js'
 export type { OutlineFn, ScenarioBody, ScenarioFn, ScenarioOptions } from './FeatureRuntime.js'
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './OutlineExpand.js'
 export type { OutlineRow, TemplateToken } from './OutlineExpand.js'

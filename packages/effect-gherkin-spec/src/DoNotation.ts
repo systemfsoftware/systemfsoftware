@@ -1,6 +1,40 @@
-import { Cause, Effect } from 'effect'
+import { Cause, Context, Effect } from 'effect'
 import { StepError } from './StepError.schema.js'
 
+export interface StepAssertionFailure {
+  readonly keyword: string
+  readonly text: string
+  readonly cause: unknown
+}
+
+export interface SoftFailuresContext {
+  readonly record: (failure: StepAssertionFailure) => void
+  readonly getFailures: () => readonly StepAssertionFailure[]
+}
+
+export const makeFreshSoftContext = (): SoftFailuresContext => {
+  const failures: StepAssertionFailure[] = []
+  return {
+    record: (failure) => {
+      failures.push(failure)
+    },
+    getFailures: () => [...failures],
+  }
+}
+
+export const SoftFailuresRef: Context.Reference<SoftFailuresContext> = Context.Reference<SoftFailuresContext>(
+  '@systemfsoftware/effect-gherkin-spec/SoftFailures',
+  {
+    defaultValue: makeFreshSoftContext,
+  },
+)
+
+const recordSoftFailure = (keyword: string, text: string, cause: unknown) =>
+  SoftFailuresRef.pipe(
+    Effect.map((soft) => {
+      soft.record({ keyword, text, cause })
+    }),
+  )
 type NoInfer<A> = [A][A extends unknown ? 0 : never]
 
 const GherkinScopeTypeId: unique symbol = Symbol.for('@systemfsoftware/gherkin/GherkinScope')
@@ -81,6 +115,49 @@ const tapThen =
         const resolvedText = resolveText(text, scope)
         const nextScope = { ...scope, ...stageThen }
         return runTapBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
+      },
+    )
+const handleRawTap = <E2, R2>(
+  raw: Effect.Effect<unknown, E2, R2> | void,
+  keyword: string,
+  resolvedText: string,
+): Effect.Effect<void, never, R2> => {
+  if (Effect.isEffect(raw)) {
+    return raw.pipe(
+      Effect.catchCause((cause) => recordSoftFailure(keyword, resolvedText, Cause.squash(cause))),
+      Effect.asVoid,
+    )
+  }
+  return Effect.void
+}
+
+const runSoftBody = <A extends object, E2, R2>(
+  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+  scope: GherkinScope<A>,
+  keyword: string,
+  resolvedText: string,
+): Effect.Effect<void, never, R2> => {
+  try {
+    return handleRawTap<E2, R2>(f(scope), keyword, resolvedText)
+  } catch (e) {
+    return recordSoftFailure(keyword, resolvedText, e)
+  }
+}
+
+const tapSoft =
+  (keyword: string, text: StepText) =>
+  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never>(
+    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  ) =>
+  <E1, R1>(
+    self: GherkinEffect<A, E1, R1>,
+  ): GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2> =>
+    Effect.flatMap(
+      self,
+      (scope): Effect.Effect<GherkinScope<Omit<A, typeof StageTypeId> & ThenStage>, StepError, R2> => {
+        const resolvedText = resolveText(text, scope)
+        const nextScope = { ...scope, ...stageThen }
+        return runSoftBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
       },
     )
 
@@ -165,9 +242,15 @@ const bindWhen = (keyword: 'when', text: StepText) => {
 
 const _given = (text: StepText) => bindGiven('given', text)
 const _when = (text: StepText) => bindWhen('when', text)
-const _then = (text: StepText) => tapThen('then', text)
-const _and = (text: StepText) => tapThen('and', text)
-const _but = (text: StepText) => tapThen('but', text)
+const _then = Object.assign((text: StepText) => tapThen('then', text), {
+  soft: (text: StepText) => tapSoft('then', text),
+})
+const _and = Object.assign((text: StepText) => tapThen('and', text), {
+  soft: (text: StepText) => tapSoft('and', text),
+})
+const _but = Object.assign((text: StepText) => tapThen('but', text), {
+  soft: (text: StepText) => tapSoft('but', text),
+})
 
 const emptyScope: GherkinScope<InitialStage> = {
   ...stageInitial,

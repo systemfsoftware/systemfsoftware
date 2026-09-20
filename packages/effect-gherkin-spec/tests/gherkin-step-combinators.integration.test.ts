@@ -7,7 +7,16 @@
  * `StepError`, and the pipeline can be pre-seeded via `Gherkin.startWith`.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { And, But, Gherkin, Given, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import {
+  And,
+  But,
+  checkSoftFailures,
+  Gherkin,
+  Given,
+  StepError,
+  Then,
+  When,
+} from '@systemfsoftware/effect-gherkin-spec'
 import { Chunk, Effect, Result } from 'effect'
 import { Schema } from 'effect'
 import { expect } from 'vitest'
@@ -452,5 +461,101 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
         expect(s).toEqual(expect.objectContaining({ x: 2 }))
       }),
     ),
+  )
+
+  scenario(
+    'A pipeline with passing soft assertions succeeds without error',
+    Gherkin.Do.pipe(
+      Given('initial state')('x', () => Effect.succeed(42)),
+      Then.soft('soft check matches')((s) => {
+        expect(s.x).toBe(42)
+      }),
+      And.soft('additional soft check matches')((s) => {
+        expect(s.x).toBeGreaterThan(40)
+      }),
+      But.soft('negative soft check matches')((s) => {
+        expect(s.x).not.toBe(0)
+      }),
+    ),
+  )
+
+  scenario(
+    'Multiple failing soft assertions run completely and aggregate all errors',
+    Effect.gen(function*() {
+      const pipeline = Gherkin.Do.pipe(
+        Given('initial state')('x', () => Effect.succeed(1)),
+        Then.soft('first soft check')((s) => {
+          expect(s.x).toBe(100)
+        }),
+        Then.soft('second soft check')((s) => {
+          expect(s.x).toBe(200)
+        }),
+      )
+      const result = yield* checkSoftFailures(pipeline.pipe(Effect.asVoid)).pipe(Effect.result)
+      Result.match(result, {
+        onFailure: (err) => {
+          expect(err).toBeInstanceOf(StepError)
+          expect(String(err.cause)).toContain('first soft check')
+          expect(String(err.cause)).toContain('second soft check')
+        },
+        onSuccess: () => {
+          throw new Error('Expected soft assertions to fail')
+        },
+      })
+    }),
+  )
+
+  scenario(
+    'A pipeline with one failing and one passing soft assertion reports only the failure',
+    Effect.gen(function*() {
+      const pipeline = Gherkin.Do.pipe(
+        Given('initial state')('x', () => Effect.succeed(1)),
+        Then.soft('failing soft check')((s) => {
+          expect(s.x).toBe(999)
+        }),
+        Then.soft('passing soft check')((s) => {
+          expect(s.x).toBe(1)
+        }),
+      )
+      const result = yield* checkSoftFailures(pipeline.pipe(Effect.asVoid)).pipe(Effect.result)
+      Result.match(result, {
+        onFailure: (err) => {
+          expect(err).toBeInstanceOf(StepError)
+          expect(String(err.cause)).toContain('failing soft check')
+          expect(String(err.cause)).not.toContain('passing soft check')
+        },
+        onSuccess: () => {
+          throw new Error('Expected soft assertions to fail')
+        },
+      })
+    }),
+  )
+
+  scenario(
+    'A synchronous expect throw inside Then.soft does not abort subsequent steps',
+    Effect.gen(function*() {
+      let secondStepRan = false
+      const pipeline = Gherkin.Do.pipe(
+        Given('initial state')('x', () => Effect.succeed(1)),
+        Then.soft('throwing soft check')(() => {
+          throw new Error('sync-throw-in-soft')
+        }),
+        Then.soft('subsequent soft check')(() => {
+          secondStepRan = true
+          throw new Error('subsequent-soft-throw')
+        }),
+      )
+      const result = yield* checkSoftFailures(pipeline.pipe(Effect.asVoid)).pipe(Effect.result)
+      expect(secondStepRan).toBe(true)
+      Result.match(result, {
+        onFailure: (err) => {
+          expect(String(err.cause)).toContain('sync-throw-in-soft')
+          expect(String(err.cause)).toContain('subsequent-soft-throw')
+        },
+        onSuccess: () => {
+          throw new Error('Expected soft assertions to fail')
+        },
+      })
+    }),
   )
 })
