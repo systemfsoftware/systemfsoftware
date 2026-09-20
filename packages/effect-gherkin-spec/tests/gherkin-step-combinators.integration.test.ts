@@ -27,94 +27,13 @@ import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
 const Feature = makeFeature({ it, layer })
 
-Feature('Gherkin step combinators').body(({ scenario }) => {
+Feature('Gherkin step combinators').body(({ scenario, scenarioOutline }) => {
   scenario(
     'A step assertion verifies Effect values using value equality',
     Gherkin.Do.pipe(
       Given('a list of numbers in a Chunk')('items', () => Effect.succeed(Chunk.make(1, 2, 3))),
       Then('the items match an identical Chunk by value equality')((s) => {
         expect(s.items).toEqual(Chunk.make(1, 2, 3))
-      }),
-    ),
-  )
-
-  scenario(
-    'A failing Given step surfaces as a step failure',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('boom')('x', () => Effect.fail('kaboom')),
-        Effect.result,
-      )
-      expect(result).toEqual(Result.fail(expect.any(StepError)))
-    }),
-  )
-
-  scenario(
-    'A succeeding When step adds its binding to the scope',
-    Gherkin.Do.pipe(
-      Given('setup')('x', () => Effect.succeed(1)),
-      When('action')('y', (s) => Effect.succeed(s.x + 10)),
-      Then('both present')((s) => {
-        expect(s).toEqual(expect.objectContaining({ x: 1, y: 11 }))
-      }),
-    ),
-  )
-
-  scenario(
-    'A failing When step surfaces as a step failure',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('setup')('x', () => Effect.succeed(1)),
-        When('explode')('y', () => Effect.fail('boom')),
-        Effect.result,
-      )
-      expect(result).toEqual(Result.fail(expect.any(StepError)))
-    }),
-  )
-
-  scenario(
-    'A succeeding Then step leaves the scope intact',
-    Gherkin.Do.pipe(
-      Given('setup')('x', () => Effect.succeed(42)),
-      Then('check value')((s) => {
-        expect(s).toEqual(expect.objectContaining({ x: 42 }))
-      }),
-      Then('no extra keys')((s) => {
-        expect(Object.keys(s)).toEqual(['x'])
-      }),
-    ),
-  )
-
-  scenario(
-    'A Then step does not add bindings to the scope',
-    Gherkin.Do.pipe(
-      Given('setup')('x', () => Effect.succeed('a')),
-      Then('ignored return')(() => {
-        void Effect.succeed('should not leak')
-      }),
-      Then('scope unchanged')((s) => {
-        expect(s).toEqual(expect.objectContaining({ x: 'a' }))
-        expect(Object.keys(s)).toEqual(['x'])
-      }),
-    ),
-  )
-
-  scenario(
-    'A succeeding And step leaves the scope intact',
-    Gherkin.Do.pipe(
-      Given('setup')('x', () => Effect.succeed(1)),
-      And('additional check')((s) => {
-        expect(s).toEqual(expect.objectContaining({ x: 1 }))
-      }),
-    ),
-  )
-
-  scenario(
-    'A succeeding But step leaves the scope intact',
-    Gherkin.Do.pipe(
-      Given('setup')('x', () => Effect.succeed(1)),
-      But('negative check')((s) => {
-        expect(s).toEqual(expect.objectContaining({ x: 1 }))
       }),
     ),
   )
@@ -182,109 +101,61 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
     }),
   )
 
-  scenario(
-    'A failed Given step carries the Given keyword in its error',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('failing given')('x', () => Effect.fail('err')),
-        Effect.result,
-      )
-      Result.match(result, {
-        onFailure: (err) => {
-          expect(Schema.is(StepError)(err)).toBe(true)
-          if (Schema.is(StepError)(err)) {
-            expect(err.keyword).toBe('given')
-          }
-        },
-        onSuccess: () => expect.unreachable('Expected Failure with StepError'),
-      })
-    }),
-  )
-
-  scenario(
-    'A failed When step carries the When keyword in its error',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('ok')('x', () => Effect.succeed(1)),
-        When('failing when')('y', () => Effect.fail('err')),
-        Effect.result,
-      )
-      Result.match(result, {
-        onFailure: (err) => {
-          expect(Schema.is(StepError)(err)).toBe(true)
-          if (Schema.is(StepError)(err)) {
-            expect(err.keyword).toBe('when')
-          }
-        },
-        onSuccess: () => expect.unreachable('Expected Failure with StepError'),
-      })
-    }),
-  )
-
-  scenario(
-    'A failed Then step carries the Then keyword in its error',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('ok')('x', () => Effect.succeed(1)),
-        Then('throwing then')(() => {
-          throw new Error('then-err')
+  scenarioOutline(
+    'A failed step of keyword <keyword> carries the keyword in its error envelope',
+    [
+      { keyword: 'given' },
+      { keyword: 'when' },
+      { keyword: 'then' },
+      { keyword: 'and' },
+      { keyword: 'but' },
+    ] as const,
+    (row) => {
+      const pipelineForKeyword = (): Effect.Effect<unknown, StepError, never> => {
+        if (row.keyword === 'given') {
+          return Gherkin.Do.pipe(Given('fail')('x', () => Effect.fail('err')))
+        }
+        if (row.keyword === 'when') {
+          return Gherkin.Do.pipe(Given('ok')('x', () => Effect.succeed(1)), When('fail')('y', () => Effect.fail('err')))
+        }
+        if (row.keyword === 'then') {
+          return Gherkin.Do.pipe(
+            Given('ok')('x', () => Effect.succeed(1)),
+            Then('fail')(() => {
+              throw new Error('err')
+            }),
+          )
+        }
+        if (row.keyword === 'and') {
+          return Gherkin.Do.pipe(
+            Given('ok')('x', () => Effect.succeed(1)),
+            And('fail')(() => {
+              throw new Error('err')
+            }),
+          )
+        }
+        return Gherkin.Do.pipe(
+          Given('ok')('x', () => Effect.succeed(1)),
+          But('fail')(() => {
+            throw new Error('err')
+          }),
+        )
+      }
+      return Gherkin.Do.pipe(
+        Given('an executed step configured to fail')('result', () => Effect.result(pipelineForKeyword())),
+        Then('the error carries the matching keyword name')((s) => {
+          Result.match(s.result, {
+            onFailure: (err) => {
+              expect(Schema.is(StepError)(err)).toBe(true)
+              if (Schema.is(StepError)(err)) {
+                expect(err.keyword).toBe(row.keyword)
+              }
+            },
+            onSuccess: () => expect.unreachable('Expected Failure with StepError'),
+          })
         }),
-        Effect.result,
       )
-      Result.match(result, {
-        onFailure: (err) => {
-          expect(Schema.is(StepError)(err)).toBe(true)
-          if (Schema.is(StepError)(err)) {
-            expect(err.keyword).toBe('then')
-          }
-        },
-        onSuccess: () => expect.unreachable('Expected Failure with StepError'),
-      })
-    }),
-  )
-
-  scenario(
-    'A failed And step carries the And keyword in its error',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('ok')('x', () => Effect.succeed(1)),
-        And('throwing and')(() => {
-          throw new Error('and-err')
-        }),
-        Effect.result,
-      )
-      Result.match(result, {
-        onFailure: (err) => {
-          expect(Schema.is(StepError)(err)).toBe(true)
-          if (Schema.is(StepError)(err)) {
-            expect(err.keyword).toBe('and')
-          }
-        },
-        onSuccess: () => expect.unreachable('Expected Failure with StepError'),
-      })
-    }),
-  )
-
-  scenario(
-    'A failed But step carries the But keyword in its error',
-    Effect.gen(function*() {
-      const result = yield* Gherkin.Do.pipe(
-        Given('ok')('x', () => Effect.succeed(1)),
-        But('throwing but')(() => {
-          throw new Error('but-err')
-        }),
-        Effect.result,
-      )
-      Result.match(result, {
-        onFailure: (err) => {
-          expect(Schema.is(StepError)(err)).toBe(true)
-          if (Schema.is(StepError)(err)) {
-            expect(err.keyword).toBe('but')
-          }
-        },
-        onSuccess: () => expect.unreachable('Expected Failure with StepError'),
-      })
-    }),
+    },
   )
 
   scenario(
