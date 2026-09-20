@@ -46,15 +46,28 @@ test("a leaf package selects shared quality and its own executor", () => {
   // them are pinned, because the mapping is the whole point of the lane.
   for (const file of [
     "packages/unplugin/src/index.ts",
-    "packages/metro/src/index.ts",
     "tests/test-unplugin/src/index.ts",
-    "tests/test-metro/src/index.ts",
   ]) {
     assert.deepEqual(
       ids([file]),
-      ["typecheck", "bundler-defenses", "bundler-defenses-windows"],
-      `${file} must reach the Windows bundler lane`,
+      [
+        "typecheck",
+        "bundler-defenses",
+        "bundler-defenses-windows",
+        "bundler-defenses-macos",
+      ],
+      `${file} must reach the Windows and macOS bundler lanes`,
     );
+  }
+  for (const file of [
+    "packages/metro/src/index.ts",
+    "tests/test-metro/src/index.ts",
+  ]) {
+    assert.deepEqual(ids([file]), [
+      "typecheck",
+      "bundler-defenses",
+      "bundler-defenses-windows",
+    ]);
   }
   assert.deepEqual(ids(["packages/banner/src/index.ts"]), [
     "typecheck",
@@ -94,12 +107,14 @@ test("a leaf package selects shared quality and its own executor", () => {
     "go",
     "windows-go",
     "typecheck",
+    "ttsc-native",
     "evidence",
   ]);
   assert.deepEqual(ids(["packages/evidence/native/base.go"]), [
     "go",
     "windows-go",
     "typecheck",
+    "ttsc-native",
     "evidence",
   ]);
   assert.deepEqual(ids(["tests/test-evidence/src/index.ts"]), [
@@ -396,7 +411,7 @@ test("every E2E directory has exactly one normal topology owner", () => {
 });
 
 test("lane identities and workflow matrix names stay unique", () => {
-  assert.equal(LANES.length, 13, "full main matrix must stay consolidated");
+  assert.equal(LANES.length, 14, "full main matrix must stay consolidated");
   assert.ok(
     fullPlan("test").matrix.include.every(
       (lane) => !Object.hasOwn(lane, "node"),
@@ -405,8 +420,8 @@ test("lane identities and workflow matrix names stay unique", () => {
   );
   assert.equal(
     LANES.filter((lane) => lane.build === "pnpm run build:current").length,
-    9,
-    "full logical plan must keep nine scoped native builds",
+    10,
+    "full logical plan must keep ten scoped native builds",
   );
   assert.equal(new Set(LANES.map((lane) => lane.id)).size, LANES.length);
   assert.equal(new Set(LANES.map((lane) => lane.name)).size, LANES.length);
@@ -452,6 +467,24 @@ test("lane identities and workflow matrix names stay unique", () => {
     /--include=predicate_proofs/,
     "the Windows lane must exercise supplied POSIX path semantics",
   );
+  const unpluginIncludes = [
+    ...windowsBundlerRun.split(" && ")[0].matchAll(/--include=([^\s]+)/g),
+  ].flatMap((match) => match[1].split(","));
+  const nativeCases = [
+    ...fs
+      .readFileSync(
+        path.join(root, "tests/test-unplugin/src/cases/native.ts"),
+        "utf8",
+      )
+      .matchAll(/^  (case_[a-z0-9_]+):/gm),
+  ].map((match) => match[1]);
+  assert.ok(nativeCases.length > 0, "the native scenario inventory is empty");
+  for (const name of nativeCases) {
+    assert.ok(
+      unpluginIncludes.some((include) => name.includes(include)),
+      `the Windows lane must execute the real native envelope case ${name}`,
+    );
+  }
   assert.deepEqual(
     SCOPES["plugin-cache"].filter((target) => typeof target === "string"),
     ["ttsc"],
