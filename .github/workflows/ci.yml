@@ -59,3 +59,7 @@ jobs:
     name: contract · integration tests
     needs: conflicts
     uses: ./.github/workflows/reusable-contract.yml
+  smoke:
+    name: smoke · microsandbox journeys
+    needs: conflicts
+    uses: ./.github/workflows/reusable-smoke.yml
