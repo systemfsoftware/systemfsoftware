@@ -40,6 +40,7 @@ export {
   ConflictRollback,
   CreditHold,
   CreditLimitExceeded,
+  DuplicateOrder,
   Forbidden,
   InsufficientStock,
   Unauthorized,

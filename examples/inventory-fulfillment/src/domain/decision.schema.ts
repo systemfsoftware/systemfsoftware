@@ -92,5 +92,12 @@ export class Forbidden extends S.TaggedError<Forbidden>()('Forbidden', {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
 }
 
+export class DuplicateOrder extends S.TaggedError<DuplicateOrder>()('DuplicateOrder', {
+  orderId: S.String,
+  reason: S.String,
+}) {
+  readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+}
+
 export const FulfillmentError = S.Union([InsufficientStock, CreditLimitExceeded, Unauthorized, Forbidden])
 export type FulfillmentError = S.Schema.Type<typeof FulfillmentError>

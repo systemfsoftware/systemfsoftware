@@ -2,6 +2,7 @@ import { Effect, Match, Option, Schema as S } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import {
   CreditLimitExceeded,
+  DuplicateOrder,
   Forbidden,
   FulfillmentDecision,
   type FulfillmentDecision as FulfillmentDecisionType,
@@ -31,7 +32,7 @@ import {
 export const SubmitOrder = Rpc.make('submitOrder', {
   payload: SubmitOrderRequest,
   success: FulfillmentDecision,
-  error: S.Union([InsufficientStock, CreditLimitExceeded]),
+  error: S.Union([InsufficientStock, CreditLimitExceeded, DuplicateOrder, Forbidden]),
 }).middleware(AuthMiddleware)
 
 export const GetReservation = Rpc.make('getReservation', {
@@ -69,6 +70,20 @@ const submitOrderOutcome = (
 const submitOrder = (request: SubmitOrderRequest) =>
   Effect.gen(function*() {
     const { userId } = yield* AuthContext
+    const log = yield* ReservationLog
+    const existing = yield* log.findReservation(request.orderId)
+    yield* Option.match(existing, {
+      onNone: () => Effect.void,
+      onSome: (record) =>
+        Match.value(record.customerId === userId).pipe(
+          Match.when(
+            true,
+            () => Effect.fail(new DuplicateOrder({ orderId: request.orderId, reason: 'order id already fulfilled' })),
+          ),
+          Match.when(false, () => Effect.fail(forbidden(request.orderId, 'reservation is owned by another caller'))),
+          Match.exhaustive,
+        ),
+    })
     const outcome = yield* runFulfillment({
       order: new Order({ orderId: request.orderId, customerId: userId, lines: request.lines }),
       kits: request.kits,

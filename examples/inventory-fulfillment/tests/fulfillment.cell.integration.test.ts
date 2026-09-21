@@ -7,6 +7,7 @@ import {
   Backordered,
   ConflictRollback,
   CreditHold,
+  DuplicateOrder,
   Forbidden,
   InsufficientStock,
   submitRequest,
@@ -497,6 +498,53 @@ Feature('Inventory fulfillment across the warehouse network')
             expect(s.attempts.owned.customerId).toBe(s.customers.other.userId)
             expect(s.attempts.owned.orderId).toBe(s.attempts.otherOrder)
           },
+        ),
+      ),
+    )
+
+    scenario(
+      'An already fulfilled order cannot be submitted a second time',
+      Gherkin.Do.pipe(
+        Given('a customer with a Standard account and ample credit')(
+          'customer',
+          () => registerCustomerWithCredit('Repeat Submission', { tier: 'Standard', creditLimit: 1000 }),
+        ),
+        Given('a warehouse holding five units')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(warehouse, 'central', [{
+              id: uniqueId('lot'),
+              sku,
+              warehouseId: warehouse,
+              quantity: 5,
+            }])
+            return { sku }
+          })),
+        When('the customer fulfills an order')(
+          'order',
+          (s) =>
+            Effect.gen(function*() {
+              const orderId = uniqueId('order')
+              const outcome = yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
+              return { orderId, outcome }
+            }),
+        ),
+        When('the same order is submitted again')(
+          'resubmission',
+          (s) =>
+            Effect.gen(function*() {
+              const refusal = yield* Effect.flip(
+                placeOrder(s.customer, s.order.orderId, [{ sku: s.catalog.sku, quantity: 2 }]),
+              )
+              return yield* S.decodeUnknownEffect(DuplicateOrder)(refusal)
+            }),
+        ),
+        And('the original reservation is the only one recorded')((s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            expect(yield* server.inspect.reservations(s.order.orderId)).toHaveLength(1)
+          })
         ),
       ),
     )
