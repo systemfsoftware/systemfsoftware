@@ -150,6 +150,10 @@
     - effect-rc112
     - modern-ends-know
     - projections-collapsed-into-ports
+"@systemfsoftware/differential-spec@0.1.0":
+  dir: packages/differential-spec
+  intents:
+    - differential-spec-harness
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -952,6 +956,22 @@
   dir: omp/plugins/omp-typescript-discipline
   intents:
     - stryker-version-bump
+"@systemfsoftware/oxlint-config-cell-architecture@1.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-dmmf@1.1.0":
+  dir: packages/oxlint-presets/oxlint-config-dmmf
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-recommended@1.1.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
+  dir: packages/oxlint-presets/oxlint-config-rule-authoring
+  intents:
+    - modular-oxlint-ecosystem
 "@systemfsoftware/oxlint-config@0.1.0":
   dir: packages/oxlint-plugin/oxlint-config
   intents:
@@ -961,6 +981,10 @@
   dir: packages/oxlint-plugin/make-boundary
   intents:
     - make-boundary-constructor-set
+"@systemfsoftware/oxlint-plugin-cell-architecture@1.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - modular-oxlint-ecosystem
 "@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
   dir: packages/oxlint-plugins/cell-vocabulary
   intents:
@@ -1003,6 +1027,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-cell-vocabulary
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-dmmf-workflow@5.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-dmmf-workflow
+  intents:
+    - modular-oxlint-ecosystem
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -1126,6 +1154,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
   intents:
     - stryker-version-bump
+"@systemfsoftware/oxlint-plugin-effect-platform@1.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - modular-oxlint-ecosystem
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -1355,6 +1387,11 @@
   dir: packages/oxlint-plugin/oxlint-plugin-recommended
   intents:
     - stryker-version-bump
+"@systemfsoftware/oxlint-plugin-test-discipline@3.6.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - differential-test-altitude
+    - modular-oxlint-ecosystem
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
