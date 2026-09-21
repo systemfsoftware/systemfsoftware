@@ -6,6 +6,7 @@
 "@systemfsoftware/oxlint-plugin-cell-architecture": minor
 "@systemfsoftware/oxlint-plugin-dmmf-workflow": minor
 "@systemfsoftware/oxlint-plugin-effect-platform": minor
+"@systemfsoftware/oxlint-plugin-test-discipline": minor
 "@systemfsoftware/tsconfig": none
 ---
 
