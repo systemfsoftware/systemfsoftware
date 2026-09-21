@@ -154,7 +154,7 @@ export function build(provide) {
       code: `import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 
 export function build() {
-  return Sandwich.read(read).decide(decide).write(write).provide(ledgerLayer)
+  return Sandwich.named('ledger.post')(read).decide(decide).write(write).provide(ledgerLayer)
 }`,
       filename: 'src/ledger.ts',
     },
