@@ -39,6 +39,8 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --config vitest.config.ts",
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
     "smoke": "pnpm build && node examples/boot-alpine.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
@@ -47,6 +49,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "microsandbox": "catalog:"
   },
   "devDependencies": {
@@ -57,6 +60,13 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/stryker-config": "workspace:^",
+    "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
+    "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",
+    "@systemfsoftware/stryker-js": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
+    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

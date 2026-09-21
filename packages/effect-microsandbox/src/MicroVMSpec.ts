@@ -39,12 +39,6 @@ const applyAll = (spec: MicroVMSpec): MicroVMSpec =>
 
 const decodeSucceeds = (spec: MicroVMSpec): boolean => Exit.isSuccess(Schema.decodeExit(MicroVMSpec)(spec))
 
-const twinOf = (spec: MicroVMSpec): MicroVMSpec => {
-  const decoded = Schema.decodeExit(MicroVMSpec)(spec)
-  if (Exit.isFailure(decoded)) throw new Error('generated spec failed its own schema', { cause: decoded.cause })
-  return decoded.value
-}
-
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
@@ -52,18 +46,21 @@ if (import.meta.vitest !== void 0) {
   const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
 
   const specEq = Schema.toEquivalence(MicroVMSpec)
-  const NonEmptyKey = Schema.String.pipe(Schema.check(Schema.isNonEmpty()))
 
   it.prop('∀spec_Combinators_=Pure', [MicroVMSpec], ([spec]) => {
-    const twin = twinOf(spec)
     const next = applyAll(spec)
-    return specEq(applyAll(twin), next) && !Object.is(next, spec)
+    return Exit.match(Schema.decodeExit(MicroVMSpec)(spec), {
+      onSuccess: (twin) => specEq(applyAll(twin), next) && !Object.is(next, spec),
+      onFailure: () => false,
+    })
   })
 
-  const keyArb = Arbitrary.schema(NonEmptyKey)
+  // Key domain: any string, including ''. Distinctness is constructed, never
+  // filtered: the suffixed twin is strictly longer than its base.
+  const keyDraw = Arbitrary.schema(Schema.String)
   const distinctKeyPair = Arbitrary.flatMap(
-    keyArb,
-    (k1) => Arbitrary.map(Arbitrary.filter(keyArb, (k2) => k2 !== k1), (k2) => [k1, k2] as const),
+    keyDraw,
+    (k1) => Arbitrary.map(keyDraw, (k2) => [k1, `${k2}#${k1}`] as const),
   )
 
   it.prop('≤kk_EnvMerge_≡Assoc', [MicroVMSpec, distinctKeyPair], ([spec, [k1, k2]]) => {
