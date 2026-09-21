@@ -197,7 +197,7 @@ The `decide` refusal is an outcome, not a failure: it travels to `encode` and `w
 
 ### Operation names and telemetry
 
-The operation name passed to `Sandwich.named` is a static string literal that identifies the cell. It names the parent span and sets the duration histogram name (`app.<name>.duration`, recording seconds with the single label `result_class`). Child spans are `<name>.read` and `<name>.write`. The attributes copied onto the parent span are the command fields named by the command schema class's static `InstrumentationBrand` list. `Sandwich.named(name)` uses `Sandwich.DEFAULT_DURATION_BOUNDARIES`; passing an options object (`Sandwich.named(name, { boundaries })`) overrides the duration histogram buckets.
+The operation name passed to `Sandwich.named` is a static string literal that identifies the cell. It names the parent span and sets the duration histogram name (`app.<name>.duration`, recording seconds with the single label `result_class`). Child spans are `<name>.read` and `<name>.write`. The attributes copied onto the parent span are the command fields named by the command schema class's static `InstrumentationBrand` list, and each named field must hold a string, number, or boolean: a field holding an object is copied as a raw object, which OTLP backends reject. `Sandwich.named(name)` uses `Sandwich.DEFAULT_DURATION_BOUNDARIES`; passing an options object (`Sandwich.named(name, { boundaries })`) overrides the duration histogram buckets. The buckets belong to the name: two cells that share an operation name share one histogram, and the boundaries declared first for that name are the ones that count.
 
 ```ts
 const cell = Sandwich.named('order.submit', {

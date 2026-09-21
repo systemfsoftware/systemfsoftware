@@ -80,7 +80,7 @@ const tagOf = (value: unknown): string => String(Reflect.get(Object(value), '_ta
 const isStringList = (value: unknown): value is ReadonlyArray<string> => Array.isArray(value)
 
 const heldKeys = (value: unknown): ReadonlyArray<string> => {
-  const ctor: unknown = Reflect.get(Object.getPrototypeOf(Object(value)), 'constructor')
+  const ctor: unknown = Reflect.get(Object(value), 'constructor')
   const declared: unknown = Reflect.get(Object(ctor), InstrumentationBrand)
   return isStringList(declared) ? declared : []
 }
@@ -207,8 +207,7 @@ export const named = <N extends string>(
   name: ValidOperationName<N>,
   options?: NamedCellOptions,
 ): <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE, RR>) => ReadChain<I, Raw, RE, RR> => {
-  const operation: string = name
-  const histogram = histogramFor(operation, options)
+  const histogram = histogramFor(name, options)
 
   return <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE, RR>): ReadChain<I, Raw, RE, RR> => {
     const decode = <Dcd, DecE>(phase: PurePhase<Raw, Dcd, DecE>): DecodedChain<I, Raw, Dcd, RE, DecE, RR> => {
