@@ -58,9 +58,9 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
-const failureErrorOf = (
-  exit: Exit.Exit<unknown, unknown>,
-): unknown => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
+const failureErrorOf = <A, E>(
+  exit: Exit.Exit<A, E>,
+): E | undefined => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
 
 const primaryProcessor = Sandwich.named('cell.pipeline.primary')((order: AdmissionOrder) => {
   if (order.id === 'infra-crash') {

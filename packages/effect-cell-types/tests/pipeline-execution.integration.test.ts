@@ -60,9 +60,9 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
-const failureErrorOf = (
-  exit: Exit.Exit<unknown, unknown>,
-): unknown => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
+const failureErrorOf = <A, E>(
+  exit: Exit.Exit<A, E>,
+): E | undefined => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
 
 const decodeRaw = (raw: Raw): Result.Result<Decoded, Malformed> =>
   Match.value(raw.bytes).pipe(
