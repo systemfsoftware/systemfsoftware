@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/all": none
+"@systemfsoftware/differential-spec": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-cell-types": none
@@ -14,15 +14,15 @@
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
-"@systemfsoftware/oxlint-plugin-effect-dmmf": none
-"@systemfsoftware/oxlint-plugin-effect-entrypoint": none
+"@systemfsoftware/oxlint-config-cell-architecture": none
+"@systemfsoftware/oxlint-config-dmmf": none
+"@systemfsoftware/oxlint-config-recommended": none
+"@systemfsoftware/oxlint-config-rule-authoring": none
+"@systemfsoftware/oxlint-plugin-cell-architecture": none
+"@systemfsoftware/oxlint-plugin-dmmf-workflow": none
+"@systemfsoftware/oxlint-plugin-effect-platform": none
 "@systemfsoftware/oxlint-plugin-effect-schema": none
-"@systemfsoftware/oxlint-plugin-effect-workflow": none
-"@systemfsoftware/oxlint-plugin-property-testing": none
-"@systemfsoftware/oxlint-plugin-recommended": none
-"@systemfsoftware/oxlint-plugin-test-hygiene": none
-"@systemfsoftware/oxlint-plugin-test-placement": none
-"@systemfsoftware/oxlint-plugin": none
+"@systemfsoftware/oxlint-plugin-test-discipline": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
 "@systemfsoftware/tsconfig": none
