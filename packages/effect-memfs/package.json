@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-memfs",
   "license": "Apache-2.0",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -53,8 +53,8 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",

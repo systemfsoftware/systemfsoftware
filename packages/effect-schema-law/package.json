@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-law",
   "license": "Apache-2.0",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-law#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Property-test any Effect Schema's codec laws \u2014 round-trip identity and encode stability, generated with @effect/vitest and fast-check.",
+  "description": "Property-test any Effect Schema's codec laws — round-trip identity and encode stability, generated with @effect/vitest and fast-check.",
   "keywords": [
     "effect",
     "effect-ts",

@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/rx-effect",
   "license": "Apache-2.0",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/rx-effect#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Bridge RxJS and Effect-TS \u2014 turn an Observable into a typed Effect Stream with backpressure and proper interruption.",
+  "description": "Bridge RxJS and Effect-TS — turn an Observable into a typed Effect Stream with backpressure and proper interruption.",
   "keywords": [
     "effect",
     "effect-ts",

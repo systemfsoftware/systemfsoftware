@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom-react",
   "license": "Apache-2.0",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/atom/effect-atom-react#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "React bindings for effect-atom \u2014 forked under systemfsoftware from tim-smart/effect-atom.",
+  "description": "React bindings for effect-atom — forked under systemfsoftware from tim-smart/effect-atom.",
   "keywords": [
     "effect",
     "effect-ts",

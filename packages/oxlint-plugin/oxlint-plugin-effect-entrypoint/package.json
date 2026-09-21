@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-entrypoint",
   "license": "Apache-2.0",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -65,8 +65,8 @@
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
     "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
