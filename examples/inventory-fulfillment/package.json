@@ -22,6 +22,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

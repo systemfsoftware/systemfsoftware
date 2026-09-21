@@ -262,6 +262,9 @@ importers:
       '@systemfsoftware/all':
         specifier: workspace:^
         version: link:../../packages/oxlint-plugin/all
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../packages/effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../packages/oxlint-plugin/oxlint-config
