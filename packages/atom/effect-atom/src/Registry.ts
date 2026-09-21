@@ -15,6 +15,7 @@ import * as Fiber from 'effect/Fiber'
 import { constVoid, dual } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Pipeable from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import type { Scheduler, SchedulerDispatcher } from 'effect/Scheduler'
@@ -802,7 +803,7 @@ function removeNodeFromBucketEntry(
 /**
  * Concrete registry used by the package implementation.
  */
-export class RegistryImpl implements Registry {
+export class RegistryImpl extends Pipeable.Class implements Registry {
   readonly [TypeId]: TypeId
   readonly timeoutResolution: number
   readonly defaultIdleTTL: number | undefined
@@ -822,6 +823,7 @@ export class RegistryImpl implements Registry {
     now?: () => number,
     scheduleTimer?: (f: () => void, delayMillis: number) => () => void,
   ) {
+    super()
     this[TypeId] = TypeId
     this.scheduler = new MixedScheduler('sync', scheduleTask)
     this.schedulerAsync = new MixedScheduler('async', scheduleTask)

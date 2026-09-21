@@ -21,6 +21,7 @@ import {
 } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
@@ -29,6 +30,7 @@ import { expect, vi } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
 Feature('Reading and changing shared values from on-screen widgets')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A writer who saves through the confirming setter knows when the save has finished',

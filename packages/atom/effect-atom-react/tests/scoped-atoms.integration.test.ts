@@ -5,6 +5,7 @@ import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { make, RegistryContext, useAtomSet, useAtomUpdate, useAtomValue } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { expect } from 'vitest'
@@ -12,6 +13,7 @@ import { expect } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
 Feature('Scoped atoms that belong to one part of the page')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A scoped counter is created for its subtree and updates through its setter',

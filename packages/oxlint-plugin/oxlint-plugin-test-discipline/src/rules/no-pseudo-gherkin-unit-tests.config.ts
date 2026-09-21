@@ -2,11 +2,10 @@ import { MESSAGE } from './path.config.js'
 
 export const NO_LAYER_IN_FEATURE_NAME = 'a *.integration.test.ts feature with no environment double' as const
 export const NO_LAYER_IN_FEATURE_EXPECTED =
-  'a feature builder chained with .withLayer(...) or .withScenarioLayer(...)' as const
-export const NO_LAYER_IN_FEATURE_ACTUAL =
-  'a Feature(...) call with no .withLayer or .withScenarioLayer builder method' as const
+  'a Feature builder chained with .withLayer(layer) or .withScenarioLayer(layer)' as const
+export const NO_LAYER_IN_FEATURE_ACTUAL = 'a Feature(...) call without .withLayer or .withScenarioLayer' as const
 export const NO_LAYER_IN_FEATURE_FIX =
-  'an integration test under WGI-CLS1 exercises real collaborator seams using Layer doubles (withLayer or withScenarioLayer). A test with no Layers is a pure in-memory calculation: move its laws into deterministic-universal scenarios, or provide the external boundary Layer it exercises.' as const
+  'an integration test under WGI-CLS1 must declare its collaborator environment via .withLayer(...) or .withScenarioLayer(...). Chain .withLayer(Layer.empty) (or .withScenarioLayer(Layer.empty)) if the feature exercises in-memory collaborators without custom services, or provide the external boundary Layer it exercises (e.g. .withLayer(MyService.Live)).' as const
 
 export const meta = {
   type: 'problem',

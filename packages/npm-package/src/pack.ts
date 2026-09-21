@@ -57,7 +57,7 @@ function requirePrefixedPath(key: string, prefix: string, packageName: string): 
 }
 
 /**
- * Pack an authored file tree directly, without building a {@link Package} first.
+ * Pack an authored file tree directly, without building a {@link (Package:interface)} first.
  *
  * Reading a file through `Package` caches its decoded text, so packing a tree
  * that carries binary bodies straight from the map avoids that conversion.

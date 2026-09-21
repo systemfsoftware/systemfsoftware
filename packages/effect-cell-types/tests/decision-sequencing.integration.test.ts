@@ -1,6 +1,7 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
@@ -39,6 +40,7 @@ const totalCell = (decide = totalAdmitDecision) =>
   )
 
 Feature('Sequencing dependent decisions')
+  .withLayer(Layer.empty)
   .body(({ scenarioOutline }) => {
     scenarioOutline(
       'Early decision rejection halts evaluation while acceptance proceeds to subsequent rules',
