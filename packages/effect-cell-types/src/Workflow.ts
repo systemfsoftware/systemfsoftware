@@ -31,7 +31,7 @@ type ClassKeys<C> = C extends { readonly Type: infer T } ? keyof T & string : ne
 
 export type CheckCommandClass<C> = C extends
   { readonly [InstrumentationBrand]: infer Keys extends ReadonlyArray<string> }
-  ? [Keys[number]] extends [ClassKeys<C>] ? unknown
+  ? [Keys[number]] extends [ClassKeys<C>] ? object
   : InvalidInstrumentationKey<Exclude<Keys[number], ClassKeys<C>>>
   : MissingInstrumentationAnnotation
 

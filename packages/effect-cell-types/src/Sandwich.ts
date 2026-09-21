@@ -53,59 +53,51 @@ export interface NamedCellOptions {
  */
 type ResultClass = 'success' | 'failure' | 'infrastructure'
 
-/**
- * The attribute-value type the span API itself declares: `Span.attribute(key, value)` takes
- * `unknown`, so a copied field value is `unknown` here because that is what the sink accepts,
- * not because the shape was lost.
- */
-type FieldEntry = readonly [string, unknown]
+/** The class-side declaration the runner reads: the fields a span may carry. */
 type InstrumentedSchema = CommandSchema & { readonly [InstrumentationBrand]: ReadonlyArray<string> }
+type BrandHolder = { readonly [InstrumentationBrand]: ReadonlyArray<string> }
 
-const commandFieldEntries = (
-  schema: InstrumentedSchema | undefined,
-  command: unknown,
-): ReadonlyArray<FieldEntry> => (schema === undefined
-  ? []
-  : schema[InstrumentationBrand].map((key) => [key, Reflect.get(Object(command), key)]))
+const annotateFields = <C>(schema: InstrumentedSchema | undefined, command: C): Effect.Effect<void> =>
+  schema === undefined
+    ? Effect.void
+    : Effect.forEach(
+      schema[InstrumentationBrand],
+      (key) => Effect.annotateCurrentSpan(key, Reflect.get(Object(command), key)),
+      { discard: true },
+    )
 
-const annotateFields = (schema: InstrumentedSchema | undefined, command: unknown): Effect.Effect<void> =>
-  Effect.forEach(
-    commandFieldEntries(schema, command),
-    ([key, value]) => Effect.annotateCurrentSpan(key, value),
-    { discard: true },
-  )
+const tagOf = <T>(value: T): string => String(Reflect.get(Object(value), '_tag'))
 
-const tagOf = (value: unknown): string => String(Reflect.get(Object(value), '_tag'))
+const holdsBrand = (holder: unknown): holder is BrandHolder =>
+  Array.isArray(Reflect.get(Object(holder), InstrumentationBrand))
 
-const isStringList = (value: unknown): value is ReadonlyArray<string> => Array.isArray(value)
+const hasHeldBrand = (value: unknown): value is { constructor: BrandHolder } =>
+  holdsBrand(Reflect.get(Object(value), 'constructor'))
 
-const heldKeys = (value: unknown): ReadonlyArray<string> => {
-  const ctor: unknown = Reflect.get(Object(value), 'constructor')
-  const declared: unknown = Reflect.get(Object(ctor), InstrumentationBrand)
-  return isStringList(declared) ? declared : []
-}
+const heldKeys = <T>(value: T): ReadonlyArray<string> =>
+  hasHeldBrand(value) ? value.constructor[InstrumentationBrand] : []
 
-const annotateHeld = (value: unknown): Effect.Effect<void> =>
+const annotateHeld = <T>(value: T): Effect.Effect<void> =>
   Effect.forEach(
     heldKeys(value).map((key) => [key, Reflect.get(Object(value), key)] as const),
     ([key, field]) => Effect.annotateCurrentSpan(key, field),
     { discard: true },
   )
 
-const annotateTagged = (label: string, value: unknown): Effect.Effect<void> =>
+const annotateTagged = <T>(label: string, value: T): Effect.Effect<void> =>
   Effect.gen(function*() {
     yield* Effect.annotateCurrentSpan(label, tagOf(value))
     yield* annotateHeld(value)
   })
 
-const annotateOutcome = (outcome: Result.Result<unknown, unknown>): Effect.Effect<void> =>
+const annotateOutcome = <D, E>(outcome: Result.Result<D, E>): Effect.Effect<void> =>
   Result.match(outcome, {
     onSuccess: (decision) => annotateTagged('decision', decision),
     onFailure: (refusal) => annotateTagged('failure', refusal),
   })
 
-const okOrRefusal = (
-  outcome: Result.Result<unknown, unknown>,
+const okOrRefusal = <D, E>(
+  outcome: Result.Result<D, E>,
 ): ResultClass => (Result.isSuccess(outcome) ? 'success' : 'failure')
 
 /** A shell failure is infrastructure even after a refusal; the refusal label is kept only when the run completes. */
