@@ -35,6 +35,7 @@ const _default: {
         'tests-dir-helpers-in-fixtures': Rule;
         'no-io-module-in-source-test': Rule;
         'tests-import-public-api': Rule;
+        'differential-test-requires-harness': Rule;
     };
     configs: {
         recommended: {

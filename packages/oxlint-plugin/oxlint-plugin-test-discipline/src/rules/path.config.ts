@@ -12,6 +12,7 @@ export const TEST_TREE_DIRS: ReadonlySet<string> = new Set([...SANCTIONED_TEST_D
 
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
+export const DIFFERENTIAL_SUFFIX = '.differential.test.ts' as const
 
 /**
  * The one test file the taxonomy sanctions by name rather than by suffix: the
@@ -38,6 +39,8 @@ export const WORKFLOW_TEST_BASENAME = /^[^.]+\.workflow\.property\.test\.ts$/
 export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|noop)(?:[^a-z]|$)/
 
 export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const
+
+export const DIFFERENTIAL_PACKAGE = '@systemfsoftware/differential-spec' as const
 
 export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
 

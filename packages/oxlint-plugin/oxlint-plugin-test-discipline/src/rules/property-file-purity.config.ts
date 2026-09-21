@@ -1,5 +1,4 @@
 export const PROPERTY_TEST_SUFFIX = '.property.test.ts' as const
-
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {
