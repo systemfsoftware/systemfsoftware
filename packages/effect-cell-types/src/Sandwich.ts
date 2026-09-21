@@ -2,6 +2,7 @@ import * as Effect from 'effect/Effect'
 import { Prototype } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 import { type Cell, CellTypeId } from './Cell.js'
+export type { Cell } from './Cell.js'
 import { type WorkflowBrand } from './Workflow.js'
 
 const PurePhaseBrand: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/PurePhase')

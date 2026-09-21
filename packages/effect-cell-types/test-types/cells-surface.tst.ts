@@ -137,6 +137,15 @@ describe('the sandwich the chain builds', () => {
     >()
   })
 
+  it('Should_ExposeCellTypeUnderSandwich_When_Imported', () => {
+    expect<Sandwich.Cell<Cmd, void, never, never>>().type.toBe<Cell.Cell<Cmd, void, never, never>>()
+  })
+
+  it('Should_InferSandwichCell_When_ChainingPhases', () => {
+    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    expect(cell).type.toBeAssignableTo<Sandwich.Cell<Cmd, void, never, never>>()
+  })
+
   it('Should_UnionTheErrorChannel_When_ReadAndWriteCanFail', () => {
     const cell = Sandwich.read(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
     expect(cell).type.toBe<

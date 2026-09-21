@@ -382,7 +382,7 @@ Feature('Processing admission orders through resilient cell pipelines')
               evalCount++
               return Cell.succeed(`evaluated:${evalCount}`)
             })
-            const explodingLazyCell: Cell.Cell<AdmissionOrder, never, never, never> = Cell.suspend(() => {
+            const explodingLazyCell = Cell.suspend<AdmissionOrder, never, never, never>(() => {
               throw new Error('construction exploded')
             })
             const identityCell = Cell.id<AdmissionOrder>()

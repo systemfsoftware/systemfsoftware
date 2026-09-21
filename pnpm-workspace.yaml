@@ -17,10 +17,19 @@ catalog:
   "@effect/platform-node-shared": 4.0.0-rc.116
   effect: 4.0.0-rc.116
   "@effect/vitest": 4.0.0-rc.116
+  "@effect/sql-pg": 4.0.0-rc.116
+  "@effect/sql-pglite": 4.0.0-rc.116
   "@effect/tsgo": ^0.45.0
   fast-check: ^4
   vitest: ^5
   "@vitest/snapshot": ^5
+  drizzle-orm: 1.0.0-rc.5-5935859
+  drizzle-kit: 1.0.0-rc.4
+  better-auth: 1.7.5
+  "@electric-sql/pglite": 0.5.8
+  pg: 8.23.0
+  "@types/pg": 8.23.1
+  tsx: 4.23.13
   "@vitest/coverage-v8": ^5
   "@vitest/coverage-istanbul": ^5
   vite-tsconfig-paths: ^6.1.1
@@ -90,5 +99,6 @@ packages:
   - packages/oxlint-presets/*
   - packages/toolchain/*
   - omp/plugins/*
+  - examples/*
 config:
   confirm-modules-purge: false
