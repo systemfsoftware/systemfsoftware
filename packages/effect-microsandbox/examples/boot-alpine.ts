@@ -1,6 +1,11 @@
-import { layer as microVMLayer, MicroVM, MicroVMSpec } from '@systemfsoftware/effect-microsandbox'
-import type { MicroVMError } from '@systemfsoftware/effect-microsandbox'
-import { Context, Deferred, Effect, Fiber, HashMap, Layer, Option, Schema } from 'effect'
+import {
+  MicroVM,
+  MicroVMError,
+  MicroVMSandbox,
+  MicroVMSpec,
+  MicroVMSpecSchema,
+} from '@systemfsoftware/effect-microsandbox'
+import { Context, Deferred, Effect, Fiber, HashMap, Layer, Option, pipe, Schema } from 'effect'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { existsSync } from 'node:fs'
@@ -13,26 +18,25 @@ const recordGone = (name: string): Effect.Effect<boolean> =>
     )
   )
 
-const alpineSpec = Schema.decodeEffect(MicroVMSpec)({
+const alpineSpec = Schema.decodeEffect(MicroVMSpecSchema.MicroVMSpec)({
   image: 'alpine:3.20',
   env: {},
   ports: [8080],
   mounts: [],
 })
 
-const portlessSpec = Schema.decodeEffect(MicroVMSpec)({
+const portlessSpec = Schema.decodeEffect(MicroVMSpecSchema.MicroVMSpec)({
   image: 'alpine:3.20',
   env: {},
   ports: [],
   mounts: [],
 })
 
-// J1 — scoped boot: exec round-trip, loopback port mapping, record cleanup.
 const j1 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J1: scoped boot, exec, mapped port, record cleanup')
-    const spec = yield* alpineSpec
-    const svc = yield* MicroVM
+    const spec = MicroVMSpec.withEnv(yield* alpineSpec, { SMOKE_JOURNEY: 'j1' })
+    const svc = yield* MicroVM.MicroVM
     const vm = yield* svc.start(spec)
     const out = yield* vm.exec('echo', ['hello'])
     assert.equal(out.code, 0)
@@ -43,11 +47,9 @@ const j1 = Effect.scoped(
       'guest port 8080 must map to a positive host port',
     )
     return vm.name
-  }).pipe(Effect.provide(microVMLayer)),
+  }).pipe(Effect.provide(MicroVMSandbox.MicroVMLive)),
 )
 
-// J2 — interrupt: a Deferred signals boot completion; interrupting the fiber
-// returns only after the release finalizer finished, and the record is gone.
 const j2 = Effect.gen(function*() {
   yield* Effect.logInfo('[smoke] J2: interrupting booted VM, awaiting finalizer')
   const spec = yield* portlessSpec
@@ -55,11 +57,11 @@ const j2 = Effect.gen(function*() {
   const fiber = yield* Effect.forkChild(
     Effect.scoped(
       Effect.gen(function*() {
-        const svc = yield* MicroVM
+        const svc = yield* MicroVM.MicroVM
         const vm = yield* svc.start(spec)
         yield* Deferred.succeed(booted, vm.name)
         return yield* Effect.never
-      }).pipe(Effect.provide(microVMLayer)),
+      }).pipe(Effect.provide(MicroVMSandbox.MicroVMLive)),
     ),
   )
   const name = yield* Deferred.await(booted)
@@ -67,13 +69,12 @@ const j2 = Effect.gen(function*() {
   return name
 })
 
-// J3 — Layer reuse: one layer build serves two sequential VM lifecycles.
 const j3 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J3: one layer build, two sequential VM lifecycles')
-    const spec = yield* alpineSpec
-    const context = yield* Layer.build(microVMLayer)
-    const svc = Context.get(context, MicroVM)
+    const spec = pipe(yield* alpineSpec, MicroVMSpec.withEnv({ SMOKE_JOURNEY: 'j3' }))
+    const context = yield* Layer.build(MicroVMSandbox.MicroVMLive)
+    const svc = Context.get(context, MicroVM.MicroVM)
     const first = yield* Effect.scoped(
       Effect.flatMap(svc.start(spec), (vm) => vm.exec('echo', ['first'])),
     )
@@ -87,7 +88,7 @@ const j3 = Effect.scoped(
   }),
 )
 
-const main: Effect.Effect<void, MicroVMError | Schema.SchemaError> = Effect.gen(function*() {
+const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError> = Effect.gen(function*() {
   if (process.platform === 'linux' && !existsSync('/dev/kvm')) {
     yield* Effect.logInfo('[smoke] no /dev/kvm — skipping (virtualization-required journey)')
     return

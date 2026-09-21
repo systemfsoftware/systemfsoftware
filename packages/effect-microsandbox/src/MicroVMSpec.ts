@@ -1,5 +1,6 @@
 /// <reference types="vitest/importMeta" />
 import { Exit, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import { MicroVMSpec, type Mount, type WaitStrategy } from './MicroVMSpec.schema.js'
 
 export const Wait = {
@@ -8,27 +9,42 @@ export const Wait = {
   forLog: (pattern: string): WaitStrategy => ({ _tag: 'Log', pattern }),
 }
 
-export const withEnv = (env: Record<string, string>) => (spec: MicroVMSpec): MicroVMSpec => ({
+export const withEnv: {
+  (env: Record<string, string>): (spec: MicroVMSpec) => MicroVMSpec
+  (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec
+} = dual(2, (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec => ({
   ...spec,
   env: { ...spec.env, ...env },
-})
+}))
 
-export const withExposedPorts = (ports: ReadonlyArray<number>) => (spec: MicroVMSpec): MicroVMSpec => ({
+export const withExposedPorts: {
+  (ports: ReadonlyArray<number>): (spec: MicroVMSpec) => MicroVMSpec
+  (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec
+} = dual(2, (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec => ({
   ...spec,
   ports,
-})
+}))
 
-export const withMount = (mount: Mount) => (spec: MicroVMSpec): MicroVMSpec => ({
+export const withMount: {
+  (mount: Mount): (spec: MicroVMSpec) => MicroVMSpec
+  (spec: MicroVMSpec, mount: Mount): MicroVMSpec
+} = dual(2, (spec: MicroVMSpec, mount: Mount): MicroVMSpec => ({
   ...spec,
   mounts: [...spec.mounts, mount],
-})
+}))
 
-export const withMemoryLimit = (memoryMb: number) => (spec: MicroVMSpec): MicroVMSpec => ({ ...spec, memoryMb })
+export const withMemoryLimit: {
+  (memoryMb: number): (spec: MicroVMSpec) => MicroVMSpec
+  (spec: MicroVMSpec, memoryMb: number): MicroVMSpec
+} = dual(2, (spec: MicroVMSpec, memoryMb: number): MicroVMSpec => ({ ...spec, memoryMb }))
 
-export const withWaitStrategy = (waitStrategy: WaitStrategy) => (spec: MicroVMSpec): MicroVMSpec => ({
+export const withWaitStrategy: {
+  (waitStrategy: WaitStrategy): (spec: MicroVMSpec) => MicroVMSpec
+  (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec
+} = dual(2, (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec => ({
   ...spec,
   waitStrategy,
-})
+}))
 
 const applyAll = (spec: MicroVMSpec): MicroVMSpec =>
   withEnv({ K: 'V' })(
@@ -38,6 +54,8 @@ const applyAll = (spec: MicroVMSpec): MicroVMSpec =>
   )
 
 const decodeSucceeds = (spec: MicroVMSpec): boolean => Exit.isSuccess(Schema.decodeExit(MicroVMSpec)(spec))
+
+const applyEnv = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec => withEnv(spec, env)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
@@ -64,8 +82,8 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.prop('≤kk_EnvMerge_≡Assoc', [MicroVMSpec, distinctKeyPair], ([spec, [k1, k2]]) => {
-    const sequential = withEnv({ [k1]: 'v1' })(withEnv({ [k2]: 'v2' })(spec))
-    const merged = withEnv({ [k1]: 'v1', [k2]: 'v2' })(spec)
+    const sequential = applyEnv(applyEnv(spec, { [k2]: 'v2' }), { [k1]: 'v1' })
+    const merged = applyEnv(spec, { [k1]: 'v1', [k2]: 'v2' })
     return specEq(sequential, merged)
   })
 

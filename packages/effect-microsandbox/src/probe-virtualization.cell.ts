@@ -1,9 +1,9 @@
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect, FileSystem } from 'effect'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { resolveRuntime } from 'microsandbox'
 import type { ResolvedRuntime } from 'microsandbox'
-import { VirtualizationUnsupportedError } from '../MicroVMError.schema.js'
 import {
   AssessVirtualization,
   assessVirtualization,
@@ -13,8 +13,11 @@ import {
   KvmDenied,
   PlatformUnsupported,
   type ProbeObservation,
+  type VirtualizationVerdict,
   WHPUnavailable,
 } from './assess-virtualization.workflow.js'
+import { VirtualizationUnsupportedError } from './MicroVMError.schema.js'
+import type { MicroVMSpec } from './MicroVMSpec.schema.js'
 
 const KVM_DEVICE = '/dev/kvm'
 const WINDOWS_VMCOMPUTE = 'C:\\Windows\\System32\\vmcompute.dll'
@@ -69,8 +72,9 @@ const probes: Record<string, ((fs: FileSystem.FileSystem) => Effect.Effect<Probe
 const probeFor = (fs: FileSystem.FileSystem, platform: string): Effect.Effect<ProbeObservation> =>
   probes[platform] !== undefined ? probes[platform](fs) : unsupportedProbe
 
-const probeCapability = (fs: FileSystem.FileSystem): Effect.Effect<ProbeObservation> =>
-  Effect.suspend(() => probeFor(fs, process.platform))
+const probeCapability: Effect.Effect<ProbeObservation, never, FileSystem.FileSystem> = Effect.suspend(() =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => probeFor(fs, process.platform))
+)
 
 let announcedRuntime = false
 
@@ -83,35 +87,28 @@ const announce = (resolved: ResolvedRuntime): Effect.Effect<void> =>
     )
   })
 
-/**
- * Fail fast with actionable diagnostics when hardware virtualization is
- * unavailable (R8), then resolve the msb runtime through the SDK (R7):
- * bundled platform binaries are the default and MSB_PATH / MSB_LIBKRUNFW_PATH
- * / MSB_HOME operator overrides pass through untouched — a resolution failure
- * surfaces as the SDK's own defect, never a silent fallback. The probe reads
- * the host, the verdict cell decides, and this shell only translates the
- * verdict: a refusal logs its topology and fails with the cell's remediation.
- * The first successful pre-flight per process logs the resolved runtime path.
- *
- * @internal
- */
-export const preflightWith = (
-  fs: FileSystem.FileSystem,
-): Effect.Effect<ResolvedRuntime, VirtualizationUnsupportedError> =>
-  Effect.gen(function*() {
-    const observation = yield* probeCapability(fs)
-    const command = new AssessVirtualization({ platform: process.platform, observation })
-    const verdict = Result.getOrThrow(assessVirtualization(command))
-    return yield* Match.value(verdict).pipe(
-      Match.tag('VirtualizationRefused', (refused) =>
-        Effect.andThen(
-          Effect.logDebug(`[effect-microsandbox] virtualization topology: ${refused.topology}`),
-          Effect.fail(
-            new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
-          ),
-        )),
-      Match.tag('VirtualizationEligible', () =>
-        Effect.flatMap(Effect.sync(() => resolveRuntime()), (resolved) => Effect.as(announce(resolved), resolved))),
-      Match.exhaustive,
-    )
-  })
+const writeProbe = (
+  verdict: Result.Result<VirtualizationVerdict, never>,
+  command: AssessVirtualization,
+): Effect.Effect<void, VirtualizationUnsupportedError> =>
+  Match.value(Result.getOrThrow(verdict)).pipe(
+    Match.tag('VirtualizationRefused', (refused) =>
+      Effect.andThen(
+        Effect.logDebug(`[effect-microsandbox] virtualization topology: ${refused.topology}`),
+        Effect.fail(
+          new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
+        ),
+      )),
+    Match.tag('VirtualizationEligible', () =>
+      Effect.flatMap(Effect.sync(() => resolveRuntime()), (resolved) => Effect.as(announce(resolved), undefined))),
+    Match.exhaustive,
+  )
+
+export const probeVirtualization = Sandwich.read((_spec: MicroVMSpec) =>
+  Effect.map(
+    probeCapability,
+    (observation) => new AssessVirtualization({ platform: process.platform, observation }),
+  )
+)
+  .decide(assessVirtualization)
+  .write(writeProbe)

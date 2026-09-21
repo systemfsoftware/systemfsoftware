@@ -6,7 +6,6 @@ import * as Result from 'effect/Result'
 const VerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-microsandbox/VirtualizationVerdict')
 type VerdictTypeId = typeof VerdictTypeId
 
-/** @internal */
 export class VirtualizationEligible extends Schema.TaggedClass<VirtualizationEligible>()(
   'VirtualizationEligible',
   {},
@@ -14,7 +13,6 @@ export class VirtualizationEligible extends Schema.TaggedClass<VirtualizationEli
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
-/** @internal */
 export class VirtualizationRefused extends Schema.TaggedClass<VirtualizationRefused>()(
   'VirtualizationRefused',
   {
@@ -25,39 +23,31 @@ export class VirtualizationRefused extends Schema.TaggedClass<VirtualizationRefu
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
-/** @internal */
 export type VirtualizationVerdict = VirtualizationEligible | VirtualizationRefused
 
-/** @internal */
 export class KvmAccessible extends Schema.TaggedClass<KvmAccessible>()('KvmAccessible', {}) {}
 
-/** @internal */
 export class KvmDenied extends Schema.TaggedClass<KvmDenied>()('KvmDenied', {
   topology: Schema.String,
 }) {}
 
-/** @internal */
 export class KvmAbsent extends Schema.TaggedClass<KvmAbsent>()('KvmAbsent', {
   topology: Schema.String,
 }) {}
 
-/** @internal */
 export class HvfUnavailable extends Schema.TaggedClass<HvfUnavailable>()('HvfUnavailable', {
   arch: Schema.String,
 }) {}
 
-/** @internal */
 export class WHPUnavailable extends Schema.TaggedClass<WHPUnavailable>()('WHPUnavailable', {
   topology: Schema.String,
 }) {}
 
-/** @internal */
 export class PlatformUnsupported extends Schema.TaggedClass<PlatformUnsupported>()('PlatformUnsupported', {
   platform: Schema.String,
   arch: Schema.String,
 }) {}
 
-/** @internal */
 export const ProbeObservation = Schema.Union([
   KvmAccessible,
   KvmDenied,
@@ -66,10 +56,8 @@ export const ProbeObservation = Schema.Union([
   WHPUnavailable,
   PlatformUnsupported,
 ])
-/** @internal */
 export type ProbeObservation = typeof ProbeObservation.Type
 
-/** @internal */
 export class AssessVirtualization extends Schema.TaggedClass<AssessVirtualization>()('AssessVirtualization', {
   platform: Schema.String,
   observation: ProbeObservation,
@@ -85,13 +73,6 @@ const WHP_REMEDIATION =
 const UNSUPPORTED_REMEDIATION =
   'unsupported platform: effect-microsandbox supports linux (kvm), macOS (Hypervisor.framework), and windows (WHP)'
 
-/**
- * The virtualization verdict cell: one OS probe observation in, one verdict
- * out — the sandbox runs, or the operator gets the remediation for the exact
- * refusal the probe observed. Total: every observation yields a verdict, so
- * the error channel is `never` by construction, not by convention.
- */
-/** @internal */
 export const assessVirtualization = Workflow.total(
   AssessVirtualization,
   (command): Result.Result<VirtualizationVerdict, never> =>

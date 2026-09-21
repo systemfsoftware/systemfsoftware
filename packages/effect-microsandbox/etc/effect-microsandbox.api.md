@@ -4,222 +4,30 @@
 
 ```ts
 
-import { Context } from 'effect';
-import { Effect } from 'effect';
-import { HashMap } from 'effect';
-import { Layer } from 'effect';
-import { Schema } from 'effect';
-import * as Scope from 'effect/Scope';
-import { Stream } from 'effect';
-import { YieldableError } from 'effect/Cause';
-
 // @public (undocumented)
-export class ExecError extends ExecError_base {}
-
-// @public (undocumented)
-export const ExecError_base: Schema.Class<ExecError, Schema.TaggedStruct<"ExecError", {
-    readonly argv: Schema.$Array<Schema.String>;
-    readonly reason: Schema.String;
-}>, YieldableError>;
-
-// @public (undocumented)
-export interface ExecResult {
-    // (undocumented)
-    readonly code: number;
-    // (undocumented)
-    readonly stderr: string;
-    // (undocumented)
-    readonly stdout: string;
+export namespace MicroVM {
+    export { ExecResult, LogLine, MicroVM, RunningVM };
 }
 
 // @public (undocumented)
-export const GuestPort: Schema.Int;
-
-// @public (undocumented)
-export type GuestPort = typeof GuestPort.Type;
-
-// @public (undocumented)
-export const HttpWait: Schema.TaggedStruct<"Http", {
-    readonly path: Schema.String;
-    readonly port: Schema.Int;
-}>;
-
-// @public (undocumented)
-export type HttpWait = typeof HttpWait.Type;
-
-// @public (undocumented)
-export const ImageReference: Schema.String;
-
-// @public (undocumented)
-export type ImageReference = typeof ImageReference.Type;
-
-// @public (undocumented)
-export const layer: Layer.Layer<MicroVM>;
-
-// @public (undocumented)
-export interface LogLine {
-    // (undocumented)
-    readonly source: string;
-    // (undocumented)
-    readonly text: string;
+export namespace MicroVMError {
+    export { ExecError, LoopbackViolationError, MicroVMError, PortAllocationError, SandboxBootError, VirtualizationUnsupportedError, WaitTimeoutError };
 }
 
 // @public (undocumented)
-export const LogWait: Schema.TaggedStruct<"Log", {
-    readonly pattern: Schema.String;
-}>;
-
-// @public (undocumented)
-export type LogWait = typeof LogWait.Type;
-
-// @public (undocumented)
-export class LoopbackViolationError extends LoopbackViolationError_base {}
-
-// @public (undocumented)
-export const LoopbackViolationError_base: Schema.Class<LoopbackViolationError, Schema.TaggedStruct<"LoopbackViolationError", {
-    readonly sandboxName: Schema.String;
-    readonly host: Schema.String;
-    readonly guestPort: Schema.Int;
-}>, YieldableError>;
-
-// @public
-export class MicroVM extends MicroVM_base {}
-
-// @public (undocumented)
-export const MicroVM_base: Context.ServiceClass<MicroVM, "MicroVM", {
-    readonly start: (spec: MicroVMSpec) => Effect.Effect<RunningVM, MicroVMError, Scope.Scope>;
-}>;
-
-// @public (undocumented)
-export type MicroVMError = VirtualizationUnsupportedError | SandboxBootError | WaitTimeoutError | ExecError | PortAllocationError | LoopbackViolationError;
-
-// @public (undocumented)
-export const MicroVMSpec: Schema.Struct<{
-    readonly image: Schema.String;
-    readonly env: Schema.$Record<Schema.String, Schema.String>;
-    readonly ports: Schema.$Array<Schema.Int>;
-    readonly mounts: Schema.$Array<Schema.Struct<{
-        readonly host: Schema.String;
-        readonly guest: Schema.String;
-    }>>;
-    readonly memoryMb: Schema.optional<Schema.Finite>;
-    readonly vCPUs: Schema.optional<Schema.Int>;
-    readonly workdir: Schema.optional<Schema.String>;
-    readonly cmd: Schema.optional<Schema.$Array<Schema.String>>;
-    readonly waitStrategy: Schema.optional<Schema.Union<readonly [Schema.TaggedStruct<"Http", {
-        readonly path: Schema.String;
-        readonly port: Schema.Int;
-    }>, Schema.TaggedStruct<"Port", {
-        readonly port: Schema.Int;
-    }>, Schema.TaggedStruct<"Log", {
-        readonly pattern: Schema.String;
-    }>]>>;
-}>;
-
-// @public (undocumented)
-export type MicroVMSpec = typeof MicroVMSpec.Type;
-
-// @public (undocumented)
-export const Mount: Schema.Struct<{
-    readonly host: Schema.String;
-    readonly guest: Schema.String;
-}>;
-
-// @public (undocumented)
-export type Mount = typeof Mount.Type;
-
-// @public (undocumented)
-export class PortAllocationError extends PortAllocationError_base {}
-
-// @public (undocumented)
-export const PortAllocationError_base: Schema.Class<PortAllocationError, Schema.TaggedStruct<"PortAllocationError", {
-    readonly guestPort: Schema.Int;
-    readonly reason: Schema.String;
-}>, YieldableError>;
-
-// @public (undocumented)
-export const PortWait: Schema.TaggedStruct<"Port", {
-    readonly port: Schema.Int;
-}>;
-
-// @public (undocumented)
-export type PortWait = typeof PortWait.Type;
-
-// @public (undocumented)
-export interface RunningVM {
-    // (undocumented)
-    readonly exec: (cmd: string, args?: ReadonlyArray<string>) => Effect.Effect<ExecResult, ExecError>;
-    // (undocumented)
-    readonly logs: Stream.Stream<LogLine, SandboxBootError>;
-    // (undocumented)
-    readonly mappedPorts: HashMap.HashMap<number, number>;
-    // (undocumented)
-    readonly name: string;
-    // (undocumented)
-    readonly ping: Effect.Effect<boolean>;
+export namespace MicroVMSandbox {
+    export { MicroVMLive };
 }
 
 // @public (undocumented)
-export class SandboxBootError extends SandboxBootError_base {}
+export namespace MicroVMSpec {
+    export { Wait, withEnv, withExposedPorts, withMemoryLimit, withMount, withWaitStrategy };
+}
 
 // @public (undocumented)
-export const SandboxBootError_base: Schema.Class<SandboxBootError, Schema.TaggedStruct<"SandboxBootError", {
-    readonly sandboxName: Schema.String;
-    readonly reason: Schema.String;
-}>, YieldableError>;
-
-// @public (undocumented)
-export class VirtualizationUnsupportedError extends VirtualizationUnsupportedError_base {}
-
-// @public (undocumented)
-export const VirtualizationUnsupportedError_base: Schema.Class<VirtualizationUnsupportedError, Schema.TaggedStruct<"VirtualizationUnsupportedError", {
-    readonly platform: Schema.String;
-    readonly remediation: Schema.String;
-}>, YieldableError>;
-
-// @public (undocumented)
-export const Wait: {
-    forHttp: (path: string, port: number) => WaitStrategy;
-    forPort: (port: number) => WaitStrategy;
-    forLog: (pattern: string) => WaitStrategy;
-};
-
-// @public (undocumented)
-export const WaitStrategy: Schema.Union<readonly [Schema.TaggedStruct<"Http", {
-    readonly path: Schema.String;
-    readonly port: Schema.Int;
-}>, Schema.TaggedStruct<"Port", {
-    readonly port: Schema.Int;
-}>, Schema.TaggedStruct<"Log", {
-    readonly pattern: Schema.String;
-}>]>;
-
-// @public (undocumented)
-export type WaitStrategy = typeof WaitStrategy.Type;
-
-// @public (undocumented)
-export class WaitTimeoutError extends WaitTimeoutError_base {}
-
-// @public (undocumented)
-export const WaitTimeoutError_base: Schema.Class<WaitTimeoutError, Schema.TaggedStruct<"WaitTimeoutError", {
-    readonly wait: Schema.String;
-    readonly timeoutMs: Schema.Int;
-}>, YieldableError>;
-
-// @public (undocumented)
-export const withEnv: (env: Record<string, string>) => (spec: MicroVMSpec) => MicroVMSpec;
-
-// @public (undocumented)
-export const withExposedPorts: (ports: ReadonlyArray<number>) => (spec: MicroVMSpec) => MicroVMSpec;
-
-// @public (undocumented)
-export const withMemoryLimit: (memoryMb: number) => (spec: MicroVMSpec) => MicroVMSpec;
-
-// @public (undocumented)
-export const withMount: (mount: Mount) => (spec: MicroVMSpec) => MicroVMSpec;
-
-// @public (undocumented)
-export const withWaitStrategy: (waitStrategy: WaitStrategy) => (spec: MicroVMSpec) => MicroVMSpec;
+export namespace MicroVMSpecSchema {
+    export { GuestPort, HttpWait, ImageReference, LogWait, MicroVMSpec, Mount, PortWait, WaitStrategy };
+}
 
 // (No @packageDocumentation comment for this package)
 
