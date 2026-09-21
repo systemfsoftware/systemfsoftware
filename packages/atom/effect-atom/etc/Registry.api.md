@@ -10,6 +10,7 @@ import * as Effect from 'effect/Effect';
 import { Inspectable } from 'effect/Inspectable';
 import * as Layer from 'effect/Layer';
 import * as Option_2 from 'effect/Option';
+import * as Pipeable$1 from 'effect/Pipeable';
 import { Pipeable } from 'effect/Pipeable';
 import { Scheduler } from 'effect/Scheduler';
 import { SchedulerDispatcher } from 'effect/Scheduler';
@@ -117,7 +118,7 @@ export interface Registry {
 }
 
 // @public
-export class RegistryImpl implements Registry {
+export class RegistryImpl extends Pipeable$1.Class implements Registry {
     // (undocumented)
     readonly [TypeId]: TypeId;
     constructor(initialValues?: Iterable<readonly [Atom<unknown>, unknown]>, scheduleTask?: (cb: () => void) => () => void, timeoutResolution?: number, defaultIdleTTL?: number, now?: () => number, scheduleTimer?: (f: () => void, delayMillis: number) => () => void);
@@ -223,8 +224,8 @@ export const TypeId: TypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-CloF-M4q.d.ts:334:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
-// dist/Atom-CloF-M4q.d.ts:334:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CyTEJlYL.d.ts:335:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CyTEJlYL.d.ts:335:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
 
 // (No @packageDocumentation comment for this package)
 

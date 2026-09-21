@@ -14,8 +14,14 @@ export function createPackageFromTarballData(tarball: Uint8Array): Package;
 export type DirectoryJSON = Record<string, string | Uint8Array | null>;
 
 // @public (undocumented)
-export class Package {
-    constructor(files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string);
+export function makePackage(files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string): Package;
+
+// @public (undocumented)
+export interface Package {
+    // Warning: (ae-forgotten-export) The symbol "TypeId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly [TypeId]: TypeId;
     // (undocumented)
     directoryExists(path: string): boolean;
     // (undocumented)
@@ -34,8 +40,14 @@ export class Package {
     tryReadBytes(path: string): string | Uint8Array | undefined;
     // (undocumented)
     tryReadFile(path: string): string | undefined;
+    // (undocumented)
     withOverlay(other: Package): Package;
 }
+
+// @public (undocumented)
+export const Package: {
+    make: typeof makePackage;
+};
 
 // @public
 export function packPackage(pkg: Package): Uint8Array;

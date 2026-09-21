@@ -12,8 +12,8 @@
 import * as Equal from 'effect/Equal'
 import type { Equal as EqualType } from 'effect/Equal'
 import * as Hash from 'effect/Hash'
+import * as Pipeable from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
-
 /**
  * The literal type used to identify `AtomRef` values.
  *
@@ -191,11 +191,12 @@ const unlinkListener = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): voi
   unlinkNext(listener)
 }
 
-class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
+class ReadonlyRefImpl<A> extends Pipeable.Class implements ReadonlyRef<A> {
   readonly [TypeId]: TypeId
   readonly key = keyState.generate()
   public value: A
   constructor(value: A) {
+    super()
     this[TypeId] = TypeId
     this.value = value
   }
@@ -255,12 +256,13 @@ class AtomRefImpl<A> extends ReadonlyRefImpl<A> implements AtomRef<A> {
   }
 }
 
-class MapRefImpl<A, B> implements ReadonlyRef<B> {
+class MapRefImpl<A, B> extends Pipeable.Class implements ReadonlyRef<B> {
   readonly [TypeId]: TypeId
   readonly key = keyState.generate()
   readonly parent: ReadonlyRef<A>
   readonly transform: (a: A) => B
   constructor(parent: ReadonlyRef<A>, transform: (a: A) => B) {
+    super()
     this[TypeId] = TypeId
     this.parent = parent
     this.transform = transform
@@ -290,7 +292,7 @@ class MapRefImpl<A, B> implements ReadonlyRef<B> {
   }
 }
 
-class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
+class PropRefImpl<A, K extends keyof A> extends Pipeable.Class implements AtomRef<A[K]> {
   readonly [TypeId]: TypeId
   readonly key = keyState.generate()
   private previous: A[K]
@@ -298,6 +300,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
   readonly _prop: K
 
   constructor(parent: AtomRef<A>, _prop: K) {
+    super()
     this[TypeId] = TypeId
     this.parent = parent
     this._prop = _prop
