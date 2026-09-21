@@ -21,9 +21,9 @@ type DaemonHealthShape = {
   readonly paused: Latch.Latch
 }
 
-type TickPolicyHooksShape = {
+type TickPolicyHooksShape<RetrySchedule = unknown> = {
   readonly spanAttributes?: Effect.Effect<Record<string, string | number | boolean>>
-  readonly innerRetry?: Schedule.Schedule<unknown>
+  readonly innerRetry?: Schedule.Schedule<RetrySchedule>
   readonly trackDuration?: Metric.Histogram<Duration.Duration>
 }
 
@@ -70,7 +70,7 @@ const applyInnerRetry = (hooks: TickPolicyHooksShape) => {
 const openReadyGauge = (gauge: Metric.Gauge<number>, name: string) =>
   Metric.update(Metric.withAttributes(gauge, { daemon: name, latch: 'ready' }), 1)
 
-const buildPollTick = <E, R, W extends WorkerShape<unknown, E, R>>(
+const buildPollTick = <E, R, W extends WorkerShape<WWork, E, R>, WWork = unknown>(
   worker: W,
   health: DaemonHealthShape,
   gate: Effect.Effect<Option.Option<Effect.Effect<void, E, R>>, E, R>,
@@ -113,7 +113,7 @@ const wrapSpan = <_WE, EEff, R, W extends { readonly name: string }>(
   )
 }
 
-const buildPollLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
+const buildPollLoop = <E, R, W extends WorkerShape<WWork, E, R>, WWork = unknown>(
   worker: W,
   loop: PollLoop<E, R>,
   health: DaemonHealthShape,
@@ -129,7 +129,7 @@ const propagateExit = <A, Err>(exit: Exit.Exit<A, Err>): Effect.Effect<void, Err
     Match.orElse(() => Effect.void),
   )
 
-const buildStreamLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
+const buildStreamLoop = <E, R, W extends WorkerShape<WWork, E, R>, WWork = unknown>(
   worker: W,
   loop: StreamLoop<E, R>,
   health: DaemonHealthShape,
@@ -152,7 +152,7 @@ const buildStreamLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
   return wrapSpan(worker, retried.pipe(Effect.asVoid))
 }
 
-const buildSubscriptionLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
+const buildSubscriptionLoop = <E, R, W extends WorkerShape<WWork, E, R>, WWork = unknown>(
   worker: W,
   loop: SubscriptionLoop<E, R>,
   health: DaemonHealthShape,
@@ -168,8 +168,8 @@ const buildSubscriptionLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
 }
 
 /** @internal */
-export const buildWorkerLoop = <E, R>(
-  worker: WorkerShape<WorkerShape<unknown, E, R>, E, R>,
+export const buildWorkerLoop = <E, R, WWork = unknown>(
+  worker: WorkerShape<WorkerShape<WWork, E, R>, E, R>,
   health: DaemonHealthShape,
   readyGauge: Metric.Gauge<number>,
 ): Effect.Effect<void, E | Cause.TimeoutError, R | Scope.Scope> =>

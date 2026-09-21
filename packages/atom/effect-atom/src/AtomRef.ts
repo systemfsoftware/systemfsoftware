@@ -14,6 +14,9 @@ import type { Equal as EqualType } from 'effect/Equal'
 import * as Hash from 'effect/Hash'
 import * as Pipeable from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
+
+type AnyReadonlyRef<A = unknown> = ReadonlyRef<A>
+type AnyValue<A = unknown> = A
 /**
  * The literal type used to identify `AtomRef` values.
  *
@@ -99,7 +102,7 @@ export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
  */
 export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items)
 
-const isReadonlyRef = (u: unknown): u is ReadonlyRef<unknown> => hasProperty(u, TypeId)
+const isReadonlyRef = (u: unknown): u is AnyReadonlyRef => hasProperty(u, TypeId)
 
 const isArrayWithProp = <A, K extends keyof A>(value: A, _prop: K): value is A & Array<A[K]> => Array.isArray(value)
 
@@ -110,8 +113,8 @@ const hasProp = <A, K extends PropertyKey>(value: A, prop: K): boolean => {
   return false
 }
 
-const propInObject = (value: NonNullable<unknown>, prop: PropertyKey): boolean => {
-  const boxed: unknown = Object(value)
+const propInObject = <T = unknown>(value: NonNullable<T>, prop: PropertyKey): boolean => {
+  const boxed: AnyValue = Object(value)
   return hasKey(boxed, prop)
 }
 
@@ -122,7 +125,7 @@ const isInTarget = (value: unknown): value is object => {
   return typeof value === 'function'
 }
 
-const hasKey = (value: unknown, prop: PropertyKey): boolean => {
+const hasKey = <T = unknown>(value: T, prop: PropertyKey): boolean => {
   if (isInTarget(value)) {
     return prop in value
   }
@@ -383,7 +386,7 @@ class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collect
         if (p === 'notify') {
           return notify
         }
-        const value: unknown = Reflect.get(target, p, receiver)
+        const value: AnyValue = Reflect.get(target, p, receiver)
         return value
       },
     })

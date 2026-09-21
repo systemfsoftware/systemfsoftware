@@ -84,6 +84,8 @@ export declare namespace Result {
  */
 export type Result<A, E = never> = Initial<A, E> | Success<A, E> | Failure<A, E>
 
+type AnyResult<A = unknown, E = unknown> = Result<A, E>
+
 /**
  * Shared prototype every `Result` variant inherits from. The three
  * constructors (`initial`, `success`, `failure`) use it; `waiting` in
@@ -104,7 +106,7 @@ export const ResultProto = {
   pipe() {
     return pipeArguments(this, arguments)
   },
-  [Equal.symbol](this: Result<unknown, unknown>, that: Result<unknown, unknown>): boolean {
+  [Equal.symbol](this: AnyResult, that: AnyResult): boolean {
     if (this.waiting !== that.waiting) {
       return false
     }
@@ -129,7 +131,7 @@ export const ResultProto = {
       Match.exhaustive,
     )
   },
-  [Hash.symbol](this: Result<unknown, unknown>): number {
+  [Hash.symbol](this: AnyResult): number {
     const tagHash = Hash.string(`${this._tag}:${this.waiting}`)
     return Match.value(this).pipe(
       Match.tag('Initial', () => tagHash),
@@ -183,7 +185,7 @@ export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
  *
  * @since 4.0.0
  */
-export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProperty(u, TypeId)
+export const isResult = (u: unknown): u is AnyResult => hasProperty(u, TypeId)
 
 /**
  * Creates an `Initial` result, optionally marking it as waiting.

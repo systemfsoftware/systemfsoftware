@@ -28,6 +28,8 @@ import { hostNow, hostScheduleTimer } from './internal/HostTimer.js'
 import * as Result from './Result.js'
 import type { Failure, Success } from './Result.js'
 
+type AnyValue<A = unknown> = A
+
 /**
  * The literal type used to identify `AtomRegistry` services and values.
  *
@@ -71,7 +73,7 @@ export interface Registry {
    */
   readonly now: () => number
   readonly scheduleTimer: (f: () => void, delayMillis: number) => () => void
-  readonly getNodes: () => ReadonlyMap<Atom.Atom<unknown> | string, Node<unknown>>
+  readonly getNodes: () => ReadonlyMap<Atom.Atom | string, Node>
   readonly get: <A>(atom: Atom.Atom<A>) => A
   /**
    * Returns the current value of an atom when its node has been initialized, without rebuilding a stale or uninitialized node.
@@ -82,7 +84,7 @@ export interface Registry {
   readonly mount: <A>(atom: Atom.Atom<A>) => () => void
   readonly refresh: <A>(atom: Atom.Atom<A>) => void
   readonly set: <R, W>(atom: Atom.Writable<R, W>, value: W) => void
-  readonly setSerializable: (key: string, encoded: unknown) => void
+  readonly setSerializable: <T = unknown>(key: string, encoded: T) => void
   readonly setInitialValue: <A>(atom: Atom.Atom<A>, value: A) => void
   readonly modify: <R, W, A>(atom: Atom.Writable<R, W>, f: (_: R) => [returnValue: A, nextValue: W]) => A
   readonly update: <R, W>(atom: Atom.Writable<R, W>, f: (_: R) => W) => void
@@ -91,8 +93,8 @@ export interface Registry {
   }) => () => void
   readonly reset: () => void
   readonly dispose: () => void
-  onNodeAdded?: ((node: Node<unknown>) => void) | undefined
-  onNodeRemoved?: ((node: Node<unknown>) => void) | undefined
+  onNodeAdded?: ((node: Node) => void) | undefined
+  onNodeRemoved?: ((node: Node) => void) | undefined
 }
 
 /**
@@ -105,7 +107,7 @@ export interface Registry {
  *
  * @since 4.0.0
  */
-export interface Node<A> {
+export interface Node<A = unknown> {
   readonly atom: Atom.Atom<A>
   readonly value: () => A
   /**
@@ -113,14 +115,14 @@ export interface Node<A> {
    * these sets internally; consumers can inspect them but must not coordinate
    * through them.
    */
-  readonly parents: ReadonlySet<Node<unknown>>
-  readonly children: ReadonlySet<Node<unknown>>
+  readonly parents: ReadonlySet<Node>
+  readonly children: ReadonlySet<Node>
   readonly listeners: ReadonlySet<() => void>
   currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed'
 }
 
 type RegistryMakeOptions = {
-  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
+  readonly initialValues?: Iterable<readonly [Atom.Atom, AnyValue]> | undefined
   readonly scheduleTask?: ((f: () => void) => () => void) | undefined
   readonly timeoutResolution?: number | undefined
   readonly defaultIdleTTL?: number | undefined
@@ -415,12 +417,11 @@ const SerializableTypeId: Atom.SerializableTypeId = '~effect-atom/atom/Atom/Seri
 interface SerializableAtom {
   readonly [SerializableTypeId]: {
     readonly key: string
-    readonly decode: (encoded: unknown) => unknown
+    readonly decode: (encoded: AnyValue) => AnyValue
   }
 }
 
-const isSerializableAtom = (atom: Atom.Atom<unknown>): atom is Atom.Atom<unknown> & SerializableAtom =>
-  SerializableTypeId in atom
+const isSerializableAtom = (atom: Atom.Atom): atom is Atom.Atom & SerializableAtom => SerializableTypeId in atom
 
 function atomKey<A>(atom: Atom.Atom<A>): Atom.Atom<A> | string {
   if (isSerializableAtom(atom)) {
@@ -434,10 +435,10 @@ function atomKey<A>(atom: Atom.Atom<A>): Atom.Atom<A> | string {
  * under an atom's key is that atom's own node, so key equality re-establishes
  * the erased `A` type across the map boundary.
  */
-const isNodeImplFor = <A>(atom: Atom.Atom<A>, node: NodeImpl<unknown>): node is NodeImpl<A> =>
+const isNodeImplFor = <A>(atom: Atom.Atom<A>, node: NodeImpl): node is NodeImpl<A> =>
   atomKey(node.atom) === atomKey(atom)
 
-type TimeoutBucket = readonly [nodes: Set<NodeImpl<unknown>>, cancel: () => void]
+type TimeoutBucket = readonly [nodes: Set<NodeImpl>, cancel: () => void]
 
 function nowOrHost(now: (() => number) | undefined): () => number {
   if (now === undefined) {
@@ -474,7 +475,7 @@ function resolveTimeoutResolution(
 
 function applyInitialValues(
   registry: RegistryImpl,
-  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined,
+  initialValues: Iterable<readonly [Atom.Atom, AnyValue]> | undefined,
 ): void {
   if (initialValues === undefined) {
     return
@@ -484,7 +485,7 @@ function applyInitialValues(
 
 function setEachInitialValue(
   registry: RegistryImpl,
-  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>,
+  initialValues: Iterable<readonly [Atom.Atom, AnyValue]>,
 ): void {
   for (const [atom, value] of initialValues) {
     registry.setInitialValue(atom, value)
@@ -499,7 +500,7 @@ function resolveInitialValueTarget<A>(atom: Atom.Atom<A>): Atom.Atom<A> {
   return target
 }
 
-function valueOptionIfForAtom<A>(atom: Atom.Atom<A>, node: NodeImpl<unknown>): Option.Option<A> {
+function valueOptionIfForAtom<A>(atom: Atom.Atom<A>, node: NodeImpl): Option.Option<A> {
   if (isNodeImplFor(atom, node) === false) {
     return Option.none()
   }
@@ -508,11 +509,11 @@ function valueOptionIfForAtom<A>(atom: Atom.Atom<A>, node: NodeImpl<unknown>): O
 
 function applyDecodedSerializable(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
-  atom: Atom.Atom<unknown> & SerializableAtom,
-  encoded: unknown,
+  node: NodeImpl,
+  atom: Atom.Atom & SerializableAtom,
+  encoded: AnyValue,
 ): void {
-  let decoded: unknown
+  let decoded: AnyValue
   try {
     decoded = atom[SerializableTypeId].decode(encoded)
   } catch {
@@ -523,9 +524,9 @@ function applyDecodedSerializable(
 
 function assignDecodedSerializable(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
-  atom: Atom.Atom<unknown>,
-  decoded: unknown,
+  node: NodeImpl,
+  atom: Atom.Atom,
+  decoded: AnyValue,
 ): void {
   const target = resolveInitialValueTarget(atom)
   if (target === atom) {
@@ -537,8 +538,8 @@ function assignDecodedSerializable(
 
 function applySerializableValue(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
-  encoded: unknown,
+  node: NodeImpl,
+  encoded: AnyValue,
 ): void {
   const atom = node.atom
   if (isSerializableAtom(atom) === false) {
@@ -568,28 +569,28 @@ function notifyIfImmediateFlag<A>(
   }
 }
 
-function atomIdleTtlIsActive(registry: RegistryImpl, atom: Atom.Atom<unknown>): boolean {
+function atomIdleTtlIsActive(registry: RegistryImpl, atom: Atom.Atom): boolean {
   if (atom.idleTTL === 0) {
     return false
   }
   return hasIdleTtl(registry, atom)
 }
 
-function hasIdleTtl(registry: RegistryImpl, atom: Atom.Atom<unknown>): boolean {
+function hasIdleTtl(registry: RegistryImpl, atom: Atom.Atom): boolean {
   if (atom.idleTTL !== undefined) {
     return true
   }
   return registry.defaultIdleTTL !== undefined
 }
 
-function notifyNodeAdded(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+function notifyNodeAdded(registry: RegistryImpl, node: NodeImpl): void {
   if (registry.onNodeAdded === undefined) {
     return
   }
   registry.onNodeAdded(node)
 }
 
-function notifyNodeRemoved(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+function notifyNodeRemoved(registry: RegistryImpl, node: NodeImpl): void {
   if (registry.onNodeRemoved === undefined) {
     return
   }
@@ -611,7 +612,7 @@ function existingOrCreateNode<A>(
   registry: RegistryImpl,
   atom: Atom.Atom<A>,
   key: Atom.Atom<A> | string,
-  existing: NodeImpl<unknown>,
+  existing: NodeImpl,
 ): NodeImpl<A> {
   if (isNodeImplFor(atom, existing)) {
     return reuseExistingNode(registry, atom, existing)
@@ -655,7 +656,7 @@ function applyPreloadedIfStringKey<A>(
 
 function applyPreloadedSerializable(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
+  node: NodeImpl,
   key: string,
 ): void {
   if (registry.preloadedSerializable.has(key) === false) {
@@ -686,13 +687,13 @@ function scheduleRemovalUnlessKeepAlive<A>(registry: RegistryImpl, atom: Atom.At
   registry.scheduleAtomRemoval(atom)
 }
 
-function removeNodeIfCanBeRemoved(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+function removeNodeIfCanBeRemoved(registry: RegistryImpl, node: NodeImpl): void {
   if (node.canBeRemoved) {
     registry.removeNode(node)
   }
 }
 
-function removeAtomIfIdle(registry: RegistryImpl, atom: Atom.Atom<unknown>): void {
+function removeAtomIfIdle(registry: RegistryImpl, atom: Atom.Atom): void {
   const node = registry.nodes.get(atomKey(atom))
   if (node === undefined) {
     return
@@ -700,19 +701,19 @@ function removeAtomIfIdle(registry: RegistryImpl, atom: Atom.Atom<unknown>): voi
   removeNodeIfCanBeRemoved(registry, node)
 }
 
-function evictNode(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+function evictNode(registry: RegistryImpl, node: NodeImpl): void {
   registry.nodes.delete(atomKey(node.atom))
   node.remove()
   notifyNodeRemoved(registry, node)
 }
 
-function evictNodeIfIdle(registry: RegistryImpl, node: NodeImpl<unknown>): void {
+function evictNodeIfIdle(registry: RegistryImpl, node: NodeImpl): void {
   if (node.canBeRemoved) {
     evictNode(registry, node)
   }
 }
 
-function idleTtlOf(atom: Atom.Atom<unknown>, defaultIdleTTL: number | undefined): number | undefined {
+function idleTtlOf(atom: Atom.Atom, defaultIdleTTL: number | undefined): number | undefined {
   if (atom.idleTTL === undefined) {
     return defaultIdleTTL
   }
@@ -721,7 +722,7 @@ function idleTtlOf(atom: Atom.Atom<unknown>, defaultIdleTTL: number | undefined)
 
 function remainingAfterSweep(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
+  node: NodeImpl,
   nodeIdleTTL: number,
   currentSweepTTL: number,
 ): number | undefined {
@@ -735,7 +736,7 @@ function remainingAfterSweep(
 
 function remainingIdleTtl(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
+  node: NodeImpl,
   nodeIdleTTL: number,
   currentSweepTTL: number | null,
 ): number | undefined {
@@ -752,7 +753,7 @@ function timeoutBucketFor(registry: RegistryImpl, idleTTL: number): number {
 }
 
 function createTimeoutBucket(registry: RegistryImpl, bucket: number): TimeoutBucket {
-  const nodes = new Set<NodeImpl<unknown>>()
+  const nodes = new Set<NodeImpl>()
   const cancel = registry.scheduleTimer(() => registry.sweepBucket(bucket), bucket - registry.now())
   const entry: TimeoutBucket = [nodes, cancel]
   registry.timeoutBuckets.set(bucket, entry)
@@ -767,7 +768,7 @@ function ensureTimeoutBucket(registry: RegistryImpl, bucket: number): TimeoutBuc
   return createTimeoutBucket(registry, bucket)
 }
 
-function addNodeToTimeoutBucket(registry: RegistryImpl, node: NodeImpl<unknown>, idleTTL: number): void {
+function addNodeToTimeoutBucket(registry: RegistryImpl, node: NodeImpl, idleTTL: number): void {
   const bucket = timeoutBucketFor(registry, idleTTL)
   const entry = ensureTimeoutBucket(registry, bucket)
   entry[0].add(node)
@@ -776,7 +777,7 @@ function addNodeToTimeoutBucket(registry: RegistryImpl, node: NodeImpl<unknown>,
 
 function dropNodeFromTimeoutBucket(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
+  node: NodeImpl,
   bucket: number,
 ): void {
   const entry = registry.timeoutBuckets.get(bucket)
@@ -788,7 +789,7 @@ function dropNodeFromTimeoutBucket(
 
 function removeNodeFromBucketEntry(
   registry: RegistryImpl,
-  node: NodeImpl<unknown>,
+  node: NodeImpl,
   bucket: number,
   entry: TimeoutBucket,
 ): void {
@@ -812,11 +813,11 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
   readonly dispatcher: SchedulerDispatcher
   readonly now: () => number
   readonly scheduleTimer: (f: () => void, delayMillis: number) => () => void
-  onNodeAdded?: ((node: Node<unknown>) => void) | undefined
-  onNodeRemoved?: ((node: Node<unknown>) => void) | undefined
+  onNodeAdded?: ((node: Node) => void) | undefined
+  onNodeRemoved?: ((node: Node) => void) | undefined
 
   constructor(
-    initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]>,
+    initialValues?: Iterable<readonly [Atom.Atom, AnyValue]>,
     scheduleTask?: (cb: () => void) => () => void,
     timeoutResolution?: number,
     defaultIdleTTL?: number,
@@ -839,10 +840,10 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     this.ensureNode(resolveInitialValueTarget(atom)).setInitialValue(value)
   }
 
-  readonly nodes = new Map<Atom.Atom<unknown> | string, NodeImpl<unknown>>()
-  readonly preloadedSerializable = new Map<string, unknown>()
+  readonly nodes = new Map<Atom.Atom | string, NodeImpl>()
+  readonly preloadedSerializable = new Map<string, AnyValue>()
   readonly timeoutBuckets = new Map<number, TimeoutBucket>()
-  readonly nodeTimeoutBucket = new Map<NodeImpl<unknown>, number>()
+  readonly nodeTimeoutBucket = new Map<NodeImpl, number>()
   disposed = false
 
   getNodes() {
@@ -865,7 +866,7 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     atom.write(this.ensureNode(atom).writeContext, value)
   }
 
-  setSerializable(key: string, encoded: unknown): void {
+  setSerializable<T = unknown>(key: string, encoded: T): void {
     const node = this.nodes.get(key)
     if (node === undefined) {
       this.preloadedSerializable.set(key, encoded)
@@ -912,7 +913,7 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     return this.subscribe(atom, constVoid, constImmediate)
   }
 
-  atomHasTtl(atom: Atom.Atom<unknown>): boolean {
+  atomHasTtl(atom: Atom.Atom): boolean {
     if (atom.keepAlive) {
       return false
     }
@@ -936,19 +937,19 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     this.ensureNode(atom).invalidate()
   }
 
-  scheduleAtomRemoval(atom: Atom.Atom<unknown>): void {
+  scheduleAtomRemoval(atom: Atom.Atom): void {
     this.dispatcher.scheduleTask(() => {
       removeAtomIfIdle(this, atom)
     }, 0)
   }
 
-  scheduleNodeRemoval(node: NodeImpl<unknown>): void {
+  scheduleNodeRemoval(node: NodeImpl): void {
     this.dispatcher.scheduleTask(() => {
       removeNodeIfCanBeRemoved(this, node)
     }, 0)
   }
 
-  removeNode(node: NodeImpl<unknown>): void {
+  removeNode(node: NodeImpl): void {
     if (this.atomHasTtl(node.atom)) {
       this.setNodeTimeout(node)
       return
@@ -956,14 +957,14 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     evictNode(this, node)
   }
 
-  setNodeTimeout(node: NodeImpl<unknown>): void {
+  setNodeTimeout(node: NodeImpl): void {
     if (this.nodeTimeoutBucket.has(node)) {
       return
     }
     this.setNodeTimeoutIfIdle(node)
   }
 
-  private setNodeTimeoutIfIdle(node: NodeImpl<unknown>): void {
+  private setNodeTimeoutIfIdle(node: NodeImpl): void {
     const nodeIdleTTL = idleTtlOf(node.atom, this.defaultIdleTTL)
     if (nodeIdleTTL === undefined) {
       return
@@ -971,7 +972,7 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     this.scheduleOrEvictIdleNode(node, nodeIdleTTL)
   }
 
-  private scheduleOrEvictIdleNode(node: NodeImpl<unknown>, nodeIdleTTL: number): void {
+  private scheduleOrEvictIdleNode(node: NodeImpl, nodeIdleTTL: number): void {
     const remaining = remainingIdleTtl(this, node, nodeIdleTTL, this.#currentSweepTTL)
     if (remaining === undefined) {
       return
@@ -979,7 +980,7 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     addNodeToTimeoutBucket(this, node, remaining)
   }
 
-  removeNodeTimeout(node: NodeImpl<unknown>): void {
+  removeNodeTimeout(node: NodeImpl): void {
     const bucket = this.nodeTimeoutBucket.get(node)
     if (bucket === undefined) {
       return
@@ -1005,25 +1006,25 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     })
   }
 
-  private sweepIdleNode(node: NodeImpl<unknown>): void {
+  private sweepIdleNode(node: NodeImpl): void {
     this.nodeTimeoutBucket.delete(node)
     this.sweepIdleNodeIfRemovable(node)
   }
 
-  private sweepIdleNodeIfRemovable(node: NodeImpl<unknown>): void {
+  private sweepIdleNodeIfRemovable(node: NodeImpl): void {
     if (node.canBeRemoved === false) {
       return
     }
     this.sweepRemoveNode(node)
   }
 
-  private sweepRemoveNode(node: NodeImpl<unknown>): void {
+  private sweepRemoveNode(node: NodeImpl): void {
     this.nodes.delete(atomKey(node.atom))
     notifyNodeRemoved(this, node)
     this.removeNodeWithSweepTtl(node)
   }
 
-  private removeNodeWithSweepTtl(node: NodeImpl<unknown>): void {
+  private removeNodeWithSweepTtl(node: NodeImpl): void {
     this.assignSweepTtl(idleTtlOf(node.atom, this.defaultIdleTTL))
     node.remove()
     this.#currentSweepTTL = null

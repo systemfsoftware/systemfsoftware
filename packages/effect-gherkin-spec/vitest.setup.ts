@@ -3,9 +3,9 @@ import { Equal } from 'effect'
 import * as fc from 'fast-check'
 import { expect } from 'vitest'
 
-const bothAreEqual = (a: unknown, b: unknown): boolean => Equal.isEqual(a) && Equal.isEqual(b)
+const bothAreEqual = <A = unknown, B = unknown>(a: A, b: B): boolean => Equal.isEqual(a) && Equal.isEqual(b)
 
-const hasAsymmetric = (val: unknown, seen = new Set<unknown>()): boolean => {
+const hasAsymmetric = <A = unknown>(val: A, seen = new Set<object>()): boolean => {
   if (typeof val !== 'object' || val === null) return false
   if ('asymmetricMatch' in val) return true
   if (seen.has(val)) return false
@@ -13,7 +13,7 @@ const hasAsymmetric = (val: unknown, seen = new Set<unknown>()): boolean => {
   return Object.values(val).some((child) => hasAsymmetric(child, seen))
 }
 expect.addEqualityTesters([
-  (a: unknown, b: unknown): boolean | undefined => {
+  <A = unknown, B = unknown>(a: A, b: B): boolean | undefined => {
     if (hasAsymmetric(a) || hasAsymmetric(b)) {
       return undefined
     }

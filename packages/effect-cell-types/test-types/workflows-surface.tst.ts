@@ -13,6 +13,7 @@ import { refuseWidenedCommand, type WidenedDecision } from '../tests/__fixtures_
 import { SettleCommand } from '../tests/__fixtures__/total-admit-decision.workflow.js'
 import { totalAdmitTaggedCommand } from '../tests/__fixtures__/total-admit-tagged-command.workflow.js'
 import { totalPairAdmitTaggedCommands } from '../tests/__fixtures__/total-pair-admit-tagged-commands.workflow.js'
+type Top<A = unknown> = A
 
 interface UntaggedMember {
   readonly value: number
@@ -317,11 +318,11 @@ describe('the shared-type-id predicate as measured', () => {
   })
 
   it('Should_AcceptTheMarker_When_AnInterfaceCarriesTheClassFieldsWidenedSlot', () => {
-    expect<Workflow.Inhabited<WidenedBrandOne | WidenedBrandTwo, CommandRefused>>().type.toBe<unknown>()
+    expect<Workflow.Inhabited<WidenedBrandOne | WidenedBrandTwo, CommandRefused>>().type.toBe<Top>()
   })
 
   it('Should_AcceptTheMarker_When_TheGenuineTaggedClassFamilyCarriesTheFieldInitializerBrand', () => {
-    expect<Workflow.Inhabited<Decision, CommandRefused>>().type.toBe<unknown>()
+    expect<Workflow.Inhabited<Decision, CommandRefused>>().type.toBe<Top>()
   })
 
   it('Should_RefuseTheMarker_When_TheFamilyBrandCarriesAStringKey', () => {

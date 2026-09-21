@@ -1,7 +1,7 @@
 import { Cause, Exit } from 'effect'
 import type { DisparityRecord } from './RelationalOracle.js'
 
-const stringify = (value: unknown): string | undefined => {
+const stringify = <V = unknown>(value: V): string | undefined => {
   try {
     return JSON.stringify(value, null, 2)
   } catch {
@@ -9,7 +9,7 @@ const stringify = (value: unknown): string | undefined => {
   }
 }
 
-export const renderUnknown = (value: unknown): string => stringify(value) ?? String(value)
+export const renderUnknown = <V = unknown>(value: V): string => stringify(value) ?? String(value)
 
 export const renderExit = <A, E>(exit: Exit.Exit<A, E>): string =>
   Exit.isSuccess(exit) ? renderUnknown(exit.value) : Cause.pretty(exit.cause)

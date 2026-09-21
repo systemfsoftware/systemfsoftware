@@ -56,16 +56,16 @@ export const mount: {
 };
 
 // @public
-interface Node_2<A> {
+interface Node_2<A = unknown> {
     // (undocumented)
     readonly atom: Atom<A>;
     // (undocumented)
-    readonly children: ReadonlySet<Node_2<unknown>>;
+    readonly children: ReadonlySet<Node_2>;
     // (undocumented)
     currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed';
     // (undocumented)
     readonly listeners: ReadonlySet<() => void>;
-    readonly parents: ReadonlySet<Node_2<unknown>>;
+    readonly parents: ReadonlySet<Node_2>;
     // (undocumented)
     readonly value: () => A;
 }
@@ -80,7 +80,7 @@ export interface Registry {
     // (undocumented)
     readonly get: <A>(atom: Atom<A>) => A;
     // (undocumented)
-    readonly getNodes: () => ReadonlyMap<Atom<unknown> | string, Node_2<unknown>>;
+    readonly getNodes: () => ReadonlyMap<Atom | string, Node_2>;
     readonly getRaw: <A>(atom: Atom<A>) => Option_2.Option<A>;
     // (undocumented)
     readonly modify: <R, W, A>(atom: Writable<R, W>, f: (_: R) => [returnValue: A, nextValue: W]) => A;
@@ -88,9 +88,9 @@ export interface Registry {
     readonly mount: <A>(atom: Atom<A>) => () => void;
     readonly now: () => number;
     // (undocumented)
-    onNodeAdded?: ((node: Node_2<unknown>) => void) | undefined;
+    onNodeAdded?: ((node: Node_2) => void) | undefined;
     // (undocumented)
-    onNodeRemoved?: ((node: Node_2<unknown>) => void) | undefined;
+    onNodeRemoved?: ((node: Node_2) => void) | undefined;
     // (undocumented)
     readonly refresh: <A>(atom: Atom<A>) => void;
     // (undocumented)
@@ -108,7 +108,7 @@ export interface Registry {
     // (undocumented)
     readonly setInitialValue: <A>(atom: Atom<A>, value: A) => void;
     // (undocumented)
-    readonly setSerializable: (key: string, encoded: unknown) => void;
+    readonly setSerializable: <T = unknown>(key: string, encoded: T) => void;
     // (undocumented)
     readonly subscribe: <A>(atom: Atom<A>, f: (_: A) => void, options?: {
         readonly immediate?: boolean;
@@ -121,9 +121,10 @@ export interface Registry {
 export class RegistryImpl extends Pipeable$1.Class implements Registry {
     // (undocumented)
     readonly [TypeId]: TypeId;
-    constructor(initialValues?: Iterable<readonly [Atom<unknown>, unknown]>, scheduleTask?: (cb: () => void) => () => void, timeoutResolution?: number, defaultIdleTTL?: number, now?: () => number, scheduleTimer?: (f: () => void, delayMillis: number) => () => void);
+    // Warning: (ae-forgotten-export) The symbol "AnyValue" needs to be exported by the entry point Registry.d.ts
+    constructor(initialValues?: Iterable<readonly [Atom, AnyValue]>, scheduleTask?: (cb: () => void) => () => void, timeoutResolution?: number, defaultIdleTTL?: number, now?: () => number, scheduleTimer?: (f: () => void, delayMillis: number) => () => void);
     // (undocumented)
-    atomHasTtl(atom: Atom<unknown>): boolean;
+    atomHasTtl(atom: Atom): boolean;
     // (undocumented)
     createNode<A>(atom: Atom<A>): NodeImpl<A>;
     // (undocumented)
@@ -157,23 +158,23 @@ export class RegistryImpl extends Pipeable$1.Class implements Registry {
     // (undocumented)
     readonly now: () => number;
     // (undocumented)
-    onNodeAdded?: ((node: Node_2<unknown>) => void) | undefined;
+    onNodeAdded?: ((node: Node_2) => void) | undefined;
     // (undocumented)
-    onNodeRemoved?: ((node: Node_2<unknown>) => void) | undefined;
+    onNodeRemoved?: ((node: Node_2) => void) | undefined;
     // (undocumented)
     readonly preloadedSerializable: Map<string, unknown>;
     // (undocumented)
     refresh: <A>(atom: Atom<A>) => void;
     // (undocumented)
-    removeNode(node: NodeImpl<unknown>): void;
+    removeNode(node: NodeImpl): void;
     // (undocumented)
-    removeNodeTimeout(node: NodeImpl<unknown>): void;
+    removeNodeTimeout(node: NodeImpl): void;
     // (undocumented)
     reset(): void;
     // (undocumented)
-    scheduleAtomRemoval(atom: Atom<unknown>): void;
+    scheduleAtomRemoval(atom: Atom): void;
     // (undocumented)
-    scheduleNodeRemoval(node: NodeImpl<unknown>): void;
+    scheduleNodeRemoval(node: NodeImpl): void;
     // (undocumented)
     readonly scheduler: Scheduler;
     // (undocumented)
@@ -185,9 +186,9 @@ export class RegistryImpl extends Pipeable$1.Class implements Registry {
     // (undocumented)
     setInitialValue<A>(atom: Atom<A>, value: A): void;
     // (undocumented)
-    setNodeTimeout(node: NodeImpl<unknown>): void;
+    setNodeTimeout(node: NodeImpl): void;
     // (undocumented)
-    setSerializable(key: string, encoded: unknown): void;
+    setSerializable<T = unknown>(key: string, encoded: T): void;
     // (undocumented)
     subscribe<A>(atom: Atom<A>, f: (_: A) => void, options?: {
         readonly immediate?: boolean;
@@ -224,8 +225,8 @@ export const TypeId: TypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-CyTEJlYL.d.ts:335:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
-// dist/Atom-CyTEJlYL.d.ts:335:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CNcOgrn0.d.ts:338:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CNcOgrn0.d.ts:338:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
 
 // (No @packageDocumentation comment for this package)
 

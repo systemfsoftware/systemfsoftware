@@ -308,9 +308,9 @@ export const stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
 }) => Worker_2<E, R, L>;
 
 // @public (undocumented)
-export interface StreamLoop<E, R> extends StreamLoopTag {
+export interface StreamLoop<E, R, A = unknown> extends StreamLoopTag {
     // (undocumented)
-    readonly stream: Stream.Stream<unknown, E, R>;
+    readonly stream: Stream.Stream<A, E, R>;
 }
 
 // @public (undocumented)
@@ -447,9 +447,9 @@ export const TaskConfig: Context.Reference<SupervisionConfig>;
 export class TickPolicyConfig extends TickPolicyConfig_base {}
 
 // @public (undocumented)
-export interface TickPolicyHooks {
+export interface TickPolicyHooks<RetrySchedule = unknown> {
     // (undocumented)
-    readonly innerRetry?: Schedule.Schedule<unknown>;
+    readonly innerRetry?: Schedule.Schedule<RetrySchedule>;
     // (undocumented)
     readonly spanAttributes?: Effect.Effect<Record<string, string | number | boolean>>;
     // (undocumented)

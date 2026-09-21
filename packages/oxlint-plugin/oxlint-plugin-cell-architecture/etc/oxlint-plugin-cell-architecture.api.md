@@ -14,6 +14,7 @@ const _default: {
     rules: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
+        'ban-unknown': Rule;
         'internal-export-jsdoc': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;

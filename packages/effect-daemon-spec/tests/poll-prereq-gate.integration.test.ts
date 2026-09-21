@@ -9,6 +9,7 @@ import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
 const Feature = makeFeature({ it, layer })
 
+type AnyAttr<V = unknown> = V
 const SPAN_NAME = 'test.work.span' as const
 
 const recordPrereqSpan = (seen: Ref.Ref<boolean[]>) =>
@@ -182,7 +183,7 @@ Feature('Poll Prereq Gate')
       Gherkin.Do.pipe(
         Given('a captured attribute map')(
           'attrs',
-          () => Ref.make<Option.Option<ReadonlyMap<string, unknown>>>(Option.none()),
+          () => Ref.make<Option.Option<ReadonlyMap<string, AnyAttr>>>(Option.none()),
         ),
         When('a poll worker configured with span attributes finds work')('health', (s) =>
           Effect.gen(function*() {

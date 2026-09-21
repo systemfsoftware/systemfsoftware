@@ -58,7 +58,7 @@ const exitRoundtripHolds = (result: SampleResult): boolean => {
   return Equal.equals(roundtripped, Result.failure(result.cause))
 }
 
-const errorOrDefect = (cause: Cause.Cause<unknown>): 'error' | 'defect' => {
+const errorOrDefect = <E = unknown>(cause: Cause.Cause<E>): 'error' | 'defect' => {
   if (EffectResult.isSuccess(Cause.findError(cause))) {
     return 'error'
   }
@@ -941,7 +941,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
           (s) =>
             Effect.sync(() =>
               s.samples.every((result) => {
-                const value: unknown = Result.builder(result).orNull()
+                const value: AnyValue = Result.builder(result).orNull()
                 return value === null
               })
             ),
@@ -987,7 +987,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     )
                   }
                   if (Result.isInitial(result)) {
-                    const rendered: unknown = Result.builder(result).render()
+                    const rendered: AnyValue = Result.builder(result).render()
                     return rendered === null
                   }
                   let threw = false
@@ -1255,11 +1255,12 @@ const PAIR_SAMPLES:
   readonly (readonly [Schema.Schema.Type<typeof resultSchema>, Schema.Schema.Type<typeof resultSchema>])[] =
     RESULT_SAMPLES.flatMap((a) => RESULT_SAMPLES.map((b) => [a, b] as const))
 const MSG_SAMPLES = ['oops', 'boom', ''] as const
-const GARBAGE_SAMPLES: readonly unknown[] = [null, 5, 'x', { a: 1 }, { _tag: 'Weird' }, []]
+type AnyValue<A = unknown> = A
+const GARBAGE_SAMPLES: readonly AnyValue[] = [null, 5, 'x', { a: 1 }, { _tag: 'Weird' }, []]
 const TAGGED_SAMPLES: readonly Schema.Schema.Type<typeof taggedSchema>[] = [
   Result.success(2),
   Result.failure(Cause.fail({ _tag: 'T', code: 7 })),
   Result.failure(Cause.fail('plain')),
 ]
-const interruptedResult = Result.failure<unknown, never>(Cause.interrupt(1))
+const interruptedResult = Result.failure<never, never>(Cause.interrupt(1))
 const exhaustiveResult = Result.fail<TaggedError>({ _tag: 'T', code: 7 })

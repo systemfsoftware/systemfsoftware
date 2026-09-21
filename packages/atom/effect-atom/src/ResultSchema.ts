@@ -10,6 +10,9 @@ import * as SchemaTransformation from 'effect/SchemaTransformation'
 import { failure, initial, isResult, success } from './ResultValues.js'
 import type { Failure, Result, Success } from './ResultValues.js'
 
+type AnyFailure<A = unknown, E = unknown> = Failure<A, E>
+type AnyResult<A = unknown, E = unknown> = Result<A, E>
+
 /**
  * Schema interface for `Result` values, retaining the schemas used for
  * success values and failure errors.
@@ -65,7 +68,7 @@ export const Schema = <
   >()(
     [success_, Schema_.Cause(error_, Schema_.Defect())],
     ([value, cause]) => (input, ast, options) => {
-      const parseFailureKnown = (failed: Failure<unknown, unknown>) => {
+      const parseFailureKnown = (failed: AnyFailure) => {
         const prevSuccessEffect = failed.previousSuccess.pipe(
           Option.map((ps) =>
             Effect.mapBothEager(
@@ -101,7 +104,7 @@ export const Schema = <
         )
       }
 
-      const parseSuccessOrInitial = (known: Result<unknown, unknown>) => {
+      const parseSuccessOrInitial = (known: AnyResult) => {
         if (isSuccessResult(known)) {
           return Effect.mapBothEager(
             SchemaParser.decodeUnknownEffect(value)(known.value, options),
@@ -115,7 +118,7 @@ export const Schema = <
         return Effect.succeed(initial(known.waiting))
       }
 
-      const parseKnown = (known: Result<unknown, unknown>) => {
+      const parseKnown = (known: AnyResult) => {
         if (isFailureResult(known)) {
           return parseFailureKnown(known)
         }

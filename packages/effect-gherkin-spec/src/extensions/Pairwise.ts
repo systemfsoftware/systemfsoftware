@@ -5,7 +5,7 @@ import type { GherkinEffect, GivenStage, InitialStage, StepText, WhenStage } fro
 import { resolveText, StageTypeId, stageWhen, stepWrap } from '../DoNotation.js'
 import type { StepError } from '../StepError.schema.js'
 
-type NoInfer<A> = [A][A extends unknown ? 0 : never]
+type NoInfer<A> = [A][A extends A ? 0 : never]
 
 export type PairwiseResult<A> = {
   readonly a: A
@@ -35,9 +35,9 @@ export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
       E1 | StepError,
       R1 | RA | RB
     >
-    function step<E>(
+    function step<E, Out = unknown>(
       name: string,
-      f: (scope: object) => (svc: Service) => Effect.Effect<unknown, E, never>,
+      f: (scope: object) => (svc: Service) => Effect.Effect<Out, E, never>,
     ) {
       return <E1, R1>(self: GherkinEffect<object, E1, R1>) =>
         self.pipe(

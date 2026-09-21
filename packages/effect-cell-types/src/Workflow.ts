@@ -38,24 +38,26 @@ export interface UnsharedTypeId {
     'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
 }
 
-type AtLeastTwoDistinct<T, U = T> = U extends unknown ? [T] extends [U] ? false : true : never
+type AtLeastTwoDistinct<T, U = T> = U extends U ? [T] extends [U] ? false : true : never
 
-type TaggedMembers<D> = D extends unknown ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
+type TaggedMembers<D> = D extends D ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
   : never
 
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 
-type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends unknown
+type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends D
   ? K extends keyof D ? MutuallyAssignable<D[K], symbol> : false
   : never
+
+type Top<A = unknown> = A
 
 type SharedTypeId<D> = [
   {
     [K in keyof D]: [K] extends [symbol] ? ([BrandSlotIsTheGeneralSymbol<D, K>] extends [true] ? K : never) : never
   }[keyof D],
-] extends [never] ? UnsharedTypeId : unknown
+] extends [never] ? UnsharedTypeId : Top
 
-type DecisionShape<D> = [unknown] extends [D] ? unknown
+type DecisionShape<D> = [Top] extends [D] ? Top
   : AtLeastTwoDistinct<D> extends false ? SingleVariantDecision
   : boolean extends TaggedMembers<D> ? UntaggedDecision
   : SharedTypeId<D>
@@ -64,7 +66,7 @@ export type Workflow<Command, Decision, DecisionError> = [Decision] extends [nev
   : [DecisionError] extends [never] ? UninhabitedError
   : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
 
-type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? unknown : UntaggedError
+type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? Top : UntaggedError
   : UntaggedError
 
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision

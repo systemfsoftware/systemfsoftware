@@ -10,7 +10,7 @@ import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
-const jsonString = (value: unknown): string => JSON.stringify(value)
+const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
 
 const uint8Of = (value: string | Uint8Array | null | undefined): Uint8Array => {
   if (value instanceof Uint8Array) return value

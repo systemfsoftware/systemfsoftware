@@ -38,8 +38,10 @@ export interface Capture<Name extends string = string, _A = unknown> extends Cap
     readonly default: string | undefined;
     // (undocumented)
     readonly name: Name;
+    // Warning: (ae-forgotten-export) The symbol "AnyConstraintDecoder$1" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    readonly schema: Schema.ConstraintDecoder<unknown> | undefined;
+    readonly schema: AnyConstraintDecoder$1 | undefined;
 }
 
 // @public (undocumented)
@@ -64,7 +66,8 @@ export interface CaptureModel {
     readonly default: string | undefined;
     // (undocumented)
     readonly name: string;
-    readonly schema: Schema.ConstraintDecoder<unknown> | undefined;
+    // Warning: (ae-forgotten-export) The symbol "AnyConstraintDecoder" needs to be exported by the entry point index.d.ts
+    readonly schema: AnyConstraintDecoder | undefined;
 }
 
 // @public (undocumented)
@@ -174,12 +177,14 @@ export interface PlayContext<TArgs = unknown> {
     readonly canvas: Canvas;
     // (undocumented)
     readonly canvasElement: HTMLElement;
+    // Warning: (ae-forgotten-export) The symbol "AnyValue" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    readonly globals: Record<string, unknown>;
+    readonly globals: Record<string, AnyValue>;
     // (undocumented)
-    readonly loaded: Record<string, unknown>;
+    readonly loaded: Record<string, AnyValue>;
     // (undocumented)
-    readonly parameters: Record<string, unknown>;
+    readonly parameters: Record<string, AnyValue>;
     // (undocumented)
     readonly reporting: ReportingAPI;
     // (undocumented)
@@ -189,9 +194,9 @@ export interface PlayContext<TArgs = unknown> {
 }
 
 // @public (undocumented)
-interface Report_2 {
+interface Report_2<Result = unknown> {
     // (undocumented)
-    readonly result: unknown;
+    readonly result: Result;
     // (undocumented)
     readonly status: 'failed' | 'passed' | 'warning';
     // (undocumented)
@@ -264,11 +269,11 @@ export interface StepContext<TArgs = unknown> {
     // (undocumented)
     readonly context: PlayContext<TArgs>;
     // (undocumented)
-    readonly globals: Record<string, unknown>;
+    readonly globals: Record<string, AnyValue>;
     // (undocumented)
-    readonly loaded: Record<string, unknown>;
+    readonly loaded: Record<string, AnyValue>;
     // (undocumented)
-    readonly parameters: Record<string, unknown>;
+    readonly parameters: Record<string, AnyValue>;
     // (undocumented)
     readonly reporting: ReportingAPI;
     // (undocumented)

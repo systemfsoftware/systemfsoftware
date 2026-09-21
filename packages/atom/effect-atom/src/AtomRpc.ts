@@ -31,12 +31,12 @@ import * as Atom from './Atom.js'
 import * as AsyncResult from './Result.js'
 import { schemaCodec } from './ResultSchema.js'
 
+type AnyAtom<A = unknown> = Atom.Atom<A>
+type ReactivityKey<K = unknown> = readonly K[] | ReadonlyRecord<string, readonly K[]>
+type AnyRecord<V = unknown> = Record<string, V>
 interface QueryOptions {
   readonly headers?: Headers.Input | undefined
-  readonly reactivityKeys?:
-    | readonly unknown[]
-    | ReadonlyRecord<string, readonly unknown[]>
-    | undefined
+  readonly reactivityKeys?: ReactivityKey | undefined
   readonly timeToLive?: Duration.Input | undefined
   readonly serializationKey?: string | undefined
 }
@@ -45,10 +45,7 @@ interface QueryKey<Rpcs extends Rpc.Any> {
   tag: Rpc.Tag<Rpcs>
   payload: Rpc.PayloadConstructor<Rpcs>
   headers: Headers.Headers | undefined
-  reactivityKeys:
-    | readonly unknown[]
-    | ReadonlyRecord<string, readonly unknown[]>
-    | undefined
+  reactivityKeys: ReactivityKey | undefined
   timeToLive: Duration.Duration | undefined
   serializationKey: string | undefined
 }
@@ -91,7 +88,7 @@ const isAnyWithProps = (u: unknown): u is Rpc.AnyWithProps => {
   return hasRpcSchemas(u)
 }
 
-const requireRpc = (rpc: unknown, tag: unknown): Rpc.AnyWithProps => {
+const requireRpc = <R = unknown, T = unknown>(rpc: R, tag: T): Rpc.AnyWithProps => {
   if (isAnyWithProps(rpc)) {
     return rpc
   }
@@ -172,20 +169,20 @@ const hasSerializationKey = (key: string | undefined): key is string => {
   return key !== ''
 }
 
-const applyFiniteOrKeepAlive = (
-  atom: Atom.Atom<unknown>,
+const applyFiniteOrKeepAlive = <A extends AnyAtom>(
+  atom: A,
   timeToLive: Duration.Duration,
-): Atom.Atom<unknown> => {
+): A => {
   if (Duration.isFinite(timeToLive)) {
     return Atom.setIdleTTL(atom, timeToLive)
   }
   return Atom.keepAlive(atom)
 }
 
-const applyQueryTtl = (
-  atom: Atom.Atom<unknown>,
+const applyQueryTtl = <A extends AnyAtom>(
+  atom: A,
   timeToLive: Duration.Duration | undefined,
-): Atom.Atom<unknown> => {
+): A => {
   if (timeToLive === undefined) {
     return atom
   }
@@ -228,10 +225,7 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any> ex
     : Atom.AtomResultFn<
       {
         readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
-        readonly reactivityKeys?:
-          | readonly unknown[]
-          | ReadonlyRecord<string, readonly unknown[]>
-          | undefined
+        readonly reactivityKeys?: ReactivityKey | undefined
         readonly headers?: Headers.Input | undefined
       },
       _Success['Type'],
@@ -244,10 +238,7 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any> ex
     payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>,
     options?: {
       readonly headers?: Headers.Input | undefined
-      readonly reactivityKeys?:
-        | readonly unknown[]
-        | ReadonlyRecord<string, readonly unknown[]>
-        | undefined
+      readonly reactivityKeys?: ReactivityKey | undefined
       readonly timeToLive?: Duration.Input | undefined
       readonly serializationKey?: string | undefined
     },
@@ -306,7 +297,7 @@ export const Service = <Self>() =>
       | Layer.Layer<Exclude<NoInfer<RM>, Scope.Scope>, ER>
       | ((get: Atom.AtomContext) => Layer.Layer<Exclude<NoInfer<RM>, Scope.Scope>, ER>)
     readonly spanPrefix?: string | undefined
-    readonly spanAttributes?: Record<string, unknown> | undefined
+    readonly spanAttributes?: AnyRecord | undefined
     readonly generateRequestId?: (() => RequestId) | undefined
     readonly disableTracing?: boolean | undefined
     readonly makeEffect?:
@@ -429,10 +420,7 @@ export const Service = <Self>() =>
     const rpc = getRpc(tag)
     const fnAtom = runtime.fn<{
       readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
-      readonly reactivityKeys?:
-        | readonly unknown[]
-        | ReadonlyRecord<string, readonly unknown[]>
-        | undefined
+      readonly reactivityKeys?: ReactivityKey | undefined
       readonly headers?: Headers.Input | undefined
     }>()(
       Effect.fnUntraced(function*({ headers, payload, reactivityKeys }) {
@@ -461,10 +449,7 @@ export const Service = <Self>() =>
     : Atom.AtomResultFn<
       {
         readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>
-        readonly reactivityKeys?:
-          | readonly unknown[]
-          | ReadonlyRecord<string, readonly unknown[]>
-          | undefined
+        readonly reactivityKeys?: ReactivityKey | undefined
         readonly headers?: Headers.Input | undefined
       },
       _Success['Type'],
@@ -473,11 +458,11 @@ export const Service = <Self>() =>
     : never
 
   function mutation<Tag extends Rpc.Tag<Rpcs>>(arg: Tag): MutationReturn<Tag>
-  function mutation(arg: Rpc.Tag<Rpcs>): Atom.Atom<unknown> {
+  function mutation(arg: Rpc.Tag<Rpcs>): AnyAtom {
     return mutationFamily(arg)
   }
 
-  const makeStreamQueryAtom = (key: QueryKey<Rpcs>): Atom.Atom<unknown> =>
+  const makeStreamQueryAtom = (key: QueryKey<Rpcs>): AnyAtom =>
     runtime.pull(
       Stream.unwrap(
         service.use((client) =>
@@ -488,12 +473,12 @@ export const Service = <Self>() =>
       ),
     )
 
-  const makeEffectQueryAtom = (key: QueryKey<Rpcs>): Atom.Atom<unknown> =>
+  const makeEffectQueryAtom = (key: QueryKey<Rpcs>): AnyAtom =>
     runtime.atom(
       service.use((client) => callFlat(client, key.tag, key.payload, key.headers, 'effect')),
     )
 
-  const makeQueryAtom = (key: QueryKey<Rpcs>): Atom.Atom<unknown> => {
+  const makeQueryAtom = (key: QueryKey<Rpcs>): AnyAtom => {
     const rpc = getRpc(key.tag)
     if (RpcSchema.isStreamSchema(rpc.successSchema)) {
       return makeStreamQueryAtom(key)
@@ -501,21 +486,21 @@ export const Service = <Self>() =>
     return makeEffectQueryAtom(key)
   }
 
-  const withQueryReactivity = (
-    atom: Atom.Atom<unknown>,
+  const withQueryReactivity = <A extends AnyAtom>(
+    atom: A,
     reactivityKeys: QueryKey<Rpcs>['reactivityKeys'],
-  ): Atom.Atom<unknown> => {
+  ): A => {
     if (reactivityKeys === undefined) {
       return atom
     }
     return runtime.factory.withReactivity(reactivityKeys)(atom)
   }
 
-  const serializeNonStreamQueryAtom = (
-    atom: Atom.Atom<unknown>,
+  const serializeNonStreamQueryAtom = <A extends AnyAtom>(
+    atom: A,
     key: QueryKey<Rpcs>,
     rpc: Rpc.AnyWithProps,
-  ): Atom.Atom<unknown> => {
+  ): A => {
     if (hasSerializationKey(key.serializationKey)) {
       return Atom.serializable(atom, {
         key: `AtomRpc:${key.tag}:${key.serializationKey}`,
@@ -525,10 +510,10 @@ export const Service = <Self>() =>
     return atom
   }
 
-  const serializeQueryAtom = (
-    atom: Atom.Atom<unknown>,
+  const serializeQueryAtom = <A extends AnyAtom>(
+    atom: A,
     key: QueryKey<Rpcs>,
-  ): Atom.Atom<unknown> => {
+  ): A => {
     const rpc = getRpc(key.tag)
     if (RpcSchema.isStreamSchema(rpc.successSchema)) {
       return atom
@@ -536,10 +521,10 @@ export const Service = <Self>() =>
     return serializeNonStreamQueryAtom(atom, key, rpc)
   }
 
-  const decorateQueryAtom = (
-    atom: Atom.Atom<unknown>,
+  const decorateQueryAtom = <A extends AnyAtom>(
+    atom: A,
     key: QueryKey<Rpcs>,
-  ): Atom.Atom<unknown> =>
+  ): A =>
     applyQueryTtl(
       serializeQueryAtom(withQueryReactivity(atom, key.reactivityKeys), key),
       key.timeToLive,
@@ -573,10 +558,7 @@ export const Service = <Self>() =>
     payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>,
     options?: {
       readonly headers?: Headers.Input | undefined
-      readonly reactivityKeys?:
-        | readonly unknown[]
-        | ReadonlyRecord<string, readonly unknown[]>
-        | undefined
+      readonly reactivityKeys?: ReactivityKey | undefined
       readonly timeToLive?: Duration.Input | undefined
       readonly serializationKey?: string | undefined
     },
@@ -586,14 +568,11 @@ export const Service = <Self>() =>
     payload: Rpc.PayloadConstructor<Rpcs>,
     options?: {
       readonly headers?: Headers.Input | undefined
-      readonly reactivityKeys?:
-        | readonly unknown[]
-        | ReadonlyRecord<string, readonly unknown[]>
-        | undefined
+      readonly reactivityKeys?: ReactivityKey | undefined
       readonly timeToLive?: Duration.Input | undefined
       readonly serializationKey?: string | undefined
     },
-  ): Atom.Atom<unknown> {
+  ): AnyAtom {
     return queryFamily(makeQueryKey(tag, payload, options))
   }
 

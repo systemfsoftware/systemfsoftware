@@ -19,11 +19,12 @@ const orEmpty = <A>(value: A | undefined): A | Record<never, never> => {
   }
   return value
 }
+type AnyEffect<E, R, A = unknown> = Effect.Effect<A, E, R>
 
 export const subscription = <
   AE,
   AR,
-  ACQ extends Effect.Effect<unknown, AE, AR>,
+  ACQ extends AnyEffect<AE, AR>,
   TICK,
   THOOKS,
   CHILD,
