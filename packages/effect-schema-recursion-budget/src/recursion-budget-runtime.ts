@@ -13,7 +13,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const invalidBudget = (received: unknown): Error =>
   new Error(
     `recursionBudget: expected { maxDepth: integer >= 1, depthSize: 'small' | 'medium' | 'large' }, received ${
-      JSON.stringify(received) ?? 'undefined'
+      String(JSON.stringify(received))
     }`,
   )
 

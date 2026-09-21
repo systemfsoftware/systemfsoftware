@@ -83,44 +83,11 @@ overrides:
   # per peer context. One esbuild keeps one vitest (issue #304 guard).
   esbuild: ^0.28.2
 packages:
-  - packages/atom/
-  - packages/atom/effect-atom/
-  - packages/atom/effect-atom-react/
-  - packages/oxlint-plugin/
-  - packages/toolchain/
-  - packages/effect-gherkin-spec/
-  - packages/storybook-gherkin/
-  - packages/effect-schema-discovery/
-  - packages/effect-schema-recursion-budget/
-  - packages/effect-schema-extensions/
-  - packages/effect-schema-law/
-  - packages/effect-schema-vite/
-  - packages/effect-cell-types/
-  - packages/effect-daemon-spec/
-  - packages/effect-memfs/
-  - packages/hex-schema/
-  - packages/npm-package/
-  - packages/rx-effect/
-  - packages/oxlint-plugin/import-origin/
-  - packages/oxlint-plugin/make-boundary/
-  - packages/oxlint-plugin/oxlint-plugin/
-  - packages/oxlint-plugin/oxlint-plugin-recommended/
-  - packages/oxlint-plugin/oxlint-plugin-effect-dmmf/
-  - packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/
-  - packages/oxlint-plugin/oxlint-plugin-effect-native/
-  - packages/oxlint-plugin/oxlint-plugin-effect-schema/
-  - packages/oxlint-plugin/oxlint-plugin-effect-workflow/
-  - packages/oxlint-plugin/oxlint-plugin-property-testing/
-  - packages/oxlint-plugin/oxlint-plugin-structure/
-  - packages/oxlint-plugin/oxlint-plugin-tag-discipline/
-  - packages/oxlint-plugin/oxlint-plugin-test-hygiene/
-  - packages/oxlint-plugin/oxlint-plugin-test-placement/
-  - packages/oxlint-plugin/oxlint-config/
-  - packages/oxlint-plugin/all/
-  - packages/toolchain/stryker-config/
-  - packages/toolchain/tsconfig/
-  - packages/toolchain/tsdown-config/
-  - packages/toolchain/vitest-config/
+  - packages/*
+  - packages/atom/*
+  - packages/oxlint-plugin/*
+  - packages/oxlint-presets/*
+  - packages/toolchain/*
   - omp/plugins/*
 config:
   confirm-modules-purge: false
