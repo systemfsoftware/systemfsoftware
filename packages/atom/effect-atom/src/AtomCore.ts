@@ -6,6 +6,9 @@ import { hasProperty } from 'effect/Predicate'
 import type { Mutable } from 'effect/Types'
 import type { Atom, AtomContext, Writable, WriteContext } from './Atom.js'
 
+type AnyAtom<A = unknown> = Atom<A>
+type AnyWritable<A = unknown, W = unknown> = Writable<A, W>
+
 export const PipeInspectableProto = {
   pipe() {
     return pipeArguments(this, arguments)
@@ -45,7 +48,7 @@ export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
  *
  * @since 4.0.0
  */
-export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
+export const isAtom = (u: unknown): u is AnyAtom => hasProperty(u, TypeId)
 
 /**
  * Returns a copy of an atom with an idle time-to-live: finite durations dispose it after inactivity, while an infinite duration keeps it alive.
@@ -53,12 +56,12 @@ export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
  * @since 4.0.0
  */
 export const setIdleTTL: {
-  (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => A
-  <A extends Atom<unknown>>(self: A, duration: Duration.Input): A
+  (duration: Duration.Input): <A extends AnyAtom>(self: A) => A
+  <A extends AnyAtom>(self: A, duration: Duration.Input): A
 } = dual<
-  (duration: Duration.Input) => <A extends Atom<unknown>>(self: A) => A,
-  <A extends Atom<unknown>>(self: A, duration: Duration.Input) => A
->(2, <A extends Atom<unknown>>(self: A, durationInput: Duration.Input): A => {
+  (duration: Duration.Input) => <A extends AnyAtom>(self: A) => A,
+  <A extends AnyAtom>(self: A, duration: Duration.Input) => A
+>(2, <A extends AnyAtom>(self: A, durationInput: Duration.Input): A => {
   const duration = Duration.fromInputUnsafe(durationInput)
   const isFinite = Duration.isFinite(duration)
   const copy = {
@@ -79,7 +82,7 @@ export const AtomProto = {
   [NodeInspectSymbol](): Inspectable {
     return this
   },
-  toJSON(this: Atom<unknown>) {
+  toJSON(this: AnyAtom) {
     return {
       _id: 'Atom',
       keepAlive: this.keepAlive,
@@ -176,7 +179,7 @@ const transformReadable = <A, B>(
   )
 
 const transformWritable = <A, B>(
-  self: Writable<A, unknown>,
+  self: AnyWritable<A>,
   f: (get: AtomContext, atom: Atom<A>) => B,
 ): Atom<B> =>
   writable(
@@ -241,13 +244,13 @@ const getInitialValueTarget = <A>(atom: Atom<A>): Atom<A> => {
  * @since 4.0.0
  */
 export const transform: {
-  <R extends Atom<unknown>, B>(
+  <R extends AnyAtom, B>(
     f: (get: AtomContext, atom: R) => B,
     options?: {
       readonly initialValueTarget?: Atom<B> | undefined
     },
   ): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
-  <R extends Atom<unknown>, B>(
+  <R extends AnyAtom, B>(
     self: R,
     f: (get: AtomContext, atom: R) => B,
     options?: {

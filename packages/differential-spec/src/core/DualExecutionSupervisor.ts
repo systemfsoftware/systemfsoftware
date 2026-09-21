@@ -38,9 +38,11 @@ const bothSucceeded = <A, B, E>(
 const bothFailed = <A, B, E>(
   exits: readonly [Exit.Exit<A, E>, Exit.Exit<B, E>],
 ): exits is readonly [Exit.Failure<A, E>, Exit.Failure<B, E>] => Exit.isFailure(exits[0]) && Exit.isFailure(exits[1])
+type StringRecord<V = unknown> = Record<string, V>
+type StringEntry<V = unknown> = [string, V]
 
-const ownFields = (error: Error): Record<string, unknown> => {
-  const entries: Array<[string, unknown]> = Object.entries(error)
+const ownFields = (error: Error): StringRecord => {
+  const entries: Array<StringEntry> = Object.entries(error)
   return Object.fromEntries(entries)
 }
 
@@ -86,7 +88,10 @@ const inconclusiveReport = <Input>(details: fc.RunDetails<[Input]>): DisparityEr
     }),
   })
 
-type FollowUp<Input> = { readonly ok: true; readonly value: Input } | { readonly ok: false; readonly error: unknown }
+type FollowUp<Input, Err = unknown> = { readonly ok: true; readonly value: Input } | {
+  readonly ok: false
+  readonly error: Err
+}
 
 const followUpOf = <Input>(secondInput: (input: Input) => Input, input: Input): FollowUp<Input> => {
   try {
@@ -96,10 +101,10 @@ const followUpOf = <Input>(secondInput: (input: Input) => Input, input: Input): 
   }
 }
 
-const transformThrewReport = <Input>(
+const transformThrewReport = <Input, E = unknown>(
   details: FailedWithCounterexample<Input>,
   input: Input,
-  error: unknown,
+  error: E,
 ): DisparityError =>
   new DisparityError({
     report: formatDisparity({
@@ -111,9 +116,9 @@ const transformThrewReport = <Input>(
     }),
   })
 
-const disparityOf = <Input, OutputA, OutputB, E>(
+const disparityOf = <Input, OutputA, OutputB, E, DescribedInput = unknown>(
   details: FailedWithCounterexample<Input>,
-  input: unknown,
+  input: DescribedInput,
   exitA: Exit.Exit<OutputA, E>,
   exitB: Exit.Exit<OutputB, E>,
 ): DisparityError =>
@@ -127,11 +132,11 @@ const disparityOf = <Input, OutputA, OutputB, E>(
     }),
   })
 
-const reportCounterexample = <Input, OutputA, OutputB, E>(
+const reportCounterexample = <Input, OutputA, OutputB, E, DescribedInput = unknown>(
   targetA: (input: Input) => Effect.Effect<OutputA, E>,
   targetB: (input: Input) => Effect.Effect<OutputB, E>,
   secondInput: (input: Input) => Input,
-  describeInput: (input: Input, followUp: Input) => unknown,
+  describeInput: (input: Input, followUp: Input) => DescribedInput,
   details: FailedWithCounterexample<Input>,
   input: Input,
 ): Effect.Effect<void, DisparityError> => {
@@ -143,11 +148,11 @@ const reportCounterexample = <Input, OutputA, OutputB, E>(
   )
 }
 
-const reportFailure = <Input, OutputA, OutputB, E>(
+const reportFailure = <Input, OutputA, OutputB, E, DescribedInput = unknown>(
   targetA: (input: Input) => Effect.Effect<OutputA, E>,
   targetB: (input: Input) => Effect.Effect<OutputB, E>,
   secondInput: (input: Input) => Input,
-  describeInput: (input: Input, followUp: Input) => unknown,
+  describeInput: (input: Input, followUp: Input) => DescribedInput,
   details: fc.RunDetails<[Input]>,
 ): Effect.Effect<void, DisparityError> => {
   if (!isFailedWithCounterexample(details)) return Effect.fail(inconclusiveReport(details))
@@ -156,11 +161,11 @@ const reportFailure = <Input, OutputA, OutputB, E>(
 
 const isConclusivePass = <Input>(details: fc.RunDetails<[Input]>): boolean => !details.failed && !details.interrupted
 
-const failWithDisparity = <Input, OutputA, OutputB, E>(
+const failWithDisparity = <Input, OutputA, OutputB, E, DescribedInput = unknown>(
   targetA: (input: Input) => Effect.Effect<OutputA, E>,
   targetB: (input: Input) => Effect.Effect<OutputB, E>,
   secondInput: (input: Input) => Input,
-  describeInput: (input: Input, followUp: Input) => unknown,
+  describeInput: (input: Input, followUp: Input) => DescribedInput,
   details: fc.RunDetails<[Input]>,
 ): Effect.Effect<void, DisparityError> => {
   if (isConclusivePass(details)) return Effect.void

@@ -25,11 +25,16 @@ function useStore<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): A {
   return React.useSyncExternalStore(subscribe, () => registry.get(atom), () => Atom.getServerValue(atom, registry))
 }
 
-const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<Atom.Atom<unknown>>>()
+type AnyAtom<Val = unknown> = Atom.Atom<Val>
+type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
+type AnyPromiseMap<Val = unknown> = WeakMap<AnyAtom<Val>, Promise<void>>
+type AnyValue<Val = unknown> = Val
+
+const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<AnyAtom>>()
 
 function initialValuesSetFor(
   registry: AtomRegistry.Registry,
-): WeakSet<Atom.Atom<unknown>> {
+): WeakSet<AnyAtom> {
   const existing = initialValuesSet.get(registry)
   if (existing !== undefined) {
     return existing
@@ -39,17 +44,17 @@ function initialValuesSetFor(
 
 function createInitialValuesSet(
   registry: AtomRegistry.Registry,
-): WeakSet<Atom.Atom<unknown>> {
-  const set = new WeakSet<Atom.Atom<unknown>>()
+): WeakSet<AnyAtom> {
+  const set = new WeakSet<AnyAtom>()
   initialValuesSet.set(registry, set)
   return set
 }
 
 function seedInitialValueIfNew(
-  set: WeakSet<Atom.Atom<unknown>>,
+  set: WeakSet<AnyAtom>,
   registry: AtomRegistry.Registry,
-  atom: Atom.Atom<unknown>,
-  value: unknown,
+  atom: AnyAtom,
+  value: AnyValue,
 ): void {
   if (set.has(atom)) {
     return
@@ -60,7 +65,7 @@ function seedInitialValueIfNew(
 
 function seedInitialValues(
   registry: AtomRegistry.Registry,
-  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>,
+  initialValues: Iterable<AnyInitialValue>,
 ): void {
   const set = initialValuesSetFor(registry)
   for (const [atom, value] of initialValues) {
@@ -83,7 +88,7 @@ function seedInitialValues(
  *
  * @since 4.0.0
  */
-export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>): void => {
+export const useAtomInitialValues = (initialValues: Iterable<AnyInitialValue>): void => {
   seedInitialValues(React.useContext(RegistryContext), initialValues)
 }
 
@@ -275,11 +280,11 @@ export const useAtom = <R, W>(
 const atomPromiseMap = {
   suspendOnWaiting: new WeakMap<
     AtomRegistry.Registry,
-    WeakMap<Atom.Atom<unknown>, Promise<void>>
+    AnyPromiseMap
   >(),
   default: new WeakMap<
     AtomRegistry.Registry,
-    WeakMap<Atom.Atom<unknown>, Promise<void>>
+    AnyPromiseMap
   >(),
 }
 
@@ -310,7 +315,7 @@ function includeFailureFrom(options?: {
 
 function promiseRegistries(
   suspendOnWaiting: boolean,
-): WeakMap<AtomRegistry.Registry, WeakMap<Atom.Atom<unknown>, Promise<void>>> {
+): WeakMap<AtomRegistry.Registry, AnyPromiseMap> {
   if (suspendOnWaiting) {
     return atomPromiseMap.suspendOnWaiting
   }
@@ -318,10 +323,10 @@ function promiseRegistries(
 }
 
 function createAtomPromiseMap(
-  registries: WeakMap<AtomRegistry.Registry, WeakMap<Atom.Atom<unknown>, Promise<void>>>,
+  registries: WeakMap<AtomRegistry.Registry, AnyPromiseMap>,
   registry: AtomRegistry.Registry,
-): WeakMap<Atom.Atom<unknown>, Promise<void>> {
-  const map = new WeakMap<Atom.Atom<unknown>, Promise<void>>()
+): AnyPromiseMap {
+  const map = new WeakMap<AnyAtom, Promise<void>>()
   registries.set(registry, map)
   return map
 }
@@ -329,7 +334,7 @@ function createAtomPromiseMap(
 function promiseMapFor(
   registry: AtomRegistry.Registry,
   suspendOnWaiting: boolean,
-): WeakMap<Atom.Atom<unknown>, Promise<void>> {
+): AnyPromiseMap {
   const registries = promiseRegistries(suspendOnWaiting)
   const existing = registries.get(registry)
   if (existing !== undefined) {
@@ -373,8 +378,8 @@ function settleAtomPromise(
   state: { settled: boolean },
   dispose: () => void,
   resolve: () => void,
-  map: WeakMap<Atom.Atom<unknown>, Promise<void>>,
-  atom: Atom.Atom<unknown>,
+  map: AnyPromiseMap,
+  atom: AnyAtom,
 ): void {
   state.settled = true
   dispose()
@@ -388,7 +393,7 @@ function onAtomPromiseResult<A, E>(
   suspendOnWaiting: boolean,
   dispose: () => void,
   resolve: () => void,
-  map: WeakMap<Atom.Atom<unknown>, Promise<void>>,
+  map: AnyPromiseMap,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
 ): void {
   if (shouldKeepPending(state.settled, result, suspendOnWaiting)) {
@@ -401,7 +406,7 @@ function createAtomPromise<A, E>(
   registry: AtomRegistry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
-  map: WeakMap<Atom.Atom<unknown>, Promise<void>>,
+  map: AnyPromiseMap,
 ): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
   const state = { settled: false }

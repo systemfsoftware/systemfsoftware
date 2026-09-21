@@ -27,19 +27,21 @@ function isInvalidHeaderError(error: unknown): error is FlateError {
   return hasInvalidHeaderCode(error)
 }
 
-function ignoreInvalidHeader(error: unknown): void {
-  if (isInvalidHeaderError(error)) return
-  throw error
+function throwIfNotHeaderError(err: unknown): asserts err is FlateError {
+  if (!isInvalidHeaderError(err)) throw err
+}
+
+function decompress(tarball: Uint8Array, chunks: Uint8Array[]): void {
+  try {
+    new Gunzip((chunk) => chunks.push(chunk)).push(tarball, true)
+  } catch (err: unknown) {
+    throwIfNotHeaderError(err)
+  }
 }
 
 function gunzipChunks(tarball: Uint8Array): Uint8Array[] {
   const chunks: Uint8Array[] = []
-  try {
-    new Gunzip((chunk) => chunks.push(chunk)).push(tarball, true)
-  } catch (err) {
-    // this happens for zero-padded tarballs; can safely ignore
-    ignoreInvalidHeader(err)
-  }
+  decompress(tarball, chunks)
   return chunks
 }
 

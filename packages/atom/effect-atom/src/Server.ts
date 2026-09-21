@@ -13,6 +13,9 @@ import type { Atom, Type } from './Atom.js'
 import type { Registry } from './Registry.js'
 import * as AsyncResult from './Result.js'
 
+type AnyAtom<A = unknown> = Atom<A>
+type AnyAsyncResultAtom<A = unknown, E = unknown> = Atom<AsyncResult.Result<A, E>>
+
 /**
  * The type id used to mark atoms with a server-side read override.
  *
@@ -37,11 +40,11 @@ const isServerValue = <A>(self: Atom<A>): self is Atom<A> & ServerValue<A> => Se
  * @since 4.0.0
  */
 export const withServerValue: {
-  <A extends Atom<unknown>>(read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): (self: A) => A
-  <A extends Atom<unknown>>(self: A, read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): A
+  <A extends AnyAtom>(read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): (self: A) => A
+  <A extends AnyAtom>(self: A, read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): A
 } = dual(
   2,
-  <A extends Atom<unknown>>(self: A, read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): A => {
+  <A extends AnyAtom>(self: A, read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): A => {
     const copy = { ...self, [ServerValueTypeId]: read }
     Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(self))
     return copy
@@ -54,7 +57,7 @@ export const withServerValue: {
  *
  * @since 4.0.0
  */
-export const withServerValueInitial = <A extends Atom<AsyncResult.Result<unknown, unknown>>>(self: A): A => {
+export const withServerValueInitial = <A extends AnyAsyncResultAtom>(self: A): A => {
   const copy = { ...self, [ServerValueTypeId]: constant(AsyncResult.initial(true)) }
   Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(self))
   return copy

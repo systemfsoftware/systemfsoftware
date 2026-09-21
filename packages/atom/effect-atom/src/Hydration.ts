@@ -18,6 +18,8 @@ import * as Atom from './Atom.js'
 import type * as AtomRegistry from './Registry.js'
 import * as AsyncResult from './Result.js'
 
+type AnyAtom<A = unknown> = Atom.Atom<A>
+type AnyValue<A = unknown> = A
 /**
  * Marker interface for entries in a dehydrated atom registry state.
  *
@@ -37,9 +39,9 @@ export interface DehydratedAtom {
  *
  * @since 4.0.0
  */
-export interface DehydratedAtomValue extends DehydratedAtom {
+export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
   readonly key: string
-  readonly value: unknown
+  readonly value: V
   readonly dehydratedAt: number
 }
 
@@ -50,7 +52,8 @@ export interface DehydratedAtomValue extends DehydratedAtom {
  * cannot cross a serialization boundary anyway, so entries that do cross one
  * are simply applied as plain preloads.
  */
-const pendingResults = new WeakMap<DehydratedAtomValue, Deferred.Deferred<unknown>>()
+type PendingDeferred<V = unknown> = Deferred.Deferred<V>
+const pendingResults = new WeakMap<DehydratedAtomValue, PendingDeferred>()
 
 /**
  * Encodes the serializable atoms currently stored in a registry into dehydrated
@@ -103,7 +106,7 @@ const encodeInitialOrIgnore = (
   return mode
 }
 
-const isInitialResult = (value: unknown): boolean => {
+const isInitialResult = <V = unknown>(value: V): boolean => {
   if (!AsyncResult.isAsyncResult(value)) {
     return false
   }
@@ -112,8 +115,8 @@ const isInitialResult = (value: unknown): boolean => {
 
 const dehydrateNode = (
   registry: AtomRegistry.Registry,
-  node: { readonly atom: Atom.Atom<unknown>; readonly value: () => unknown },
-  key: unknown,
+  node: { readonly atom: AnyAtom; readonly value: () => AnyValue },
+  key: AnyValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
   now: number,
   arr: DehydratedAtomValue[],
@@ -145,10 +148,10 @@ const shouldSkipInitial = (
 
 const dehydrateSerializable = (
   registry: AtomRegistry.Registry,
-  atom: Atom.Atom<unknown>,
-  serializer: { readonly encode: (value: unknown) => unknown },
-  value: unknown,
-  key: unknown,
+  atom: AnyAtom,
+  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  value: AnyValue,
+  key: AnyValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
   now: number,
   arr: DehydratedAtomValue[],
@@ -162,10 +165,10 @@ const dehydrateSerializable = (
 
 const dehydrateKeyed = (
   registry: AtomRegistry.Registry,
-  atom: Atom.Atom<unknown>,
-  serializer: { readonly encode: (value: unknown) => unknown },
-  value: unknown,
-  key: unknown,
+  atom: AnyAtom,
+  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  value: AnyValue,
+  key: AnyValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
   isInitial: boolean,
   now: number,
@@ -194,7 +197,7 @@ const shouldAttachDeferred = (
   return isInitial
 }
 
-const isSettledResult = (newValue: unknown): boolean => {
+const isSettledResult = <V = unknown>(newValue: V): boolean => {
   if (!AsyncResult.isAsyncResult(newValue)) {
     return false
   }
@@ -203,8 +206,8 @@ const isSettledResult = (newValue: unknown): boolean => {
 
 const attachDeferred = (
   registry: AtomRegistry.Registry,
-  atom: Atom.Atom<unknown>,
-  serializer: { readonly encode: (value: unknown) => unknown },
+  atom: AnyAtom,
+  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
   entry: DehydratedAtomValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
   isInitial: boolean,
@@ -212,7 +215,7 @@ const attachDeferred = (
   if (!shouldAttachDeferred(encodeInitialResultMode, isInitial)) {
     return
   }
-  const deferred = Deferred.makeUnsafe<unknown>()
+  const deferred = Deferred.makeUnsafe<AnyValue>()
   const unsubscribe = registry.subscribe(atom, (newValue) => {
     completeDeferred(deferred, unsubscribe, serializer, newValue)
   })
@@ -220,10 +223,10 @@ const attachDeferred = (
 }
 
 const completeDeferred = (
-  deferred: Deferred.Deferred<unknown>,
+  deferred: Deferred.Deferred<AnyValue>,
   unsubscribe: () => void,
-  serializer: { readonly encode: (value: unknown) => unknown },
-  newValue: unknown,
+  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  newValue: AnyValue,
 ): void => {
   if (!isSettledResult(newValue)) {
     return

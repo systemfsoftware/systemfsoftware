@@ -113,7 +113,7 @@ Feature('Gherkin step combinators')
         { keyword: 'but' },
       ] as const,
       (row) => {
-        const pipelineForKeyword = (): Effect.Effect<unknown, StepError, never> => {
+        const pipelineForKeyword = (): Effect.Effect<object, StepError, never> => {
           if (row.keyword === 'given') {
             return Gherkin.Do.pipe(Given('fail')('x', () => Effect.fail('err')))
           }

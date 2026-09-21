@@ -63,7 +63,9 @@ export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
  *
  * @since 4.0.0
  */
-export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
+type AnyAtom<Val = unknown> = Atom.Atom<Val>
+
+export interface ScopedAtom<A extends AnyAtom, Input = never> {
   readonly [TypeId]: TypeId
   use(): A
   Provider: [Input] extends [never] ? React.FC<{ readonly children?: React.ReactNode | undefined }>
@@ -71,13 +73,13 @@ export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
   Context: React.Context<A | undefined>
 }
 
-function hasNoParameters<A extends Atom.Atom<unknown>, Input>(
+function hasNoParameters<A extends AnyAtom, Input>(
   factory: (() => A) | ((input: Input) => A),
 ): factory is () => A {
   return factory.length === 0
 }
 
-function createScopedAtomFromInput<A extends Atom.Atom<unknown>, Input>(
+function createScopedAtomFromInput<A extends AnyAtom, Input>(
   factory: (input: Input) => A,
   value: Input | undefined,
 ): A {
@@ -87,7 +89,7 @@ function createScopedAtomFromInput<A extends Atom.Atom<unknown>, Input>(
   return factory(value)
 }
 
-function createScopedAtom<A extends Atom.Atom<unknown>, Input>(
+function createScopedAtom<A extends AnyAtom, Input>(
   factory: (() => A) | ((input: Input) => A),
   value: Input | undefined,
 ): A {
@@ -145,7 +147,7 @@ function createScopedAtom<A extends Atom.Atom<unknown>, Input>(
  *
  * @since 4.0.0
  */
-export const make = <A extends Atom.Atom<unknown>, Input = never>(
+export const make = <A extends AnyAtom, Input = never>(
   f: (() => A) | ((input: Input) => A),
 ): ScopedAtom<A, Input> => {
   const Context = React.createContext<A | undefined>(undefined)

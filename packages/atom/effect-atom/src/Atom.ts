@@ -57,7 +57,7 @@ import * as AsyncResult from './Result.js'
  *
  * @since 4.0.0
  */
-export interface Atom<A> extends Pipeable, Inspectable {
+export interface Atom<A = unknown> extends Pipeable, Inspectable {
   readonly [TypeId]: TypeId
   readonly keepAlive: boolean
   readonly lazy: boolean
@@ -68,41 +68,46 @@ export interface Atom<A> extends Pipeable, Inspectable {
   readonly idleTTL?: number
   readonly initialValueTarget?: Atom<A>
 }
+type Top<A = unknown> = A
+type AnyAtom<A = unknown> = Atom<A>
+type AnyAtomResultFn<Arg = unknown, A = unknown, E = unknown> = AtomResultFn<Arg, A, E>
+type AnyResult<A = unknown, E = unknown> = AsyncResult.Result<A, E>
+type AnyReactivityKeys<K = unknown> = readonly K[] | ReadonlyRecord<string, readonly K[]>
 
 /**
  * Extracts the value type produced by an `Atom`.
  *
  * @since 4.0.0
  */
-export type Type<T extends Atom<unknown>> = T extends Atom<infer A> ? A : never
+export type Type<T extends AnyAtom> = T extends Atom<infer A> ? A : never
 
 /**
  * Extracts the success value type from an atom whose value is an `AsyncResult`.
  *
  * @since 4.0.0
  */
-export type Success<T extends Atom<unknown>> = T extends Atom<AsyncResult.Result<infer A, infer _>> ? A : never
+export type Success<T extends AnyAtom> = T extends Atom<AsyncResult.Result<infer A, infer _>> ? A : never
 
 /**
  * Extracts the item type from an atom whose value is a `PullResult`.
  *
  * @since 4.0.0
  */
-export type PullSuccess<T extends Atom<unknown>> = T extends Atom<PullResult<infer A, infer _>> ? A : never
+export type PullSuccess<T extends AnyAtom> = T extends Atom<PullResult<infer A, infer _>> ? A : never
 
 /**
  * Extracts the failure error type from an atom whose value is an `AsyncResult`.
  *
  * @since 4.0.0
  */
-export type Failure<T extends Atom<unknown>> = T extends Atom<AsyncResult.Result<infer _, infer E>> ? E : never
+export type Failure<T extends AnyAtom> = T extends Atom<AsyncResult.Result<infer _, infer E>> ? E : never
 
 /**
  * Returns an atom type without serializable metadata, preserving `Writable` read and write types when the input atom is writable.
  *
  * @since 4.0.0
  */
-export type WithoutSerializable<T extends Atom<unknown>> = T extends Writable<infer R, infer W> ? Writable<R, W>
+export type WithoutSerializable<T extends AnyAtom> = T extends Writable<infer R, infer W> ? Writable<R, W>
   : Atom<Type<T>>
 
 /**
@@ -167,9 +172,9 @@ export interface WriteContext<A> {
   set<R, W>(this: WriteContext<A>, atom: Writable<R, W>, value: W): void
 }
 
-type FnOptions = {
-  readonly initialValue?: unknown
-  readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+type FnOptions<Init = unknown, Key = unknown> = {
+  readonly initialValue?: Init
+  readonly reactivityKeys?: AnyReactivityKeys<Key> | undefined
   readonly concurrent?: boolean | undefined
 }
 
@@ -179,29 +184,29 @@ function runtimeFn<R, ER, Arg>(
   <E, A>(
     fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
     options?: FnOptions,
-  ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+  ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
   <E, A>(
     fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
     options?: FnOptions,
-  ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+  ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
 }
 function runtimeFn<R, ER, E, A, Arg = void>(
   this: AtomRuntime<R, ER>,
   fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
   options?: FnOptions,
-): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
 function runtimeFn<R, ER, E, A, Arg = void>(
   this: AtomRuntime<R, ER>,
   fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
   options?: FnOptions,
-): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
 function runtimeFn<R, ER, Arg, A, E>(
   this: AtomRuntime<R, ER>,
   fn?: (arg: Arg, get: FnContext) =>
     | Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>
     | Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
   options?: FnOptions,
-): unknown {
+): Top {
   if (fn === undefined) {
     return <Arg2, A2, E2>(
       fn2: (arg: Arg2, get: FnContext) =>
@@ -253,22 +258,22 @@ const RuntimeProto: {
       <E, A>(
         fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
         options?: FnOptions,
-      ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+      ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
       <E, A>(
         fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
         options?: FnOptions,
-      ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+      ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
     }
     <R, ER, E, A, Arg = void>(
       this: AtomRuntime<R, ER>,
       fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
       options?: FnOptions,
-    ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+    ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
     <R, ER, E, A, Arg = void>(
       this: AtomRuntime<R, ER>,
       fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
       options?: FnOptions,
-    ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+    ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
   }
   pull: <R, ER, A, E>(
     this: AtomRuntime<R, ER>,
@@ -358,7 +363,7 @@ const makeFnRuntime = <R, ER, Arg, A, E>(
     | Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
   options?: {
     readonly initialValue?: A
-    readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+    readonly reactivityKeys?: AnyReactivityKeys | undefined
   },
 ) => {
   const [read, write, argAtom] = makeResultFn<Arg, E, A, R | Reactivity.Reactivity | Scope.Scope>(
@@ -501,7 +506,7 @@ function readRuntimeRefAtom<R, ER, A, E>(
 
 function isUnsuccessfulResult(
   ref: unknown,
-): ref is AsyncResult.Result<unknown, unknown> {
+): ref is AnyResult {
   if (AsyncResult.isResult(ref) === false) {
     return false
   }
@@ -534,7 +539,7 @@ function readRuntimeSubRefWithServices<R, A, E>(
   return AsyncResult.success(readRefDirect(get, ref, runtime))
 }
 
-type ReactivityKeys = readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>
+type ReactivityKeys<K = unknown> = AnyReactivityKeys<K>
 
 function wrapFnWithReactivity<R, Arg, A, E>(
   fn: (arg: Arg, get: FnContext) =>
@@ -594,10 +599,10 @@ function makeReadOrAtom<A, E>(
     | ((get: AtomContext, services?: Context.Context<never>) => A)
     | A,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
-): ((get: AtomContext, services?: Context.Context<never>) => unknown) | Writable<A> {
+): ((get: AtomContext, services?: Context.Context<never>) => Top) | Writable<A> {
   if (Effect.isEffect(arg)) {
     return function(get: AtomContext, providedServices?: Context.Context<never>) {
       return effect(get, arg, options, providedServices)
@@ -617,10 +622,10 @@ function makeReadOrAtomNonEffect<A, E>(
     | ((get: AtomContext, services?: Context.Context<never>) => A)
     | A,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
-): ((get: AtomContext, services?: Context.Context<never>) => unknown) | Writable<A> {
+): ((get: AtomContext, services?: Context.Context<never>) => Top) | Writable<A> {
   if (Stream.isStream(arg)) {
     return function(get: AtomContext, providedServices?: Context.Context<never>) {
       return stream(get, arg, options, providedServices)
@@ -637,10 +642,10 @@ function makeReadOrAtomFnOrState<A, E>(
     ) => Effect.Effect<A, E, Scope.Scope | AtomRegistry> | Stream.Stream<A, E, AtomRegistry> | A)
     | A,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
-): ((get: AtomContext, services?: Context.Context<never>) => unknown) | Writable<A> {
+): ((get: AtomContext, services?: Context.Context<never>) => Top) | Writable<A> {
   if (isAtomFnArg<A, E>(arg)) {
     return function(get: AtomContext, providedServices?: Context.Context<never>) {
       return valueFromCreated(arg(get, providedServices), get, options, providedServices)
@@ -653,11 +658,11 @@ function valueFromCreated<A, E>(
   value: Effect.Effect<A, E, Scope.Scope | AtomRegistry> | Stream.Stream<A, E, AtomRegistry> | A,
   get: AtomContext,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
   services?: Context.Context<never>,
-): unknown {
+): Top {
   if (Effect.isEffect(value)) {
     return effect(get, value, options, services)
   }
@@ -668,20 +673,20 @@ function valueFromCreatedNonEffect<A, E>(
   value: Stream.Stream<A, E, AtomRegistry> | A,
   get: AtomContext,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
   services?: Context.Context<never>,
-): unknown {
+): Top {
   if (Stream.isStream(value)) {
     return stream(get, value, options, services)
   }
   return value
 }
 
-function asReadableAtom(
-  readOrAtom: ((get: AtomContext, services?: Context.Context<never>) => unknown) | Atom<unknown>,
-): Atom<unknown> {
+function asReadableAtom<A = unknown>(
+  readOrAtom: ((get: AtomContext, services?: Context.Context<never>) => A) | AnyAtom<A>,
+): AnyAtom<A> {
   if (isAtom(readOrAtom)) {
     return readOrAtom
   }
@@ -1143,9 +1148,9 @@ function familyWeakGet<Arg, T extends object>(
 
 function readWithFallback<A2, E2>(
   get: AtomContext,
-  self: Atom<AsyncResult.Result<unknown, unknown>>,
+  self: Atom<AnyResult>,
   fallback: Atom<AsyncResult.Result<A2, E2>>,
-): AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2> {
+): AnyResult | AsyncResult.Result<A2, E2> {
   const result = get(self)
   if (AsyncResult.isInitial(result)) {
     return AsyncResult.waiting(get(fallback))
@@ -1153,10 +1158,10 @@ function readWithFallback<A2, E2>(
   return result
 }
 
-function copyWithFallback<R extends Atom<AsyncResult.Result<unknown, unknown>>, A2, E2>(
+function copyWithFallback<R extends Atom<AnyResult>, A2, E2>(
   self: R,
-  withFallback: (get: AtomContext) => AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>,
-): Atom<AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>> {
+  withFallback: (get: AtomContext) => AnyResult | AsyncResult.Result<A2, E2>,
+): Atom<AnyResult | AsyncResult.Result<A2, E2>> {
   const refresh = atomRefresh(self)
   if (isWritable(self)) {
     return writable(withFallback, self.write, refresh)
@@ -1204,9 +1209,9 @@ function stackLine(stack: string): string {
 }
 
 function mapResultValue(
-  value: unknown,
-  f: (value: unknown) => unknown,
-): AsyncResult.Result<unknown, unknown> {
+  value: Top,
+  f: (value: Top) => Top,
+): AnyResult {
   if (AsyncResult.isResult(value) === false) {
     throw new TypeError('mapResult: expected an AsyncResult atom')
   }
@@ -1214,34 +1219,34 @@ function mapResultValue(
 }
 
 function mapResultMapped(
-  value: AsyncResult.Result<unknown, unknown>,
-  f: (value: unknown) => unknown,
-): AsyncResult.Result<unknown, unknown> {
+  value: AnyResult,
+  f: (value: Top) => Top,
+): AnyResult {
   if (AsyncResult.isSuccess(value)) {
     return AsyncResult.success(f(value.value))
   }
   return value
 }
 
-function mapResultBinary(selfOrF: unknown, f: unknown): unknown {
+function mapResultBinary(selfOrF: Top, f: Top): Top {
   if (isAtom(selfOrF) === false) {
     throw new TypeError('mapResult expects an atom and a function argument')
   }
   return mapResultBinaryFn(selfOrF, f)
 }
 
-function mapResultBinaryFn(self: Atom<unknown>, f: unknown): unknown {
+function mapResultBinaryFn(self: AnyAtom, f: Top): Top {
   if (isMapResultMapper(f) === false) {
     throw new TypeError('mapResult expects an atom and a function argument')
   }
   return mapResultImpl(self, f)
 }
 
-function mapResultCurried(selfOrF: unknown): (self: Atom<unknown>) => unknown {
-  return (self: Atom<unknown>) => mapResultCurriedApply(self, selfOrF)
+function mapResultCurried(selfOrF: Top): (self: AnyAtom) => Top {
+  return (self: AnyAtom) => mapResultCurriedApply(self, selfOrF)
 }
 
-function mapResultCurriedApply(self: Atom<unknown>, selfOrF: unknown): unknown {
+function mapResultCurriedApply(self: AnyAtom, selfOrF: Top): Top {
   if (isMapResultMapper(selfOrF) === false) {
     throw new TypeError('mapResult expects a function argument')
   }
@@ -1252,7 +1257,7 @@ type SwrOptions = {
   readonly staleTime: Duration.Input
   readonly revalidateOnMount?: boolean | undefined
   readonly revalidateOnFocus?: boolean | 'always' | undefined
-  readonly focusSignal?: Atom<unknown> | undefined
+  readonly focusSignal?: AnyAtom | undefined
 }
 
 function revalidateOnFocusEnabled(value: boolean | 'always' | undefined): boolean {
@@ -1262,7 +1267,7 @@ function revalidateOnFocusEnabled(value: boolean | 'always' | undefined): boolea
   return value !== false
 }
 
-function shouldSubscribeSwrFocus(options: SwrOptions): options is SwrOptions & { readonly focusSignal: Atom<unknown> } {
+function shouldSubscribeSwrFocus(options: SwrOptions): options is SwrOptions & { readonly focusSignal: AnyAtom } {
   if (options.focusSignal === undefined) {
     return false
   }
@@ -1362,14 +1367,14 @@ function shouldRevalidateSettledSWR<A, E>(
 type OptimisticState<A> = {
   lastValue: A
   needsRefresh: boolean
-  transitions: Set<Atom<AsyncResult.Result<A, unknown>>>
+  transitions: Set<Atom<AsyncResult.Result<A, Top>>>
   cancels: Set<() => void>
 }
 
 function readOptimistic<A>(
   get: AtomContext,
   self: Atom<A>,
-  writeAtom: Atom<readonly [number, Atom<AsyncResult.Result<A, unknown>> | undefined]>,
+  writeAtom: Atom<readonly [number, Atom<AsyncResult.Result<A, Top>> | undefined]>,
 ): A {
   const state: OptimisticState<A> = {
     lastValue: get.once(self),
@@ -1400,7 +1405,7 @@ function applyOptimisticSourceIdle<A>(get: AtomContext, state: OptimisticState<A
   applyOptimisticResult(get, value)
 }
 
-function applyOptimisticResult<A>(get: AtomContext, value: AsyncResult.Result<A, unknown>): void {
+function applyOptimisticResult<A>(get: AtomContext, value: AsyncResult.Result<A, Top>): void {
   const current = Option.getOrUndefined(get.self())
   if (AsyncResult.isInitial(value)) {
     applyOptimisticInitial(get, current, value)
@@ -1411,8 +1416,8 @@ function applyOptimisticResult<A>(get: AtomContext, value: AsyncResult.Result<A,
 
 function applyOptimisticInitial<A>(
   get: AtomContext,
-  current: unknown,
-  value: AsyncResult.Initial<A, unknown>,
+  current: Top,
+  value: AsyncResult.Initial<A, Top>,
 ): void {
   if (isInitialResult(current) === false) {
     return
@@ -1420,7 +1425,7 @@ function applyOptimisticInitial<A>(
   get.setSelf(value)
 }
 
-function isInitialResult(current: unknown): boolean {
+function isInitialResult(current: Top): boolean {
   if (AsyncResult.isResult(current) === false) {
     return false
   }
@@ -1429,8 +1434,8 @@ function isInitialResult(current: unknown): boolean {
 
 function applyOptimisticNonInitial<A>(
   get: AtomContext,
-  current: unknown,
-  value: AsyncResult.Success<A, unknown> | AsyncResult.Failure<A, unknown>,
+  current: Top,
+  value: AsyncResult.Success<A, Top> | AsyncResult.Failure<A, Top>,
 ): void {
   if (AsyncResult.isSuccess(value)) {
     applyOptimisticSuccess(get, current, value)
@@ -1441,8 +1446,8 @@ function applyOptimisticNonInitial<A>(
 
 function applyOptimisticSuccess<A>(
   get: AtomContext,
-  current: unknown,
-  value: AsyncResult.Success<A, unknown>,
+  current: Top,
+  value: AsyncResult.Success<A, Top>,
 ): void {
   if (isSuccessResult(current)) {
     applyOptimisticNewerSuccess(get, current, value)
@@ -1451,7 +1456,7 @@ function applyOptimisticSuccess<A>(
   get.setSelf(value)
 }
 
-function isSuccessResult(current: unknown): current is AsyncResult.Success<unknown, unknown> {
+function isSuccessResult(current: unknown): current is AsyncResult.Success<Top, Top> {
   if (AsyncResult.isResult(current) === false) {
     return false
   }
@@ -1460,8 +1465,8 @@ function isSuccessResult(current: unknown): current is AsyncResult.Success<unkno
 
 function applyOptimisticNewerSuccess<A>(
   get: AtomContext,
-  current: AsyncResult.Success<unknown, unknown>,
-  value: AsyncResult.Success<A, unknown>,
+  current: AsyncResult.Success<Top, Top>,
+  value: AsyncResult.Success<A, Top>,
 ): void {
   if (shouldReplaceOptimisticSuccess(current, value) === false) {
     return
@@ -1470,8 +1475,8 @@ function applyOptimisticNewerSuccess<A>(
 }
 
 function shouldReplaceOptimisticSuccess(
-  current: AsyncResult.Success<unknown, unknown>,
-  value: AsyncResult.Success<unknown, unknown>,
+  current: AsyncResult.Success<Top, Top>,
+  value: AsyncResult.Success<Top, Top>,
 ): boolean {
   if (value.waiting) {
     return false
@@ -1483,7 +1488,7 @@ function subscribeOptimisticWrite<A>(
   get: AtomContext,
   self: Atom<A>,
   state: OptimisticState<A>,
-  atom: Atom<AsyncResult.Result<A, unknown>> | undefined,
+  atom: Atom<AsyncResult.Result<A, Top>> | undefined,
 ): void {
   if (atom === undefined) {
     return
@@ -1495,7 +1500,7 @@ function subscribeOptimisticWriteAtom<A>(
   get: AtomContext,
   self: Atom<A>,
   state: OptimisticState<A>,
-  atom: Atom<AsyncResult.Result<A, unknown>>,
+  atom: Atom<AsyncResult.Result<A, Top>>,
 ): void {
   if (state.transitions.has(atom)) {
     return
@@ -1507,7 +1512,7 @@ function startOptimisticTransition<A>(
   get: AtomContext,
   self: Atom<A>,
   state: OptimisticState<A>,
-  atom: Atom<AsyncResult.Result<A, unknown>>,
+  atom: Atom<AsyncResult.Result<A, Top>>,
 ): void {
   state.transitions.add(atom)
   let cancel: (() => void) | undefined = undefined
@@ -1519,7 +1524,7 @@ function startOptimisticTransition<A>(
 
 function keepOptimisticCancel<A>(
   state: OptimisticState<A>,
-  atom: Atom<AsyncResult.Result<A, unknown>>,
+  atom: Atom<AsyncResult.Result<A, Top>>,
   cancel: () => void,
 ): void {
   if (state.transitions.has(atom)) {
@@ -1533,9 +1538,9 @@ function onOptimisticTransition<A>(
   get: AtomContext,
   self: Atom<A>,
   state: OptimisticState<A>,
-  atom: Atom<AsyncResult.Result<A, unknown>>,
+  atom: Atom<AsyncResult.Result<A, Top>>,
   cancel: (() => void) | undefined,
-  result: AsyncResult.Result<A, unknown>,
+  result: AsyncResult.Result<A, Top>,
 ): void {
   if (isWaitingSuccess(result)) {
     get.setSelf(result.value)
@@ -1555,9 +1560,9 @@ function finishOptimisticTransition<A>(
   get: AtomContext,
   self: Atom<A>,
   state: OptimisticState<A>,
-  atom: Atom<AsyncResult.Result<A, unknown>>,
+  atom: Atom<AsyncResult.Result<A, Top>>,
   cancel: (() => void) | undefined,
-  result: AsyncResult.Result<A, unknown>,
+  result: AsyncResult.Result<A, Top>,
 ): void {
   state.transitions.delete(atom)
   dropOptimisticCancel(state, cancel)
@@ -1573,14 +1578,14 @@ function dropOptimisticCancel<A>(state: OptimisticState<A>, cancel: (() => void)
   cancel()
 }
 
-function markOptimisticRefresh<A>(state: OptimisticState<A>, result: AsyncResult.Result<A, unknown>): void {
+function markOptimisticRefresh<A>(state: OptimisticState<A>, result: AsyncResult.Result<A, Top>): void {
   if (shouldMarkOptimisticRefresh(state, result) === false) {
     return
   }
   state.needsRefresh = true
 }
 
-function shouldMarkOptimisticRefresh<A>(state: OptimisticState<A>, result: AsyncResult.Result<A, unknown>): boolean {
+function shouldMarkOptimisticRefresh<A>(state: OptimisticState<A>, result: AsyncResult.Result<A, Top>): boolean {
   if (state.needsRefresh) {
     return false
   }
@@ -1610,12 +1615,12 @@ function finalizeOptimistic<A>(state: OptimisticState<A>): void {
 }
 
 function runOptimisticFn<A, W, XA, XE, OW>(
-  self: Writable<A, Atom<AsyncResult.Result<W, unknown>>>,
+  self: Writable<A, Atom<AsyncResult.Result<W, Top>>>,
   options: {
     readonly reducer: (current: NoInfer<A>, update: OW) => NoInfer<W>
     readonly fn: AtomResultFn<OW, XA, XE> | ((set: (result: NoInfer<W>) => void) => AtomResultFn<OW, XA, XE>)
   },
-  transition: Writable<AsyncResult.Result<W, unknown>>,
+  transition: Writable<AsyncResult.Result<W, Top>>,
   arg: OW,
   get: FnContext,
 ): Effect.Effect<XA, XE> {
@@ -1644,7 +1649,7 @@ function optimisticFnValue<W>(value: W): W {
 
 function optimisticFnAtom<W, XA, XE, OW>(
   fn: AtomResultFn<OW, XA, XE> | ((set: (result: NoInfer<W>) => void) => AtomResultFn<OW, XA, XE>),
-  transition: Writable<AsyncResult.Result<W, unknown>>,
+  transition: Writable<AsyncResult.Result<W, Top>>,
   get: FnContext,
 ): AtomResultFn<OW, XA, XE> {
   if (typeof fn === 'function') {
@@ -1655,7 +1660,7 @@ function optimisticFnAtom<W, XA, XE, OW>(
 
 function setOptimisticFnTransition<W>(
   get: FnContext,
-  transition: Writable<AsyncResult.Result<W, unknown>>,
+  transition: Writable<AsyncResult.Result<W, Top>>,
   value: W,
 ): void {
   get.set(transition, AsyncResult.success(waitingIfResult(value), { waiting: true }))
@@ -1696,17 +1701,17 @@ function optimisticFnPending<A, E>(result: AsyncResult.Result<A, E>): boolean {
   return result.waiting
 }
 
-function readKvs<S extends Schema.ConstraintCodec<unknown, unknown>, Mode extends 'sync' | 'async'>(
+function readKvs<S extends Schema.ConstraintCodec<Top, Top>, Mode extends 'sync' | 'async'>(
   get: AtomContext,
   options: {
-    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, unknown>
+    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, Top>
     readonly key: string
     readonly schema: S
     readonly defaultValue: LazyArg<S['Type']>
     readonly mode?: Mode | undefined
   },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
-  resultAtom: Atom<unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
+  resultAtom: Atom<Top>,
   isWritten: () => boolean,
   setWritten: (written: boolean) => void,
 ): AsyncResult.Result<S['Type']> | S['Type'] {
@@ -1716,13 +1721,13 @@ function readKvs<S extends Schema.ConstraintCodec<unknown, unknown>, Mode extend
   return readKvsSync(get, options, setAtom, resultAtom, isWritten, setWritten)
 }
 
-function readKvsAsync<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function readKvsAsync<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: {
     readonly defaultValue: LazyArg<S['Type']>
   },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
-  resultAtom: Atom<unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
+  resultAtom: Atom<Top>,
   isWritten: () => boolean,
   setWritten: (written: boolean) => void,
 ): AsyncResult.Result<S['Type']> {
@@ -1732,7 +1737,7 @@ function readKvsAsync<S extends Schema.ConstraintCodec<unknown, unknown>>(
   return kvsAsyncValue(get, options, resultAtom)
 }
 
-function kvsHasStoreOption(result: unknown): result is AsyncResult.Success<Option.Option<unknown>, unknown> {
+function kvsHasStoreOption(result: unknown): result is AsyncResult.Success<Option.Option<Top>, Top> {
   if (AsyncResult.isResult(result) === false) {
     return false
   }
@@ -1741,17 +1746,17 @@ function kvsHasStoreOption(result: unknown): result is AsyncResult.Success<Optio
 
 function kvsSuccessHasOption(
   result: AsyncResult.Result<unknown, unknown>,
-): result is AsyncResult.Success<Option.Option<unknown>, unknown> {
+): result is AsyncResult.Success<Option.Option<Top>, Top> {
   if (AsyncResult.isSuccess(result) === false) {
     return false
   }
   return Option.isOption(result.value)
 }
 
-function kvsAsyncValue<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function kvsAsyncValue<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  resultAtom: Atom<unknown>,
+  resultAtom: Atom<Top>,
 ): AsyncResult.Result<S['Type']> {
   const result = get.once(resultAtom)
   if (kvsHasStoreOption(result) === false) {
@@ -1760,9 +1765,9 @@ function kvsAsyncValue<S extends Schema.ConstraintCodec<unknown, unknown>>(
   return kvsAsyncFromOption(options, result.value)
 }
 
-function kvsAsyncFromOption<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function kvsAsyncFromOption<S extends Schema.ConstraintCodec<Top, Top>>(
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  value: Option.Option<unknown>,
+  value: Option.Option<Top>,
 ): AsyncResult.Result<S['Type']> {
   if (Option.isSome(value)) {
     return AsyncResult.success(value.value)
@@ -1770,12 +1775,12 @@ function kvsAsyncFromOption<S extends Schema.ConstraintCodec<unknown, unknown>>(
   return AsyncResult.success(options.defaultValue())
 }
 
-function onKvsAsyncResult<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function onKvsAsyncResult<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
   isWritten: () => boolean,
-  result: unknown,
+  result: Top,
 ): void {
   if (isWritten()) {
     return
@@ -1783,11 +1788,11 @@ function onKvsAsyncResult<S extends Schema.ConstraintCodec<unknown, unknown>>(
   applyKvsAsyncResult(get, options, setAtom, result)
 }
 
-function applyKvsAsyncResult<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function applyKvsAsyncResult<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
-  result: unknown,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
+  result: Top,
 ): void {
   if (kvsHasStoreOption(result) === false) {
     return
@@ -1795,11 +1800,11 @@ function applyKvsAsyncResult<S extends Schema.ConstraintCodec<unknown, unknown>>
   applyKvsAsyncOption(get, options, setAtom, result.value)
 }
 
-function applyKvsAsyncOption<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function applyKvsAsyncOption<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
-  value: Option.Option<unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
+  value: Option.Option<Top>,
 ): void {
   if (Option.isSome(value)) {
     get.setSelf(AsyncResult.success(value.value))
@@ -1810,11 +1815,11 @@ function applyKvsAsyncOption<S extends Schema.ConstraintCodec<unknown, unknown>>
   get.setSelf(AsyncResult.success(next))
 }
 
-function readKvsSync<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function readKvsSync<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
-  resultAtom: Atom<unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
+  resultAtom: Atom<Top>,
   isWritten: () => boolean,
   setWritten: (written: boolean) => void,
 ): S['Type'] {
@@ -1824,12 +1829,12 @@ function readKvsSync<S extends Schema.ConstraintCodec<unknown, unknown>>(
   return Option.getOrElse(get.self<S['Type']>(), options.defaultValue)
 }
 
-function onKvsSyncResult<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function onKvsSyncResult<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
   isWritten: () => boolean,
-  result: unknown,
+  result: Top,
 ): void {
   if (kvsHasStoreOption(result) === false) {
     return
@@ -1837,12 +1842,12 @@ function onKvsSyncResult<S extends Schema.ConstraintCodec<unknown, unknown>>(
   applyKvsSyncOption(get, options, setAtom, isWritten, result.value)
 }
 
-function applyKvsSyncOption<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function applyKvsSyncOption<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
   isWritten: () => boolean,
-  value: Option.Option<unknown>,
+  value: Option.Option<Top>,
 ): void {
   if (isWritten()) {
     return
@@ -1850,11 +1855,11 @@ function applyKvsSyncOption<S extends Schema.ConstraintCodec<unknown, unknown>>(
   applyKvsSyncValue(get, options, setAtom, value)
 }
 
-function applyKvsSyncValue<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function applyKvsSyncValue<S extends Schema.ConstraintCodec<Top, Top>>(
   get: AtomContext,
   options: { readonly defaultValue: LazyArg<S['Type']> },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
-  value: Option.Option<unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
+  value: Option.Option<Top>,
 ): void {
   if (Option.isSome(value)) {
     get.setSelf(value.value)
@@ -1865,10 +1870,10 @@ function applyKvsSyncValue<S extends Schema.ConstraintCodec<unknown, unknown>>(
   get.set(setAtom, next)
 }
 
-function writeKvs<S extends Schema.ConstraintCodec<unknown, unknown>>(
+function writeKvs<S extends Schema.ConstraintCodec<Top, Top>>(
   ctx: WriteContext<AsyncResult.Result<S['Type']> | S['Type']>,
   options: { readonly mode?: 'sync' | 'async' | undefined },
-  setAtom: AtomResultFn<S['Type'], unknown, unknown>,
+  setAtom: AtomResultFn<S['Type'], Top, Top>,
   value: S['Type'],
 ): void {
   ctx.set(setAtom, value)
@@ -1882,7 +1887,7 @@ function kvsWrittenValue<A>(mode: 'sync' | 'async' | undefined, value: A): Async
   return value
 }
 
-function serializableLabel(self: Atom<unknown>, key: string): readonly [string, string] {
+function serializableLabel(self: Atom<Top>, key: string): readonly [string, string] {
   if (self.label === undefined) {
     return [key, stackLabel()]
   }
@@ -1938,10 +1943,10 @@ export function make<A, E>(
     | ((get: AtomContext, services?: Context.Context<never>) => A)
     | A,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
-): Atom<unknown> | Writable<unknown> {
+): Atom<Top> | Writable<Top> {
   return asReadableAtom(makeReadOrAtom(arg, options))
 }
 
@@ -1993,10 +1998,10 @@ export function makeRead<A, E>(
     | ((get: AtomContext, services?: Context.Context<never>) => A)
     | A,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly uninterruptible?: boolean | undefined
   },
-): ((get: AtomContext, services?: Context.Context<never>) => unknown) | Writable<A> {
+): ((get: AtomContext, services?: Context.Context<never>) => Top) | Writable<A> {
   return makeReadOrAtom(arg, options)
 }
 
@@ -2184,7 +2189,7 @@ function interruptForkedFiber<A, E>(
 export interface AtomRuntime<R, ER = never> extends Atom<AsyncResult.Result<Context.Context<R>, ER>> {
   readonly factory: RuntimeFactory
 
-  readonly layer: Atom<Layer.Layer<R, ER, unknown>>
+  readonly layer: Atom<Layer.Layer<R, ER, Top>>
 
   readonly atom: {
     <A, E>(
@@ -2212,35 +2217,35 @@ export interface AtomRuntime<R, ER = never> extends Atom<AsyncResult.Result<Cont
         fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry | Reactivity.Reactivity | R>,
         options?: {
           readonly initialValue?: A | undefined
-          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+          readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined
           readonly concurrent?: boolean | undefined
         },
-      ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+      ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
       <E, A>(
         fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
         options?: {
           readonly initialValue?: A | undefined
-          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+          readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined
           readonly concurrent?: boolean | undefined
         },
-      ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+      ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
     }
     <E, A, Arg = void>(
       fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry | Reactivity.Reactivity | R>,
       options?: {
         readonly initialValue?: A | undefined
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+        readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined
         readonly concurrent?: boolean | undefined
       },
-    ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+    ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
     <E, A, Arg = void>(
       fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
       options?: {
         readonly initialValue?: A | undefined
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+        readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined
         readonly concurrent?: boolean | undefined
       },
-    ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+    ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
   }
 
   readonly pull: <A, E>(
@@ -2274,8 +2279,8 @@ export interface AtomRuntime<R, ER = never> extends Atom<AsyncResult.Result<Cont
 export interface RuntimeFactory {
   <R, E>(
     create:
-      | Layer.Layer<R, E, unknown>
-      | ((get: AtomContext) => Layer.Layer<R, E, unknown>),
+      | Layer.Layer<R, E, Top>
+      | ((get: AtomContext) => Layer.Layer<R, E, Top>),
   ): AtomRuntime<R, E>
   readonly addGlobalLayer: <A, E>(layer: Layer.Layer<A, E, AtomRegistry | Reactivity.Reactivity>) => void
 
@@ -2284,8 +2289,8 @@ export interface RuntimeFactory {
    * the keys change.
    */
   readonly withReactivity: (
-    keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>,
-  ) => <A extends Atom<unknown>>(atom: A) => A
+    keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
+  ) => <A extends Atom<Top>>(atom: A) => A
 }
 
 /**
@@ -2338,10 +2343,10 @@ export function context(options?: {
     ),
   )
   const withReactivity = (
-    keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>,
-  ): <A extends Atom<unknown>>(atom: A) => A =>
-  <A extends Atom<unknown>>(atom: A): A => {
-    const read = (get: AtomContext): unknown => {
+    keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
+  ): <A extends Atom<Top>>(atom: A) => A =>
+  <A extends Atom<Top>>(atom: A): A => {
+    const read = (get: AtomContext): Top => {
       const store = AsyncResult.getOrThrow(get(reactivityAtom))
       get.addFinalizer(store.registerUnsafe(keys, () => {
         get.refresh(atom)
@@ -2387,8 +2392,8 @@ function assignRuntimeFactory(
   memoMap: Atom<Layer.MemoMap> | Layer.MemoMap,
   addGlobalLayer: <A, E>(layer: Layer.Layer<A, E, AtomRegistry | Reactivity.Reactivity>) => void,
   withReactivity: (
-    keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>,
-  ) => <A extends Atom<unknown>>(atom: A) => A,
+    keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
+  ) => <A extends Atom<Top>>(atom: A) => A,
 ): RegistryRuntimeFactory | SharedRuntimeFactory {
   if (isAtom(memoMap)) {
     return Object.assign(factoryFn, { memoMap, addGlobalLayer, withReactivity })
@@ -2415,8 +2420,8 @@ export const runtime: RegistryRuntimeFactory = context()
  * @since 4.0.0
  */
 export const withReactivity: (
-  keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>,
-) => <A extends Atom<unknown>>(atom: A) => A = runtime.withReactivity
+  keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
+) => <A extends Atom<Top>>(atom: A) => A = runtime.withReactivity
 
 // -----------------------------------------------------------------------------
 // constructors - stream
@@ -2499,12 +2504,12 @@ function runMakeStream<A, E, R0>(
 export const subscriptionRef: {
   <A>(
     ref: SubscriptionRef.SubscriptionRef<A> | ((get: AtomContext) => SubscriptionRef.SubscriptionRef<A>),
-  ): Writable<A> | Writable<unknown, unknown>
+  ): Writable<A> | Writable<Top, Top>
   <A, E>(
     effect:
       | Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>
       | ((get: AtomContext) => Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>),
-  ): Writable<AsyncResult.Result<A, E | Cause.NoSuchElementError>, A> | Writable<unknown, unknown>
+  ): Writable<AsyncResult.Result<A, E | Cause.NoSuchElementError>, A> | Writable<Top, Top>
 } = <A, E = never>(
   ref:
     | SubscriptionRef.SubscriptionRef<A>
@@ -2514,7 +2519,7 @@ export const subscriptionRef: {
       get: AtomContext,
     ) => Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>),
 ): Writable<
-  A | AsyncResult.Result<A | Context.Context<unknown>, E | Cause.NoSuchElementError>,
+  A | AsyncResult.Result<A | Context.Context<Top>, E | Cause.NoSuchElementError>,
   A
 > =>
   makeSubRef(
@@ -2632,7 +2637,7 @@ export interface FnContext {
   addFinalizer(this: FnContext, f: () => void): void
   mount<A>(this: FnContext, atom: Atom<A>): void
   refresh<A>(this: FnContext, atom: Atom<A>): void
-  self(this: FnContext): Option.Option<unknown>
+  self(this: FnContext): Option.Option<Top>
   setSelf<A>(this: FnContext, a: A): void
   set<R, W>(this: FnContext, atom: Writable<R, W>, value: W): void
   setResult<A, E, W>(this: FnContext, atom: Writable<AsyncResult.Result<A, E>, W>, value: W): Effect.Effect<A, E>
@@ -2673,8 +2678,8 @@ export function fnSync<A, Arg = void>(
   options: { readonly initialValue: A },
 ): Writable<A, Arg>
 export function fnSync(
-  ...args: readonly [f?: (arg: unknown, get: FnContext) => unknown, options?: { readonly initialValue?: unknown }]
-): unknown {
+  ...args: readonly [f?: (arg: Top, get: FnContext) => Top, options?: { readonly initialValue?: Top }]
+): Top {
   if (args.length === 0) {
     return makeFnSync
   }
@@ -2682,8 +2687,8 @@ export function fnSync(
 }
 
 function fnSyncFromArgs(
-  args: readonly [f?: (arg: unknown, get: FnContext) => unknown, options?: { readonly initialValue?: unknown }],
-): unknown {
+  args: readonly [f?: (arg: Top, get: FnContext) => Top, options?: { readonly initialValue?: Top }],
+): Top {
   const f = args[0]
   if (f === undefined) {
     throw new TypeError('fnSync expects a function argument')
@@ -2787,15 +2792,15 @@ export function fn<E, A, Arg = void>(
 ): AtomResultFn<Arg, A, E | Cause.NoSuchElementError>
 export function fn(
   ...args: readonly [
-    fn?: (arg: unknown, get: FnContext) =>
-      | Effect.Effect<unknown, unknown, Scope.Scope | AtomRegistry>
-      | Stream.Stream<unknown, unknown, AtomRegistry>,
+    fn?: (arg: Top, get: FnContext) =>
+      | Effect.Effect<Top, Top, Scope.Scope | AtomRegistry>
+      | Stream.Stream<Top, Top, AtomRegistry>,
     options?: {
-      readonly initialValue?: unknown
+      readonly initialValue?: Top
       readonly concurrent?: boolean | undefined
     },
   ]
-): unknown {
+): Top {
   if (args.length === 0) {
     return makeFn
   }
@@ -2804,15 +2809,15 @@ export function fn(
 
 function fnFromArgs(
   args: readonly [
-    fn?: (arg: unknown, get: FnContext) =>
-      | Effect.Effect<unknown, unknown, Scope.Scope | AtomRegistry>
-      | Stream.Stream<unknown, unknown, AtomRegistry>,
+    fn?: (arg: Top, get: FnContext) =>
+      | Effect.Effect<Top, Top, Scope.Scope | AtomRegistry>
+      | Stream.Stream<Top, Top, AtomRegistry>,
     options?: {
-      readonly initialValue?: unknown
+      readonly initialValue?: Top
       readonly concurrent?: boolean | undefined
     },
   ],
-): unknown {
+): Top {
   const f = args[0]
   if (f === undefined) {
     throw new TypeError('fn expects a function argument')
@@ -2835,14 +2840,14 @@ function makeFn<Arg, E, A>(
   },
 ): AtomResultFn<Arg, A, E | Cause.NoSuchElementError>
 function makeFn(
-  f: (arg: unknown, get: FnContext) =>
-    | Effect.Effect<unknown, unknown, Scope.Scope | AtomRegistry>
-    | Stream.Stream<unknown, unknown, AtomRegistry>,
+  f: (arg: Top, get: FnContext) =>
+    | Effect.Effect<Top, Top, Scope.Scope | AtomRegistry>
+    | Stream.Stream<Top, Top, AtomRegistry>,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: Top
     readonly concurrent?: boolean | undefined
   },
-): AtomResultFn<unknown, unknown, unknown>
+): AtomResultFn<Top, Top, Top>
 function makeFn<Arg, E, A>(
   f: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry> | Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
   options?: {
@@ -2999,32 +3004,32 @@ export const family = makeFamily()
 export const withFallback: {
   <E2, A2>(
     fallback: Atom<AsyncResult.Result<A2, E2>>,
-  ): <R extends Atom<AsyncResult.Result<unknown, unknown>>>(
+  ): <R extends Atom<AsyncResult.Result<Top, Top>>>(
     self: R,
   ) => [R] extends [Writable<infer _, infer RW>] ? Writable<
-      AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>,
+      AsyncResult.Result<Top, Top> | AsyncResult.Result<A2, E2>,
       RW
     >
     : Atom<
-      AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>
+      AsyncResult.Result<Top, Top> | AsyncResult.Result<A2, E2>
     >
-  <R extends Atom<AsyncResult.Result<unknown, unknown>>, A2, E2>(
+  <R extends Atom<AsyncResult.Result<Top, Top>>, A2, E2>(
     self: R,
     fallback: Atom<AsyncResult.Result<A2, E2>>,
   ): [R] extends [Writable<infer _, infer RW>] ? Writable<
-      AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>,
+      AsyncResult.Result<Top, Top> | AsyncResult.Result<A2, E2>,
       RW
     >
     : Atom<
-      AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>
+      AsyncResult.Result<Top, Top> | AsyncResult.Result<A2, E2>
     >
-} = dual(2, <R extends Atom<AsyncResult.Result<unknown, unknown>>, A2, E2>(
+} = dual(2, <R extends Atom<AsyncResult.Result<Top, Top>>, A2, E2>(
   self: R,
   fallback: Atom<AsyncResult.Result<A2, E2>>,
 ): Atom<
-  AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2>
+  AsyncResult.Result<Top, Top> | AsyncResult.Result<A2, E2>
 > => {
-  function withFallback(get: AtomContext): AsyncResult.Result<unknown, unknown> | AsyncResult.Result<A2, E2> {
+  function withFallback(get: AtomContext): AsyncResult.Result<Top, Top> | AsyncResult.Result<A2, E2> {
     return readWithFallback(get, self, fallback)
   }
   return copyWithFallback(self, withFallback)
@@ -3041,7 +3046,7 @@ const copyAtomWithProto = <A extends object, P extends object>(self: A, patch: P
  *
  * @since 4.0.0
  */
-export const keepAlive = <A extends Atom<unknown>>(self: A): A =>
+export const keepAlive = <A extends Atom<Top>>(self: A): A =>
   copyAtomWithProto(self, {
     keepAlive: true,
   })
@@ -3055,7 +3060,7 @@ export const keepAlive = <A extends Atom<unknown>>(self: A): A =>
  *
  * @since 4.0.0
  */
-export const autoDispose = <A extends Atom<unknown>>(self: A): A =>
+export const autoDispose = <A extends Atom<Top>>(self: A): A =>
   copyAtomWithProto(self, {
     keepAlive: false,
   })
@@ -3071,9 +3076,9 @@ export const autoDispose = <A extends Atom<unknown>>(self: A): A =>
  * @since 4.0.0
  */
 export const setLazy: {
-  (lazy: boolean): <A extends Atom<unknown>>(self: A) => A
-  <A extends Atom<unknown>>(self: A, lazy: boolean): A
-} = dual(2, <A extends Atom<unknown>>(self: A, lazy: boolean) =>
+  (lazy: boolean): <A extends Atom<Top>>(self: A) => A
+  <A extends Atom<Top>>(self: A, lazy: boolean): A
+} = dual(2, <A extends Atom<Top>>(self: A, lazy: boolean) =>
   copyAtomWithProto(self, {
     lazy,
   }))
@@ -3106,10 +3111,10 @@ export const setLazy: {
  */
 export const withEquality: {
   <A>(equals: (value: A, next: A) => boolean): <T extends Atom<A>>(self: T) => T
-  <T extends Atom<unknown>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T
+  <T extends Atom<Top>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T
 } = dual(
   2,
-  <T extends Atom<unknown>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T =>
+  <T extends Atom<Top>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T =>
     copyAtomWithProto(self, {
       equals,
     }),
@@ -3126,11 +3131,11 @@ export const withEquality: {
  * @since 4.0.0
  */
 export const withLabel: {
-  (name: string): <A extends Atom<unknown>>(self: A) => A
-  <A extends Atom<unknown>>(self: A, name: string): A
+  (name: string): <A extends Atom<Top>>(self: A) => A
+  <A extends Atom<Top>>(self: A, name: string): A
 } = dual<
-  (name: string) => <A extends Atom<unknown>>(self: A) => A,
-  <A extends Atom<unknown>>(self: A, name: string) => A
+  (name: string) => <A extends Atom<Top>>(self: A) => A,
+  <A extends Atom<Top>>(self: A, name: string) => A
 >(2, (self, name) =>
   copyAtomWithProto(self, {
     label: [name, stackLabel()],
@@ -3169,10 +3174,10 @@ export const initialValue: {
  * @since 4.0.0
  */
 export const map: {
-  <R extends Atom<unknown>, B>(
+  <R extends Atom<Top>, B>(
     f: (_: Type<R>) => B,
   ): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
-  <R extends Atom<unknown>, B>(
+  <R extends Atom<Top>, B>(
     self: R,
     f: (_: Type<R>) => B,
   ): [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
@@ -3192,30 +3197,30 @@ export const map: {
  * @since 4.0.0
  */
 const mapResultImpl = (
-  self: Atom<unknown>,
-  f: (value: unknown) => unknown,
-): Atom<AsyncResult.Result<unknown, unknown>> =>
-  transform(self, (get): AsyncResult.Result<unknown, unknown> => mapResultValue(get(self), f))
+  self: Atom<Top>,
+  f: (value: Top) => Top,
+): Atom<AsyncResult.Result<Top, Top>> =>
+  transform(self, (get): AsyncResult.Result<Top, Top> => mapResultValue(get(self), f))
 
-type MapResultMapper = (s: unknown) => unknown
+type MapResultMapper = (s: Top) => Top
 const isMapResultMapper = (arg: unknown): arg is MapResultMapper => typeof arg === 'function'
 
-export function mapResult<R extends Atom<AsyncResult.Result<unknown, unknown>>, B>(
+export function mapResult<R extends Atom<AsyncResult.Result<Top, Top>>, B>(
   f: (_: AsyncResult.Result.Success<Type<R>>) => B,
 ): (
   self: R,
 ) => [R] extends [Writable<infer _, infer RW>]
   ? Writable<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>, RW>
   : Atom<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>>
-export function mapResult<R extends Atom<AsyncResult.Result<unknown, unknown>>, B>(
+export function mapResult<R extends Atom<AsyncResult.Result<Top, Top>>, B>(
   self: R,
   f: (_: AsyncResult.Result.Success<Type<R>>) => B,
 ): [R] extends [Writable<infer _, infer RW>] ? Writable<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>, RW>
   : Atom<AsyncResult.Result<B, AsyncResult.Result.Failure<Type<R>>>>
 export function mapResult(
-  selfOrF: unknown,
-  f?: unknown,
-): unknown {
+  selfOrF: Top,
+  f?: Top,
+): Top {
   if (arguments.length >= 2) {
     return mapResultBinary(selfOrF, f)
   }
@@ -3234,8 +3239,8 @@ export function mapResult(
  * @since 4.0.0
  */
 export const debounce: {
-  (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => WithoutSerializable<A>
-  <A extends Atom<unknown>>(self: A, duration: Duration.Input): WithoutSerializable<A>
+  (duration: Duration.Input): <A extends Atom<Top>>(self: A) => WithoutSerializable<A>
+  <A extends Atom<Top>>(self: A, duration: Duration.Input): WithoutSerializable<A>
 } = dual(
   2,
   <A>(self: Atom<A>, duration: Duration.Input): Atom<A> => {
@@ -3271,8 +3276,8 @@ export const debounce: {
  * @since 4.0.0
  */
 export const withRefresh: {
-  (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => WithoutSerializable<A>
-  <A extends Atom<unknown>>(self: A, duration: Duration.Input): WithoutSerializable<A>
+  (duration: Duration.Input): <A extends Atom<Top>>(self: A) => WithoutSerializable<A>
+  <A extends Atom<Top>>(self: A, duration: Duration.Input): WithoutSerializable<A>
 } = dual(
   2,
   <A>(self: Atom<A>, duration: Duration.Input): Atom<A> => {
@@ -3304,16 +3309,16 @@ export const swr: {
       readonly staleTime: Duration.Input
       readonly revalidateOnMount?: boolean | undefined
       readonly revalidateOnFocus?: boolean | 'always' | undefined
-      readonly focusSignal?: Atom<unknown> | undefined
+      readonly focusSignal?: Atom<Top> | undefined
     },
-  ): <R extends Atom<AsyncResult.Result<unknown, unknown>>>(self: R) => WithoutSerializable<R>
-  <R extends Atom<AsyncResult.Result<unknown, unknown>>>(
+  ): <R extends Atom<AsyncResult.Result<Top, Top>>>(self: R) => WithoutSerializable<R>
+  <R extends Atom<AsyncResult.Result<Top, Top>>>(
     self: R,
     options: {
       readonly staleTime: Duration.Input
       readonly revalidateOnMount?: boolean | undefined
       readonly revalidateOnFocus?: boolean | 'always' | undefined
-      readonly focusSignal?: Atom<unknown> | undefined
+      readonly focusSignal?: Atom<Top> | undefined
     },
   ): WithoutSerializable<R>
 } = dual(
@@ -3324,7 +3329,7 @@ export const swr: {
       readonly staleTime: Duration.Input
       readonly revalidateOnMount?: boolean | undefined
       readonly revalidateOnFocus?: boolean | 'always' | undefined
-      readonly focusSignal?: Atom<unknown> | undefined
+      readonly focusSignal?: Atom<Top> | undefined
     },
   ): Atom<AsyncResult.Result<A, E>> => {
     const staleTime = Duration.toMillis(Duration.fromInputUnsafe(options.staleTime))
@@ -3364,9 +3369,9 @@ const shouldRevalidateSWR = <A, E>(
  *
  * @since 4.0.0
  */
-export const optimistic = <A>(self: Atom<A>): Writable<A, Atom<AsyncResult.Result<A, unknown>>> => {
+export const optimistic = <A>(self: Atom<A>): Writable<A, Atom<AsyncResult.Result<A, Top>>> => {
   let counter = 0
-  const writeAtom = removeTtl(state<readonly [number, Atom<AsyncResult.Result<A, unknown>> | undefined]>(
+  const writeAtom = removeTtl(state<readonly [number, Atom<AsyncResult.Result<A, Top>> | undefined]>(
     [counter, undefined] as const,
   ))
   return writable(
@@ -3397,10 +3402,10 @@ export const optimisticFn: {
         | ((set: (result: NoInfer<W>) => void) => AtomResultFn<OW, XA, XE>)
     },
   ): (
-    self: Writable<A, Atom<AsyncResult.Result<W, unknown>>>,
+    self: Writable<A, Atom<AsyncResult.Result<W, Top>>>,
   ) => AtomResultFn<OW, XA, XE>
   <A, W, XA, XE, OW = void>(
-    self: Writable<A, Atom<AsyncResult.Result<W, unknown>>>,
+    self: Writable<A, Atom<AsyncResult.Result<W, Top>>>,
     options: {
       readonly reducer: (current: NoInfer<A>, update: OW) => NoInfer<W>
       readonly fn:
@@ -3409,7 +3414,7 @@ export const optimisticFn: {
     },
   ): AtomResultFn<OW, XA, XE>
 } = dual(2, <A, W, XA, XE, OW = void>(
-  self: Writable<A, Atom<AsyncResult.Result<W, unknown>>>,
+  self: Writable<A, Atom<AsyncResult.Result<W, Top>>>,
   options: {
     readonly reducer: (current: NoInfer<A>, update: OW) => NoInfer<W>
     readonly fn:
@@ -3417,7 +3422,7 @@ export const optimisticFn: {
       | ((set: (result: NoInfer<W>) => void) => AtomResultFn<OW, XA, XE>)
   },
 ): AtomResultFn<OW, XA, XE> => {
-  const transition = removeTtl(state<AsyncResult.Result<W, unknown>>(AsyncResult.initial()))
+  const transition = removeTtl(state<AsyncResult.Result<W, Top>>(AsyncResult.initial()))
   return fn((arg: OW, get) => runOptimisticFn(self, options, transition, arg, get))
 })
 
@@ -3456,18 +3461,18 @@ export const batch: (f: () => void) => void = Registry.batch
  *
  * @since 4.0.0
  */
-export function kvs<S extends Schema.ConstraintCodec<unknown, unknown>, const Mode extends 'sync' | 'async' = never>(
+export function kvs<S extends Schema.ConstraintCodec<Top, Top>, const Mode extends 'sync' | 'async' = never>(
   options: {
-    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, unknown>
+    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, Top>
     readonly key: string
     readonly schema: S
     readonly defaultValue: LazyArg<S['Type']>
     readonly mode?: Mode | undefined
   },
 ): Writable<'async' extends Mode ? AsyncResult.Result<S['Type']> : S['Type'], S['Type']>
-export function kvs<S extends Schema.ConstraintCodec<unknown, unknown>, const Mode extends 'sync' | 'async' = never>(
+export function kvs<S extends Schema.ConstraintCodec<Top, Top>, const Mode extends 'sync' | 'async' = never>(
   options: {
-    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, unknown>
+    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, Top>
     readonly key: string
     readonly schema: S
     readonly defaultValue: LazyArg<S['Type']>
@@ -3671,7 +3676,7 @@ export interface Serializable<S extends Schema.Constraint> {
  *
  * @since 4.0.0
  */
-export const isSerializable = (self: Atom<unknown>): self is Atom<unknown> & Serializable<Schema.Unknown> =>
+export const isSerializable = (self: Atom<unknown>): self is Atom<Top> & Serializable<Schema.Unknown> =>
   SerializableTypeId in self
 
 /**
@@ -3685,15 +3690,15 @@ export const isSerializable = (self: Atom<unknown>): self is Atom<unknown> & Ser
  * @since 4.0.0
  */
 export const serializable: {
-  <R extends Atom<unknown>, S extends Schema.Constraint>(options: {
+  <R extends Atom<Top>, S extends Schema.Constraint>(options: {
     readonly key: string
     readonly schema: S
   }): (self: R) => R & Serializable<S>
-  <R extends Atom<unknown>, S extends Schema.Constraint>(self: R, options: {
+  <R extends Atom<Top>, S extends Schema.Constraint>(self: R, options: {
     readonly key: string
     readonly schema: S
   }): R & Serializable<S>
-} = dual(2, <R extends Atom<unknown>, A, I>(self: R, options: {
+} = dual(2, <R extends Atom<Top>, A, I>(self: R, options: {
   readonly key: string
   readonly schema: Schema.ConstraintCodec<A, I>
 }): R & Serializable<Schema.ConstraintCodec<A, I>> => {

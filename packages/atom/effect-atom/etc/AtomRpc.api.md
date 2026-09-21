@@ -37,7 +37,7 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any> ex
     // (undocumented)
     readonly mutation: <Tag extends Rpc.Tag<Rpcs>>(arg: Tag) => Rpc.ExtractTag<Rpcs, Tag> extends Rpc.Rpc<infer _Tag, infer _Payload, infer _Success, infer _Error, infer _Middleware, infer _Requires> ? [_Success] extends [RpcSchema.Stream<infer _A, infer _E>] ? never : AtomResultFn<{
         readonly payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>;
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+        readonly reactivityKeys?: ReactivityKey | undefined;
         readonly headers?: Headers_2.Input | undefined;
     }, _Success['Type'], _Error['Type'] | RpcClientError | _Middleware['error']['Type']> : never;
     // Warning: (ae-forgotten-export) The symbol "Writable" needs to be exported by the entry point AtomRpc.d.ts
@@ -48,7 +48,7 @@ export interface AtomRpcClient<Self, Id extends string, Rpcs extends Rpc.Any> ex
     // (undocumented)
     readonly query: <Tag extends Rpc.Tag<Rpcs>>(tag: Tag, payload: Rpc.PayloadConstructor<Rpc.ExtractTag<Rpcs, Tag>>, options?: {
         readonly headers?: Headers_2.Input | undefined;
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+        readonly reactivityKeys?: ReactivityKey | undefined;
         readonly timeToLive?: Duration.Input | undefined;
         readonly serializationKey?: string | undefined;
     }) => Rpc.ExtractTag<Rpcs, Tag> extends Rpc.Rpc<infer _Tag, infer _Payload, infer _Success, infer _Error, infer _Middleware> ? [_Success] extends [RpcSchema.Stream<infer _A, infer _E>] ? Writable<PullResult<_A['Type'], _E['Type'] | _Error['Type'] | RpcClientError | _Middleware['error']['Type']>, void> : Atom<Result<_Success['Type'], _Error['Type'] | RpcClientError | _Middleware['error']['Type']>> : never;
@@ -63,7 +63,7 @@ export const Service: <Self>() => <const Id extends string, Rpcs extends Rpc.Any
     readonly group: RpcGroup.RpcGroup<Rpcs>;
     readonly protocol: Layer.Layer<Exclude<NoInfer_2<RM>, Scope.Scope>, ER> | ((get: AtomContext) => Layer.Layer<Exclude<NoInfer_2<RM>, Scope.Scope>, ER>);
     readonly spanPrefix?: string | undefined;
-    readonly spanAttributes?: Record<string, unknown> | undefined;
+    readonly spanAttributes?: AnyRecord | undefined;
     readonly generateRequestId?: (() => RequestId) | undefined;
     readonly disableTracing?: boolean | undefined;
     readonly makeEffect?: Effect.Effect<RpcClient.RpcClient.Flat<Rpcs, RpcClientError>, never, RM | RpcClient.Protocol | Rpc.MiddlewareClient<Rpcs> | Scope.Scope> | undefined;
@@ -77,8 +77,10 @@ export namespace t {
 
 // Warnings were encountered during analysis:
 //
-// dist/AtomRpc.d.ts:62:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomRpc.d.ts
-// dist/AtomRpc.d.ts:68:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomRpc.d.ts
+// dist/AtomRpc.d.ts:37:5 - (ae-forgotten-export) The symbol "ReactivityKey" needs to be exported by the entry point AtomRpc.d.ts
+// dist/AtomRpc.d.ts:64:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomRpc.d.ts
+// dist/AtomRpc.d.ts:66:3 - (ae-forgotten-export) The symbol "AnyRecord" needs to be exported by the entry point AtomRpc.d.ts
+// dist/AtomRpc.d.ts:70:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomRpc.d.ts
 
 // (No @packageDocumentation comment for this package)
 

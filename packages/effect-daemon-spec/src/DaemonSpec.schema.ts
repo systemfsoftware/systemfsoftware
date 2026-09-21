@@ -27,9 +27,9 @@ export type PollOpts<A, E, R, L extends LockConfig> =
     }
   )
 
-export interface TickPolicyHooks {
+export interface TickPolicyHooks<RetrySchedule = unknown> {
   readonly spanAttributes?: Effect.Effect<Record<string, string | number | boolean>>
-  readonly innerRetry?: Schedule.Schedule<unknown>
+  readonly innerRetry?: Schedule.Schedule<RetrySchedule>
   readonly trackDuration?: Metric.Histogram<Duration.Duration>
 }
 
@@ -43,8 +43,8 @@ export interface PollLoop<E, R> extends PollLoopTag {
   readonly interval: Duration.Input
 }
 
-export interface StreamLoop<E, R> extends StreamLoopTag {
-  readonly stream: Stream.Stream<unknown, E, R>
+export interface StreamLoop<E, R, A = unknown> extends StreamLoopTag {
+  readonly stream: Stream.Stream<A, E, R>
 }
 
 export interface SubscriptionLoop<E, R> extends SubscriptionLoopTag {

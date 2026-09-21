@@ -41,14 +41,14 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
     readonly mutation: <GroupIdentifier extends HttpApiGroup.Identifier<Groups>, EndpointIdentifier extends HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Group>>, Group extends HttpApiGroup.WithIdentifier<Groups, GroupIdentifier> = HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>, Endpoint extends HttpApiEndpoint.WithIdentifier<HttpApiGroup.Endpoints<Group>, EndpointIdentifier> = HttpApiEndpoint.WithIdentifier<HttpApiGroup.Endpoints<Group>, EndpointIdentifier>, const ResponseMode extends HttpApiEndpoint.ClientResponseMode = HttpApiEndpoint.ClientResponseMode>(group: GroupIdentifier, endpoint: EndpointIdentifier, options?: {
         readonly responseMode?: ResponseMode | undefined;
     }) => [Endpoint] extends [HttpApiEndpoint.HttpApiEndpoint<infer _Identifier, infer _Method, infer _Path, infer _Params, infer _Query, infer _Payload, infer _Headers, infer _Success, infer _Error, infer _Middleware, infer _RE>] ? AtomResultFn<Simplify<HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+        readonly reactivityKeys?: ReactivityKeys | undefined;
     }>, ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>, ErrorByMode<_Error, _Middleware, ResponseMode>> : never;
     // Warning: (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point AtomHttpApi.d.ts
     // Warning: (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point AtomHttpApi.d.ts
     //
     // (undocumented)
     readonly query: <GroupIdentifier extends HttpApiGroup.Identifier<Groups>, EndpointIdentifier extends HttpApiEndpoint.Identifier<HttpApiGroup.Endpoints<Group>>, Group extends HttpApiGroup.WithIdentifier<Groups, GroupIdentifier> = HttpApiGroup.WithIdentifier<Groups, GroupIdentifier>, Endpoint extends HttpApiEndpoint.WithIdentifier<HttpApiGroup.Endpoints<Group>, EndpointIdentifier> = HttpApiEndpoint.WithIdentifier<HttpApiGroup.Endpoints<Group>, EndpointIdentifier>, const ResponseMode extends HttpApiEndpoint.ClientResponseMode = 'decoded-only'>(group: GroupIdentifier, endpoint: EndpointIdentifier, request: [Endpoint] extends [HttpApiEndpoint.HttpApiEndpoint<infer _Identifier, infer _Method, infer _Path, infer _Params, infer _Query, infer _Payload, infer _Headers, infer _Success, infer _Error, infer _R, infer _RE>] ? Simplify<HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
-        readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+        readonly reactivityKeys?: ReactivityKeys | undefined;
         readonly timeToLive?: Duration.Input | undefined;
         readonly serializationKey?: string | undefined;
     }> : never) => [Endpoint] extends [HttpApiEndpoint.HttpApiEndpoint<infer _Identifier, infer _Method, infer _Path, infer _Params, infer _Query, infer _Payload, infer _Headers, infer _Success, infer _Error, infer _Middleware, infer _RE>] ? Atom<Result<ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>, ErrorByMode<_Error, _Middleware, ResponseMode>>> : never;
@@ -63,7 +63,7 @@ export const Service: <Self>() => <const Id extends string, ApiId extends string
     readonly api: HttpApi.HttpApi<ApiId, Groups>;
     readonly httpClient: Layer.Layer<HttpApiGroup.ClientServices<Groups> | HttpApiGroup.MiddlewareClient<Groups> | HttpClient.HttpClient> | ((get: AtomContext) => Layer.Layer<HttpApiGroup.ClientServices<Groups> | HttpApiGroup.MiddlewareClient<Groups> | HttpClient.HttpClient>);
     readonly transformClient?: ((client: HttpClient.HttpClient) => HttpClient.HttpClient) | undefined;
-    readonly transformResponse?: ((effect: Effect.Effect<unknown, unknown, unknown>) => Effect.Effect<unknown, unknown, unknown>) | undefined;
+    readonly transformResponse?: ((effect: AnyEffect) => AnyEffect) | undefined;
     readonly baseUrl?: URL | string | undefined;
     readonly runtime?: RuntimeFactory | undefined;
 }) => AtomHttpApiClient<Self, Id, Groups>;
@@ -75,8 +75,10 @@ export namespace t {
 
 // Warnings were encountered during analysis:
 //
-// dist/AtomHttpApi.d.ts:63:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomHttpApi.d.ts
-// dist/AtomHttpApi.d.ts:67:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomHttpApi.d.ts
+// dist/AtomHttpApi.d.ts:38:5 - (ae-forgotten-export) The symbol "ReactivityKeys" needs to be exported by the entry point AtomHttpApi.d.ts
+// dist/AtomHttpApi.d.ts:65:3 - (ae-forgotten-export) The symbol "AtomContext" needs to be exported by the entry point AtomHttpApi.d.ts
+// dist/AtomHttpApi.d.ts:67:3 - (ae-forgotten-export) The symbol "AnyEffect" needs to be exported by the entry point AtomHttpApi.d.ts
+// dist/AtomHttpApi.d.ts:69:3 - (ae-forgotten-export) The symbol "RuntimeFactory" needs to be exported by the entry point AtomHttpApi.d.ts
 
 // (No @packageDocumentation comment for this package)
 

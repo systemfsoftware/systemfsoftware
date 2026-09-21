@@ -25,7 +25,7 @@ import * as Stream from 'effect/Stream';
 import * as SubscriptionRef from 'effect/SubscriptionRef';
 
 // @public
-export interface Atom<A> extends Pipeable, Inspectable {
+export interface Atom<A = unknown> extends Pipeable, Inspectable {
     // (undocumented)
     readonly [TypeId]: TypeId;
     // (undocumented)
@@ -135,28 +135,30 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result<Context.Context<
         <Arg>(): {
             <E, A>(fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry | Reactivity.Reactivity | R>, options?: {
                 readonly initialValue?: A | undefined;
-                readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+                readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined;
                 readonly concurrent?: boolean | undefined;
-            }): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>;
+            }): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn;
             <E, A>(fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>, options?: {
                 readonly initialValue?: A | undefined;
-                readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+                readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined;
                 readonly concurrent?: boolean | undefined;
-            }): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>;
+            }): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn;
         };
         <E, A, Arg = void>(fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry | Reactivity.Reactivity | R>, options?: {
             readonly initialValue?: A | undefined;
-            readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+            readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined;
             readonly concurrent?: boolean | undefined;
-        }): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>;
+        }): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn;
         <E, A, Arg = void>(fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>, options?: {
             readonly initialValue?: A | undefined;
-            readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined;
+            readonly reactivityKeys?: readonly Top[] | ReadonlyRecord<string, readonly Top[]> | undefined;
             readonly concurrent?: boolean | undefined;
-        }): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>;
+        }): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn;
     };
+    // Warning: (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point Atom.d.ts
+    //
     // (undocumented)
-    readonly layer: Atom<Layer.Layer<R, ER, unknown>>;
+    readonly layer: Atom<Layer.Layer<R, ER, Top>>;
     // (undocumented)
     readonly pull: <A, E>(create: ((get: AtomContext) => Stream.Stream<A, E, R | AtomRegistry | Reactivity.Reactivity>) | Stream.Stream<A, E, R | AtomRegistry | Reactivity.Reactivity>, options?: {
         readonly disableAccumulation?: boolean;
@@ -167,7 +169,7 @@ export interface AtomRuntime<R, ER = never> extends Atom<Result<Context.Context<
 }
 
 // @public
-export const autoDispose: <A extends Atom<unknown>>(self: A) => A;
+export const autoDispose: <A extends Atom<Top>>(self: A) => A;
 
 // @public
 export const batch: (f: () => void) => void;
@@ -187,12 +189,14 @@ export function context(options: {
 
 // @public
 export const debounce: {
-    (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => WithoutSerializable<A>;
-    <A extends Atom<unknown>>(self: A, duration: Duration.Input): WithoutSerializable<A>;
+    (duration: Duration.Input): <A extends Atom<Top>>(self: A) => WithoutSerializable<A>;
+    <A extends Atom<Top>>(self: A, duration: Duration.Input): WithoutSerializable<A>;
 };
 
+// Warning: (ae-forgotten-export) The symbol "AnyAtom" needs to be exported by the entry point Atom.d.ts
+//
 // @public
-export type Failure<T extends Atom<unknown>> = T extends Atom<Result<infer _, infer E>> ? E : never;
+export type Failure<T extends AnyAtom> = T extends Atom<Result<infer _, infer E>> ? E : never;
 
 // @public
 export const family: <Arg, T extends object>(f: (arg: Arg) => T) => (arg: Arg) => T;
@@ -238,7 +242,7 @@ export interface FnContext {
         readonly suspendOnWaiting?: boolean | undefined;
     }): Effect.Effect<A, E>;
     // (undocumented)
-    self(this: FnContext): Option_2.Option<unknown>;
+    self(this: FnContext): Option_2.Option<Top>;
     // (undocumented)
     set<R, W>(this: FnContext, atom: Writable<R, W>, value: W): void;
     // (undocumented)
@@ -305,21 +309,23 @@ export const Interrupt: unique symbol;
 // @public
 export type Interrupt = typeof Interrupt;
 
+// Warning: (ae-forgotten-export) The symbol "AnyAtom$3" needs to be exported by the entry point Atom.d.ts
+//
 // @public
-export const isAtom: (u: unknown) => u is Atom<unknown>;
+export const isAtom: (u: unknown) => u is AnyAtom$3;
 
 // @public
-export const isSerializable: (self: Atom<unknown>) => self is Atom<unknown> & Serializable<Schema.Unknown>;
+export const isSerializable: (self: Atom<unknown>) => self is Atom<Top> & Serializable<Schema.Unknown>;
 
 // @public
 export const isWritable: <R, W>(atom: Atom<R>) => atom is Writable<R, W>;
 
 // @public
-export const keepAlive: <A extends Atom<unknown>>(self: A) => A;
+export const keepAlive: <A extends Atom<Top>>(self: A) => A;
 
 // @public
-export function kvs<S extends Schema.ConstraintCodec<unknown, unknown>, const Mode extends 'sync' | 'async' = never>(options: {
-    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, unknown>;
+export function kvs<S extends Schema.ConstraintCodec<Top, Top>, const Mode extends 'sync' | 'async' = never>(options: {
+    readonly runtime: AtomRuntime<KeyValueStore.KeyValueStore, Top>;
     readonly key: string;
     readonly schema: S;
     readonly defaultValue: LazyArg<S['Type']>;
@@ -384,20 +390,22 @@ export function makeRead<A>(create: (get: AtomContext) => A): (get: AtomContext,
 // @public (undocumented)
 export function makeRead<A>(initialValue: A): Writable<A>;
 
+// Warning: (ae-forgotten-export) The symbol "AnyAtom$2" needs to be exported by the entry point Atom.d.ts
+//
 // @public
-export const makeRefreshOnSignal: <S>(signal: Atom<S>) => <A extends Atom<unknown>>(self: A) => WithoutSerializable<A>;
+export const makeRefreshOnSignal: <S>(signal: Atom<S>) => <A extends AnyAtom$2>(self: A) => WithoutSerializable<A>;
 
 // @public
 export const map: {
-    <R extends Atom<unknown>, B>(f: (_: Type<R>) => B): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>;
-    <R extends Atom<unknown>, B>(self: R, f: (_: Type<R>) => B): [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>;
+    <R extends Atom<Top>, B>(f: (_: Type<R>) => B): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>;
+    <R extends Atom<Top>, B>(self: R, f: (_: Type<R>) => B): [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>;
 };
 
 // @public (undocumented)
-export function mapResult<R extends Atom<Result<unknown, unknown>>, B>(f: (_: Result.Success<Type<R>>) => B): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<Result<B, Result.Failure<Type<R>>>, RW> : Atom<Result<B, Result.Failure<Type<R>>>>;
+export function mapResult<R extends Atom<Result<Top, Top>>, B>(f: (_: Result.Success<Type<R>>) => B): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<Result<B, Result.Failure<Type<R>>>, RW> : Atom<Result<B, Result.Failure<Type<R>>>>;
 
 // @public (undocumented)
-export function mapResult<R extends Atom<Result<unknown, unknown>>, B>(self: R, f: (_: Result.Success<Type<R>>) => B): [R] extends [Writable<infer _, infer RW>] ? Writable<Result<B, Result.Failure<Type<R>>>, RW> : Atom<Result<B, Result.Failure<Type<R>>>>;
+export function mapResult<R extends Atom<Result<Top, Top>>, B>(self: R, f: (_: Result.Success<Type<R>>) => B): [R] extends [Writable<infer _, infer RW>] ? Writable<Result<B, Result.Failure<Type<R>>>, RW> : Atom<Result<B, Result.Failure<Type<R>>>>;
 
 // @public
 export const modify: {
@@ -409,15 +417,15 @@ export const modify: {
 export const mount: <A>(self: Atom<A>) => Effect.Effect<void, never, AtomRegistry | Scope.Scope>;
 
 // @public
-export const optimistic: <A>(self: Atom<A>) => Writable<A, Atom<Result<A, unknown>>>;
+export const optimistic: <A>(self: Atom<A>) => Writable<A, Atom<Result<A, Top>>>;
 
 // @public
 export const optimisticFn: {
     <A, W, XA, XE, OW = void>(options: {
         readonly reducer: (current: NoInfer_2<A>, update: OW) => NoInfer_2<W>;
         readonly fn: AtomResultFn<OW, XA, XE> | ((set: (result: NoInfer_2<W>) => void) => AtomResultFn<OW, XA, XE>);
-    }): (self: Writable<A, Atom<Result<W, unknown>>>) => AtomResultFn<OW, XA, XE>;
-    <A, W, XA, XE, OW = void>(self: Writable<A, Atom<Result<W, unknown>>>, options: {
+    }): (self: Writable<A, Atom<Result<W, Top>>>) => AtomResultFn<OW, XA, XE>;
+    <A, W, XA, XE, OW = void>(self: Writable<A, Atom<Result<W, Top>>>, options: {
         readonly reducer: (current: NoInfer_2<A>, update: OW) => NoInfer_2<W>;
         readonly fn: AtomResultFn<OW, XA, XE> | ((set: (result: NoInfer_2<W>) => void) => AtomResultFn<OW, XA, XE>);
     }): AtomResultFn<OW, XA, XE>;
@@ -435,7 +443,7 @@ export type PullResult<A, E = never> = Result<{
 }, E | Cause.NoSuchElementError>;
 
 // @public
-export type PullSuccess<T extends Atom<unknown>> = T extends Atom<PullResult<infer A, infer _>> ? A : never;
+export type PullSuccess<T extends AnyAtom> = T extends Atom<PullResult<infer A, infer _>> ? A : never;
 
 // @public
 export const readable: <A>(read: (get: AtomContext) => A, refresh?: (f: <A_1>(atom: Atom<A_1>) => void) => void) => Atom<A>;
@@ -444,7 +452,7 @@ export const readable: <A>(read: (get: AtomContext) => A, refresh?: (f: <A_1>(at
 export const refresh: <A>(self: Atom<A>) => Effect.Effect<void, never, AtomRegistry>;
 
 // @public
-export const refreshOnWindowFocus: <A extends Atom<unknown>>(self: A) => WithoutSerializable<A>;
+export const refreshOnWindowFocus: <A extends AnyAtom$2>(self: A) => WithoutSerializable<A>;
 
 // @public
 export interface RegistryRuntimeFactory extends RuntimeFactory {
@@ -464,14 +472,16 @@ export const runtime: RegistryRuntimeFactory;
 // @public
 export interface RuntimeFactory {
     // (undocumented)
-    <R, E>(create: Layer.Layer<R, E, unknown> | ((get: AtomContext) => Layer.Layer<R, E, unknown>)): AtomRuntime<R, E>;
+    <R, E>(create: Layer.Layer<R, E, Top> | ((get: AtomContext) => Layer.Layer<R, E, Top>)): AtomRuntime<R, E>;
     // (undocumented)
     readonly addGlobalLayer: <A, E>(layer: Layer.Layer<A, E, AtomRegistry | Reactivity.Reactivity>) => void;
-    readonly withReactivity: (keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>) => <A extends Atom<unknown>>(atom: A) => A;
+    readonly withReactivity: (keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>) => <A extends Atom<Top>>(atom: A) => A;
 }
 
+// Warning: (ae-forgotten-export) The symbol "StringCodec" needs to be exported by the entry point Atom.d.ts
+//
 // @public
-export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = never>(name: string, options?: {
+export function searchParam<S extends StringCodec = never>(name: string, options?: {
     readonly schema?: S | undefined;
 }): Writable<[S] extends [never] ? string : Option_2.Option<S['Type']>>;
 
@@ -487,11 +497,11 @@ export interface Serializable<S extends Schema.Constraint> {
 
 // @public
 export const serializable: {
-    <R extends Atom<unknown>, S extends Schema.Constraint>(options: {
+    <R extends Atom<Top>, S extends Schema.Constraint>(options: {
         readonly key: string;
         readonly schema: S;
     }): (self: R) => R & Serializable<S>;
-    <R extends Atom<unknown>, S extends Schema.Constraint>(self: R, options: {
+    <R extends Atom<Top>, S extends Schema.Constraint>(self: R, options: {
         readonly key: string;
         readonly schema: S;
     }): R & Serializable<S>;
@@ -524,14 +534,14 @@ export const set: {
 
 // @public
 export const setIdleTTL: {
-    (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => A;
-    <A extends Atom<unknown>>(self: A, duration: Duration.Input): A;
+    (duration: Duration.Input): <A extends AnyAtom$3>(self: A) => A;
+    <A extends AnyAtom$3>(self: A, duration: Duration.Input): A;
 };
 
 // @public
 export const setLazy: {
-    (lazy: boolean): <A extends Atom<unknown>>(self: A) => A;
-    <A extends Atom<unknown>>(self: A, lazy: boolean): A;
+    (lazy: boolean): <A extends Atom<Top>>(self: A) => A;
+    <A extends Atom<Top>>(self: A, lazy: boolean): A;
 };
 
 // @public
@@ -542,12 +552,12 @@ export interface SharedRuntimeFactory extends RuntimeFactory {
 
 // @public
 export const subscriptionRef: {
-    <A>(ref: SubscriptionRef.SubscriptionRef<A> | ((get: AtomContext) => SubscriptionRef.SubscriptionRef<A>)): Writable<A> | Writable<unknown, unknown>;
-    <A, E>(effect: Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry> | ((get: AtomContext) => Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>)): Writable<Result<A, E | Cause.NoSuchElementError>, A> | Writable<unknown, unknown>;
+    <A>(ref: SubscriptionRef.SubscriptionRef<A> | ((get: AtomContext) => SubscriptionRef.SubscriptionRef<A>)): Writable<A> | Writable<Top, Top>;
+    <A, E>(effect: Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry> | ((get: AtomContext) => Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>)): Writable<Result<A, E | Cause.NoSuchElementError>, A> | Writable<Top, Top>;
 };
 
 // @public
-export type Success<T extends Atom<unknown>> = T extends Atom<Result<infer A, infer _>> ? A : never;
+export type Success<T extends AnyAtom> = T extends Atom<Result<infer A, infer _>> ? A : never;
 
 // @public
 export const swr: {
@@ -555,13 +565,13 @@ export const swr: {
         readonly staleTime: Duration.Input;
         readonly revalidateOnMount?: boolean | undefined;
         readonly revalidateOnFocus?: boolean | 'always' | undefined;
-        readonly focusSignal?: Atom<unknown> | undefined;
-    }): <R extends Atom<Result<unknown, unknown>>>(self: R) => WithoutSerializable<R>;
-    <R extends Atom<Result<unknown, unknown>>>(self: R, options: {
+        readonly focusSignal?: Atom<Top> | undefined;
+    }): <R extends Atom<Result<Top, Top>>>(self: R) => WithoutSerializable<R>;
+    <R extends Atom<Result<Top, Top>>>(self: R, options: {
         readonly staleTime: Duration.Input;
         readonly revalidateOnMount?: boolean | undefined;
         readonly revalidateOnFocus?: boolean | 'always' | undefined;
-        readonly focusSignal?: Atom<unknown> | undefined;
+        readonly focusSignal?: Atom<Top> | undefined;
     }): WithoutSerializable<R>;
 };
 
@@ -573,16 +583,16 @@ export const toStreamResult: <A, E>(self: Atom<Result<A, E>>) => Stream.Stream<A
 
 // @public
 export const transform: {
-    <R extends Atom<unknown>, B>(f: (get: AtomContext, atom: R) => B, options?: {
+    <R extends AnyAtom$3, B>(f: (get: AtomContext, atom: R) => B, options?: {
         readonly initialValueTarget?: Atom<B> | undefined;
     }): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>;
-    <R extends Atom<unknown>, B>(self: R, f: (get: AtomContext, atom: R) => B, options?: {
+    <R extends AnyAtom$3, B>(self: R, f: (get: AtomContext, atom: R) => B, options?: {
         readonly initialValueTarget?: Atom<B> | undefined;
     }): [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>;
 };
 
 // @public
-export type Type<T extends Atom<unknown>> = T extends Atom<infer A> ? A : never;
+export type Type<T extends AnyAtom> = T extends Atom<infer A> ? A : never;
 
 // @public
 export type TypeId = '~effect/reactivity/Atom';
@@ -602,41 +612,43 @@ export const windowFocusSignal: Atom<number>;
 // @public
 export const withEquality: {
     <A>(equals: (value: A, next: A) => boolean): <T extends Atom<A>>(self: T) => T;
-    <T extends Atom<unknown>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T;
+    <T extends Atom<Top>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T;
 };
 
 // @public
 export const withFallback: {
-    <E2, A2>(fallback: Atom<Result<A2, E2>>): <R extends Atom<Result<unknown, unknown>>>(self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<Result<unknown, unknown> | Result<A2, E2>, RW> : Atom<Result<unknown, unknown> | Result<A2, E2>>;
-    <R extends Atom<Result<unknown, unknown>>, A2, E2>(self: R, fallback: Atom<Result<A2, E2>>): [R] extends [Writable<infer _, infer RW>] ? Writable<Result<unknown, unknown> | Result<A2, E2>, RW> : Atom<Result<unknown, unknown> | Result<A2, E2>>;
+    <E2, A2>(fallback: Atom<Result<A2, E2>>): <R extends Atom<Result<Top, Top>>>(self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<Result<Top, Top> | Result<A2, E2>, RW> : Atom<Result<Top, Top> | Result<A2, E2>>;
+    <R extends Atom<Result<Top, Top>>, A2, E2>(self: R, fallback: Atom<Result<A2, E2>>): [R] extends [Writable<infer _, infer RW>] ? Writable<Result<Top, Top> | Result<A2, E2>, RW> : Atom<Result<Top, Top> | Result<A2, E2>>;
 };
 
 // @public
 export const withLabel: {
-    (name: string): <A extends Atom<unknown>>(self: A) => A;
-    <A extends Atom<unknown>>(self: A, name: string): A;
+    (name: string): <A extends Atom<Top>>(self: A) => A;
+    <A extends Atom<Top>>(self: A, name: string): A;
 };
 
 // @public
-export type WithoutSerializable<T extends Atom<unknown>> = T extends Writable<infer R, infer W> ? Writable<R, W> : Atom<Type<T>>;
+export type WithoutSerializable<T extends AnyAtom> = T extends Writable<infer R, infer W> ? Writable<R, W> : Atom<Type<T>>;
 
 // @public
-export const withReactivity: (keys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>) => <A extends Atom<unknown>>(atom: A) => A;
+export const withReactivity: (keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>) => <A extends Atom<Top>>(atom: A) => A;
 
 // @public
 export const withRefresh: {
-    (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => WithoutSerializable<A>;
-    <A extends Atom<unknown>>(self: A, duration: Duration.Input): WithoutSerializable<A>;
+    (duration: Duration.Input): <A extends Atom<Top>>(self: A) => WithoutSerializable<A>;
+    <A extends Atom<Top>>(self: A, duration: Duration.Input): WithoutSerializable<A>;
 };
 
 // @public
 export const withServerValue: {
-    <A extends Atom<unknown>>(read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): (self: A) => A;
-    <A extends Atom<unknown>>(self: A, read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): A;
+    <A extends AnyAtom$1>(read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): (self: A) => A;
+    <A extends AnyAtom$1>(self: A, read: (get: <A2>(atom: Atom<A2>) => A2) => Type<A>): A;
 };
 
+// Warning: (ae-forgotten-export) The symbol "AnyAsyncResultAtom" needs to be exported by the entry point Atom.d.ts
+//
 // @public
-export const withServerValueInitial: <A extends Atom<Result<unknown, unknown>>>(self: A) => A;
+export const withServerValueInitial: <A extends AnyAsyncResultAtom>(self: A) => A;
 
 // @public
 export interface Writable<R, W = R> extends Atom<R> {
@@ -669,7 +681,9 @@ export interface WriteContext<A> {
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-CyTEJlYL.d.ts:663:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CNcOgrn0.d.ts:490:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CNcOgrn0.d.ts:673:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CNcOgrn0.d.ts:690:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
 
 // (No @packageDocumentation comment for this package)
 

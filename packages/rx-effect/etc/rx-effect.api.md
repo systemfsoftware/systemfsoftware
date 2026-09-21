@@ -8,7 +8,10 @@ import * as Rx from 'rxjs';
 import { Stream } from 'effect';
 
 // @public (undocumented)
-export const fromObservable: <E>(onError: (error: unknown) => E) => <A>(observable: Rx.Observable<A>) => Stream.Stream<A, E>;
+export type AnyError<U = unknown> = U;
+
+// @public (undocumented)
+export const fromObservable: <E>(onError: (error: AnyError) => E) => <A>(observable: Rx.Observable<A>) => Stream.Stream<A, E>;
 
 // (No @packageDocumentation comment for this package)
 

@@ -57,12 +57,16 @@ export {
 }
 export type { Failure, Initial, Result, Success } from './ResultValues.js'
 
+type AnyResult<A = unknown, E = unknown> = Result<A, E>
+type AnySuccess<A = unknown, E = unknown> = Success<A, E>
+type Top<A = unknown> = A
+
 /**
  * Rebuilds an `Result` with new success and failure types while preserving the variant of another result.
  *
  * @since 4.0.0
  */
-export type With<R extends Result<unknown, unknown>, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E>
+export type With<R extends AnyResult, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E>
   : R extends Success<infer _A, infer _E> ? Success<A, E>
   : R extends Failure<infer _A, infer _E> ? Failure<A, E>
   : never
@@ -207,14 +211,14 @@ type TouchOptions = {
   readonly touch?: boolean | undefined
 }
 
-const maybeTouchDefined = <R extends Result<unknown, unknown>>(self: R, options: TouchOptions): R => {
+const maybeTouchDefined = <R extends AnyResult>(self: R, options: TouchOptions): R => {
   if (options.touch === true) {
     return touch(self)
   }
   return self
 }
 
-const maybeTouch = <R extends Result<unknown, unknown>>(self: R, options: TouchOptions | undefined): R => {
+const maybeTouch = <R extends AnyResult>(self: R, options: TouchOptions | undefined): R => {
   if (options === undefined) {
     return self
   }
@@ -226,7 +230,7 @@ const maybeTouch = <R extends Result<unknown, unknown>>(self: R, options: TouchO
  *
  * @since 4.0.0
  */
-export const waiting = <R extends Result<unknown, unknown>>(self: R, options?: {
+export const waiting = <R extends AnyResult>(self: R, options?: {
   readonly touch?: boolean | undefined
 }): R => {
   if (self.waiting) {
@@ -240,7 +244,7 @@ export const waiting = <R extends Result<unknown, unknown>>(self: R, options?: {
  *
  * @since 4.0.0
  */
-export const touch = <A extends Result<unknown, unknown>>(result: A): A => {
+export const touch = <A extends AnyResult>(result: A): A => {
   if (isSuccess(result)) {
     return { ...result, timestamp: Effect.runSync(Clock.currentTimeMillis) }
   }
@@ -253,14 +257,14 @@ export const touch = <A extends Result<unknown, unknown>>(result: A): A => {
  *
  * @since 4.0.0
  */
-export function replacePrevious<R extends Result<unknown, unknown>, XE, A>(
+export function replacePrevious<R extends AnyResult, XE, A>(
   self: R,
   previous: Option.Option<Result<A, XE>>,
 ): With<R, A, Result.Failure<R>>
-export function replacePrevious(
-  self: Result<unknown, unknown>,
-  previous: Option.Option<Result<unknown, unknown>>,
-): Result<unknown, unknown> {
+export function replacePrevious<A = unknown, E = unknown, XA = unknown>(
+  self: Result<A, E>,
+  previous: Option.Option<Result<XA, E>>,
+): AnyResult {
   if (isFailure(self)) {
     return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
   }
@@ -475,7 +479,7 @@ export const match: {
 
 type ErrorHandlers<A, E, X, Y> = {
   readonly onError: (error: E, _: Failure<A, E>) => X
-  readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+  readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
 }
 
 const matchFailureErrorOrDefect = <A, E, X, Y>(
@@ -513,19 +517,19 @@ export const matchWithError: {
   <A, E, W, X, Y, Z>(options: {
     readonly onInitial: (_: Initial<A, E>) => W
     readonly onError: (error: E, _: Failure<A, E>) => X
-    readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+    readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
     readonly onSuccess: (_: Success<A, E>) => Z
   }): (self: Result<A, E>) => W | X | Y | Z
   <A, E, W, X, Y, Z>(self: Result<A, E>, options: {
     readonly onInitial: (_: Initial<A, E>) => W
     readonly onError: (error: E, _: Failure<A, E>) => X
-    readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+    readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
     readonly onSuccess: (_: Success<A, E>) => Z
   }): W | X | Y | Z
 } = dual(2, <A, E, W, X, Y, Z>(self: Result<A, E>, options: {
   readonly onInitial: (_: Initial<A, E>) => W
   readonly onError: (error: E, _: Failure<A, E>) => X
-  readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+  readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
   readonly onSuccess: (_: Success<A, E>) => Z
 }): W | X | Y | Z => {
   if (isSuccess(self)) {
@@ -568,19 +572,19 @@ export const matchWithWaiting: {
   <A, E, W, X, Y, Z>(options: {
     readonly onWaiting: (_: Result<A, E>) => W
     readonly onError: (error: E, _: Failure<A, E>) => X
-    readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+    readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
     readonly onSuccess: (_: Success<A, E>) => Z
   }): (self: Result<A, E>) => W | X | Y | Z
   <A, E, W, X, Y, Z>(self: Result<A, E>, options: {
     readonly onWaiting: (_: Result<A, E>) => W
     readonly onError: (error: E, _: Failure<A, E>) => X
-    readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+    readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
     readonly onSuccess: (_: Success<A, E>) => Z
   }): W | X | Y | Z
 } = dual(2, <A, E, W, X, Y, Z>(self: Result<A, E>, options: {
   readonly onWaiting: (_: Result<A, E>) => W
   readonly onError: (error: E, _: Failure<A, E>) => X
-  readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y
+  readonly onDefect: (defect: Top, _: Failure<A, E>) => Y
   readonly onSuccess: (_: Success<A, E>) => Z
 }): W | X | Y | Z => {
   if (self.waiting) {
@@ -594,55 +598,55 @@ export const matchWithWaiting: {
  *
  * @since 4.0.0
  */
-type AllSuccess<Arg> = [Arg] extends [readonly unknown[]] ? {
+type AllSuccess<Arg> = [Arg] extends [readonly Top[]] ? {
     -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
   }
   : [Arg] extends [Iterable<infer _A>] ? _A extends Result<infer _AA, infer _E> ? _AA : _A
-  : [Arg] extends [Record<string, unknown>] ? {
+  : [Arg] extends [Record<string, Top>] ? {
       -readonly [K in keyof Arg]: [Arg[K]] extends [Result<infer _A, infer _E>] ? _A : Arg[K]
     }
   : never
 
-type AllError<Arg> = [Arg] extends [readonly unknown[]] ? Result.Failure<Arg[number]>
+type AllError<Arg> = [Arg] extends [readonly Top[]] ? Result.Failure<Arg[number]>
   : [Arg] extends [Iterable<infer _A>] ? Result.Failure<_A>
-  : [Arg] extends [Record<string, unknown>] ? Result.Failure<Arg[keyof Arg]>
+  : [Arg] extends [Record<string, Top>] ? Result.Failure<Arg[keyof Arg]>
   : never
 
-export function all<const Arg extends Iterable<unknown> | Record<string, unknown>>(
+export function all<const Arg extends Iterable<Top> | Record<string, Top>>(
   results: Arg,
 ): Result<AllSuccess<Arg>, AllError<Arg>>
-export function all(results: Iterable<unknown> | Record<string, unknown>): Result<unknown, unknown> {
+export function all<T = unknown>(results: Iterable<T> | Record<string, T>): AnyResult {
   return allImpl(results)
 }
 
 type CollectDone = {
   readonly done: true
-  readonly result: Result<unknown, unknown>
+  readonly result: AnyResult
 }
 
 type CollectContinue = {
   readonly done: false
   readonly waiting: boolean
-  readonly value: unknown
+  readonly value: Top
 }
 
 type CollectOutcome = CollectDone | CollectContinue
 
-const collectSuccessItem = (result: Success<unknown, unknown>, waiting: boolean): CollectContinue => {
+const collectSuccessItem = (result: AnySuccess, waiting: boolean): CollectContinue => {
   if (result.waiting) {
     return { done: false, waiting: true, value: result.value }
   }
   return { done: false, waiting, value: result.value }
 }
 
-const collectResultItem = (result: Result<unknown, unknown>, waiting: boolean): CollectOutcome => {
+const collectResultItem = (result: AnyResult, waiting: boolean): CollectOutcome => {
   if (!isSuccess(result)) {
     return { done: true, result }
   }
   return collectSuccessItem(result, waiting)
 }
 
-const collectItem = (result: unknown, waiting: boolean): CollectOutcome => {
+const collectItem = <T = unknown>(result: T, waiting: boolean): CollectOutcome => {
   if (!isResult(result)) {
     return { done: false, waiting, value: result }
   }
@@ -651,8 +655,8 @@ const collectItem = (result: unknown, waiting: boolean): CollectOutcome => {
 
 type AllArrayState = {
   waiting: boolean
-  early: Result<unknown, unknown> | undefined
-  successes: unknown[]
+  early: AnyResult | undefined
+  successes: Top[]
 }
 
 const applyArrayContinue = (state: AllArrayState, outcome: CollectContinue): void => {
@@ -668,21 +672,21 @@ const applyArrayOutcome = (state: AllArrayState, outcome: CollectOutcome): void 
   applyArrayContinue(state, outcome)
 }
 
-const collectIntoArray = (state: AllArrayState, result: unknown): void => {
+const collectIntoArray = <T = unknown>(state: AllArrayState, result: T): void => {
   if (state.early !== undefined) {
     return
   }
   applyArrayOutcome(state, collectItem(result, state.waiting))
 }
 
-const finishArray = (state: AllArrayState): Result<unknown, unknown> => {
+const finishArray = (state: AllArrayState): AnyResult => {
   if (state.early !== undefined) {
     return state.early
   }
   return success(state.successes, { waiting: state.waiting })
 }
 
-const allIterable = (results: Iterable<unknown>): Result<unknown, unknown> => {
+const allIterable = <T = unknown>(results: Iterable<T>): AnyResult => {
   const state: AllArrayState = { waiting: false, early: undefined, successes: [] }
   for (const result of results) {
     collectIntoArray(state, result)
@@ -692,8 +696,8 @@ const allIterable = (results: Iterable<unknown>): Result<unknown, unknown> => {
 
 type AllRecordState = {
   waiting: boolean
-  early: Result<unknown, unknown> | undefined
-  successes: Record<string, unknown>
+  early: AnyResult | undefined
+  successes: Record<string, Top>
 }
 
 const applyRecordContinue = (state: AllRecordState, key: string, outcome: CollectContinue): void => {
@@ -709,21 +713,21 @@ const applyRecordOutcome = (state: AllRecordState, key: string, outcome: Collect
   applyRecordContinue(state, key, outcome)
 }
 
-const collectIntoRecord = (state: AllRecordState, key: string, result: unknown): void => {
+const collectIntoRecord = <T = unknown>(state: AllRecordState, key: string, result: T): void => {
   if (state.early !== undefined) {
     return
   }
   applyRecordOutcome(state, key, collectItem(result, state.waiting))
 }
 
-const finishRecord = (state: AllRecordState): Result<unknown, unknown> => {
+const finishRecord = (state: AllRecordState): AnyResult => {
   if (state.early !== undefined) {
     return state.early
   }
   return success(state.successes, { waiting: state.waiting })
 }
 
-const allRecord = (results: Record<string, unknown>): Result<unknown, unknown> => {
+const allRecord = <T = unknown>(results: Record<string, T>): AnyResult => {
   const state: AllRecordState = { waiting: false, early: undefined, successes: {} }
   for (const [key, result] of Object.entries(results)) {
     collectIntoRecord(state, key, result)
@@ -731,14 +735,14 @@ const allRecord = (results: Record<string, unknown>): Result<unknown, unknown> =
   return finishRecord(state)
 }
 
-const allImpl = (results: Iterable<unknown> | Record<string, unknown>): Result<unknown, unknown> => {
+const allImpl = <T = unknown>(results: Iterable<T> | Record<string, T>): AnyResult => {
   if (isIterable(results)) {
     return allIterable(results)
   }
   return allRecord(results)
 }
 
-type BuilderFor<A extends Result<unknown, unknown>> = Builder<
+type BuilderFor<A extends AnyResult> = Builder<
   never,
   A extends Success<infer _A, infer _E> ? _A : never,
   A extends Failure<infer _A, infer _E> ? _E : never,
@@ -751,7 +755,7 @@ type BuilderFor<A extends Result<unknown, unknown>> = Builder<
  *
  * @since 4.0.0
  */
-export function builder<A extends Result<unknown, unknown>>(self: A): BuilderFor<A>
+export function builder<A extends AnyResult>(self: A): BuilderFor<A>
 /**
  * The implementation signature is erased because `Builder` is a phantom state
  * machine and `BuilderImpl` is not. `Builder` records what has been handled in
@@ -761,8 +765,8 @@ export function builder<A extends Result<unknown, unknown>>(self: A): BuilderFor
  * to `BuilderFor` (measured: TS2322 through `onWaiting` into `onErrorIf`). The
  * declaration above is the contract; the class is the mechanism.
  */
-export function builder(self: Result<unknown, unknown>): unknown {
-  return new BuilderImpl<never, unknown, unknown>(self)
+export function builder(self: AnyResult): Top {
+  return new BuilderImpl<never, Top, Top>(self)
 }
 
 /**
@@ -799,17 +803,17 @@ export type Builder<Out, A, E, I, F> =
   & ([A | E | I | F] extends [never] ? {
       exhaustive(): Out
     }
-    : unknown)
-  & ([I] extends [never] ? unknown
+    : Top)
+  & ([I] extends [never] ? Top
     : {
       onInitial<B>(f: (result: Initial<A, E>) => B): Builder<Out | B, A, E, never, F>
       onInitialOrWaiting<B>(f: (result: Result<A, E>) => B): Builder<Out | B, A, E, never, F>
     })
-  & ([A] extends [never] ? unknown
+  & ([A] extends [never] ? Top
     : {
       onSuccess<B>(f: (value: A, result: Success<A, E>) => B): Builder<Out | B, never, E, I, F>
     })
-  & ([E] extends [never] ? unknown : {
+  & ([E] extends [never] ? Top : {
     onError<B>(f: (error: E, result: Failure<A, E>) => B): Builder<Out | B, A, never, I, F>
 
     onErrorIf<B extends E, C>(
@@ -830,7 +834,7 @@ export type Builder<Out, A, E, I, F> =
       f: (error: Types.ExtractTag<E, Tag>, result: Failure<A, E>) => B,
     ): Builder<Out | B, A, Types.ExcludeTag<E, Tag>, I, F>
   })
-  & ([E | F] extends [never] ? unknown : {
+  & ([E | F] extends [never] ? Top : {
     onFailure<B>(f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B): Builder<Out | B, A, never, I, never>
   })
   & (Interrupt extends F ? {
@@ -838,13 +842,13 @@ export type Builder<Out, A, E, I, F> =
         f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B,
       ): Builder<Out | B, A, E, I, Exclude<F, Interrupt>>
     }
-    : unknown)
+    : Top)
   & (Defect extends F ? {
-      onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): Builder<Out | B, A, E, I, Exclude<F, Defect>>
+      onDefect<B>(f: (defect: Top, result: Failure<A, E>) => B): Builder<Out | B, A, E, I, Exclude<F, Defect>>
     }
-    : unknown)
+    : Top)
 
-const errorMatchesTag = (tag: string | readonly string[], e: unknown): boolean => {
+const errorMatchesTag = <E = unknown>(tag: string | readonly string[], e: E): boolean => {
   if (typeof tag === 'string') {
     return isTagged(e, tag)
   }
@@ -853,7 +857,7 @@ const errorMatchesTag = (tag: string | readonly string[], e: unknown): boolean =
 
 const defectOption = <A, E, B>(
   result: Failure<A, E>,
-  f: (defect: unknown, result: Failure<A, E>) => B,
+  f: (defect: Top, result: Failure<A, E>) => B,
 ): Option.Option<B> => {
   const defect = Cause.findDefect(result.cause)
   if (Either.isFailure(defect)) {
@@ -879,7 +883,7 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
     this.result = result
   }
   readonly result: Result<A, E>
-  private output: Option.Option<unknown> = Option.none()
+  private output: Option.Option<Top> = Option.none()
 
   when<B extends Result<A, E>, C>(
     refinement: Refinement<Result<A, E>, B>,
@@ -908,7 +912,7 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
     }
   }
 
-  private captureWhen(value: Option.Option<unknown>): void {
+  private captureWhen(value: Option.Option<Top>): void {
     if (Option.isSome(value)) {
       this.output = value
     }
@@ -959,7 +963,7 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
     )
   }
 
-  onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onDefect<B>(f: (defect: Top, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (result) => defectOption(result, f))
   }
 
@@ -968,24 +972,24 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
   }
 
   orElse<B>(orElse: LazyArg<B>): Out | B
-  orElse(orElse: LazyArg<unknown>): unknown {
+  orElse(orElse: LazyArg<Top>): Top {
     return Option.getOrElse(this.output, orElse)
   }
 
   orNull(): Out | null
-  orNull(): unknown {
+  orNull(): Top {
     return Option.getOrNull(this.output)
   }
 
   render(): Out | null
-  render(): unknown {
+  render(): Top {
     if (Option.isSome(this.output)) {
       return this.output.value
     }
     return this.renderMissing()
   }
 
-  private renderMissing(): unknown {
+  private renderMissing(): Top {
     if (isFailure(this.result)) {
       throw Cause.squash(this.result.cause)
     }
@@ -993,7 +997,7 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
   }
 
   exhaustive(): Out
-  exhaustive(): unknown {
+  exhaustive(): Top {
     return this.render()
   }
 }

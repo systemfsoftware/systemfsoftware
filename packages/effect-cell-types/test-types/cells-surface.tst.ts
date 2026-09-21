@@ -13,6 +13,9 @@ import { CommandRefused, TaggedCmd } from '../tests/__fixtures__/Command.schema.
 import { type Decision as TotalDecision, DecisionError } from '../tests/__fixtures__/Decision.schema.js'
 import { totalAdmitTaggedCommand } from '../tests/__fixtures__/total-admit-tagged-command.workflow.js'
 
+type Top<A = unknown> = A
+type TopCell<A, E = never, R = never, I = unknown> = Cell.Cell<I, A, E, R>
+
 interface Cmd {
   readonly id: string
 }
@@ -171,12 +174,12 @@ describe('the refusal the error channel excludes', () => {
 describe('the chains the surface refuses', () => {
   it('Should_RefuseTheWrite_When_DecodeArrivesWithoutEncode', () => {
     expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
-      readonly write: unknown
+      readonly write: Top
     }>()
   })
 
   it('Should_RefuseTheEncode_When_EncodeArrivesWithoutDecode', () => {
-    expect(Sandwich.read(read).decide(decideOverRaw)).type.not.toBeAssignableTo<{ readonly encode: unknown }>()
+    expect(Sandwich.read(read).decide(decideOverRaw)).type.not.toBeAssignableTo<{ readonly encode: Top }>()
   })
 
   it('Should_RefuseTheDecide_When_TheDecideIsNotAWorkflow', () => {
@@ -395,7 +398,7 @@ describe('the variance the Cell carries', () => {
 
 describe('the record API the surface retired', () => {
   it('Should_ExposeNoLayer_When_TheChainIsTheOnlyConstructor', () => {
-    expect<typeof Cell>().type.not.toBeAssignableTo<{ readonly layer: unknown }>()
+    expect<typeof Cell>().type.not.toBeAssignableTo<{ readonly layer: Top }>()
   })
 
   it('Should_ExposeNoBagMachinery_When_TheAssemblerWentInternal', () => {
@@ -445,7 +448,7 @@ describe('the sandwich chain the continuation surface builds', () => {
     expect(lawful).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
-    expect(Sandwich.read(read)).type.not.toBeAssignableTo<{ readonly write: unknown }>()
+    expect(Sandwich.read(read)).type.not.toBeAssignableTo<{ readonly write: Top }>()
   })
 
   it('Should_RefuseTheWrite_When_DecideOnADecodedChainSkipsEncode', () => {
@@ -460,7 +463,7 @@ describe('the sandwich chain the continuation surface builds', () => {
     Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(Sandwich.pure(encodeResult))
     // write is not lawful before encode on a decoded chain
     expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
-      readonly write: unknown
+      readonly write: Top
     }>()
   })
 
@@ -521,16 +524,16 @@ describe('the sandwich chain the continuation surface builds', () => {
 
 describe('the constructor arrows', () => {
   it('Should_LiftTheConstant_When_Succeeding', () => {
-    expect(Cell.succeed(7)).type.toBe<Cell.Cell<unknown, number, never, never>>()
+    expect(Cell.succeed(7)).type.toBe<TopCell<number>>()
     expect(Cell.succeed(7).run(command)).type.toBe<Effect<number, never, never>>()
   })
 
   it('Should_LiftTheFailure_When_Failing', () => {
-    expect(Cell.fail(readErr)).type.toBe<Cell.Cell<unknown, never, ReadErr, never>>()
+    expect(Cell.fail(readErr)).type.toBe<TopCell<never, ReadErr>>()
   })
 
   it('Should_CarryTheChannels_When_LiftingAnEffect', () => {
-    expect(Cell.fromEffect(lifted)).type.toBe<Cell.Cell<unknown, string, ReadErr, Db>>()
+    expect(Cell.fromEffect(lifted)).type.toBe<TopCell<string, ReadErr, Db>>()
   })
 
   it('Should_DeferConstruction_When_Suspending', () => {
@@ -543,13 +546,13 @@ describe('the constructor arrows', () => {
   })
 
   it('Should_AcceptAnyInput_When_SupplyingAConstant', () => {
-    expect(Cell.succeed(7)).type.toBe<Cell.Cell<unknown, number, never, never>>()
-    expect<Cell.Cell<unknown, number, never, never>>().type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+    expect(Cell.succeed(7)).type.toBe<TopCell<number>>()
+    expect<TopCell<number>>().type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
   })
 
   it('Should_AcceptAnyInput_When_LiftingAnEffect', () => {
-    expect(Cell.fromEffect(succeedSeven)).type.toBe<Cell.Cell<unknown, number, never, never>>()
-    expect<Cell.Cell<unknown, number, never, never>>().type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
+    expect(Cell.fromEffect(succeedSeven)).type.toBe<TopCell<number>>()
+    expect<TopCell<number>>().type.toBeAssignableTo<Cell.Cell<Cmd, number, never, never>>()
   })
 })
 
@@ -693,7 +696,7 @@ describe('the sequencing arrows and the match destructor', () => {
 
 describe('the Do chain over the TypeLambda', () => {
   it('Should_TypeDoAsContravariantInputUnknown_When_Initialized', () => {
-    expect(Cell.Do).type.toBe<Cell.Cell<unknown, {}, never, never>>()
+    expect(Cell.Do).type.toBe<TopCell<{}>>()
   })
 
   it('Should_AccumulateTheRecord_When_BindingOntoDo', () => {

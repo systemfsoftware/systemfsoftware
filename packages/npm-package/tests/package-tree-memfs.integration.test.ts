@@ -5,7 +5,7 @@ import { Effect, Exit, Layer } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
-const jsonString = (value: unknown): string => JSON.stringify(value)
+const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
 
 const volumeOf = (contents: DirectoryJSON): Contents => {
   const volume: Contents = {}
