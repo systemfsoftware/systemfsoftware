@@ -4,7 +4,7 @@ import { defineConfig } from 'tsdown'
 type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
-  '.': './dist/effect-microsandbox.d.ts',
+  '.': './dist/mod.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -37,6 +37,7 @@ export default defineConfig({
   deps: {
     onlyBundle: false,
   },
+  define: { 'import.meta.vitest': 'undefined' },
   exports: {
     devExports: '@systemfsoftware/source',
     customExports: injectTypes,

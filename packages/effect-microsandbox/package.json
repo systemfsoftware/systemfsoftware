@@ -29,7 +29,7 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-microsandbox.d.ts",
+      "types": "./dist/mod.d.ts",
       "default": "./dist/mod.mjs"
     },
     "./package.json": "./package.json"
@@ -88,20 +88,10 @@
     "provenance": true,
     "exports": {
       ".": {
-        "types": "./dist/effect-microsandbox.d.ts",
+        "types": "./dist/mod.d.ts",
         "default": "./dist/mod.mjs"
       },
       "./package.json": "./package.json"
     }
-  },
-  "inlinedDependencies": {
-    "@effect/vitest": "4.0.0-rc.116",
-    "@jridgewell/sourcemap-codec": "1.6.0",
-    "chai": "6.2.2",
-    "expect-type": "1.4.0",
-    "magic-string": "1.4.1",
-    "tinybench": "6.1.4",
-    "vite": "8.2.1",
-    "vitest": "5.0.1"
   }
 }
