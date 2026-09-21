@@ -46,6 +46,7 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "microsandbox": "catalog:"
   },
   "devDependencies": {
