@@ -1,0 +1,118 @@
+import { Effect, Match, Option, Schema as S } from 'effect'
+import { Rpc, RpcGroup } from 'effect/unstable/rpc'
+import {
+  CreditLimitExceeded,
+  Forbidden,
+  FulfillmentDecision,
+  type FulfillmentDecision as FulfillmentDecisionType,
+  type FulfillmentError,
+  InsufficientStock,
+  Unauthorized,
+} from '../domain/decision.schema.js'
+import { Order } from '../domain/order.schema.js'
+import { runFulfillment } from '../fulfillment.cell.js'
+import { AuthContext } from '../ports/AuthContext.js'
+import { InventoryStore } from '../ports/InventoryStore.js'
+import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.js'
+import { AuthMiddleware } from './auth.middleware.js'
+import {
+  GetReservationRequest,
+  ListStockRequest,
+  ReservationView,
+  StockView,
+  SubmitOrderRequest,
+} from './inventory-fulfillment.schema.js'
+
+/**
+ * Submit a fulfillment order. `ConflictRollback` rides the success union (a
+ * wire decision, not an error); `Unauthorized` joins the failure union from
+ * {@link AuthMiddleware}.
+ */
+export const SubmitOrder = Rpc.make('submitOrder', {
+  payload: SubmitOrderRequest,
+  success: FulfillmentDecision,
+  error: S.Union([InsufficientStock, CreditLimitExceeded]),
+}).middleware(AuthMiddleware)
+
+export const GetReservation = Rpc.make('getReservation', {
+  payload: GetReservationRequest,
+  success: ReservationView,
+  error: Forbidden,
+}).middleware(AuthMiddleware)
+
+export const ListStock = Rpc.make('listStock', {
+  payload: ListStockRequest,
+  success: StockView,
+}).middleware(AuthMiddleware)
+
+export const FulfillmentRpcs = RpcGroup.make(SubmitOrder, GetReservation, ListStock)
+
+const dieUnreachable = (impossible: Unauthorized | Forbidden): Effect.Effect<never> =>
+  Effect.die(new Error(`fulfillment cell produced an impossible error: ${impossible._tag}`))
+
+const submitOrderOutcome = (
+  outcome: FulfillmentDecisionType | FulfillmentError,
+): Effect.Effect<FulfillmentDecisionType, InsufficientStock | CreditLimitExceeded> =>
+  Match.value(outcome).pipe(
+    Match.tag('AllocatedSplit', (decision) => Effect.succeed(decision)),
+    Match.tag('AllocatedWithOverdraft', (decision) => Effect.succeed(decision)),
+    Match.tag('Backordered', (decision) => Effect.succeed(decision)),
+    Match.tag('CreditHold', (decision) => Effect.succeed(decision)),
+    Match.tag('ConflictRollback', (decision) => Effect.succeed(decision)),
+    Match.tag('InsufficientStock', (error) => Effect.fail(error)),
+    Match.tag('CreditLimitExceeded', (error) => Effect.fail(error)),
+    Match.tag('Unauthorized', dieUnreachable),
+    Match.tag('Forbidden', dieUnreachable),
+    Match.exhaustive,
+  )
+
+const submitOrder = (request: SubmitOrderRequest) =>
+  Effect.gen(function*() {
+    const { userId } = yield* AuthContext
+    const outcome = yield* runFulfillment({
+      order: new Order({ orderId: request.orderId, customerId: userId, lines: request.lines }),
+      kits: request.kits,
+      fraudRisk: request.fraudRisk,
+    })
+    return yield* submitOrderOutcome(outcome)
+  })
+
+const forbidden = (resource: string, reason: string): Forbidden => new Forbidden({ resource, reason })
+
+const ownedReservation = (record: ReservationRecord, userId: string): Effect.Effect<ReservationView, Forbidden> =>
+  Match.value(record.customerId === userId).pipe(
+    Match.when(true, () =>
+      Effect.succeed(
+        new ReservationView({
+          orderId: record.orderId,
+          customerId: record.customerId,
+          allocations: record.allocations,
+          occurredAt: record.occurredAt,
+        }),
+      )),
+    Match.when(false, () => Effect.fail(forbidden(record.orderId, 'reservation is owned by another caller'))),
+    Match.exhaustive,
+  )
+
+const getReservation = (request: GetReservationRequest) =>
+  Effect.gen(function*() {
+    const { userId } = yield* AuthContext
+    const log = yield* ReservationLog
+    const found = yield* log.findReservation(request.orderId)
+    return yield* Option.match(found, {
+      onNone: () => Effect.fail(forbidden(request.orderId, 'reservation not found')),
+      onSome: (record) => ownedReservation(record, userId),
+    })
+  })
+
+const listStock = () =>
+  Effect.gen(function*() {
+    const store = yield* InventoryStore
+    return new StockView({ partitions: yield* store.readAllStock })
+  })
+
+export const handlers = FulfillmentRpcs.toLayer({
+  submitOrder,
+  getReservation,
+  listStock,
+})
