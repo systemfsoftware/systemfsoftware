@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, type DateTime, Duration, Effect, Match, Option, Random, Result, Schema as S } from 'effect'
+import { Array as Arr, DateTime, Duration, Effect, Match, Option, Random, Result, Schema as S } from 'effect'
 import type { SchemaError } from 'effect/Schema'
 import {
   allocateStock,
@@ -46,7 +46,6 @@ import {
 import { CreditLedger } from './ports/CreditLedger.js'
 import { CustomerGate } from './ports/CustomerGate.js'
 import { InventoryStore } from './ports/InventoryStore.js'
-import { NowClock } from './ports/NowClock.js'
 import { type ReservationCommit, type ReservationCommitOutcome, ReservationLog } from './ports/ReservationLog.js'
 
 export interface FulfillmentRequest {
@@ -55,7 +54,7 @@ export interface FulfillmentRequest {
   readonly fraudRisk: FraudRiskScore
 }
 
-type FulfillmentPorts = InventoryStore | CreditLedger | ReservationLog | NowClock | CustomerGate
+type FulfillmentPorts = InventoryStore | CreditLedger | ReservationLog | CustomerGate
 
 interface RawContext {
   readonly order: Order
@@ -205,13 +204,12 @@ const encodedOutcome = (outcome: Result.Result<CoreDecision, CoreError>): Encode
 
 const readContext = (
   request: FulfillmentRequest,
-): Effect.Effect<RawContext, CreditAccountNotFound, InventoryStore | CreditLedger | NowClock> =>
+): Effect.Effect<RawContext, CreditAccountNotFound, InventoryStore | CreditLedger> =>
   Effect.gen(function*() {
     const inventory = yield* InventoryStore
     const creditLedger = yield* CreditLedger
-    const clock = yield* NowClock
     const [stock, credit, now] = yield* Effect.all(
-      [inventory.readAllStock, creditLedger.readCredit(request.order.customerId), clock.now],
+      [inventory.readAllStock, creditLedger.readCredit(request.order.customerId), DateTime.now],
       { concurrency: 'unbounded' },
     ).pipe(Effect.catchTag(['SchemaError', 'EffectDrizzleQueryError'], (error) => Effect.die(error)))
     return {

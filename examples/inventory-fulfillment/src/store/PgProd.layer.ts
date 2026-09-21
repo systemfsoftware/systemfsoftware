@@ -6,9 +6,7 @@ import { Pool } from 'pg'
 import { CreditLedger } from '../ports/CreditLedger.js'
 import { CustomerGate } from '../ports/CustomerGate.js'
 import { InventoryStore } from '../ports/InventoryStore.js'
-import { NowClock } from '../ports/NowClock.js'
 import { ReservationLog } from '../ports/ReservationLog.js'
-import { layer as ClockLiveLayer } from './ClockLive.js'
 import { layer as CreditLedgerDrizzleLayer } from './CreditLedgerDrizzle.js'
 import { layer as CustomerGateLayer } from './CustomerGateInMemory.js'
 import { DrizzleSession } from './DrizzleSession.js'
@@ -63,12 +61,11 @@ const ports = Layer.mergeAll(
   InventoryStoreDrizzleLayer,
   CreditLedgerDrizzleLayer,
   ReservationLogDrizzleLayer,
-  ClockLiveLayer,
   CustomerGateLayer,
 )
 
 export const layer: Layer.Layer<
-  DrizzleSession | InventoryStore | CreditLedger | ReservationLog | NowClock | CustomerGate | PgRuntime
+  DrizzleSession | InventoryStore | CreditLedger | ReservationLog | CustomerGate | PgRuntime
 > = ports.pipe(
   Layer.provideMerge(sessionLayer.pipe(Layer.provide(clientLayer))),
   Layer.provideMerge(rawClient),

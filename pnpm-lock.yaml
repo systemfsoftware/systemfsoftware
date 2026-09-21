@@ -120,9 +120,6 @@ catalogs:
     tstyche:
       specifier: ^7.2.5
       version: 7.2.5
-    tsx:
-      specifier: 4.23.13
-      version: 4.23.13
     type-fest:
       specifier: ^5.10.0
       version: 5.10.0
@@ -265,6 +262,12 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../packages/effect-gherkin-spec
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../packages/effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../packages/oxlint-plugin/oxlint-config
@@ -292,9 +295,6 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.0
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.13
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -11226,6 +11226,7 @@ snapshots:
       esbuild: 0.28.2
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   turbo@2.11.2:
     optionalDependencies:

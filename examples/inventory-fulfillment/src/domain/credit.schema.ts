@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Schema as S } from 'effect'
 
 export const Money = S.Finite.pipe(

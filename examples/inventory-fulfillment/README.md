@@ -5,7 +5,7 @@ A stress-test example for the [cell-architecture compound pack](../../../compoun
 ## What it proves
 
 - **Pure decision core**: the four fulfillment workflows (`explode-bundle`, `allocate-stock`, `check-credit`, `settle-fulfillment`) are `Workflow.make` constructions with CC=1, zero imperative control flow, and `Match.exhaustive` decision dispatch.
-- **Ports separate from layers**: `InventoryStore`, `CreditLedger`, `ReservationLog`, `NowClock`, `AuthContext` are declared without drivers; drizzle-backed Layers swap between PGlite (tests) and PostgreSQL (production) without touching port code.
+- **Ports separate from layers**: `InventoryStore`, `CreditLedger`, `ReservationLog`, `AuthContext` are declared without drivers; drizzle-backed Layers swap between PGlite (tests) and PostgreSQL (production) without touching port code. The clock is effect's built-in `Clock`.
 - **I/O sandwich**: the `fulfillment.cell.ts` composition root reads, decodes, decides, encodes, and writes — with optimistic concurrency via a version-column CAS and a bounded retry (3) that never enters the core.
 - **Decode never cast**: every row and wire payload crosses into the domain through `S.decodeUnknown`; drizzle row types never leak inward.
 - **Sociable integration**: the suite drives real RPC requests through the real HTTP server into the real embedded Postgres — no mock ports.
