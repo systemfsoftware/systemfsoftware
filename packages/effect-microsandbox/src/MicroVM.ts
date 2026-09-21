@@ -32,7 +32,7 @@ export interface RunningVM {
 
 /**
  * The MicroVM service: starts Scope-managed microVM sandboxes from pure
- * {@link MicroVMSpec} data, applying the spec's wait strategy before the
+ * `MicroVMSpec` data, applying the spec's wait strategy before the
  * acquired handle is returned. `spec.ports` publishes host loopback ports
  * only.
  */
