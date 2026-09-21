@@ -46,7 +46,9 @@ export class PlanSandbox extends Schema.TaggedClass<PlanSandbox>()('PlanSandbox'
   spec: MicroVMSpec,
   bindings: Schema.Array(PortBinding),
   name: Schema.String,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['name'] as const
+}
 
 const LOOPBACK_HOST = '127.0.0.1'
 const LOOPBACK_PREFIX = '127.'

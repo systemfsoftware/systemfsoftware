@@ -4,7 +4,7 @@ import * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
 import type { Sandbox } from 'microsandbox'
 import { bootMicroVM } from './boot-microvm.cell.js'
-import { type AcquiredVM, describeCause } from './boot-sandbox.cell.js'
+import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { ExecError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
@@ -16,7 +16,7 @@ const execOf =
     return Effect.map(
       Effect.tryPromise({
         try: () => sandbox.exec(cmd, [...args]),
-        catch: (cause) => new ExecError({ argv, reason: describeCause(cause) }),
+        catch: (cause) => new ExecError({ argv, cause }),
       }),
       (output): ExecResult => ({ code: output.status.code, stdout: output.stdout(), stderr: output.stderr() }),
     )
@@ -27,12 +27,11 @@ const logsOf = (sandbox: Sandbox): Stream.Stream<LogLine, SandboxBootError> =>
     Stream.fromEffect(
       Effect.tryPromise({
         try: () => sandbox.logStream({ follow: true }),
-        catch: (cause) => new SandboxBootError({ sandboxName: sandbox.name, reason: describeCause(cause) }),
+        catch: (cause) => new SandboxBootError({ sandboxName: sandbox.name, cause }),
       }),
     ),
     (logStream) =>
-      Stream.fromAsyncIterable(logStream, (cause) =>
-        new SandboxBootError({ sandboxName: sandbox.name, reason: describeCause(cause) })),
+      Stream.fromAsyncIterable(logStream, (cause) => new SandboxBootError({ sandboxName: sandbox.name, cause })),
   ).pipe(
     Stream.map((entry): LogLine => ({ source: entry.source, text: entry.text() })),
   )

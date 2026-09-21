@@ -123,7 +123,7 @@ const writeReadiness = (
     Match.exhaustive,
   )
 
-export const awaitReadiness = Sandwich.read(readReadinessCommand)
+export const awaitReadiness = Sandwich.named('await_readiness')(readReadinessCommand)
   .decode(Sandwich.pure((vm: AcquiredVM) => Result.succeed(new ResolveWaitStrategy({ spec: vm.spec }))))
   .decide(resolveWaitStrategy)
   .encode(Sandwich.pure(Result.succeed))

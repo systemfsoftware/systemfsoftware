@@ -13,7 +13,7 @@ export class VirtualizationUnsupportedError extends Schema.TaggedError<Virtualiz
 
 export class SandboxBootError extends Schema.TaggedError<SandboxBootError>()('SandboxBootError', {
   sandboxName: Schema.String,
-  reason: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
 }) {}
 
 export class WaitTimeoutError extends Schema.TaggedError<WaitTimeoutError>()('WaitTimeoutError', {
@@ -23,12 +23,12 @@ export class WaitTimeoutError extends Schema.TaggedError<WaitTimeoutError>()('Wa
 
 export class ExecError extends Schema.TaggedError<ExecError>()('ExecError', {
   argv: Schema.Array(Schema.String),
-  reason: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
 }) {}
 
 export class PortAllocationError extends Schema.TaggedError<PortAllocationError>()('PortAllocationError', {
   guestPort: GuestPort,
-  reason: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
 }) {}
 
 export class LoopbackViolationError extends Schema.TaggedError<LoopbackViolationError>()(

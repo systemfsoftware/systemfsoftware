@@ -29,10 +29,6 @@ export interface AcquiredVM {
   readonly sandbox: Sandbox
 }
 
-const messageOf = (cause: unknown): string => (typeof cause === 'string' ? cause : 'non-error rejection')
-
-export const describeCause = (cause: unknown): string => cause instanceof Error ? cause.message : messageOf(cause)
-
 const optional = <A>(value: A | undefined, apply: (a: A) => void): void => {
   if (value !== undefined) apply(value)
 }
@@ -68,7 +64,7 @@ const createSandbox = (spec: MicroVMSpec, plan: SandboxPlan): Effect.Effect<Acqu
         applyPlan(plan, builder)
         return builder.create()
       },
-      catch: (cause) => new SandboxBootError({ sandboxName: plan.name, reason: describeCause(cause) }),
+      catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
     }),
     (sandbox): AcquiredVM => ({ spec, plan, sandbox }),
   )
@@ -91,11 +87,11 @@ const allocateBinding = (guest: number): Effect.Effect<PortBinding, PortAllocati
   Effect.scoped(
     Effect.gen(function*() {
       const server = yield* NodeSocketServer.make({ host: LOOPBACK_HOST, port: 0 }).pipe(
-        Effect.mapError((cause) => new PortAllocationError({ guestPort: guest, reason: describeCause(cause) })),
+        Effect.mapError((cause) => new PortAllocationError({ guestPort: guest, cause })),
       )
       const address = server.address
       if (!('port' in address)) {
-        return yield* new PortAllocationError({ guestPort: guest, reason: 'server reported no TCP port' })
+        return yield* new PortAllocationError({ guestPort: guest })
       }
       return { guest, host: LOOPBACK_HOST, hostPort: address.port }
     }),
@@ -138,6 +134,6 @@ const writeBoot = (
     Match.exhaustive,
   )
 
-export const bootSandbox = Sandwich.read(readPlanCommand)
+export const bootSandbox = Sandwich.named('boot_sandbox')(readPlanCommand)
   .decide(renderSandboxPlan)
   .write(writeBoot)

@@ -20,7 +20,9 @@ export type WaitStrategyDecision = WaitRequired | WaitSkipped
 
 export class ResolveWaitStrategy extends Schema.TaggedClass<ResolveWaitStrategy>()('ResolveWaitStrategy', {
   spec: MicroVMSpec,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = [] as const
+}
 
 export const resolveWaitStrategy = Workflow.total(
   ResolveWaitStrategy,

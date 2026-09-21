@@ -95,7 +95,7 @@ const writeProbe = (
     Match.exhaustive,
   )
 
-export const probeVirtualization = Sandwich.read((_spec: MicroVMSpec) =>
+export const probeVirtualization = Sandwich.named('probe_virtualization')((_spec: MicroVMSpec) =>
   Effect.map(
     probeCapability,
     (observation) => new AssessVirtualization({ platform: process.platform, observation }),
