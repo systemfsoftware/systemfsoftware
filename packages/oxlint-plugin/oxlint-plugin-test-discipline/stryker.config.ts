@@ -5,7 +5,7 @@ export default defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
-    options: { configFile: 'vitest.config.ts', dir: '.', related: false },
+    options: { configFile: 'vitest.config.ts', dir: '.' },
   },
   checkers: [
     {
@@ -25,5 +25,5 @@ export default defineConfig({
     '!src/rules/**/*.test.ts',
     '!src/rules/*.config.ts',
   ],
-  coverageAnalysis: 'off',
+  coverageAnalysis: 'perTest',
 })
