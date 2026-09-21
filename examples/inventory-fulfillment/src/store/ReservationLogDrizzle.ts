@@ -35,11 +35,11 @@ const allocationBatches = (events: readonly InventoryReservationEvents[]): reado
       )),
   )
 
-const allocationsOf = (events: readonly InventoryReservationEvents[]): readonly LotAllocation[] =>
-  Arr.flatMap(allocationBatches(events), (batch) => batch.allocations)
+const allocationsOf = (batches: readonly AllocationBatch[]): readonly LotAllocation[] =>
+  Arr.flatMap(batches, (batch) => batch.allocations)
 
-const reservationRowsOf = (commit: ReservationCommit) =>
-  Arr.flatMap(allocationBatches(commit.events), (batch) =>
+const reservationRowsOf = (commit: ReservationCommit, batches: readonly AllocationBatch[]) =>
+  Arr.flatMap(batches, (batch) =>
     Arr.map(batch.allocations, (allocation) => ({
       id: `${commit.orderId}:${allocation.lotId}`,
       orderId: commit.orderId,
@@ -64,11 +64,12 @@ const hasVersionConflict = (results: readonly (readonly { readonly lotId: string
   Arr.some(results, (updated) => updated.length !== 1)
 
 const commitEffect = (db: DrizzleDatabase, commit: ReservationCommit) => {
-  const rows = reservationRowsOf(commit)
+  const batches = allocationBatches(commit.events)
+  const rows = reservationRowsOf(commit, batches)
   return db
     .transaction((tx) =>
       Effect.gen(function*() {
-        const casResults = yield* Effect.forEach(allocationsOf(commit.events), (allocation) =>
+        const casResults = yield* Effect.forEach(allocationsOf(batches), (allocation) =>
           tx
             .update(stockLots)
             .set({

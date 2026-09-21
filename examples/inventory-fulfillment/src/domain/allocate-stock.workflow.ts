@@ -167,8 +167,11 @@ const insufficientOf = (
     Match.exhaustive,
   )
 
-const allocatedOutcome = (command: AllocateStockCommand): StockAllocated | StockBackordered => {
-  const outcomes = Arr.map(demandsOf(command.lines), (demand) => ({
+const allocatedOutcome = (
+  command: AllocateStockCommand,
+  demands: readonly SkuDemand[],
+): StockAllocated | StockBackordered => {
+  const outcomes = Arr.map(demands, (demand) => ({
     demand,
     allocation: allocateSku(candidatesFor(command.stock, demand.sku), demand.requested),
   }))
@@ -185,10 +188,12 @@ const allocatedOutcome = (command: AllocateStockCommand): StockAllocated | Stock
 
 export const allocateStock = Workflow.make(
   AllocateStockCommand,
-  (command): Result.Result<StockAllocated | StockBackordered, InsufficientStock> =>
-    Match.value(insufficientOf(command.stock, demandsOf(command.lines))).pipe(
+  (command): Result.Result<StockAllocated | StockBackordered, InsufficientStock> => {
+    const demands = demandsOf(command.lines)
+    return Match.value(insufficientOf(command.stock, demands)).pipe(
       Match.tag('Some', (refusal) => Result.fail(refusal.value)),
-      Match.tag('None', () => Result.succeed(allocatedOutcome(command))),
+      Match.tag('None', () => Result.succeed(allocatedOutcome(command, demands))),
       Match.exhaustive,
-    ),
+    )
+  },
 )

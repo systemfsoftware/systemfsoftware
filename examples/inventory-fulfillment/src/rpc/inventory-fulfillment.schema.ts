@@ -5,7 +5,6 @@ import { OrderLine } from '../domain/order.schema.js'
 
 export class SubmitOrderRequest extends S.Class<SubmitOrderRequest>('SubmitOrderRequest')({
   orderId: S.String,
-  customerId: S.String,
   lines: S.Array(OrderLine),
   kits: S.Array(KitDefinition),
   fraudRisk: FraudRiskScore,

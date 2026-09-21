@@ -223,7 +223,6 @@ export interface SubmitOrderInput {
 export const submitRequest = (input: SubmitOrderInput): Effect.Effect<SubmitOrderRequest> =>
   S.decodeEffect(SubmitOrderRequest)({
     orderId: input.orderId,
-    customerId: 'client-supplied-ignored-by-server',
     lines: input.lines,
     kits: input.kits ?? [],
     fraudRisk: input.fraudRisk ?? 0,

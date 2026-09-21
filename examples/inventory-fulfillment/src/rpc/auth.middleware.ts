@@ -14,15 +14,13 @@ export class AuthMiddleware extends RpcMiddleware.Service<AuthMiddleware, { prov
   { error: Unauthorized },
 ) {}
 
-const webHeaders = (headers: Readonly<Record<string, string>>): Headers => new Headers(Object.entries(headers))
-
 export const layer: Layer.Layer<AuthMiddleware, never, AuthService> = Layer.effect(
   AuthMiddleware,
   Effect.gen(function*() {
     const auth = yield* AuthService
     return (inner, options) =>
       Effect.tryPromise({
-        try: () => auth.api.getSession({ headers: webHeaders(options.headers) }),
+        try: () => auth.api.getSession({ headers: new Headers(Object.entries(options.headers)) }),
         catch: () => new Unauthorized({ reason: 'session resolution failed' }),
       }).pipe(
         Effect.flatMap((session) =>

@@ -1,18 +1,6 @@
 /**
- * U0 — Backend Compatibility Spike (throwaway).
- *
- * Proves the four risky composition points of the Backend Stack Contract before
- * any code unit starts:
- *
- *  1. PGlite session: @effect/sql-pglite + drizzle-orm/effect-pglite roundtrip.
- *  2. Transactional CAS: drizzle transaction with UPDATE ... WHERE version =
- *     $expected returning affected rows (both hit and stale-miss).
- *  3. effect/unstable/rpc: RpcGroup + RpcMiddleware + RpcServer.layerHttp on
- *     @effect/platform-node HttpServer, exercised by an in-process RpcClient,
- *     with the drizzle session in context.
- *  4. better-auth: drizzle adapter + signUpEmail + getSession roundtrip.
- *
- * Deleted when U1 lands; this directory never ships.
+ * U0 compatibility spike — re-run green before any effect-line catalog pin
+ * moves (contract: docs/solutions/tooling-decisions/effect-v4-unstable-stack-binding.md).
  */
 import { createServer } from 'node:http'
 
@@ -224,7 +212,7 @@ const program = Effect.gen(function*() {
       Effect.tryPromise({
         try: () =>
           auth.api.getSession({
-            headers: new Headers(Object.entries(options.headers as Record<string, string>)),
+            headers: new Headers(Object.entries(options.headers)),
           }),
         catch: () => new Unauthorized(),
       }).pipe(

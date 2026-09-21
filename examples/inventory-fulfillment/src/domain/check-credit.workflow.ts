@@ -52,11 +52,12 @@ const headroomOf = (account: CreditAccount): number => Num.max(0, account.credit
 const shortfallOf = (command: CreditCheckCommand): number =>
   Num.max(0, command.requiredAmount - headroomOf(command.account))
 
-const vipDecision = (command: CreditCheckCommand): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> =>
-  Match.value(shortfallOf(command) <= command.account.overdraftPrivilege).pipe(
+const vipDecision = (command: CreditCheckCommand): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> => {
+  const shortfall = shortfallOf(command)
+  return Match.value(shortfall <= command.account.overdraftPrivilege).pipe(
     Match.when(
       true,
-      () => Result.succeed(new CreditGranted({ orderId: command.orderId, overdraftAmount: shortfallOf(command) })),
+      () => Result.succeed(new CreditGranted({ orderId: command.orderId, overdraftAmount: shortfall })),
     ),
     Match.when(false, () =>
       Result.fail(
@@ -68,22 +69,28 @@ const vipDecision = (command: CreditCheckCommand): Result.Result<CreditGranted |
       )),
     Match.exhaustive,
   )
+}
 
 const standardDecision = (
   command: CreditCheckCommand,
-): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> =>
-  Match.value(shortfallOf(command) === 0).pipe(
+): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> => {
+  const shortfall = shortfallOf(command)
+  return Match.value(shortfall === 0).pipe(
     Match.when(true, () => Result.succeed(new CreditGranted({ orderId: command.orderId, overdraftAmount: 0 }))),
-    Match.when(false, () =>
-      Result.succeed(
-        new CreditHold({
-          orderId: command.orderId,
-          shortfall: shortfallOf(command),
-          requiredDownpayment: shortfallOf(command),
-        }),
-      )),
+    Match.when(
+      false,
+      () =>
+        Result.succeed(
+          new CreditHold({
+            orderId: command.orderId,
+            shortfall,
+            requiredDownpayment: shortfall,
+          }),
+        ),
+    ),
     Match.exhaustive,
   )
+}
 
 export const checkCredit = Workflow.make(
   CreditCheckCommand,

@@ -130,11 +130,11 @@ const settlementOf = (command: OrderFulfillmentCommand): SettleFulfillmentComman
 }
 
 const planOf = (
-  decisionTag: string,
+  decision: FulfillmentDecision,
   orderId: string,
   allocations: readonly LotAllocation[],
   backordered: Option.Option<readonly OrderLine[]>,
-): ReservationPlan => ({ orderId, decisionTag, allocations, backordered })
+): ReservationPlan => ({ orderId, decisionTag: decision._tag, allocations, backordered })
 
 const persisted = (decision: FulfillmentDecision, reservation: ReservationPlan): EncodedFulfillment => ({
   decision,
@@ -145,39 +145,32 @@ const encodeCore = (decision: CoreDecision): EncodedFulfillment =>
   Match.value(decision).pipe(
     Match.tag('OrderAllocated', (allocated) => {
       const allocations = allocationsOf(allocated.reservations)
-      return persisted(
-        new AllocatedSplit({ orderId: allocated.orderId, allocations }),
-        planOf('AllocatedSplit', allocated.orderId, allocations, Option.none()),
-      )
+      const wire = new AllocatedSplit({ orderId: allocated.orderId, allocations })
+      return persisted(wire, planOf(wire, allocated.orderId, allocations, Option.none()))
     }),
     Match.tag('OrderAllocatedWithOverdraft', (overdraft) => {
       const allocations = allocationsOf(overdraft.reservations)
-      return persisted(
-        new AllocatedWithOverdraft({
-          orderId: overdraft.orderId,
-          allocations,
-          overdraftAmount: moneyOf(overdraft.overdraftAmount),
-        }),
-        planOf('AllocatedWithOverdraft', overdraft.orderId, allocations, Option.none()),
-      )
+      const wire = new AllocatedWithOverdraft({
+        orderId: overdraft.orderId,
+        allocations,
+        overdraftAmount: moneyOf(overdraft.overdraftAmount),
+      })
+      return persisted(wire, planOf(wire, overdraft.orderId, allocations, Option.none()))
     }),
     Match.tag('OrderBackordered', (backordered) => {
       const allocations = allocationsOf(backordered.reservations)
       const lines = Arr.map(backordered.backordered, lineOf)
-      return persisted(
-        new Backordered({ orderId: backordered.orderId, allocations, backorderedLines: lines }),
-        planOf('Backordered', backordered.orderId, allocations, Option.some(lines)),
-      )
+      const wire = new Backordered({ orderId: backordered.orderId, allocations, backorderedLines: lines })
+      return persisted(wire, planOf(wire, backordered.orderId, allocations, Option.some(lines)))
     }),
-    Match.tag('OrderHeld', (held) =>
-      persisted(
-        new WireCreditHold({
-          orderId: held.orderId,
-          shortfall: moneyOf(held.shortfall),
-          requiredDownpayment: moneyOf(held.requiredDownpayment),
-        }),
-        planOf('CreditHold', held.orderId, [], Option.none()),
-      )),
+    Match.tag('OrderHeld', (held) => {
+      const wire = new WireCreditHold({
+        orderId: held.orderId,
+        shortfall: moneyOf(held.shortfall),
+        requiredDownpayment: moneyOf(held.requiredDownpayment),
+      })
+      return persisted(wire, planOf(wire, held.orderId, [], Option.none()))
+    }),
     Match.exhaustive,
   )
 
@@ -212,8 +205,10 @@ const readContext = (
     const creditLedger = yield* CreditLedger
     const clock = yield* NowClock
     const stock = yield* inventory.readAllStock
-    const credit = yield* creditLedger.readCredit(request.order.customerId)
-    const now = yield* clock.now
+    const [credit, now] = yield* Effect.all(
+      [creditLedger.readCredit(request.order.customerId), clock.now],
+      { concurrency: 'unbounded' },
+    )
     return {
       order: request.order,
       customerTier: credit.tier,
@@ -298,6 +293,7 @@ const runAttempt = (request: FulfillmentRequest): Effect.Effect<FulfillmentAttem
 
 const commitRollback = (
   request: FulfillmentRequest,
+  auditTag: string,
   now: DateTime.Utc,
 ): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> =>
   Effect.gen(function*() {
@@ -316,7 +312,7 @@ const commitRollback = (
       audit: new AuditPayload({
         orderId: request.order.orderId,
         actorId: request.order.customerId,
-        decisionTag: 'ConflictRollback',
+        decisionTag: auditTag,
         occurredAt: now,
       }),
     })
@@ -327,10 +323,11 @@ const rollback = (
   attempt: FulfillmentAttempt,
   attempts: number,
 ): Effect.Effect<ConflictRollback, never, ReservationLog> =>
-  Effect.map(
-    commitRollback(request, attempt.now),
-    () => new ConflictRollback({ orderId: request.order.orderId, attempts }),
-  )
+  Effect.gen(function*() {
+    const decision = new ConflictRollback({ orderId: request.order.orderId, attempts })
+    yield* commitRollback(request, decision._tag, attempt.now)
+    return decision
+  })
 
 function submitWithRetry(
   request: FulfillmentRequest,
