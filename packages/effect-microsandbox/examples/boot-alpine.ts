@@ -1,4 +1,4 @@
-import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
+import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import {
   MicroVM,
   MicroVMError,
@@ -7,18 +7,17 @@ import {
   MicroVMSpecSchema,
 } from '@systemfsoftware/effect-microsandbox'
 import { Context, Deferred, Effect, Fiber, HashMap, Layer, Option, pipe, Schema } from 'effect'
-import type * as FileSystem from 'effect/FileSystem'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { existsSync } from 'node:fs'
 
 const recordGone = (name: string): Effect.Effect<boolean> =>
-  Effect.promise(() =>
-    Sandbox.get(name).then(
-      () => false,
-      () => true,
-    )
+  Effect.match(
+    Effect.tryPromise({ try: () => Sandbox.get(name), catch: () => undefined }),
+    { onFailure: () => true, onSuccess: () => false },
   )
+
+const AppLive = MicroVMSandbox.MicroVMLive.pipe(Layer.provide(nodeServicesLayer))
 
 const alpineSpec = Schema.decodeEffect(MicroVMSpecSchema.MicroVMSpec)({
   image: 'alpine:3.20',
@@ -49,7 +48,7 @@ const j1 = Effect.scoped(
       'guest port 8080 must map to a positive host port',
     )
     return vm.name
-  }).pipe(Effect.provide(MicroVMSandbox.MicroVMLive)),
+  }).pipe(Effect.provide(AppLive)),
 )
 
 const j2 = Effect.gen(function*() {
@@ -63,7 +62,7 @@ const j2 = Effect.gen(function*() {
         const vm = yield* svc.start(spec)
         yield* Deferred.succeed(booted, vm.name)
         return yield* Effect.never
-      }).pipe(Effect.provide(MicroVMSandbox.MicroVMLive)),
+      }).pipe(Effect.provide(AppLive)),
     ),
   )
   const name = yield* Deferred.await(booted)
@@ -75,7 +74,7 @@ const j3 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J3: one layer build, two sequential VM lifecycles')
     const spec = pipe(yield* alpineSpec, MicroVMSpec.withEnv({ SMOKE_JOURNEY: 'j3' }))
-    const context = yield* Layer.build(MicroVMSandbox.MicroVMLive)
+    const context = yield* Layer.build(AppLive)
     const svc = Context.get(context, MicroVM.MicroVM)
     const first = yield* Effect.scoped(
       Effect.flatMap(svc.start(spec), (vm) => vm.exec('echo', ['first'])),
@@ -90,7 +89,7 @@ const j3 = Effect.scoped(
   }),
 )
 
-const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError, FileSystem.FileSystem> = Effect.gen(
+const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError> = Effect.gen(
   function*() {
     if (process.platform === 'linux' && !existsSync('/dev/kvm')) {
       yield* Effect.logInfo('[smoke] no /dev/kvm — skipping (virtualization-required journey)')
@@ -105,4 +104,4 @@ const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError, 
   },
 )
 
-void Effect.runPromise(Effect.provide(main, nodeFileSystemLayer))
+void Effect.runPromise(main)

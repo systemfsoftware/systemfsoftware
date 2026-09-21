@@ -64,32 +64,23 @@ const logProbe = (sandbox: Sandbox, pattern: RegExp): Effect.Effect<boolean> =>
     (entries) => Option.isSome(entries) && entries.value.some((entry) => pattern.test(entry.text())),
   )
 
+const probeUntilSatisfied = (probe: Effect.Effect<boolean>): Effect.Effect<boolean> =>
+  Effect.flatMap(probe, (satisfied) =>
+    satisfied
+      ? Effect.succeed(true)
+      : Effect.flatMap(Effect.sleep(`${WAIT_POLL_MS} millis`), () => probeUntilSatisfied(probe)))
+
 const awaitProbe = (
   wait: string,
   timeoutMs: number,
   probe: Effect.Effect<boolean>,
 ): Effect.Effect<void, WaitTimeoutError> =>
-  Effect.suspend(() => {
-    let remaining = Math.max(1, Math.floor(timeoutMs / WAIT_POLL_MS))
-    let satisfied = false
-    return Effect.whileLoop({
-      while: () => !satisfied && remaining > 0,
-      body: () =>
-        Effect.andThen(
-          Effect.map(probe, (result) => {
-            if (result) satisfied = true
-          }),
-          Effect.sleep(`${WAIT_POLL_MS} millis`),
-        ),
-      step: () => {
-        remaining -= 1
-      },
-    }).pipe(
-      Effect.andThen(
-        Effect.suspend(() => satisfied ? Effect.void : Effect.fail(new WaitTimeoutError({ wait, timeoutMs }))),
-      ),
-    )
-  })
+  Effect.asVoid(
+    Effect.timeoutOrElse(probeUntilSatisfied(probe), {
+      duration: `${timeoutMs} millis`,
+      orElse: () => Effect.fail(new WaitTimeoutError({ wait, timeoutMs })),
+    }),
+  )
 
 const hostPortFor = (vm: AcquiredVM, guest: number): number | undefined => {
   const binding = vm.plan.portBindings.find((candidate) => candidate.guest === guest)
@@ -118,30 +109,22 @@ const probeFor = (vm: AcquiredVM, strategy: WaitStrategy): Effect.Effect<boolean
     Match.exhaustive,
   )
 
-interface ReadinessRaw {
-  readonly vm: AcquiredVM
-  readonly command: ResolveWaitStrategy
-}
-
-const readReadinessCommand = (vm: AcquiredVM): Effect.Effect<ReadinessRaw> =>
-  Effect.succeed({ vm, command: new ResolveWaitStrategy({ spec: vm.spec }) })
+const readReadinessCommand = (vm: AcquiredVM): Effect.Effect<AcquiredVM> => Effect.succeed(vm)
 
 const writeReadiness = (
   outcome: Result.Result<WaitRequired | WaitSkipped, never>,
-  raw: ReadinessRaw,
+  vm: AcquiredVM,
 ): Effect.Effect<AcquiredVM, WaitTimeoutError> =>
   Match.value(Result.getOrThrow(outcome)).pipe(
     Match.tag('WaitRequired', ({ strategy }) =>
-      Effect.as(awaitProbe(waitLabel(strategy), WAIT_TIMEOUT_MS, probeFor(raw.vm, strategy)), raw.vm)),
+      Effect.as(awaitProbe(waitLabel(strategy), WAIT_TIMEOUT_MS, probeFor(vm, strategy)), vm)),
     Match.tag('WaitSkipped', () =>
-      Effect.succeed(raw.vm)),
+      Effect.succeed(vm)),
     Match.exhaustive,
   )
 
 export const awaitReadiness = Sandwich.read(readReadinessCommand)
-  .decode(Sandwich.pure((raw: ReadinessRaw) => Result.succeed(raw.command)))
+  .decode(Sandwich.pure((vm: AcquiredVM) => Result.succeed(new ResolveWaitStrategy({ spec: vm.spec }))))
   .decide(resolveWaitStrategy)
-  .encode(
-    Sandwich.pure((outcome: Result.Result<WaitRequired | WaitSkipped, never>) => Result.succeed(outcome)),
-  )
+  .encode(Sandwich.pure(Result.succeed))
   .write(writeReadiness)

@@ -11,7 +11,7 @@ pnpm add @systemfsoftware/effect-microsandbox
 ```
 
 ```ts
-import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
+import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM, MicroVMSandbox, MicroVMSpecSchema } from '@systemfsoftware/effect-microsandbox'
 import { Effect, HashMap, Schema } from 'effect'
 
@@ -34,12 +34,12 @@ const program = Effect.scoped(
 await Effect.runPromise(
   program.pipe(
     Effect.provide(MicroVMSandbox.MicroVMLive),
-    Effect.provide(nodeFileSystemLayer),
+    Effect.provide(nodeServicesLayer),
   ),
 )
 ```
 
-`MicroVMLive` requires a `FileSystem` — the program root supplies the platform's layer.
+`MicroVMLive` requires `Crypto` and `FileSystem` — the program root supplies the platform's layers, so tests can substitute their own.
 
 When the scope closes — normally or through interruption — the sandbox is stopped, destroyed, and its record removed. There is nothing to clean up by hand.
 

@@ -1,6 +1,7 @@
 import * as NodeSocketServer from '@effect/platform-node/NodeSocketServer'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
+import * as Crypto from 'effect/Crypto'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
@@ -26,13 +27,6 @@ export interface AcquiredVM {
   readonly spec: MicroVMSpec
   readonly plan: SandboxPlan
   readonly sandbox: Sandbox
-}
-
-let nameCounter = 0
-
-const nextNameSuffix = (): string => {
-  nameCounter += 1
-  return nameCounter.toString(16).padStart(6, '0')
 }
 
 const messageOf = (cause: unknown): string => (typeof cause === 'string' ? cause : 'non-error rejection')
@@ -112,11 +106,17 @@ const allocateBindings = (
 ): Effect.Effect<ReadonlyArray<PortBinding>, PortAllocationError> =>
   Effect.forEach(guests, (guest) => allocateBinding(guest), { concurrency: 'unbounded' })
 
-const readPlanCommand = (spec: MicroVMSpec): Effect.Effect<PlanSandbox, PortAllocationError> =>
-  Effect.map(
-    allocateBindings(spec.ports),
-    (bindings) => new PlanSandbox({ spec, bindings, name: `effect-microsandbox-${process.pid}-${nextNameSuffix()}` }),
-  )
+const readPlanCommand = (spec: MicroVMSpec): Effect.Effect<PlanSandbox, PortAllocationError, Crypto.Crypto> =>
+  Effect.gen(function*() {
+    const crypto = yield* Crypto.Crypto
+    const bindings = yield* allocateBindings(spec.ports)
+    const id = yield* crypto.randomUUIDv4.pipe(Effect.orDie)
+    return new PlanSandbox({
+      spec,
+      bindings,
+      name: `effect-microsandbox-${process.pid}-${id.slice(0, 8)}`,
+    })
+  })
 
 const writeBoot = (
   outcome: Result.Result<SandboxPlanDecision, never>,
@@ -138,4 +138,6 @@ const writeBoot = (
     Match.exhaustive,
   )
 
-export const bootSandbox = Sandwich.read(readPlanCommand).decide(renderSandboxPlan).write(writeBoot)
+export const bootSandbox = Sandwich.read(readPlanCommand)
+  .decide(renderSandboxPlan)
+  .write(writeBoot)

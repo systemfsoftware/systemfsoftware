@@ -44,10 +44,8 @@ const linuxProbe = (fs: FileSystem.FileSystem): Effect.Effect<ProbeObservation> 
         ),
   )
 
-const darwinProbe: Effect.Effect<ProbeObservation> = Effect.suspend(() =>
-  Effect.succeed<ProbeObservation>(
-    process.arch === 'arm64' ? new KvmAccessible() : new HvfUnavailable({ arch: process.arch }),
-  )
+const darwinProbe: Effect.Effect<ProbeObservation> = Effect.succeed<ProbeObservation>(
+  process.arch === 'arm64' ? new KvmAccessible() : new HvfUnavailable({ arch: process.arch }),
 )
 
 const windowsProbe = (fs: FileSystem.FileSystem): Effect.Effect<ProbeObservation> =>
@@ -59,8 +57,8 @@ const windowsProbe = (fs: FileSystem.FileSystem): Effect.Effect<ProbeObservation
         : new WHPUnavailable({ topology: 'vmcompute present=false' }),
   )
 
-const unsupportedProbe: Effect.Effect<ProbeObservation> = Effect.suspend(() =>
-  Effect.succeed(new PlatformUnsupported({ platform: process.platform, arch: process.arch }))
+const unsupportedProbe: Effect.Effect<ProbeObservation> = Effect.succeed<ProbeObservation>(
+  new PlatformUnsupported({ platform: process.platform, arch: process.arch }),
 )
 
 const probes: Record<string, ((fs: FileSystem.FileSystem) => Effect.Effect<ProbeObservation>) | undefined> = {
@@ -72,20 +70,14 @@ const probes: Record<string, ((fs: FileSystem.FileSystem) => Effect.Effect<Probe
 const probeFor = (fs: FileSystem.FileSystem, platform: string): Effect.Effect<ProbeObservation> =>
   probes[platform] !== undefined ? probes[platform](fs) : unsupportedProbe
 
-const probeCapability: Effect.Effect<ProbeObservation, never, FileSystem.FileSystem> = Effect.suspend(() =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => probeFor(fs, process.platform))
+const probeCapability: Effect.Effect<ProbeObservation, never, FileSystem.FileSystem> = Effect.flatMap(
+  FileSystem.FileSystem,
+  (fs) => probeFor(fs, process.platform),
 )
-
-let announcedRuntime = false
-
 const announce = (resolved: ResolvedRuntime): Effect.Effect<void> =>
-  Effect.suspend(() => {
-    if (announcedRuntime) return Effect.void
-    announcedRuntime = true
-    return Effect.logInfo(
-      `[effect-microsandbox] microsandbox runtime resolved: ${resolved.msbPath} (origin: ${resolved.origin})`,
-    )
-  })
+  Effect.logInfo(
+    `[effect-microsandbox] microsandbox runtime resolved: ${resolved.msbPath} (origin: ${resolved.origin})`,
+  )
 
 const writeProbe = (
   verdict: Result.Result<VirtualizationVerdict, never>,
@@ -99,8 +91,7 @@ const writeProbe = (
           new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
         ),
       )),
-    Match.tag('VirtualizationEligible', () =>
-      Effect.flatMap(Effect.sync(() => resolveRuntime()), (resolved) => Effect.as(announce(resolved), undefined))),
+    Match.tag('VirtualizationEligible', () => Effect.flatMap(Effect.sync(() => resolveRuntime()), announce)),
     Match.exhaustive,
   )
 

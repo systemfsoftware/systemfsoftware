@@ -1,4 +1,5 @@
 import { Effect, HashMap, Layer, Option, Stream } from 'effect'
+import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
 import type { Sandbox } from 'microsandbox'
@@ -47,13 +48,22 @@ const runningVMOf = (vm: AcquiredVM): RunningVM => ({
   ping: Effect.map(Effect.option(Effect.promise(() => vm.sandbox.ping())), Option.isSome),
 })
 
-const startWith =
-  (fs: FileSystem.FileSystem) => (spec: MicroVMSpec): Effect.Effect<RunningVM, MicroVMError, Scope.Scope> =>
-    Effect.map(
-      Effect.provideService(bootMicroVM.run(spec), FileSystem.FileSystem, fs),
-      runningVMOf,
-    )
+const make = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const crypto = yield* Crypto.Crypto
+  return {
+    start: (spec: MicroVMSpec): Effect.Effect<RunningVM, MicroVMError, Scope.Scope> =>
+      Effect.map(
+        bootMicroVM.run(spec).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Crypto.Crypto, crypto),
+        ),
+        runningVMOf,
+      ),
+  }
+})
 
-const make = Effect.map(FileSystem.FileSystem, (fs) => ({ start: startWith(fs) }))
-
-export const MicroVMLive: Layer.Layer<MicroVM, never, FileSystem.FileSystem> = Layer.effect(MicroVM, make)
+export const MicroVMLive: Layer.Layer<MicroVM, never, Crypto.Crypto | FileSystem.FileSystem> = Layer.effect(
+  MicroVM,
+  make,
+)
