@@ -1,12 +1,80 @@
 /// <reference types="vitest/importMeta" />
+import type { Effect, Layer } from 'effect'
 import { Exit, Schema } from 'effect'
+import * as Crypto from 'effect/Crypto'
+import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
-import { MicroVMSpec, type Mount, type WaitStrategy } from './MicroVMSpec.schema.js'
+import type * as Scope from 'effect/Scope'
+import type { MicroVMError } from './MicroVMError.schema.js'
+import { layer as sandboxLayer, scoped as sandboxScoped } from './MicroVMSandbox.js'
+import {
+  GuestPort,
+  HttpWait,
+  ImageReference,
+  LogWait,
+  MicroVMSpec,
+  type Mount,
+  PortWait,
+  type WaitStrategy,
+} from './MicroVMSpec.schema.js'
+import type { RunningVM } from './RunningVM.js'
+
+export { GuestPort, HttpWait, ImageReference, LogWait, MicroVMSpec, type Mount, PortWait, type WaitStrategy }
 
 export const Wait = {
   forHttp: (path: string, port: number): WaitStrategy => ({ _tag: 'Http', path, port }),
   forPort: (port: number): WaitStrategy => ({ _tag: 'Port', port }),
   forLog: (pattern: string): WaitStrategy => ({ _tag: 'Log', pattern }),
+}
+export interface MicroVMConfigured {
+  readonly value: MicroVMSpec
+  withExposedPorts(ports: ReadonlyArray<number>): MicroVMConfigured
+  withEnv(env: Record<string, string>): MicroVMConfigured
+  withMount(mount: Mount): MicroVMConfigured
+  withMemoryLimit(memoryMb: number): MicroVMConfigured
+  withWaitStrategy(waitStrategy: WaitStrategy): MicroVMConfigured
+  readonly scoped: Effect.Effect<
+    RunningVM,
+    MicroVMError,
+    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem
+  >
+  readonly layer: Layer.Layer<RunningVM, MicroVMError, Crypto.Crypto | FileSystem.FileSystem>
+}
+
+const makeConfigured = (raw: MicroVMSpec): MicroVMConfigured => ({
+  value: raw,
+  withExposedPorts: (ports) => makeConfigured(withExposedPorts(raw, ports)),
+  withEnv: (env) => makeConfigured(withEnv(raw, env)),
+  withMount: (mount) => makeConfigured(withMount(raw, mount)),
+  withMemoryLimit: (mb) => makeConfigured(withMemoryLimit(raw, mb)),
+  withWaitStrategy: (strategy) => makeConfigured(withWaitStrategy(raw, strategy)),
+  get scoped() {
+    return sandboxScoped(raw)
+  },
+  get layer() {
+    return sandboxLayer(raw)
+  },
+})
+
+export const spec = (
+  target:
+    | string
+    | {
+      readonly image: string
+      readonly env?: Record<string, string>
+      readonly ports?: ReadonlyArray<number>
+      readonly mounts?: ReadonlyArray<Mount>
+      readonly memoryMb?: number
+      readonly vCPUs?: number
+      readonly workdir?: string
+      readonly cmd?: ReadonlyArray<string>
+      readonly waitStrategy?: WaitStrategy
+    },
+): MicroVMConfigured => {
+  const raw: MicroVMSpec = typeof target === 'string'
+    ? { image: target, env: {}, ports: [], mounts: [] }
+    : { env: {}, ports: [], mounts: [], ...target }
+  return makeConfigured(raw)
 }
 
 export const withEnv: {

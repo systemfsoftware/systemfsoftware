@@ -5,11 +5,10 @@ import type * as Scope from 'effect/Scope'
 import type { Sandbox } from 'microsandbox'
 import { bootMicroVM } from './boot-microvm.cell.js'
 import { type AcquiredVM, describeCause } from './boot-sandbox.cell.js'
-import { MicroVM } from './MicroVM.js'
-import type { ExecResult, LogLine, RunningVM } from './MicroVM.js'
 import { ExecError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
+import { type ExecResult, type LogLine, type RunningVM, RunningVM as RunningVMTag } from './RunningVM.js'
 
 const execOf =
   (sandbox: Sandbox) => (cmd: string, args: ReadonlyArray<string> = []): Effect.Effect<ExecResult, ExecError> => {
@@ -48,22 +47,15 @@ const runningVMOf = (vm: AcquiredVM): RunningVM => ({
   ping: Effect.map(Effect.option(Effect.promise(() => vm.sandbox.ping())), Option.isSome),
 })
 
-const make = Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem
-  const crypto = yield* Crypto.Crypto
-  return {
-    start: (spec: MicroVMSpec): Effect.Effect<RunningVM, MicroVMError, Scope.Scope> =>
-      Effect.map(
-        bootMicroVM.run(spec).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.provideService(Crypto.Crypto, crypto),
-        ),
-        runningVMOf,
-      ),
-  }
-})
+export const scoped = (
+  spec: MicroVMSpec,
+): Effect.Effect<
+  RunningVM,
+  MicroVMError,
+  Scope.Scope | Crypto.Crypto | FileSystem.FileSystem
+> => Effect.map(bootMicroVM.run(spec), runningVMOf)
 
-export const MicroVMLive: Layer.Layer<MicroVM, never, Crypto.Crypto | FileSystem.FileSystem> = Layer.effect(
-  MicroVM,
-  make,
-)
+export const layer = (
+  spec: MicroVMSpec,
+): Layer.Layer<RunningVM, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> =>
+  Layer.effect(RunningVMTag, scoped(spec))

@@ -6,27 +6,7 @@
 
 // @public (undocumented)
 export namespace MicroVM {
-    export { ExecResult, LogLine, MicroVM, RunningVM };
-}
-
-// @public (undocumented)
-export namespace MicroVMError {
-    export { ExecError, LoopbackViolationError, MicroVMError, PortAllocationError, SandboxBootError, VirtualizationUnsupportedError, WaitTimeoutError };
-}
-
-// @public (undocumented)
-export namespace MicroVMSandbox {
-    export { MicroVMLive };
-}
-
-// @public (undocumented)
-export namespace MicroVMSpec {
-    export { Wait, withEnv, withExposedPorts, withMemoryLimit, withMount, withWaitStrategy };
-}
-
-// @public (undocumented)
-export namespace MicroVMSpecSchema {
-    export { GuestPort, HttpWait, ImageReference, LogWait, MicroVMSpec, Mount, PortWait, WaitStrategy };
+    export { ExecError, ExecResult, GuestPort, HttpWait, ImageReference, LogLine, LogWait, LoopbackViolationError, MicroVMConfigured, MicroVMError, MicroVMSpec, Mount, PortAllocationError, PortWait, RunningVM, SandboxBootError, VirtualizationUnsupportedError, Wait, WaitStrategy, WaitTimeoutError, layer, scoped, spec, withEnv, withExposedPorts, withMemoryLimit, withMount, withWaitStrategy };
 }
 
 // (No @packageDocumentation comment for this package)

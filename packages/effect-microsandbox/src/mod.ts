@@ -1,5 +1,1 @@
 export * as MicroVM from './MicroVM.js'
-export * as MicroVMError from './MicroVMError.schema.js'
-export * as MicroVMSandbox from './MicroVMSandbox.js'
-export * as MicroVMSpec from './MicroVMSpec.js'
-export * as MicroVMSpecSchema from './MicroVMSpec.schema.js'
