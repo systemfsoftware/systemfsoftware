@@ -11,7 +11,7 @@ const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-t
 type DecisionTypeId = typeof DecisionTypeId
 
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
-  length: S.Number,
+  length: S.Finite,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }

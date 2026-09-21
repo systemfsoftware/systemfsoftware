@@ -4,9 +4,9 @@
 import * as Result from '@systemfsoftware/effect-atom/Result'
 import * as S from 'effect/Schema'
 
-export const TagError = S.TaggedStruct('T', { code: S.Number })
+export const TagError = S.TaggedStruct('T', { code: S.Finite })
 export type TaggedError = S.Schema.Type<typeof TagError>
 
-export const resultSchema = Result.Schema({ success: S.Number, error: S.String })
+export const resultSchema = Result.Schema({ success: S.Finite, error: S.String })
 
-export const taggedSchema = Result.Schema({ success: S.Number, error: S.Union([TagError, S.String]) })
+export const taggedSchema = Result.Schema({ success: S.Finite, error: S.Union([TagError, S.String]) })
