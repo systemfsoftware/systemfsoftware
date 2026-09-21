@@ -1,4 +1,5 @@
 import { Effect, Option, Predicate, Stream } from 'effect'
+import * as Arr from 'effect/Array'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type { Sandbox } from 'microsandbox'
@@ -42,9 +43,9 @@ export const make = (options: {
   ...Prototype,
 })
 
-const hostPortOf = (bindings: ReadonlyArray<PortBinding>, guest: number): Option.Option<number> =>
+const hostPortOf = (bindings: ReadonlyArray<PortBinding>, guest: number) =>
   Option.map(
-    Option.fromUndefinedOr(bindings.find((binding) => binding.guest === guest)),
+    Arr.findFirst(bindings, (binding) => binding.guest === guest),
     (binding) => binding.hostPort,
   )
 
@@ -64,9 +65,18 @@ export const port: {
     ),
 )
 
-const prefixSlash = (path: string): string => (path.startsWith('/') ? path : `/${path}`)
-const normalizePath = (path: string | undefined): string => (path !== undefined ? prefixSlash(path) : '')
+const prefixSlash = (path: string) => {
+  if (path.startsWith('/')) {
+    return path
+  }
+  return `/${path}`
+}
 
+const normalizePath = (path: string | undefined) =>
+  Option.match(Option.fromNullishOr(path), {
+    onSome: prefixSlash,
+    onNone: () => '',
+  })
 export const url: {
   (guestPort: number, path?: string): (self: RunningVM) => Effect.Effect<string, PortAllocationError>
   (self: RunningVM, guestPort: number, path?: string): Effect.Effect<string, PortAllocationError>

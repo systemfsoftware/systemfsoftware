@@ -74,26 +74,20 @@ const REMEDIATIONS = {
     'unsupported platform: effect-microsandbox supports linux (kvm), macOS (Hypervisor.framework), and windows (WHP)',
 } as const
 
+const refused = (topology: string, remediation: string): Result.Result<VirtualizationRefused, never> =>
+  Result.succeed(VirtualizationRefused.make({ remediation, topology }))
+
 export const assessVirtualization = Workflow.total(
   AssessVirtualization,
   (command): Result.Result<VirtualizationVerdict, never> =>
     Match.value(command.observation).pipe(
       Match.tag('KvmAccessible', () => Result.succeed(VirtualizationEligible.make())),
-      Match.tag('KvmDenied', ({ topology }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.kvmDenied, topology }))),
-      Match.tag('KvmAbsent', ({ topology }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.kvmAbsent, topology }))),
-      Match.tag('HvfUnavailable', ({ arch }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.hvf, topology: `arch=${arch}` }))),
-      Match.tag('WHPUnavailable', ({ topology }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.whp, topology }))),
+      Match.tag('KvmDenied', ({ topology }) => refused(topology, REMEDIATIONS.kvmDenied)),
+      Match.tag('KvmAbsent', ({ topology }) => refused(topology, REMEDIATIONS.kvmAbsent)),
+      Match.tag('HvfUnavailable', ({ arch }) => refused(`arch=${arch}`, REMEDIATIONS.hvf)),
+      Match.tag('WHPUnavailable', ({ topology }) => refused(topology, REMEDIATIONS.whp)),
       Match.tag('PlatformUnsupported', ({ platform, arch }) =>
-        Result.succeed(
-          VirtualizationRefused.make({
-            remediation: REMEDIATIONS.unsupported,
-            topology: `platform=${platform} (${arch})`,
-          }),
-        )),
+        refused(`platform=${platform} (${arch})`, REMEDIATIONS.unsupported)),
       Match.exhaustive,
     ),
 )

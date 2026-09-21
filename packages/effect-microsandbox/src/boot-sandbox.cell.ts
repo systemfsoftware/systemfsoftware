@@ -1,10 +1,9 @@
 import * as NodeSocketServer from '@effect/platform-node/NodeSocketServer'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Effect } from 'effect'
+import { Array, Effect, Function, Option, pipe } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import type * as Scope from 'effect/Scope'
 import type { Sandbox, SandboxBuilder } from 'microsandbox'
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
@@ -27,52 +26,61 @@ export interface AcquiredVM {
   readonly plan: SandboxPlan
   readonly sandbox: Sandbox
 }
+const compilePlan: {
+  (plan: SandboxPlan): (builder: SandboxBuilder) => SandboxBuilder
+  (builder: SandboxBuilder, plan: SandboxPlan): SandboxBuilder
+} = Function.dual(2, (builder: SandboxBuilder, plan: SandboxPlan): SandboxBuilder =>
+  pipe(
+    builder.image(plan.image).envs({ ...plan.envs }),
+    (b) =>
+      Option.match(Option.fromNullishOr(plan.cpus), {
+        onNone: () => b,
+        onSome: (cpus) => b.cpus(cpus),
+      }),
+    (b) =>
+      Option.match(Option.fromNullishOr(plan.memoryMiB), {
+        onNone: () => b,
+        onSome: (mem) => b.memory(mem),
+      }),
+    (b) =>
+      Option.match(Option.fromNullishOr(plan.workdir), {
+        onNone: () => b,
+        onSome: (wd) => b.workdir(wd),
+      }),
+    (b) =>
+      Option.match(Option.fromNullishOr(plan.cmd), {
+        onNone: () => b,
+        onSome: (cmd) => b.cmd([...cmd]),
+      }),
+    (b) =>
+      Array.reduce(
+        plan.mounts,
+        b,
+        (acc, m) => acc.volume(m.guest, (v: NapiMountBuilderT) => v.bind(m.host)),
+      ),
+    (b) =>
+      Array.reduce(
+        plan.portBindings,
+        b,
+        (acc, p) => acc.portBind(p.host, p.hostPort, p.guest),
+      ),
+  ))
 
-const optional = <A>(value: A | undefined, apply: (a: A) => void): void => {
-  if (value !== undefined) apply(value)
-}
-
-const applyVolumes = (builder: SandboxBuilder, mounts: SandboxPlan['mounts']): void => {
-  for (const mount of mounts) {
-    builder.volume(mount.guest, (b: NapiMountBuilderT): NapiMountBuilderT => b.bind(mount.host))
-  }
-}
-
-const applyPorts = (builder: SandboxBuilder, bindings: SandboxPlan['portBindings']): void => {
-  for (const binding of bindings) {
-    builder.portBind(binding.host, binding.hostPort, binding.guest)
-  }
-}
-
-const applyPlan = (plan: SandboxPlan, builder: SandboxBuilder): void => {
-  builder.image(plan.image)
-  optional(plan.cpus, (cpus) => builder.cpus(cpus))
-  optional(plan.memoryMiB, (memoryMiB) => builder.memory(memoryMiB))
-  optional(plan.workdir, (workdir) => builder.workdir(workdir))
-  optional(plan.cmd, (cmd) => builder.cmd([...cmd]))
-  builder.envs({ ...plan.envs })
-  applyVolumes(builder, plan.mounts)
-  applyPorts(builder, plan.portBindings)
-}
-
-const createSandbox = (spec: MicroVMSpec, plan: SandboxPlan): Effect.Effect<AcquiredVM, SandboxBootError> =>
-  Effect.flatMap(
-    Effect.tryPromise({
-      try: () => import('microsandbox'),
-      catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
-    }),
-    ({ Sandbox }) =>
+const createSandbox = (spec: MicroVMSpec, plan: SandboxPlan) =>
+  Effect.tryPromise({
+    try: () => import('microsandbox'),
+    catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
+  }).pipe(
+    Effect.flatMap(({ Sandbox }) =>
       Effect.tryPromise({
-        try: () => {
-          const builder = Sandbox.builder(plan.name)
-          applyPlan(plan, builder)
-          return builder.create()
-        },
+        try: () => compilePlan(Sandbox.builder(plan.name), plan).create(),
         catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
-      }).pipe(Effect.map((sandbox): AcquiredVM => ({ spec, plan, sandbox }))),
+      })
+    ),
+    Effect.map((sandbox): AcquiredVM => ({ spec, plan, sandbox })),
   )
 
-const teardown = (sandbox: Sandbox): Effect.Effect<void> =>
+const teardown = (sandbox: Sandbox) =>
   Effect.gen(function*() {
     yield* Effect.promise(() => sandbox.stopWithTimeout(STOP_TIMEOUT_MS)).pipe(
       Effect.catchDefect(() =>
@@ -86,26 +94,24 @@ const teardown = (sandbox: Sandbox): Effect.Effect<void> =>
     )
   }).pipe(Effect.uninterruptible)
 
-const allocateBinding = (guest: number): Effect.Effect<PortBinding, PortAllocationError> =>
+const allocateBinding = (guest: number) =>
   Effect.scoped(
-    Effect.gen(function*() {
-      const server = yield* NodeSocketServer.make({ host: LOOPBACK_HOST, port: 0 }).pipe(
-        Effect.mapError((cause) => new PortAllocationError({ guestPort: guest, cause })),
-      )
-      const address = server.address
-      if (!('port' in address)) {
-        return yield* new PortAllocationError({ guestPort: guest })
-      }
-      return { guest, host: LOOPBACK_HOST, hostPort: address.port }
-    }),
+    NodeSocketServer.make({ host: LOOPBACK_HOST, port: 0 }).pipe(
+      Effect.mapError((cause) => new PortAllocationError({ guestPort: guest, cause })),
+      Effect.flatMap((server) => {
+        const address = server.address
+        return Option.match(Option.fromNullishOr('port' in address ? address.port : undefined), {
+          onNone: () => Effect.fail(new PortAllocationError({ guestPort: guest })),
+          onSome: (port) => Effect.succeed<PortBinding>({ guest, host: LOOPBACK_HOST, hostPort: port }),
+        })
+      }),
+    ),
   )
 
-const allocateBindings = (
-  guests: ReadonlyArray<number>,
-): Effect.Effect<ReadonlyArray<PortBinding>, PortAllocationError> =>
+const allocateBindings = (guests: ReadonlyArray<number>) =>
   Effect.forEach(guests, (guest) => allocateBinding(guest), { concurrency: 'unbounded' })
 
-const readPlanCommand = (spec: MicroVMSpec): Effect.Effect<PlanSandbox, PortAllocationError, Crypto.Crypto> =>
+const readPlanCommand = (spec: MicroVMSpec) =>
   Effect.gen(function*() {
     const crypto = yield* Crypto.Crypto
     const ports = Match.value(spec).pipe(
@@ -122,10 +128,7 @@ const readPlanCommand = (spec: MicroVMSpec): Effect.Effect<PlanSandbox, PortAllo
     })
   })
 
-const writeBoot = (
-  outcome: Result.Result<SandboxPlanDecision, never>,
-  command: PlanSandbox,
-): Effect.Effect<AcquiredVM, LoopbackViolationError | SandboxBootError, Scope.Scope> =>
+const writeBoot = (outcome: Result.Result<SandboxPlanDecision, never>, command: PlanSandbox) =>
   Match.value(Result.getOrThrow(outcome)).pipe(
     Match.tag('PlanRefused', (refused) =>
       Effect.fail(

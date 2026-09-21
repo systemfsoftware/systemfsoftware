@@ -1,5 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Option, Schema } from 'effect'
+import * as Arr from 'effect/Array'
 import * as Result from 'effect/Result'
 import { GuestPort, MicroVMSpec } from './MicroVMSpec.schema.js'
 
@@ -50,13 +51,12 @@ export class PlanSandbox extends Schema.TaggedClass<PlanSandbox>()('PlanSandbox'
   static readonly [Workflow.InstrumentationBrand] = ['name'] as const
 }
 
-const LOOPBACK_HOST = '127.0.0.1'
 const LOOPBACK_PREFIX = '127.'
 
-const isLoopback = (host: string): boolean => [host === LOOPBACK_HOST, host.startsWith(LOOPBACK_PREFIX)].some(Boolean)
+const isLoopback = (host: string): boolean => host.startsWith(LOOPBACK_PREFIX)
 
 const illegalBinding = (bindings: ReadonlyArray<PortBinding>): Option.Option<PortBinding> =>
-  Option.fromNullishOr(bindings.find((binding) => !isLoopback(binding.host)))
+  Arr.findFirst(bindings, (binding) => !isLoopback(binding.host))
 
 const planOf = (command: PlanSandbox): SandboxPlan =>
   Match.value(command.spec).pipe(

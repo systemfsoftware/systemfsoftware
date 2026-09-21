@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Effect, FileSystem } from 'effect'
+import { Config, Effect, FileSystem, Option } from 'effect'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import type { ResolvedRuntime } from 'microsandbox'
@@ -28,52 +28,57 @@ const kvmObservationOf = (accessible: boolean, present: boolean): ProbeObservati
     Match.orElse(() => new KvmAbsent({ topology: 'kvm exists=false' })),
   )
 
-const linuxProbe = (fs: FileSystem.FileSystem): Effect.Effect<ProbeObservation> =>
-  Effect.flatMap(
-    fs.access(KVM_DEVICE, { readable: true, writable: true }).pipe(
-      Effect.as(true),
-      Effect.catchTag('PlatformError', () => Effect.succeed(false)),
-    ),
-    (accessible) =>
-      accessible
-        ? Effect.succeed<ProbeObservation>(kvmObservationOf(true, false))
-        : Effect.map(
-          fs.exists(KVM_DEVICE).pipe(Effect.catchTag('PlatformError', () => Effect.succeed(false))),
-          (present) => kvmObservationOf(false, present),
-        ),
+const linuxProbe = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const accessible = yield* fs.access(KVM_DEVICE, { readable: true, writable: true }).pipe(
+    Effect.as(true),
+    Effect.catchTag('PlatformError', () => Effect.succeed(false)),
   )
-
-const darwinProbe: Effect.Effect<ProbeObservation> = Effect.succeed<ProbeObservation>(
-  process.arch === 'arm64' ? new KvmAccessible() : new HvfUnavailable({ arch: process.arch }),
-)
-
-const windowsProbe = (fs: FileSystem.FileSystem): Effect.Effect<ProbeObservation> =>
-  Effect.map(
-    fs.exists(WINDOWS_VMCOMPUTE).pipe(Effect.catchTag('PlatformError', () => Effect.succeed(false))),
-    (present): ProbeObservation =>
-      present
-        ? new KvmAccessible()
-        : new WHPUnavailable({ topology: 'vmcompute present=false' }),
+  if (accessible) {
+    return kvmObservationOf(true, false)
+  }
+  const present = yield* fs.exists(KVM_DEVICE).pipe(
+    Effect.catchTag('PlatformError', () => Effect.succeed(false)),
   )
+  return kvmObservationOf(false, present)
+})
+const darwinProbe = Effect.gen(function*() {
+  const arch = yield* Config.String('ARCH').pipe(Config.withDefault(process.arch))
+  return Match.value(arch).pipe(
+    Match.when('arm64', () => new KvmAccessible()),
+    Match.orElse((a) => new HvfUnavailable({ arch: a })),
+  )
+}).pipe(Effect.orDie)
 
-const unsupportedProbe: Effect.Effect<ProbeObservation> = Effect.succeed<ProbeObservation>(
-  new PlatformUnsupported({ platform: process.platform, arch: process.arch }),
-)
+const windowsProbe = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const present = yield* fs.exists(WINDOWS_VMCOMPUTE).pipe(
+    Effect.catchTag('PlatformError', () => Effect.succeed(false)),
+  )
+  if (present) {
+    return new KvmAccessible()
+  }
+  return new WHPUnavailable({ topology: 'vmcompute present=false' })
+})
 
-const probes: Record<string, ((fs: FileSystem.FileSystem) => Effect.Effect<ProbeObservation>) | undefined> = {
+const unsupportedProbe = (platform: string, arch: string) =>
+  Effect.succeed<ProbeObservation>(new PlatformUnsupported({ platform, arch }))
+
+const probes: Record<string, Effect.Effect<ProbeObservation, never, FileSystem.FileSystem>> = {
   linux: linuxProbe,
-  darwin: () => darwinProbe,
+  darwin: darwinProbe,
   win32: windowsProbe,
 }
 
-const probeFor = (fs: FileSystem.FileSystem, platform: string): Effect.Effect<ProbeObservation> =>
-  probes[platform] !== undefined ? probes[platform](fs) : unsupportedProbe
-
-const probeCapability: Effect.Effect<ProbeObservation, never, FileSystem.FileSystem> = Effect.flatMap(
-  FileSystem.FileSystem,
-  (fs) => probeFor(fs, process.platform),
-)
-const announce = (resolved: ResolvedRuntime): Effect.Effect<void> =>
+const probeCapability = Effect.gen(function*() {
+  const platform = yield* Config.String('PLATFORM').pipe(Config.withDefault(process.platform))
+  const arch = yield* Config.String('ARCH').pipe(Config.withDefault(process.arch))
+  return yield* Option.match(Option.fromNullishOr(probes[platform]), {
+    onSome: (probe) => probe,
+    onNone: () => unsupportedProbe(platform, arch),
+  })
+}).pipe(Effect.orDie)
+const announce = (resolved: ResolvedRuntime) =>
   Effect.logInfo(
     `[effect-microsandbox] microsandbox runtime resolved: ${resolved.msbPath} (origin: ${resolved.origin})`,
   )
@@ -91,29 +96,27 @@ const writeProbe = (
         ),
       )),
     Match.tag('VirtualizationEligible', () =>
-      Effect.flatMap(
-        Effect.flatMap(
-          Effect.tryPromise({
-            try: () => import('microsandbox'),
-            catch: (cause) =>
-              new VirtualizationUnsupportedError({
-                platform: command.platform,
-                remediation: 'Failed to load microsandbox native runtime',
-                cause,
-              }),
+      Effect.tryPromise({
+        try: () => import('microsandbox'),
+        catch: (cause) =>
+          new VirtualizationUnsupportedError({
+            platform: command.platform,
+            remediation: 'Failed to load microsandbox native runtime',
+            cause,
           }),
-          ({ resolveRuntime }) => Effect.sync(() => resolveRuntime()),
-        ),
-        announce,
+      }).pipe(
+        Effect.flatMap(({ resolveRuntime }) => Effect.sync(() => resolveRuntime())),
+        Effect.flatMap(announce),
       )),
     Match.exhaustive,
   )
 
 export const probeVirtualization = Sandwich.named('probe_virtualization')((_spec: MicroVMSpec) =>
-  Effect.map(
-    probeCapability,
-    (observation) => new AssessVirtualization({ platform: process.platform, observation }),
-  )
+  Effect.gen(function*() {
+    const platform = yield* Config.String('PLATFORM').pipe(Config.withDefault(process.platform))
+    const observation = yield* probeCapability
+    return new AssessVirtualization({ platform, observation })
+  }).pipe(Effect.orDie)
 )
   .decide(assessVirtualization)
   .write(writeProbe)
