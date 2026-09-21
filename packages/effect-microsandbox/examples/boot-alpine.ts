@@ -1,7 +1,7 @@
 import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Deferred, Effect, Fiber, HashMap, Option } from 'effect'
+import { Deferred, Effect, Fiber } from 'effect'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { existsSync } from 'node:fs'
@@ -25,11 +25,10 @@ const j1 = Effect.scoped(
     const out = yield* vm.exec('echo', ['hello'])
     assert.equal(out.code, 0)
     assert.ok(out.stdout.includes('hello'), 'guest must echo the exec payload')
-    const hostPort = HashMap.get(vm.mappedPorts, 8080)
-    assert.ok(
-      Option.isSome(hostPort) && hostPort.value > 0,
-      'guest port 8080 must map to a positive host port',
-    )
+    const hostPort = yield* vm.port(8080)
+    assert.ok(hostPort > 0, 'guest port 8080 must map to a positive host port')
+    const url = yield* vm.url(8080, '/ping')
+    assert.equal(url, `http://127.0.0.1:${hostPort}/ping`)
     return vm.name
   }),
 )

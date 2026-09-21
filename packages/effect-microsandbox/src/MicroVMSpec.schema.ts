@@ -20,6 +20,18 @@ export type HttpWait = typeof HttpWait.Type
 export const PortWait = Schema.TaggedStruct('Port', { port: GuestPort })
 export type PortWait = typeof PortWait.Type
 
+export const PortProbe = Schema.Union([
+  Schema.TaggedStruct('Tcp', {}),
+  Schema.TaggedStruct('Http', {
+    path: Schema.String.pipe(Schema.check(Schema.isStartsWith('/'))),
+  }),
+])
+export type PortProbe = typeof PortProbe.Type
+
+export class ExposedPort extends Schema.Class<ExposedPort>('ExposedPort')({
+  port: GuestPort,
+  probe: Schema.optional(PortProbe),
+}) {}
 export const LogWait = Schema.TaggedStruct('Log', {
   pattern: Schema.String.pipe(Schema.check(Schema.isNonEmpty())),
 })

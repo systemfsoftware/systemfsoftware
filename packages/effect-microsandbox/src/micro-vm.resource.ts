@@ -1,13 +1,15 @@
-import type { Effect, Layer } from 'effect'
-import { Exit, Match, Schema } from 'effect'
+import { Effect, Exit, HashMap, Layer, Match, Option, Schema, Stream } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type * as Scope from 'effect/Scope'
-import type { MicroVMError } from './MicroVMError.schema.js'
-import { layer as sandboxLayer, scoped as sandboxScoped } from './MicroVMSandbox.js'
+import type { Sandbox } from 'microsandbox'
+import { bootMicroVM } from './boot-microvm.cell.js'
+import type { AcquiredVM } from './boot-sandbox.cell.js'
+import { ExecError, type MicroVMError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import {
+  ExposedPort,
   GuestPort,
   HttpWait,
   ImageReference,
@@ -15,13 +17,14 @@ import {
   LogWait,
   MicroVMSpec,
   type Mount,
+  PortProbe,
   PortWait,
   ServiceSpec,
   type WaitStrategy,
 } from './MicroVMSpec.schema.js'
-import type { RunningVM } from './RunningVM.js'
-
+import { type ExecResult, type LogLine, type RunningVM, RunningVM as RunningVMTag } from './running-vm.handle.js'
 export {
+  ExposedPort,
   GuestPort,
   HttpWait,
   ImageReference,
@@ -29,9 +32,18 @@ export {
   LogWait,
   MicroVMSpec,
   type Mount,
+  PortProbe,
   PortWait,
   ServiceSpec,
   type WaitStrategy,
+}
+
+export { type ExecResult, type LogLine, RunningVMTag as RunningVM }
+
+export const Port = {
+  of: (port: number): ExposedPort => new ExposedPort({ port }),
+  tcp: (port: number): ExposedPort => new ExposedPort({ port, probe: { _tag: 'Tcp' } }),
+  http: (port: number, path = '/'): ExposedPort => new ExposedPort({ port, probe: { _tag: 'Http', path } }),
 }
 
 export const Wait = {
@@ -80,14 +92,83 @@ const makeProto = (raw: MicroVMSpec): MicroVMResource => {
       return makeProto(withWaitStrategy(raw, waitStrategy))
     },
     get scoped() {
-      return sandboxScoped(raw)
+      return scoped(raw)
     },
     get layer() {
-      return sandboxLayer(raw)
+      return layer(raw)
     },
   }
   return self
 }
+
+const execOf =
+  (sandbox: Sandbox) => (cmd: string, args: ReadonlyArray<string> = []): Effect.Effect<ExecResult, ExecError> => {
+    const argv = [cmd, ...args]
+    return Effect.map(
+      Effect.tryPromise({
+        try: () => sandbox.exec(cmd, [...args]),
+        catch: (cause) => new ExecError({ argv, cause }),
+      }),
+      (output): ExecResult => ({ code: output.status.code, stdout: output.stdout(), stderr: output.stderr() }),
+    )
+  }
+
+const logsOf = (sandbox: Sandbox): Stream.Stream<LogLine, SandboxBootError> =>
+  Stream.flatMap(
+    Stream.fromEffect(
+      Effect.tryPromise({
+        try: () => sandbox.logStream({ follow: true }),
+        catch: (cause) => new SandboxBootError({ sandboxName: sandbox.name, cause }),
+      }),
+    ),
+    (logStream) =>
+      Stream.fromAsyncIterable(logStream, (cause) => new SandboxBootError({ sandboxName: sandbox.name, cause })),
+  ).pipe(
+    Stream.map((entry): LogLine => ({ source: entry.source, text: entry.text() })),
+  )
+
+const runningVMOf = (vm: AcquiredVM): RunningVM => {
+  const mappedPorts = HashMap.fromIterable(
+    vm.plan.portBindings.map((binding) => [binding.guest, binding.hostPort] as const),
+  )
+
+  const port = (guestPort: number): Effect.Effect<number, PortAllocationError> =>
+    Effect.fromOption(HashMap.get(mappedPorts, guestPort)).pipe(
+      Effect.mapError(
+        () =>
+          new PortAllocationError({
+            guestPort,
+            cause: `Guest port ${guestPort} is not mapped to any host port on sandbox ${vm.plan.name}`,
+          }),
+      ),
+    )
+
+  const url = (guestPort: number, path = ''): Effect.Effect<string, PortAllocationError> =>
+    Effect.map(port(guestPort), (hostPort) => `http://127.0.0.1:${hostPort}${path.startsWith('/') ? path : `/${path}`}`)
+
+  return {
+    name: vm.plan.name,
+    mappedPorts,
+    port,
+    url,
+    exec: execOf(vm.sandbox),
+    logs: logsOf(vm.sandbox),
+    ping: Effect.map(Effect.option(Effect.promise(() => vm.sandbox.ping())), Option.isSome),
+  }
+}
+
+export const scoped = (
+  spec: MicroVMSpec,
+): Effect.Effect<
+  RunningVM,
+  MicroVMError,
+  Scope.Scope | Crypto.Crypto | FileSystem.FileSystem
+> => Effect.map(bootMicroVM.run(spec), runningVMOf)
+
+export const layer = (
+  spec: MicroVMSpec,
+): Layer.Layer<RunningVM, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> =>
+  Layer.effect(RunningVMTag, scoped(spec))
 export const service = (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
   makeProto(new ServiceSpec({ image, ports, env: {}, mounts: [] }))
 
