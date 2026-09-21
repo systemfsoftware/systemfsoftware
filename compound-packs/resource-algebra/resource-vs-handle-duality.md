@@ -39,6 +39,9 @@ In idiomatic Effect (`Socket`, `Queue`, `Fiber`, `Ref`), **handles are not OOP-s
 const TypeId = Symbol.for('~my-org/package/RunningInstance')
 export type TypeId = typeof TypeId
 
+// 1b. Module-private symbol slot for third-party driver tokens (see handle-state-privacy.md):
+const DriverId: unique symbol = Symbol.for('~my-org/package/RunningInstance/driver')
+
 // 2. Type guard:
 export const isRunningInstance = (u: unknown): u is RunningInstance =>
   Predicate.hasProperty(u, TypeId)
@@ -48,7 +51,7 @@ export interface RunningInstance extends Pipeable {
   readonly [TypeId]: typeof TypeId
   readonly id: string
   readonly endpoint: string
-  readonly driver: RawDriver
+  readonly [DriverId]: RawDriver
 }
 
 // 4. Constructor spreading Prototype:
@@ -64,6 +67,8 @@ export const exec: {
   (self: RunningInstance, cmd: string): Effect.Effect<ExecResult, ExecError>
 } = dual(2, (self: RunningInstance, cmd: string) => ...)
 ```
+
+Per-field state privacy — which tokens may be public readonly fields and which require module-private symbol slots or service closure scope — is codified in `handle-state-privacy.md`.
 
 ```ts
 // WRONG: Modeling an acquired entity as an ambient singleton Service

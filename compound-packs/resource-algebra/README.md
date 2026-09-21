@@ -18,6 +18,7 @@ This pack defines **Executable Resource Algebras**: pure declarative specificati
 | `pipeable-dual-parity.md`             | Pipeable Dual Parity             | Full parity between fluent method chaining and data-last `pipe(...)` composition                    | `review`       |
 | `scoped-lifecycle-first.md`           | Scoped Lifecycle First           | Resources acquire inside Effect `Scope` with escalating finalizers; no imperative start/stop        | `review`       |
 | `resource-vs-handle-duality.md`       | Resource vs Handle Duality       | Cold specification builders compile to live Pipeable handles, never ambient Context.Services        | `review`       |
+| `handle-state-privacy.md`             | Handle State Privacy             | Per-instance state travels inside the instance: symbol slots, opaque fields, or factory closures    | `review`       |
 | `parameterized-layer-constructors.md` | Parameterized Layer Constructors | Libraries export parameterized `layer(spec)` constructors, never static `*Live` singletons          | `review`       |
 | `single-namespace-barrel.md`          | Single Namespace Barrel          | Primary abstractions export as single cohesive namespace barrels matching Effect lineage            | `review`       |
 | `callable-vs-resource-syntax.md`      | Callable vs Resource Syntax      | Evaluators/policies use callable syntax `fn(input)`; resources/entities use interface properties    | `review`       |
