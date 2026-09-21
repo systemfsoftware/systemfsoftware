@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/npm-package",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/npm-package#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "An npm package as an in-memory file tree: build one from an authored file map, pack it to tarball bytes, and read one back \u2014 without touching the filesystem.",
+  "description": "An npm package as an in-memory file tree: build one from an authored file map, pack it to tarball bytes, and read one back — without touching the filesystem.",
   "keywords": [
     "npm",
     "package",

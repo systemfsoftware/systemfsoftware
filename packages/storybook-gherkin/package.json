@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/storybook-gherkin",
   "license": "Apache-2.0",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/storybook-gherkin#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Feature specs as Storybook stories \u2014 Gherkin Given/When/Then embedded in CSF with typed captures and scenario outlines, executing under Storybook's browser-mode play functions.",
+  "description": "Feature specs as Storybook stories — Gherkin Given/When/Then embedded in CSF with typed captures and scenario outlines, executing under Storybook's browser-mode play functions.",
   "keywords": [
     "effect",
     "effect-ts",
