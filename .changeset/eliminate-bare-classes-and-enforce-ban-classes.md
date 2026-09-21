@@ -2,7 +2,7 @@
 "@systemfsoftware/npm-package": minor
 "@systemfsoftware/effect-atom": patch
 "@systemfsoftware/oxlint-plugin-cell-architecture": minor
-"@systemfsoftware/oxlint-presets": patch
+"@systemfsoftware/oxlint-config-cell-architecture": patch
 "@systemfsoftware/oxlint-config-recommended": patch
 ---
 
