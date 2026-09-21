@@ -99,5 +99,18 @@ export class DuplicateOrder extends S.TaggedError<DuplicateOrder>()('DuplicateOr
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
 }
 
+export class CreditAccountNotFound extends S.TaggedError<CreditAccountNotFound>()('CreditAccountNotFound', {
+  customerId: S.String,
+  reason: S.String,
+}) {
+  readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+}
+
+export class AuthServiceUnavailable extends S.TaggedError<AuthServiceUnavailable>()('AuthServiceUnavailable', {
+  reason: S.String,
+}) {
+  readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+}
+
 export const FulfillmentError = S.Union([InsufficientStock, CreditLimitExceeded, Unauthorized, Forbidden])
 export type FulfillmentError = S.Schema.Type<typeof FulfillmentError>

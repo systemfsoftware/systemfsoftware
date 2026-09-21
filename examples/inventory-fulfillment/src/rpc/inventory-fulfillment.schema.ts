@@ -14,7 +14,11 @@ export class GetReservationRequest extends S.Class<GetReservationRequest>('GetRe
   orderId: S.String,
 }) {}
 
-export class ListStockRequest extends S.Class<ListStockRequest>('ListStockRequest')({}) {}
+export class ListStockRequest extends S.Class<ListStockRequest>('ListStockRequest')({
+  cursor: S.optional(S.String),
+  warehouseId: S.optional(S.String),
+  limit: S.optional(S.Int),
+}) {}
 
 export class ReservationView extends S.Class<ReservationView>('ReservationView')({
   orderId: S.String,
@@ -25,4 +29,5 @@ export class ReservationView extends S.Class<ReservationView>('ReservationView')
 
 export class StockView extends S.Class<StockView>('StockView')({
   partitions: S.Array(WarehouseStockPartition),
+  nextCursor: S.NullOr(S.String),
 }) {}

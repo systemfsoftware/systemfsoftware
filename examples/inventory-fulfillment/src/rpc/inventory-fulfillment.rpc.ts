@@ -1,6 +1,7 @@
 import { Effect, Match, Option, Schema as S } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import {
+  CreditAccountNotFound,
   CreditLimitExceeded,
   DuplicateOrder,
   Forbidden,
@@ -32,7 +33,7 @@ import {
 export const SubmitOrder = Rpc.make('submitOrder', {
   payload: SubmitOrderRequest,
   success: FulfillmentDecision,
-  error: S.Union([InsufficientStock, CreditLimitExceeded, DuplicateOrder, Forbidden]),
+  error: S.Union([InsufficientStock, CreditLimitExceeded, DuplicateOrder, Forbidden, CreditAccountNotFound]),
 }).middleware(AuthMiddleware)
 
 export const GetReservation = Rpc.make('getReservation', {
@@ -120,10 +121,21 @@ const getReservation = (request: GetReservationRequest) =>
     })
   })
 
-const listStock = () =>
+const defaultStockPageSize = 50
+const maxStockPageSize = 100
+
+const pageSizeOf = (limit: number | undefined): number =>
+  Math.max(1, Math.min(limit ?? defaultStockPageSize, maxStockPageSize))
+
+const listStock = (request: ListStockRequest) =>
   Effect.gen(function*() {
     const store = yield* InventoryStore
-    return new StockView({ partitions: yield* store.readAllStock })
+    const page = yield* store.readStockPage({
+      cursor: Option.fromUndefinedOr(request.cursor),
+      limit: pageSizeOf(request.limit),
+      warehouseId: Option.fromUndefinedOr(request.warehouseId),
+    })
+    return new StockView({ partitions: page.partitions, nextCursor: Option.getOrNull(page.nextCursor) })
   })
 
 export const handlers = FulfillmentRpcs.toLayer({

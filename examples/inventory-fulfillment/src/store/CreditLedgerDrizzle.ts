@@ -1,6 +1,9 @@
+import { sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
 import { Effect, Layer, Option } from 'effect'
 import type { SchemaError } from 'effect/Schema'
+import type { Money } from '../domain/credit.schema.js'
+import { CreditAccountNotFound } from '../domain/decision.schema.js'
 import type { CustomerCredit } from '../ports/CreditLedger.js'
 import { CreditLedger } from '../ports/CreditLedger.js'
 import { decodeCreditAccount, decodeCustomerTier } from './decode.js'
@@ -27,8 +30,22 @@ const readCredit = (db: DrizzleDatabase, customerId: string) =>
   Effect.gen(function*() {
     const rows: readonly UserRow[] = yield* db.select().from(user).where(eq(user.id, customerId))
     return yield* Option.match(Option.fromUndefinedOr(rows[0]), {
-      onNone: () => Effect.die(new Error(`CreditLedger: no credit account for customer ${customerId}`)),
+      onNone: () =>
+        Effect.fail(new CreditAccountNotFound({ customerId, reason: `no credit account for customer ${customerId}` })),
       onSome: (row) => creditOf(row),
+    })
+  })
+
+const charge = (db: DrizzleDatabase, customerId: string, amount: Money) =>
+  Effect.gen(function*() {
+    const updated = yield* db
+      .update(user)
+      .set({ outstandingBalance: sql`${user.outstandingBalance} + ${amount}` })
+      .where(eq(user.id, customerId))
+      .returning({ id: user.id })
+    return yield* Option.match(Option.fromUndefinedOr(updated[0]), {
+      onNone: () => Effect.die(new Error(`credit charge: no credit account for customer ${customerId}`)),
+      onSome: () => Effect.void,
     })
   })
 
@@ -37,7 +54,8 @@ export const layer: Layer.Layer<CreditLedger, never, DrizzleSession> = Layer.eff
   Effect.gen(function*() {
     const db = yield* DrizzleSession
     return {
-      readCredit: (customerId: string) => readCredit(db, customerId).pipe(Effect.orDie),
+      readCredit: (customerId: string) => readCredit(db, customerId),
+      charge: (customerId: string, amount: Money) => charge(db, customerId, amount).pipe(Effect.orDie),
     }
   }),
 )

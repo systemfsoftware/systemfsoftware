@@ -18,7 +18,7 @@ import {
   uniqueId,
   uniquePassword,
 } from './server.fixture.js'
-import type { CreditInput, Session, StockLotInput } from './server.fixture.js'
+import type { CreditInput, FulfillmentDecision, Session, StockLotInput, StockView } from './server.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -66,6 +66,50 @@ const placeOrder = (session: Session, orderId: string, lines: readonly LineInput
     return yield* client.submitOrder(payload)
   })
 
+type CreditOutcome =
+  | { readonly tag: 'AllocatedSplit'; readonly orderId: string }
+  | {
+    readonly tag: 'CreditHold'
+    readonly orderId: string
+    readonly shortfall: number
+    readonly requiredDownpayment: number
+  }
+
+type CreditHoldOutcome = Extract<CreditOutcome, { readonly tag: 'CreditHold' }>
+
+const classifyCreditOutcome = (decision: FulfillmentDecision): Effect.Effect<CreditOutcome> =>
+  S.decodeUnknownEffect(AllocatedSplit)(decision).pipe(
+    Effect.map((allocated): CreditOutcome => ({ tag: 'AllocatedSplit', orderId: allocated.orderId })),
+    Effect.catchTag('SchemaError', () =>
+      S.decodeUnknownEffect(CreditHold)(decision).pipe(
+        Effect.map(
+          (held): CreditOutcome => ({
+            tag: 'CreditHold',
+            orderId: held.orderId,
+            shortfall: held.shortfall,
+            requiredDownpayment: held.requiredDownpayment,
+          }),
+        ),
+        Effect.orDie,
+      )),
+  )
+
+const lotIdsOf = (view: StockView): readonly string[] =>
+  view.partitions.flatMap((partition) => partition.lots.map((lot) => lot.lotId))
+
+interface StockPageRequest {
+  readonly warehouseId: string
+  readonly limit: number
+  readonly cursor?: string | undefined
+}
+
+const listStockPage = (session: Session, request: StockPageRequest) =>
+  Effect.gen(function*() {
+    const server = yield* TestServer
+    const client = yield* server.client(session.cookie)
+    return yield* client.listStock(request)
+  })
+
 Feature('Inventory fulfillment across the warehouse network')
   .withScenarioLayer(TestServerLayer)
   .liveClock()
@@ -88,7 +132,7 @@ Feature('Inventory fulfillment across the warehouse network')
               sku: skuA,
               warehouseId: east,
               quantity: 6,
-              expiresAt: DateTime.makeUnsafe('2026-01-01T00:00:00Z'),
+              expiresAt: DateTime.makeUnsafe('2027-01-01T00:00:00Z'),
             }])
             yield* provisionStock(west, 'west', [
               {
@@ -96,7 +140,7 @@ Feature('Inventory fulfillment across the warehouse network')
                 sku: skuA,
                 warehouseId: west,
                 quantity: 8,
-                expiresAt: DateTime.makeUnsafe('2026-02-01T00:00:00Z'),
+                expiresAt: DateTime.makeUnsafe('2027-02-01T00:00:00Z'),
               },
               { id: uniqueId('lot'), sku: skuB, warehouseId: west, quantity: 5 },
             ])
@@ -546,6 +590,97 @@ Feature('Inventory fulfillment across the warehouse network')
             expect(yield* server.inspect.reservations(s.order.orderId)).toHaveLength(1)
           })
         ),
+      ),
+    )
+
+    scenario(
+      'A customer paging through the stock list reaches every lot',
+      Gherkin.Do.pipe(
+        Given('a customer with an authenticated session')('customer', () => registerCustomer('Stock Pager')),
+        Given('a warehouse stocking five lots of a single item')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            const lots = [uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot')]
+            yield* provisionStock(
+              warehouse,
+              'central',
+              lots.map((id) => ({ id, sku, warehouseId: warehouse, quantity: 1 })),
+            )
+            return { sku, warehouse, lots }
+          })),
+        When('they list the stock four lots at a time')('pages', (s) =>
+          Effect.gen(function*() {
+            const first = yield* listStockPage(s.customer, { warehouseId: s.catalog.warehouse, limit: 4 })
+            const second = yield* listStockPage(s.customer, {
+              warehouseId: s.catalog.warehouse,
+              limit: 4,
+              cursor: first.nextCursor ?? undefined,
+            })
+            return { first, second }
+          })),
+        Then('the first page holds four lots and offers a way to continue')((s) => {
+          expect(lotIdsOf(s.pages.first)).toHaveLength(4)
+          expect(s.pages.first.nextCursor).not.toBeNull()
+        }),
+        And('the next page holds the one remaining lot and closes the listing')((s) => {
+          const firstIds = lotIdsOf(s.pages.first)
+          const secondIds = lotIdsOf(s.pages.second)
+          expect(secondIds).toHaveLength(1)
+          expect([...secondIds, ...firstIds].sort()).toEqual([...s.catalog.lots].sort())
+          expect(s.pages.second.nextCursor).toBeNull()
+        }),
+      ),
+    )
+
+    scenario(
+      'Two orders a customer submits at once cannot both draw on the same credit',
+      Gherkin.Do.pipe(
+        Given('a Standard customer with a hundred unit credit limit')(
+          'customer',
+          () => registerCustomerWithCredit('Credit Single Flight', { tier: 'Standard', creditLimit: 100 }),
+        ),
+        Given('a warehouse holding ample stock of one item across two lots')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(warehouse, 'central', [
+              { id: uniqueId('lot'), sku, warehouseId: warehouse, quantity: 200 },
+              { id: uniqueId('lot'), sku, warehouseId: warehouse, quantity: 200 },
+            ])
+            return { sku }
+          })),
+        When('the customer submits two eighty unit orders at the same moment')(
+          'outcomes',
+          (s) =>
+            Effect.gen(function*() {
+              const server = yield* TestServer
+              const firstClient = yield* server.client(s.customer.cookie)
+              const secondClient = yield* server.client(s.customer.cookie)
+              const firstPayload = yield* submitRequest({
+                orderId: uniqueId('order'),
+                lines: [{ sku: s.catalog.sku, quantity: 80 }],
+              })
+              const secondPayload = yield* submitRequest({
+                orderId: uniqueId('order'),
+                lines: [{ sku: s.catalog.sku, quantity: 80 }],
+              })
+              const decisions = yield* Effect.all(
+                [firstClient.submitOrder(firstPayload), secondClient.submitOrder(secondPayload)],
+                { concurrency: 'unbounded' },
+              )
+              return yield* Effect.forEach(decisions, classifyCreditOutcome)
+            }),
+        ),
+        Then('exactly one order is allocated and the other is held for the shortfall')((s) => {
+          expect(s.outcomes.filter((outcome) => outcome.tag === 'AllocatedSplit')).toHaveLength(1)
+          const held = s.outcomes.filter(
+            (outcome): outcome is CreditHoldOutcome => outcome.tag === 'CreditHold',
+          )
+          expect(held).toHaveLength(1)
+          expect(held[0]?.shortfall).toBe(60)
+          expect(held[0]?.requiredDownpayment).toBe(60)
+        }),
       ),
     )
   })

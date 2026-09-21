@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, type DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
+import { Array as Arr, type DateTime, Duration, Effect, Match, Option, Random, Result, Schema as S } from 'effect'
 import type { SchemaError } from 'effect/Schema'
 import {
   allocateStock,
@@ -18,6 +18,7 @@ import {
   AllocatedWithOverdraft,
   Backordered,
   ConflictRollback,
+  type CreditAccountNotFound,
   CreditHold as WireCreditHold,
   CreditLimitExceeded as WireCreditLimitExceeded,
   type FulfillmentDecision,
@@ -43,6 +44,7 @@ import {
   SettleFulfillmentCommand,
 } from './domain/settle-fulfillment.workflow.js'
 import { CreditLedger } from './ports/CreditLedger.js'
+import { CustomerGate } from './ports/CustomerGate.js'
 import { InventoryStore } from './ports/InventoryStore.js'
 import { NowClock } from './ports/NowClock.js'
 import { type ReservationCommit, type ReservationCommitOutcome, ReservationLog } from './ports/ReservationLog.js'
@@ -53,7 +55,7 @@ export interface FulfillmentRequest {
   readonly fraudRisk: FraudRiskScore
 }
 
-type FulfillmentPorts = InventoryStore | CreditLedger | ReservationLog | NowClock
+type FulfillmentPorts = InventoryStore | CreditLedger | ReservationLog | NowClock | CustomerGate
 
 interface RawContext {
   readonly order: Order
@@ -88,6 +90,9 @@ type CoreError = AllocateInsufficientStock | CreditCheckLimitExceeded
 
 const maxAttempts = 3
 
+const minRetryDelayMillis = 50
+const maxRetryDelayMillis = 100
+
 const rollbackReason = 'optimistic concurrency conflict: retry budget exhausted'
 
 const moneyOf = (value: number): Money => Result.getOrThrow(S.decodeResult(Money)(value))
@@ -113,6 +118,7 @@ const settlementOf = (command: OrderFulfillmentCommand): SettleFulfillmentComman
         orderId: command.order.orderId,
         lines: exploded.components,
         stock: command.stock,
+        now: command.now,
       }),
     ),
   )
@@ -199,16 +205,15 @@ const encodedOutcome = (outcome: Result.Result<CoreDecision, CoreError>): Encode
 
 const readContext = (
   request: FulfillmentRequest,
-): Effect.Effect<RawContext, never, InventoryStore | CreditLedger | NowClock> =>
+): Effect.Effect<RawContext, CreditAccountNotFound, InventoryStore | CreditLedger | NowClock> =>
   Effect.gen(function*() {
     const inventory = yield* InventoryStore
     const creditLedger = yield* CreditLedger
     const clock = yield* NowClock
-    const stock = yield* inventory.readAllStock
-    const [credit, now] = yield* Effect.all(
-      [creditLedger.readCredit(request.order.customerId), clock.now],
+    const [stock, credit, now] = yield* Effect.all(
+      [inventory.readAllStock, creditLedger.readCredit(request.order.customerId), clock.now],
       { concurrency: 'unbounded' },
-    )
+    ).pipe(Effect.catchTag(['SchemaError', 'EffectDrizzleQueryError'], (error) => Effect.die(error)))
     return {
       order: request.order,
       customerTier: credit.tier,
@@ -288,8 +293,10 @@ const cell = Sandwich.read(readContext)
     })
   )
 
-const runAttempt = (request: FulfillmentRequest): Effect.Effect<FulfillmentAttempt, never, FulfillmentPorts> =>
-  cell.run(request).pipe(Effect.orDie)
+const runAttempt = (
+  request: FulfillmentRequest,
+): Effect.Effect<FulfillmentAttempt, CreditAccountNotFound, FulfillmentPorts> =>
+  cell.run(request).pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
 
 const commitRollback = (
   request: FulfillmentRequest,
@@ -332,7 +339,7 @@ const rollback = (
 function submitWithRetry(
   request: FulfillmentRequest,
   attemptNumber: number,
-): Effect.Effect<FulfillmentDecision | FulfillmentError, never, FulfillmentPorts> {
+): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> {
   return Effect.flatMap(runAttempt(request), (attempt) =>
     Option.match(attempt.commit, {
       onNone: () => Effect.succeed(attempt.decision),
@@ -340,7 +347,15 @@ function submitWithRetry(
         Match.value(outcome === 'VersionConflict').pipe(
           Match.when(true, () =>
             Match.value(attemptNumber < maxAttempts).pipe(
-              Match.when(true, () => submitWithRetry(request, attemptNumber + 1)),
+              Match.when(true, () =>
+                Effect.flatMap(
+                  Random.nextIntBetween(minRetryDelayMillis, maxRetryDelayMillis),
+                  (delay) =>
+                    Effect.flatMap(
+                      Effect.sleep(Duration.millis(delay)),
+                      () => submitWithRetry(request, attemptNumber + 1),
+                    ),
+                )),
               Match.when(false, () => rollback(request, attempt, attemptNumber)),
               Match.exhaustive,
             )),
@@ -354,9 +369,50 @@ function submitWithRetry(
  * The fulfillment cell: reads stock/credit/clock, decodes and decides purely, encodes the wire
  * decision and its reservation events, then commits with an optimistic-concurrency CAS. A
  * `VersionConflict` re-runs the whole sandwich from a fresh read, bounded to {@link maxAttempts}
- * total attempts, after which the shell returns the `ConflictRollback` decision and writes a
- * `ReservationRolledBack` compensation record.
+ * total attempts with a jittered backoff between them, after which the shell returns the
+ * `ConflictRollback` decision and writes a `ReservationRolledBack` compensation record.
+ *
+ * The whole run is serialized per customer by {@link CustomerGate}: the credit read that authorizes
+ * the order and the charge that settles it form one critical section, so two concurrent orders from
+ * one customer cannot both be authorized against the same pre-charge balance. A committed
+ * allocation (`AllocatedSplit` / `AllocatedWithOverdraft`) charges the customer; `Backordered`,
+ * `CreditHold` and `ConflictRollback` leave no charge behind.
  */
+const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
+  moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
+
+const chargeFor = (
+  request: FulfillmentRequest,
+  decision: FulfillmentDecision | FulfillmentError,
+): Effect.Effect<void, never, CreditLedger> =>
+  Match.value(decision).pipe(
+    Match.tag('AllocatedSplit', (allocated) =>
+      Effect.flatMap(CreditLedger, (ledger) =>
+        ledger.charge(request.order.customerId, chargedAmountOf(allocated.allocations)))),
+    Match.tag('AllocatedWithOverdraft', (overdraft) =>
+      Effect.flatMap(CreditLedger, (ledger) =>
+        ledger.charge(request.order.customerId, chargedAmountOf(overdraft.allocations)))),
+    Match.tag('Backordered', () =>
+      Effect.void),
+    Match.tag('CreditHold', () =>
+      Effect.void),
+    Match.tag('ConflictRollback', () =>
+      Effect.void),
+    Match.tag('InsufficientStock', () =>
+      Effect.void),
+    Match.tag('CreditLimitExceeded', () =>
+      Effect.void),
+    Match.tag('Unauthorized', () => Effect.void),
+    Match.tag('Forbidden', () => Effect.void),
+    Match.exhaustive,
+  )
+
+const runGated = (
+  request: FulfillmentRequest,
+): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> =>
+  Effect.flatMap(submitWithRetry(request, 1), (decision) => Effect.map(chargeFor(request, decision), () => decision))
+
 export const runFulfillment = (
   request: FulfillmentRequest,
-): Effect.Effect<FulfillmentDecision | FulfillmentError, never, FulfillmentPorts> => submitWithRetry(request, 1)
+): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> =>
+  Effect.flatMap(CustomerGate, (gate) => gate.withGate(request.order.customerId, runGated(request)))

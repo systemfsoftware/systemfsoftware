@@ -22,12 +22,13 @@ import { eq } from 'drizzle-orm/sql/expressions/conditions'
 import { Context, DateTime, Effect, Layer, Match, Option, Ref, Schema as S } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
-import { AuthService, makeAuth } from '../src/http/auth.routes.js'
 import { httpServerLayer, layer as serverLayer } from '../src/http/server.js'
+import { AuthService } from '../src/ports/AuthService.js'
 import { InventoryStore } from '../src/ports/InventoryStore.js'
 import { make as makeRpcClient } from '../src/rpc/client.js'
 import type { Client as RpcClientHandle } from '../src/rpc/client.js'
 import { SubmitOrderRequest } from '../src/rpc/inventory-fulfillment.schema.js'
+import { makeAuth } from '../src/store/AuthServiceLive.js'
 import { DrizzleSession } from '../src/store/DrizzleSession.js'
 import type { DrizzleDatabase } from '../src/store/DrizzleSession.js'
 import { layer as pgTestLayer } from '../src/store/PgTest.layer.js'
@@ -119,6 +120,7 @@ const seamInstrumentedInventoryStore: Layer.Layer<InventoryStore, never, Drizzle
               return partitions
             }),
             readStock: (skus) => inner.readStock(skus),
+            readStockPage: (query) => inner.readStockPage(query),
           }
         }),
       )

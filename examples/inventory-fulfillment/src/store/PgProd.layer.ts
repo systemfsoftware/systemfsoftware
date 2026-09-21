@@ -4,11 +4,13 @@ import { migrate } from 'drizzle-orm/effect-postgres/migrator'
 import { Config, Context, Effect, Layer, Redacted } from 'effect'
 import { Pool } from 'pg'
 import { CreditLedger } from '../ports/CreditLedger.js'
+import { CustomerGate } from '../ports/CustomerGate.js'
 import { InventoryStore } from '../ports/InventoryStore.js'
 import { NowClock } from '../ports/NowClock.js'
 import { ReservationLog } from '../ports/ReservationLog.js'
 import { layer as ClockLiveLayer } from './ClockLive.js'
 import { layer as CreditLedgerDrizzleLayer } from './CreditLedgerDrizzle.js'
+import { layer as CustomerGateLayer } from './CustomerGateInMemory.js'
 import { DrizzleSession } from './DrizzleSession.js'
 import { layer as InventoryStoreDrizzleLayer } from './InventoryStoreDrizzle.js'
 import { layer as ReservationLogDrizzleLayer } from './ReservationLogDrizzle.js'
@@ -62,10 +64,11 @@ const ports = Layer.mergeAll(
   CreditLedgerDrizzleLayer,
   ReservationLogDrizzleLayer,
   ClockLiveLayer,
+  CustomerGateLayer,
 )
 
 export const layer: Layer.Layer<
-  DrizzleSession | InventoryStore | CreditLedger | ReservationLog | NowClock | PgRuntime
+  DrizzleSession | InventoryStore | CreditLedger | ReservationLog | NowClock | CustomerGate | PgRuntime
 > = ports.pipe(
   Layer.provideMerge(sessionLayer.pipe(Layer.provide(clientLayer))),
   Layer.provideMerge(rawClient),

@@ -1,4 +1,5 @@
 import { describe, it } from '@effect/vitest'
+import { DateTime } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Num from 'effect/Number'
@@ -38,7 +39,8 @@ const stockOf = (
 const commandOf = (
   lines: readonly ComponentDemand[],
   stock: readonly WarehouseStockPartition[],
-): AllocateStockCommand => new AllocateStockCommand({ orderId: 'order-1', lines, stock })
+  now: DateTime.Utc,
+): AllocateStockCommand => new AllocateStockCommand({ orderId: 'order-1', lines, stock, now })
 
 const requestedBySku = (lines: readonly ComponentDemand[]): ReadonlyMap<string, number> =>
   Arr.reduce(lines, new Map<string, number>(), (acc, line) => {
@@ -112,10 +114,125 @@ const conserves = (lines: readonly ComponentDemand[], result: AllocateResult): b
     },
   })
 
+const beforeEarliest = (earliest: number): DateTime.Utc =>
+  Match.value(Number.isFinite(earliest)).pipe(
+    Match.when(true, () => DateTime.makeUnsafe(earliest - 1)),
+    Match.when(false, () => DateTime.makeUnsafe(0)),
+    Match.exhaustive,
+  )
+
+const earlierThanEveryExpiry = (stock: readonly WarehouseStockPartition[]): DateTime.Utc =>
+  beforeEarliest(
+    Arr.reduce(Arr.flatMap(stock, (partition) => partition.lots), Number.POSITIVE_INFINITY, (min, lot) =>
+      Option.match(lot.expiresAt, {
+        onNone: () =>
+          min,
+        onSome: (expiresAt) =>
+          Num.min(min, expiresAt.epochMilliseconds),
+      })),
+  )
+
+const liveAt = (now: DateTime.Utc, lot: StockLot): boolean =>
+  Option.getOrElse(
+    Option.map(lot.expiresAt, (expiresAt) => expiresAt.epochMilliseconds > now.epochMilliseconds),
+    () => true,
+  )
+
+const expireLotsAt = (
+  stock: readonly WarehouseStockPartition[],
+  at: DateTime.Utc,
+): readonly WarehouseStockPartition[] =>
+  Arr.map(
+    stock,
+    (partition) =>
+      new WarehouseStockPartition({
+        warehouseId: partition.warehouseId,
+        region: partition.region,
+        lots: Arr.map(
+          partition.lots,
+          (lot) =>
+            new StockLot({
+              lotId: lot.lotId,
+              sku: lot.sku,
+              warehouseId: lot.warehouseId,
+              quantityOnHand: lot.quantityOnHand,
+              version: lot.version,
+              expiresAt: Option.some(at),
+            }),
+        ),
+      }),
+  )
+
+const liveLotsOf = (stock: readonly WarehouseStockPartition[], now: DateTime.Utc): readonly StockLot[] =>
+  Arr.filter(Arr.flatMap(stock, (partition) => partition.lots), (lot) => liveAt(now, lot))
+
+const liveAvailableBySku = (
+  stock: readonly WarehouseStockPartition[],
+  now: DateTime.Utc,
+): ReadonlyMap<string, number> =>
+  Arr.reduce(liveLotsOf(stock, now), new Map<string, number>(), (acc, lot) => {
+    acc.set(lot.sku, (acc.get(lot.sku) ?? 0) + lot.quantityOnHand)
+    return acc
+  })
+
+const reservationsOf = (decision: StockAllocated | StockBackordered): readonly LotReservation[] =>
+  Match.value(decision).pipe(
+    Match.tag('StockAllocated', (allocated) => allocated.reservations),
+    Match.tag('StockBackordered', (backordered) => backordered.reservations),
+    Match.exhaustive,
+  )
+
+const refusedWithZeroAvailability = (result: AllocateResult): boolean =>
+  Result.match(result, {
+    onFailure: (error) => error.available === 0,
+    onSuccess: () => false,
+  })
+
+const onlyLiveReservations = (
+  stock: readonly WarehouseStockPartition[],
+  now: DateTime.Utc,
+  result: AllocateResult,
+): boolean =>
+  Result.match(result, {
+    onFailure: () => true,
+    onSuccess: (decision) => {
+      const liveIds = new Set(Arr.map(liveLotsOf(stock, now), (lot) => lot.lotId))
+      return Arr.every(reservationsOf(decision), (reservation) => liveIds.has(reservation.lotId))
+    },
+  })
+
+const withinLiveStock = (
+  stock: readonly WarehouseStockPartition[],
+  now: DateTime.Utc,
+  result: AllocateResult,
+): boolean =>
+  Result.match(result, {
+    onFailure: () => true,
+    onSuccess: (decision) => {
+      const { allocated } = summaryOf(decision)
+      const live = liveAvailableBySku(stock, now)
+      return Arr.every(skusOf(allocated), (sku) => (allocated.get(sku) ?? 0) <= (live.get(sku) ?? 0))
+    },
+  })
+
+const refusalMatchesLiveAvailability = (
+  stock: readonly WarehouseStockPartition[],
+  lines: readonly ComponentDemand[],
+  now: DateTime.Utc,
+  result: AllocateResult,
+): boolean => {
+  const live = liveAvailableBySku(stock, now)
+  const exhausted = Arr.some(Arr.fromIterable(requestedBySku(lines).keys()), (sku) => (live.get(sku) ?? 0) === 0)
+  return Result.match(result, {
+    onFailure: () => exhausted,
+    onSuccess: () => !exhausted,
+  })
+}
+
 describe('allocateStock — conservation', () => {
   it.prop('∀l_AllocateStock_≤Stock', [S.Array(ComponentDemand), S.NonEmptyArray(StockLot)], ([lines, templates]) => {
     const stock = stockOf(lines, templates)
-    return withinStock(stock, allocateStock(commandOf(lines, stock)))
+    return withinStock(stock, allocateStock(commandOf(lines, stock, earlierThanEveryExpiry(stock))))
   })
 
   it.prop(
@@ -123,7 +240,37 @@ describe('allocateStock — conservation', () => {
     [S.Array(ComponentDemand), S.NonEmptyArray(StockLot)],
     ([lines, templates]) => {
       const stock = stockOf(lines, templates)
-      return conserves(lines, allocateStock(commandOf(lines, stock)))
+      return conserves(lines, allocateStock(commandOf(lines, stock, earlierThanEveryExpiry(stock))))
+    },
+  )
+})
+
+describe('allocateStock — expiry', () => {
+  it.prop(
+    '∀l_ExpiredLot_⊥',
+    [S.NonEmptyArray(ComponentDemand), S.NonEmptyArray(StockLot)],
+    ([lines, templates]) => {
+      const now = DateTime.makeUnsafe(0)
+      const stock = expireLotsAt(stockOf(lines, templates), now)
+      return refusedWithZeroAvailability(allocateStock(commandOf(lines, stock, now)))
+    },
+  )
+
+  it.prop(
+    '∀(l,now)_Allocation_⊆Live',
+    [S.Array(ComponentDemand), S.NonEmptyArray(StockLot), S.DateTimeUtc],
+    ([lines, templates, now]) => {
+      const stock = stockOf(lines, templates)
+      const result = allocateStock(commandOf(lines, stock, now))
+      return (
+        onlyLiveReservations(stock, now, result) &&
+        withinLiveStock(stock, now, result) &&
+        refusalMatchesLiveAvailability(stock, lines, now, result) &&
+        Result.match(result, {
+          onFailure: () => true,
+          onSuccess: () => conserves(lines, result),
+        })
+      )
     },
   )
 })

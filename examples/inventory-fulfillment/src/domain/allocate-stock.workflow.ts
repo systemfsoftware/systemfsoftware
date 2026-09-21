@@ -1,4 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import type { DateTime } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Num from 'effect/Number'
@@ -62,6 +63,7 @@ export class AllocateStockCommand extends S.Class<AllocateStockCommand>('Allocat
   orderId: S.String,
   lines: S.Array(ComponentDemand),
   stock: S.Array(WarehouseStockPartition),
+  now: S.DateTimeUtc,
 }) {}
 
 interface SkuDemand {
@@ -88,15 +90,31 @@ const expiryKey = (lot: StockLot): number =>
     () => Number.POSITIVE_INFINITY,
   )
 
-const candidatesFor = (stock: readonly WarehouseStockPartition[], sku: SkuId): readonly StockLot[] =>
+const isLive = (now: DateTime.Utc, lot: StockLot): boolean =>
+  Option.getOrElse(
+    Option.map(lot.expiresAt, (expiresAt) => expiresAt.epochMilliseconds > now.epochMilliseconds),
+    () => true,
+  )
+
+const candidatesFor = (
+  stock: readonly WarehouseStockPartition[],
+  sku: SkuId,
+  now: DateTime.Utc,
+): readonly StockLot[] =>
   Arr.sortWith(
-    Arr.filter(Arr.flatMap(stock, (partition) => partition.lots), (lot) => lot.sku === sku),
+    Arr.filter(
+      Arr.filter(
+        Arr.flatMap(stock, (partition) => partition.lots),
+        (lot) => lot.sku === sku,
+      ),
+      (lot) => isLive(now, lot),
+    ),
     expiryKey,
     Order.Number,
   )
 
-const availableFor = (stock: readonly WarehouseStockPartition[], sku: SkuId): number =>
-  Arr.reduce(candidatesFor(stock, sku), 0, (total, lot) => total + lot.quantityOnHand)
+const availableFor = (stock: readonly WarehouseStockPartition[], sku: SkuId, now: DateTime.Utc): number =>
+  Arr.reduce(candidatesFor(stock, sku, now), 0, (total, lot) => total + lot.quantityOnHand)
 
 const mergeDemand = (demands: readonly SkuDemand[], line: ComponentDemand): readonly SkuDemand[] =>
   Match.value(Arr.some(demands, (demand) => demand.sku === line.sku)).pipe(
@@ -156,8 +174,9 @@ const backorderOf = (demand: SkuDemand): Option.Option<UnfulfilledDemand> =>
 const insufficientOf = (
   stock: readonly WarehouseStockPartition[],
   demands: readonly SkuDemand[],
+  now: DateTime.Utc,
 ): Option.Option<InsufficientStock> =>
-  Match.value(Arr.findFirst(demands, (demand) => availableFor(stock, demand.sku) === 0)).pipe(
+  Match.value(Arr.findFirst(demands, (demand) => availableFor(stock, demand.sku, now) === 0)).pipe(
     Match.tag(
       'Some',
       (demand) =>
@@ -173,7 +192,7 @@ const allocatedOutcome = (
 ): StockAllocated | StockBackordered => {
   const outcomes = Arr.map(demands, (demand) => ({
     demand,
-    allocation: allocateSku(candidatesFor(command.stock, demand.sku), demand.requested),
+    allocation: allocateSku(candidatesFor(command.stock, demand.sku, command.now), demand.requested),
   }))
   const reservations = Arr.flatMap(outcomes, (outcome) => outcome.allocation.reservations)
   const backordered = Arr.getSomes(
@@ -190,7 +209,7 @@ export const allocateStock = Workflow.make(
   AllocateStockCommand,
   (command): Result.Result<StockAllocated | StockBackordered, InsufficientStock> => {
     const demands = demandsOf(command.lines)
-    return Match.value(insufficientOf(command.stock, demands)).pipe(
+    return Match.value(insufficientOf(command.stock, demands, command.now)).pipe(
       Match.tag('Some', (refusal) => Result.fail(refusal.value)),
       Match.tag('None', () => Result.succeed(allocatedOutcome(command, demands))),
       Match.exhaustive,

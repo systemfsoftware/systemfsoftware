@@ -1,17 +1,29 @@
-import { Effect, Layer, Option } from 'effect'
+import { Effect, Layer, Option, Schema as S } from 'effect'
 import { RpcMiddleware } from 'effect/unstable/rpc'
-import { Unauthorized } from '../domain/decision.schema.js'
-import { AuthService } from '../http/auth.routes.js'
+import { AuthServiceUnavailable, Unauthorized } from '../domain/decision.schema.js'
 import { AuthContext } from '../ports/AuthContext.js'
+import { AuthService } from '../ports/AuthService.js'
+
+const sessionTimeoutMillis = 5_000
+
+const failureReasonOf = (thrown: unknown): string => {
+  if (thrown instanceof Error) {
+    return thrown.message
+  }
+  return 'auth backend threw a value that is not an Error'
+}
 
 /**
  * Resolves the better-auth session backing every RPC request and exposes the
- * session's `userId` to handlers as `AuthContext`, or fails the request with the
- * typed `Unauthorized` schema error when no session exists.
+ * session's `userId` to handlers as `AuthContext`. A genuine missing session
+ * (the backend returned no session) fails with the typed `Unauthorized`; a
+ * backend that throws or exceeds {@link sessionTimeoutMillis} fails with the
+ * typed `AuthServiceUnavailable`, preserving the underlying cause rather than
+ * masking an outage as an authentication refusal.
  */
 export class AuthMiddleware extends RpcMiddleware.Service<AuthMiddleware, { provides: AuthContext }>()(
   '@systemfsoftware/example-inventory-fulfillment/rpc/AuthMiddleware',
-  { error: Unauthorized },
+  { error: S.Union([Unauthorized, AuthServiceUnavailable]) },
 ) {}
 
 export const layer: Layer.Layer<AuthMiddleware, never, AuthService> = Layer.effect(
@@ -21,8 +33,17 @@ export const layer: Layer.Layer<AuthMiddleware, never, AuthService> = Layer.effe
     return (inner, options) =>
       Effect.tryPromise({
         try: () => auth.api.getSession({ headers: new Headers(Object.entries(options.headers)) }),
-        catch: () => new Unauthorized({ reason: 'session resolution failed' }),
+        catch: (cause) => new AuthServiceUnavailable({ reason: failureReasonOf(cause) }),
       }).pipe(
+        Effect.timeoutOrElse({
+          duration: sessionTimeoutMillis,
+          orElse: () =>
+            Effect.fail(
+              new AuthServiceUnavailable({
+                reason: `auth session resolution exceeded ${sessionTimeoutMillis}ms`,
+              }),
+            ),
+        }),
         Effect.flatMap((session) =>
           Option.match(Option.fromNullishOr(session), {
             onNone: () => Effect.fail(new Unauthorized({ reason: 'no active session' })),

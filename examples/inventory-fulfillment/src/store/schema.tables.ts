@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const warehouses = pgTable('warehouses', {
   id: text('id').primaryKey(),
@@ -12,7 +12,10 @@ export const stockLots = pgTable('stock_lots', {
   quantityOnHand: integer('quantity_on_hand').notNull(),
   version: integer('version').notNull(),
   expiresAt: timestamp('expires_at'),
-})
+}, (table) => [
+  index('stock_lots_sku_idx').on(table.sku),
+  index('stock_lots_warehouse_id_idx').on(table.warehouseId),
+])
 
 export const reservations = pgTable('reservations', {
   id: text('id').primaryKey(),
@@ -24,7 +27,10 @@ export const reservations = pgTable('reservations', {
   quantity: integer('quantity').notNull(),
   version: integer('version').notNull(),
   occurredAt: timestamp('occurred_at').notNull(),
-})
+}, (table) => [
+  index('reservations_order_id_idx').on(table.orderId),
+  index('reservations_lot_id_idx').on(table.lotId),
+])
 
 export const auditEvents = pgTable('audit_events', {
   id: text('id').primaryKey(),
@@ -32,7 +38,9 @@ export const auditEvents = pgTable('audit_events', {
   actorId: text('actor_id').notNull(),
   decisionTag: text('decision_tag').notNull(),
   occurredAt: timestamp('occurred_at').notNull(),
-})
+}, (table) => [
+  index('audit_events_order_id_idx').on(table.orderId),
+])
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -57,7 +65,9 @@ export const session = pgTable('session', {
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
   userId: text('user_id').notNull(),
-})
+}, (table) => [
+  index('session_user_id_idx').on(table.userId),
+])
 
 export const account = pgTable('account', {
   id: text('id').primaryKey(),
@@ -73,7 +83,9 @@ export const account = pgTable('account', {
   password: text('password'),
   createdAt: timestamp('created_at').notNull(),
   updatedAt: timestamp('updated_at').notNull(),
-})
+}, (table) => [
+  index('account_user_id_idx').on(table.userId),
+])
 
 export const verification = pgTable('verification', {
   id: text('id').primaryKey(),
