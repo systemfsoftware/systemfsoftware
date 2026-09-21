@@ -63,6 +63,9 @@ catalogs:
     effect:
       specifier: 4.0.0-rc.116
       version: 4.0.0-rc.116
+    microsandbox:
+      specifier: 0.7.2
+      version: 0.7.2
     oxc-parser:
       specifier: ^0.150.0
       version: 0.150.0
@@ -569,6 +572,58 @@ importers:
       memfs:
         specifier: ^4.78.1
         version: 4.78.1
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.116(effect@4.0.0-rc.116)(vitest@5.0.1)
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.59.1(@types/node@26.6.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../toolchain/tsdown-config
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.116
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/effect-microsandbox:
+    dependencies:
+      microsandbox:
+        specifier: 'catalog:'
+        version: 0.7.2
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2516,6 +2571,9 @@ packages:
   '@jsr/std__streams@1.1.2':
     resolution: {integrity: sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A==, tarball: https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz}
 
+  '@microsandbox/types@0.7.2':
+    resolution: {integrity: sha512-K02/NyT4VaC14fXUlC6cC3qBYHMzfkhTEibOzJMh7P99wlbA+SxungRpZqPAm4tOzmClZEoBlC8es52Y7ipUtQ==}
+
   '@microsoft/api-extractor-model@7.33.12':
     resolution: {integrity: sha512-TdKOYgwf98xLjNW+y3iXIiCf4ZLQbilGAlqkMTTAqqAWfgRXAn9YCSGMsaiB1U7OPRvslUWg6n08EqQPbP93tA==}
     engines: {node: '>=20.9.0'}
@@ -4069,6 +4127,38 @@ packages:
       typescript:
         optional: true
 
+  '@superradcompany/microsandbox-darwin-arm64@0.7.2':
+    resolution: {integrity: sha512-i6XkuEaWM0IPGK9pWg4CGegxQ3pFrobLLc7C3C4ImjMdAwCUOzYCAqKQUcsuKQmIJixbWRVpIccQOJe/sYkexA==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.2':
+    resolution: {integrity: sha512-gU15ar5FtNXfQGiKktdgJdkba5dW5+yDv7gx38sD6QrgqhSOgVsC17yvrPOD+AAdBbj6GTntlbL3ENn/rx7MKQ==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.2':
+    resolution: {integrity: sha512-5gmMDYjyGXtx+13rWKeI0/f6x7ecDg6aMFVCupgr23IQODQLuGsbvn70LyXUrT0bOlYhle6i4uum2+AwVKTU8Q==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.2':
+    resolution: {integrity: sha512-Vhn6POQS6MKuSnthhOHppt8FAS9Lb2TqPr59q/NtBk2AXC4uK5tiUwKQCA/H7E1irzE8YHhT/rvMHufHkYXo7A==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.2':
+    resolution: {integrity: sha512-B33UPd8Tfk+Q7r1w+QmDmwO3e16x7n0wr2c+ynssJRxjoD4llLF+LBN2WeseTtEb32IuOM+nVgeFAFuyL7q4Mg==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [win32]
+
   '@sveltejs/acorn-typescript@1.0.13':
     resolution: {integrity: sha512-wgKggnhZVL9Bfx1OaKKTrYY9BFRk6C8UAkQNUcIv1+llzYrIqy+RZm5HPKzn0NpEBvTVhTqB4kQyllZywsRBRQ==}
     peerDependencies:
@@ -5311,6 +5401,11 @@ packages:
 
   memfs@4.78.1:
     resolution: {integrity: sha512-SkSlK6DZbzekBoiu0mcHUx9RRPnsBdaKQ36u8F3HvYZm/lRiD34YabQ2Xr76r+zYENzRPFKBsanAZPSl+r3Nqg==}
+
+  microsandbox@0.7.2:
+    resolution: {integrity: sha512-SKrNTnnOzhLofhDRQAXmXeO5QEkBYzK9e0o+B8WD5FkIONjGks/y/GVcupdsFzZVJXNsusMAfImSFbBzL5E0xw==}
+    engines: {node: '>= 22'}
+    hasBin: true
 
   min-indent@1.0.1:
     resolution: {integrity: sha512-I9jwMn07Sy/IwOj3zVkVik2JTvgpaykDZEigL6Rx6N9LbMywwUSMtxET+7lVoDLLd3O3IXwJwvuuns8UB/HeAg==}
@@ -6918,6 +7013,8 @@ snapshots:
     dependencies:
       '@jsr/std__bytes': 1.0.6
 
+  '@microsandbox/types@0.7.2': {}
+
   '@microsoft/api-extractor-model@7.33.12(@types/node@26.6.2)':
     dependencies:
       '@microsoft/tsdoc': 0.16.0
@@ -8035,6 +8132,21 @@ snapshots:
       typescript: 7.0.2
     transitivePeerDependencies:
       - supports-color
+
+  '@superradcompany/microsandbox-darwin-arm64@0.7.2':
+    optional: true
+
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.7.2':
+    optional: true
+
+  '@superradcompany/microsandbox-linux-x64-gnu@0.7.2':
+    optional: true
+
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.7.2':
+    optional: true
+
+  '@superradcompany/microsandbox-win32-x64-msvc@0.7.2':
+    optional: true
 
   '@sveltejs/acorn-typescript@1.0.13(acorn@8.18.0)':
     dependencies:
@@ -9223,6 +9335,16 @@ snapshots:
       thingies: 2.6.0(tslib@2.8.1)
       tree-dump: 1.1.0(tslib@2.8.1)
       tslib: 2.8.1
+
+  microsandbox@0.7.2:
+    dependencies:
+      '@microsandbox/types': 0.7.2
+    optionalDependencies:
+      '@superradcompany/microsandbox-darwin-arm64': 0.7.2
+      '@superradcompany/microsandbox-linux-arm64-gnu': 0.7.2
+      '@superradcompany/microsandbox-linux-x64-gnu': 0.7.2
+      '@superradcompany/microsandbox-win32-arm64-msvc': 0.7.2
+      '@superradcompany/microsandbox-win32-x64-msvc': 0.7.2
 
   min-indent@1.0.1: {}
 

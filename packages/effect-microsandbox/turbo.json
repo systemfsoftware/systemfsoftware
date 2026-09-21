@@ -1,0 +1,29 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "typecheck": {
+      "dependsOn": [
+        "^build",
+        "^api:check"
+      ]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "vitest.config.ts",
+        "vitest-setup.ts",
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "!**/README.md",
+        "!**/AGENTS.md"
+      ],
+      "outputs": [
+        "coverage/**"
+      ],
+      "dependsOn": [
+        "^build",
+        "^api:check"
+      ]
+    }
+  }
+}
