@@ -11,7 +11,7 @@ export namespace Cell {
 
 // @public (undocumented)
 export namespace Sandwich {
-    export { DecodedChain, DecodedDecidedChain, EncodedChain, PurePhase, RawDecidedChain, ReadChain, pure, read };
+    export { Cell, DecodedChain, DecodedDecidedChain, EncodedChain, PurePhase, RawDecidedChain, ReadChain, pure, read };
 }
 
 // @public (undocumented)
