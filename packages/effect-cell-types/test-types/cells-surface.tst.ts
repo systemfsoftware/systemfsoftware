@@ -120,17 +120,28 @@ declare const writeChainedOutcome: (
   outcome: Result.Result<TotalDecision, CommandRefused | DecisionError>,
   raw: TaggedCmd,
 ) => Effect<void, never, never>
+declare const widenedName: string
+
+describe('the operation name the constructor accepts', () => {
+  it('Should_AcceptAStaticLiteral_When_TheNameCarriesNoUnit', () => {
+    expect(Sandwich.named).type.toBeCallableWith('order.submit')
+    expect(Sandwich.named).type.not.toBeCallableWith(widenedName)
+    expect(Sandwich.named).type.not.toBeCallableWith('order.submit_ms')
+    expect(Sandwich.named).type.not.toBeCallableWith('order.submit_seconds')
+    expect(Sandwich.named).type.not.toBeCallableWith('payload_bytes')
+  })
+})
 
 describe('the sandwich the chain builds', () => {
   it('Should_InferTheCell_When_ReadDecideWriteChain', () => {
-    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
   })
 
   it('Should_InferTheCell_When_AllFivePhasesChain', () => {
-    const cell = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+    const cell = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
       Sandwich.pure((outcome) => Result.succeed(encode(outcome))),
     ).write(writeOutput)
     expect(cell).type.toBe<
@@ -145,19 +156,19 @@ describe('the sandwich the chain builds', () => {
   })
 
   it('Should_InferSandwichCell_When_ChainingPhases', () => {
-    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell).type.toBeAssignableTo<Sandwich.Cell<Cmd, void, never, never>>()
   })
 
   it('Should_UnionTheErrorChannel_When_ReadAndWriteCanFail', () => {
-    const cell = Sandwich.read(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
+    const cell = Sandwich.named('cell.surface')(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, ReadErr | WriteErr, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
   })
 
   it('Should_UnionTheServices_When_BothImpurePhasesRequire', () => {
-    const cell = Sandwich.read(readNeedingDb).decide(decideOverRaw).write(writeOutcomeNeedingBus)
+    const cell = Sandwich.named('cell.surface')(readNeedingDb).decide(decideOverRaw).write(writeOutcomeNeedingBus)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, never, Db | Bus> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
@@ -166,40 +177,43 @@ describe('the sandwich the chain builds', () => {
 
 describe('the refusal the error channel excludes', () => {
   it('Should_KeepTheDecideRefusalAnOutcome_When_NamingTheErrorChannel', () => {
-    const cell = Sandwich.read(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
+    const cell = Sandwich.named('cell.surface')(readFailing).decide(decideOverRaw).write(writeOutcomeFailing)
     expect(cell).type.not.toBeAssignableTo<Cell.Cell<Cmd, void, Refusal, never>>()
   })
 })
 
 describe('the chains the surface refuses', () => {
   it('Should_RefuseTheWrite_When_DecodeArrivesWithoutEncode', () => {
-    expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
-      readonly write: Top
-    }>()
+    expect(Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not
+      .toBeAssignableTo<{
+        readonly write: Top
+      }>()
   })
 
   it('Should_RefuseTheEncode_When_EncodeArrivesWithoutDecode', () => {
-    expect(Sandwich.read(read).decide(decideOverRaw)).type.not.toBeAssignableTo<{ readonly encode: Top }>()
+    expect(Sandwich.named('cell.surface')(read).decide(decideOverRaw)).type.not.toBeAssignableTo<
+      { readonly encode: Top }
+    >()
   })
 
   it('Should_RefuseTheDecide_When_TheDecideIsNotAWorkflow', () => {
-    const rawChain = Sandwich.read(read)
+    const rawChain = Sandwich.named('cell.surface')(read)
     expect<typeof rawChain.decide>().type.not.toBeCallableWith(decideUnbranded)
   })
 
   it('Should_RefuseTheWrite_When_TheWriteSecondParameterIsNotTheRaw', () => {
-    const decided = Sandwich.read(read).decide(decideOverRaw)
+    const decided = Sandwich.named('cell.surface')(read).decide(decideOverRaw)
     expect<typeof decided.write>().type.not.toBeCallableWith(writeOutcomeWrongRaw)
   })
 
   it('Should_RefuseTheDecide_When_ItsInputIsNotTheReadRaw', () => {
-    const rawChain = Sandwich.read(read)
+    const rawChain = Sandwich.named('cell.surface')(read)
     expect<typeof rawChain.decide>().type.toBeCallableWith(decideOverRaw)
     expect<typeof rawChain.decide>().type.not.toBeCallableWith(decideOverDecoded)
   })
 
   it('Should_RefuseUnbrandedPurePhase_When_DecodeRequiresPurePhaseBrand', () => {
-    const rawChain = Sandwich.read(read)
+    const rawChain = Sandwich.named('cell.surface')(read)
     expect<typeof rawChain.decode>().type.toBeCallableWith(Sandwich.pure(decode))
     expect<typeof rawChain.decode>().type.not.toBeCallableWith(decode)
   })
@@ -207,7 +221,7 @@ describe('the chains the surface refuses', () => {
 
 describe('the unary write the chain admits', () => {
   it('Should_AdmitAUnaryWrite_When_TheWriteIgnoresTheOutcome', () => {
-    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcomeUnary)
+    const cell = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcomeUnary)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
@@ -216,33 +230,33 @@ describe('the unary write the chain admits', () => {
 
 describe('the run the Cell publishes', () => {
   it('Should_YieldTheChannels_When_TheArrowIsApplied', () => {
-    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell.run(command)).type.toBe<Effect<void, never, never>>()
   })
 })
 
 describe('the provide that clears the services', () => {
   it('Should_NarrowRToNever_When_TheOneServiceIsProvided', () => {
-    const cell = Sandwich.read(readNeedingDb).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(readNeedingDb).decide(decideOverRaw).write(writeOutcome)
     const provided = pipe(cell, Cell.provide(dbLayer))
     expect(provided).type.toBe<Cell.Cell<Cmd, void, never, never>>()
     expect(provided.run(command)).type.toBe<Effect<void, never, never>>()
   })
 
   it('Should_UnionTheLayerError_When_TheLayerCanFail', () => {
-    const cell = Sandwich.read(readNeedingDb).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(readNeedingDb).decide(decideOverRaw).write(writeOutcome)
     const provided = pipe(cell, Cell.provide(failingDbLayer))
     expect(provided).type.toBe<Cell.Cell<Cmd, void, ReadErr, never>>()
   })
 
   it('Should_KeepTheLayerInputs_When_TheLayerNeedsServices', () => {
-    const cell = Sandwich.read(readNeedingClock).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(readNeedingClock).decide(decideOverRaw).write(writeOutcome)
     const provided = pipe(cell, Cell.provide(dbFromClock))
     expect(provided).type.toBe<Cell.Cell<Cmd, void, never, Clock>>()
   })
 
   it('Should_NarrowOnlyTheProvidedService_When_ChainingProvides', () => {
-    const cell = Sandwich.read(readNeedingDbAndClock).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(readNeedingDbAndClock).decide(decideOverRaw).write(writeOutcome)
     const once = pipe(cell, Cell.provide(dbLayer))
     expect(once).type.toBe<Cell.Cell<Cmd, void, never, Clock>>()
     expect(pipe(once, Cell.provide(clockLayer))).type.toBe<Cell.Cell<Cmd, void, never, never>>()
@@ -267,12 +281,18 @@ describe('the combinator algebra', () => {
   })
 
   it('Should_FeedTheResponseToTheNext_When_AndThenChains', () => {
-    const chained = pipe(Sandwich.read(read).decide(decideOverRaw).write(writeOutcome), Cell.andThen(voidCell))
+    const chained = pipe(
+      Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome),
+      Cell.andThen(voidCell),
+    )
     expect(chained).type.toBe<Cell.Cell<Cmd, boolean, WriteErr, Bus>>()
   })
 
   it('Should_TupleTheResponses_When_Zipping', () => {
-    const zipped = pipe(Sandwich.read(read).decide(decideOverRaw).write(writeOutcome), Cell.zip(twinCell))
+    const zipped = pipe(
+      Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome),
+      Cell.zip(twinCell),
+    )
     expect(zipped).type.toBe<Cell.Cell<Cmd, readonly [void, boolean], WriteErr, Bus>>()
   })
 
@@ -381,7 +401,7 @@ describe('the variance the Cell carries', () => {
   })
 
   it('Should_PipeThePipedResult_When_NestingInstancePipes', () => {
-    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome)
     const piped = cell.pipe(Cell.map((_response: void): number => 1))
     expect(piped).type.toBe<Cell.Cell<Cmd, number, never, never>>()
     expect(piped.pipe(Cell.map((count: number): string => `${count}`))).type.toBe<
@@ -423,36 +443,36 @@ describe('the record API the surface retired', () => {
 
 describe('the constructors the decide slot accepts', () => {
   it('Should_AcceptTheTotalDecider_When_ItsErrorChannelIsNever', () => {
-    const cell = Sandwich.read(readTagged).decide(totalAdmitTaggedCommand).write(writeTotalOutcome)
+    const cell = Sandwich.named('cell.surface')(readTagged).decide(totalAdmitTaggedCommand).write(writeTotalOutcome)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
   })
 
   it('Should_AcceptTheComposite_When_ItsErrorChannelIsTheComponentUnion', () => {
-    const cell = Sandwich.read(readTagged).decide(chainAdmitTaggedCommands).write(writeChainedOutcome)
+    const cell = Sandwich.named('cell.surface')(readTagged).decide(chainAdmitTaggedCommands).write(writeChainedOutcome)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
   })
 
   it('Should_RefuseAHandRolledChain_When_NoConstructorAppliedTheBrand', () => {
-    const taggedChain = Sandwich.read(readTagged)
+    const taggedChain = Sandwich.named('cell.surface')(readTagged)
     expect<typeof taggedChain.decide>().type.not.toBeCallableWith(decideUnbrandedChain)
   })
 })
 
 describe('the sandwich chain the continuation surface builds', () => {
   it('Should_RefuseTheWrite_When_ReadIsFollowedByWrite', () => {
-    const lawful = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const lawful = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome)
     expect(lawful).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
-    expect(Sandwich.read(read)).type.not.toBeAssignableTo<{ readonly write: Top }>()
+    expect(Sandwich.named('cell.surface')(read)).type.not.toBeAssignableTo<{ readonly write: Top }>()
   })
 
   it('Should_RefuseTheWrite_When_DecideOnADecodedChainSkipsEncode', () => {
-    const lawful = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+    const lawful = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
       Sandwich.pure(encodeResult),
     ).write(writeOutput)
     expect(lawful).type.toBe<
@@ -460,15 +480,18 @@ describe('the sandwich chain the continuation surface builds', () => {
         readonly phases: readonly ['read', 'decode', 'decide', 'encode', 'write']
       }
     >()
-    Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(Sandwich.pure(encodeResult))
+    Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+      Sandwich.pure(encodeResult),
+    )
     // write is not lawful before encode on a decoded chain
-    expect(Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not.toBeAssignableTo<{
-      readonly write: Top
-    }>()
+    expect(Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)).type.not
+      .toBeAssignableTo<{
+        readonly write: Top
+      }>()
   })
 
   it('Should_PinTheRawGrainPhases_When_WritingAfterDecide', () => {
-    const cell = Sandwich.read(read).decide(decideOverRaw).write(writeOutcome)
+    const cell = Sandwich.named('cell.surface')(read).decide(decideOverRaw).write(writeOutcome)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, never, never> & { readonly phases: readonly ['read', 'decide', 'write'] }
     >()
@@ -476,7 +499,7 @@ describe('the sandwich chain the continuation surface builds', () => {
   })
 
   it('Should_PinTheDecodedGrainPhases_When_WritingAfterEncode', () => {
-    const cell = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+    const cell = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
       Sandwich.pure(encodeResult),
     ).write(writeOutput)
     expect(cell).type.toBe<
@@ -488,7 +511,9 @@ describe('the sandwich chain the continuation surface builds', () => {
   })
 
   it('Should_UnionTheChannels_When_FivePhasesEachContribute', () => {
-    const cell = Sandwich.read(readNeedingDbAndClock).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
+    const cell = Sandwich.named('cell.surface')(readNeedingDbAndClock).decode(Sandwich.pure(decode)).decide(
+      decideOverDecoded,
+    ).encode(
       Sandwich.pure(encodeResult),
     ).write(writeOutputNeedingBus)
     expect(cell).type.toBe<
@@ -499,21 +524,21 @@ describe('the sandwich chain the continuation surface builds', () => {
   })
 
   it('Should_RefuseABareClosure_When_DecodeDemandsAPurePhase', () => {
-    const lawful = Sandwich.read(read).decode(Sandwich.pure(decode))
+    const lawful = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode))
     expect(lawful).type.toBe<Sandwich.DecodedChain<Cmd, Raw, Decoded, never, DecodeErr, never>>()
-    const readChain = Sandwich.read(read)
+    const readChain = Sandwich.named('cell.surface')(read)
     expect<typeof readChain.decode>().type.not.toBeCallableWith((raw: Raw) => succeedDecoded(raw))
   })
 
   it('Should_RefuseABareClosure_When_EncodeDemandsAPurePhase', () => {
-    const chain = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
+    const chain = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
     expect<typeof chain.encode>().type.not.toBeCallableWith(
       (outcome: Result.Result<Decision, Refusal>) => Result.succeed(encode(outcome)),
     )
   })
 
   it('Should_RefuseTheEncode_When_ItsRefusalChannelIsNotNever', () => {
-    const chain = Sandwich.read(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
+    const chain = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
     expect<typeof chain.encode>().type.not.toBeCallableWith(
       Sandwich.pure((outcome: Result.Result<Decision, Refusal>): Result.Result<Output, Refusal> =>
         Result.succeed(encode(outcome))

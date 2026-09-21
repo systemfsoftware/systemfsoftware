@@ -28,7 +28,7 @@ export const orderCell: Cell.Cell<
   OrderApproved | OrderRejected,
   DatabaseConnectionError | SchemaError,
   OrderStore | CustomerGate
-> = Sandwich.read(readContext)
+> = Sandwich.named('order.submit')(readContext)
   .decode(Sandwich.pure(decodeContext))
   .decide(decideWorkflow)
   .encode(Sandwich.pure(encodeOutcome))

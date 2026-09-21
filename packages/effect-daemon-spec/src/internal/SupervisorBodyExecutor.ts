@@ -76,7 +76,9 @@ const restartDescription = <R>(spec: {
     decision: RestartDecisionRestart,
   ) => Effect.Effect<void, never, never>
 }) =>
-  Sandwich.read((intensity: IntensityTracker) => Effect.andThen(intensity.record, intensity.isExceeded))
+  Sandwich.named('supervisor.restart-description')((intensity: IntensityTracker) =>
+    Effect.andThen(intensity.record, intensity.isExceeded)
+  )
     .decode(
       Sandwich.pure((intensityExceeded) =>
         Result.succeed({

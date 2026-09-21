@@ -22,7 +22,7 @@ const render = (decision: Decision): string =>
     Match.exhaustive,
   )
 
-const chainCell = Sandwich.read((command: Decoded) => Effect.succeed(command))
+const chainCell = Sandwich.named('cell.decision.sequencing.chain')((command: Decoded) => Effect.succeed(command))
   .decide(chainAdmitDecisions).write(
     (outcome: Result.Result<Decision, Malformed>) =>
       Effect.sync(() =>
@@ -34,10 +34,11 @@ const chainCell = Sandwich.read((command: Decoded) => Effect.succeed(command))
   )
 
 const totalCell = (decide = totalAdmitDecision) =>
-  Sandwich.read((command: SettleCommand) => Effect.succeed(command)).decide(decide).write(
-    (outcome: Result.Result<Decision, never>) =>
-      Effect.sync(() => Result.match(outcome, { onSuccess: render, onFailure: (): string => 'failed' })),
-  )
+  Sandwich.named('cell.decision.sequencing.total')((command: SettleCommand) => Effect.succeed(command)).decide(decide)
+    .write(
+      (outcome: Result.Result<Decision, never>) =>
+        Effect.sync(() => Result.match(outcome, { onSuccess: render, onFailure: (): string => 'failed' })),
+    )
 
 Feature('Sequencing dependent decisions')
   .withLayer(Layer.empty)

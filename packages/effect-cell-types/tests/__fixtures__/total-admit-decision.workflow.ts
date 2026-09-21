@@ -13,7 +13,9 @@ import { Admitted, Rejected } from './admit-decoded-command.workflow.js'
 export class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand', {
   decision: S.Union([Admitted, Rejected]),
   ctx: S.String,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['ctx'] as const
+}
 
 /**
  * The decision that cannot fail: the settled command already carries the upstream

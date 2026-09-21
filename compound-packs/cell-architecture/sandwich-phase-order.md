@@ -10,7 +10,7 @@ tags: [cell, sandwich, phases, fcis]
 An outside interaction is an **I/O Sandwich**: five sequential phases executed in order:
 `read` (impure) -> `decode` (pure) -> `decide` (pure) -> `encode` (pure) -> `write` (impure).
 
-The phases must be constructed through `Sandwich.read(...)` and its fluent continuation methods. The builder interfaces carry type-level sentences (`sentence: must decide after decode`, `sentence: must write after encode`) that expose only the lawful next step. Composing phases out of order or omitting intermediate transitions is a compile error.
+The phases must be constructed through `Sandwich.named(name)` and its fluent continuation methods. The name is a static operation identifier: it is the parent span's name and the stem of the duration metric. The builder interfaces carry type-level sentences (`sentence: must decide after decode`, `sentence: must write after encode`) that expose only the lawful next step. Composing phases out of order or omitting intermediate transitions is a compile error.
 
 Do not hand-sequence phases as bare procedural function calls (`write(decide(read(raw)))`). When functions are hand-composed, any permutation type-checks and the compiler can guarantee nothing. When a step is missing, use the raw chain (`read` -> `decide` -> `write`), where the workflow operates directly on the raw input and passes its outcome directly to the writer.
 
@@ -26,7 +26,7 @@ export const processOrder = async (req: Request) => {
 }
 
 // RIGHT: typed Sandwich chain; out-of-order calls fail compilation
-export const processOrderCell = Sandwich.read((req: Request) => fetchOrderEffect(req.id))
+export const processOrderCell = Sandwich.named('order.submit')((req: Request) => fetchOrderEffect(req.id))
   .decode(Sandwich.pure(decodeOrder))
   .decide(decideOrderWorkflow)
   .encode(Sandwich.pure((outcome) => Result.succeed(formatOutcome(outcome))))

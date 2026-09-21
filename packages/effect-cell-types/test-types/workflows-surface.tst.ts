@@ -7,7 +7,14 @@ import { acceptTaggedCommand, type FixtureDecision } from '../tests/__fixtures__
 import { type Admitted, type Rejected } from '../tests/__fixtures__/admit-decoded-command.workflow.js'
 import { chainAdmitTaggedCommands } from '../tests/__fixtures__/chain-admit-tagged-commands.workflow.js'
 import { ChainedTaggedCommand } from '../tests/__fixtures__/chain-admit-tagged-commands.workflow.js'
-import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
+import {
+  BadKeyCmd,
+  CommandRefused,
+  StructCmd,
+  TaggedCmd,
+  UnstampedCmd,
+  UntaggedCmd,
+} from '../tests/__fixtures__/Command.schema.js'
 import { type Decision, DecisionError, LoneDecision } from '../tests/__fixtures__/Decision.schema.js'
 import { refuseWidenedCommand, type WidenedDecision } from '../tests/__fixtures__/refuse-widened-command.workflow.js'
 import { SettleCommand } from '../tests/__fixtures__/total-admit-decision.workflow.js'
@@ -124,6 +131,8 @@ interface StringKeyBrandTwo {
 
 declare const decideOverTagged: (command: TaggedCmd) => Result<Decision, DecisionError>
 declare const decideOverUntagged: (command: UntaggedCmd) => Result<Decision, DecisionError>
+declare const decideOverUnstamped: (command: UnstampedCmd) => Result<Decision, DecisionError>
+declare const decideOverBadKey: (command: BadKeyCmd) => Result<Decision, DecisionError>
 declare const decideWidened: typeof refuseWidenedCommand
 declare const decideNeverOverTagged: (command: TaggedCmd) => Result<Decision, never>
 declare const decideLoneOverTagged: (command: TaggedCmd) => Result<LoneDecision, CommandRefused>
@@ -169,6 +178,16 @@ describe('the commands and deciders make refuses', () => {
 
   it('Should_AcceptTheUntaggedClassCommand_When_TheDeciderCarriesTwoVariants', () => {
     expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
+  })
+
+  it('Should_RefuseAMissingInstrumentationList_When_TheCommandDeclaresNone', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(UnstampedCmd, decideOverUnstamped)
+  })
+
+  it('Should_RefuseAnUnknownInstrumentationKey_When_TheListNamesANonField', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(BadKeyCmd, decideOverBadKey)
   })
 
   it('Should_RefuseTheNeverErrorChannel_When_TheDecisionCannotFail', () => {
@@ -342,7 +361,7 @@ describe('the shared-type-id predicate as measured', () => {
 
 describe('the composite the decide slot accepts', () => {
   it('Should_AcceptTheTotalComposite_When_TheDecideSlotTakesAWorkflow', () => {
-    const cell = Sandwich.read(readSettleCommand).decide(totalPairAdmitTaggedCommands).write(
+    const cell = Sandwich.named('cell.surface')(readSettleCommand).decide(totalPairAdmitTaggedCommands).write(
       writeTotalSettleOutcome,
     )
     expect(cell).type.toBe<
