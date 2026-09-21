@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Array as A, Option } from 'effect'
+import { DIFFERENTIAL_SUFFIX } from './path.config.js'
+import { basenameOf, isTestFile } from './path.js'
 import { isPropCallee, PROP_MODIFIERS } from './prop-call.js'
 import { meta, PROPERTY_TEST_SUFFIX } from './property-file-purity.config.js'
 
@@ -8,55 +9,90 @@ export type MessageIds = 'plainIt' | 'plainEffectIt' | 'rawFastCheck' | 'fastChe
 
 const RAW_FC_METHODS: ReadonlySet<string> = new Set(['assert', 'check', 'property', 'asyncProperty'])
 
+interface PropertyFileKind {
+  readonly suffix: string
+  readonly plainExpected: string
+  readonly plainFix: string
+  readonly rawFcExpected: string
+  readonly rawFcActualSuffix: string
+  readonly rawFcFix: string
+}
+
+const PROPERTY_FILE_KIND: PropertyFileKind = {
+  suffix: PROPERTY_TEST_SUFFIX,
+  plainExpected: 'it.prop(...) or it.effect.prop(...) — property files never mix with scenario tests',
+  plainFix:
+    'move the scenario test to a plain *.test.ts file, or rewrite it as a property with arbitraries and a boolean-returning predicate',
+  rawFcExpected: 'it.prop(...) or it.effect.prop(...) from @effect/vitest',
+  rawFcActualSuffix: 'bypasses the vitest/Effect integration',
+  rawFcFix:
+    'rewrite as it.prop(name, [arbitraries], predicate) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',
+}
+
+const DIFFERENTIAL_FILE_KIND: PropertyFileKind = {
+  suffix: DIFFERENTIAL_SUFFIX,
+  plainExpected:
+    'the differential harness — Differential.compare(...).on(arb).assert(oracle) or Metamorphic.on(system).relation(...).on(arb)',
+  plainFix: 'rewrite via @systemfsoftware/differential-spec; scenario tests do not belong in a differential file',
+  rawFcExpected:
+    'the harness owns fast-check — pass an fc.Arbitrary to the harness, never call fc.assert/fc.check directly',
+  rawFcActualSuffix: 'bypasses the differential harness oracle',
+  rawFcFix:
+    'build the arbitrary in tests/__fixtures__ and hand it to Differential.compare(...).on(arb) or Metamorphic.on(...).relation(...).on(arb)',
+}
+
 const reportPlain = (
   context: Context,
   node: ESTree.CallExpression,
   messageId: 'plainIt' | 'plainEffectIt',
   actual: string,
+  kind: PropertyFileKind,
 ): void => {
   context.report({
     node,
     messageId,
     data: {
-      name: `scenario test (${actual}) in a ${PROPERTY_TEST_SUFFIX} file`,
-      expected: 'it.prop(...) or it.effect.prop(...) — property files never mix with scenario tests',
+      name: `scenario test (${actual}) in a ${kind.suffix} file`,
+      expected: kind.plainExpected,
       actual: `${actual} runs a single example, not a property`,
-      fix:
-        'move the scenario test to a plain *.test.ts file, or rewrite it as a property with arbitraries and a boolean-returning predicate',
+      fix: kind.plainFix,
     },
   })
 }
 
-const createPropertyFileVisitors = (context: Context) => ({
+const reportRawFc = (context: Context, node: ESTree.CallExpression, method: string, kind: PropertyFileKind): void => {
+  context.report({
+    node,
+    messageId: 'rawFastCheck',
+    data: {
+      name: `raw fc.${method}(...) in a ${kind.suffix} file`,
+      expected: kind.rawFcExpected,
+      actual: `fc.${method}(...) ${kind.rawFcActualSuffix}`,
+      fix: kind.rawFcFix,
+    },
+  })
+}
+
+const createPropertyFileVisitors = (context: Context, kind: PropertyFileKind) => ({
   CallExpression(node: ESTree.CallExpression) {
     const callee = node.callee
     if (callee.type === 'Identifier') {
       if (callee.name === 'it' || callee.name === 'test') {
-        reportPlain(context, node, 'plainIt', `${callee.name}(...)`)
+        reportPlain(context, node, 'plainIt', `${callee.name}(...)`, kind)
       }
       return
     }
     if (callee.type !== 'MemberExpression' || callee.property.type !== 'Identifier') return
     const object = callee.object
     if (object.type === 'Identifier' && object.name === 'fc' && RAW_FC_METHODS.has(callee.property.name)) {
-      context.report({
-        node,
-        messageId: 'rawFastCheck',
-        data: {
-          name: `raw fc.${callee.property.name}(...) in a ${PROPERTY_TEST_SUFFIX} file`,
-          expected: 'it.prop(...) or it.effect.prop(...) from @effect/vitest',
-          actual: `fc.${callee.property.name}(...) bypasses the vitest/Effect integration`,
-          fix:
-            'rewrite as it.prop(name, [arbitraries], predicate) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',
-        },
-      })
+      reportRawFc(context, node, callee.property.name, kind)
       return
     }
     if (object.type === 'Identifier' && object.name === 'it') {
       if (callee.property.name === 'effect') {
-        reportPlain(context, node, 'plainEffectIt', 'it.effect(...)')
+        reportPlain(context, node, 'plainEffectIt', 'it.effect(...)', kind)
       } else if (PROP_MODIFIERS.has(callee.property.name)) {
-        reportPlain(context, node, 'plainIt', `it.${callee.property.name}(...)`)
+        reportPlain(context, node, 'plainIt', `it.${callee.property.name}(...)`, kind)
       }
       return
     }
@@ -65,7 +101,7 @@ const createPropertyFileVisitors = (context: Context) => ({
       object.object.type === 'Identifier' && object.object.name === 'it' &&
       object.property.type === 'Identifier' && object.property.name === 'effect'
     ) {
-      reportPlain(context, node, 'plainEffectIt', `it.effect.${callee.property.name}(...)`)
+      reportPlain(context, node, 'plainEffectIt', `it.effect.${callee.property.name}(...)`, kind)
     }
   },
 })
@@ -100,7 +136,6 @@ const createScenarioFileVisitors = (context: Context) => ({
       }
     }
   },
-
   CallExpression(node: ESTree.CallExpression) {
     if (!isPropCallee(node.callee)) return
     context.report({
@@ -116,14 +151,16 @@ const createScenarioFileVisitors = (context: Context) => ({
   },
 })
 
+const kindOf = (filename: string): PropertyFileKind =>
+  filename.endsWith(DIFFERENTIAL_SUFFIX) ? DIFFERENTIAL_FILE_KIND : PROPERTY_FILE_KIND
+
 export const propertyFilePurity = defineRule({
   meta,
   create(context: Context) {
-    const isTestFile = A.last(context.filename.split('/')).pipe(
-      Option.exists((base) => base.includes('.test.') || base.includes('.spec.')),
-    )
-    if (!isTestFile) return {}
-    if (context.filename.endsWith(PROPERTY_TEST_SUFFIX)) return createPropertyFileVisitors(context)
+    if (!isTestFile(basenameOf(context.filename))) return {}
+    if (context.filename.endsWith(PROPERTY_TEST_SUFFIX) || context.filename.endsWith(DIFFERENTIAL_SUFFIX)) {
+      return createPropertyFileVisitors(context, kindOf(context.filename))
+    }
     return createScenarioFileVisitors(context)
   },
 })

@@ -2,6 +2,7 @@ import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
 import { dampTestNaming } from './rules/damp-test-naming.js'
+import { differentialTestRequiresHarness } from './rules/differential-test-requires-harness.js'
 import { inSourceTestPropOnly } from './rules/in-source-test-prop-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { noAssertInProperty } from './rules/no-assert-in-property.js'
@@ -49,6 +50,7 @@ const recommendedRules = {
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
+  [rule('differential-test-requires-harness')]: 'error',
 } as const
 
 export default {
@@ -79,6 +81,7 @@ export default {
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,
+    'differential-test-requires-harness': differentialTestRequiresHarness,
   },
   configs: {
     recommended: {
