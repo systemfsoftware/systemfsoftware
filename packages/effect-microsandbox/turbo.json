@@ -1,29 +1,11 @@
 {
+  "$schema": "https://v2-10-1.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
-    "typecheck": {
-      "dependsOn": [
-        "^build",
-        "^api:check"
-      ]
-    },
-    "test": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "vitest.config.ts",
-        "vitest-setup.ts",
-        "src/**/*.ts",
-        "tests/**/*.ts",
-        "!**/README.md",
-        "!**/AGENTS.md"
-      ],
-      "outputs": [
-        "coverage/**"
-      ],
-      "dependsOn": [
-        "^build",
-        "^api:check"
-      ]
+    "smoke:journey": {
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "outputLogs": "new-only"
     }
   }
 }
