@@ -10,13 +10,14 @@ import {
   Then,
   tokenizeTemplate,
 } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Result } from 'effect'
+import { Effect, Layer, Result } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
-Feature('Scenario outline — edge cases and title stringification').body(
-  ({ scenario, scenarioOutline }) => {
+Feature('Scenario outline — edge cases and title stringification')
+  .withLayer(Layer.empty)
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'Title stringification safely formats primitive and complex JavaScript values',
       Effect.sync(() => {
@@ -83,5 +84,4 @@ Feature('Scenario outline — edge cases and title stringification').body(
           }),
         ),
     )
-  },
-)
+  })

@@ -64,6 +64,7 @@ const ApiWithRejection = HttpApi.make('api').add(
 )
 
 Feature('Reusing a fetched profile after the page reloads, without asking the server again')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A profile fetched once is still available on a freshly reloaded page',
@@ -343,7 +344,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         Then('the raw response is reported')((s) => {
           expect(Result.isSuccess(s.outcome)).toBe(true)
           if (Result.isSuccess(s.outcome)) {
-            expect(s.outcome.value.status).toBe(200)
+            expect(s.outcome.value).toMatchObject({ status: 200 })
           }
         }),
       ),

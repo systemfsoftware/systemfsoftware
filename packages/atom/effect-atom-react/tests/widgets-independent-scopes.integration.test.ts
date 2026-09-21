@@ -5,6 +5,7 @@ import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { expect, vi } from 'vitest'
@@ -12,6 +13,7 @@ import { expect, vi } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
 Feature('Keeping two on-screen widgets showing values from separate data sources independent of each other')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       "A widget still loading is not affected when a different widget's cleanup timer runs",

@@ -9,6 +9,7 @@ import { expect, vi } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
 Feature('Deriving values from other values on a page')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A plain value on the page reads back exactly what was set',

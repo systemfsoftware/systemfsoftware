@@ -17,6 +17,7 @@ import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Latch from 'effect/Latch'
+import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { renderToString } from 'react-dom/server'
@@ -25,6 +26,7 @@ import { expect, vi } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
 Feature('Server-side rendering of React atom hooks')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'Atoms run during SSR when no server snapshot is given',

@@ -9,78 +9,133 @@ function assert(condition: boolean, message: string): asserts condition {
   throw new Error(message)
 }
 
-export class Package {
-  #files: Record<string, string | Uint8Array> = {}
+export const TypeId: unique symbol = Symbol.for('@systemfsoftware/npm-package/Package')
+export type TypeId = typeof TypeId
+
+export const filesMap = new WeakMap<Package, Record<string, string | Uint8Array>>()
+
+export interface Package {
+  readonly [TypeId]: TypeId
   readonly packageName: string
   readonly packageVersion: string
   readonly resolvedUrl: string | undefined
+  tryReadBytes(path: string): string | Uint8Array | undefined
+  tryReadFile(path: string): string | undefined
+  readFile(path: string): string
+  fileExists(path: string): boolean
+  directoryExists(path: string): boolean
+  listFiles(directory?: string): string[]
+  withOverlay(other: Package): Package
+}
+function decodeStored(
+  store: Record<string, string | Uint8Array>,
+  path: string,
+  file: string | Uint8Array | undefined,
+): string | undefined {
+  if (file === undefined) return undefined
+  return decodeStoredFile(store, path, file)
+}
 
-  constructor(
-    files: Record<string, string | Uint8Array>,
-    packageName: string,
-    packageVersion: string,
-    resolvedUrl?: string,
-  ) {
-    this.#files = { ...files }
-    this.packageName = packageName
-    this.packageVersion = packageVersion
-    this.resolvedUrl = resolvedUrl
-  }
+function readStoreFile(
+  store: Record<string, string | Uint8Array> | undefined,
+  path: string,
+): string | undefined {
+  if (store === undefined) return undefined
+  return decodeStored(store, path, store[path])
+}
 
-  tryReadBytes(path: string): string | Uint8Array | undefined {
-    return this.#files[path]
-  }
-
-  tryReadFile(path: string): string | undefined {
-    const file = this.#files[path]
-    if (file === undefined) {
-      return undefined
-    }
-    return this.decodeStoredFile(path, file)
-  }
-
-  private decodeStoredFile(path: string, file: string | Uint8Array): string {
-    if (typeof file === 'string') {
-      return file
-    }
-    const content = new TextDecoder().decode(file)
-    this.#files[path] = content
-    return content
-  }
-
-  readFile(path: string): string {
+const PackageProto: Package = {
+  [TypeId]: TypeId,
+  packageName: '',
+  packageVersion: '',
+  resolvedUrl: undefined,
+  tryReadBytes(this: Package, path: string): string | Uint8Array | undefined {
+    return filesMap.get(this)?.[path]
+  },
+  tryReadFile(this: Package, path: string): string | undefined {
+    return readStoreFile(filesMap.get(this), path)
+  },
+  readFile(this: Package, path: string): string {
     const content = this.tryReadFile(path)
     if (content === undefined) {
       throw new Error(`File not found: ${path}`)
     }
     return content
-  }
-
-  fileExists(path: string): boolean {
-    return path in this.#files
-  }
-
-  directoryExists(path: string): boolean {
+  },
+  fileExists(this: Package, path: string): boolean {
+    const store = filesMap.get(this)
+    return store !== undefined && path in store
+  },
+  directoryExists(this: Package, path: string): boolean {
+    const store = filesMap.get(this)
+    if (store === undefined) return false
     const prefix = ensureTrailingDirectorySeparator(path)
-    return Object.keys(this.#files).some((file) => file.startsWith(prefix))
-  }
-
-  listFiles(directory?: string): string[] {
-    return listPackageFiles(this.#files, directory)
-  }
-
-  /**
-   * Merge `other`'s files over this package's, returning a new package and
-   * mutating neither. The result keeps THIS package's name, version and
-   * resolved URL, so when `other` carries its own `package.json` the returned
-   * package's `packageName` need not match the name inside its own bytes.
-   */
-  withOverlay(other: Package): Package {
-    const files = { ...this.#files, ...other.#files }
-    return new Package(files, this.packageName, this.packageVersion, this.resolvedUrl)
-  }
+    return Object.keys(store).some((file) => file.startsWith(prefix))
+  },
+  listFiles(this: Package, directory?: string): string[] {
+    const store = filesMap.get(this)
+    if (store === undefined) return []
+    return listPackageFiles(store, directory)
+  },
+  withOverlay(this: Package, other: Package): Package {
+    const combined = Object.assign({}, filesMap.get(this), filesMap.get(other))
+    return makePackage(combined, this.packageName, this.packageVersion, this.resolvedUrl)
+  },
 }
 
+function decodeStoredFile(
+  files: Record<string, string | Uint8Array>,
+  path: string,
+  file: string | Uint8Array,
+): string {
+  if (typeof file === 'string') {
+    return file
+  }
+  const content = new TextDecoder().decode(file)
+  files[path] = content
+  return content
+}
+
+export function makePackage(
+  files: Record<string, string | Uint8Array>,
+  packageName: string,
+  packageVersion: string,
+  resolvedUrl?: string,
+): Package {
+  const pkg: Package = {
+    [TypeId]: TypeId,
+    packageName,
+    packageVersion,
+    resolvedUrl,
+    tryReadBytes(p: string) {
+      return PackageProto.tryReadBytes.call(this, p)
+    },
+    tryReadFile(p: string) {
+      return PackageProto.tryReadFile.call(this, p)
+    },
+    readFile(p: string) {
+      return PackageProto.readFile.call(this, p)
+    },
+    fileExists(p: string) {
+      return PackageProto.fileExists.call(this, p)
+    },
+    directoryExists(p: string) {
+      return PackageProto.directoryExists.call(this, p)
+    },
+    listFiles(dir?: string) {
+      return PackageProto.listFiles.call(this, dir)
+    },
+    withOverlay(other: Package) {
+      return PackageProto.withOverlay.call(this, other)
+    },
+  }
+  filesMap.set(pkg, { ...files })
+  return pkg
+}
+
+export const Package = {
+  make: makePackage,
+}
 function directoryWithRoot(directory: string | undefined): string {
   if (directory === undefined) return '/'
   return directory
@@ -156,13 +211,13 @@ function packageWithJson(
   packageVersion: string,
   prefix: string,
 ): Package {
-  const pkg = new Package(packageFiles, packageName, packageVersion)
+  const pkg = makePackage(packageFiles, packageName, packageVersion)
   assert(pkg.fileExists(`${prefix}package.json`), 'Must contain package.json')
   return pkg
 }
 
 /**
- * Build a {@link Package} from an authored file tree without a tarball.
+ * Build a {@link (Package:interface)} from an authored file tree without a tarball.
  *
  * Tree contract (minor-version stable):
  * - Relative keys are prefixed with `/node_modules/<packageName>/`.
@@ -229,5 +284,5 @@ export function toDirectoryJSON(
 
 export function createPackageFromTarballData(tarball: Uint8Array): Package {
   const { files, packageName, packageVersion } = extractTarball(tarball)
-  return new Package(files, packageName, packageVersion)
+  return makePackage(files, packageName, packageVersion)
 }

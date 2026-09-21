@@ -1,11 +1,12 @@
 import { Atom, Registry, Result } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Fiber, HashSet, Latch, Option, Schema, Stream } from 'effect'
+import { Cause, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Stream } from 'effect'
 import { expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('Keeping a value that is still loading available to every reader')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A value that never finishes loading is not started over after several readers check it',

@@ -1,11 +1,12 @@
 import { DynamicLimitExceeded } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('DynamicLimitExceeded error')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'DynamicLimitExceeded has limit and _tag fields',

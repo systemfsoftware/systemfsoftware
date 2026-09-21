@@ -3,12 +3,10 @@ import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Option, Schema, Stream } from 'effect'
+import { Effect, Layer, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
+import * as RpcTest from 'effect/unstable/rpc/RpcTest'
 import { expect } from 'vitest'
-
-const finiteNumber = (u: unknown): FiniteNumber => Option.getOrThrow(Schema.decodeUnknownOption(Schema.Finite)(u))
-type FiniteNumber = Schema.Schema.Type<typeof Schema.Finite>
 
 const Feature = makeFeature({ it, layer })
 
@@ -31,7 +29,24 @@ const StreamGroup = RpcGroup.make(
   }),
 )
 
+type GroupRpcs = RpcGroup.Rpcs<typeof Group>
+type StreamRpcs = RpcGroup.Rpcs<typeof StreamGroup>
+
+/**
+ * An in-memory RPC server for a group.
+ *
+ * `RpcTest` wires the real client to real handlers over the no-serialization
+ * transport, so each scenario consumes a genuine `RpcClient.Flat` rather than a
+ * hand-written client shape.
+ */
+const serverFor = (handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>>) =>
+  RpcTest.makeClient(Group, { flatten: true }).pipe(Effect.provide(handlers))
+
+const itemsServer = (handlers: Layer.Layer<Rpc.ToHandler<StreamRpcs>>) =>
+  RpcTest.makeClient(StreamGroup, { flatten: true }).pipe(Effect.provide(handlers))
+
 Feature('Reusing an rpc-fetched user after the page reloads, without calling the server again')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A user fetched once over rpc is still available on a freshly reloaded page',
@@ -41,15 +56,15 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           () =>
             Effect.sync(() => {
               let callCount = 0
-              const makeEffect = Effect.succeed(
-                (tag: string, payload: { readonly id: FiniteNumber }) => {
-                  callCount++
-                  if (tag !== 'getUser') {
-                    return Effect.die(`unexpected tag: ${tag}`)
-                  }
-                  return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-                },
-              )
+              const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+                getUser: ({ id }) =>
+                  Effect.sync(() => {
+                    callCount += 1
+                    return { id, name: `user-${id}` }
+                  }),
+                createUser: () => Effect.die('unexpected tag: createUser'),
+              })
+              const makeEffect = serverFor(Handlers)
               const Client = AtomRpc.Service()('Client', {
                 group: Group,
                 protocol: Layer.empty,
@@ -86,12 +101,15 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         Given('a page that calls an rpc server that counts calls')('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: FiniteNumber }) => {
-                callCount++
-                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              },
-            )
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: ({ id }) =>
+                Effect.sync(() => {
+                  callCount += 1
+                  return { id, name: `user-${id}` }
+                }),
+              createUser: () => Effect.die('unexpected tag: createUser'),
+            })
+            const makeEffect = serverFor(Handlers)
             const Client = AtomRpc.Service()('Client', {
               group: Group,
               protocol: Layer.empty,
@@ -121,14 +139,11 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
       Gherkin.Do.pipe(
         Given('a page that submits new records over rpc to a server that accepts them')('ctx', () =>
           Effect.sync(() => {
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly name: string }) => {
-                if (tag !== 'createUser') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Effect.succeed({ id: finiteNumber(1), name: payload.name })
-              },
-            )
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: () => Effect.die('unexpected tag: getUser'),
+              createUser: ({ name }) => Effect.succeed({ id: 1, name }),
+            })
+            const makeEffect = serverFor(Handlers)
             const Client = AtomRpc.Service()('Client', {
               group: Group,
               protocol: Layer.empty,
@@ -161,18 +176,14 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         Given('a page whose rpc server streams two records')('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const makeEffect = Effect.succeed(
-              (tag: string) => {
-                callCount++
-                if (tag !== 'getItems') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Stream.fromIterable([
-                  { id: finiteNumber(1), name: 'first' },
-                  { id: finiteNumber(2), name: 'second' },
-                ])
-              },
-            )
+            const Handlers: Layer.Layer<Rpc.ToHandler<StreamRpcs>> = StreamGroup.toLayer({
+              getItems: () =>
+                Stream.fromIterable([
+                  { id: 1, name: 'first' },
+                  { id: 2, name: 'second' },
+                ]),
+            })
+            const makeEffect = itemsServer(Handlers)
             const Client = AtomRpc.Service()('Client', {
               group: StreamGroup,
               protocol: Layer.empty,
@@ -217,18 +228,19 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           () =>
             Effect.sync(() => {
               let callCount = 0
-              const makeEffect = Effect.succeed(
-                (tag: string, payload: { readonly id?: FiniteNumber; readonly name?: string }) => {
-                  callCount++
-                  if (tag === 'getUser') {
-                    return Effect.succeed({ id: finiteNumber(1), name: 'user-1' })
-                  }
-                  if (tag === 'createUser') {
-                    return Effect.succeed({ id: finiteNumber(1), name: payload.name ?? '' })
-                  }
-                  return Effect.die(`unexpected tag: ${tag}`)
-                },
-              )
+              const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+                getUser: () =>
+                  Effect.sync(() => {
+                    callCount += 1
+                    return { id: 1, name: 'user-1' }
+                  }),
+                createUser: ({ name }) =>
+                  Effect.sync(() => {
+                    callCount += 1
+                    return { id: 1, name }
+                  }),
+              })
+              const makeEffect = serverFor(Handlers)
               const Client = AtomRpc.Service()('Client', {
                 group: Group,
                 protocol: Layer.empty,
@@ -274,14 +286,11 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
       Gherkin.Do.pipe(
         Given('a page that builds its rpc client with a protocol function')('ctx', () =>
           Effect.sync(() => {
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: FiniteNumber }) => {
-                if (tag !== 'getUser') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              },
-            )
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: ({ id }) => Effect.succeed({ id, name: `user-${id}` }),
+              createUser: () => Effect.die('unexpected tag: createUser'),
+            })
+            const makeEffect = serverFor(Handlers)
             const Client = AtomRpc.Service()('Client', {
               group: Group,
               protocol: () => Layer.empty,
@@ -316,15 +325,15 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         )('ctx', () =>
           Effect.sync(() => {
             let callCount = 0
-            const makeEffect = Effect.succeed(
-              (tag: string, payload: { readonly id: FiniteNumber }) => {
-                callCount++
-                if (tag !== 'getUser') {
-                  return Effect.die(`unexpected tag: ${tag}`)
-                }
-                return Effect.succeed({ id: payload.id, name: `user-${payload.id}` })
-              },
-            )
+            const Handlers: Layer.Layer<Rpc.ToHandler<GroupRpcs>> = Group.toLayer({
+              getUser: ({ id }) =>
+                Effect.sync(() => {
+                  callCount += 1
+                  return { id, name: `user-${id}` }
+                }),
+              createUser: () => Effect.die('unexpected tag: createUser'),
+            })
+            const makeEffect = serverFor(Handlers)
             const Client = AtomRpc.Service()('Client', {
               group: Group,
               protocol: Layer.empty,

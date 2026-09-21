@@ -2,6 +2,7 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Pipeable from 'effect/Pipeable'
 import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
 import type * as Atom from './Atom.js'
@@ -38,16 +39,16 @@ const NodeState: {
 }
 type NodeState = number
 
-export class NodeImpl<A> {
+export class NodeImpl<A> extends Pipeable.Class {
   constructor(
     registry: RegistryImpl,
     atom: Atom.Atom<A>,
   ) {
+    super()
     this.registry = registry
     this.atom = atom
     this.writeContext = new WriteContextImpl(registry, this)
   }
-
   readonly registry: RegistryImpl
   readonly atom: Atom.Atom<A>
   state: NodeState = NodeState.uninitialized
@@ -946,11 +947,12 @@ function readAndLink<A, A2>(node: NodeImpl<A>, atom: Atom.Atom<A2>): A2 {
   return value
 }
 
-class WriteContextImpl<A> implements Atom.WriteContext<A> {
+class WriteContextImpl<A> extends Pipeable.Class implements Atom.WriteContext<A> {
   constructor(
     registry: RegistryImpl,
     node: NodeImpl<A>,
   ) {
+    super()
     this.registry = registry
     this.node = node
   }

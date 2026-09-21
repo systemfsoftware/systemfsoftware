@@ -1,11 +1,12 @@
 import { Atom, Hydration, Registry, Result } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Deferred, Effect, Fiber, Schema } from 'effect'
+import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
 import { expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
 Feature("Saving a page's values so a reloaded page starts with them already filled in")
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A saved value is still there after the page reloads and its cleanup timer runs',

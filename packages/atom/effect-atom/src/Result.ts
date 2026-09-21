@@ -17,7 +17,8 @@ import * as Exit from 'effect/Exit'
 import type { LazyArg } from 'effect/Function'
 import { constTrue, dual } from 'effect/Function'
 import * as Option from 'effect/Option'
-import { type Pipeable, pipeArguments } from 'effect/Pipeable'
+import type { Pipeable } from 'effect/Pipeable'
+import * as PipeableModule from 'effect/Pipeable'
 import type { Predicate, Refinement } from 'effect/Predicate'
 import { isIterable, isTagged } from 'effect/Predicate'
 import * as Either from 'effect/Result'
@@ -872,8 +873,9 @@ const interruptOption = <A, E, B>(
   return Option.some(f(interruptors.success, result))
 }
 
-class BuilderImpl<Out, A, E> {
+class BuilderImpl<Out, A, E> extends PipeableModule.Class {
   constructor(result: Result<A, E>) {
+    super()
     this.result = result
   }
   readonly result: Result<A, E>
@@ -910,10 +912,6 @@ class BuilderImpl<Out, A, E> {
     if (Option.isSome(value)) {
       this.output = value
     }
-  }
-
-  pipe() {
-    return pipeArguments(this, arguments)
   }
 
   onWaiting<B>(f: (result: Result<A, E>) => B): BuilderImpl<Out | B, A, E> {
