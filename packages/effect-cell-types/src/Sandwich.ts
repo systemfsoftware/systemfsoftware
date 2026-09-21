@@ -92,18 +92,16 @@ const annotateHeld = (value: unknown): Effect.Effect<void> =>
     { discard: true },
   )
 
+const annotateTagged = (label: string, value: unknown): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    yield* Effect.annotateCurrentSpan(label, tagOf(value))
+    yield* annotateHeld(value)
+  })
+
 const annotateOutcome = (outcome: Result.Result<unknown, unknown>): Effect.Effect<void> =>
   Result.match(outcome, {
-    onSuccess: (decision) =>
-      Effect.gen(function*() {
-        yield* Effect.annotateCurrentSpan('decision', tagOf(decision))
-        yield* annotateHeld(decision)
-      }),
-    onFailure: (refusal) =>
-      Effect.gen(function*() {
-        yield* Effect.annotateCurrentSpan('failure', tagOf(refusal))
-        yield* annotateHeld(refusal)
-      }),
+    onSuccess: (decision) => annotateTagged('decision', decision),
+    onFailure: (refusal) => annotateTagged('failure', refusal),
   })
 
 const okOrRefusal = (
