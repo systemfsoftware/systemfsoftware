@@ -1,76 +1,39 @@
 ---
 title: Capability ports must be declared in separate modules from concrete Layer implementations
 applies_when:
-  - declaring a service key, Context.Tag, or capability interface
-  - implementing a Layer that satisfies a service port
-  - organizing dependency injection and service boundaries in Effect
-  - reviewing imports between domain consumers and infrastructure implementations
-tags: [cell-architecture, ports-and-adapters, context-tag, layer, dependency-inversion]
+  - declaring a service tag, port, or capability contract
+  - implementing a Layer that satisfies an infrastructure dependency
+  - reviewing imports between pure domain code and database drivers
+tags: [cell, ports-and-adapters, context-service, layer, dependency-inversion]
 ---
 
-# Capability ports must be declared in separate modules from concrete Layer implementations
+Capability ports (`Context.Service`) and concrete implementations (`Layer`) represent two distinct architectural concerns and must live in separate modules:
 
-A capability port (`Context.Tag` / `Context.Service`) and the concrete implementation (`Layer`) that satisfies it represent two completely different architectural concerns with two distinct consumer audiences (`docs/solutions/architecture-patterns/one-cell-cannot-hold-a-port-and-its-implementation.md`, `CONSTITUTION.md` CONST-B4).
+- **Lean Port Declarations**: The port (`Context.Service<Self, Shape>()(...)`) defines the abstract operations required by the domain. It lives in a lightweight, pure declaration module that contains zero imports of database drivers, HTTP clients, or platform runtimes.
+- **Adapters at the Infrastructure Boundary**: The concrete implementation (`Layer.effect`, `Layer.succeed`) lives in an adapter module under infrastructure or store directories. It imports the driver (`@effect/sql-pg`, `pglite`) and satisfies the port contract.
+- **Inward Import Direction**: Domain workflows and pure cells import only the capability port. They never import concrete layers or driver libraries. The layers are imported and merged solely at the application composition root.
+- **Avoid Co-location**: Never export both `Port` and `Port.Live` from the same file. Co-locating the implementation pulls third-party driver dependencies into every caller that only wanted the type contract.
 
-When a single module exports both the port and the layer, consumers that only need the interface are forced into a dependency on the concrete implementation, corrupting the dependency graph and forcing test projection workarounds.
+```ts
+// WRONG: port and implementation in the same file forces driver imports onto consumers
+// ports/LedgerStore.ts
+import { PgClient } from '@effect/sql-pg' // Driver leak!
+import { Context, Layer } from 'effect'
 
-## Doctrine & Constraints
+export class LedgerStore extends Context.Service<LedgerStore, Shape>()('LedgerStore') {}
+export const LedgerStoreLive = Layer.effect(LedgerStore, ...)
 
-- **Port in a shared declaration cell**: The capability port (`Context.Tag<Service>`) and its abstract interface belong in a lean, dependency-free declaration module that any consumer may freely import.
-- **Layer at the composition edge**: Concrete implementations (`Layer.effect`, `Layer.succeed`) must live in separate adapter or infrastructure modules that are imported only at the application composition root (`main.ts`).
-- **Inward import direction**: Domain workflows and core cell operations must never import concrete Layers or driver packages. They only ever mention capability tags in their requirements (`R`) channel.
-- **Single responsibility per file**: Never co-locate `DatabasePort` and `DatabaseLive` in the same file.
+// RIGHT: separate port declaration from concrete adapter
+// File 1: ports/LedgerStore.ts (pure declaration, zero driver imports)
+import { Context, Effect } from 'effect'
+export class LedgerStore extends Context.Service<LedgerStore, Shape>()('LedgerStore') {}
 
-## Calibration Examples
+// File 2: store/LedgerStoreDrizzle.ts (adapter, imported only at root)
+import { PgClient } from '@effect/sql-pg'
+import { Layer } from 'effect'
+import { LedgerStore } from '../ports/LedgerStore.js'
+export const LedgerStoreLive = Layer.effect(LedgerStore, ...)
+```
 
-- **wrong**:
-  ```ts
-  // One file holds both port and implementation
-  // src/services/UserRepository.ts
-  import { PgClient } from '@effect/sql-pg' // Impure driver import!
-  import { Context, Layer } from 'effect'
-
-  export class UserRepository extends Context.Tag('UserRepository')<
-    UserRepository,
-    { readonly findById: (id: string) => Effect.Effect<User, NotFound> }
-  >() {}
-
-  // Forbidden: co-located implementation forces Postgres dependency on every caller of the port
-  export const UserRepositoryLive = Layer.effect(
-    UserRepository,
-    Effect.gen(function*() {
-      const sql = yield* PgClient.PgClient
-      // ...
-    }),
-  )
-  ```
-- **right**:
-  ```ts
-  // File 1: Port declaration (lean, pure interface)
-  // src/domain/UserRepository.ts
-  import { Context, Effect } from 'effect'
-
-  export class UserRepository extends Context.Tag('UserRepository')<
-    UserRepository,
-    { readonly findById: (id: string) => Effect.Effect<User, NotFound> }
-  >() {}
-
-  // File 2: Implementation (separate infrastructure module, imported only at composition root)
-  // src/infrastructure/UserRepositoryPgLive.ts
-  import { PgClient } from '@effect/sql-pg'
-  import { Effect, Layer } from 'effect'
-  import { UserRepository } from '../domain/UserRepository'
-
-  export const UserRepositoryPgLive = Layer.effect(
-    UserRepository,
-    Effect.gen(function*() {
-      const sql = yield* PgClient.PgClient
-      // ...
-    }),
-  )
-  ```
-
-## Verification & Gate
-
-- `lint`: Import-graph lint ensures pure and domain modules do not import infrastructure or driver packages (`@effect/sql-*`, `@effect/platform-node`, `node:*`).
-- `review`: Reviewer checks that `Context.Tag` declaration files export zero `Layer` instances, and that `Layer` exports exist exclusively in adapter/infrastructure files.
+Gate: `lint` — import-origin lint forbids importing database drivers or platform modules into port files.
+Review: verify port files export no `Layer` values.
