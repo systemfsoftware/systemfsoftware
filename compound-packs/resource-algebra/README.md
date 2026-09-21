@@ -13,3 +13,4 @@ This pack provides the rules for **executable resource algebras**: pure specific
 - `parameterized-layer-constructors.md`: Libraries export parameterized `layer(spec)` constructors, never static `*Live` singletons.
 - `internal-engine-boundary.md`: Internal cell pipelines and pure workflows drive execution without leaking port ceremony to consumers.
 - `single-namespace-barrel.md`: Primary abstractions export as single cohesive namespace barrels matching Effect lineage.
+- `resource-file-convention.md`: Resource algebras are authored in hyphen-cased `*.resource.ts` files with `Pipeable` compliance.

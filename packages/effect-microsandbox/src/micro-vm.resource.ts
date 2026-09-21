@@ -1,9 +1,9 @@
-/// <reference types="vitest/importMeta" />
 import type { Effect, Layer } from 'effect'
 import { Exit, Schema } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
+import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type * as Scope from 'effect/Scope'
 import type { MicroVMError } from './MicroVMError.schema.js'
 import { layer as sandboxLayer, scoped as sandboxScoped } from './MicroVMSandbox.js'
@@ -26,13 +26,18 @@ export const Wait = {
   forPort: (port: number): WaitStrategy => ({ _tag: 'Port', port }),
   forLog: (pattern: string): WaitStrategy => ({ _tag: 'Log', pattern }),
 }
-export interface MicroVMConfigured {
-  readonly value: MicroVMSpec
-  withExposedPorts(ports: ReadonlyArray<number>): MicroVMConfigured
-  withEnv(env: Record<string, string>): MicroVMConfigured
-  withMount(mount: Mount): MicroVMConfigured
-  withMemoryLimit(memoryMb: number): MicroVMConfigured
-  withWaitStrategy(waitStrategy: WaitStrategy): MicroVMConfigured
+
+const TypeId = '~systemfsoftware/microvm/MicroVM'
+export type TypeId = typeof TypeId
+
+export interface MicroVMResource extends Pipeable {
+  readonly [TypeId]: typeof TypeId
+  readonly spec: MicroVMSpec
+  withExposedPorts(ports: ReadonlyArray<number>): MicroVMResource
+  withEnv(env: Record<string, string>): MicroVMResource
+  withMount(mount: Mount): MicroVMResource
+  withMemoryLimit(memoryMb: number): MicroVMResource
+  withWaitStrategy(waitStrategy: WaitStrategy): MicroVMResource
   readonly scoped: Effect.Effect<
     RunningVM,
     MicroVMError,
@@ -41,22 +46,36 @@ export interface MicroVMConfigured {
   readonly layer: Layer.Layer<RunningVM, MicroVMError, Crypto.Crypto | FileSystem.FileSystem>
 }
 
-const makeConfigured = (raw: MicroVMSpec): MicroVMConfigured => ({
-  value: raw,
-  withExposedPorts: (ports) => makeConfigured(withExposedPorts(raw, ports)),
-  withEnv: (env) => makeConfigured(withEnv(raw, env)),
-  withMount: (mount) => makeConfigured(withMount(raw, mount)),
-  withMemoryLimit: (mb) => makeConfigured(withMemoryLimit(raw, mb)),
-  withWaitStrategy: (strategy) => makeConfigured(withWaitStrategy(raw, strategy)),
-  get scoped() {
-    return sandboxScoped(raw)
-  },
-  get layer() {
-    return sandboxLayer(raw)
-  },
-})
-
-export const spec = (
+const makeProto = (raw: MicroVMSpec): MicroVMResource => {
+  const self: MicroVMResource = {
+    [TypeId]: TypeId,
+    spec: raw,
+    ...Prototype,
+    withExposedPorts(ports: ReadonlyArray<number>): MicroVMResource {
+      return makeProto(withExposedPorts(raw, ports))
+    },
+    withEnv(env: Record<string, string>): MicroVMResource {
+      return makeProto(withEnv(raw, env))
+    },
+    withMount(mount: Mount): MicroVMResource {
+      return makeProto(withMount(raw, mount))
+    },
+    withMemoryLimit(memoryMb: number): MicroVMResource {
+      return makeProto(withMemoryLimit(raw, memoryMb))
+    },
+    withWaitStrategy(waitStrategy: WaitStrategy): MicroVMResource {
+      return makeProto(withWaitStrategy(raw, waitStrategy))
+    },
+    get scoped() {
+      return sandboxScoped(raw)
+    },
+    get layer() {
+      return sandboxLayer(raw)
+    },
+  }
+  return self
+}
+export const make = (
   target:
     | string
     | {
@@ -70,12 +89,14 @@ export const spec = (
       readonly cmd?: ReadonlyArray<string>
       readonly waitStrategy?: WaitStrategy
     },
-): MicroVMConfigured => {
+): MicroVMResource => {
   const raw: MicroVMSpec = typeof target === 'string'
     ? { image: target, env: {}, ports: [], mounts: [] }
     : { env: {}, ports: [], mounts: [], ...target }
-  return makeConfigured(raw)
+  return makeProto(raw)
 }
+
+export const spec = make
 
 export const withEnv: {
   (env: Record<string, string>): (spec: MicroVMSpec) => MicroVMSpec
@@ -139,8 +160,6 @@ if (import.meta.vitest !== void 0) {
     })
   })
 
-  // Key domain: any string, including ''. Distinctness is constructed, never
-  // filtered: the suffixed twin is strictly longer than its base.
   const keyDraw = Arbitrary.schema(Schema.String)
   const distinctKeyPair = Arbitrary.flatMap(
     keyDraw,
@@ -153,8 +172,6 @@ if (import.meta.vitest !== void 0) {
     return specEq(sequential, merged)
   })
 
-  // A spec assembled from an invalid part must fail decode at the engine
-  // boundary — typed ParseError, never a silent repair.
   it.prop('∀spec_NegLimit_⊥', [MicroVMSpec], ([spec]) => !decodeSucceeds(withMemoryLimit(-1)(spec)))
   it.prop('∀spec_RangePort_⊥', [MicroVMSpec], ([spec]) => !decodeSucceeds(withExposedPorts([70_000])(spec)))
   it.prop(
