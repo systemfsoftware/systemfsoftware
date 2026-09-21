@@ -1,6 +1,6 @@
 import { Schema as S } from 'effect'
+import { KitDefinition, SkuId, WarehouseStockPartition } from '../inventory/inventory.schema.js'
 import { CreditAccount, CustomerTier, FraudRiskScore } from './credit.schema.js'
-import { KitDefinition, SkuId, WarehouseStockPartition } from './inventory.schema.js'
 
 const OrderFulfillmentCommandTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/example-inventory-fulfillment/OrderFulfillmentCommand',

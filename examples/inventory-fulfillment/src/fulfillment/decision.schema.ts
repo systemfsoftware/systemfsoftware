@@ -1,6 +1,6 @@
 import { Schema as S } from 'effect'
+import { LotAllocation, SkuId } from '../inventory/inventory.schema.js'
 import { Money } from './credit.schema.js'
-import { LotAllocation, SkuId } from './inventory.schema.js'
 import { OrderLine } from './order.schema.js'
 
 const FulfillmentDecisionTypeId: unique symbol = Symbol.for(
@@ -109,6 +109,9 @@ export class CreditAccountNotFound extends S.TaggedError<CreditAccountNotFound>(
 export class AuthServiceUnavailable extends S.TaggedError<AuthServiceUnavailable>()('AuthServiceUnavailable', {
   reason: S.String,
 }) {
+  readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+}
+export class OptimisticConflict extends S.TaggedError<OptimisticConflict>()('OptimisticConflict', {}) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
 }
 

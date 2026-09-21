@@ -7,7 +7,7 @@ import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { ComponentDemand } from './explode-bundle.workflow.js'
+import { ComponentDemand } from '../fulfillment/explode-bundle.workflow.js'
 import { LotId, SkuId, Version, WarehouseId, WarehouseStockPartition } from './inventory.schema.js'
 import type { StockLot } from './inventory.schema.js'
 

@@ -1,5 +1,5 @@
 import { Schema as S } from 'effect'
-import { LotAllocation } from './inventory.schema.js'
+import { LotAllocation } from '../inventory/inventory.schema.js'
 import { OrderLine } from './order.schema.js'
 
 const InventoryReservationEventsTypeId: unique symbol = Symbol.for(

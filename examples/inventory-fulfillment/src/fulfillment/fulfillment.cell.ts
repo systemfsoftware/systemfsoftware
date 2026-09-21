@@ -1,40 +1,37 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, DateTime, Duration, Effect, Match, Option, Random, Result, Schema as S } from 'effect'
+import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
 import type { SchemaError } from 'effect/Schema'
 import {
   allocateStock,
   AllocateStockCommand,
   type InsufficientStock as AllocateInsufficientStock,
   type LotReservation,
-} from './domain/allocate-stock.workflow.js'
+} from '../inventory/allocate-stock.workflow.js'
+import { type KitDefinition, LotAllocation, type WarehouseStockPartition } from '../inventory/inventory.schema.js'
+import { InventoryStore } from '../inventory/InventoryStore.js'
+import { CreditLedger } from '../ports/CreditLedger.js'
+import { type ReservationCommit, type ReservationCommitOutcome, ReservationLog } from '../ports/ReservationLog.js'
 import {
   checkCredit,
   CreditCheckCommand,
   type CreditLimitExceeded as CreditCheckLimitExceeded,
-} from './domain/check-credit.workflow.js'
-import { type CreditAccount, type CustomerTier, type FraudRiskScore, Money } from './domain/credit.schema.js'
+} from './check-credit.workflow.js'
+import { type CreditAccount, type CustomerTier, type FraudRiskScore, Money } from './credit.schema.js'
 import {
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
-  ConflictRollback,
   type CreditAccountNotFound,
   CreditHold as WireCreditHold,
   CreditLimitExceeded as WireCreditLimitExceeded,
   type FulfillmentDecision,
   type FulfillmentError,
   InsufficientStock as WireInsufficientStock,
-} from './domain/decision.schema.js'
-import {
-  AuditPayload,
-  BackorderRecorded,
-  type InventoryReservationEvents,
-  ReservationRolledBack,
-  StockReserved,
-} from './domain/event.schema.js'
-import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './domain/explode-bundle.workflow.js'
-import { type KitDefinition, LotAllocation, type WarehouseStockPartition } from './domain/inventory.schema.js'
-import { type Order, OrderFulfillmentCommand, OrderLine } from './domain/order.schema.js'
+  OptimisticConflict,
+} from './decision.schema.js'
+import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
+import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './explode-bundle.workflow.js'
+import { type Order, OrderFulfillmentCommand, OrderLine } from './order.schema.js'
 import {
   type OrderAllocated,
   type OrderAllocatedWithOverdraft,
@@ -42,19 +39,13 @@ import {
   type OrderHeld,
   settleFulfillment,
   SettleFulfillmentCommand,
-} from './domain/settle-fulfillment.workflow.js'
-import { CreditLedger } from './ports/CreditLedger.js'
-import { CustomerGate } from './ports/CustomerGate.js'
-import { InventoryStore } from './ports/InventoryStore.js'
-import { type ReservationCommit, type ReservationCommitOutcome, ReservationLog } from './ports/ReservationLog.js'
+} from './settle-fulfillment.workflow.js'
 
 export interface FulfillmentRequest {
   readonly order: Order
   readonly kits: readonly KitDefinition[]
   readonly fraudRisk: FraudRiskScore
 }
-
-type FulfillmentPorts = InventoryStore | CreditLedger | ReservationLog | CustomerGate
 
 interface RawContext {
   readonly order: Order
@@ -70,29 +61,16 @@ interface ReservationPlan {
   readonly orderId: string
   readonly decisionTag: string
   readonly allocations: readonly LotAllocation[]
-  readonly backordered: Option.Option<readonly OrderLine[]>
+  readonly backordered?: readonly OrderLine[] | undefined
 }
 
 interface EncodedFulfillment {
   readonly decision: FulfillmentDecision | FulfillmentError
-  readonly reservation: Option.Option<ReservationPlan>
-}
-
-interface FulfillmentAttempt {
-  readonly decision: FulfillmentDecision | FulfillmentError
-  readonly commit: Option.Option<ReservationCommitOutcome>
-  readonly now: DateTime.Utc
+  readonly reservation?: ReservationPlan | undefined
 }
 
 type CoreDecision = OrderAllocated | OrderAllocatedWithOverdraft | OrderBackordered | OrderHeld
 type CoreError = AllocateInsufficientStock | CreditCheckLimitExceeded
-
-const maxAttempts = 3
-
-const minRetryDelayMillis = 50
-const maxRetryDelayMillis = 100
-
-const rollbackReason = 'optimistic concurrency conflict: retry budget exhausted'
 
 const moneyOf = (value: number): Money => Result.getOrThrow(S.decodeResult(Money)(value))
 
@@ -138,12 +116,12 @@ const planOf = (
   decision: FulfillmentDecision,
   orderId: string,
   allocations: readonly LotAllocation[],
-  backordered: Option.Option<readonly OrderLine[]>,
+  backordered?: readonly OrderLine[],
 ): ReservationPlan => ({ orderId, decisionTag: decision._tag, allocations, backordered })
 
 const persisted = (decision: FulfillmentDecision, reservation: ReservationPlan): EncodedFulfillment => ({
   decision,
-  reservation: Option.some(reservation),
+  reservation,
 })
 
 const encodeCore = (decision: CoreDecision): EncodedFulfillment =>
@@ -151,7 +129,7 @@ const encodeCore = (decision: CoreDecision): EncodedFulfillment =>
     Match.tag('OrderAllocated', (allocated) => {
       const allocations = allocationsOf(allocated.reservations)
       const wire = new AllocatedSplit({ orderId: allocated.orderId, allocations })
-      return persisted(wire, planOf(wire, allocated.orderId, allocations, Option.none()))
+      return persisted(wire, planOf(wire, allocated.orderId, allocations, undefined))
     }),
     Match.tag('OrderAllocatedWithOverdraft', (overdraft) => {
       const allocations = allocationsOf(overdraft.reservations)
@@ -160,13 +138,13 @@ const encodeCore = (decision: CoreDecision): EncodedFulfillment =>
         allocations,
         overdraftAmount: moneyOf(overdraft.overdraftAmount),
       })
-      return persisted(wire, planOf(wire, overdraft.orderId, allocations, Option.none()))
+      return persisted(wire, planOf(wire, overdraft.orderId, allocations, undefined))
     }),
     Match.tag('OrderBackordered', (backordered) => {
       const allocations = allocationsOf(backordered.reservations)
       const lines = Arr.map(backordered.backordered, lineOf)
       const wire = new Backordered({ orderId: backordered.orderId, allocations, backorderedLines: lines })
-      return persisted(wire, planOf(wire, backordered.orderId, allocations, Option.some(lines)))
+      return persisted(wire, planOf(wire, backordered.orderId, allocations, lines))
     }),
     Match.tag('OrderHeld', (held) => {
       const wire = new WireCreditHold({
@@ -174,7 +152,7 @@ const encodeCore = (decision: CoreDecision): EncodedFulfillment =>
         shortfall: moneyOf(held.shortfall),
         requiredDownpayment: moneyOf(held.requiredDownpayment),
       })
-      return persisted(wire, planOf(wire, held.orderId, [], Option.none()))
+      return persisted(wire, planOf(wire, held.orderId, [], undefined))
     }),
     Match.exhaustive,
   )
@@ -198,7 +176,7 @@ const encodeError = (error: CoreError): FulfillmentError =>
 
 const encodedOutcome = (outcome: Result.Result<CoreDecision, CoreError>): EncodedFulfillment =>
   Result.match(outcome, {
-    onFailure: (error): EncodedFulfillment => ({ decision: encodeError(error), reservation: Option.none() }),
+    onFailure: (error): EncodedFulfillment => ({ decision: encodeError(error), reservation: undefined }),
     onSuccess: encodeCore,
   })
 
@@ -238,13 +216,12 @@ const stockReservedOf = (plan: ReservationPlan, now: DateTime.Utc): Option.Optio
 
 const backorderRecordedOf = (plan: ReservationPlan, now: DateTime.Utc): Option.Option<BackorderRecorded> =>
   Option.map(
-    plan.backordered,
+    Option.fromUndefinedOr(plan.backordered),
     (lines) => new BackorderRecorded({ orderId: plan.orderId, backorderedLines: lines, occurredAt: now }),
   )
 
 const reservationEventsOf = (plan: ReservationPlan, now: DateTime.Utc): readonly InventoryReservationEvents[] =>
   Arr.getSomes([stockReservedOf(plan, now), backorderRecordedOf(plan, now)])
-
 const reservationCommitOf = (plan: ReservationPlan, raw: RawContext): ReservationCommit => ({
   orderId: plan.orderId,
   customerId: raw.order.customerId,
@@ -266,13 +243,53 @@ const commitReservation = (
     return yield* log.commit(reservationCommitOf(plan, raw))
   })
 
-const attemptOf = (
-  decision: FulfillmentDecision | FulfillmentError,
-  commit: Option.Option<ReservationCommitOutcome>,
-  now: DateTime.Utc,
-): FulfillmentAttempt => ({ decision, commit, now })
+const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
+  moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
 
-const cell = Sandwich.read(readContext)
+const chargeFor = (
+  customerId: string,
+  decision: FulfillmentDecision | FulfillmentError,
+): Effect.Effect<void, never, CreditLedger> =>
+  Match.value(decision).pipe(
+    Match.tag('AllocatedSplit', (allocated) =>
+      Effect.flatMap(CreditLedger, (ledger) =>
+        ledger.charge(customerId, chargedAmountOf(allocated.allocations)))),
+    Match.tag('AllocatedWithOverdraft', (overdraft) =>
+      Effect.flatMap(CreditLedger, (ledger) =>
+        ledger.charge(customerId, chargedAmountOf(overdraft.allocations)))),
+    Match.tag('CreditHold', () =>
+      Effect.void),
+    Match.tag('Backordered', () =>
+      Effect.void),
+    Match.tag('ConflictRollback', () =>
+      Effect.void),
+    Match.tag('InsufficientStock', () => Effect.void),
+    Match.tag('CreditLimitExceeded', () => Effect.void),
+    Match.tag('Unauthorized', () => Effect.void),
+    Match.tag('Forbidden', () => Effect.void),
+    Match.exhaustive,
+  )
+
+const writeFulfillment = (encoded: EncodedFulfillment, raw: RawContext) =>
+  Option.match(Option.fromUndefinedOr(encoded.reservation), {
+    onNone: () => Effect.map(chargeFor(raw.order.customerId, encoded.decision), () => encoded.decision),
+    onSome: (plan) =>
+      Effect.flatMap(commitReservation(plan, raw), (outcome) =>
+        Match.value(outcome).pipe(
+          Match.when('VersionConflict', () => Effect.fail(new OptimisticConflict({}))),
+          Match.when(
+            'Committed',
+            () => Effect.map(chargeFor(raw.order.customerId, encoded.decision), () => encoded.decision),
+          ),
+          Match.exhaustive,
+        )),
+  })
+
+/**
+ * The fulfillment sandwich. Callers run `fulfillmentCell.run(request)`.
+ * CAS retries and per-customer gating live at the RPC edge (Effect.retry, CustomerGate).
+ */
+export const fulfillmentCell = Sandwich.read(readContext)
   .decode(Sandwich.pure(decodeContext))
   .decide(settleFulfillment)
   .encode(
@@ -280,138 +297,4 @@ const cell = Sandwich.read(readContext)
       Result.succeed(encodedOutcome(outcome))
     ),
   )
-  .write((encoded: EncodedFulfillment, raw: RawContext) =>
-    Option.match(encoded.reservation, {
-      onNone: () => Effect.succeed(attemptOf(encoded.decision, Option.none(), raw.now)),
-      onSome: (plan) =>
-        Effect.map(
-          commitReservation(plan, raw),
-          (outcome) => attemptOf(encoded.decision, Option.some(outcome), raw.now),
-        ),
-    })
-  )
-
-const runAttempt = (
-  request: FulfillmentRequest,
-): Effect.Effect<FulfillmentAttempt, CreditAccountNotFound, FulfillmentPorts> =>
-  cell.run(request).pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
-
-const commitRollback = (
-  request: FulfillmentRequest,
-  auditTag: string,
-  now: DateTime.Utc,
-): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> =>
-  Effect.gen(function*() {
-    const log = yield* ReservationLog
-    return yield* log.commit({
-      orderId: request.order.orderId,
-      customerId: request.order.customerId,
-      events: [
-        new ReservationRolledBack({
-          orderId: request.order.orderId,
-          reason: rollbackReason,
-          allocations: [],
-          occurredAt: now,
-        }),
-      ],
-      audit: new AuditPayload({
-        orderId: request.order.orderId,
-        actorId: request.order.customerId,
-        decisionTag: auditTag,
-        occurredAt: now,
-      }),
-    })
-  })
-
-const rollback = (
-  request: FulfillmentRequest,
-  attempt: FulfillmentAttempt,
-  attempts: number,
-): Effect.Effect<ConflictRollback, never, ReservationLog> =>
-  Effect.gen(function*() {
-    const decision = new ConflictRollback({ orderId: request.order.orderId, attempts })
-    yield* commitRollback(request, decision._tag, attempt.now)
-    return decision
-  })
-
-function submitWithRetry(
-  request: FulfillmentRequest,
-  attemptNumber: number,
-): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> {
-  return Effect.flatMap(runAttempt(request), (attempt) =>
-    Option.match(attempt.commit, {
-      onNone: () => Effect.succeed(attempt.decision),
-      onSome: (outcome) =>
-        Match.value(outcome === 'VersionConflict').pipe(
-          Match.when(true, () =>
-            Match.value(attemptNumber < maxAttempts).pipe(
-              Match.when(true, () =>
-                Effect.flatMap(
-                  Random.nextIntBetween(minRetryDelayMillis, maxRetryDelayMillis),
-                  (delay) =>
-                    Effect.flatMap(
-                      Effect.sleep(Duration.millis(delay)),
-                      () => submitWithRetry(request, attemptNumber + 1),
-                    ),
-                )),
-              Match.when(false, () => rollback(request, attempt, attemptNumber)),
-              Match.exhaustive,
-            )),
-          Match.when(false, () => Effect.succeed(attempt.decision)),
-          Match.exhaustive,
-        ),
-    }))
-}
-
-/** The total quantity across the given allocations, as a monetary amount. */
-const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
-  moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
-
-const chargeFor = (
-  request: FulfillmentRequest,
-  decision: FulfillmentDecision | FulfillmentError,
-): Effect.Effect<void, never, CreditLedger> =>
-  Match.value(decision).pipe(
-    Match.tag('AllocatedSplit', (allocated) =>
-      Effect.flatMap(CreditLedger, (ledger) =>
-        ledger.charge(request.order.customerId, chargedAmountOf(allocated.allocations)))),
-    Match.tag('AllocatedWithOverdraft', (overdraft) =>
-      Effect.flatMap(CreditLedger, (ledger) =>
-        ledger.charge(request.order.customerId, chargedAmountOf(overdraft.allocations)))),
-    Match.tag('Backordered', () =>
-      Effect.void),
-    Match.tag('CreditHold', () =>
-      Effect.void),
-    Match.tag('ConflictRollback', () =>
-      Effect.void),
-    Match.tag('InsufficientStock', () =>
-      Effect.void),
-    Match.tag('CreditLimitExceeded', () =>
-      Effect.void),
-    Match.tag('Unauthorized', () => Effect.void),
-    Match.tag('Forbidden', () => Effect.void),
-    Match.exhaustive,
-  )
-
-const runGated = (
-  request: FulfillmentRequest,
-): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> =>
-  Effect.flatMap(submitWithRetry(request, 1), (decision) => Effect.map(chargeFor(request, decision), () => decision))
-
-/**
- * The fulfillment cell: reads stock/credit/clock, decodes and decides purely, encodes the wire
- * decision and its reservation events, then commits with an optimistic-concurrency CAS. A
- * `VersionConflict` re-runs the whole sandwich from a fresh read, bounded to {@link maxAttempts}
- * total attempts with a jittered backoff between them, after which the shell returns the
- * `ConflictRollback` decision and writes a `ReservationRolledBack` compensation record.
- *
- * The whole run is serialized per customer by {@link CustomerGate}: the credit read that authorizes
- * the order and the charge that settles it form one critical section, so two concurrent orders from
- * one customer cannot both be authorized against the same pre-charge balance. A committed
- * allocation (`AllocatedSplit` / `AllocatedWithOverdraft`) charges the customer; `Backordered`,
- * `CreditHold` and `ConflictRollback` leave no charge behind.
- */
-export const runFulfillment = (
-  request: FulfillmentRequest,
-): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> =>
-  Effect.flatMap(CustomerGate, (gate) => gate.withGate(request.order.customerId, runGated(request)))
+  .write(writeFulfillment)

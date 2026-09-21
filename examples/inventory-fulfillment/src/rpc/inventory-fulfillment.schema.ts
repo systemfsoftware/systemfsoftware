@@ -1,7 +1,7 @@
 import { Schema as S } from 'effect'
-import { FraudRiskScore } from '../domain/credit.schema.js'
-import { KitDefinition, LotAllocation, WarehouseStockPartition } from '../domain/inventory.schema.js'
-import { OrderLine } from '../domain/order.schema.js'
+import { FraudRiskScore } from '../fulfillment/credit.schema.js'
+import { OrderLine } from '../fulfillment/order.schema.js'
+import { KitDefinition, LotAllocation, WarehouseStockPartition } from '../inventory/inventory.schema.js'
 
 export class SubmitOrderRequest extends S.Class<SubmitOrderRequest>('SubmitOrderRequest')({
   orderId: S.String,

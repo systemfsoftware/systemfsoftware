@@ -1,6 +1,7 @@
-import { Context, type DateTime, Effect, Option } from 'effect'
-import type { AuditPayload, InventoryReservationEvents } from '../domain/event.schema.js'
-import type { LotAllocation } from '../domain/inventory.schema.js'
+import { Context, type DateTime, type Effect, Layer, type Option } from 'effect'
+import type { AuditPayload, InventoryReservationEvents } from '../fulfillment/event.schema.js'
+import type { LotAllocation } from '../inventory/inventory.schema.js'
+import { make as makeDrizzle } from '../store/ReservationLogDrizzle.js'
 
 export interface ReservationCommit {
   readonly orderId: string
@@ -25,4 +26,6 @@ export interface ReservationLogService {
 
 export class ReservationLog extends Context.Service<ReservationLog, ReservationLogService>()(
   '@systemfsoftware/example-inventory-fulfillment/ports/ReservationLog',
-) {}
+) {
+  static readonly Live = Layer.effect(this, makeDrizzle)
+}

@@ -1,7 +1,7 @@
 import { Effect, Schema as S } from 'effect'
-import { type CreditAccount, CustomerTier } from '../domain/credit.schema.js'
-import type { AuditPayload } from '../domain/event.schema.js'
-import type { LotAllocation, StockLot, WarehouseStockPartition } from '../domain/inventory.schema.js'
+import { type CreditAccount, CustomerTier } from '../fulfillment/credit.schema.js'
+import type { AuditPayload } from '../fulfillment/event.schema.js'
+import type { LotAllocation, StockLot, WarehouseStockPartition } from '../inventory/inventory.schema.js'
 import {
   AuditPayloadFromRow,
   CreditAccountFromRow,

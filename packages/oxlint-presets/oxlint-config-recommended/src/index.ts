@@ -54,7 +54,7 @@ const testFilePatterns = [
 
 const sourceAndTestOverrides: NonNullable<OxlintConfig['overrides']> = [
   {
-    files: ['**/src/**', '**/*.test.ts'],
+    files: ['**/src/**', ...testFilePatterns],
     rules: {
       ...rules,
       ...promoteWarnToError(tsgoCorrectness.rules),

@@ -1,11 +1,10 @@
 import { sql } from 'drizzle-orm'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
-import { Effect, Layer, Option } from 'effect'
+import { Effect, Option } from 'effect'
 import type { SchemaError } from 'effect/Schema'
-import type { Money } from '../domain/credit.schema.js'
-import { CreditAccountNotFound } from '../domain/decision.schema.js'
+import type { Money } from '../fulfillment/credit.schema.js'
+import { CreditAccountNotFound } from '../fulfillment/decision.schema.js'
 import type { CustomerCredit } from '../ports/CreditLedger.js'
-import { CreditLedger } from '../ports/CreditLedger.js'
 import { decodeCreditAccount, decodeCustomerTier } from './decode.js'
 import { type DrizzleDatabase, DrizzleSession } from './DrizzleSession.js'
 import { user } from './schema.tables.js'
@@ -49,13 +48,10 @@ const charge = (db: DrizzleDatabase, customerId: string, amount: Money) =>
     })
   })
 
-export const layer: Layer.Layer<CreditLedger, never, DrizzleSession> = Layer.effect(
-  CreditLedger,
-  Effect.gen(function*() {
-    const db = yield* DrizzleSession
-    return {
-      readCredit: (customerId: string) => readCredit(db, customerId),
-      charge: (customerId: string, amount: Money) => charge(db, customerId, amount).pipe(Effect.orDie),
-    }
-  }),
-)
+export const make = Effect.gen(function*() {
+  const db = yield* DrizzleSession
+  return {
+    readCredit: (customerId: string) => readCredit(db, customerId),
+    charge: (customerId: string, amount: Money) => charge(db, customerId, amount).pipe(Effect.orDie),
+  }
+})

@@ -1,19 +1,12 @@
-import { layer as pgClientLayer, PgClient } from '@effect/sql-pg/PgClient'
-import { makeWithDefaults } from 'drizzle-orm/effect-postgres'
-import { migrate } from 'drizzle-orm/effect-postgres/migrator'
-import { Config, Context, Effect, Layer, Redacted } from 'effect'
+import { layer as pgClientLayer } from '@effect/sql-pg/PgClient'
+import { Config, Context, Duration, Effect, Layer, Redacted } from 'effect'
 import { Pool } from 'pg'
+import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
+import { InventoryStore } from '../inventory/InventoryStore.js'
 import { CreditLedger } from '../ports/CreditLedger.js'
 import { CustomerGate } from '../ports/CustomerGate.js'
-import { InventoryStore } from '../ports/InventoryStore.js'
 import { ReservationLog } from '../ports/ReservationLog.js'
-import { layer as CreditLedgerDrizzleLayer } from './CreditLedgerDrizzle.js'
-import { layer as CustomerGateLayer } from './CustomerGateInMemory.js'
 import { DrizzleSession } from './DrizzleSession.js'
-import { layer as InventoryStoreDrizzleLayer } from './InventoryStoreDrizzle.js'
-import { layer as ReservationLogDrizzleLayer } from './ReservationLogDrizzle.js'
-
-const migrationsFolder = new URL('../../drizzle/', import.meta.url).pathname
 
 const requiredEnv = Effect.all({
   databaseUrl: Config.String('DATABASE_URL'),
@@ -27,7 +20,11 @@ export interface PgRuntimeService {
 
 export class PgRuntime extends Context.Service<PgRuntime, PgRuntimeService>()(
   '@systemfsoftware/example-inventory-fulfillment/store/PgRuntime',
-) {}
+) {
+  static Live: Layer.Layer<
+    DrizzleSession | InventoryStore | CreditLedger | ReservationLog | CustomerGate | PgRuntime | FulfillmentConfig
+  >
+}
 
 export const rawClient: Layer.Layer<PgRuntime> = Layer.effect(
   PgRuntime,
@@ -48,26 +45,16 @@ const clientLayer = Layer.unwrap(
   }),
 )
 
-const sessionLayer: Layer.Layer<DrizzleSession, never, PgClient> = Layer.effect(
-  DrizzleSession,
-  Effect.gen(function*() {
-    const db = yield* makeWithDefaults()
-    yield* migrate(db, { migrationsFolder })
-    return db
-  }).pipe(Effect.orDie),
-)
-
 const ports = Layer.mergeAll(
-  InventoryStoreDrizzleLayer,
-  CreditLedgerDrizzleLayer,
-  ReservationLogDrizzleLayer,
-  CustomerGateLayer,
+  InventoryStore.Live,
+  CreditLedger.Live,
+  ReservationLog.Live,
+  CustomerGate.Live,
+  Layer.succeed(FulfillmentConfig, { maxRetries: 3, retryInterval: Duration.millis(50) }),
 )
 
-export const layer: Layer.Layer<
-  DrizzleSession | InventoryStore | CreditLedger | ReservationLog | CustomerGate | PgRuntime
-> = ports.pipe(
-  Layer.provideMerge(sessionLayer.pipe(Layer.provide(clientLayer))),
+PgRuntime.Live = ports.pipe(
+  Layer.provideMerge(DrizzleSession.Live.pipe(Layer.provide(clientLayer))),
   Layer.provideMerge(rawClient),
   Layer.orDie,
 )

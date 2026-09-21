@@ -1,8 +1,9 @@
 import type { EffectDrizzleQueryError } from 'drizzle-orm/effect-core'
-import { Context, Effect } from 'effect'
+import { Context, type Effect, Layer } from 'effect'
 import type { SchemaError } from 'effect/Schema'
-import type { CreditAccount, CustomerTier, Money } from '../domain/credit.schema.js'
-import { CreditAccountNotFound } from '../domain/decision.schema.js'
+import type { CreditAccount, CustomerTier, Money } from '../fulfillment/credit.schema.js'
+import { CreditAccountNotFound } from '../fulfillment/decision.schema.js'
+import { make as makeDrizzle } from '../store/CreditLedgerDrizzle.js'
 
 export interface CustomerCredit {
   readonly account: CreditAccount
@@ -23,4 +24,6 @@ export interface CreditLedgerService {
 
 export class CreditLedger extends Context.Service<CreditLedger, CreditLedgerService>()(
   '@systemfsoftware/example-inventory-fulfillment/ports/CreditLedger',
-) {}
+) {
+  static readonly Live = Layer.effect(this, makeDrizzle)
+}

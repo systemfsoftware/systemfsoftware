@@ -17,8 +17,14 @@ import {
   uniqueEmail,
   uniqueId,
   uniquePassword,
-} from './server.fixture.js'
-import type { CreditInput, FulfillmentDecision, Session, StockLotInput, StockView } from './server.fixture.js'
+} from './__fixtures__/server.fixture.js'
+import type {
+  CreditInput,
+  FulfillmentDecision,
+  Session,
+  StockLotInput,
+  StockView,
+} from './__fixtures__/server.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 

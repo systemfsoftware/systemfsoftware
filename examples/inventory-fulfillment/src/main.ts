@@ -1,12 +1,13 @@
+#!/usr/bin/env node
 import { NodeRuntime } from '@effect/platform-node'
 import { Layer } from 'effect'
-import { layer as serverLayer } from './http/server.js'
-import { layer as authLayer } from './store/AuthServiceLive.js'
-import { layer as pgProdLayer } from './store/PgProd.layer.js'
+import { HttpLive } from './http/server.js'
+import { AuthService } from './ports/AuthService.js'
+import { PgRuntime } from './store/PgRuntime.js'
 
-const program = serverLayer.pipe(
-  Layer.provide(authLayer),
-  Layer.provide(pgProdLayer),
+const program = HttpLive.pipe(
+  Layer.provide(AuthService.Live),
+  Layer.provide(PgRuntime.Live),
   Layer.orDie,
 )
 

@@ -1,4 +1,5 @@
-import { Context, type Effect } from 'effect'
+import { Context, type Effect, Layer } from 'effect'
+import { make as makeInMemory } from '../store/CustomerGateInMemory.js'
 
 /**
  * Per-customer mutual exclusion. `withGate` runs the supplied effect while
@@ -20,4 +21,6 @@ export interface CustomerGateService {
 
 export class CustomerGate extends Context.Service<CustomerGate, CustomerGateService>()(
   '@systemfsoftware/example-inventory-fulfillment/ports/CustomerGate',
-) {}
+) {
+  static readonly Live = Layer.effect(this, makeInMemory)
+}

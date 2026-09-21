@@ -8,7 +8,7 @@ import {
   StockAllocated,
   StockBackordered,
   UnfulfilledDemand,
-} from './allocate-stock.workflow.js'
+} from '../inventory/allocate-stock.workflow.js'
 import { CreditGranted, CreditHold, CreditLimitExceeded } from './check-credit.workflow.js'
 
 const FulfillmentDecisionTypeId: unique symbol = Symbol.for(

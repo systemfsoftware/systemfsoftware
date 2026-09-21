@@ -1,6 +1,6 @@
 import { Schema as S } from 'effect'
-import { CreditAccount, Money } from '../domain/credit.schema.js'
-import { AuditPayload } from '../domain/event.schema.js'
+import { CreditAccount, Money } from '../fulfillment/credit.schema.js'
+import { AuditPayload } from '../fulfillment/event.schema.js'
 import {
   LotAllocation,
   LotId,
@@ -9,7 +9,7 @@ import {
   Version,
   WarehouseId,
   WarehouseStockPartition,
-} from '../domain/inventory.schema.js'
+} from '../inventory/inventory.schema.js'
 
 const StockLotRow = S.Struct({
   lotId: LotId,

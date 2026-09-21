@@ -1,6 +1,7 @@
-import { Effect, Match, Option, Schema as S } from 'effect'
+import { DateTime, Effect, Match, Option, Predicate, Schedule, Schema as S } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import {
+  ConflictRollback,
   CreditAccountNotFound,
   CreditLimitExceeded,
   DuplicateOrder,
@@ -10,11 +11,14 @@ import {
   type FulfillmentError,
   InsufficientStock,
   Unauthorized,
-} from '../domain/decision.schema.js'
-import { Order } from '../domain/order.schema.js'
-import { runFulfillment } from '../fulfillment.cell.js'
+} from '../fulfillment/decision.schema.js'
+import { AuditPayload, ReservationRolledBack } from '../fulfillment/event.schema.js'
+import { fulfillmentCell } from '../fulfillment/fulfillment.cell.js'
+import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
+import { Order } from '../fulfillment/order.schema.js'
+import { InventoryStore } from '../inventory/InventoryStore.js'
 import { AuthContext } from '../ports/AuthContext.js'
-import { InventoryStore } from '../ports/InventoryStore.js'
+import { CustomerGate } from '../ports/CustomerGate.js'
 import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.js'
 import { AuthMiddleware } from './auth.middleware.js'
 import {
@@ -80,6 +84,56 @@ const ownershipOf = <A, E>(
     Match.when(false, () => Effect.fail(forbidden(record.orderId, 'reservation is owned by another caller'))),
     Match.exhaustive,
   )
+
+const rollbackReason = 'optimistic concurrency conflict: retry budget exhausted'
+
+const rollback = (orderId: string, customerId: string, attempts: number) =>
+  Effect.gen(function*() {
+    const log = yield* ReservationLog
+    const now = yield* DateTime.now
+    yield* log.commit({
+      orderId,
+      customerId,
+      events: [
+        new ReservationRolledBack({
+          orderId,
+          reason: rollbackReason,
+          allocations: [],
+          occurredAt: now,
+        }),
+      ],
+      audit: new AuditPayload({
+        orderId,
+        actorId: customerId,
+        decisionTag: 'ConflictRollback',
+        occurredAt: now,
+      }),
+    })
+    return new ConflictRollback({ orderId, attempts })
+  })
+
+const runFulfillment = (request: {
+  readonly order: Order
+  readonly kits: SubmitOrderRequest['kits']
+  readonly fraudRisk: SubmitOrderRequest['fraudRisk']
+}) =>
+  Effect.gen(function*() {
+    const gate = yield* CustomerGate
+    const config = yield* FulfillmentConfig
+    return yield* gate.withGate(
+      request.order.customerId,
+      fulfillmentCell.run(request).pipe(
+        Effect.catchTag('SchemaError', (error) => Effect.die(error)),
+        Effect.retry({
+          times: config.maxRetries - 1,
+          schedule: Schedule.spaced(config.retryInterval),
+          while: Predicate.isTagged('OptimisticConflict'),
+        }),
+        Effect.catchTag('OptimisticConflict', () =>
+          rollback(request.order.orderId, request.order.customerId, config.maxRetries)),
+      ),
+    )
+  })
 
 const submitOrder = (request: SubmitOrderRequest) =>
   Effect.gen(function*() {

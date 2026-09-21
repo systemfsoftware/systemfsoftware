@@ -13,7 +13,7 @@ const handler = (
     return HttpServerResponse.fromWeb(response)
   }).pipe(Effect.orDie)
 
-export const layer: Layer.Layer<never, never, HttpRouter.HttpRouter | AuthService> = HttpRouter.use((router) =>
+export const AuthRoutesLive: Layer.Layer<never, never, HttpRouter.HttpRouter | AuthService> = HttpRouter.use((router) =>
   Effect.gen(function*() {
     const auth = yield* AuthService
     yield* router.add('*', '/api/auth/*', handler(auth))

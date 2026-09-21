@@ -3,7 +3,7 @@ import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { KitDefinition, SkuId } from './inventory.schema.js'
+import { KitDefinition, SkuId } from '../inventory/inventory.schema.js'
 import { OrderLine } from './order.schema.js'
 
 const ExplodeDecisionTypeId: unique symbol = Symbol.for(

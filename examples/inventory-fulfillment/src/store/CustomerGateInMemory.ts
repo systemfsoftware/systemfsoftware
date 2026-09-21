@@ -1,5 +1,4 @@
-import { Effect, HashMap, Layer, Option, Ref, Semaphore } from 'effect'
-import { CustomerGate } from '../ports/CustomerGate.js'
+import { Effect, HashMap, Option, Ref, Semaphore } from 'effect'
 
 /**
  * In-process {@link CustomerGate}: one single-permit `Semaphore` per
@@ -10,23 +9,20 @@ import { CustomerGate } from '../ports/CustomerGate.js'
  * would replace it with a Postgres advisory lock keyed by `customerId`
  * (`pg_advisory_xact_lock`), because two processes share no semaphore.
  */
-export const layer: Layer.Layer<CustomerGate> = Layer.effect(
-  CustomerGate,
-  Effect.gen(function*() {
-    const gates = yield* Ref.make(HashMap.empty<string, Semaphore.Semaphore>())
-    return {
-      withGate: <A, E, R>(customerId: string, effect: Effect.Effect<A, E, R>) =>
-        Effect.flatMap(
-          Ref.modify(gates, (current) =>
-            Option.match(HashMap.get(current, customerId), {
-              onNone: () => {
-                const semaphore = Semaphore.makeUnsafe(1)
-                return [semaphore, HashMap.set(current, customerId, semaphore)] as const
-              },
-              onSome: (semaphore) => [semaphore, current] as const,
-            })),
-          (semaphore) => semaphore.withPermit(effect),
-        ),
-    }
-  }),
-)
+export const make = Effect.gen(function*() {
+  const gates = yield* Ref.make(HashMap.empty<string, Semaphore.Semaphore>())
+  return {
+    withGate: <A, E, R>(customerId: string, effect: Effect.Effect<A, E, R>) =>
+      Effect.flatMap(
+        Ref.modify(gates, (current) =>
+          Option.match(HashMap.get(current, customerId), {
+            onNone: () => {
+              const semaphore = Semaphore.makeUnsafe(1)
+              return [semaphore, HashMap.set(current, customerId, semaphore)] as const
+            },
+            onSome: (semaphore) => [semaphore, current] as const,
+          })),
+        (semaphore) => semaphore.withPermit(effect),
+      ),
+  }
+})

@@ -6,9 +6,9 @@ import * as Num from 'effect/Number'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { ComponentDemand } from '../../fulfillment/explode-bundle.workflow.js'
 import { allocateStock, AllocateStockCommand, StockAllocated, StockBackordered } from '../allocate-stock.workflow.js'
 import type { InsufficientStock, LotReservation } from '../allocate-stock.workflow.js'
-import { ComponentDemand } from '../explode-bundle.workflow.js'
 import { StockLot, WarehouseStockPartition } from '../inventory.schema.js'
 
 type AllocateResult = Result.Result<StockAllocated | StockBackordered, InsufficientStock>

@@ -1,10 +1,10 @@
 import type { SQL } from 'drizzle-orm'
 import { and, eq, gt, inArray, or } from 'drizzle-orm/sql/expressions/conditions'
 import { asc } from 'drizzle-orm/sql/expressions/select'
-import { Array as Arr, Effect, Encoding, HashMap, Layer, Option, Record as Record_, Result } from 'effect'
+import { Array as Arr, Effect, Encoding, HashMap, Option, Record as Record_, Result } from 'effect'
 import type { SchemaError } from 'effect/Schema'
-import type { SkuId, WarehouseStockPartition } from '../domain/inventory.schema.js'
-import { InventoryStore, type StockPageQuery } from '../ports/InventoryStore.js'
+import type { SkuId, WarehouseStockPartition } from '../inventory/inventory.schema.js'
+import type { StockPageQuery } from '../inventory/InventoryStore.js'
 import { decodeWarehouseStockPartition } from './decode.js'
 import { type DrizzleDatabase, DrizzleSession } from './DrizzleSession.js'
 import { stockLots, warehouses } from './schema.tables.js'
@@ -124,14 +124,11 @@ const readStockPage = (db: DrizzleDatabase, query: StockPageQuery) =>
     return { partitions: yield* partitionsFor(db, page), nextCursor: continuationOf(rows, page) }
   })
 
-export const layer: Layer.Layer<InventoryStore, never, DrizzleSession> = Layer.effect(
-  InventoryStore,
-  Effect.gen(function*() {
-    const db = yield* DrizzleSession
-    return {
-      readAllStock: readAllStock(db).pipe(Effect.orDie),
-      readStock: (skus: readonly SkuId[]) => readStock(db, skus).pipe(Effect.orDie),
-      readStockPage: (query: StockPageQuery) => readStockPage(db, query).pipe(Effect.orDie),
-    }
-  }),
-)
+export const make = Effect.gen(function*() {
+  const db = yield* DrizzleSession
+  return {
+    readAllStock: readAllStock(db).pipe(Effect.orDie),
+    readStock: (skus: readonly SkuId[]) => readStock(db, skus).pipe(Effect.orDie),
+    readStockPage: (query: StockPageQuery) => readStockPage(db, query).pipe(Effect.orDie),
+  }
+})

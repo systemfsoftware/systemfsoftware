@@ -1,5 +1,6 @@
-import { Context, Effect, type Option } from 'effect'
-import type { SkuId, WarehouseStockPartition } from '../domain/inventory.schema.js'
+import { Context, type Effect, Layer, type Option } from 'effect'
+import { make as makeDrizzle } from '../store/InventoryStoreDrizzle.js'
+import type { SkuId, WarehouseStockPartition } from './inventory.schema.js'
 
 export interface StockPageQuery {
   readonly cursor: Option.Option<string>
@@ -20,4 +21,6 @@ export interface InventoryStoreService {
 
 export class InventoryStore extends Context.Service<InventoryStore, InventoryStoreService>()(
   '@systemfsoftware/example-inventory-fulfillment/ports/InventoryStore',
-) {}
+) {
+  static readonly Live = Layer.effect(this, makeDrizzle)
+}

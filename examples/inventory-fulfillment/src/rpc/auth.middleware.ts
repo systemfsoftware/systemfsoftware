@@ -1,6 +1,6 @@
 import { Effect, Layer, Option, Schema as S } from 'effect'
 import { RpcMiddleware } from 'effect/unstable/rpc'
-import { AuthServiceUnavailable, Unauthorized } from '../domain/decision.schema.js'
+import { AuthServiceUnavailable, Unauthorized } from '../fulfillment/decision.schema.js'
 import { AuthContext } from '../ports/AuthContext.js'
 import { AuthService } from '../ports/AuthService.js'
 
@@ -24,32 +24,32 @@ const failureReasonOf = (thrown: unknown): string => {
 export class AuthMiddleware extends RpcMiddleware.Service<AuthMiddleware, { provides: AuthContext }>()(
   '@systemfsoftware/example-inventory-fulfillment/rpc/AuthMiddleware',
   { error: S.Union([Unauthorized, AuthServiceUnavailable]) },
-) {}
-
-export const layer: Layer.Layer<AuthMiddleware, never, AuthService> = Layer.effect(
-  AuthMiddleware,
-  Effect.gen(function*() {
-    const auth = yield* AuthService
-    return (inner, options) =>
-      Effect.tryPromise({
-        try: () => auth.api.getSession({ headers: new Headers(Object.entries(options.headers)) }),
-        catch: (cause) => new AuthServiceUnavailable({ reason: failureReasonOf(cause) }),
-      }).pipe(
-        Effect.timeoutOrElse({
-          duration: sessionTimeoutMillis,
-          orElse: () =>
-            Effect.fail(
-              new AuthServiceUnavailable({
-                reason: `auth session resolution exceeded ${sessionTimeoutMillis}ms`,
-              }),
-            ),
-        }),
-        Effect.flatMap((session) =>
-          Option.match(Option.fromNullishOr(session), {
-            onNone: () => Effect.fail(new Unauthorized({ reason: 'no active session' })),
-            onSome: (resolved) => Effect.provideService(inner, AuthContext, { userId: resolved.user.id }),
-          })
-        ),
-      )
-  }),
-)
+) {
+  static readonly Live: Layer.Layer<AuthMiddleware, never, AuthService> = Layer.effect(
+    this,
+    Effect.gen(function*() {
+      const auth = yield* AuthService
+      return (inner, options) =>
+        Effect.tryPromise({
+          try: () => auth.api.getSession({ headers: new Headers(Object.entries(options.headers)) }),
+          catch: (cause) => new AuthServiceUnavailable({ reason: failureReasonOf(cause) }),
+        }).pipe(
+          Effect.timeoutOrElse({
+            duration: sessionTimeoutMillis,
+            orElse: () =>
+              Effect.fail(
+                new AuthServiceUnavailable({
+                  reason: `auth session resolution exceeded ${sessionTimeoutMillis}ms`,
+                }),
+              ),
+          }),
+          Effect.flatMap((session) =>
+            Option.match(Option.fromNullishOr(session), {
+              onNone: () => Effect.fail(new Unauthorized({ reason: 'no active session' })),
+              onSome: (resolved) => Effect.provideService(inner, AuthContext, { userId: resolved.user.id }),
+            })
+          ),
+        )
+    }),
+  )
+}

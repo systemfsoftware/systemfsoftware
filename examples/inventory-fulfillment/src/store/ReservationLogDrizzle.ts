@@ -1,11 +1,10 @@
 import { sql } from 'drizzle-orm'
 import { and, eq } from 'drizzle-orm/sql/expressions/conditions'
-import { Array as Arr, DateTime, Effect, Layer, Match, Option } from 'effect'
+import { Array as Arr, DateTime, Effect, Match, Option } from 'effect'
 import type { SchemaError } from 'effect/Schema'
-import type { AuditPayload, InventoryReservationEvents } from '../domain/event.schema.js'
-import type { LotAllocation } from '../domain/inventory.schema.js'
+import type { AuditPayload, InventoryReservationEvents } from '../fulfillment/event.schema.js'
+import type { LotAllocation } from '../inventory/inventory.schema.js'
 import type { ReservationCommit, ReservationRecord } from '../ports/ReservationLog.js'
-import { ReservationLog } from '../ports/ReservationLog.js'
 import { decodeLotAllocation } from './decode.js'
 import { type DrizzleDatabase, DrizzleSession } from './DrizzleSession.js'
 import { auditEvents, reservations, stockLots } from './schema.tables.js'
@@ -123,13 +122,10 @@ const findReservation = (db: DrizzleDatabase, orderId: string) =>
     return yield* reservationRecord(rows)
   })
 
-export const layer: Layer.Layer<ReservationLog, never, DrizzleSession> = Layer.effect(
-  ReservationLog,
-  Effect.gen(function*() {
-    const db = yield* DrizzleSession
-    return {
-      findReservation: (orderId: string) => findReservation(db, orderId).pipe(Effect.orDie),
-      commit: (input: ReservationCommit) => commitEffect(db, input).pipe(Effect.orDie),
-    }
-  }),
-)
+export const make = Effect.gen(function*() {
+  const db = yield* DrizzleSession
+  return {
+    findReservation: (orderId: string) => findReservation(db, orderId).pipe(Effect.orDie),
+    commit: (input: ReservationCommit) => commitEffect(db, input).pipe(Effect.orDie),
+  }
+})
