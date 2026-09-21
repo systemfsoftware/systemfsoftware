@@ -8,7 +8,7 @@ type NapiMountBuilderT = InstanceType<typeof MountBuilder>
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from '../MicroVMError.schema.js'
 import type { MicroVMError } from '../MicroVMError.schema.js'
 import type { MicroVMSpec } from '../MicroVMSpec.schema.js'
-import { preflight } from './Preflight.js'
+import { preflightWith } from './Preflight.js'
 import { planFor, renderSandboxName } from './SandboxPlan.js'
 import type { PortBinding, SandboxPlan } from './SandboxPlan.js'
 
@@ -94,9 +94,10 @@ const create = (plan: SandboxPlan): Effect.Effect<Sandbox, SandboxBootError> =>
 /** @internal */
 export const boot = (
   spec: MicroVMSpec,
-): Effect.Effect<SandboxPlan, MicroVMError, Scope.Scope | FileSystem.FileSystem> =>
+  fs: FileSystem.FileSystem,
+): Effect.Effect<SandboxPlan, MicroVMError, Scope.Scope> =>
   Effect.gen(function*() {
-    yield* preflight
+    yield* preflightWith(fs)
     const bindings = yield* allocateBindings(spec.ports)
     return yield* renderPlan(spec, bindings)
   })
@@ -113,9 +114,10 @@ const createAcquired = (plan: SandboxPlan): Effect.Effect<AcquiredVM, SandboxBoo
 /** @internal */
 export const acquire = (
   spec: MicroVMSpec,
-): Effect.Effect<AcquiredVM, MicroVMError, Scope.Scope | FileSystem.FileSystem> =>
+  fs: FileSystem.FileSystem,
+): Effect.Effect<AcquiredVM, MicroVMError, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.flatMap(boot(spec), (plan) => createAcquired(plan)),
+    Effect.flatMap(boot(spec, fs), (plan) => createAcquired(plan)),
     (acquired) => teardown(acquired.sandbox),
   )
 

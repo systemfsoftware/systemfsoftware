@@ -94,10 +94,8 @@ const probeFor = (fs: FileSystem.FileSystem, platform: string): Effect.Effect<Pr
   return probe === undefined ? Effect.succeed(unsupportedProbe) : probe(fs)
 }
 
-const probeCapability: Effect.Effect<Probe, never, FileSystem.FileSystem> = Effect.flatMap(
-  FileSystem.FileSystem,
-  (fs) => Effect.suspend(() => probeFor(fs, process.platform)),
-)
+const probeCapability = (fs: FileSystem.FileSystem): Effect.Effect<Probe> =>
+  Effect.suspend(() => probeFor(fs, process.platform))
 
 const verdictFor = (probe: Probe): Result.Result<void, Refusal> =>
   probe.virtualizationReady
@@ -125,9 +123,11 @@ const announce = (resolved: ResolvedRuntime): Effect.Effect<void> =>
  *
  * @internal
  */
-export const preflight: Effect.Effect<ResolvedRuntime, VirtualizationUnsupportedError, FileSystem.FileSystem> = Effect
-  .gen(function*() {
-    const probe = yield* probeCapability
+export const preflightWith = (
+  fs: FileSystem.FileSystem,
+): Effect.Effect<ResolvedRuntime, VirtualizationUnsupportedError> =>
+  Effect.gen(function*() {
+    const probe = yield* probeCapability(fs)
     const refusal = Result.getFailure(verdictFor(probe))
     if (Option.isSome(refusal)) {
       yield* Effect.logDebug(`[effect-microsandbox] virtualization topology: ${refusal.value.topology}`)

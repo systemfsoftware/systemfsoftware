@@ -37,7 +37,7 @@ export interface RunningVM {
  * only.
  */
 export class MicroVM extends Context.Service<MicroVM, {
-  readonly start: (spec: MicroVMSpec) => Effect.Effect<RunningVM, MicroVMError, Scope.Scope | FileSystem.FileSystem>
+  readonly start: (spec: MicroVMSpec) => Effect.Effect<RunningVM, MicroVMError, Scope.Scope>
 }>()('MicroVM') {}
 
 const describeCause = (cause: unknown): string => cause instanceof Error ? cause.message : 'non-error rejection'
@@ -161,11 +161,18 @@ const probeFor = (vm: AcquiredVM, strategy: WaitStrategy): Effect.Effect<boolean
 
 const defaultStrategy = (spec: MicroVMSpec): WaitStrategy => ({ _tag: 'Port', port: spec.ports[0] ?? 1 })
 
-const startVM = (spec: MicroVMSpec) =>
+const portWait = (spec: MicroVMSpec): WaitStrategy | undefined =>
+  spec.ports.length === 0 ? undefined : defaultStrategy(spec)
+
+const waits = (spec: MicroVMSpec): WaitStrategy | undefined => spec.waitStrategy ?? portWait(spec)
+
+const startWith = (fs: FileSystem.FileSystem) => (spec: MicroVMSpec) =>
   Effect.gen(function*() {
-    const vm = yield* acquire(spec)
-    const strategy = spec.waitStrategy ?? defaultStrategy(spec)
-    yield* awaitProbe(waitLabel(strategy), 30_000, probeFor(vm, strategy))
+    const vm = yield* acquire(spec, fs)
+    const strategy = waits(spec)
+    if (strategy !== undefined) {
+      yield* awaitProbe(waitLabel(strategy), 30_000, probeFor(vm, strategy))
+    }
     return {
       name: vm.plan.name,
       mappedPorts: HashMap.fromIterable(
@@ -177,6 +184,7 @@ const startVM = (spec: MicroVMSpec) =>
     }
   })
 
-export const layer: Layer.Layer<MicroVM> = Layer.effect(MicroVM, Effect.succeed({ start: startVM })).pipe(
-  Layer.provide(nodeFileSystemLayer),
-)
+export const layer: Layer.Layer<MicroVM> = Layer.effect(
+  MicroVM,
+  Effect.map(FileSystem.FileSystem, (fs) => ({ start: startWith(fs) })),
+).pipe(Layer.provide(nodeFileSystemLayer))

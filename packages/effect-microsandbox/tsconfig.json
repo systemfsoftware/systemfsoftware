@@ -6,7 +6,8 @@
   ],
   "include": [
     "src",
-    "tests"
+    "tests",
+    "examples"
   ],
   "compilerOptions": {
     "customConditions": [
