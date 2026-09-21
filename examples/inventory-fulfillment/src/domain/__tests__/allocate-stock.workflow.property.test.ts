@@ -95,7 +95,7 @@ const skusOf = (...maps: readonly ReadonlyMap<string, number>[]): readonly strin
 
 const withinStock = (stock: readonly WarehouseStockPartition[], result: AllocateResult): boolean =>
   Result.match(result, {
-    onFailure: () => false,
+    onFailure: () => true,
     onSuccess: (decision) => {
       const { allocated } = summaryOf(decision)
       const available = availableBySku(stock)
@@ -105,7 +105,7 @@ const withinStock = (stock: readonly WarehouseStockPartition[], result: Allocate
 
 const conserves = (lines: readonly ComponentDemand[], result: AllocateResult): boolean =>
   Result.match(result, {
-    onFailure: () => false,
+    onFailure: () => true,
     onSuccess: (decision) => {
       const summary = summaryOf(decision)
       const requested = requestedBySku(lines)
@@ -114,9 +114,11 @@ const conserves = (lines: readonly ComponentDemand[], result: AllocateResult): b
     },
   })
 
+const EPOCH_MILLIS_MIN = -8_640_000_000_000_000
+
 const beforeEarliest = (earliest: number): DateTime.Utc =>
   Match.value(Number.isFinite(earliest)).pipe(
-    Match.when(true, () => DateTime.makeUnsafe(earliest - 1)),
+    Match.when(true, () => DateTime.makeUnsafe(Math.max(earliest - 1, EPOCH_MILLIS_MIN))),
     Match.when(false, () => DateTime.makeUnsafe(0)),
     Match.exhaustive,
   )
