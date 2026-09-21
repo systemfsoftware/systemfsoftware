@@ -11,9 +11,10 @@ pnpm add @systemfsoftware/effect-microsandbox
 ```
 
 ```ts
+import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM, MicroVMSandbox, MicroVMSpecSchema } from '@systemfsoftware/effect-microsandbox'
-import { Effect, HashMap, Schema } from 'effect'
+import { Effect, HashMap, Layer, Schema } from 'effect'
 
 const program = Effect.scoped(
   Effect.gen(function*() {
@@ -31,97 +32,110 @@ const program = Effect.scoped(
   }),
 )
 
-await Effect.runPromise(
-  program.pipe(
-    Effect.provide(MicroVMSandbox.MicroVMLive),
-    Effect.provide(nodeServicesLayer),
-  ),
-)
-```
+const AppLive = MicroVMSandbox.MicroVMLive.pipe(Layer.provide(nodeServicesLayer))
 
-`MicroVMLive` requires `Crypto` and `FileSystem` — the program root supplies the platform's layers, so tests can substitute their own.
+NodeRuntime.runMain(Effect.provide(program, AppLive))
+```
 
 When the scope closes — normally or through interruption — the sandbox is stopped, destroyed, and its record removed. There is nothing to clean up by hand.
 
-## Why microVMs
+## Architecture
 
-Shared-kernel containers leak state between tests and need a Docker socket. Process-level fakes drift from the real service. A microVM gives each test a full kernel boundary with the ergonomics of a container: same image references, same port publishing, but hardware isolation and a lifecycle owned by your Effect scope.
+### Why MicroVMs
 
-## What you declare
+Shared-kernel containers leak state between tests and require a local Docker socket. Process-level fakes drift from real service semantics. A microVM gives each test an isolated hardware kernel with container-like ergonomics: standard image references, port publishing, and execution boundaries governed entirely by an Effect `Scope`.
 
-A `MicroVMSpec` is plain data validated by an Effect Schema — image, environment, exposed guest ports, bind mounts, vCPU and memory limits, and an optional wait strategy. Combinators transform specs without mutation and are dual — usable data-last inside a pipe or data-first directly:
+### Layer Wiring
+
+`MicroVMLive` is an Effect `Layer` that depends on `Crypto` and `FileSystem` capability ports. In accordance with cell-architecture principles, these concrete platform bindings are provided once at your application or test composition root (such as `@effect/platform-node/NodeServices`), allowing test suites to substitute mock filesystems or custom crypto runtimes seamlessly.
+
+## Specifying Containers
+
+A `MicroVMSpec` is a pure data structure validated by an Effect Schema. Combinators transform specs immutably and support both data-first and data-last pipeline styles:
 
 ```ts
-const redis = MicroVMSpec.withExposedPorts([6379])(
-  MicroVMSpec.withMemoryLimit(512)(
-    MicroVMSpec.withWaitStrategy(MicroVMSpec.Wait.forPort(6379))(base),
-  ),
+import { MicroVMSpec } from '@systemfsoftware/effect-microsandbox'
+import { pipe } from 'effect'
+
+// Data-last pipe style
+const redis = pipe(
+  baseSpec,
+  MicroVMSpec.withExposedPorts([6379]),
+  MicroVMSpec.withMemoryLimit(512),
+  MicroVMSpec.withWaitStrategy(MicroVMSpec.Wait.forPort(6379)),
 )
 
-pipe(base, MicroVMSpec.withMemoryLimit(512)) // data-last
-MicroVMSpec.withMemoryLimit(base, 512) // data-first
+// Data-first direct style
+const customized = MicroVMSpec.withMemoryLimit(baseSpec, 512)
 ```
 
-| Combinator                             | Effect                       |
+### Spec Combinators
+
+| Combinator                             | Description                  |
 | -------------------------------------- | ---------------------------- |
-| `MicroVMSpec.withEnv(env)`             | merges environment variables |
-| `MicroVMSpec.withExposedPorts(ports)`  | replaces the guest port list |
-| `MicroVMSpec.withMount({host, guest})` | appends a bind mount         |
-| `MicroVMSpec.withMemoryLimit(mb)`      | sets the memory cap          |
-| `MicroVMSpec.withWaitStrategy(s)`      | sets readiness probing       |
+| `MicroVMSpec.withEnv(env)`             | Merges environment variables |
+| `MicroVMSpec.withExposedPorts(ports)`  | Replaces exposed guest ports |
+| `MicroVMSpec.withMount({host, guest})` | Appends a host bind mount    |
+| `MicroVMSpec.withMemoryLimit(mb)`      | Sets memory limit in MiB     |
+| `MicroVMSpec.withWaitStrategy(s)`      | Sets readiness wait strategy |
 
-## Readiness waits
+### Readiness Strategies
 
-`start` does not return until the strategy is satisfied (30 s budget, then `WaitTimeoutError`):
+VM startup does not complete until the specified wait strategy passes (30-second budget before raising `WaitTimeoutError`):
 
-- `MicroVMSpec.Wait.forPort(guestPort)` — host dials the mapped loopback port.
-- `MicroVMSpec.Wait.forHttp(path, guestPort)` — host issues a `GET` and requires a 2xx.
-- `MicroVMSpec.Wait.forLog(pattern)` — polls the guest log for the first regex match.
+- **Port Probe**: `MicroVMSpec.Wait.forPort(guestPort)` dials the mapped host loopback port.
+- **HTTP Probe**: `MicroVMSpec.Wait.forHttp(path, guestPort)` issues a `GET` request and checks for a `2xx` status.
+- **Log Pattern**: `MicroVMSpec.Wait.forLog(pattern)` polls the guest log stream for a matching regex.
 
-A spec without a strategy and without ports skips waiting; a spec with ports defaults to a port-open probe on the first one. Note that a TCP accept is a weak check — the port-forward proxy accepts before the guest listens — so prefer HTTP or log probes for real readiness.
+## Runtime Behaviour
 
-## Ports
+### Automatic Port Allocation
 
-Each exposed guest port gets a free loopback port allocated by the library before boot and passed to the runtime as an explicit `127.0.0.1` mapping. `vm.mappedPorts` is an `Effect HashMap` of guest port → host port; nothing is ever bound on a non-loopback interface, and a mapping that would violate that is refused at render time with `LoopbackViolationError` — before any VM exists.
+Exposed guest ports are automatically paired with unallocated ephemeral ports on `127.0.0.1` prior to boot. Port mappings are accessible via `vm.mappedPorts` (`HashMap<number, number>`). Any rendered configuration targeting non-loopback interfaces fails immediately with `LoopbackViolationError`.
 
-## Errors
+### The `RunningVM` Handle
 
-One typed union, `MicroVMError.MicroVMError`:
+`RunningVM` provides safe, typed primitives to control the active microVM:
 
-| Error                            | When                                                                                                                       |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `VirtualizationUnsupportedError` | host lacks KVM/Hypervisor.framework/WHP; message names the remediation (udev rule, `msb doctor --fix`, Apple-Silicon-only) |
-| `SandboxBootError`               | the runtime failed to create or start the sandbox                                                                          |
-| `PortAllocationError`            | no free loopback port could be bound                                                                                       |
-| `LoopbackViolationError`         | a rendered mapping targeted a non-loopback host                                                                            |
-| `WaitTimeoutError`               | readiness not observed within the budget                                                                                   |
-| `ExecError`                      | an in-guest command failed to run                                                                                          |
+- `exec(cmd, args)`: Executes commands as argv lists (no shell injection vulnerabilities); resolves with `{ code, stdout, stderr }`.
+- `logs`: Returns an Effect `Stream` of structured log entries (`source`, `text`).
+- `ping`: Returns an Effect resolving to `true` if the guest agent responds.
+- `mappedPorts`: Read-only `HashMap` of guest-to-host port bindings.
+- `name`: Unique sandbox identifier (`effect-microsandbox-<pid>-<suffix>`).
 
-Runtime resolution is delegated to the SDK: the npm-bundled binaries are the default, and `MSB_PATH` / `MSB_LIBKRUNFW_PATH` / `MSB_HOME` overrides pass through untouched. A failed resolution surfaces as the SDK's own defect — never a silent fallback.
+### Failure Model
 
-## The handle
+All operational failures are returned as typed errors in the `MicroVMError.MicroVMError` union:
 
-`RunningVM` exposes everything a test needs and nothing else:
+| Error                            | Cause                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `VirtualizationUnsupportedError` | Missing KVM (`/dev/kvm`), Hypervisor.framework, or WHP with specific diagnostic remediation |
+| `SandboxBootError`               | Runtime failed to initialize or start the microVM sandbox                                   |
+| `PortAllocationError`            | Unable to bind a free host loopback port                                                    |
+| `LoopbackViolationError`         | Port mapping targeted a disallowed non-loopback address                                     |
+| `WaitTimeoutError`               | Readiness condition was not satisfied within the 30-second deadline                         |
+| `ExecError`                      | In-guest command execution exited with failure or could not run                             |
 
-- `exec(cmd, args)` — argv-only, no shell interpolation; resolves with `{ code, stdout, stderr }`.
-- `logs` — an Effect `Stream` of guest log lines, ending when the sandbox stops.
-- `ping` — whether the guest agent is reachable.
-- `mappedPorts` — guest port → host port.
-- `name` — `effect-microsandbox-<pid>-<suffix>`, so concurrent test workers never collide.
+## Verification
 
-## Requirements
+### System Requirements
 
-- Effect v4 (`effect` peer dependency).
-- Hardware virtualization: KVM on Linux (`/dev/kvm` present and writable), Hypervisor.framework on macOS (Apple Silicon), or Windows Hypervisor Platform. The [smoke journey](./examples/boot-alpine.ts) skips itself when none is present.
+- **Effect**: v4 (`effect` catalog dependency).
+- **Hardware Virtualization**:
+  - Linux: KVM (`/dev/kvm` accessible with read/write permissions).
+  - macOS: Apple Silicon with Hypervisor.framework.
+  - Windows: Windows Hypervisor Platform (WHP).
 
-## Smoke journey
+### Smoke Journey
+
+To verify end-to-end integration on a host with virtualization support:
 
 ```bash
-node examples/boot-alpine.ts
+pnpm --filter @systemfsoftware/effect-microsandbox smoke
 ```
 
-Boots Alpine, round-trips an `exec`, verifies the port map, interrupts a held scope, reuses one Layer across two lifecycles, and asserts no sandbox record survives. Exit code 0 means the library works end to end on this host.
+The smoke journey boots Alpine Linux, executes an in-guest command, tests port mapping, confirms resource cleanup on interruption, and exercises layer reuse across sequential VM runs.
 
 ## License
 
-Apache-2.0 — see [LICENSE](./LICENSE).
+Licensed under the [Apache-2.0 License](LICENSE).

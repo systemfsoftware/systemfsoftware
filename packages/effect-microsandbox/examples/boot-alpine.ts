@@ -1,3 +1,4 @@
+import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import {
   MicroVM,
@@ -104,4 +105,4 @@ const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError> 
   },
 )
 
-void Effect.runPromise(main)
+NodeRuntime.runMain(main)
