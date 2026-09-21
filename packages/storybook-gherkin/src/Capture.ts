@@ -3,9 +3,11 @@ import type { Schema } from 'effect'
 const CaptureTag = { _tag: 'Capture' } as const
 export type CaptureTag = typeof CaptureTag
 
+type AnyConstraintDecoder<A = unknown> = Schema.ConstraintDecoder<A>
+
 export interface Capture<Name extends string = string, _A = unknown> extends CaptureTag {
   readonly name: Name
-  readonly schema: Schema.ConstraintDecoder<unknown> | undefined
+  readonly schema: AnyConstraintDecoder | undefined
   readonly default: string | undefined
 }
 

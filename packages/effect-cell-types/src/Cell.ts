@@ -55,17 +55,17 @@ const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A,
 /**
  * A constant response for any input; the error and service channels are never.
  */
-export const succeed = <A>(response: A): Cell<unknown, A, never, never> => make(() => Effect.succeed(response))
+export const succeed = <A, I = unknown>(response: A): Cell<I, A, never, never> => make(() => Effect.succeed(response))
 
 /**
  * A constant infrastructure failure for any input.
  */
-export const fail = <E>(error: E): Cell<unknown, never, E, never> => make(() => Effect.fail(error))
+export const fail = <E, I = unknown>(error: E): Cell<I, never, E, never> => make(() => Effect.fail(error))
 
 /**
  * The lifted effect's response, failure, and services carried for any input.
  */
-export const fromEffect = <A, E, R>(effect: Effect.Effect<A, E, R>): Cell<unknown, A, E, R> => make(() => effect)
+export const fromEffect = <A, E, R, I = unknown>(effect: Effect.Effect<A, E, R>): Cell<I, A, E, R> => make(() => effect)
 
 /**
  * The thunked cell built afresh on each run; construction never happens at wrap time.
@@ -295,18 +295,18 @@ export const orElse: {
  * on an infrastructure failure.
  */
 export const tap: {
-  <A, E2, R2>(
-    f: (response: A) => Effect.Effect<unknown, E2, R2>,
+  <A, E2, R2, A2 = unknown>(
+    f: (response: A) => Effect.Effect<A2, E2, R2>,
   ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | E2, R | R2>
-  <I, A, E, R, E2, R2>(
+  <I, A, E, R, E2, R2, A2 = unknown>(
     self: Cell<I, A, E, R>,
-    f: (response: A) => Effect.Effect<unknown, E2, R2>,
+    f: (response: A) => Effect.Effect<A2, E2, R2>,
   ): Cell<I, A, E | E2, R | R2>
 } = dual(
   2,
-  <I, A, E, R, E2, R2>(
+  <I, A, E, R, E2, R2, A2 = unknown>(
     self: Cell<I, A, E, R>,
-    f: (response: A) => Effect.Effect<unknown, E2, R2>,
+    f: (response: A) => Effect.Effect<A2, E2, R2>,
   ): Cell<I, A, E | E2, R | R2> => make((input) => Effect.tap(self.run(input), f)),
 )
 
@@ -388,12 +388,10 @@ export const match: {
  * The local no-infer marker the Do chain overloads use so the accumulator
  * stays fixed while the next field infers.
  */
-type NoInfer<A> = [A][A extends unknown ? 0 : never]
+type NoInfer<A> = [A][A extends A ? 0 : never]
 
-/**
- * The empty accumulator cell a Do chain starts from.
- */
-export const Do: Kind<unknown, never, never, {}> = make(() => Effect.succeed({}))
+type AnyInputKind<I = unknown, E = never, R = never, A = {}> = Kind<I, E, R, A>
+export const Do: AnyInputKind = make(() => Effect.succeed({}))
 /**
  * Adds a named field to the Do accumulator by running the cell the function
  * builds from the accumulated scope. Both cells observe the identical input,

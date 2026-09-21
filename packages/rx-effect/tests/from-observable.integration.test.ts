@@ -29,7 +29,7 @@ const Feature = makeFeature({ it, layer })
 const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<readonly A[], E, never> =>
   Stream.runCollect(stream).pipe(Effect.map((chunk) => Array.from(chunk)))
 
-const errorMessage = (e: unknown): string => {
+const errorMessage = <U = unknown>(e: U): string => {
   if (e instanceof Error) return e.message
   if (typeof e === 'string') return e
   return 'unknown-error'
@@ -156,7 +156,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
       Gherkin.Do.pipe(
         Given('an observable emitting the integers 0..9 and an unsubscribe spy')('subject', () =>
           Effect.sync(() => {
-            const calls: unknown[] = []
+            const calls: void[] = []
             const spy = () => {
               calls.push(undefined)
             }
@@ -187,7 +187,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
       Gherkin.Do.pipe(
         Given('an observable emitting the integers 0..9 and an unsubscribe spy')('subject', () =>
           Effect.sync(() => {
-            const calls: unknown[] = []
+            const calls: void[] = []
             const spy = () => {
               calls.push(undefined)
             }

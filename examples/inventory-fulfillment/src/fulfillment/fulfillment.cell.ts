@@ -289,7 +289,7 @@ const writeFulfillment = (encoded: EncodedFulfillment, raw: RawContext) =>
  * The fulfillment sandwich. Callers run `fulfillmentCell.run(request)`.
  * CAS retries and per-customer gating live at the RPC edge (Effect.retry, CustomerGate).
  */
-export const fulfillmentCell = Sandwich.read(readContext)
+export const fulfillmentCell = Sandwich.named('fulfillment.settle')(readContext)
   .decode(Sandwich.pure(decodeContext))
   .decide(settleFulfillment)
   .encode(

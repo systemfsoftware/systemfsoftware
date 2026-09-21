@@ -29,10 +29,12 @@ type PartitionedAtoms = {
   readonly existingAtoms: Array<Hydration.DehydratedAtomValue>
 }
 
+type AnyMap<K = unknown, V = unknown> = ReadonlyMap<K, V>
+
 function pushPartitionedAtom(
   newAtoms: Array<Hydration.DehydratedAtomValue>,
   existingAtoms: Array<Hydration.DehydratedAtomValue>,
-  nodes: ReadonlyMap<unknown, unknown>,
+  nodes: AnyMap,
   dehydratedAtom: Hydration.DehydratedAtomValue,
 ): void {
   const existingNode = nodes.get(dehydratedAtom.key)
@@ -44,7 +46,7 @@ function pushPartitionedAtom(
 }
 
 function partitionDehydratedAtoms(
-  nodes: ReadonlyMap<unknown, unknown>,
+  nodes: AnyMap,
   dehydratedAtoms: Array<Hydration.DehydratedAtomValue>,
 ): PartitionedAtoms {
   const newAtoms: Array<Hydration.DehydratedAtomValue> = []

@@ -21,10 +21,12 @@ const lotRowOf = (lot: StockLotRow) => ({
   expiresAt: lot.expiresAt,
 })
 
+type AnyPartitionRow<R = unknown> = R
+
 const buildPartitions = (
   lots: readonly StockLotRow[],
   regions: HashMap.HashMap<string, string>,
-): readonly unknown[] =>
+): readonly AnyPartitionRow[] =>
   Arr.getSomes(
     Arr.map(
       Record_.toEntries(Arr.groupBy(lots, (lot) => lot.warehouseId)),
@@ -38,7 +40,7 @@ const buildPartitions = (
   )
 
 const decodePartitions = (
-  rows: readonly unknown[],
+  rows: readonly AnyPartitionRow[],
 ): Effect.Effect<readonly WarehouseStockPartition[], SchemaError> =>
   Effect.forEach(rows, (row) => decodeWarehouseStockPartition(row))
 

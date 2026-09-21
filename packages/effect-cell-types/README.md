@@ -29,13 +29,15 @@ marker interface whose property name is the remediation.
 Executors build a workflow from the command's schema class and a decider over that class — runtime identity, one assertion across the branded return:
 
 ```ts
-import { make } from '@systemfsoftware/effect-cell-types'
+import { make, Workflow } from '@systemfsoftware/effect-cell-types'
 import { Result } from 'effect'
 import * as S from 'effect/Schema'
 
 export class DecideInput extends S.Class<DecideInput>('DecideInput')({
   exitSuccess: S.Boolean,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['exitSuccess'] as const
+}
 
 export const decide = make(
   DecideInput,
@@ -135,11 +137,11 @@ rejected, not allowed.
 
 ## Building a cell: the `Sandwich` chain
 
-A cell is authored as a typed continuation chain, not a record of phases. `Sandwich.read` takes the impure read effect and returns only the lawful next steps; each step composes its `run` at construction and exposes only what may follow, so a misordered chain fails to compile with a missing-method error whose displayed type names the lawful next steps. There is no interpreter: composition happens step by step inside the constructors. Every finished cell carries a recorded `phases` tuple — a type-level literal plus a matching runtime array, both produced by the constructors.
+A cell is authored as a typed continuation chain, not a record of phases. `Sandwich.named` takes a static operation name and returns a reader accepting the impure read effect, which returns only the lawful next steps; each step composes its `run` at construction and exposes only what may follow, so a misordered chain fails to compile with a missing-method error whose displayed type names the lawful next steps. There is no interpreter: composition happens step by step inside the constructors. Every finished cell carries a recorded `phases` tuple — a type-level literal plus a matching runtime array, both produced by the constructors.
 
 | Step     | Exposes next                                    | Channel law                                                      |
 | -------- | ----------------------------------------------- | ---------------------------------------------------------------- |
-| `read`   | `decode`, `decide`                              | `I` consumed; `Raw` produced; `E`/`R` from the `Effect`          |
+| `named`  | `decode`, `decide`                              | `I` consumed; `Raw` produced; `E`/`R` from the `Effect`          |
 | `decode` | `decide`                                        | a `Sandwich.pure` phase; its refusal fails the cell              |
 | `decide` | `encode` (decoded chain) or `write` (raw chain) | a `Workflow.make` value; the outcome is a value, never a failure |
 | `encode` | `write`                                         | a `Sandwich.pure` phase shaping the outcome `Result`             |
@@ -164,7 +166,9 @@ interface Raw {
 declare const admit: Workflow<Decoded, Admitted, Malformed>
 declare const render: (outcome: Result.Result<Admitted, Malformed>) => string
 
-const cell = Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length }))).decide(
+const cell = Sandwich.named('command.admit')((command: Command) =>
+  Effect.succeed(new Decoded({ length: command.id.length }))
+).decide(
   admit,
 ).write(
   (outcome: Result.Result<Admitted, Malformed>) => Effect.sync(() => render(outcome)),
@@ -176,7 +180,7 @@ cell.phases // ['read', 'decide', 'write']
 A full chain fills `decode` and `encode` with `Sandwich.pure` phases — synchronous `Result`-returning thunks, the only values the slots accept, so no `Effect` can be evaluated inside them:
 
 ```ts
-const full = Sandwich.read((command: Command) => Effect.succeed({ bytes: command.id })).decode(
+const full = Sandwich.named('command.admit')((command: Command) => Effect.succeed({ bytes: command.id })).decode(
   Sandwich.pure((raw: Raw): Result.Result<Decoded, Malformed> =>
     Result.succeed(new Decoded({ length: raw.bytes.length }))
   ),
@@ -190,6 +194,18 @@ full.phases // ['read', 'decode', 'decide', 'encode', 'write']
 ```
 
 The `decide` refusal is an outcome, not a failure: it travels to `encode` and `write` as a `Result` value. A `decode` refusal fails the cell and the run stops there.
+
+### Operation names and telemetry
+
+The operation name passed to `Sandwich.named` is a static string literal that identifies the cell. It names the parent span and sets the duration histogram name (`app.<name>.duration`, recording seconds with the single label `result_class`). Child spans are `<name>.read` and `<name>.write`. The attributes copied onto the parent span are the command fields named by the command schema class's static `InstrumentationBrand` list, and each named field must hold a string, number, or boolean: a field holding an object is copied as a raw object, which OTLP backends reject. `Sandwich.named(name)` uses `Sandwich.DEFAULT_DURATION_BOUNDARIES`; passing an options object (`Sandwich.named(name, { boundaries })`) overrides the duration histogram buckets. The buckets belong to the name: two cells that share an operation name share one histogram, and the boundaries declared first for that name are the ones that count.
+
+```ts
+const cell = Sandwich.named('order.submit', {
+  boundaries: [0.01, 0.05, 0.1, 0.5, 1, 5],
+})((command: SubmitOrderCommand) => readOrderEffect(command))
+  .decide(decideOrder)
+  .write((outcome) => writeOrderEffect(outcome))
+```
 
 ## Composing cells: arrows, constructors, and the Do chain
 
@@ -291,7 +307,9 @@ class Decision {}
 class Err {
   constructor(readonly reason: string) {}
 }
-class Input extends S.Class<Input>('Input')({ valid: S.Boolean }) {}
+class Input extends S.Class<Input>('Input')({ valid: S.Boolean }) {
+  static readonly [Workflow.InstrumentationBrand] = ['valid'] as const
+}
 
 const decide = Workflow.make(
   Input,

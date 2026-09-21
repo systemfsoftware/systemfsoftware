@@ -14,11 +14,12 @@ import { Refinement } from 'effect/Predicate';
 import * as Schema_ from 'effect/Schema';
 import * as Types from 'effect/Types';
 
+// Warning: (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point Result.d.ts
 // Warning: (ae-forgotten-export) The symbol "AllSuccess" needs to be exported by the entry point Result.d.ts
 // Warning: (ae-forgotten-export) The symbol "AllError" needs to be exported by the entry point Result.d.ts
 //
 // @public (undocumented)
-export function all<const Arg extends Iterable<unknown> | Record<string, unknown>>(results: Arg): Result<AllSuccess<Arg>, AllError<Arg>>;
+export function all<const Arg extends Iterable<Top> | Record<string, Top>>(results: Arg): Result<AllSuccess<Arg>, AllError<Arg>>;
 
 // @public
 export type Builder<Out, A, E, I, F> = Pipeable & {
@@ -28,29 +29,30 @@ export type Builder<Out, A, E, I, F> = Pipeable & {
     render(): [A | I] extends [never] ? Out : Out | null;
 } & ([A | E | I | F] extends [never] ? {
     exhaustive(): Out;
-} : unknown) & ([I] extends [never] ? unknown : {
+} : Top) & ([I] extends [never] ? Top : {
     onInitial<B>(f: (result: Initial<A, E>) => B): Builder<Out | B, A, E, never, F>;
     onInitialOrWaiting<B>(f: (result: Result<A, E>) => B): Builder<Out | B, A, E, never, F>;
-}) & ([A] extends [never] ? unknown : {
+}) & ([A] extends [never] ? Top : {
     onSuccess<B>(f: (value: A, result: Success<A, E>) => B): Builder<Out | B, never, E, I, F>;
-}) & ([E] extends [never] ? unknown : {
+}) & ([E] extends [never] ? Top : {
     onError<B>(f: (error: E, result: Failure<A, E>) => B): Builder<Out | B, A, never, I, F>;
     onErrorIf<B extends E, C>(refinement: Refinement<E, B>, f: (error: B, result: Failure<A, E>) => C): Builder<Out | C, A, Types.EqualsWith<E, B, E, Exclude<E, B>>, I, F>;
     onErrorIf<C>(predicate: Predicate<E>, f: (error: E, result: Failure<A, E>) => C): Builder<Out | C, A, E, I, F>;
     onErrorTag<const Tags extends readonly Types.Tags<E>[], B>(tags: Tags, f: (error: Types.ExtractTag<E, Tags[number]>, result: Failure<A, E>) => B): Builder<Out | B, A, Types.ExcludeTag<E, Tags[number]>, I, F>;
     onErrorTag<const Tag extends Types.Tags<E>, B>(tag: Tag, f: (error: Types.ExtractTag<E, Tag>, result: Failure<A, E>) => B): Builder<Out | B, A, Types.ExcludeTag<E, Tag>, I, F>;
-}) & ([E | F] extends [never] ? unknown : {
+}) & ([E | F] extends [never] ? Top : {
     onFailure<B>(f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B): Builder<Out | B, A, never, I, never>;
 }) & (Interrupt extends F ? {
     onInterrupt<B>(f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B): Builder<Out | B, A, E, I, Exclude<F, Interrupt>>;
-} : unknown) & (Defect extends F ? {
-    onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): Builder<Out | B, A, E, I, Exclude<F, Defect>>;
-} : unknown);
+} : Top) & (Defect extends F ? {
+    onDefect<B>(f: (defect: Top, result: Failure<A, E>) => B): Builder<Out | B, A, E, I, Exclude<F, Defect>>;
+} : Top);
 
+// Warning: (ae-forgotten-export) The symbol "AnyResult" needs to be exported by the entry point Result.d.ts
 // Warning: (ae-forgotten-export) The symbol "BuilderFor" needs to be exported by the entry point Result.d.ts
 //
 // @public
-export function builder<A extends Result<unknown, unknown>>(self: A): BuilderFor<A>;
+export function builder<A extends AnyResult>(self: A): BuilderFor<A>;
 
 // @public
 export const cause: <A, E>(self: Result<A, E>) => Option_2.Option<Cause.Cause<E>>;
@@ -145,8 +147,10 @@ export const isInterrupted: <A, E>(result: Result<A, E>) => result is Failure<A,
 // @public
 export const isNotInitial: <A, E>(result: Result<A, E>) => result is Success<A, E> | Failure<A, E>;
 
+// Warning: (ae-forgotten-export) The symbol "AnyResult$1" needs to be exported by the entry point Result.d.ts
+//
 // @public
-const isResult: (u: unknown) => u is Result<unknown, unknown>;
+const isResult: (u: unknown) => u is AnyResult$1;
 export { isResult as isAsyncResult }
 export { isResult }
 
@@ -181,13 +185,13 @@ export const matchWithError: {
     <A, E, W, X, Y, Z>(options: {
         readonly onInitial: (_: Initial<A, E>) => W;
         readonly onError: (error: E, _: Failure<A, E>) => X;
-        readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y;
+        readonly onDefect: (defect: Top, _: Failure<A, E>) => Y;
         readonly onSuccess: (_: Success<A, E>) => Z;
     }): (self: Result<A, E>) => W | X | Y | Z;
     <A, E, W, X, Y, Z>(self: Result<A, E>, options: {
         readonly onInitial: (_: Initial<A, E>) => W;
         readonly onError: (error: E, _: Failure<A, E>) => X;
-        readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y;
+        readonly onDefect: (defect: Top, _: Failure<A, E>) => Y;
         readonly onSuccess: (_: Success<A, E>) => Z;
     }): W | X | Y | Z;
 };
@@ -197,19 +201,19 @@ export const matchWithWaiting: {
     <A, E, W, X, Y, Z>(options: {
         readonly onWaiting: (_: Result<A, E>) => W;
         readonly onError: (error: E, _: Failure<A, E>) => X;
-        readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y;
+        readonly onDefect: (defect: Top, _: Failure<A, E>) => Y;
         readonly onSuccess: (_: Success<A, E>) => Z;
     }): (self: Result<A, E>) => W | X | Y | Z;
     <A, E, W, X, Y, Z>(self: Result<A, E>, options: {
         readonly onWaiting: (_: Result<A, E>) => W;
         readonly onError: (error: E, _: Failure<A, E>) => X;
-        readonly onDefect: (defect: unknown, _: Failure<A, E>) => Y;
+        readonly onDefect: (defect: Top, _: Failure<A, E>) => Y;
         readonly onSuccess: (_: Success<A, E>) => Z;
     }): W | X | Y | Z;
 };
 
 // @public
-export function replacePrevious<R extends Result<unknown, unknown>, XE, A>(self: R, previous: Option_2.Option<Result<A, XE>>): With<R, A, Result.Failure<R>>;
+export function replacePrevious<R extends AnyResult, XE, A>(self: R, previous: Option_2.Option<Result<A, XE>>): With<R, A, Result.Failure<R>>;
 
 // @public
 export namespace Result {
@@ -266,7 +270,7 @@ export const toExit: {
 };
 
 // @public
-export const touch: <A extends Result<unknown, unknown>>(result: A) => A;
+export const touch: <A extends AnyResult>(result: A) => A;
 
 // @public
 export type TypeId = '~effect-atom/atom/Result';
@@ -278,7 +282,7 @@ export const TypeId: TypeId;
 export const value: <A, E>(self: Result<A, E>) => Option_2.Option<A>;
 
 // @public
-export const waiting: <R extends Result<unknown, unknown>>(self: R, options?: {
+export const waiting: <R extends AnyResult>(self: R, options?: {
     readonly touch?: boolean | undefined;
 }) => R;
 
@@ -286,7 +290,7 @@ export const waiting: <R extends Result<unknown, unknown>>(self: R, options?: {
 export const waitingFrom: <A, E>(previous: Option_2.Option<Result<A, E>>) => Result<A, E>;
 
 // @public
-export type With<R extends Result<unknown, unknown>, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E> : R extends Success<infer _A, infer _E> ? Success<A, E> : R extends Failure<infer _A, infer _E> ? Failure<A, E> : never;
+export type With<R extends AnyResult, A, E> = R extends Initial<infer _A, infer _E> ? Initial<A, E> : R extends Success<infer _A, infer _E> ? Success<A, E> : R extends Failure<infer _A, infer _E> ? Failure<A, E> : never;
 
 // (No @packageDocumentation comment for this package)
 

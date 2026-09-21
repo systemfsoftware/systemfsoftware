@@ -8,6 +8,7 @@ Oxlint rules for module structure and export hygiene — classes must extend a s
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ban-classes`               | Ban bare classes that do not extend a base class or constructor, routing with diagnostics to sanctioned Effect v4 idioms.                                                    |
 | `ban-error-string`          | Ban string coercion of error-like values. Use `{ cause }` to preserve the original error context.                                                                            |
+| `ban-unknown`               | Ban `unknown` except as a generic default (`<A = unknown>`), a type-predicate parameter, or a catch binding.                                                                 |
 | `internal-export-jsdoc`     | Require a JSDoc `@internal` tag on every export whose file sits under a directory segment named internal.                                                                    |
 | `no-internal-jsdoc-outside` | Forbid a JSDoc `@internal` tag on any file whose path has no directory segment named internal.                                                                               |
 | `no-io-boundary-tests`      | I/O boundary files (acl/store/adapter/handler) are verified by composition tests, never unit tests — not a `*.test.ts` file and not an in-source `import.meta.vitest` block. |

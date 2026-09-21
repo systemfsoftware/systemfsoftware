@@ -27,13 +27,13 @@ export interface DehydratedAtom {
 }
 
 // @public
-export interface DehydratedAtomValue extends DehydratedAtom {
+export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
     // (undocumented)
     readonly dehydratedAt: number;
     // (undocumented)
     readonly key: string;
     // (undocumented)
-    readonly value: unknown;
+    readonly value: V;
 }
 
 // @public

@@ -3,10 +3,37 @@ import type * as Schema from 'effect/Schema'
 
 const WorkflowTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Workflow')
 type WorkflowTypeId = typeof WorkflowTypeId
+export const WorkflowSchemasKey: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/WorkflowSchemas')
+export type WorkflowSchemasKey = typeof WorkflowSchemasKey
+
+export type CommandSchema = Schema.Constraint & { readonly fields: Schema.Struct.Fields }
 
 export interface WorkflowBrand {
   readonly [WorkflowTypeId]: WorkflowTypeId
+  readonly [WorkflowSchemasKey]?: {
+    readonly commandSchema?: CommandSchema & { readonly [InstrumentationBrand]: ReadonlyArray<string> }
+  }
 }
+
+export const InstrumentationBrand: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/instrumentation')
+export type InstrumentationBrand = typeof InstrumentationBrand
+
+export type MissingInstrumentationAnnotation = {
+  readonly __CELL_SCHEMA_MISSING_INSTRUMENTATION_ANNOTATION__:
+    'a cell command must declare its instrumentation: static readonly [Workflow.InstrumentationBrand] = [...] as const'
+}
+
+export type InvalidInstrumentationKey<K extends string> = {
+  readonly __CELL_SCHEMA_INVALID_INSTRUMENTATION_KEY__: `instrumentation key '${K}' is not a field of this schema class`
+}
+
+type ClassKeys<C> = C extends { readonly Type: infer T } ? keyof T & string : never
+
+export type CheckCommandClass<C> = C extends
+  { readonly [InstrumentationBrand]: infer Keys extends ReadonlyArray<string> }
+  ? [Keys[number]] extends [ClassKeys<C>] ? object
+  : InvalidInstrumentationKey<Exclude<Keys[number], ClassKeys<C>>>
+  : MissingInstrumentationAnnotation
 
 export interface UninhabitedDecision {
   readonly __WORKFLOW_DECISION_CHANNEL_IS_NEVER__:
@@ -38,24 +65,26 @@ export interface UnsharedTypeId {
     'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
 }
 
-type AtLeastTwoDistinct<T, U = T> = U extends unknown ? [T] extends [U] ? false : true : never
+type AtLeastTwoDistinct<T, U = T> = U extends U ? [T] extends [U] ? false : true : never
 
-type TaggedMembers<D> = D extends unknown ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
+type TaggedMembers<D> = D extends D ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
   : never
 
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 
-type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends unknown
+type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends D
   ? K extends keyof D ? MutuallyAssignable<D[K], symbol> : false
   : never
+
+type Top<A = unknown> = A
 
 type SharedTypeId<D> = [
   {
     [K in keyof D]: [K] extends [symbol] ? ([BrandSlotIsTheGeneralSymbol<D, K>] extends [true] ? K : never) : never
   }[keyof D],
-] extends [never] ? UnsharedTypeId : unknown
+] extends [never] ? UnsharedTypeId : Top
 
-type DecisionShape<D> = [unknown] extends [D] ? unknown
+type DecisionShape<D> = [Top] extends [D] ? Top
   : AtLeastTwoDistinct<D> extends false ? SingleVariantDecision
   : boolean extends TaggedMembers<D> ? UntaggedDecision
   : SharedTypeId<D>
@@ -64,24 +93,28 @@ export type Workflow<Command, Decision, DecisionError> = [Decision] extends [nev
   : [DecisionError] extends [never] ? UninhabitedError
   : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
 
-type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? unknown : UntaggedError
+type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? Top : UntaggedError
   : UntaggedError
 
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
   : DecisionShape<Decision> & DispatchableTag<DecisionError>
-
 export const make = <
-  Self,
-  S extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
-  Inherited,
+  C extends Schema.Constraint & {
+    readonly fields: Schema.Struct.Fields
+    readonly Type: object
+    readonly [InstrumentationBrand]: ReadonlyArray<string>
+  },
   D,
   E,
 >(
-  _command: Schema.Class<Self, S, Inherited>,
-  decide: (command: Self) => Result<D, E> & Inhabited<D, E>,
-): Workflow<Self, D, E> => {
+  command: C & CheckCommandClass<C>,
+  decide: (command: C['Type']) => Result<D, E> & Inhabited<D, E>,
+): Workflow<C['Type'], D, E> => {
   assertWorkflow(decide)
+  Object.assign(decide, {
+    [WorkflowSchemasKey]: { commandSchema: command },
+  })
   return decide
 }
 
@@ -98,16 +131,21 @@ export const make = <
  * channel is still generic.
  */
 export const total = <
-  Self,
-  S extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
-  Inherited,
+  C extends Schema.Constraint & {
+    readonly fields: Schema.Struct.Fields
+    readonly Type: object
+    readonly [InstrumentationBrand]: ReadonlyArray<string>
+  },
   D,
 >(
-  _command: Schema.Class<Self, S, Inherited>,
-  decide: (command: Self) => Result<D, never> & DecisionShape<D>,
-): ((command: Self) => Result<D, never>) & WorkflowBrand => {
-  const plain: (command: Self) => Result<D, never> = decide
+  command: C & CheckCommandClass<C>,
+  decide: (command: C['Type']) => Result<D, never> & DecisionShape<D>,
+): ((command: C['Type']) => Result<D, never>) & WorkflowBrand => {
+  const plain: (command: C['Type']) => Result<D, never> = decide
   assertTotal(plain)
+  Object.assign(plain, {
+    [WorkflowSchemasKey]: { commandSchema: command },
+  })
   return plain
 }
 

@@ -118,7 +118,9 @@ const buildStepContext = <TArgs>(ctx: PlayContext<TArgs>): StepContext<TArgs> =>
   context: ctx,
 })
 
-const squashExit = <A>(exit: Exit.Exit<A, unknown>): A | undefined =>
+type AnyExit<A, E = unknown> = Exit.Exit<A, E>
+
+const squashExit = <A>(exit: AnyExit<A>): A | undefined =>
   Exit.match(exit, {
     onSuccess: (value) => value,
     onFailure: (cause) => {
@@ -266,14 +268,14 @@ const bodyAfterOptions = <TArgs>(
   return rest.slice(1)
 }
 
-const pushInnerStep = <TArgs>(steps: Step<TArgs>[], inner: unknown): void => {
+const pushInnerStep = <TArgs, I = unknown>(steps: Step<TArgs>[], inner: I): void => {
   if (!isStep<TArgs>(inner)) {
     throw new TypeError(`Steps group contains a non-step value of type ${typeof inner}`)
   }
   steps.push(inner)
 }
 
-const pushStepGroup = <TArgs>(steps: Step<TArgs>[], item: readonly unknown[]): void => {
+const pushStepGroup = <TArgs, I = unknown>(steps: Step<TArgs>[], item: readonly I[]): void => {
   for (const inner of item) {
     pushInnerStep(steps, inner)
   }
@@ -347,7 +349,7 @@ const makeScenario = <TArgs>(
   function scenario(
     name: string,
     ...rest: readonly (StepArg<TArgs> | ScenarioOptions)[]
-  ): unknown {
+  ): StorySpec<TArgs> {
     const { options, steps } = parseScenarioArgs(rest)
     const fullName = qualifyName(prefix, name)
     const withRecord = withRecordOf(options)

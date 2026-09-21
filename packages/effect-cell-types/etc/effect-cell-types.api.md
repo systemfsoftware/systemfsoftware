@@ -11,12 +11,12 @@ export namespace Cell {
 
 // @public (undocumented)
 export namespace Sandwich {
-    export { Cell, DecodedChain, DecodedDecidedChain, EncodedChain, PurePhase, RawDecidedChain, ReadChain, pure, read };
+    export { Cell, DEFAULT_DURATION_BOUNDARIES, DecodedChain, DecodedDecidedChain, EncodedChain, NamedCellOptions, PurePhase, RawDecidedChain, ReadChain, ValidOperationName, named, pure };
 }
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen, make, total };
+    export { CheckCommandClass, CommandSchema, Inhabited, InstrumentationBrand, InvalidInstrumentationKey, MissingInstrumentationAnnotation, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, WorkflowSchemasKey, andThen, make, total };
 }
 
 // (No @packageDocumentation comment for this package)

@@ -29,6 +29,10 @@ import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
 import * as Atom from './Atom.js'
 import * as AsyncResult from './Result.js'
 import { schemaCodec } from './ResultSchema.js'
+type AnyAtom<A = unknown> = Atom.Atom<A>
+type Top<A = unknown> = A
+type ReactivityKeys<K = unknown> = readonly K[] | ReadonlyRecord<string, readonly K[]>
+type AnyEffect<A = unknown, E = unknown, R = unknown> = Effect.Effect<A, E, R>
 // rc.108 does not expose HttpApiEndpoint.getSuccessSchemas/getErrorSchemas (added upstream
 // after rc.108); replicate them against the public .success/.error schema sets.
 const getSuccessSchemas = (endpoint: HttpApiEndpoint.Top): readonly [Schema.Top, ...Array<Schema.Top>] => {
@@ -64,7 +68,7 @@ const isGroupCandidate = (candidate: unknown, group: string): candidate is objec
   return hasGroupIdentifier(candidate, group)
 }
 
-const objectOrUndefined = (value: unknown): object | undefined => {
+const objectOrUndefined = <V = unknown>(value: V): object | undefined => {
   if (!isNonNullObject(value)) {
     return undefined
   }
@@ -96,7 +100,7 @@ const matchingEndpoint = (
   endpoints: object,
   endpoint: string,
 ): HttpApiEndpoint.Top | undefined => {
-  const values: ReadonlyArray<unknown> = Object.values(endpoints)
+  const values = Object.values(endpoints)
   return values.find((definition): definition is HttpApiEndpoint.Top => isMatchingEndpoint(definition, endpoint))
 }
 
@@ -124,7 +128,7 @@ const requireEndpoint = (
 }
 
 const endpointFor = (
-  groups: ReadonlyArray<unknown>,
+  groups: ReadonlyArray<Top>,
   group: string,
   endpoint: string,
 ): HttpApiEndpoint.Top => {
@@ -135,30 +139,31 @@ const endpointFor = (
   return requireEndpoint(candidate, group, endpoint)
 }
 
-interface EndpointRequest {
-  readonly params?: unknown
-  readonly query?: unknown
-  readonly payload?: unknown
-  readonly headers?: unknown
+interface EndpointRequest<P = unknown, Q = unknown, Pl = unknown, H = unknown> {
+  readonly params?: P
+  readonly query?: Q
+  readonly payload?: Pl
+  readonly headers?: H
   readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
 }
 
-interface EndpointCall {
+interface EndpointCall<A = unknown> {
   (
     request: EndpointRequest,
-  ): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
+  ): Effect.Effect<A, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
 }
 
 const isEndpointCall = (u: unknown): u is EndpointCall => typeof u === 'function'
 
-const propertyOf = (client: unknown, group: string): unknown => {
+const propertyOf = <C = unknown>(client: C, group: string): Top => {
   if (!isObjectOrFunction(client)) {
     return undefined
   }
-  return Reflect.get(client, group)
+  const prop: Top = Reflect.get(client, group)
+  return prop
 }
 
-const groupEntryOf = (client: unknown, group: string): object => {
+const groupEntryOf = <C = unknown>(client: C, group: string): object => {
   const groupEntry = propertyOf(client, group)
   if (!isNonNullObject(groupEntry)) {
     throw new Error(`Unknown API group: ${group}`)
@@ -171,20 +176,20 @@ const callFromGroup = (
   group: string,
   endpoint: string,
   request: EndpointRequest,
-): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> => {
-  const call: unknown = Reflect.get(groupEntry, endpoint)
+): Effect.Effect<Top, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> => {
+  const call: Top = Reflect.get(groupEntry, endpoint)
   if (!isEndpointCall(call)) {
     throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
   }
   return call(request)
 }
 
-const callEndpoint = (
-  client: unknown,
+const callEndpoint = <C = unknown>(
+  client: C,
   group: string,
   endpoint: string,
   request: EndpointRequest,
-): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> =>
+): Effect.Effect<Top, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> =>
   callFromGroup(groupEntryOf(client, group), group, endpoint, request)
 
 const isDieError = (
@@ -233,8 +238,6 @@ const responseModeFromOptions = (
   }
   return responseModeOrDecoded(options.responseMode)
 }
-
-type ReactivityKeys = readonly unknown[] | ReadonlyRecord<string, readonly unknown[]>
 
 const withReactivityKeys = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
@@ -329,7 +332,7 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
   ] ? Atom.AtomResultFn<
       Simplify<
         HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
-          readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+          readonly reactivityKeys?: ReactivityKeys | undefined
         }
       >,
       ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
@@ -371,10 +374,7 @@ export interface AtomHttpApiClient<Self, Id extends string, Groups extends HttpA
       >,
     ] ? Simplify<
         HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
-          readonly reactivityKeys?:
-            | readonly unknown[]
-            | ReadonlyRecord<string, readonly unknown[]>
-            | undefined
+          readonly reactivityKeys?: ReactivityKeys | undefined
           readonly timeToLive?: Duration.Input | undefined
           readonly serializationKey?: string | undefined
         }
@@ -440,7 +440,7 @@ export const Service =
         >)
       readonly transformClient?: ((client: HttpClient.HttpClient) => HttpClient.HttpClient) | undefined
       readonly transformResponse?:
-        | ((effect: Effect.Effect<unknown, unknown, unknown>) => Effect.Effect<unknown, unknown, unknown>)
+        | ((effect: AnyEffect) => AnyEffect)
         | undefined
       readonly baseUrl?: URL | string | undefined
       readonly runtime?: Atom.RuntimeFactory | undefined
@@ -468,13 +468,7 @@ export const Service =
     const runtime = runtimeFactoryOf(options.runtime)(clientLayer(options.httpClient))
 
     const mutationFamily = Atom.family(({ endpoint, group, responseMode }: MutationKey) => {
-      const fnAtom = runtime.fn<{
-        params: unknown
-        query: unknown
-        headers: unknown
-        payload: unknown
-        reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
-      }>()(
+      const fnAtom = runtime.fn<EndpointRequest & { readonly reactivityKeys?: ReactivityKeys | undefined }>()(
         Effect.fnUntraced(function*(opts) {
           const client = yield* service
           const effect = catchErrors(callEndpoint(client, group, endpoint, {
@@ -517,10 +511,7 @@ export const Service =
     ] ? Atom.AtomResultFn<
         Simplify<
           HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, 'decoded-only'> & {
-            readonly reactivityKeys?:
-              | readonly unknown[]
-              | ReadonlyRecord<string, readonly unknown[]>
-              | undefined
+            readonly reactivityKeys?: ReactivityKeys | undefined
           }
         >,
         ResponseByMode<Extract<_Success, Schema.Top>['Type'], ResponseMode>,
@@ -556,7 +547,7 @@ export const Service =
       options?: {
         readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
       },
-    ): Atom.Atom<unknown> {
+    ): AnyAtom {
       return mutationFamily({
         group,
         endpoint,
@@ -564,7 +555,7 @@ export const Service =
       })
     }
 
-    const withQueryReactivity = <A extends Atom.Atom<unknown>>(
+    const withQueryReactivity = <A extends AnyAtom>(
       atom: A,
       reactivityKeys: ReactivityKeys | undefined,
     ): A => {
@@ -574,10 +565,10 @@ export const Service =
       return runtime.factory.withReactivity(reactivityKeys)(atom)
     }
 
-    const serializeIfKeyed = (
-      atom: Atom.Atom<unknown>,
+    const serializeIfKeyed = <A extends AnyAtom>(
+      atom: A,
       opts: QueryKey,
-    ): Atom.Atom<unknown> => {
+    ): A => {
       const serializationKey = opts.serializationKey
       if (!hasSerializationKey(serializationKey)) {
         return atom
@@ -592,10 +583,10 @@ export const Service =
       })
     }
 
-    const withQuerySerialization = (
-      atom: Atom.Atom<unknown>,
+    const withQuerySerialization = <A extends AnyAtom>(
+      atom: A,
       opts: QueryKey,
-    ): Atom.Atom<unknown> => {
+    ): A => {
       if (opts.responseMode !== 'decoded-only') {
         return atom
       }
@@ -636,10 +627,7 @@ export const Service =
       >,
     ] ? Simplify<
         HttpApiEndpoint.ClientRequest<_Params, _Query, _Payload, _Headers, ResponseMode> & {
-          readonly reactivityKeys?:
-            | readonly unknown[]
-            | ReadonlyRecord<string, readonly unknown[]>
-            | undefined
+          readonly reactivityKeys?: ReactivityKeys | undefined
           readonly timeToLive?: Duration.Input | undefined
           readonly serializationKey?: string | undefined
         }
@@ -694,20 +682,12 @@ export const Service =
     function query(
       group: string,
       endpoint: string,
-      request: {
-        readonly params?: unknown
-        readonly query?: unknown
-        readonly payload?: unknown
-        readonly headers?: unknown
-        readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
-        readonly reactivityKeys?:
-          | readonly unknown[]
-          | ReadonlyRecord<string, readonly unknown[]>
-          | undefined
+      request: EndpointRequest & {
+        readonly reactivityKeys?: ReactivityKeys | undefined
         readonly timeToLive?: Duration.Input | undefined
         readonly serializationKey?: string | undefined
       },
-    ): Atom.Atom<unknown> {
+    ): AnyAtom {
       const key: QueryKey = {
         group,
         endpoint,
@@ -740,12 +720,12 @@ interface MutationKey {
 interface QueryKey {
   group: string
   endpoint: string
-  params: unknown
-  query: unknown
-  headers: unknown
-  payload: unknown
+  params: Top
+  query: Top
+  headers: Top
+  payload: Top
   responseMode: HttpApiEndpoint.ClientResponseMode
-  reactivityKeys: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
+  reactivityKeys: ReactivityKeys | undefined
   timeToLive: Duration.Duration | undefined
   serializationKey: string | undefined
 }

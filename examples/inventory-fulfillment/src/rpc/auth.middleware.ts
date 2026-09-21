@@ -6,7 +6,7 @@ import { AuthService } from '../ports/AuthService.js'
 
 const sessionTimeoutMillis = 5_000
 
-const failureReasonOf = (thrown: unknown): string => {
+const failureReasonOf = <E = unknown>(thrown: E): string => {
   if (thrown instanceof Error) {
     return thrown.message
   }

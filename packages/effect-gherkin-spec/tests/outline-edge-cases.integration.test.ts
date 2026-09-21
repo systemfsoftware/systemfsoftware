@@ -59,7 +59,7 @@ Feature('Scenario outline — edge cases and title stringification')
     scenario(
       'Custom title stringifiers override standard value representation',
       Effect.sync(() => {
-        const customStringifier = (val: unknown) => `custom:${String(val)}`
+        const customStringifier = <A = unknown>(val: A) => `custom:${String(val)}`
         const title = renderTitle(
           'Processing item <id>',
           { id: 99 },

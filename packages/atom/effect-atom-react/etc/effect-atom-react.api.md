@@ -12,6 +12,21 @@ import * as Effect from 'effect/Effect';
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration';
 import * as React_2 from 'react';
 
+// @public (undocumented)
+export type AnyAtom$1<Val = unknown> = Atom.Atom<Val>;
+
+// @public (undocumented)
+export type AnyAtom$2<Val = unknown> = Atom.Atom<Val>;
+
+// @public
+export type AnyAtom<Val = unknown> = Atom.Atom<Val>;
+
+// @public (undocumented)
+export type AnyInitialValue$1<Val = unknown> = readonly [AnyAtom$2<Val>, Val];
+
+// @public (undocumented)
+export type AnyInitialValue<Val = unknown> = readonly [AnyAtom$1<Val>, Val];
+
 // @public
 export const HydrationBoundary: React_2.FC<HydrationBoundaryProps>;
 
@@ -24,7 +39,7 @@ export interface HydrationBoundaryProps {
 }
 
 // @public
-export const make: <A extends Atom.Atom<unknown>, Input = never>(f: (() => A) | ((input: Input) => A)) => ScopedAtom<A, Input>;
+export const make: <A extends AnyAtom, Input = never>(f: (() => A) | ((input: Input) => A)) => ScopedAtom<A, Input>;
 
 // @public
 export const RegistryContext: React_2.Context<AtomRegistry.Registry>;
@@ -35,7 +50,7 @@ export const RegistryProvider: (options: RegistryProviderOptions) => React_2.Fun
 // @public (undocumented)
 export type RegistryProviderOptions = {
     readonly children?: React_2.ReactNode | undefined;
-    readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined;
+    readonly initialValues?: Iterable<AnyInitialValue> | undefined;
     readonly scheduleTask?: ((f: () => void) => () => void) | undefined;
     readonly timeoutResolution?: number | undefined;
     readonly defaultIdleTTL?: number | undefined;
@@ -44,8 +59,8 @@ export type RegistryProviderOptions = {
 // @public
 export function scheduleTask(f: () => void): () => void;
 
-// @public
-export interface ScopedAtom<A extends Atom.Atom<unknown>, Input = never> {
+// @public (undocumented)
+export interface ScopedAtom<A extends AnyAtom, Input = never> {
     // (undocumented)
     readonly [TypeId]: TypeId;
     // (undocumented)
@@ -71,7 +86,7 @@ export const TypeId: TypeId;
 export const useAtom: <R, W>(atom: Atom.Writable<R, W>) => readonly [value: R, write: (value: W) => void];
 
 // @public
-export const useAtomInitialValues: (initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>) => void;
+export const useAtomInitialValues: (initialValues: Iterable<AnyInitialValue$1>) => void;
 
 // @public
 export const useAtomMount: <A>(atom: Atom.Atom<A>) => void;

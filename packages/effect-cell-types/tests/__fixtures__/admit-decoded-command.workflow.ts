@@ -5,7 +5,9 @@ import * as S from 'effect/Schema'
 
 export class Decoded extends S.Class<Decoded>('Decoded')({
   length: S.Int,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['length'] as const
+}
 
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/InterpreterDecide')
 type DecisionTypeId = typeof DecisionTypeId
@@ -14,6 +16,7 @@ export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
   length: S.Finite,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
+  static readonly [Workflow.InstrumentationBrand] = ['length'] as const
 }
 
 export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {

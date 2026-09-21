@@ -15,6 +15,9 @@ import * as Schema from 'effect/Schema'
 import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
 import { readable, transform, writable } from './AtomCore.js'
 
+type AnyAtom<A = unknown> = Atom<A>
+type StringCodec<Type = unknown, Encoded extends string = string> = Schema.ConstraintCodec<Type, Encoded>
+
 // -----------------------------------------------------------------------------
 // Focus
 // -----------------------------------------------------------------------------
@@ -55,8 +58,8 @@ export const windowFocusSignal: Atom<number> = readable((get) => {
  * @since 4.0.0
  */
 export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
-  function refreshOnSignal<A extends Atom<unknown>>(self: A): WithoutSerializable<A>
-  function refreshOnSignal<A extends Atom<unknown>, V extends Type<A>>(
+  function refreshOnSignal<A extends AnyAtom>(self: A): WithoutSerializable<A>
+  function refreshOnSignal<A extends AnyAtom, V extends Type<A>>(
     self: A & Atom<V>,
   ): [A & Atom<V>] extends [Writable<infer _, infer RW>] ? Writable<V, RW> : Atom<V> {
     return transform(self, (get) => {
@@ -79,7 +82,7 @@ export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
  *
  * @since 4.0.0
  */
-export const refreshOnWindowFocus: <A extends Atom<unknown>>(self: A) => WithoutSerializable<A> = makeRefreshOnSignal(
+export const refreshOnWindowFocus: <A extends AnyAtom>(self: A) => WithoutSerializable<A> = makeRefreshOnSignal(
   windowFocusSignal,
 )
 
@@ -96,13 +99,13 @@ export const refreshOnWindowFocus: <A extends Atom<unknown>>(self: A) => Without
  *
  * @since 4.0.0
  */
-export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = never>(
+export function searchParam<S extends StringCodec = never>(
   name: string,
   options?: {
     readonly schema?: S | undefined
   },
 ): Writable<[S] extends [never] ? string : Option.Option<S['Type']>>
-export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = never>(
+export function searchParam<S extends StringCodec = never>(
   name: string,
   options?: {
     readonly schema?: S | undefined
@@ -246,7 +249,7 @@ const runScheduledSearchParamUpdate = (generation: number): void => {
   }
 }
 
-const schemaDecoder = <S extends Schema.ConstraintCodec<unknown, string>>(
+const schemaDecoder = <S extends StringCodec>(
   options?: {
     readonly schema?: S | undefined
   },
@@ -257,7 +260,7 @@ const schemaDecoder = <S extends Schema.ConstraintCodec<unknown, string>>(
   return schemaCodec(options.schema, Schema.decodeExit)
 }
 
-const schemaEncoder = <S extends Schema.ConstraintCodec<unknown, string>>(
+const schemaEncoder = <S extends StringCodec>(
   options?: {
     readonly schema?: S | undefined
   },
@@ -268,7 +271,7 @@ const schemaEncoder = <S extends Schema.ConstraintCodec<unknown, string>>(
   return schemaCodec(options.schema, Schema.encodeExit)
 }
 
-const schemaCodec = <S extends Schema.ConstraintCodec<unknown, string>, C>(
+const schemaCodec = <S extends StringCodec, C>(
   schema: S | undefined,
   codec: (schema: S) => C,
 ): C | undefined => {

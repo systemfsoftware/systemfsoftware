@@ -87,12 +87,12 @@ const selectLayeredMode = <R>(
 ) => pickMode(methodsIt.effect, mode)
 const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
 
-const toTaskContext = (ctx: unknown): VitestTaskContext | null => {
+const toTaskContext = <Ctx = unknown>(ctx: Ctx): VitestTaskContext | null => {
   if (isTaskContext(ctx)) return ctx
   return null
 }
 
-const wrapWithTask = <A, E, R>(effect: Effect.Effect<A, E, R>, ctx: unknown): Effect.Effect<A, E, R> =>
+const wrapWithTask = <A, E, R, Ctx = unknown>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R> =>
   effect.pipe(Effect.provideService(VitestTaskRef, toTaskContext(ctx)))
 
 export type FeatureBuilderBoth<

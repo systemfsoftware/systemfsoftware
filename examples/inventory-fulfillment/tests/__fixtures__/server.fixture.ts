@@ -259,7 +259,7 @@ const cookieHeaderOf = (cookies: Cookies.Cookies): string => {
   return header
 }
 
-const userFromSession = (json: unknown): string => {
+const userFromSession = <J = unknown>(json: J): string => {
   const session = json as { readonly user?: { readonly id?: string } } | null
   const id = session?.user?.id
   if (typeof id !== 'string') {
@@ -279,7 +279,7 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
 
   const execute = (request: HttpClientRequest.HttpClientRequest) => http.execute(request).pipe(Effect.orDie)
 
-  const post = (path: string, body: unknown) =>
+  const post = <B = unknown>(path: string, body: B) =>
     Effect.gen(function*() {
       const request = HttpClientRequest.post(`${baseUrl}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body))
       const response = yield* execute(request)
@@ -299,7 +299,7 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
       return userFromSession(json)
     })
 
-  const authenticate = (path: string, body: unknown): Effect.Effect<Session> =>
+  const authenticate = <B = unknown>(path: string, body: B): Effect.Effect<Session> =>
     Effect.gen(function*() {
       const response = yield* post(path, body)
       const cookie = cookieHeaderOf(response.cookies)

@@ -1,3 +1,4 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 
 /**
@@ -15,12 +16,28 @@ import * as S from 'effect/Schema'
 /** The canonical authoring shape: a tagged command carrying its fields. */
 export class TaggedCmd extends S.TaggedClass<TaggedCmd>()('TaggedCmd', {
   value: S.Int,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['value'] as const
+}
 
 /** An untagged `Schema.Class`, which the constraint must accept on equal terms. */
 export class UntaggedCmd extends S.Class<UntaggedCmd>('UntaggedCmd')({
   value: S.Int,
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['value'] as const
+}
+
+/** A schema class missing the static instrumentation stamp — refused by Workflow.make. */
+export class UnstampedCmd extends S.Class<UnstampedCmd>('UnstampedCmd')({
+  value: S.Int,
 }) {}
+
+/** A schema class whose instrumentation lists a key that is not a field — refused by Workflow.make. */
+export class BadKeyCmd extends S.Class<BadKeyCmd>('BadKeyCmd')({
+  value: S.Int,
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['nope'] as const
+}
 
 /** A schema but not a class — no `identifier`, no `extend`, so it is refused. */
 export const StructCmd = S.Struct({ value: S.Int })

@@ -40,10 +40,10 @@ export const pollSchedule = (opts?: PollOptions) => {
   return Schedule.spaced(interval).pipe(Schedule.upTo({ duration: timeout }))
 }
 
-export interface StepAssertionFailure {
+export interface StepAssertionFailure<C = unknown> {
   readonly keyword: string
   readonly text: string
-  readonly cause: unknown
+  readonly cause: C
 }
 
 export interface SoftFailuresContext {
@@ -67,10 +67,10 @@ export const SoftFailuresRef: Context.Reference<SoftFailuresContext> = Context.R
     defaultValue: makeFreshSoftContext,
   },
 )
-export interface VitestTaskContext {
+export interface VitestTaskContext<Ann = unknown> {
   readonly annotate?: ((message: string, type?: string) => Promise<void> | void) | undefined
   readonly task?: {
-    readonly annotations?: readonly unknown[] | undefined
+    readonly annotations?: readonly Ann[] | undefined
   } | undefined
 }
 
@@ -128,14 +128,14 @@ const annotateStep = <A, E, R>(
     yield* annotateStepResult(taskCtx, keyword, resolvedText, duration, Exit.isSuccess(exit))
     return yield* exit
   })
-const recordSoftFailure = (keyword: string, text: string, cause: unknown) =>
+const recordSoftFailure = <C = unknown>(keyword: string, text: string, cause: C) =>
   Effect.gen(function*() {
     const soft = yield* SoftFailuresRef
     soft.record({ keyword, text, cause })
     const taskCtx = yield* VitestTaskRef
     yield* recordAnnotation(taskCtx, `[${keyword.toUpperCase()}] ${text} - soft-failed`, 'error')
   })
-type NoInfer<A> = [A][A extends unknown ? 0 : never]
+type NoInfer<A> = [A][A extends A ? 0 : never]
 
 const GherkinScopeTypeId: unique symbol = Symbol.for('@systemfsoftware/gherkin/GherkinScope')
 export const StageTypeId: unique symbol = Symbol.for('@systemfsoftware/gherkin/Stage')
@@ -178,8 +178,8 @@ export type GherkinEffect<A extends object, E, R> = Effect.Effect<GherkinScope<A
 
 export type AssertedPipeline<R = never> = Effect.Effect<GherkinScope<object & ThenStage>, StepError, R>
 
-const wrapTapResult = <A extends object, E2, R2>(
-  raw: Effect.Effect<unknown, E2, R2> | void,
+const wrapTapResult = <A extends object, E2, R2, Out = unknown>(
+  raw: Effect.Effect<Out, E2, R2> | void,
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
@@ -190,8 +190,8 @@ const wrapTapResult = <A extends object, E2, R2>(
   return stepWrap(keyword, resolvedText, Effect.void).pipe(Effect.as(scope))
 }
 
-const runTapBody = <A extends object, E2, R2>(
-  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+const runTapBody = <A extends object, E2, R2, Out = unknown>(
+  f: (a: A) => Effect.Effect<Out, E2, R2> | void,
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
@@ -207,8 +207,8 @@ const runTapBody = <A extends object, E2, R2>(
 
 const tapThen =
   (keyword: string, text: StepText) =>
-  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never>(
-    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(
+    f: (a: NoInfer<A>) => Effect.Effect<Out, E2, R2> | void,
   ) =>
   <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
@@ -221,8 +221,8 @@ const tapThen =
         return runTapBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
       },
     )
-const handleRawTap = <E2, R2>(
-  raw: Effect.Effect<unknown, E2, R2> | void,
+const handleRawTap = <E2, R2, Out = unknown>(
+  raw: Effect.Effect<Out, E2, R2> | void,
   keyword: string,
   resolvedText: string,
 ): Effect.Effect<void, never, R2> => {
@@ -235,8 +235,8 @@ const handleRawTap = <E2, R2>(
   return Effect.void
 }
 
-const runSoftBody = <A extends object, E2, R2>(
-  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+const runSoftBody = <A extends object, E2, R2, Out = unknown>(
+  f: (a: A) => Effect.Effect<Out, E2, R2> | void,
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
@@ -250,8 +250,8 @@ const runSoftBody = <A extends object, E2, R2>(
 
 const tapSoft =
   (keyword: string, text: StepText) =>
-  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never>(
-    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(
+    f: (a: NoInfer<A>) => Effect.Effect<Out, E2, R2> | void,
   ) =>
   <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
@@ -264,8 +264,8 @@ const tapSoft =
         return runSoftBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
       },
     )
-const evaluatePollRaw = <E2, R2>(
-  raw: Effect.Effect<unknown, E2, R2> | void,
+const evaluatePollRaw = <E2, R2, Out = unknown>(
+  raw: Effect.Effect<Out, E2, R2> | void,
   keyword: string,
   resolvedText: string,
 ): Effect.Effect<void, StepError, R2> => {
@@ -284,8 +284,8 @@ const evaluatePollRaw = <E2, R2>(
   return Effect.void
 }
 
-const evaluatePoll = <A extends object, E2, R2>(
-  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+const evaluatePoll = <A extends object, E2, R2, Out = unknown>(
+  f: (a: A) => Effect.Effect<Out, E2, R2> | void,
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
@@ -301,8 +301,8 @@ const evaluatePoll = <A extends object, E2, R2>(
   }
 }
 
-const runPollBody = <A extends object, E2, R2>(
-  f: (a: A) => Effect.Effect<unknown, E2, R2> | void,
+const runPollBody = <A extends object, E2, R2, Out = unknown>(
+  f: (a: A) => Effect.Effect<Out, E2, R2> | void,
   scope: GherkinScope<A>,
   keyword: string,
   resolvedText: string,
@@ -314,8 +314,8 @@ const runPollBody = <A extends object, E2, R2>(
 
 const tapPoll =
   (keyword: string, text: StepText, opts?: PollOptions) =>
-  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never>(
-    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(
+    f: (a: NoInfer<A>) => Effect.Effect<Out, E2, R2> | void,
   ) =>
   <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
@@ -346,8 +346,9 @@ const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
     A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
     E2 = never,
     R2 = never,
+    Out = unknown,
   >(
-    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+    f: (a: NoInfer<A>) => Effect.Effect<Out, E2, R2> | void,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
   ) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>
@@ -382,8 +383,8 @@ const bindPoll = (keyword: 'when', text: StepText, opts?: PollOptions) => {
   return step
 }
 
-type BindStepTapArgs<E, R> = [f: (scope: object) => Effect.Effect<unknown, E, R> | void]
-type BindStepBindArgs<E, R> = [name: string, f: (scope: object) => Effect.Effect<unknown, E, R>]
+type BindStepTapArgs<E, R, Out = unknown> = [f: (scope: object) => Effect.Effect<Out, E, R> | void]
+type BindStepBindArgs<E, R, Out = unknown> = [name: string, f: (scope: object) => Effect.Effect<Out, E, R>]
 
 const bindGiven = (keyword: 'given', text: StepText) => {
   function step<N extends string, A extends object & (InitialStage | GivenStage), B, E2, R2>(
@@ -392,8 +393,8 @@ const bindGiven = (keyword: 'given', text: StepText) => {
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
   ) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & GivenStage, E1 | StepError, R1 | R2>
-  function step<A extends object & (InitialStage | GivenStage), E2 = never, R2 = never>(
-    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+  function step<A extends object & (InitialStage | GivenStage), E2 = never, R2 = never, Out = unknown>(
+    f: (a: NoInfer<A>) => Effect.Effect<Out, E2, R2> | void,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
   ) => GherkinEffect<Omit<A, typeof StageTypeId> & GivenStage, E1 | StepError, R1 | R2>
@@ -440,8 +441,9 @@ const bindWhen = (keyword: 'when', text: StepText) => {
     A extends object & (InitialStage | GivenStage | WhenStage | ThenStage),
     E2 = never,
     R2 = never,
+    Out = unknown,
   >(
-    f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
+    f: (a: NoInfer<A>) => Effect.Effect<Out, E2, R2> | void,
   ): <E1, R1>(
     self: GherkinEffect<A, E1, R1>,
   ) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>
@@ -493,7 +495,8 @@ const emptyScope: GherkinScope<InitialStage> = {
   [GherkinScopeTypeId]: GherkinScopeTypeId,
 }
 
-export type ScopeMap = Readonly<Record<string, Effect.Effect<unknown, never, never>>>
+type Top<T = unknown> = T
+export type ScopeMap = Readonly<Record<string, Effect.Effect<Top, never, never>>>
 
 export type ScopeServices<S extends ScopeMap> = {
   readonly [K in keyof S]: S[K] extends Effect.Effect<infer A, never, infer _R> ? A : never
@@ -508,9 +511,9 @@ function makeScope<S extends ScopeMap>(
 ): GherkinEffect<ScopeServices<S> & GivenStage, never, ScopeIdentifiers<S>>
 function makeScope<S extends ScopeMap>(
   map: S,
-): Effect.Effect<GherkinScope<Record<string, unknown> & GivenStage>, never, never> {
+): Effect.Effect<GherkinScope<Record<string, Top> & GivenStage>, never, never> {
   return Effect.gen(function*() {
-    const out: Record<string, unknown> = {
+    const out: Record<string, Top> = {
       ...stageGiven,
       [GherkinScopeTypeId]: GherkinScopeTypeId,
     }

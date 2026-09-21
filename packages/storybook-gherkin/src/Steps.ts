@@ -9,10 +9,14 @@ export type Keyword = 'Given' | 'When' | 'Then' | 'And' | 'But' | 'Star'
 
 export type ConcreteKeyword = 'Given' | 'When' | 'Then'
 
+type AnyConstraintDecoder<A = unknown> = Schema.ConstraintDecoder<A>
+type AnyValue<V = unknown> = V
+type AnyEffect<E, R, A = unknown> = Effect.Effect<A, E, R>
+
 export interface CaptureModel {
   readonly name: string
   /** Service-free decode view — the v4 counterpart of the removed no-context alias. */
-  readonly schema: Schema.ConstraintDecoder<unknown> | undefined
+  readonly schema: AnyConstraintDecoder | undefined
   readonly default: string | undefined
 }
 
@@ -80,10 +84,10 @@ export type Canvas = typeof screen
 
 export type StepFn = (label: string, fn: () => Promise<void>) => Promise<void> | void
 
-export interface Report {
+export interface Report<Result = unknown> {
   readonly type: string
   readonly version?: number
-  readonly result: unknown
+  readonly result: Result
   readonly status: 'failed' | 'passed' | 'warning'
 }
 
@@ -98,9 +102,9 @@ export interface PlayContext<TArgs = unknown> {
   readonly step: StepFn
   readonly userEvent: UserEventObject
   readonly args: TArgs
-  readonly globals: Record<string, unknown>
-  readonly parameters: Record<string, unknown>
-  readonly loaded: Record<string, unknown>
+  readonly globals: Record<string, AnyValue>
+  readonly parameters: Record<string, AnyValue>
+  readonly loaded: Record<string, AnyValue>
   readonly abortSignal: AbortSignal
   readonly reporting: ReportingAPI
 }
@@ -111,9 +115,9 @@ export interface StepContext<TArgs = unknown> {
   readonly userEvent: UserEventObject
   readonly step: StepFn
   readonly args: TArgs
-  readonly globals: Record<string, unknown>
-  readonly parameters: Record<string, unknown>
-  readonly loaded: Record<string, unknown>
+  readonly globals: Record<string, AnyValue>
+  readonly parameters: Record<string, AnyValue>
+  readonly loaded: Record<string, AnyValue>
   readonly canvasElement: HTMLElement
   /**
    * Fires on story teardown (remount, navigation, HMR). Since the 2026-08-09
@@ -245,7 +249,7 @@ const decodeCapture = (
   cap: CaptureModel,
   values: Readonly<Record<string, string>>,
   model: StepModel,
-): Effect.Effect<unknown, CaptureDecodeFailed> => {
+): AnyEffect<CaptureDecodeFailed, never> => {
   const raw = captureRaw(cap, values)
   if (cap.schema === undefined) return Effect.succeed(raw)
   return Schema.decodeEffect(cap.schema)(raw).pipe(
@@ -272,7 +276,7 @@ const makeStepCtor = (keyword: Keyword): StepCtor => {
   function ctor(
     statics: TemplateStringsArray,
     ...holes: readonly Hole[]
-  ): unknown {
+  ): AnyValue {
     return <TArgs = unknown>(handler: StepHandler<CapsOf<typeof holes>, TArgs>): Step<TArgs> => {
       const model = buildModel(keyword, statics, holes)
       const _step: Step<TArgs> = {
@@ -281,7 +285,7 @@ const makeStepCtor = (keyword: Keyword): StepCtor => {
         run: (values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) =>
           Effect.forEach(model.captures, (cap) => decodeCapture(cap, values, model)).pipe(
             Effect.flatMap((decoded) => {
-              const caps: Record<string, unknown> = {}
+              const caps: Record<string, AnyValue> = {}
               for (const [cap, value] of Arr.zip(model.captures, decoded)) caps[cap.name] = value
               return Effect.promise(() => Promise.resolve(handler(ctx, caps)))
             }),

@@ -1,9 +1,11 @@
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
 import { Cause, Effect, Layer, Ref } from 'effect'
 
+type AnyCause<E = unknown> = Cause.Cause<E>
+
 export const ReporterSpyContext = Effect.gen(function*() {
-  const restartsRef = yield* Ref.make<{ name: string; cause: Cause.Cause<unknown> }[]>([])
-  const exhaustionsRef = yield* Ref.make<{ name: string; cause: Cause.Cause<unknown> }[]>([])
+  const restartsRef = yield* Ref.make<{ name: string; cause: AnyCause }[]>([])
+  const exhaustionsRef = yield* Ref.make<{ name: string; cause: AnyCause }[]>([])
   return {
     reporter: DaemonReporter.of({
       onRestart: (name, cause) => Ref.update(restartsRef, (r) => [...r, { name, cause }]).pipe(Effect.as(void 0)),

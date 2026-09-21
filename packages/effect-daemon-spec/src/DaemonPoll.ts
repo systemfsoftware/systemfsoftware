@@ -33,9 +33,10 @@ type PollShape<W, D, WE, WR> =
     readonly work: W
     readonly prereq?: undefined
   }
+type AnyEffect<E, R, A = unknown> = Effect.Effect<A, E, R>
 
 export const poll = <
-  W extends Effect.Effect<unknown, WE, WR>,
+  W extends AnyEffect<WE, WR>,
   D,
   WE,
   WR,

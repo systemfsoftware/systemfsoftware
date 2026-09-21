@@ -1,5 +1,6 @@
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
+import { banUnknown } from './rules/ban-unknown.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
@@ -15,6 +16,7 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 const recommendedRules = {
   [rule('ban-classes')]: 'error',
   [rule('ban-error-string')]: 'error',
+  [rule('ban-unknown')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
   [rule('no-internal-jsdoc-outside')]: 'error',
   [rule('no-io-boundary-tests')]: 'error',
@@ -31,6 +33,7 @@ export default {
   rules: {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
+    'ban-unknown': banUnknown,
     'internal-export-jsdoc': internalExportJsdoc,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-io-boundary-tests': noIoBoundaryTests,

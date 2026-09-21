@@ -72,11 +72,11 @@ const nameFromObject = (entry: object): string => {
   return ''
 }
 
-const toGlobPath = (entry: unknown): string => {
+const toGlobPath = <E = unknown>(entry: E): string => {
   if (!isObject(entry)) return stringIfString(entry)
   return nameFromObject(entry)
 }
-const stringIfString = (value: unknown): string => {
+const stringIfString = <V = unknown>(value: V): string => {
   if (typeof value === 'string') return value
   return ''
 }
@@ -86,7 +86,7 @@ const stringFieldFromRecord = (err: object, key: string): string => {
   return stringIfString(Reflect.get(err, key))
 }
 
-const stringField = (err: unknown, key: string): string => {
+const stringField = <E = unknown>(err: E, key: string): string => {
   if (!isObject(err)) return ''
   return stringFieldFromRecord(err, key)
 }
@@ -96,12 +96,12 @@ const isFunctionAtKey = (value: object, key: string): boolean => {
   return typeof Reflect.get(value, key) === 'function'
 }
 
-const hasFunction = (value: unknown, key: string): boolean => {
+const hasFunction = <V = unknown>(value: V, key: string): boolean => {
   if (!isObject(value)) return false
   return isFunctionAtKey(value, key)
 }
 
-const hasReadAndWrite = (value: unknown): boolean => {
+const hasReadAndWrite = <V = unknown>(value: V): boolean => {
   if (!hasFunction(value, 'read')) return false
   return hasFunction(value, 'write')
 }
@@ -116,17 +116,17 @@ const isStat = (value: unknown): value is Stat => {
   return hasFunction(value, 'isDirectory')
 }
 
-const toFileHandle = (handle: unknown): FileHandle => {
+const toFileHandle = <H = unknown>(handle: H): FileHandle => {
   if (isFileHandle(handle)) return handle
   throw new TypeError('memfs returned a value that is not a file handle')
 }
 
-const toStat = (stat: unknown): Stat => {
+const toStat = <S = unknown>(stat: S): Stat => {
   if (isStat(stat)) return stat
   throw new TypeError('memfs returned a value that is not a stat record')
 }
 
-const toPlatformError = (method: string) => (err: unknown): Error.PlatformError =>
+const toPlatformError = (method: string) => <E = unknown>(err: E): Error.PlatformError =>
   Error.systemError({
     _tag: REASON_BY_ERRNO[stringField(err, 'code')] ?? 'Unknown',
     module: 'FileSystem',

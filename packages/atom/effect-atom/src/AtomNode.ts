@@ -11,6 +11,9 @@ import type { NodeFate } from './internal/NodeLifetime.schema.js'
 import type { RegistryImpl } from './Registry.js'
 import * as Result from './Result.js'
 
+type AnyNode<A = unknown> = NodeImpl<A>
+type AnyLifetime<A = unknown> = Lifetime<A>
+
 const notifyListener = (listener: () => void): void => {
   listener()
 }
@@ -39,7 +42,7 @@ const NodeState: {
 }
 type NodeState = number
 
-export class NodeImpl<A> extends Pipeable.Class {
+export class NodeImpl<A = unknown> extends Pipeable.Class {
   constructor(
     registry: RegistryImpl,
     atom: Atom.Atom<A>,
@@ -56,9 +59,9 @@ export class NodeImpl<A> extends Pipeable.Class {
   writeContext: WriteContextImpl<A>
   preserveInitialValueOnBuild = false
 
-  parents = new Set<NodeImpl<unknown>>()
-  previousParents: Set<NodeImpl<unknown>> | undefined
-  children = new Set<NodeImpl<unknown>>()
+  parents = new Set<AnyNode>()
+  previousParents: Set<AnyNode> | undefined
+  children = new Set<AnyNode>()
   listeners = new Set<() => void>()
   skipInvalidation = false
   building = false
@@ -110,13 +113,13 @@ export class NodeImpl<A> extends Pipeable.Class {
     replaceInitializedValue(this, value)
   }
 
-  addParent(parent: NodeImpl<unknown>): void {
+  addParent(parent: AnyNode): void {
     this.parents.add(parent)
     forgetPreviousParent(this, parent)
     linkChild(this, parent)
   }
 
-  removeChild(child: NodeImpl<unknown>): void {
+  removeChild(child: AnyNode): void {
     this.children.delete(child)
   }
 
@@ -170,14 +173,14 @@ function nodeLifetimeInput<A>(node: NodeImpl<A>): NodeLifetimeInput {
   }
 }
 
-function isWaitingForInitial(value: unknown): boolean {
+function isWaitingForInitial<T = unknown>(value: T): boolean {
   if (Result.isResult(value) === false) {
     return false
   }
   return isInitialWaiting(value)
 }
 
-function isInitialWaiting(value: Result.Result<unknown, unknown>): boolean {
+function isInitialWaiting<A = unknown, E = unknown>(value: Result.Result<A, E>): boolean {
   if (Result.isInitial(value) === false) {
     return false
   }
@@ -232,19 +235,19 @@ function detachPreviousParents<A>(node: NodeImpl<A>): void {
   detachParents(node, node.previousParents)
 }
 
-function detachParents<A>(node: NodeImpl<A>, parents: Set<NodeImpl<unknown>>): void {
+function detachParents<A>(node: NodeImpl<A>, parents: Set<AnyNode>): void {
   node.previousParents = undefined
   for (const parent of parents) {
     detachParent(node, parent)
   }
 }
 
-function detachParent<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function detachParent<A>(node: NodeImpl<A>, parent: AnyNode): void {
   parent.removeChild(node)
   scheduleRemovalIfIdle(node, parent)
 }
 
-function scheduleRemovalIfIdle<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function scheduleRemovalIfIdle<A>(node: NodeImpl<A>, parent: AnyNode): void {
   if (parent.canBeRemoved) {
     node.registry.scheduleNodeRemoval(parent)
   }
@@ -303,7 +306,7 @@ function notifyListenersIfPresent<A>(node: NodeImpl<A>): void {
   }
 }
 
-function forgetPreviousParent<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function forgetPreviousParent<A>(node: NodeImpl<A>, parent: AnyNode): void {
   if (node.previousParents !== undefined) {
     dropPreviousParent(node, node.previousParents, parent)
   }
@@ -311,8 +314,8 @@ function forgetPreviousParent<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): 
 
 function dropPreviousParent<A>(
   node: NodeImpl<A>,
-  previousParents: Set<NodeImpl<unknown>>,
-  parent: NodeImpl<unknown>,
+  previousParents: Set<AnyNode>,
+  parent: AnyNode,
 ): void {
   previousParents.delete(parent)
   clearPreviousParentsIfEmpty(node, previousParents)
@@ -320,25 +323,25 @@ function dropPreviousParent<A>(
 
 function clearPreviousParentsIfEmpty<A>(
   node: NodeImpl<A>,
-  previousParents: Set<NodeImpl<unknown>>,
+  previousParents: Set<AnyNode>,
 ): void {
   if (previousParents.size === 0) {
     node.previousParents = undefined
   }
 }
 
-function linkChild<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function linkChild<A>(node: NodeImpl<A>, parent: AnyNode): void {
   if (parent.children.has(node) === false) {
     adoptChild(node, parent)
   }
 }
 
-function adoptChild<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function adoptChild<A>(node: NodeImpl<A>, parent: AnyNode): void {
   parent.children.add(node)
   clearSkipInvalidation(parent)
 }
 
-function clearSkipInvalidation(parent: NodeImpl<unknown>): void {
+function clearSkipInvalidation(parent: AnyNode): void {
   if (parent.skipInvalidation) {
     parent.skipInvalidation = false
   }
@@ -436,44 +439,44 @@ function detachRemovedParents<A>(node: NodeImpl<A>): void {
   removeFromParents(node, node.previousParents)
 }
 
-function removeFromParents<A>(node: NodeImpl<A>, parents: Set<NodeImpl<unknown>>): void {
+function removeFromParents<A>(node: NodeImpl<A>, parents: Set<AnyNode>): void {
   node.previousParents = undefined
   for (const parent of parents) {
     removeFromParent(node, parent)
   }
 }
 
-function removeFromParent<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function removeFromParent<A>(node: NodeImpl<A>, parent: AnyNode): void {
   parent.removeChild(node)
   removeParentIfIdle(node, parent)
 }
 
-function removeParentIfIdle<A>(node: NodeImpl<A>, parent: NodeImpl<unknown>): void {
+function removeParentIfIdle<A>(node: NodeImpl<A>, parent: AnyNode): void {
   if (parent.canBeRemoved) {
     node.registry.removeNode(parent)
   }
 }
 
-function childrenAreActive(children: Set<NodeImpl<unknown>>): boolean {
+function childrenAreActive(children: Set<AnyNode>): boolean {
   if (children.size === 0) {
     return false
   }
   return walkActiveChildren(children)
 }
 
-function walkActiveChildren(start: Set<NodeImpl<unknown>>): boolean {
-  const stack: Array<Set<NodeImpl<unknown>>> = [start]
+function walkActiveChildren(start: Set<AnyNode>): boolean {
+  const stack: Array<Set<AnyNode>> = [start]
   return walkActiveStack(stack, 0)
 }
 
-function walkActiveStack(stack: Array<Set<NodeImpl<unknown>>>, index: number): boolean {
+function walkActiveStack(stack: Array<Set<AnyNode>>, index: number): boolean {
   if (index >= stack.length) {
     return false
   }
   return scanThenContinue(stack, index)
 }
 
-function scanThenContinue(stack: Array<Set<NodeImpl<unknown>>>, index: number): boolean {
+function scanThenContinue(stack: Array<Set<AnyNode>>, index: number): boolean {
   if (scanActiveSet(stack[index], stack)) {
     return true
   }
@@ -481,8 +484,8 @@ function scanThenContinue(stack: Array<Set<NodeImpl<unknown>>>, index: number): 
 }
 
 function scanActiveSet(
-  current: Set<NodeImpl<unknown>> | undefined,
-  stack: Array<Set<NodeImpl<unknown>>>,
+  current: Set<AnyNode> | undefined,
+  stack: Array<Set<AnyNode>>,
 ): boolean {
   if (current === undefined) {
     return false
@@ -491,8 +494,8 @@ function scanActiveSet(
 }
 
 function scanDefinedSet(
-  current: Set<NodeImpl<unknown>>,
-  stack: Array<Set<NodeImpl<unknown>>>,
+  current: Set<AnyNode>,
+  stack: Array<Set<AnyNode>>,
 ): boolean {
   let found = false
   current.forEach((child) => {
@@ -503,8 +506,8 @@ function scanDefinedSet(
 
 function takeActiveChild(
   found: boolean,
-  child: NodeImpl<unknown>,
-  stack: Array<Set<NodeImpl<unknown>>>,
+  child: AnyNode,
+  stack: Array<Set<AnyNode>>,
 ): boolean {
   if (found) {
     return true
@@ -513,8 +516,8 @@ function takeActiveChild(
 }
 
 function childSignalsActive(
-  child: NodeImpl<unknown>,
-  stack: Array<Set<NodeImpl<unknown>>>,
+  child: AnyNode,
+  stack: Array<Set<AnyNode>>,
 ): boolean {
   if (childIsLive(child)) {
     return true
@@ -523,14 +526,14 @@ function childSignalsActive(
   return false
 }
 
-function childIsLive(child: NodeImpl<unknown>): boolean {
+function childIsLive(child: AnyNode): boolean {
   if (child.atom.lazy === false) {
     return true
   }
   return child.listeners.size > 0
 }
 
-function pushChildSet(child: NodeImpl<unknown>, stack: Array<Set<NodeImpl<unknown>>>): void {
+function pushChildSet(child: AnyNode, stack: Array<Set<AnyNode>>): void {
   if (child.children.size > 0) {
     stack.push(child.children)
   }
@@ -553,8 +556,8 @@ type StreamOptions = {
   readonly withoutInitialValue?: boolean
 }
 
-const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' | 'isFn' | 'registry'> = {
-  addFinalizer(this: Lifetime<unknown>, f: () => void): void {
+const LifetimeProto: Omit<AnyLifetime, 'node' | 'finalizers' | 'disposed' | 'isFn' | 'registry'> = {
+  addFinalizer(this: AnyLifetime, f: () => void): void {
     if (this.disposed) {
       f()
       return
@@ -562,7 +565,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
     pushFinalizer(this, f)
   },
 
-  get<A>(this: Lifetime<unknown>, atom: Atom.Atom<A>): A {
+  get<A>(this: AnyLifetime, atom: Atom.Atom<A>): A {
     if (this.disposed) {
       return this.node.registry.get(atom)
     }
@@ -570,7 +573,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
   },
 
   result<A, E>(
-    this: Lifetime<unknown>,
+    this: AnyLifetime,
     atom: Atom.Atom<Result.Result<A, E>>,
     options?: ResultOptions,
   ): Effect.Effect<A, E> {
@@ -581,7 +584,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
   },
 
   resultOnce<A, E>(
-    this: Lifetime<unknown>,
+    this: AnyLifetime,
     atom: Atom.Atom<Result.Result<A, E>>,
     options?: ResultOptions,
   ): Effect.Effect<A, E> {
@@ -589,7 +592,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
   },
 
   setResult<A, E, W>(
-    this: Lifetime<unknown>,
+    this: AnyLifetime,
     atom: Atom.Writable<Result.Result<A, E>, W>,
     value: W,
   ): Effect.Effect<A, E> {
@@ -598,18 +601,18 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
     return this.resultOnce(atom, { suspendOnWaiting: true })
   },
 
-  some<A>(this: Lifetime<unknown>, atom: Atom.Atom<Option.Option<A>>): Effect.Effect<A> {
+  some<A>(this: AnyLifetime, atom: Atom.Atom<Option.Option<A>>): Effect.Effect<A> {
     if (isDisposedOrFn(this)) {
       return this.someOnce(atom)
     }
     return someFromOption(this.get(atom))
   },
 
-  someOnce<A>(this: Lifetime<unknown>, atom: Atom.Atom<Option.Option<A>>): Effect.Effect<A> {
+  someOnce<A>(this: AnyLifetime, atom: Atom.Atom<Option.Option<A>>): Effect.Effect<A> {
     return Effect.callback<A>((resume) => someOnceCallback(this, atom, resume))
   },
 
-  once<A>(this: Lifetime<unknown>, atom: Atom.Atom<A>): A {
+  once<A>(this: AnyLifetime, atom: Atom.Atom<A>): A {
     return this.node.registry.get(atom)
   },
 
@@ -618,39 +621,39 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
     return this.node.valueOption()
   },
 
-  refresh<A>(this: Lifetime<unknown>, atom: Atom.Atom<A>): void {
+  refresh<A>(this: AnyLifetime, atom: Atom.Atom<A>): void {
     if (this.disposed) return
     this.node.registry.refresh(atom)
   },
 
-  refreshSelf(this: Lifetime<unknown>): void {
+  refreshSelf(this: AnyLifetime): void {
     if (this.disposed) return
     this.node.invalidate()
   },
 
-  mount<A>(this: Lifetime<unknown>, atom: Atom.Atom<A>): void {
+  mount<A>(this: AnyLifetime, atom: Atom.Atom<A>): void {
     if (this.disposed) return
     this.addFinalizer(this.node.registry.mount(atom))
   },
 
-  subscribe<A>(this: Lifetime<unknown>, atom: Atom.Atom<A>, f: (_: A) => void, options?: {
+  subscribe<A>(this: AnyLifetime, atom: Atom.Atom<A>, f: (_: A) => void, options?: {
     readonly immediate?: boolean
   }): void {
     if (this.disposed) return
     this.addFinalizer(this.node.registry.subscribe(atom, f, options))
   },
 
-  setSelf<A>(this: Lifetime<unknown>, a: A): void {
+  setSelf<A>(this: AnyLifetime, a: A): void {
     if (this.disposed) return
     this.node.setValue(a)
   },
 
-  set<R, W>(this: Lifetime<unknown>, atom: Atom.Writable<R, W>, value: W): void {
+  set<R, W>(this: AnyLifetime, atom: Atom.Writable<R, W>, value: W): void {
     if (this.disposed) return
     this.node.registry.set(atom, value)
   },
 
-  stream<A>(this: Lifetime<unknown>, atom: Atom.Atom<A>, options?: StreamOptions) {
+  stream<A>(this: AnyLifetime, atom: Atom.Atom<A>, options?: StreamOptions) {
     if (this.disposed) return Stream.empty
     return Stream.callback<A>((queue) =>
       Effect.sync(() => {
@@ -661,7 +664,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
     )
   },
 
-  streamResult<A, E>(this: Lifetime<unknown>, atom: Atom.Atom<Result.Result<A, E>>, options?: {
+  streamResult<A, E>(this: AnyLifetime, atom: Atom.Atom<Result.Result<A, E>>, options?: {
     readonly withoutInitialValue?: boolean
     readonly bufferSize?: number
   }): Stream.Stream<A, E> {
@@ -671,20 +674,20 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
     )
   },
 
-  dispose(this: Lifetime<unknown>): void {
+  dispose(this: AnyLifetime): void {
     this.disposed = true
     runFinalizers(this)
   },
 }
 
-function isDisposedOrFn(lifetime: Lifetime<unknown>): boolean {
+function isDisposedOrFn(lifetime: AnyLifetime): boolean {
   if (lifetime.disposed) {
     return true
   }
   return lifetime.isFn
 }
 
-function pushFinalizer(lifetime: Lifetime<unknown>, f: () => void): void {
+function pushFinalizer(lifetime: AnyLifetime, f: () => void): void {
   if (lifetime.finalizers === undefined) {
     lifetime.finalizers = [f]
     return
@@ -692,7 +695,7 @@ function pushFinalizer(lifetime: Lifetime<unknown>, f: () => void): void {
   lifetime.finalizers.push(f)
 }
 
-function getLive<A>(lifetime: Lifetime<unknown>, atom: Atom.Atom<A>): A {
+function getLive<A>(lifetime: AnyLifetime, atom: Atom.Atom<A>): A {
   const parent = lifetime.node.registry.ensureNode(atom)
   const value = parent.value()
   lifetime.node.addParent(parent)
@@ -700,7 +703,7 @@ function getLive<A>(lifetime: Lifetime<unknown>, atom: Atom.Atom<A>): A {
 }
 
 function resultFromLive<A, E>(
-  lifetime: Lifetime<unknown>,
+  lifetime: AnyLifetime,
   atom: Atom.Atom<Result.Result<A, E>>,
   options: ResultOptions | undefined,
 ): Effect.Effect<A, E> {
@@ -759,7 +762,7 @@ function succeedResult<A, E>(result: Result.Result<A, E>): Effect.Effect<A, E> {
 }
 
 function resultOnceCallback<A, E>(
-  lifetime: Lifetime<unknown>,
+  lifetime: AnyLifetime,
   atom: Atom.Atom<Result.Result<A, E>>,
   options: ResultOptions | undefined,
   resume: (effect: Effect.Effect<A, E>) => void,
@@ -783,7 +786,7 @@ function isReadyResult<A, E>(
 }
 
 function subscribeUntilReady<A, E>(
-  lifetime: Lifetime<unknown>,
+  lifetime: AnyLifetime,
   atom: Atom.Atom<Result.Result<A, E>>,
   options: ResultOptions | undefined,
   resume: (effect: Effect.Effect<A, E>) => void,
@@ -835,7 +838,7 @@ function someFromOption<A>(result: Option.Option<A>): Effect.Effect<A> {
 }
 
 function someOnceCallback<A>(
-  lifetime: Lifetime<unknown>,
+  lifetime: AnyLifetime,
   atom: Atom.Atom<Option.Option<A>>,
   resume: (effect: Effect.Effect<A>) => void,
 ): Effect.Effect<void> | void {
@@ -847,7 +850,7 @@ function someOnceCallback<A>(
 }
 
 function subscribeUntilSome<A>(
-  lifetime: Lifetime<unknown>,
+  lifetime: AnyLifetime,
   atom: Atom.Atom<Option.Option<A>>,
   resume: (effect: Effect.Effect<A>) => void,
 ): Effect.Effect<void> {
@@ -890,14 +893,14 @@ function failIfFailure<A, E>(result: Result.Result<A, E>): Effect.Effect<A, E> {
   return Effect.never
 }
 
-function runFinalizers(lifetime: Lifetime<unknown>): void {
+function runFinalizers(lifetime: AnyLifetime): void {
   if (lifetime.finalizers === undefined) {
     return
   }
   runFinalizerList(lifetime, lifetime.finalizers)
 }
 
-function runFinalizerList(lifetime: Lifetime<unknown>, finalizers: Array<() => void>): void {
+function runFinalizerList(lifetime: AnyLifetime, finalizers: Array<() => void>): void {
   lifetime.finalizers = undefined
   runFinalizersFrom(finalizers, finalizers.length - 1)
 }
@@ -991,8 +994,8 @@ export type BatchPhase = 0 | 1 | 2
 export const batchState: {
   phase: BatchPhase
   depth: number
-  stale: Array<NodeImpl<unknown>>
-  notify: Set<NodeImpl<unknown>>
+  stale: Array<AnyNode>
+  notify: Set<AnyNode>
 } = {
   phase: BatchPhase.disabled,
   depth: 0,
@@ -1048,19 +1051,19 @@ function resetBatchIfIdle(): void {
   }
 }
 
-function batchRebuildNode(node: NodeImpl<unknown>) {
+function batchRebuildNode(node: AnyNode) {
   restaleIfInvalidatedDuringBuild(node)
   rebuildParents(node)
   rebuildIfNotValid(node)
 }
 
-function restaleIfInvalidatedDuringBuild(node: NodeImpl<unknown>): void {
+function restaleIfInvalidatedDuringBuild(node: AnyNode): void {
   if (node.state === NodeState.valid) {
     restaleValidIfInvalidatedDuringBuild(node)
   }
 }
 
-function restaleValidIfInvalidatedDuringBuild(node: NodeImpl<unknown>): void {
+function restaleValidIfInvalidatedDuringBuild(node: AnyNode): void {
   if (node.invalidatedDuringBuild === false) {
     return
   }
@@ -1069,19 +1072,19 @@ function restaleValidIfInvalidatedDuringBuild(node: NodeImpl<unknown>): void {
   node.disposeLifetime()
 }
 
-function rebuildParents(node: NodeImpl<unknown>): void {
+function rebuildParents(node: AnyNode): void {
   for (const parent of node.parents) {
     rebuildParentIfNeeded(parent)
   }
 }
 
-function rebuildParentIfNeeded(parent: NodeImpl<unknown>): void {
+function rebuildParentIfNeeded(parent: AnyNode): void {
   if (parent.state !== NodeState.valid) {
     batchRebuildNode(parent)
   }
 }
 
-function rebuildIfNotValid(node: NodeImpl<unknown>): void {
+function rebuildIfNotValid(node: AnyNode): void {
   if (node.state !== NodeState.valid) {
     node.value()
   }

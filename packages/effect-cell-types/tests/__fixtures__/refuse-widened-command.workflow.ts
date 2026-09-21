@@ -32,9 +32,11 @@ export type WidenedDecision = WidenedOne | WidenedTwo
 
 export const refuseWidenedCommand = Workflow.make(
   TaggedCmd,
-  (_command: unknown): Result.Result<WidenedDecision, CommandRefused> =>
-    Match.value(_command).pipe(
+  <Cmd = unknown>(_command: Cmd): Result.Result<WidenedDecision, CommandRefused> => {
+    const cmd = _command as TaggedCmd
+    return Match.value(cmd).pipe(
       Match.when({ value: 0 }, () => Result.succeed(new WidenedTwo({ reason: 'zero' }))),
       Match.orElse(() => Result.succeed(new WidenedOne({ value: 0 }))),
-    ),
+    )
+  },
 )

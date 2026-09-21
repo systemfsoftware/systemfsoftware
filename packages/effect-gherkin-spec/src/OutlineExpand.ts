@@ -44,12 +44,12 @@ type JsTypeof =
   | 'symbol'
   | 'function'
 
-const stringifyObjectValue = (value: unknown): string => {
+const stringifyObjectValue = <A = unknown>(value: A): string => {
   if (value === null) return 'null'
   return JSON.stringify(value)
 }
 
-const stringifyByType: Record<JsTypeof, (value: unknown) => string> = {
+const stringifyByType: Record<JsTypeof, <A = unknown>(value: A) => string> = {
   undefined: () => 'undefined',
   boolean: (value) => String(value),
   number: (value) => String(value),
@@ -60,12 +60,14 @@ const stringifyByType: Record<JsTypeof, (value: unknown) => string> = {
   object: stringifyObjectValue,
 }
 
-export const stringifyForTitle = (value: unknown): string => stringifyByType[typeof value](value)
+export const stringifyForTitle = <A = unknown>(value: A): string => stringifyByType[typeof value](value)
+
+type AnyRow<V = unknown> = Record<string, V>
 
 const replaceTags = (
   template: string,
-  row: Record<string, unknown>,
-  stringify: (value: unknown) => string,
+  row: AnyRow,
+  stringify: <V = unknown>(value: V) => string,
 ): string => {
   let result = template
   for (const [key, value] of Object.entries(row)) {
@@ -76,8 +78,8 @@ const replaceTags = (
 
 export const renderTitle = (
   template: string,
-  row: Record<string, unknown>,
-  stringify: (value: unknown) => string = stringifyForTitle,
+  row: AnyRow,
+  stringify: <V = unknown>(value: V) => string = stringifyForTitle,
 ): string => replaceTags(template, row, stringify)
 
 const formatAvailableKeys = (rowKeys: Set<string>): string => {
@@ -87,7 +89,7 @@ const formatAvailableKeys = (rowKeys: Set<string>): string => {
 }
 
 const validateRowTags = (
-  row: Record<string, unknown>,
+  row: AnyRow,
   index: number,
   tags: readonly TemplateToken[],
 ): Result.Result<void, string> => {
@@ -108,27 +110,27 @@ const firstRowFailure = (
   return failed
 }
 
-const expandRows = <Row extends Record<string, unknown>>(
+const expandRows = <Row extends AnyRow>(
   name: string,
   rows: readonly Row[],
-  stringify: (value: unknown) => string,
+  stringify: <V = unknown>(value: V) => string,
 ): Result.Result<readonly OutlineRow<Row>[], string> =>
   Result.map(
     firstRowFailure(rows.map((row, index) => validateRowTags(row, index, tokenizeTemplate(name)))),
     () => rows.map((row) => ({ row, title: renderTitle(name, row, stringify) })),
   )
 
-const expandNonEmpty = <Row extends Record<string, unknown>>(
+const expandNonEmpty = <Row extends AnyRow>(
   name: string,
   rows: readonly Row[],
-  stringify: (value: unknown) => string,
+  stringify: <V = unknown>(value: V) => string,
 ): Result.Result<readonly OutlineRow<Row>[], string> => {
   if (rows.length === 0) return Result.succeed([])
   return expandRows(name, rows, stringify)
 }
 
-export const expandOutline = <Row extends Record<string, unknown>>(
+export const expandOutline = <Row extends AnyRow>(
   name: string,
   rows: readonly Row[],
-  stringify: (value: unknown) => string = stringifyForTitle,
+  stringify: <V = unknown>(value: V) => string = stringifyForTitle,
 ): Result.Result<readonly OutlineRow<Row>[], string> => expandNonEmpty(name, rows, stringify)

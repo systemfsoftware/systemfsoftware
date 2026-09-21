@@ -10,21 +10,21 @@ import {
   WarehouseStockPartitionFromRow,
 } from './rows.schema.js'
 
-export const decodeStockLot = (row: unknown): Effect.Effect<StockLot, S.SchemaError> =>
+export const decodeStockLot = <R = unknown>(row: R): Effect.Effect<StockLot, S.SchemaError> =>
   S.decodeUnknownEffect(StockLotFromRow)(row)
 
-export const decodeWarehouseStockPartition = (
-  row: unknown,
+export const decodeWarehouseStockPartition = <R = unknown>(
+  row: R,
 ): Effect.Effect<WarehouseStockPartition, S.SchemaError> => S.decodeUnknownEffect(WarehouseStockPartitionFromRow)(row)
 
-export const decodeLotAllocation = (row: unknown): Effect.Effect<LotAllocation, S.SchemaError> =>
+export const decodeLotAllocation = <R = unknown>(row: R): Effect.Effect<LotAllocation, S.SchemaError> =>
   S.decodeUnknownEffect(LotAllocationFromRow)(row)
 
-export const decodeCreditAccount = (row: unknown): Effect.Effect<CreditAccount, S.SchemaError> =>
+export const decodeCreditAccount = <R = unknown>(row: R): Effect.Effect<CreditAccount, S.SchemaError> =>
   S.decodeUnknownEffect(CreditAccountFromRow)(row)
 
-export const decodeCustomerTier = (row: unknown): Effect.Effect<CustomerTier, S.SchemaError> =>
+export const decodeCustomerTier = <R = unknown>(row: R): Effect.Effect<CustomerTier, S.SchemaError> =>
   S.decodeUnknownEffect(CustomerTier)(row)
 
-export const decodeAuditPayload = (row: unknown): Effect.Effect<AuditPayload, S.SchemaError> =>
+export const decodeAuditPayload = <R = unknown>(row: R): Effect.Effect<AuditPayload, S.SchemaError> =>
   S.decodeUnknownEffect(AuditPayloadFromRow)(row)
