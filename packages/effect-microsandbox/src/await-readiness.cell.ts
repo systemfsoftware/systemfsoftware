@@ -5,9 +5,8 @@ import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
 import * as Socket from 'effect/unstable/socket/Socket'
-import type { Sandbox } from 'microsandbox'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
-import { WaitTimeoutError } from './MicroVMError.schema.js'
+import { SandboxBootError, WaitTimeoutError } from './MicroVMError.schema.js'
 import type { WaitStrategy } from './MicroVMSpec.schema.js'
 import {
   ResolveWaitStrategy,
@@ -58,13 +57,23 @@ const httpProbe = (hostPort: number, path: string): Effect.Effect<boolean> =>
       })),
   )
 
-const logProbe = (sandbox: Sandbox, pattern: RegExp): Effect.Effect<boolean> =>
+interface LogReader {
+  readonly name: string
+  readonly logs: () => Promise<ReadonlyArray<{ readonly text: () => string }>>
+}
+
+const logProbe = (reader: LogReader, pattern: RegExp): Effect.Effect<boolean, SandboxBootError> =>
   Effect.map(
-    Effect.option(Effect.promise(() => sandbox.logs())),
-    (entries) => Option.isSome(entries) && entries.value.some((entry) => pattern.test(entry.text())),
+    Effect.tryPromise({
+      try: () => reader.logs(),
+      catch: (cause) => new SandboxBootError({ sandboxName: reader.name, cause }),
+    }),
+    (entries) => entries.some((entry) => pattern.test(entry.text())),
   )
 
-const probeUntilSatisfied = (probe: Effect.Effect<boolean>): Effect.Effect<boolean> =>
+const probeUntilSatisfied = (
+  probe: Effect.Effect<boolean, SandboxBootError>,
+): Effect.Effect<boolean, SandboxBootError> =>
   Effect.flatMap(probe, (satisfied) =>
     satisfied
       ? Effect.succeed(true)
@@ -73,8 +82,8 @@ const probeUntilSatisfied = (probe: Effect.Effect<boolean>): Effect.Effect<boole
 const awaitProbe = (
   wait: string,
   timeoutMs: number,
-  probe: Effect.Effect<boolean>,
-): Effect.Effect<void, WaitTimeoutError> =>
+  probe: Effect.Effect<boolean, SandboxBootError>,
+): Effect.Effect<void, WaitTimeoutError | SandboxBootError> =>
   Effect.asVoid(
     Effect.timeoutOrElse(probeUntilSatisfied(probe), {
       duration: `${timeoutMs} millis`,
@@ -95,7 +104,7 @@ const waitLabel = (strategy: WaitStrategy): string =>
     Match.exhaustive,
   )
 
-const probeFor = (vm: AcquiredVM, strategy: WaitStrategy): Effect.Effect<boolean> =>
+const probeFor = (vm: AcquiredVM, strategy: WaitStrategy): Effect.Effect<boolean, SandboxBootError> =>
   Match.value(strategy).pipe(
     Match.tag('Port', ({ port }) => {
       const hostPort = hostPortFor(vm, port)
@@ -114,7 +123,7 @@ const readReadinessCommand = (vm: AcquiredVM): Effect.Effect<AcquiredVM> => Effe
 const writeReadiness = (
   outcome: Result.Result<WaitRequired | WaitSkipped, never>,
   vm: AcquiredVM,
-): Effect.Effect<AcquiredVM, WaitTimeoutError> =>
+): Effect.Effect<AcquiredVM, WaitTimeoutError | SandboxBootError> =>
   Match.value(Result.getOrThrow(outcome)).pipe(
     Match.tag('WaitRequired', ({ strategy }) =>
       Effect.as(awaitProbe(waitLabel(strategy), WAIT_TIMEOUT_MS, probeFor(vm, strategy)), vm)),

@@ -8,6 +8,8 @@ import type { PortBinding } from './render-sandbox-plan.workflow.js'
 export const TypeId = Symbol.for('~systemfsoftware/microvm/RunningVM')
 export type TypeId = typeof TypeId
 
+const SandboxTypeId: unique symbol = Symbol.for('~systemfsoftware/microvm/RunningVM/sandbox')
+
 export const isRunningVM = (u: unknown): u is RunningVM => Predicate.hasProperty(u, TypeId)
 
 export interface ExecResult {
@@ -21,19 +23,11 @@ export interface LogLine {
   readonly text: string
 }
 
-/**
- * Nominal runtime handle representing an active microVM instance.
- *
- * Conforming to Effect handle conventions (Socket, Fiber, Ref), the handle is a
- * minimal protocol record holding identity, network port bindings, and the raw
- * sandbox driver reference. Operations (exec, port, url, logs, ping, use) are
- * dual pipeable module functions.
- */
 export interface RunningVM extends Pipeable {
   readonly [TypeId]: typeof TypeId
+  readonly [SandboxTypeId]: Sandbox
   readonly name: string
   readonly portBindings: ReadonlyArray<PortBinding>
-  readonly sandbox: Sandbox
 }
 
 export const make = (options: {
@@ -42,30 +36,37 @@ export const make = (options: {
   readonly sandbox: Sandbox
 }): RunningVM => ({
   [TypeId]: TypeId,
+  [SandboxTypeId]: options.sandbox,
+  name: options.name,
+  portBindings: options.portBindings,
   ...Prototype,
-  ...options,
 })
+
+const hostPortOf = (bindings: ReadonlyArray<PortBinding>, guest: number): Option.Option<number> =>
+  Option.map(
+    Option.fromUndefinedOr(bindings.find((binding) => binding.guest === guest)),
+    (binding) => binding.hostPort,
+  )
 
 export const port: {
   (guestPort: number): (self: RunningVM) => Effect.Effect<number, PortAllocationError>
   (self: RunningVM, guestPort: number): Effect.Effect<number, PortAllocationError>
 } = dual(
   2,
-  (self: RunningVM, guestPort: number): Effect.Effect<number, PortAllocationError> => {
-    const binding = self.portBindings.find((b) => b.guest === guestPort)
-    return binding !== undefined
-      ? Effect.succeed(binding.hostPort)
-      : Effect.fail(
+  (self: RunningVM, guestPort: number): Effect.Effect<number, PortAllocationError> =>
+    Effect.fromOption(
+      hostPortOf(self.portBindings, guestPort),
+      () =>
         new PortAllocationError({
           guestPort,
           cause: `Guest port ${guestPort} is not mapped to any host port on sandbox ${self.name}`,
         }),
-      )
-  },
+    ),
 )
 
 const prefixSlash = (path: string): string => (path.startsWith('/') ? path : `/${path}`)
 const normalizePath = (path: string | undefined): string => (path !== undefined ? prefixSlash(path) : '')
+
 export const url: {
   (guestPort: number, path?: string): (self: RunningVM) => Effect.Effect<string, PortAllocationError>
   (self: RunningVM, guestPort: number, path?: string): Effect.Effect<string, PortAllocationError>
@@ -74,6 +75,7 @@ export const url: {
   (self: RunningVM, guestPort: number, path?: string): Effect.Effect<string, PortAllocationError> =>
     Effect.map(port(self, guestPort), (hostPort) => `http://127.0.0.1:${hostPort}${normalizePath(path)}`),
 )
+
 export const exec: {
   (cmd: string, args?: ReadonlyArray<string>): (self: RunningVM) => Effect.Effect<ExecResult, ExecError>
   (self: RunningVM, cmd: string, args?: ReadonlyArray<string>): Effect.Effect<ExecResult, ExecError>
@@ -83,7 +85,7 @@ export const exec: {
     const argv = [cmd, ...args]
     return Effect.map(
       Effect.tryPromise({
-        try: () => self.sandbox.exec(cmd, [...args]),
+        try: () => self[SandboxTypeId].exec(cmd, [...args]),
         catch: (cause) => new ExecError({ argv, cause }),
       }),
       (output): ExecResult => ({ code: output.status.code, stdout: output.stdout(), stderr: output.stderr() }),
@@ -95,7 +97,7 @@ export const logs = (self: RunningVM): Stream.Stream<LogLine, SandboxBootError> 
   Stream.flatMap(
     Stream.fromEffect(
       Effect.tryPromise({
-        try: () => self.sandbox.logStream({ follow: true }),
+        try: () => self[SandboxTypeId].logStream({ follow: true }),
         catch: (cause) => new SandboxBootError({ sandboxName: self.name, cause }),
       }),
     ),
@@ -106,7 +108,7 @@ export const logs = (self: RunningVM): Stream.Stream<LogLine, SandboxBootError> 
   )
 
 export const ping = (self: RunningVM): Effect.Effect<boolean> =>
-  Effect.map(Effect.option(Effect.promise(() => self.sandbox.ping())), Option.isSome)
+  Effect.map(Effect.option(Effect.promise(() => self[SandboxTypeId].ping())), Option.isSome)
 
 export const use: {
   <A>(f: (sandbox: Sandbox) => Promise<A>): (self: RunningVM) => Effect.Effect<A, SandboxBootError>
@@ -115,7 +117,44 @@ export const use: {
   2,
   <A>(self: RunningVM, f: (sandbox: Sandbox) => Promise<A>): Effect.Effect<A, SandboxBootError> =>
     Effect.tryPromise({
-      try: () => f(self.sandbox),
+      try: () => f(self[SandboxTypeId]),
       catch: (cause) => new SandboxBootError({ sandboxName: self.name, cause }),
     }),
 )
+
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@effect/vitest')
+  const { Schema } = await import('effect')
+  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
+  const { GuestPort } = await import('./MicroVMSpec.schema.js')
+
+  const uniqueGuests = Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique()))
+  const bindings = Arbitrary.map(
+    Arbitrary.schema(uniqueGuests),
+    (guests) => guests.map((guest, index) => ({ guest, host: '127.0.0.1', hostPort: 49152 + index })),
+  )
+
+  it.prop(
+    '∀bg_PortLookup_≡Declared',
+    [bindings, GuestPort],
+    ([drawn, guest]) =>
+      Option.match(hostPortOf(drawn, guest), {
+        onNone: () => !drawn.some((binding) => binding.guest === guest),
+        onSome: (hostPort) => drawn.some((binding) => binding.guest === guest && binding.hostPort === hostPort),
+      }),
+  )
+
+  it.prop(
+    '∀p_PrefixSlash_≡Idempotent',
+    [Schema.String],
+    ([path]) => prefixSlash(prefixSlash(path)) === prefixSlash(path),
+  )
+
+  it.prop('∀p_PrefixSlash_∈Slashed', [Schema.String], ([path]) => prefixSlash(path).startsWith('/'))
+
+  it.prop(
+    '∀p_Normalize_≡Prefix',
+    [Schema.String],
+    ([path]) => normalizePath(path) === prefixSlash(path) && normalizePath(undefined) === '',
+  )
+}
