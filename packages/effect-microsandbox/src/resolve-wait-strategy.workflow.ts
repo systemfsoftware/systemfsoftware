@@ -1,5 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Option, Schema } from 'effect'
+import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { MicroVMSpec, WaitStrategy } from './MicroVMSpec.schema.js'
 
@@ -28,13 +28,18 @@ export const resolveWaitStrategy = Workflow.total(
   ResolveWaitStrategy,
   (command): Result.Result<WaitStrategyDecision, never> =>
     Result.succeed(
-      Option.match(Option.fromNullishOr(command.spec.waitStrategy), {
-        onSome: (strategy) => WaitRequired.make({ strategy }),
-        onNone: () =>
-          Option.match(Option.fromNullishOr(command.spec.ports[0]), {
-            onSome: (port) => WaitRequired.make({ strategy: { _tag: 'Port', port } }),
-            onNone: () => WaitSkipped.make(),
-          }),
-      }),
+      Match.value(command.spec).pipe(
+        Match.tag('Job', () => WaitSkipped.make()),
+        Match.tag('Service', (service) =>
+          Option.match(Option.fromNullishOr(service.waitStrategy), {
+            onSome: (strategy) => WaitRequired.make({ strategy }),
+            onNone: () =>
+              Option.match(Option.fromNullishOr(service.ports[0]), {
+                onSome: (port) => WaitRequired.make({ strategy: { _tag: 'Port', port } }),
+                onNone: () => WaitSkipped.make(),
+              }),
+          })),
+        Match.exhaustive,
+      ),
     ),
 )

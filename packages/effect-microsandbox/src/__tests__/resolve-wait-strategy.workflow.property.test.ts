@@ -1,8 +1,7 @@
 import { it } from '@effect/vitest'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
-import { GuestPort, MicroVMSpec, WaitStrategy } from '../MicroVMSpec.schema.js'
+import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec, WaitStrategy } from '../MicroVMSpec.schema.js'
 import {
   ResolveWaitStrategy,
   resolveWaitStrategy,
@@ -27,20 +26,28 @@ const skippedOf = (spec: MicroVMSpec): boolean =>
     Match.exhaustive,
   )
 
-const specWithoutStrategy = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec => ({
-  image: spec.image,
-  env: spec.env,
-  ports,
-  mounts: spec.mounts,
-})
+const specWithoutStrategy = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
+  new ServiceSpec({
+    image: spec.image,
+    env: spec.env,
+    ports,
+    mounts: spec.mounts,
+  })
 
-const specWithStrategy = (spec: MicroVMSpec, strategy: WaitStrategy): MicroVMSpec => ({
-  image: spec.image,
-  env: spec.env,
-  ports: spec.ports,
-  mounts: spec.mounts,
-  waitStrategy: strategy,
-})
+const specWithStrategy = (spec: MicroVMSpec, strategy: WaitStrategy): MicroVMSpec => {
+  const ports = Match.value(spec).pipe(
+    Match.tag('Service', (s) => s.ports),
+    Match.tag('Job', () => []),
+    Match.exhaustive,
+  )
+  return new ServiceSpec({
+    image: spec.image,
+    env: spec.env,
+    ports,
+    mounts: spec.mounts,
+    waitStrategy: strategy,
+  })
+}
 
 const portOf = (required: WaitRequired): Option.Option<number> =>
   Match.value(required.strategy).pipe(
@@ -50,13 +57,9 @@ const portOf = (required: WaitRequired): Option.Option<number> =>
     Match.exhaustive,
   )
 
-const specArb = Arbitrary.schema(MicroVMSpec)
-const strategyArb = Arbitrary.schema(WaitStrategy)
-const guestPortArb = Arbitrary.schema(GuestPort)
-
 it.prop(
   '∀spec_Explicit_=Echo',
-  [specArb, strategyArb],
+  [MicroVMSpec, WaitStrategy],
   ([spec, strategy]) =>
     Option.match(requiredOf(specWithStrategy(spec, strategy)), {
       onNone: () => false,
@@ -64,14 +67,16 @@ it.prop(
     }),
 )
 
-it.prop('∀spec_NoPorts_=Skipped', [specArb], ([spec]) => skippedOf(specWithoutStrategy(spec, [])))
+it.prop('∀spec_NoPorts_=Skipped', [MicroVMSpec], ([spec]) => skippedOf(specWithoutStrategy(spec, [])))
 
 it.prop(
   '∀spec_FirstPort_=Probed',
-  [specArb, guestPortArb],
+  [MicroVMSpec, GuestPort],
   ([spec, port]) =>
     Option.match(requiredOf(specWithoutStrategy(spec, [port])), {
       onNone: () => false,
       onSome: (required) => Option.contains(portOf(required), port),
     }),
 )
+
+it.prop('∀job_Strategy_=Skipped', [JobSpec], ([job]) => skippedOf(job))

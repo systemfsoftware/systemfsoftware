@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace MicroVM {
-    export { ExecError, ExecResult, GuestPort, HttpWait, ImageReference, LogLine, LogWait, LoopbackViolationError, MicroVMError, MicroVMResource, MicroVMSpec, Mount, PortAllocationError, PortWait, RunningVM, SandboxBootError, TypeId, VirtualizationUnsupportedError, Wait, WaitStrategy, WaitTimeoutError, layer, make, scoped, spec, withEnv, withExposedPorts, withMemoryLimit, withMount, withWaitStrategy };
+    export { ExecError, ExecResult, GuestPort, HttpWait, ImageReference, JobSpec, LogLine, LogWait, LoopbackViolationError, MicroVMError, MicroVMResource, MicroVMSpec, Mount, PortAllocationError, PortWait, RunningVM, SandboxBootError, ServiceSpec, TypeId, VirtualizationUnsupportedError, Wait, WaitStrategy, WaitTimeoutError, job, layer, make, scoped, service, spec, withEnv, withExposedPorts, withMemoryLimit, withMount, withWaitStrategy };
 }
 
 // (No @packageDocumentation comment for this package)

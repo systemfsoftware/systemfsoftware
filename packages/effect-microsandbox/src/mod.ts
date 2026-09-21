@@ -1,1 +1,1 @@
-export * as MicroVM from './MicroVM.js'
+export * as MicroVM from './MicroVM/mod.js'

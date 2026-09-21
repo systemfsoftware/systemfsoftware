@@ -58,23 +58,32 @@ const isLoopback = (host: string): boolean => [host === LOOPBACK_HOST, host.star
 const illegalBinding = (bindings: ReadonlyArray<PortBinding>): Option.Option<PortBinding> =>
   Option.fromNullishOr(bindings.find((binding) => !isLoopback(binding.host)))
 
-const cmdOf = (spec: MicroVMSpec): ReadonlyArray<string> | undefined =>
-  Option.match(Option.fromNullishOr(spec.cmd), {
-    onNone: () => undefined,
-    onSome: (cmd) => [...cmd],
-  })
-
-const planOf = (command: PlanSandbox): SandboxPlan => ({
-  name: command.name,
-  image: command.spec.image,
-  envs: { ...command.spec.env },
-  cpus: command.spec.vCPUs,
-  memoryMiB: command.spec.memoryMb,
-  workdir: command.spec.workdir,
-  cmd: cmdOf(command.spec),
-  mounts: command.spec.mounts.map((mount) => ({ guest: mount.guest, host: mount.host })),
-  portBindings: command.bindings.map((binding) => ({ ...binding })),
-})
+const planOf = (command: PlanSandbox): SandboxPlan =>
+  Match.value(command.spec).pipe(
+    Match.tag('Job', (job) => ({
+      name: command.name,
+      image: job.image,
+      envs: { ...job.env },
+      cpus: job.vCPUs,
+      memoryMiB: job.memoryMb,
+      workdir: job.workdir,
+      cmd: [...job.cmd],
+      mounts: job.mounts.map((mount) => ({ guest: mount.guest, host: mount.host })),
+      portBindings: [],
+    })),
+    Match.tag('Service', (service) => ({
+      name: command.name,
+      image: service.image,
+      envs: { ...service.env },
+      cpus: service.vCPUs,
+      memoryMiB: service.memoryMb,
+      workdir: undefined,
+      cmd: undefined,
+      mounts: service.mounts.map((mount) => ({ guest: mount.guest, host: mount.host })),
+      portBindings: command.bindings.map((binding) => ({ ...binding })),
+    })),
+    Match.exhaustive,
+  )
 
 export const renderSandboxPlan = Workflow.total(
   PlanSandbox,

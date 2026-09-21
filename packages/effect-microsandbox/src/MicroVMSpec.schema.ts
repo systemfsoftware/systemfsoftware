@@ -34,15 +34,25 @@ export const Mount = Schema.Struct({
 })
 export type Mount = typeof Mount.Type
 
-export const MicroVMSpec = Schema.Struct({
+export class BaseSpec extends Schema.Class<BaseSpec>('BaseSpec')({
   image: ImageReference,
   env: Schema.Record(Schema.String, Schema.String),
-  ports: Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique())),
-  mounts: Schema.Array(Mount),
+  mounts: Schema.Array(Mount).pipe(Schema.check(Schema.isUnique())),
   memoryMb: Schema.optional(Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0)))),
   vCPUs: Schema.optional(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
-  workdir: Schema.optional(Schema.String),
-  cmd: Schema.optional(Schema.Array(Schema.String)),
+}) {}
+
+export class ServiceSpec extends Schema.TaggedClass<ServiceSpec>()('Service', {
+  ...BaseSpec.fields,
+  ports: Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique())),
   waitStrategy: Schema.optional(WaitStrategy),
-})
+}) {}
+
+export class JobSpec extends Schema.TaggedClass<JobSpec>()('Job', {
+  ...BaseSpec.fields,
+  cmd: Schema.NonEmptyArray(Schema.String),
+  workdir: Schema.optional(Schema.String),
+}) {}
+
+export const MicroVMSpec = Schema.Union([ServiceSpec, JobSpec])
 export type MicroVMSpec = typeof MicroVMSpec.Type

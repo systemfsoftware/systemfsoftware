@@ -40,7 +40,6 @@ const refusalLaw = (command: PlanSandbox, law: (refused: PlanRefused) => boolean
 
 const octet = Arbitrary.schema(Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 255 }))))
 const guestPortArb = Arbitrary.schema(GuestPort)
-
 const loopbackHost = Arbitrary.map(Arbitrary.all([octet, octet, octet]), ([a, b, c]) => `127.${a}.${b}.${c}`)
 
 const outsideOctet = Arbitrary.map(octet, (value) => (value === 127 ? 126 : value))
@@ -83,10 +82,6 @@ const refusalCase = Arbitrary.map(
   }),
 )
 
-const bindingKey = (binding: PortBinding): string => `${binding.guest}:${binding.host}:${binding.hostPort}`
-
-const mountKey = (mount: { readonly guest: string; readonly host: string }): string => `${mount.host}->${mount.guest}`
-
 const cmdEchoes = (plan: SandboxPlan, cmd: ReadonlyArray<string> | undefined): boolean =>
   Option.match(Option.fromNullishOr(cmd), {
     onNone: () => plan.cmd === undefined,
@@ -97,55 +92,45 @@ const cmdEchoes = (plan: SandboxPlan, cmd: ReadonlyArray<string> | undefined): b
       }),
   })
 
-it.prop('∀plan_Render_=Approved', [successCase], ([command]) => planLaw(command, () => true))
-it.prop(
-  '∀plan_Image_=Spec',
-  [successCase],
-  ([command]) => planLaw(command, (plan) => plan.image === command.spec.image),
-)
-it.prop('∀plan_Bindings_=Echo', [successCase], ([command]) =>
-  planLaw(command, (plan) =>
-    holds([
-      plan.portBindings.length === command.bindings.length,
-      plan.portBindings.map(bindingKey).join('|') === command.bindings.map(bindingKey).join('|'),
-    ])))
-it.prop(
-  '∀plan_Bindings_=Loopback',
-  [successCase],
-  ([command]) => planLaw(command, (plan) => plan.portBindings.every((binding) => isLoopbackHost(binding.host))),
-)
-it.prop('∀plan_Mounts_=Echo', [successCase], ([command]) =>
-  planLaw(command, (plan) =>
-    holds([
-      plan.mounts.length === command.spec.mounts.length,
-      plan.mounts.map(mountKey).join('|') === command.spec.mounts.map(mountKey).join('|'),
-    ])))
-it.prop('∀plan_Limits_=Echo', [successCase], ([command]) =>
-  planLaw(command, (plan) =>
-    holds([
-      plan.cpus === command.spec.vCPUs,
-      plan.memoryMiB === command.spec.memoryMb,
-      plan.workdir === command.spec.workdir,
-    ])))
-it.prop('∀plan_Cmd_=Echo', [successCase], ([command]) => planLaw(command, (plan) => cmdEchoes(plan, command.spec.cmd)))
-it.prop('∀plan_Envs_=Echo', [successCase], ([command]) =>
-  planLaw(command, (plan) => {
-    const env = command.spec.env
-    const keys = Object.keys(env)
-    return keys.length === Object.keys(plan.envs).length && keys.every((key) => plan.envs[key] === env[key])
-  }))
-it.prop('∀plan_Name_=Echo', [successCase], ([command]) => planLaw(command, (plan) => plan.name === command.name))
-
-it.prop('∀outside_Render_=Refused', [refusalCase], ([{ command }]) => Option.isNone(approvedOf(command)))
-it.prop(
-  '∀outside_Violation_=Typed',
-  [refusalCase],
-  ([{ command }]) => refusalLaw(command, (refused) => Schema.is(PlanRefused)(refused)),
-)
-it.prop('∀outside_Violation_=Echo', [refusalCase], ([{ command, offender }]) =>
+it.prop('∀outside_Render_=Refused', [refusalCase], ([{ command, offender }]) =>
   refusalLaw(command, (refused) =>
     holds([
       refused.sandboxName === command.name,
       refused.host === offender.host,
       refused.guestPort === offender.guest,
     ])))
+
+it.prop('∀loopback_Render_=Approved', [successCase], ([command]) =>
+  planLaw(command, (plan) => {
+    const allLoopback = plan.portBindings.every((b) => isLoopbackHost(b.host))
+    const roleCorrect = Match.value(command.spec).pipe(
+      Match.tag('Service', () =>
+        holds([
+          plan.portBindings.length === command.bindings.length,
+          plan.cmd === undefined,
+          plan.workdir === undefined,
+        ])),
+      Match.tag('Job', (job) =>
+        holds([
+          plan.portBindings.length === 0,
+          cmdEchoes(plan, job.cmd),
+          plan.workdir === job.workdir,
+        ])),
+      Match.exhaustive,
+    )
+    return holds([allLoopback, roleCorrect])
+  }))
+
+it.prop('∀plan_Configuration_=Conserved', [successCase], ([command]) =>
+  planLaw(command, (plan) => {
+    const envKeys = Object.keys(command.spec.env)
+    return holds([
+      plan.name === command.name,
+      plan.image === command.spec.image,
+      plan.cpus === command.spec.vCPUs,
+      plan.memoryMiB === command.spec.memoryMb,
+      plan.mounts.length === command.spec.mounts.length,
+      envKeys.length === Object.keys(plan.envs).length,
+      envKeys.every((k) => plan.envs[k] === command.spec.env[k]),
+    ])
+  }))

@@ -105,7 +105,12 @@ const allocateBindings = (
 const readPlanCommand = (spec: MicroVMSpec): Effect.Effect<PlanSandbox, PortAllocationError, Crypto.Crypto> =>
   Effect.gen(function*() {
     const crypto = yield* Crypto.Crypto
-    const bindings = yield* allocateBindings(spec.ports)
+    const ports = Match.value(spec).pipe(
+      Match.tag('Service', (s) => s.ports),
+      Match.tag('Job', () => []),
+      Match.exhaustive,
+    )
+    const bindings = yield* allocateBindings(ports)
     const id = yield* crypto.randomUUIDv4.pipe(Effect.orDie)
     return new PlanSandbox({
       spec,

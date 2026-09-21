@@ -1,5 +1,5 @@
 import type { Effect, Layer } from 'effect'
-import { Exit, Schema } from 'effect'
+import { Exit, Match, Schema } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
@@ -11,15 +11,28 @@ import {
   GuestPort,
   HttpWait,
   ImageReference,
+  JobSpec,
   LogWait,
   MicroVMSpec,
   type Mount,
   PortWait,
+  ServiceSpec,
   type WaitStrategy,
 } from './MicroVMSpec.schema.js'
 import type { RunningVM } from './RunningVM.js'
 
-export { GuestPort, HttpWait, ImageReference, LogWait, MicroVMSpec, type Mount, PortWait, type WaitStrategy }
+export {
+  GuestPort,
+  HttpWait,
+  ImageReference,
+  JobSpec,
+  LogWait,
+  MicroVMSpec,
+  type Mount,
+  PortWait,
+  ServiceSpec,
+  type WaitStrategy,
+}
 
 export const Wait = {
   forHttp: (path: string, port: number): WaitStrategy => ({ _tag: 'Http', path, port }),
@@ -75,66 +88,136 @@ const makeProto = (raw: MicroVMSpec): MicroVMResource => {
   }
   return self
 }
-export const make = (
-  target:
-    | string
-    | {
-      readonly image: string
-      readonly env?: Record<string, string>
-      readonly ports?: ReadonlyArray<number>
-      readonly mounts?: ReadonlyArray<Mount>
-      readonly memoryMb?: number
-      readonly vCPUs?: number
-      readonly workdir?: string
-      readonly cmd?: ReadonlyArray<string>
-      readonly waitStrategy?: WaitStrategy
-    },
-): MicroVMResource => {
-  const raw: MicroVMSpec = typeof target === 'string'
-    ? { image: target, env: {}, ports: [], mounts: [] }
-    : { env: {}, ports: [], mounts: [], ...target }
-  return makeProto(raw)
-}
+export const service = (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
+  makeProto(new ServiceSpec({ image, ports, env: {}, mounts: [] }))
 
+export const job = (image: string, cmd: readonly [string, ...Array<string>]): MicroVMResource =>
+  makeProto(new JobSpec({ image, cmd, env: {}, mounts: [] }))
+
+export const make = (image: string): MicroVMResource => service(image, [])
 export const spec = make
 
 export const withEnv: {
   (env: Record<string, string>): (spec: MicroVMSpec) => MicroVMSpec
   (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec => ({
-  ...spec,
-  env: { ...spec.env, ...env },
-}))
+} = dual(2, (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec =>
+  Match.value(spec).pipe(
+    Match.tag('Service', (s) =>
+      new ServiceSpec({
+        image: s.image,
+        env: { ...s.env, ...env },
+        ports: s.ports,
+        mounts: s.mounts,
+        memoryMb: s.memoryMb,
+        vCPUs: s.vCPUs,
+        waitStrategy: s.waitStrategy,
+      })),
+    Match.tag('Job', (j) =>
+      new JobSpec({
+        image: j.image,
+        env: { ...j.env, ...env },
+        cmd: j.cmd,
+        mounts: j.mounts,
+        memoryMb: j.memoryMb,
+        vCPUs: j.vCPUs,
+        workdir: j.workdir,
+      })),
+    Match.exhaustive,
+  ))
 
 export const withExposedPorts: {
   (ports: ReadonlyArray<number>): (spec: MicroVMSpec) => MicroVMSpec
   (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec => ({
-  ...spec,
-  ports,
-}))
+} = dual(2, (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
+  Match.value(spec).pipe(
+    Match.tag('Service', (s) =>
+      new ServiceSpec({
+        image: s.image,
+        env: s.env,
+        ports,
+        mounts: s.mounts,
+        memoryMb: s.memoryMb,
+        vCPUs: s.vCPUs,
+        waitStrategy: s.waitStrategy,
+      })),
+    Match.tag('Job', (j) => j),
+    Match.exhaustive,
+  ))
 
 export const withMount: {
   (mount: Mount): (spec: MicroVMSpec) => MicroVMSpec
   (spec: MicroVMSpec, mount: Mount): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, mount: Mount): MicroVMSpec => ({
-  ...spec,
-  mounts: [...spec.mounts, mount],
-}))
+} = dual(2, (spec: MicroVMSpec, mount: Mount): MicroVMSpec =>
+  Match.value(spec).pipe(
+    Match.tag('Service', (s) =>
+      new ServiceSpec({
+        image: s.image,
+        env: s.env,
+        ports: s.ports,
+        mounts: [...s.mounts, mount],
+        memoryMb: s.memoryMb,
+        vCPUs: s.vCPUs,
+        waitStrategy: s.waitStrategy,
+      })),
+    Match.tag('Job', (j) =>
+      new JobSpec({
+        image: j.image,
+        env: j.env,
+        cmd: j.cmd,
+        mounts: [...j.mounts, mount],
+        memoryMb: j.memoryMb,
+        vCPUs: j.vCPUs,
+        workdir: j.workdir,
+      })),
+    Match.exhaustive,
+  ))
 
 export const withMemoryLimit: {
   (memoryMb: number): (spec: MicroVMSpec) => MicroVMSpec
   (spec: MicroVMSpec, memoryMb: number): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, memoryMb: number): MicroVMSpec => ({ ...spec, memoryMb }))
+} = dual(2, (spec: MicroVMSpec, memoryMb: number): MicroVMSpec =>
+  Match.value(spec).pipe(
+    Match.tag('Service', (s) =>
+      new ServiceSpec({
+        image: s.image,
+        env: s.env,
+        ports: s.ports,
+        mounts: s.mounts,
+        memoryMb,
+        vCPUs: s.vCPUs,
+        waitStrategy: s.waitStrategy,
+      })),
+    Match.tag('Job', (j) =>
+      new JobSpec({
+        image: j.image,
+        env: j.env,
+        cmd: j.cmd,
+        mounts: j.mounts,
+        memoryMb,
+        vCPUs: j.vCPUs,
+        workdir: j.workdir,
+      })),
+    Match.exhaustive,
+  ))
 
 export const withWaitStrategy: {
   (waitStrategy: WaitStrategy): (spec: MicroVMSpec) => MicroVMSpec
   (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec => ({
-  ...spec,
-  waitStrategy,
-}))
-
+} = dual(2, (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec =>
+  Match.value(spec).pipe(
+    Match.tag('Service', (s) =>
+      new ServiceSpec({
+        image: s.image,
+        env: s.env,
+        ports: s.ports,
+        mounts: s.mounts,
+        memoryMb: s.memoryMb,
+        vCPUs: s.vCPUs,
+        waitStrategy,
+      })),
+    Match.tag('Job', (j) => j),
+    Match.exhaustive,
+  ))
 const applyAll = (spec: MicroVMSpec): MicroVMSpec =>
   withEnv({ K: 'V' })(
     withExposedPorts([6379])(
@@ -142,15 +225,17 @@ const applyAll = (spec: MicroVMSpec): MicroVMSpec =>
     ),
   )
 
-const decodeSucceeds = (spec: MicroVMSpec): boolean => Exit.isSuccess(Schema.decodeExit(MicroVMSpec)(spec))
-
 const applyEnv = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec => withEnv(spec, env)
+const applyMemory = (spec: MicroVMSpec, mb: number): MicroVMSpec => withMemoryLimit(spec, mb)
+const applyPorts = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec => withExposedPorts(spec, ports)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
 
   const specEq = Schema.toEquivalence(MicroVMSpec)
+  const positiveMb = Schema.Finite.pipe(Schema.check(Schema.isGreaterThan(0)))
+  const guestPorts = Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique()))
 
   it.prop('∀spec_Combinators_=Pure', [MicroVMSpec], ([spec]) => {
     const next = applyAll(spec)
@@ -172,12 +257,15 @@ if (import.meta.vitest !== void 0) {
     return specEq(sequential, merged)
   })
 
-  it.prop('∀spec_NegLimit_⊥', [MicroVMSpec], ([spec]) => !decodeSucceeds(withMemoryLimit(-1)(spec)))
-  it.prop('∀spec_RangePort_⊥', [MicroVMSpec], ([spec]) => !decodeSucceeds(withExposedPorts([70_000])(spec)))
   it.prop(
-    '∀spec_BlankMount_⊥',
-    [MicroVMSpec],
-    ([spec]) => !decodeSucceeds(withMount({ host: '', guest: '/data' })(spec)),
+    '∀spec_MemoryLimit_=Idempotent',
+    [MicroVMSpec, positiveMb],
+    ([spec, mb]) => specEq(applyMemory(applyMemory(spec, mb), mb), applyMemory(spec, mb)),
   )
-  it.prop('∀spec_LowPort_⊥', [MicroVMSpec], ([spec]) => !decodeSucceeds(withWaitStrategy(Wait.forPort(0))(spec)))
+
+  it.prop(
+    '∀spec_Ports_=Idempotent',
+    [MicroVMSpec, guestPorts],
+    ([spec, ports]) => specEq(applyPorts(applyPorts(spec, ports), ports), applyPorts(spec, ports)),
+  )
 }

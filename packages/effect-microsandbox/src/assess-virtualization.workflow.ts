@@ -65,15 +65,15 @@ export class AssessVirtualization extends Schema.TaggedClass<AssessVirtualizatio
   static readonly [Workflow.InstrumentationBrand] = ['platform'] as const
 }
 
-const KVM_DENIED_REMEDIATION =
-  'grant /dev/kvm access: add your user to the kvm group, or install the udev rule KERNEL=="kvm", MODE="0666" and reload udev'
-const KVM_ABSENT_REMEDIATION =
-  'no /dev/kvm found: enable VT-x/AMD-V virtualization in the host firmware or run on a KVM-capable runner'
-const HVF_REMEDIATION = 'Hypervisor.framework microVMs require Apple Silicon (arm64); Intel Macs are not supported'
-const WHP_REMEDIATION =
-  'Windows Hypervisor Platform is not enabled: run `msb doctor --fix` as administrator to enable it'
-const UNSUPPORTED_REMEDIATION =
-  'unsupported platform: effect-microsandbox supports linux (kvm), macOS (Hypervisor.framework), and windows (WHP)'
+const REMEDIATIONS = {
+  kvmDenied:
+    'grant /dev/kvm access: add your user to the kvm group, or install the udev rule KERNEL=="kvm", MODE="0666" and reload udev',
+  kvmAbsent: 'no /dev/kvm found: enable VT-x/AMD-V virtualization in the host firmware or run on a KVM-capable runner',
+  hvf: 'Hypervisor.framework microVMs require Apple Silicon (arm64); Intel Macs are not supported',
+  whp: 'Windows Hypervisor Platform is not enabled: run `msb doctor --fix` as administrator to enable it',
+  unsupported:
+    'unsupported platform: effect-microsandbox supports linux (kvm), macOS (Hypervisor.framework), and windows (WHP)',
+} as const
 
 export const assessVirtualization = Workflow.total(
   AssessVirtualization,
@@ -81,17 +81,17 @@ export const assessVirtualization = Workflow.total(
     Match.value(command.observation).pipe(
       Match.tag('KvmAccessible', () => Result.succeed(VirtualizationEligible.make())),
       Match.tag('KvmDenied', ({ topology }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: KVM_DENIED_REMEDIATION, topology }))),
+        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.kvmDenied, topology }))),
       Match.tag('KvmAbsent', ({ topology }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: KVM_ABSENT_REMEDIATION, topology }))),
+        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.kvmAbsent, topology }))),
       Match.tag('HvfUnavailable', ({ arch }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: HVF_REMEDIATION, topology: `arch=${arch}` }))),
+        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.hvf, topology: `arch=${arch}` }))),
       Match.tag('WHPUnavailable', ({ topology }) =>
-        Result.succeed(VirtualizationRefused.make({ remediation: WHP_REMEDIATION, topology }))),
+        Result.succeed(VirtualizationRefused.make({ remediation: REMEDIATIONS.whp, topology }))),
       Match.tag('PlatformUnsupported', ({ platform, arch }) =>
         Result.succeed(
           VirtualizationRefused.make({
-            remediation: UNSUPPORTED_REMEDIATION,
+            remediation: REMEDIATIONS.unsupported,
             topology: `platform=${platform} (${arch})`,
           }),
         )),
