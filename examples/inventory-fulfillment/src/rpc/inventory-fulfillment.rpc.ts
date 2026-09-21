@@ -68,6 +68,19 @@ const submitOrderOutcome = (
     Match.exhaustive,
   )
 
+const forbidden = (resource: string, reason: string): Forbidden => new Forbidden({ resource, reason })
+
+const ownershipOf = <A, E>(
+  record: ReservationRecord,
+  userId: string,
+  onOwner: Effect.Effect<A, E>,
+): Effect.Effect<A, E | Forbidden> =>
+  Match.value(record.customerId === userId).pipe(
+    Match.when(true, () => onOwner),
+    Match.when(false, () => Effect.fail(forbidden(record.orderId, 'reservation is owned by another caller'))),
+    Match.exhaustive,
+  )
+
 const submitOrder = (request: SubmitOrderRequest) =>
   Effect.gen(function*() {
     const { userId } = yield* AuthContext
@@ -76,13 +89,10 @@ const submitOrder = (request: SubmitOrderRequest) =>
     yield* Option.match(existing, {
       onNone: () => Effect.void,
       onSome: (record) =>
-        Match.value(record.customerId === userId).pipe(
-          Match.when(
-            true,
-            () => Effect.fail(new DuplicateOrder({ orderId: request.orderId, reason: 'order id already fulfilled' })),
-          ),
-          Match.when(false, () => Effect.fail(forbidden(request.orderId, 'reservation is owned by another caller'))),
-          Match.exhaustive,
+        ownershipOf(
+          record,
+          userId,
+          Effect.fail(new DuplicateOrder({ orderId: request.orderId, reason: 'order id already fulfilled' })),
         ),
     })
     const outcome = yield* runFulfillment({
@@ -93,21 +103,18 @@ const submitOrder = (request: SubmitOrderRequest) =>
     return yield* submitOrderOutcome(outcome)
   })
 
-const forbidden = (resource: string, reason: string): Forbidden => new Forbidden({ resource, reason })
-
 const ownedReservation = (record: ReservationRecord, userId: string): Effect.Effect<ReservationView, Forbidden> =>
-  Match.value(record.customerId === userId).pipe(
-    Match.when(true, () =>
-      Effect.succeed(
-        new ReservationView({
-          orderId: record.orderId,
-          customerId: record.customerId,
-          allocations: record.allocations,
-          occurredAt: record.occurredAt,
-        }),
-      )),
-    Match.when(false, () => Effect.fail(forbidden(record.orderId, 'reservation is owned by another caller'))),
-    Match.exhaustive,
+  ownershipOf(
+    record,
+    userId,
+    Effect.succeed(
+      new ReservationView({
+        orderId: record.orderId,
+        customerId: record.customerId,
+        allocations: record.allocations,
+        occurredAt: record.occurredAt,
+      }),
+    ),
   )
 
 const getReservation = (request: GetReservationRequest) =>

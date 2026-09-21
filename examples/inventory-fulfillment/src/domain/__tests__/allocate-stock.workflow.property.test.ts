@@ -132,12 +132,6 @@ const earlierThanEveryExpiry = (stock: readonly WarehouseStockPartition[]): Date
       })),
   )
 
-const liveAt = (now: DateTime.Utc, lot: StockLot): boolean =>
-  Option.getOrElse(
-    Option.map(lot.expiresAt, (expiresAt) => expiresAt.epochMilliseconds > now.epochMilliseconds),
-    () => true,
-  )
-
 const expireLotsAt = (
   stock: readonly WarehouseStockPartition[],
   at: DateTime.Utc,
@@ -164,7 +158,14 @@ const expireLotsAt = (
   )
 
 const liveLotsOf = (stock: readonly WarehouseStockPartition[], now: DateTime.Utc): readonly StockLot[] =>
-  Arr.filter(Arr.flatMap(stock, (partition) => partition.lots), (lot) => liveAt(now, lot))
+  Arr.filter(
+    Arr.flatMap(stock, (partition) => partition.lots),
+    (lot) =>
+      Option.getOrElse(
+        Option.map(lot.expiresAt, (expiresAt) => expiresAt.epochMilliseconds > now.epochMilliseconds),
+        () => true,
+      ),
+  )
 
 const liveAvailableBySku = (
   stock: readonly WarehouseStockPartition[],

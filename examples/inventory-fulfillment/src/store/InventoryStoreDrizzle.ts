@@ -88,16 +88,10 @@ const boundaryOf = (cursor: string): Option.Option<readonly [string, string]> =>
 const afterBoundary = (boundary: readonly [string, string]): SQL | undefined =>
   or(gt(stockLots.sku, boundary[0]), and(eq(stockLots.sku, boundary[0]), gt(stockLots.id, boundary[1])))
 
-const cursorCondition = (cursor: string): Effect.Effect<SQL | undefined> =>
-  Option.match(boundaryOf(cursor), {
-    onNone: () => Effect.die(new Error('listStock: cursor is not a valid continuation token')),
-    onSome: (boundary) => Effect.succeed(afterBoundary(boundary)),
-  })
-
-const cursorFilter = (cursor: Option.Option<string>): Effect.Effect<Option.Option<SQL | undefined>> =>
+const cursorFilter = (cursor: Option.Option<string>): Option.Option<SQL | undefined> =>
   Option.match(cursor, {
-    onNone: () => Effect.succeed(Option.none<SQL | undefined>()),
-    onSome: (token) => Effect.asSome(cursorCondition(token)),
+    onNone: () => Option.some(undefined),
+    onSome: (token) => Option.map(boundaryOf(token), afterBoundary),
   })
 
 const warehouseFilter = (query: StockPageQuery): SQL | undefined =>
@@ -115,7 +109,11 @@ const continuationOf = (rows: readonly StockLotRow[], page: readonly StockLotRow
 
 const readStockPage = (db: DrizzleDatabase, query: StockPageQuery) =>
   Effect.gen(function*() {
-    const after = Option.getOrUndefined(yield* cursorFilter(query.cursor))
+    const after = yield* Option.match(cursorFilter(query.cursor), {
+      onNone: (): Effect.Effect<SQL | undefined> =>
+        Effect.die(new Error('listStock: cursor is not a valid continuation token')),
+      onSome: (condition) => Effect.succeed(condition),
+    })
     const rows: readonly StockLotRow[] = yield* db
       .select()
       .from(stockLots)

@@ -365,19 +365,7 @@ function submitWithRetry(
     }))
 }
 
-/**
- * The fulfillment cell: reads stock/credit/clock, decodes and decides purely, encodes the wire
- * decision and its reservation events, then commits with an optimistic-concurrency CAS. A
- * `VersionConflict` re-runs the whole sandwich from a fresh read, bounded to {@link maxAttempts}
- * total attempts with a jittered backoff between them, after which the shell returns the
- * `ConflictRollback` decision and writes a `ReservationRolledBack` compensation record.
- *
- * The whole run is serialized per customer by {@link CustomerGate}: the credit read that authorizes
- * the order and the charge that settles it form one critical section, so two concurrent orders from
- * one customer cannot both be authorized against the same pre-charge balance. A committed
- * allocation (`AllocatedSplit` / `AllocatedWithOverdraft`) charges the customer; `Backordered`,
- * `CreditHold` and `ConflictRollback` leave no charge behind.
- */
+/** The total quantity across the given allocations, as a monetary amount. */
 const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
   moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
 
@@ -412,6 +400,19 @@ const runGated = (
 ): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> =>
   Effect.flatMap(submitWithRetry(request, 1), (decision) => Effect.map(chargeFor(request, decision), () => decision))
 
+/**
+ * The fulfillment cell: reads stock/credit/clock, decodes and decides purely, encodes the wire
+ * decision and its reservation events, then commits with an optimistic-concurrency CAS. A
+ * `VersionConflict` re-runs the whole sandwich from a fresh read, bounded to {@link maxAttempts}
+ * total attempts with a jittered backoff between them, after which the shell returns the
+ * `ConflictRollback` decision and writes a `ReservationRolledBack` compensation record.
+ *
+ * The whole run is serialized per customer by {@link CustomerGate}: the credit read that authorizes
+ * the order and the charge that settles it form one critical section, so two concurrent orders from
+ * one customer cannot both be authorized against the same pre-charge balance. A committed
+ * allocation (`AllocatedSplit` / `AllocatedWithOverdraft`) charges the customer; `Backordered`,
+ * `CreditHold` and `ConflictRollback` leave no charge behind.
+ */
 export const runFulfillment = (
   request: FulfillmentRequest,
 ): Effect.Effect<FulfillmentDecision | FulfillmentError, CreditAccountNotFound, FulfillmentPorts> =>
