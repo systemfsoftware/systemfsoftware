@@ -1,5 +1,6 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -58,25 +59,35 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
+const failureErrorOf = (
+  exit: Exit.Exit<unknown, unknown>,
+): unknown => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
+
 const readerCell = (admitted: Option.Option<Bytes>) =>
-  Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length }))).decide(
+  Sandwich.named('cell.composition.reader')((command: Command) =>
+    Effect.succeed(new Decoded({ length: command.id.length }))
+  ).decide(
     admitDecodedCommand,
   ).write(() => Effect.succeed(admitted))
 
-const readerThatFails = Sandwich.read(
+const readerThatFails = Sandwich.named('cell.composition.reader.fails')(
   (command: Command) => Effect.fail(new Malformed({ length: command.id.length })),
 ).decide(admitDecodedCommand).write(() => Effect.succeed(Option.none<Bytes>()))
 
-const innerCell = Sandwich.read((bytes: Bytes) => Effect.succeed(new Decoded({ length: bytes.bytes.length }))).decide(
+const innerCell = Sandwich.named('cell.composition.inner')((bytes: Bytes) =>
+  Effect.succeed(new Decoded({ length: bytes.bytes.length }))
+).decide(
   admitDecodedCommand,
 ).write((outcome: Result.Result<Admitted | Rejected, Malformed>) => Effect.sync(() => render(outcome)))
 
-const innerCellThatFails = Sandwich.read((bytes: Bytes) => Effect.fail(new Malformed({ length: bytes.bytes.length })))
+const innerCellThatFails = Sandwich.named('cell.composition.inner.fails')((bytes: Bytes) =>
+  Effect.fail(new Malformed({ length: bytes.bytes.length }))
+)
   .decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
     Effect.sync(() => render(outcome))
   )
 
-const itemCell = Sandwich.read((command: Command) => {
+const itemCell = Sandwich.named('cell.composition.item')((command: Command) => {
   const decoded = new Decoded({ length: command.id.length })
   if (command.id === 'bad') {
     return Effect.fail(new Malformed({ length: decoded.length }))
@@ -86,12 +97,16 @@ const itemCell = Sandwich.read((command: Command) => {
   Effect.sync(() => render(outcome))
 )
 
-const answeringCell = Sandwich.read((command: Command) => Effect.succeed(new Decoded({ length: command.id.length })))
+const answeringCell = Sandwich.named('cell.composition.answering', { boundaries: [0.1, 1] })((command: Command) =>
+  Effect.succeed(new Decoded({ length: command.id.length }))
+)
   .decide(admitDecodedCommand).write((outcome: Result.Result<Admitted | Rejected, Malformed>) =>
     Effect.flatMap(Ledger, (ledger) => ledger.append(render(outcome)))
   )
 
-const readingBackCell = Sandwich.read((line: string) => Effect.succeed(new Decoded({ length: line.length }))).decide(
+const readingBackCell = Sandwich.named('cell.composition.reading.back')((line: string) =>
+  Effect.succeed(new Decoded({ length: line.length }))
+).decide(
   admitDecodedCommand,
 ).write((outcome: Result.Result<Admitted | Rejected, Malformed>, raw: Decoded) =>
   Effect.flatMap(Ledger, (ledger) => ledger.append(`second:${render(outcome)}:${raw.length}`))
@@ -246,7 +261,7 @@ Feature('Composing cell workflows through algebraic combinators')
             },
           ),
           Then('the entire pipeline terminates with the specific validation error')((s) => {
-            expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: row.expectedLength })))
+            expect(failureErrorOf(s.run.exit)).toStrictEqual(new Malformed({ length: row.expectedLength }))
           }),
         ),
     )
@@ -303,7 +318,7 @@ Feature('Composing cell workflows through algebraic combinators')
           },
         ),
         Then('the entire batch collection fails with that error')((s) => {
-          expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 3 })))
+          expect(failureErrorOf(s.run.exit)).toStrictEqual(new Malformed({ length: 3 }))
         }),
       ),
     )

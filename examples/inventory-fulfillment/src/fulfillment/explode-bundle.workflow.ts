@@ -33,7 +33,9 @@ export class NothingToExplode extends S.TaggedClass<NothingToExplode>()('Nothing
 export class ExplodeBundleCommand extends S.Class<ExplodeBundleCommand>('ExplodeBundleCommand')({
   lines: S.Array(OrderLine),
   kits: S.Array(KitDefinition),
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = [] as const
+}
 
 const scaledDemands = (kit: KitDefinition, factor: number): readonly ComponentDemand[] =>
   Arr.map(

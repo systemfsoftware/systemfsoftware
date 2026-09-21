@@ -1,3 +1,4 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Schema, SchemaAST, SchemaGetter } from 'effect'
 import { MAX_CHILDREN_CEILING } from '../SupervisorDynamic.js'
 
@@ -118,4 +119,6 @@ export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(Decide
       decode: SchemaGetter.transform((generated) => new DecideInput(commandFromGenerated(generated))),
       encode: SchemaGetter.transform(generatedFromCommand),
     }),
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['strategy'] as const
+}

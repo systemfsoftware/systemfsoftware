@@ -1,10 +1,12 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
@@ -56,7 +58,11 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
-const primaryProcessor = Sandwich.read((order: AdmissionOrder) => {
+const failureErrorOf = (
+  exit: Exit.Exit<unknown, unknown>,
+): unknown => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
+
+const primaryProcessor = Sandwich.named('cell.pipeline.primary')((order: AdmissionOrder) => {
   if (order.id === 'infra-crash') {
     return Effect.fail(new InfraCrashError({ message: 'Gateway unavailable' }))
   }
@@ -71,7 +77,7 @@ const primaryProcessor = Sandwich.read((order: AdmissionOrder) => {
       ))
   )
 
-const fallbackProcessor = Sandwich.read((order: AdmissionOrder) =>
+const fallbackProcessor = Sandwich.named('cell.pipeline.fallback')((order: AdmissionOrder) =>
   Effect.succeed(new Decoded({ length: order.id.length }))
 )
   .decide(admitDecodedCommand)
@@ -134,7 +140,7 @@ Feature('Processing admission orders through resilient cell pipelines')
           },
         ),
         Then('the caller receives the formatted error message')(({ outcome }) => {
-          expect(outcome).toStrictEqual(Exit.fail('Service outage: Gateway unavailable'))
+          expect(failureErrorOf(outcome)).toStrictEqual('Service outage: Gateway unavailable')
         }),
       ),
     )
@@ -204,7 +210,9 @@ Feature('Processing admission orders through resilient cell pipelines')
             const chainedPipeline = Cell.flatMap(
               primaryProcessor,
               (firstResult) =>
-                Sandwich.read((ord: AdmissionOrder) => Effect.succeed(new Decoded({ length: ord.id.length })))
+                Sandwich.named('cell.pipeline.chained.route')((ord: AdmissionOrder) =>
+                  Effect.succeed(new Decoded({ length: ord.id.length }))
+                )
                   .decide(admitDecodedCommand)
                   .write(() => Effect.succeed(`chained:${firstResult}`)),
             )
@@ -231,7 +239,9 @@ Feature('Processing admission orders through resilient cell pipelines')
               primaryProcessor,
               (firstResult) => {
                 followUpExecuted = true
-                return Sandwich.read((ord: AdmissionOrder) => Effect.succeed(new Decoded({ length: ord.id.length })))
+                return Sandwich.named('cell.pipeline.chained.short.circuit')((ord: AdmissionOrder) =>
+                  Effect.succeed(new Decoded({ length: ord.id.length }))
+                )
                   .decide(admitDecodedCommand)
                   .write(() => Effect.succeed(`chained:${firstResult}`))
               },
@@ -295,7 +305,9 @@ Feature('Processing admission orders through resilient cell pipelines')
             const dynamicPipeline = Cell.andThen(
               primaryProcessor,
               (admittedStatus: string) =>
-                Sandwich.read((status: string) => Effect.succeed(new Decoded({ length: status.length })))
+                Sandwich.named('cell.pipeline.dynamic.resolved')((status: string) =>
+                  Effect.succeed(new Decoded({ length: status.length }))
+                )
                   .decide(admitDecodedCommand)
                   .write(() => Effect.succeed(`resolved-from:${admittedStatus}`)),
             )
@@ -324,7 +336,9 @@ Feature('Processing admission orders through resilient cell pipelines')
               Cell.bind(
                 'stageTwo',
                 ({ stageOne }) =>
-                  Sandwich.read((ord: AdmissionOrder) => Effect.succeed(new Decoded({ length: ord.id.length })))
+                  Sandwich.named('cell.pipeline.do.stage.two')((ord: AdmissionOrder) =>
+                    Effect.succeed(new Decoded({ length: ord.id.length }))
+                  )
                     .decide(admitDecodedCommand)
                     .write(() => Effect.succeed(`next-after-${stageOne}`)),
               ),

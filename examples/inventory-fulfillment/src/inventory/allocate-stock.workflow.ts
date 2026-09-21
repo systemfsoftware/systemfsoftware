@@ -64,7 +64,9 @@ export class AllocateStockCommand extends S.Class<AllocateStockCommand>('Allocat
   lines: S.Array(ComponentDemand),
   stock: S.Array(WarehouseStockPartition),
   now: S.DateTimeUtc,
-}) {}
+}) {
+  static readonly [Workflow.InstrumentationBrand] = ['orderId'] as const
+}
 
 interface SkuDemand {
   readonly sku: SkuId

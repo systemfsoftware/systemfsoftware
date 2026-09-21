@@ -1,10 +1,12 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
@@ -58,6 +60,10 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
     onFailure: (malformed) => `malformed:${malformed.length}`,
   })
 
+const failureErrorOf = (
+  exit: Exit.Exit<unknown, unknown>,
+): unknown => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
+
 const decodeRaw = (raw: Raw): Result.Result<Decoded, Malformed> =>
   Match.value(raw.bytes).pipe(
     Match.when('bad', () => Result.fail(new Malformed({ length: raw.bytes.length }))),
@@ -65,7 +71,9 @@ const decodeRaw = (raw: Raw): Result.Result<Decoded, Malformed> =>
     Match.orElse(() => Result.succeed(new Decoded({ length: raw.bytes.length }))),
   )
 
-const pipelineCell = Sandwich.read((command: Command) => Effect.succeed({ bytes: command.id })).decode(
+const pipelineCell = Sandwich.named('cell.pipeline.execution.admission')((command: Command) =>
+  Effect.succeed({ bytes: command.id })
+).decode(
   Sandwich.pure(decodeRaw),
 ).decide(admitDecodedCommand).encode(
   Sandwich.pure((outcome) => Result.succeed({ line: render(outcome) })),
@@ -131,7 +139,7 @@ Feature('Executing commands through an admission pipeline')
             ({ cmd }) => Effect.exit(pipelineCell.run(cmd)),
           ),
           Then('the run terminates with a validation error')(({ exit }) => {
-            expect(exit).toStrictEqual(Exit.fail(new Malformed({ length: row.expectedLength })))
+            expect(failureErrorOf(exit)).toStrictEqual(new Malformed({ length: row.expectedLength }))
           }),
           And('nothing was committed to the ledger')(() =>
             Effect.flatMap(Ledger, (ledger) =>
