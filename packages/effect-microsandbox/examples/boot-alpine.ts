@@ -1,3 +1,4 @@
+import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
 import {
   MicroVM,
   MicroVMError,
@@ -6,6 +7,7 @@ import {
   MicroVMSpecSchema,
 } from '@systemfsoftware/effect-microsandbox'
 import { Context, Deferred, Effect, Fiber, HashMap, Layer, Option, pipe, Schema } from 'effect'
+import type * as FileSystem from 'effect/FileSystem'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { existsSync } from 'node:fs'
@@ -88,17 +90,19 @@ const j3 = Effect.scoped(
   }),
 )
 
-const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError> = Effect.gen(function*() {
-  if (process.platform === 'linux' && !existsSync('/dev/kvm')) {
-    yield* Effect.logInfo('[smoke] no /dev/kvm — skipping (virtualization-required journey)')
-    return
-  }
-  const j1Name = yield* j1
-  assert.ok(yield* recordGone(j1Name), 'scope close must destroy the sandbox record')
-  const j2Name = yield* j2
-  assert.ok(yield* recordGone(j2Name), 'interrupted scope must destroy the sandbox record')
-  yield* j3
-  yield* Effect.logInfo('[smoke] all journeys green')
-})
+const main: Effect.Effect<void, MicroVMError.MicroVMError | Schema.SchemaError, FileSystem.FileSystem> = Effect.gen(
+  function*() {
+    if (process.platform === 'linux' && !existsSync('/dev/kvm')) {
+      yield* Effect.logInfo('[smoke] no /dev/kvm — skipping (virtualization-required journey)')
+      return
+    }
+    const j1Name = yield* j1
+    assert.ok(yield* recordGone(j1Name), 'scope close must destroy the sandbox record')
+    const j2Name = yield* j2
+    assert.ok(yield* recordGone(j2Name), 'interrupted scope must destroy the sandbox record')
+    yield* j3
+    yield* Effect.logInfo('[smoke] all journeys green')
+  },
+)
 
-void Effect.runPromise(main)
+void Effect.runPromise(Effect.provide(main, nodeFileSystemLayer))

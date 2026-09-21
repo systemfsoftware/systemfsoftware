@@ -63,8 +63,6 @@ const roundTrips = <A, I>(schema: SchemaKit.Codec<A, I, never>, instance: A): bo
 }
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
 
   it.prop(

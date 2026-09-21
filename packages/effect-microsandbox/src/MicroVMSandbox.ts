@@ -1,4 +1,3 @@
-import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
 import { Effect, HashMap, Layer, Option, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
@@ -57,6 +56,4 @@ const startWith =
 
 const make = Effect.map(FileSystem.FileSystem, (fs) => ({ start: startWith(fs) }))
 
-export const MicroVMLive: Layer.Layer<MicroVM> = Layer.effect(MicroVM, make).pipe(
-  Layer.provide(nodeFileSystemLayer),
-)
+export const MicroVMLive: Layer.Layer<MicroVM, never, FileSystem.FileSystem> = Layer.effect(MicroVM, make)

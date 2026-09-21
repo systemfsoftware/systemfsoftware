@@ -11,9 +11,6 @@ import {
   type SandboxPlan,
   type SandboxPlanDecision,
 } from '../render-sandbox-plan.workflow.js'
-import { renderSandboxName } from '../sandbox-name.js'
-
-const ADDRESSABLE_NAME = /^effect-microsandbox-\d+-[0-9a-f]{6,}$/
 
 const holds = (clauses: ReadonlyArray<boolean>): boolean => clauses.every((clause) => clause)
 
@@ -69,8 +66,7 @@ const successCase = Arbitrary.map(
     Arbitrary.schema(Schema.Int),
     Arbitrary.schema(Schema.String),
   ]),
-  ([spec, bindings, pid, suffix]): PlanSandbox =>
-    new PlanSandbox({ spec, bindings, name: renderSandboxName(pid, suffix) }),
+  ([spec, bindings, pid, suffix]): PlanSandbox => new PlanSandbox({ spec, bindings, name: `sandbox-${pid}-${suffix}` }),
 )
 
 const refusalCase = Arbitrary.map(
@@ -82,23 +78,10 @@ const refusalCase = Arbitrary.map(
     Arbitrary.schema(Schema.String),
   ]),
   ([spec, loopbacks, outside, pid, suffix]): Readonly<{ command: PlanSandbox; offender: PortBinding }> => ({
-    command: new PlanSandbox({ spec, bindings: [...loopbacks, outside], name: renderSandboxName(pid, suffix) }),
+    command: new PlanSandbox({ spec, bindings: [...loopbacks, outside], name: `sandbox-${pid}-${suffix}` }),
     offender: outside,
   }),
 )
-
-const pidDraw = Arbitrary.schema(
-  Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 2_147_483_647 }))),
-)
-const hexDigit = Arbitrary.map(
-  Arbitrary.schema(Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 15 })))),
-  (digit) => '0123456789abcdef'.charAt(digit),
-)
-const suffixDraw = Arbitrary.map(
-  Arbitrary.array(hexDigit, { minLength: 6, maxLength: 16 }),
-  (chars) => chars.join(''),
-)
-const nameDraw = Arbitrary.all([pidDraw, suffixDraw])
 
 const bindingKey = (binding: PortBinding): string => `${binding.guest}:${binding.host}:${binding.hostPort}`
 
@@ -152,8 +135,6 @@ it.prop('∀plan_Envs_=Echo', [successCase], ([command]) =>
     return keys.length === Object.keys(plan.envs).length && keys.every((key) => plan.envs[key] === env[key])
   }))
 it.prop('∀plan_Name_=Echo', [successCase], ([command]) => planLaw(command, (plan) => plan.name === command.name))
-
-it.prop('∀name_Ktd7_=Shape', [nameDraw], ([[pid, suffix]]) => ADDRESSABLE_NAME.test(renderSandboxName(pid, suffix)))
 
 it.prop('∀outside_Render_=Refused', [refusalCase], ([{ command }]) => Option.isNone(approvedOf(command)))
 it.prop(

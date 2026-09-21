@@ -15,7 +15,6 @@ import {
   type SandboxPlan,
   type SandboxPlanDecision,
 } from './render-sandbox-plan.workflow.js'
-import { renderSandboxName } from './sandbox-name.js'
 
 type NapiMountBuilderT = InstanceType<typeof MountBuilder>
 
@@ -116,7 +115,7 @@ const allocateBindings = (
 const readPlanCommand = (spec: MicroVMSpec): Effect.Effect<PlanSandbox, PortAllocationError> =>
   Effect.map(
     allocateBindings(spec.ports),
-    (bindings) => new PlanSandbox({ spec, bindings, name: renderSandboxName(process.pid, nextNameSuffix()) }),
+    (bindings) => new PlanSandbox({ spec, bindings, name: `effect-microsandbox-${process.pid}-${nextNameSuffix()}` }),
   )
 
 const writeBoot = (

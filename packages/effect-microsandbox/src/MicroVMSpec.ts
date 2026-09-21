@@ -58,8 +58,6 @@ const decodeSucceeds = (spec: MicroVMSpec): boolean => Exit.isSuccess(Schema.dec
 const applyEnv = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec => withEnv(spec, env)
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
   const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
 
