@@ -1,6 +1,6 @@
-import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
-import { createPackage, createPackageFromTarballData, packPackage, packTree } from '@systemfsoftware/npm-package'
-import { Effect } from 'effect'
+import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { createPackage, createPackageFromTarballData, packPackage } from '@systemfsoftware/npm-package'
+import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -11,121 +11,140 @@ const uint8Of = (value: string | Uint8Array | undefined): Uint8Array => {
   return new Uint8Array()
 }
 
-Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)').body(({ scenario }) => {
-  scenario(
-    'Should_ExtractSamePathsAndBodies_When_PackedConstructorTreeIsExtracted',
-    Effect.sync(() => {
-      const original = createPackage(
-        {
-          'package.json': jsonString({
-            name: 'extract-pack-test',
-            version: '1.0.0',
-            main: './dist/index.js',
-            types: './dist/index.d.ts',
-          }),
-          'dist/index.js': 'module.exports = { a: 1 };\n',
-          'dist/index.d.ts': 'export declare const a: number;\n',
-          'README.md': '# hello\n',
-        },
-        'extract-pack-test',
-        '1.0.0',
-      )
-
-      const tarball = packPackage(original)
-      const extracted = createPackageFromTarballData(tarball)
-
-      expect(extracted.packageName).toBe(original.packageName)
-      expect(extracted.packageVersion).toBe(original.packageVersion)
-
-      const originalPaths = original.listFiles('/').sort()
-      const extractedPaths = extracted.listFiles('/').sort()
-      expect(extractedPaths).toEqual(originalPaths)
-
-      for (const path of originalPaths) {
-        expect(extracted.tryReadFile(path)).toBe(original.tryReadFile(path))
-      }
-
-      const treeTarball = packTree(
-        {
-          'package.json': jsonString({
-            name: 'extract-pack-test',
-            version: '1.0.0',
-            main: './dist/index.js',
-            types: './dist/index.d.ts',
-          }),
-          'dist/index.js': 'module.exports = { a: 1 };\n',
-          'dist/index.d.ts': 'export declare const a: number;\n',
-        },
-        'extract-pack-test',
-      )
-      const fromTree = createPackageFromTarballData(treeTarball)
-      expect(fromTree.packageName).toBe('extract-pack-test')
-      expect(fromTree.listFiles('/').sort()).toContain('/node_modules/extract-pack-test/package.json')
-    }).pipe(Effect.mapError((cause) => new StepError({ keyword: 'scenario', text: 'AE5 pack/extract failed', cause }))),
-  )
-
-  scenario(
-    'Should_PreserveBinaryBytes_When_PackedAndExtracted',
-    Effect.sync(() => {
-      const binary = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x81])
-      const original = createPackage(
-        {
-          'package.json': jsonString({ name: 'bin-test', version: '1.0.0' }),
-          'asset.bin': binary,
-        },
-        'bin-test',
-        '1.0.0',
-      )
-
-      const extracted = createPackageFromTarballData(packPackage(original))
-      const bytes = extracted.tryReadBytes('/node_modules/bin-test/asset.bin')
-      expect(Array.from(uint8Of(bytes))).toEqual(Array.from(binary))
-    }).pipe(
-      Effect.mapError((cause) =>
-        new StepError({ keyword: 'scenario', text: 'binary bytes did not round-trip', cause })
+Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
+  .withLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'Packed constructor tree extracts identical paths and bodies',
+      Gherkin.Do.pipe(
+        Given('a package created from in-memory sources with manifest, code, types, and readme')(
+          'original',
+          () =>
+            Effect.sync(() =>
+              createPackage(
+                {
+                  'package.json': jsonString({
+                    name: 'extract-pack-test',
+                    version: '1.0.0',
+                    main: './dist/index.js',
+                    types: './dist/index.d.ts',
+                  }),
+                  'dist/index.js': 'module.exports = { a: 1 };\n',
+                  'dist/index.d.ts': 'export declare const a: number;\n',
+                  'README.md': '# hello\n',
+                },
+                'extract-pack-test',
+                '1.0.0',
+              )
+            ),
+        ),
+        When('the package is packed to a tarball and extracted into a new package instance')(
+          'extracted',
+          (s) =>
+            Effect.sync(() => {
+              const tarball = packPackage(s.original)
+              return createPackageFromTarballData(tarball)
+            }),
+        ),
+        Then('all metadata, file lists, and file contents match identically')((s) => {
+          expect(s.extracted.packageName).toBe(s.original.packageName)
+          expect(s.extracted.packageVersion).toBe(s.original.packageVersion)
+          const originalPaths = s.original.listFiles('/').sort()
+          const extractedPaths = s.extracted.listFiles('/').sort()
+          expect(extractedPaths).toEqual(originalPaths)
+          for (const path of originalPaths) {
+            expect(s.extracted.tryReadFile(path)).toBe(s.original.tryReadFile(path))
+          }
+        }),
       ),
-    ),
-  )
+    )
 
-  scenario(
-    'Should_FailExtract_When_GzipBytesAreZeroPaddedHeader',
-    Effect.sync(() => {
-      const zeroPadded = new Uint8Array(32)
-      let threw = false
-      try {
-        createPackageFromTarballData(zeroPadded)
-      } catch {
-        threw = true
-      }
-      expect(threw).toBe(true)
-    }),
-  )
+    scenario(
+      'Binary bytes are preserved exactly when packed and extracted',
+      Gherkin.Do.pipe(
+        Given('a package with a raw binary asset')('ctx', () => {
+          const binary = new Uint8Array([0xff, 0xfe, 0x00, 0x01, 0x80, 0x81])
+          const original = createPackage(
+            {
+              'package.json': jsonString({ name: 'bin-test', version: '1.0.0' }),
+              'asset.bin': binary,
+            },
+            'bin-test',
+            '1.0.0',
+          )
+          return Effect.succeed({ original, binary })
+        }),
+        When('the package is packed into tarball and extracted')('readBytes', (s) =>
+          Effect.sync(() => {
+            const extracted = createPackageFromTarballData(packPackage(s.ctx.original))
+            return extracted.tryReadBytes('/node_modules/bin-test/asset.bin')
+          })),
+        Then('the extracted binary bytes match the original buffer bit-for-bit')((s) => {
+          expect(Array.from(uint8Of(s.readBytes))).toEqual(Array.from(s.ctx.binary))
+        }),
+      ),
+    )
 
-  scenario(
-    'Should_FailExtract_When_GzipBytesAreTruncatedHeader',
-    Effect.sync(() => {
-      const truncated = Uint8Array.from([0x1f, 0x8b, 0x08, 0x00])
-      let threw = false
-      try {
-        createPackageFromTarballData(truncated)
-      } catch {
-        threw = true
-      }
-      expect(threw).toBe(true)
-    }),
-  )
+    scenario(
+      'Extraction fails when gzip bytes only contain a zero-padded header',
+      Gherkin.Do.pipe(
+        Given('a zero-padded byte array with no valid gzip payload')('bytes', () => Effect.succeed(new Uint8Array(32))),
+        When('extraction is attempted on the invalid stream')('attempt', (s) =>
+          Effect.sync(() => {
+            try {
+              createPackageFromTarballData(s.bytes)
+              return { threw: false }
+            } catch {
+              return { threw: true }
+            }
+          })),
+        Then('the extractor rejects the corrupt payload')((s) => {
+          expect(s.attempt.threw).toBe(true)
+        }),
+      ),
+    )
 
-  scenario(
-    'Should_FailExtract_When_GzipBytesAreNotGzipAtAll',
-    Effect.sync(() => {
-      const notGzip = new TextEncoder().encode('not a gzip file at all')
-      let threw = false
-      try {
-        createPackageFromTarballData(notGzip)
-      } catch {
-        threw = true
-      }
-      expect(threw).toBe(true)
-    }),
-  )
-})
+    scenario(
+      'Extraction fails when gzip bytes are a truncated header',
+      Gherkin.Do.pipe(
+        Given('a truncated gzip header containing only magic bytes')(
+          'bytes',
+          () => Effect.succeed(Uint8Array.from([0x1f, 0x8b, 0x08, 0x00])),
+        ),
+        When('extraction is attempted on the truncated header')('attempt', (s) =>
+          Effect.sync(() => {
+            try {
+              createPackageFromTarballData(s.bytes)
+              return { threw: false }
+            } catch {
+              return { threw: true }
+            }
+          })),
+        Then('the extractor rejects the truncated stream')((s) => {
+          expect(s.attempt.threw).toBe(true)
+        }),
+      ),
+    )
+
+    scenario(
+      'Extraction fails when payload bytes are not gzip at all',
+      Gherkin.Do.pipe(
+        Given('arbitrary non-gzip text bytes')(
+          'bytes',
+          () => Effect.succeed(new TextEncoder().encode('not a gzip file at all')),
+        ),
+        When('extraction is attempted on the non-archive bytes')('attempt', (s) =>
+          Effect.sync(() => {
+            try {
+              createPackageFromTarballData(s.bytes)
+              return { threw: false }
+            } catch {
+              return { threw: true }
+            }
+          })),
+        Then('the extractor rejects the uncompressed text stream')((s) => {
+          expect(s.attempt.threw).toBe(true)
+        }),
+      ),
+    )
+  })

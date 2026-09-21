@@ -51,6 +51,7 @@ const recommendedRules = {
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
   [rule('differential-test-requires-harness')]: 'error',
+  [rule('no-pseudo-gherkin-unit-tests')]: 'error',
 } as const
 
 export default {

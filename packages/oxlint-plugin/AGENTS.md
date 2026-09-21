@@ -1,36 +1,39 @@
-# AGENTS.md — `packages/oxlint-plugin/`
+# @systemfsoftware/oxlint-plugin
 
-Shared rule-authoring conventions for every oxlint plugin in this subtree. Root `AGENTS.md` governs; each package leaf carries only its own delta.
+Custom Oxlint plugins for architectural invariants, Effect-TS idioms, and test discipline.
 
-## Rules
+## Standing Rules
 
-| ID         | Rule                                                                                                                                                                                                   | Gate                                                                                                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **OX-MG1** | Zero `Ignored`/`Survived`/`NoCoverage` mutants in the package's merged CI mutation report; kill every mutant with a distinguishing test or eliminate it with a restructure — never by ignoring.        | `jq '[.. \| .status? // empty \| select(. == "Ignored" or . == "Survived" or . == "NoCoverage")] \| length' reports/mutation-report.json` returns 0 — read the CI report, never start a local run (REPO-D3) |
-| **OX-MG2** | `stryker.config.ts` ignorers are empty or the published Effect Schema / in-source Vitest ignorers; no `// Stryker disable` comments, no new ignore plugins.                                            | `grep -rn 'Stryker disable' src/` returns nothing                                                                                                                                                           |
-| **OX-CS1** | Static config (meta, messages, schema, Options, constants, regexes, message templates) lives in `src/rules/<rule>.config.ts`; pass the imported `meta` to `defineRule` directly, no spread.            | `stryker.config.ts` mutate lists a `!*.config.ts` exclusion; `grep -rn '\.config\.js' src/rules/` shows a `meta` import per rule with static config                                                         |
-| **OX-EF1** | Every message uses `{{placeholders}}`; no inlined prose.                                                                                                                                               | `review`                                                                                                                                                                                                    |
-| **OX-EF2** | `{{fix}}` is a decision procedure that can end in deletion; never a fix whose only outcome is a new address for the same code.                                                                         | `review`                                                                                                                                                                                                    |
-| **OX-GD1** | Decode path segments with Schema; strip suffixes with one `slice` behind a load-bearing guard. No manual `!== undefined` guards on runtime-shaped data.                                                | `grep -rn '!== undefined' src/rules/` returns nothing                                                                                                                                                       |
-| **OX-TS1** | Tests are RuleTester + vitest: `Should_[Behavior]_When_[Condition]` PascalCase names, `expect()` including report `data` fields. No boolean returns, no messageId-only assertions, no `dist/` imports. | `pnpm --filter <pkg> test` exits 0                                                                                                                                                                          |
-| **OX-TS2** | A rule's verdict depends only on the linted file's own AST plus `options`/`settings` — never on disk facts.                                                                                            | `grep -rn 'existsSync\\|statSync\\|readdirSync' src/rules/` returns nothing                                                                                                                                 |
-| **OX-OB1** | A rule family that judges a shape keeps at least one rule that fails a file for LACKING something.                                                                                                     | `review`                                                                                                                                                                                                    |
-| **OX-CI1** | Match canonical identifiers only (`S`, `Effect`, `Option`, `Context`, `Match`); keep the near-miss fixture proving an alias does not fire.                                                             | `grep -rE '(Alias\|Aliased\|NearMiss\|GenericTag\|Other\.)' packages/oxlint-plugin/**/src/rules/__tests__/` returns a non-canonical-spelling fixture per matching plugin                                    |
-| **OX-A1**  | New rules use `defineRule` from `@oxlint/plugins`.                                                                                                                                                     | `review`                                                                                                                                                                                                    |
-| **OX-RT1** | An enabled-but-unwanted rule is `off`, NEVER `warn`.                                                                                                                                                   | `review`                                                                                                                                                                                                    |
+Every rule authored across plugins in this directory must comply with the diagnostic contract.
 
-## Topology
+### OP-D1: The Four-Part Diagnostic Standard
 
-The subtree publishes five standalone public domain plugins:
+Oxlint operates in agent loops using `--format=agent`, which formats findings as a single line:
+`<file>:<line>:<col>: error <plugin>(<rule>): <message>`
 
-- `@systemfsoftware/oxlint-plugin-effect-schema`: Pure Effect Schema definitions, schema laws, tagged error contracts, and bounded union recursion budgets.
-- `@systemfsoftware/oxlint-plugin-dmmf-workflow`: Deterministic decision workflows (`Workflow.make`, purity invariants, exhaustive command matching, and cyclomatic complexity = 1).
-- `@systemfsoftware/oxlint-plugin-effect-platform`: `@effect/platform` runtime entrypoints (`runMain`, `ManagedRuntime.make`), I/O boundaries, runtime construction placement, and native API discipline.
-- `@systemfsoftware/oxlint-plugin-test-discipline`: PBT law verification (`fast-check`), test hygiene (`damp-test-naming`, `pbt-naming`), test placement, and test structure.
-- `@systemfsoftware/oxlint-plugin-cell-architecture`: Cell Architecture contracts (cell boundary isolation, tag discipline, sando/kernel invariants, internal JSDoc export discipline).
+To maximize agent repair convergence and prevent hallucinated workarounds, every diagnostic message MUST follow the four-part single-line template:
 
-Internal AST helper libraries (`oxlint-import-origin`, `oxlint-make-boundary`) remain private helper packages.
+```typescript
+export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
+```
 
-## Verification
+Or for presence/absence checks:
 
-`pnpm --filter <pkg> typecheck && pnpm --filter <pkg> test && pnpm --filter <pkg> lint` per package; root `pnpm check:local` after any change.
+```typescript
+export const ABSENCE_MESSAGE =
+  '{{name}} is untested. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
+```
+
+### Diagnostic Quality Rubric
+
+| Segment        | Invariant                                                                    | Example                                                                                                        |
+| -------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `{{name}}`     | Unambiguous description of the construct violated                            | `a *.integration.test.ts feature with no environment double`                                                   |
+| `{{expected}}` | The required AST or semantic contract                                        | `a Feature builder chained with .withLayer(layer) or .withScenarioLayer(layer)`                                |
+| `{{actual}}`   | Exactly what the AST visitor observed (grounds the agent)                    | `a Feature(...) call without .withLayer or .withScenarioLayer`                                                 |
+| `{{fix}}`      | Constructive guidance with literal syntax, code tokens, or default factories | `Chain .withLayer(Layer.empty) if in-memory, or provide the boundary Layer (e.g. .withLayer(MyService.Live)).` |
+
+### Banned Formats
+
+- **Multiline formats (e.g. TOON, YAML, multi-line blocks):** Banned. Breaks single-line `--format=agent` parsing across terminal and CI watchers.
+- **Negative-only messages:** Banned. Messages stating only that something is forbidden without providing the concrete syntactic replacement in `Fix:` cause LLMs to oscillate or attempt rule suppression.

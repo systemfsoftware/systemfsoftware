@@ -7,6 +7,7 @@ import '@vitest/browser/matchers'
 import { RegistryContext, useAtomRefresh, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
@@ -16,6 +17,7 @@ import { Unavailable } from './__fixtures__/Unavailable.schema.js'
 const Feature = makeFeature({ it, layer })
 
 Feature('Waiting for asynchronous values')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A reader who waits through loading sees the value once it arrives',

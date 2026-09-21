@@ -13,34 +13,36 @@ import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
-Feature('Scenario registration — argument resolution').body(({ scenario }) => {
-  scenario(
-    'An undefined second argument yields a failing pipeline',
-    Effect.gen(function*() {
-      const { pipeline } = resolveScenarioArgs<never>(void 0, void 0)
-      const result = yield* Effect.result(pipeline)
-      expect(result).toEqual(
-        Result.fail(
-          StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
-        ),
-      )
-    }),
-  )
+Feature('Scenario registration — argument resolution')
+  .withLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'An undefined second argument yields a failing pipeline',
+      Effect.gen(function*() {
+        const { pipeline } = resolveScenarioArgs<never>(void 0, void 0)
+        const result = yield* Effect.result(pipeline)
+        expect(result).toEqual(
+          Result.fail(
+            StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
+          ),
+        )
+      }),
+    )
 
-  scenario(
-    'Providing options without a pipeline yields a failing pipeline',
-    Effect.gen(function*() {
-      const { pipeline } = resolveScenarioArgs<never>({ layer: Layer.empty }, void 0)
-      const result = yield* Effect.result(pipeline)
-      expect(result).toEqual(
-        Result.fail(
-          StepError.make({
-            keyword: 'scenario',
-            text: 'pipeline is required when options are provided',
-            cause: void 0,
-          }),
-        ),
-      )
-    }),
-  )
-})
+    scenario(
+      'Providing options without a pipeline yields a failing pipeline',
+      Effect.gen(function*() {
+        const { pipeline } = resolveScenarioArgs<never>({ layer: Layer.empty }, void 0)
+        const result = yield* Effect.result(pipeline)
+        expect(result).toEqual(
+          Result.fail(
+            StepError.make({
+              keyword: 'scenario',
+              text: 'pipeline is required when options are provided',
+              cause: void 0,
+            }),
+          ),
+        )
+      }),
+    )
+  })
