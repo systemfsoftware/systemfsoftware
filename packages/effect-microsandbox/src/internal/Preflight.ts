@@ -37,7 +37,7 @@ const REMEDIATIONS: Record<ProbeFailure, string> = {
 }
 
 const KVM_DEVICE = '/dev/kvm'
-const WINDOWS_VMCPUTE = 'C:\\Windows\\System32\\vmcompute.dll'
+const WINDOWS_VMCOMPUTE = 'C:\\Windows\\System32\\vmcompute.dll'
 
 const ready = (): Probe => ({
   platform: `${process.platform} (${process.arch})`,
@@ -55,17 +55,18 @@ const failed = (failure: ProbeFailure, topology: string): Probe => ({
 
 const linuxProbe: (fs: FileSystem.FileSystem) => Effect.Effect<Probe> = (fs) =>
   Effect.flatMap(
-    fs.exists(KVM_DEVICE).pipe(Effect.catchTag('PlatformError', () => Effect.succeed(false))),
-    (present) =>
-      present
-        ? Effect.map(
-          fs.access(KVM_DEVICE, { readable: true, writable: true }).pipe(
-            Effect.as(true),
-            Effect.catchTag('PlatformError', () => Effect.succeed(false)),
-          ),
-          (accessible) => accessible ? ready() : failed('kvm-permission', 'kvm exists=true rw=false'),
-        )
-        : Effect.succeed(failed('kvm-missing', 'kvm exists=false')),
+    fs.access(KVM_DEVICE, { readable: true, writable: true }).pipe(
+      Effect.as(true),
+      Effect.catchTag('PlatformError', () => Effect.succeed(false)),
+    ),
+    (accessible) =>
+      accessible
+        ? Effect.succeed(ready())
+        : Effect.map(
+          fs.exists(KVM_DEVICE).pipe(Effect.catchTag('PlatformError', () => Effect.succeed(false))),
+          (present) =>
+            present ? failed('kvm-permission', 'kvm exists=true rw=false') : failed('kvm-missing', 'kvm exists=false'),
+        ),
   )
 
 const darwinProbe: Probe = process.arch === 'arm64'
@@ -74,7 +75,7 @@ const darwinProbe: Probe = process.arch === 'arm64'
 
 const windowsProbe: (fs: FileSystem.FileSystem) => Effect.Effect<Probe> = (fs) =>
   Effect.map(
-    fs.exists(WINDOWS_VMCPUTE).pipe(Effect.catchTag('PlatformError', () => Effect.succeed(false))),
+    fs.exists(WINDOWS_VMCOMPUTE).pipe(Effect.catchTag('PlatformError', () => Effect.succeed(false))),
     (present) => (present ? ready() : failed('whp-missing', 'vmcompute present=false')),
   )
 

@@ -45,23 +45,25 @@ const applyPorts = (builder: SandboxBuilder, bindings: SandboxPlan['portBindings
 /** @internal */
 export const allocateBinding = (
   guest: number,
-): Effect.Effect<PortBinding, PortAllocationError, Scope.Scope> =>
-  Effect.gen(function*() {
-    const server = yield* NodeSocketServer.make({ host: '127.0.0.1', port: 0 }).pipe(
-      Effect.mapError(
-        (cause) => new PortAllocationError({ guestPort: guest, reason: describeCause(cause) }),
-      ),
-    )
-    const address = server.address
-    if (!('port' in address)) {
-      return yield* new PortAllocationError({ guestPort: guest, reason: 'server reported no TCP port' })
-    }
-    return { guest, host: '127.0.0.1', hostPort: address.port }
-  })
+): Effect.Effect<PortBinding, PortAllocationError> =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const server = yield* NodeSocketServer.make({ host: '127.0.0.1', port: 0 }).pipe(
+        Effect.mapError(
+          (cause) => new PortAllocationError({ guestPort: guest, reason: describeCause(cause) }),
+        ),
+      )
+      const address = server.address
+      if (!('port' in address)) {
+        return yield* new PortAllocationError({ guestPort: guest, reason: 'server reported no TCP port' })
+      }
+      return { guest, host: '127.0.0.1', hostPort: address.port }
+    }),
+  )
 
 const allocateBindings = (
   guests: ReadonlyArray<number>,
-): Effect.Effect<ReadonlyArray<PortBinding>, PortAllocationError, Scope.Scope> =>
+): Effect.Effect<ReadonlyArray<PortBinding>, PortAllocationError> =>
   Effect.forEach(guests, (guest) => allocateBinding(guest), { concurrency: 'unbounded' })
 
 const renderPlan = (
@@ -95,7 +97,7 @@ const create = (plan: SandboxPlan): Effect.Effect<Sandbox, SandboxBootError> =>
 export const boot = (
   spec: MicroVMSpec,
   fs: FileSystem.FileSystem,
-): Effect.Effect<SandboxPlan, MicroVMError, Scope.Scope> =>
+): Effect.Effect<SandboxPlan, MicroVMError> =>
   Effect.gen(function*() {
     yield* preflightWith(fs)
     const bindings = yield* allocateBindings(spec.ports)

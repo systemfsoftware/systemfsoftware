@@ -43,14 +43,16 @@ export class MicroVM extends Context.Service<MicroVM, {
 const describeCause = (cause: unknown): string => cause instanceof Error ? cause.message : 'non-error rejection'
 
 const execOf =
-  (sandbox: Sandbox) => (cmd: string, args: ReadonlyArray<string> = []): Effect.Effect<ExecResult, ExecError> =>
-    Effect.map(
+  (sandbox: Sandbox) => (cmd: string, args: ReadonlyArray<string> = []): Effect.Effect<ExecResult, ExecError> => {
+    const argv = [cmd, ...args]
+    return Effect.map(
       Effect.tryPromise({
         try: () => sandbox.exec(cmd, [...args]),
-        catch: (cause) => new ExecError({ argv: [cmd, ...args], reason: describeCause(cause) }),
+        catch: (cause) => new ExecError({ argv, reason: describeCause(cause) }),
       }),
       (output): ExecResult => ({ code: output.status.code, stdout: output.stdout(), stderr: output.stderr() }),
     )
+  }
 
 const logsOf = (sandbox: Sandbox): Stream.Stream<LogLine, SandboxBootError> =>
   Stream.flatMap(
@@ -67,18 +69,22 @@ const logsOf = (sandbox: Sandbox): Stream.Stream<LogLine, SandboxBootError> =>
     Stream.map((entry): LogLine => ({ source: entry.source, text: entry.text() })),
   )
 
-const dialProbe = (hostPort: number): Effect.Effect<boolean> =>
-  Effect.scoped(
-    Effect.map(
-      Effect.option(Layer.build(NodeSocket.layerNet({ host: '127.0.0.1', port: hostPort }))),
-      Option.isSome,
-    ),
+const probeConnect = (
+  hostPort: number,
+): Effect.Effect<Option.Option<Socket.Socket>, never, Scope.Scope> =>
+  Effect.map(
+    Effect.option(Layer.build(NodeSocket.layerNet({ host: '127.0.0.1', port: hostPort }))),
+    Option.map((context) => Context.get(context, Socket.Socket)),
   )
+
+const dialProbe = (hostPort: number): Effect.Effect<boolean> =>
+  Effect.scoped(Effect.map(probeConnect(hostPort), Option.isSome))
 
 const statusOk = (text: string): boolean => /^HTTP\/[\d.]+ 2\d\d/.test(text)
 
-const decodeChunk = (chunk: Uint8Array | string): string =>
-  typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk)
+const decoder = new TextDecoder()
+
+const decodeChunk = (chunk: Uint8Array | string): string => typeof chunk === 'string' ? chunk : decoder.decode(chunk)
 
 const exchangeOn = (
   socket: Socket.Socket,
@@ -94,12 +100,11 @@ const exchangeOn = (
 
 const httpProbe = (hostPort: number, path: string): Effect.Effect<boolean> =>
   Effect.scoped(
-    Effect.gen(function*() {
-      const picked = yield* Effect.option(Layer.build(NodeSocket.layerNet({ host: '127.0.0.1', port: hostPort })))
-      if (Option.isNone(picked)) return false
-      const received = yield* Effect.option(exchangeOn(Context.get(picked.value, Socket.Socket), path))
-      return Option.isSome(received)
-    }),
+    Effect.flatMap(probeConnect(hostPort), (picked) =>
+      Option.match(picked, {
+        onNone: () => Effect.succeed(false),
+        onSome: (socket) => Effect.map(Effect.option(exchangeOn(socket, path)), Option.getOrElse(() => false)),
+      })),
   )
 
 const logProbe = (sandbox: Sandbox, pattern: RegExp): Effect.Effect<boolean> =>
@@ -108,20 +113,26 @@ const logProbe = (sandbox: Sandbox, pattern: RegExp): Effect.Effect<boolean> =>
     (entries) => Option.isSome(entries) && entries.value.some((entry) => pattern.test(entry.text())),
   )
 
+const WAIT_TIMEOUT_MS = 30_000
+const WAIT_POLL_MS = 250
+
 const awaitProbe = (
   wait: string,
   timeoutMs: number,
   probe: Effect.Effect<boolean>,
 ): Effect.Effect<void, WaitTimeoutError> =>
   Effect.suspend(() => {
-    let remaining = Math.max(1, Math.floor(timeoutMs / 250))
+    let remaining = Math.max(1, Math.floor(timeoutMs / WAIT_POLL_MS))
     let satisfied = false
     return Effect.whileLoop({
       while: () => !satisfied && remaining > 0,
       body: () =>
-        Effect.map(probe, (result) => {
-          if (result) satisfied = true
-        }),
+        Effect.andThen(
+          Effect.map(probe, (result) => {
+            if (result) satisfied = true
+          }),
+          Effect.sleep(`${WAIT_POLL_MS} millis`),
+        ),
       step: () => {
         remaining -= 1
       },
@@ -171,7 +182,7 @@ const startWith = (fs: FileSystem.FileSystem) => (spec: MicroVMSpec) =>
     const vm = yield* acquire(spec, fs)
     const strategy = waits(spec)
     if (strategy !== undefined) {
-      yield* awaitProbe(waitLabel(strategy), 30_000, probeFor(vm, strategy))
+      yield* awaitProbe(waitLabel(strategy), WAIT_TIMEOUT_MS, probeFor(vm, strategy))
     }
     return {
       name: vm.plan.name,
