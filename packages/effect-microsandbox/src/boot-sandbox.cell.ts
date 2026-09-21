@@ -5,8 +5,7 @@ import * as Crypto from 'effect/Crypto'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
-import { MountBuilder, Sandbox } from 'microsandbox'
-import type { SandboxBuilder } from 'microsandbox'
+import type { Sandbox, SandboxBuilder } from 'microsandbox'
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
 import {
@@ -17,7 +16,7 @@ import {
   type SandboxPlanDecision,
 } from './render-sandbox-plan.workflow.js'
 
-type NapiMountBuilderT = InstanceType<typeof MountBuilder>
+type NapiMountBuilderT = { bind(host: string): NapiMountBuilderT }
 
 const STOP_TIMEOUT_MS = 10_000
 const KILL_TIMEOUT_MS = 5_000
@@ -57,16 +56,20 @@ const applyPlan = (plan: SandboxPlan, builder: SandboxBuilder): void => {
 }
 
 const createSandbox = (spec: MicroVMSpec, plan: SandboxPlan): Effect.Effect<AcquiredVM, SandboxBootError> =>
-  Effect.map(
+  Effect.flatMap(
     Effect.tryPromise({
-      try: () => {
-        const builder = Sandbox.builder(plan.name)
-        applyPlan(plan, builder)
-        return builder.create()
-      },
+      try: () => import('microsandbox'),
       catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
     }),
-    (sandbox): AcquiredVM => ({ spec, plan, sandbox }),
+    ({ Sandbox }) =>
+      Effect.tryPromise({
+        try: () => {
+          const builder = Sandbox.builder(plan.name)
+          applyPlan(plan, builder)
+          return builder.create()
+        },
+        catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
+      }).pipe(Effect.map((sandbox): AcquiredVM => ({ spec, plan, sandbox }))),
   )
 
 const teardown = (sandbox: Sandbox): Effect.Effect<void> =>

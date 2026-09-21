@@ -2,7 +2,6 @@ import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect, FileSystem } from 'effect'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import { resolveRuntime } from 'microsandbox'
 import type { ResolvedRuntime } from 'microsandbox'
 import {
   AssessVirtualization,
@@ -91,7 +90,22 @@ const writeProbe = (
           new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
         ),
       )),
-    Match.tag('VirtualizationEligible', () => Effect.flatMap(Effect.sync(() => resolveRuntime()), announce)),
+    Match.tag('VirtualizationEligible', () =>
+      Effect.flatMap(
+        Effect.flatMap(
+          Effect.tryPromise({
+            try: () => import('microsandbox'),
+            catch: (cause) =>
+              new VirtualizationUnsupportedError({
+                platform: command.platform,
+                remediation: 'Failed to load microsandbox native runtime',
+                cause,
+              }),
+          }),
+          ({ resolveRuntime }) => Effect.sync(() => resolveRuntime()),
+        ),
+        announce,
+      )),
     Match.exhaustive,
   )
 

@@ -64,7 +64,6 @@ export class AssessVirtualization extends Schema.TaggedClass<AssessVirtualizatio
 }) {
   static readonly [Workflow.InstrumentationBrand] = ['platform'] as const
 }
-
 const REMEDIATIONS = {
   kvmDenied:
     'grant /dev/kvm access: add your user to the kvm group, or install the udev rule KERNEL=="kvm", MODE="0666" and reload udev',

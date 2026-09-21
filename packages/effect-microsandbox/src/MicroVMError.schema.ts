@@ -7,6 +7,7 @@ export class VirtualizationUnsupportedError extends Schema.TaggedError<Virtualiz
   {
     platform: Schema.String,
     remediation: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
   },
 ) {}
 

@@ -20,14 +20,14 @@ const j1 = Effect.scoped(
     yield* Effect.logInfo('[smoke] J1: scoped boot, mapped port, record cleanup')
     const spec = alpine.withEnv({ SMOKE_JOURNEY: 'j1' })
     const vm = yield* spec.scoped
-    const pinged = yield* vm.ping
+    const pinged = yield* MicroVM.ping(vm)
     assert.ok(pinged, 'ping must return true')
-    const out = yield* vm.exec('echo', ['hello'])
+    const out = yield* MicroVM.exec(vm, 'echo', ['hello'])
     assert.equal(out.code, 0)
     assert.ok(out.stdout.includes('hello'), 'guest must echo the exec payload')
-    const hostPort = yield* vm.port(8080)
+    const hostPort = yield* MicroVM.port(vm, 8080)
     assert.ok(hostPort > 0, 'guest port 8080 must map to a positive host port')
-    const url = yield* vm.url(8080, '/ping')
+    const url = yield* MicroVM.url(vm, 8080, '/ping')
     assert.equal(url, `http://127.0.0.1:${hostPort}/ping`)
     return vm.name
   }),
@@ -52,12 +52,12 @@ const j3 = Effect.scoped(
     yield* Effect.logInfo('[smoke] J3: one layer build, two sequential VM lifecycles')
     const spec = alpine.withEnv({ SMOKE_JOURNEY: 'j3' })
     const first = yield* Effect.scoped(
-      Effect.flatMap(spec.scoped, (vm) => vm.exec('echo', ['first'])),
+      Effect.flatMap(spec.scoped, (vm) => vm.pipe(MicroVM.exec('echo', ['first']))),
     )
     assert.equal(first.code, 0)
     assert.ok(first.stdout.includes('first'))
     const second = yield* Effect.scoped(
-      Effect.flatMap(spec.scoped, (vm) => vm.exec('echo', ['second'])),
+      Effect.flatMap(spec.scoped, (vm) => vm.pipe(MicroVM.exec('echo', ['second']))),
     )
     assert.equal(second.code, 0)
     assert.ok(second.stdout.includes('second'))
