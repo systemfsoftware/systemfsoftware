@@ -160,18 +160,17 @@ const checkPropCall = (provenance: Provenance, context: Context, call: ESTree.Ca
     })
     return
   }
-  if (!shape.callsDomainFunction) {
-    context.report({
-      node: call,
-      messageId: 'noDomainFunction',
-      data: {
-        name: NO_FUNCTION_NAME,
-        expected: NO_FUNCTION_EXPECTED,
-        actual: NO_FUNCTION_ACTUAL,
-        fix: NO_FUNCTION_FIX,
-      },
-    })
-  }
+  if (shape.callsDomainFunction) return
+  context.report({
+    node: call,
+    messageId: 'noDomainFunction',
+    data: {
+      name: NO_FUNCTION_NAME,
+      expected: NO_FUNCTION_EXPECTED,
+      actual: NO_FUNCTION_ACTUAL,
+      fix: NO_FUNCTION_FIX,
+    },
+  })
 }
 
 export const propGeneratedLawDuplicate = defineRule({
