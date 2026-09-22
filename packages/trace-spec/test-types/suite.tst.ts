@@ -1,6 +1,7 @@
 import { Contract, type Observe, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, type FileSystem, type Layer, Schema } from 'effect'
+import type * as fc from 'fast-check'
 import { describe, expect, it } from 'tstyche'
 
 class Inventory extends Context.Service<Inventory, { readonly count: Effect.Effect<number> }>()('test/Inventory') {}
@@ -9,6 +10,8 @@ declare const bindings: Parameters<typeof Suite.make>[0]
 declare const harness: Layer.Layer<Observe.Observation | FileSystem.FileSystem>
 declare const harnessWithInventory: Layer.Layer<Observe.Observation | FileSystem.FileSystem | Inventory>
 declare const fileSystemOnly: Layer.Layer<FileSystem.FileSystem>
+declare const inventoryWithHarness: Layer.Layer<Inventory | Observe.Observation | FileSystem.FileSystem>
+declare const generatedInputs: fc.Arbitrary<string>
 
 const Settle = Span.declare({ id: 'settle', name: 'settle', attrs: Schema.Struct({ 'app.order.id': Schema.String }) })
 const taxonomy = Taxonomy.make({ id: 't', spans: [Settle], edges: [], forbid: [] })
@@ -40,6 +43,28 @@ describe('Suite.make', () => {
     Suite.make(bindings)('s').withScenarioLayer(harness).body(({ Case }) => {
       expect(Case).type.toBeCallableWith('settles', selfContained, 'order-1')
       expect(Case).type.not.toBeCallableWith('counts', needsInventory, 'order-1')
+    })
+  })
+
+  it('opens a suite-wide layer only when it also carries the observation services', () => {
+    expect(Suite.make(bindings)('s').withLayer).type.not.toBeCallableWith(fileSystemOnly)
+    expect(Suite.make(bindings)('s').withLayer).type.toBeCallableWith(inventoryWithHarness)
+  })
+
+  it('a shared suite still refuses a case needing a service the shared layer omits', () => {
+    Suite.make(bindings)('s').withLayer(harnessWithInventory).body(({ Case }) => {
+      expect(Case).type.toBeCallableWith('counts', needsInventory, 'order-1')
+    })
+    Suite.make(bindings)('s').withLayer(harness).body(({ Case }) => {
+      expect(Case).type.toBeCallableWith('settles', selfContained, 'order-1')
+      expect(Case).type.not.toBeCallableWith('counts', needsInventory, 'order-1')
+    })
+  })
+
+  it('accepts a prop case over a generated arbitrary and refuses a bare example value', () => {
+    Suite.make(bindings)('s').withScenarioLayer(harnessWithInventory).body(({ Case }) => {
+      expect(Case.prop).type.toBeCallableWith('counts', needsInventory, generatedInputs)
+      expect(Case.prop).type.not.toBeCallableWith('counts', needsInventory, 'order-1')
     })
   })
 })

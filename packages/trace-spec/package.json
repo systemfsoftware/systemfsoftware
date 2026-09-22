@@ -49,7 +49,8 @@
     "@opentelemetry/sdk-trace-base": "catalog:",
     "@opentelemetry/semantic-conventions": "catalog:",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
-    "@systemfsoftware/trace-taxonomy": "workspace:^"
+    "@systemfsoftware/trace-taxonomy": "workspace:^",
+    "fast-check": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
@@ -62,7 +63,6 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
-    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

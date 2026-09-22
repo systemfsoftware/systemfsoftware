@@ -4,8 +4,8 @@
 
 New package: hold a behaviour to the trace it produced.
 
-`Contract.of(taxonomy).stimulate(stimulus).holds(relation)` composes a spec and `Contract.check` runs it under a trace id it owns, reads the finished trace back through an OpenTelemetry in-memory exporter (`Observe.inMemory`), decodes it against the taxonomy, and evaluates the relation. `Suite.make({ it, layer })` registers one `Case` per spec.
+`Contract.of(taxonomy).stimulate(stimulus).holds(relation)` composes a spec; `Contract.check` runs it under a trace id it owns, reads the trace back through `Observe.inMemory`, decodes it against the taxonomy, and evaluates the relation. `Suite.make({ it, layer })` registers a `Case` per example input or a `Case.prop` per fast-check arbitrary, shrinking a failure to a minimal input; `withLayer` shares a layer across the suite.
 
-`Rel` relations answer a verdict naming the broken conjunct and the spans inspected, never a bare boolean. `Rel.fromTaxonomy` holds a trace to its taxonomy's edges and forbidden spans.
+`Rel` relations answer a verdict naming the broken conjunct and the spans inspected, never a bare boolean; the set covers existence, attributes, status, events, placement, ordering, duration, and `all`/`any`/`not`.
 
-A break fails with `TraceDisparityError` and records where the decoded trace was written; a missing required attribute fails with `ContractDecodeError`; an empty trace fails with `EmptyObservationError`.
+A break fails with `TraceDisparityError` and annotates the test with the dump path; a missing required attribute fails with `ContractDecodeError`; an empty trace with `EmptyObservationError`.

@@ -58,13 +58,21 @@ TraceSuite('checkout.place_order')
 
 Each `Case` is one stimulus, one owned trace, one relation. The scenario layer is built fresh per case and must provide `Observe.Observation` and a `FileSystem` for failure dumps, plus whatever the stimulated behaviour needs. A failing case fails with the harness's own error channel — the three outcomes above, or `StimulusFailure` when the behaviour itself failed before its trace could be judged. Cases run on the live clock.
 
+`.withLayer(shared)` registers the suite over a layer built once for the whole suite; the shared layer then carries the observation harness, and `.withScenarioLayer(scenario)` can follow it for what each case needs fresh.
+
+`Case.prop(title, contract, arbitrary)` runs the contract over inputs drawn from a fast-check arbitrary (100 runs). The first failing input is shrunk to a minimal one, re-run, and reported: the case fails with that input's `TraceDisparityError` and names the shrunk input.
+
+When a case fails with a `TraceDisparityError`, the test carries a Vitest annotation naming the dump under `artifacts/traces/`, so the decoded graph is found from the failing test.
+
 ## Observe in memory
 
-`Observe.inMemory` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observe.Observation` for reading a trace back. Specs isolate by the trace id each one owns, so two specs in one process never see each other's spans. The export happens outside any test-clock boundary.
+`Observe.inMemory` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observe.Observation` for reading a trace back. Each acquisition of the layer owns its exporter and tracer provider and shuts the provider down on release, so a case provided the layer as its scenario layer sees only its own spans. The export happens outside any test-clock boundary.
 
 ## Relations
 
-`Rel.exists`, `Rel.absent`, `Rel.unique`, `Rel.child`, `Rel.descendant`, `Rel.status`, `Rel.errorType`, `Rel.attrs`, `Rel.durationLessThan`, `Rel.soft`, `Rel.all`, `Rel.fromTaxonomy`.
+`Rel.exists`, `Rel.absent`, `Rel.unique`, `Rel.child`, `Rel.descendant`, `Rel.status`, `Rel.errorType`, `Rel.attrs`, `Rel.durationLessThan`, `Rel.forall`, `Rel.event`, `Rel.order`, `Rel.any`, `Rel.not`, `Rel.soft`, `Rel.all`, `Rel.fromTaxonomy`.
+
+`Rel.forall(spec, predicate, detail)` holds when the span was emitted and every node satisfies the predicate; `Rel.event(spec, name)` when every node carries that event; `Rel.order(before, after)` when every `after` span starts at or after some `before` span. All three break when no matching span was emitted. `Rel.any(...relations)` holds when one conjunct holds and names every conjunct when none does; `Rel.not(relation)` holds when its inner relation breaks. `any` and `not` are never soft.
 
 `Rel.fromTaxonomy(taxonomy, { path })` turns the taxonomy itself into a relation: every declared edge must place each child span under a matching parent (directly for `child`, anywhere above for `descendant`), and every forbidden span must be absent unless its `unless` tag names the given path. Edges constrain placement, not existence — pair it with `Rel.exists` for the spans a scenario requires.
 

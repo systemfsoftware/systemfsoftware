@@ -1,6 +1,6 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observe, Rel, Stimulus, Verdict } from '@systemfsoftware/trace-spec'
-import { Effect, Schema } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
@@ -82,6 +82,41 @@ Feature('Holding a settlement to the trace it produced')
             expect(firstGraph.traceId).not.toBe(secondGraph.traceId)
           })
         ),
+      ),
+    )
+
+    scenario(
+      'A trace served at one observation window cannot be read at another',
+      Gherkin.Do.pipe(
+        Given('a settlement was served under its own observation window')('window', () =>
+          Effect.scoped(
+            Effect.gen(function*() {
+              const window = yield* Layer.build(Observe.inMemory)
+              const run = yield* settlement.run({ orderId: 'order-3', total: 3 }).pipe(Effect.provide(window))
+              const spans = yield* Effect.flatMap(
+                Observe.Observation,
+                (observation) => observation.collect(run.traceId),
+              ).pipe(Effect.provide(window))
+              const graph = yield* Graph.decode(run.traceId, spans, FulfillmentTaxonomy)
+              return { run, graph }
+            }),
+          )),
+        When('the same trace is asked for at a separate window')('reread', (s) =>
+          Effect.scoped(
+            Effect.flatMap(Layer.build(Observe.inMemory), (window) =>
+              Effect.flatMap(Observe.Observation, (observation) =>
+                observation.collect(s.window.run.traceId)).pipe(
+                  Effect.provide(window),
+                )).pipe(Effect.flip),
+          )),
+        Then('the separate window is told there is nothing to read')((s) => {
+          expect(s.reread._tag).toBe('EmptyObservationError')
+          expect(s.reread.traceId).toBe(s.window.run.traceId)
+        }),
+        And('the window that served the settlement still answers with its graph')((s) => {
+          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)).evaluate(s.window.graph)
+          expect(Schema.is(Verdict.Hold)(verdict)).toBe(true)
+        }),
       ),
     )
   })
