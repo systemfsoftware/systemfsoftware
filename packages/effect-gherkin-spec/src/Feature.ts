@@ -1,20 +1,16 @@
-/// <reference types="vitest/globals" />
-import type * as EffectVitest from '@effect/vitest'
-import type { Vitest } from '@effect/vitest'
-import * as Effect from 'effect/Effect'
+import { type Register, Suite } from '@systemfsoftware/effect-spec-runtime'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
-import type { TestOptions } from 'vitest'
-import { Gherkin, type ScopeMap, type VitestTaskContext, VitestTaskRef } from './DoNotation.js'
+import { Gherkin, type ScopeMap } from './DoNotation.js'
 import {
   createOutlineFnNoFresh,
   createOutlineFnWithFresh,
   createScenarioNoFresh,
   createScenarioWithFresh,
   type FeatureBody,
-  type RegisterMode,
   type ScenarioBody,
 } from './FeatureRuntime.js'
+import type { StepError } from './StepError.schema.js'
 
 export {
   type FeatureBody,
@@ -24,76 +20,16 @@ export {
   type ScenarioOptions,
 } from './FeatureRuntime.js'
 
-type DescribeMode = 'describe' | 'skip' | 'only'
+type DescribeMode = Register.DescribeMode
 type EmptyScopeMap = Readonly<Record<string, never>>
 
 export { type RegisterMode } from './FeatureRuntime.js'
 
-export type FeatureLayerOptions = {
-  readonly excludeTestServices?: boolean
-}
+export type FeatureLayerOptions = Suite.LayerOptions
 
-export type FeatureSuiteOptions = Pick<TestOptions, 'tags'> & Partial<TestOptions>
+export type FeatureSuiteOptions = Suite.Options
 
-export type EffectVitestBindings = Pick<typeof EffectVitest, 'layer'> & {
-  readonly it: Vitest.Methods
-}
-
-const selectDescribeMode = (mode: DescribeMode) =>
-  ({
-    skip: describe.skip,
-    only: describe.only,
-    describe,
-  })[mode]
-
-const invokeDescribe = (
-  mode: DescribeMode,
-  suiteName: string,
-  suiteOpts: FeatureSuiteOptions | undefined,
-  fn: () => void,
-): void => {
-  const d = selectDescribeMode(mode)
-  if (typeof suiteOpts === 'undefined') {
-    d(suiteName, fn)
-    return
-  }
-  d(suiteName, suiteOpts, fn)
-}
-
-const pickMode = <R>(
-  family: Vitest.Tester<R>,
-  mode: RegisterMode,
-) =>
-  ({
-    skip: family.skip,
-    only: family.only,
-    run: family,
-  })[mode]
-
-const selectUnlayeredMode = (
-  methodsIt: Vitest.Methods,
-  mode: RegisterMode,
-  useLiveClock: boolean,
-): Vitest.Test<Scope.Scope> => {
-  if (useLiveClock) {
-    return pickMode(methodsIt.live, mode)
-  }
-  return pickMode(methodsIt.effect, mode)
-}
-
-const selectLayeredMode = <R>(
-  methodsIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>,
-  mode: RegisterMode,
-) => pickMode(methodsIt.effect, mode)
-const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
-
-const toTaskContext = <Ctx = unknown>(ctx: Ctx): VitestTaskContext | null => {
-  if (isTaskContext(ctx)) return ctx
-  return null
-}
-
-const wrapWithTask = <A, E, R, Ctx = unknown>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R> =>
-  effect.pipe(Effect.provideService(VitestTaskRef, toTaskContext(ctx)))
+export type EffectVitestBindings = Suite.Bindings
 
 export type FeatureBuilderBoth<
   RShared,
@@ -190,8 +126,6 @@ export type FeatureFn = FeatureStarter & {
 }
 
 export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
-  const { it: effectIt, layer: effectVitestLayer } = deps
-
   const runNothing = <S extends ScopeMap>(
     name: string,
     scopeMap: S,
@@ -200,30 +134,24 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     suiteOpts: FeatureSuiteOptions | undefined,
     useLiveClock: boolean,
   ): void => {
-    invokeDescribe(describeMode, name, suiteOpts, () => {
-      let bg: ScenarioBody<never> | null = null
-      const scenario = createScenarioNoFresh<never>((scenName, effect, mode) => {
-        selectUnlayeredMode(effectIt, mode, useLiveClock)(
-          scenName,
-          (ctx) => wrapWithTask(effect, ctx),
-        )
-      }, () => bg)
-      const scenarioOutline = createOutlineFnNoFresh<never>((scenName, effect, mode) => {
-        selectUnlayeredMode(effectIt, mode, useLiveClock)(
-          scenName,
-          (ctx) => wrapWithTask(effect, ctx),
-        )
-      }, () => bg)
-      body({
-        scenario,
-        background: (pipeline) => {
-          bg = pipeline
-        },
-        scenarioOutline,
-        scope: Gherkin.scope(scopeMap),
-        Do: Gherkin.Do,
-      })
-    })
+    Suite.open<void, StepError, void>(
+      deps,
+      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
+      (register) => {
+        let bg: ScenarioBody<never> | null = null
+        const scenario = createScenarioNoFresh<never>(register, () => bg)
+        const scenarioOutline = createOutlineFnNoFresh<never>(register, () => bg)
+        body({
+          scenario,
+          background: (pipeline) => {
+            bg = pipeline
+          },
+          scenarioOutline,
+          scope: Gherkin.scope(scopeMap),
+          Do: Gherkin.Do,
+        })
+      },
+    )
   }
 
   const runWithFresh = <
@@ -239,32 +167,25 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     useLiveClock: boolean,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
-    invokeDescribe(describeMode, name, suiteOpts, () => {
-      let bg: ScenarioBody<RFresh | RFreshReq> | null = null
-      const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(
-        (scenName, effect, mode) => {
-          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, (ctx) => wrapWithTask(effect, ctx))
-        },
-        () => bg,
-        featureScenarioLayer,
-      )
-      const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(
-        (scenName, effect, mode) => {
-          selectUnlayeredMode(effectIt, mode, useLiveClock)(scenName, (ctx) => wrapWithTask(effect, ctx))
-        },
-        () => bg,
-        featureScenarioLayer,
-      )
-      body({
-        scenario,
-        background: (pipeline) => {
-          bg = pipeline
-        },
-        scenarioOutline,
-        scope: Gherkin.scope(scopeMap),
-        Do: Gherkin.Do,
-      })
-    })
+    Suite.openCase<void, StepError, RFresh, RFreshReq, void>(
+      deps,
+      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
+      featureScenarioLayer,
+      (register) => {
+        let bg: ScenarioBody<RFresh | RFreshReq> | null = null
+        const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(register, () => bg)
+        const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(register, () => bg)
+        body({
+          scenario,
+          background: (pipeline) => {
+            bg = pipeline
+          },
+          scenarioOutline,
+          scope: Gherkin.scope(scopeMap),
+          Do: Gherkin.Do,
+        })
+      },
+    )
   }
 
   const runWithLayer = <RShared, S extends ScopeMap>(
@@ -277,32 +198,25 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     suiteOpts: FeatureSuiteOptions | undefined,
     useLiveClock: boolean,
   ): void => {
-    const layerSetup = effectVitestLayer(layerDef, {
-      excludeTestServices: excludeTestServices || useLiveClock,
-    })
-    let bg: ScenarioBody<RShared> | null = null
-
-    const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
-      const scenario = createScenarioNoFresh<RShared>((scenName, effect, mode) => {
-        selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
-      }, () => bg)
-      const scenarioOutline = createOutlineFnNoFresh<RShared>((scenName, effect, mode) => {
-        selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
-      }, () => bg)
-      body({
-        scenario,
-        background: (pipeline) => {
-          bg = pipeline
-        },
-        scenarioOutline,
-        scope: Gherkin.scope(scopeMap),
-        Do: Gherkin.Do,
-      })
-    }
-
-    invokeDescribe(describeMode, name, suiteOpts, () => {
-      layerSetup(wireBody)
-    })
+    Suite.openShared<void, StepError, RShared, void>(
+      deps,
+      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
+      { layer: layerDef, excludeTestServices },
+      (register) => {
+        let bg: ScenarioBody<RShared> | null = null
+        const scenario = createScenarioNoFresh<RShared>(register, () => bg)
+        const scenarioOutline = createOutlineFnNoFresh<RShared>(register, () => bg)
+        body({
+          scenario,
+          background: (pipeline) => {
+            bg = pipeline
+          },
+          scenarioOutline,
+          scope: Gherkin.scope(scopeMap),
+          Do: Gherkin.Do,
+        })
+      },
+    )
   }
 
   const runWithBoth = <
@@ -321,40 +235,26 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     useLiveClock: boolean,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
-    const layerSetup = effectVitestLayer(layerDef, {
-      excludeTestServices: excludeTestServices || useLiveClock,
-    })
-    let bg: ScenarioBody<RShared | RFresh | RFreshReq> | null = null
-
-    const wireBody = (scopedIt: Vitest.MethodsNonLive<RShared>): void => {
-      const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(
-        (scenName, effect, mode) => {
-          selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
-        },
-        () => bg,
-        featureScenarioLayer,
-      )
-      const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(
-        (scenName, effect, mode) => {
-          selectLayeredMode(scopedIt, mode)(scenName, (ctx) => wrapWithTask(effect, ctx))
-        },
-        () => bg,
-        featureScenarioLayer,
-      )
-      body({
-        scenario,
-        background: (pipeline) => {
-          bg = pipeline
-        },
-        scenarioOutline,
-        scope: Gherkin.scope(scopeMap),
-        Do: Gherkin.Do,
-      })
-    }
-
-    invokeDescribe(describeMode, name, suiteOpts, () => {
-      layerSetup(wireBody)
-    })
+    Suite.openSharedCase<void, StepError, RShared, RFresh, RFreshReq, void>(
+      deps,
+      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
+      { layer: layerDef, excludeTestServices },
+      featureScenarioLayer,
+      (register) => {
+        let bg: ScenarioBody<RShared | RFresh | RFreshReq> | null = null
+        const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(register, () => bg)
+        const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(register, () => bg)
+        body({
+          scenario,
+          background: (pipeline) => {
+            bg = pipeline
+          },
+          scenarioOutline,
+          scope: Gherkin.scope(scopeMap),
+          Do: Gherkin.Do,
+        })
+      },
+    )
   }
 
   const makeBuilderBoth = <
