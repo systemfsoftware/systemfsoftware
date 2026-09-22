@@ -15,15 +15,27 @@ export const VitestTaskRef: Context.Reference<VitestTaskContext | null> = Contex
   },
 )
 
-const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
+export const RawVitestTaskRef: Context.Reference<VitestTaskContext | null> = Context.Reference<
+  VitestTaskContext | null
+>('@systemfsoftware/effect-spec-runtime/VitestTaskRaw', {
+  defaultValue: () => null,
+})
+
+const isPlainTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
+
+const isTaskContext = (ctx: unknown): ctx is VitestTaskContext =>
+  typeof ctx === 'object' ? ctx !== null : typeof ctx === 'function'
 
 const readTaskContext = <Ctx>(ctx: Ctx): VitestTaskContext | null => {
-  if (isTaskContext(ctx)) return ctx
+  if (isPlainTaskContext(ctx)) return ctx
   return null
 }
 
 export const provideTaskRef = <A, E, R, Ctx>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R> =>
-  effect.pipe(Effect.provideService(VitestTaskRef, readTaskContext(ctx)))
+  effect.pipe(
+    Effect.provideService(VitestTaskRef, readTaskContext(ctx)),
+    Effect.provideService(RawVitestTaskRef, isTaskContext(ctx) ? ctx : null),
+  )
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
