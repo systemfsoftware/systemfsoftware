@@ -115,9 +115,9 @@ NodeRuntime.runMain(Effect.provide(program, nodeServicesLayer))
 A `JobCompletion` holds:
 
 - `status`: `JobExited` with the exit code, or `JobSignaled` when a signal ended the workload. A non-zero exit code is a successful `.run`; judging it is up to you. `JobSignaled` carries no signal number, because the runtime reports every signal death the same way.
-- `stdout` and `stderr`: the complete output as bytes (`Uint8Array`), exactly as the workload wrote it. The runtime keeps at most 32 MiB of output per run.
+- `stdout` and `stderr`: the complete output as bytes (`Uint8Array`), exactly as the workload wrote it. `.run` holds all of it in memory until the workload ends.
 
-`.run` fails with `ExecError` only when the workload could not be started or its result could not be collected.
+`.run` fails with `ExecError` only when the workload could not be started or its result could not be collected. It waits as long as the workload runs; for a deadline, wrap it in `Effect.timeout`. The VM is torn down when the enclosing scope closes.
 
 ### Host Access
 

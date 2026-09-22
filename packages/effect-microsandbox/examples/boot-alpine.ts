@@ -86,12 +86,7 @@ const exitCodeOf = (completion: MicroVM.JobCompletion): number =>
   )
 
 const assertFetchFailed = (label: string, completion: MicroVM.JobCompletion): void => {
-  const exitedZero = Match.value(completion.status).pipe(
-    Match.tag('JobExited', (exited) => exited.code === 0),
-    Match.tag('JobSignaled', () => false),
-    Match.exhaustive,
-  )
-  assert.equal(exitedZero, false, `${label}: a failed fetch must not report exit code 0`)
+  assert.notEqual(exitCodeOf(completion), 0, `${label}: a failed fetch must exit with a non-zero code`)
 }
 
 const assertSignaled = (label: string, completion: MicroVM.JobCompletion): void => {
