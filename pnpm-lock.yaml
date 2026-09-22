@@ -675,6 +675,9 @@ importers:
 
   packages/effect-memfs:
     dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
       memfs:
         specifier: ^4.78.1
         version: 4.78.1
@@ -688,6 +691,15 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/differential-spec':
+        specifier: workspace:^
+        version: link:../differential-spec
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../effect-gherkin-spec
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended

@@ -44,12 +44,17 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "memfs": "^4.78.1"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/differential-spec": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
