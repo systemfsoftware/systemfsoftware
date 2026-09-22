@@ -8,6 +8,8 @@ import type { TestOptions } from 'vitest'
 import * as Register from './Register.js'
 import * as TaskRef from './TaskRef.js'
 
+export type { DescribeMode, RegisterMode } from './Register.js'
+
 export type Options = Pick<TestOptions, 'tags'> & Partial<TestOptions>
 
 export interface LayerOptions {

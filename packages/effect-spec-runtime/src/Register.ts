@@ -1,7 +1,7 @@
 /// <reference types="vitest/globals" />
 /// <reference types="vitest/importMeta" />
 import type { Vitest } from '@effect/vitest'
-import { Effect, Schema } from 'effect'
+import { Effect, Match, Option, Schema } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { Options } from './Suite.js'
 
@@ -9,44 +9,49 @@ export type RegisterMode = 'run' | 'skip' | 'only'
 
 export type DescribeMode = 'describe' | 'skip' | 'only'
 
-const selectDescribe = (mode: DescribeMode) =>
-  ({
-    skip: describe.skip,
-    only: describe.only,
-    describe,
-  })[mode]
+type DescribeMember = typeof describe | typeof describe.skip
 
+const selectDescribe = (mode: DescribeMode): DescribeMember =>
+  ({ skip: describe.skip, only: describe.only, describe })[mode]
+
+/**
+ * Keeps the caller's suite options verbatim when present; a suite declared
+ * without options is registered through the two-argument collector call.
+ */
 export const invokeDescribe = (
   mode: DescribeMode,
   suiteName: string,
   suiteOpts: Options | undefined,
   fn: () => void,
-): void => {
-  const d = selectDescribe(mode)
-  if (typeof suiteOpts === 'undefined') {
-    d(suiteName, fn)
-    return
-  }
-  d(suiteName, suiteOpts, fn)
-}
+): void =>
+  Option.match(Option.fromUndefinedOr(suiteOpts), {
+    onNone: () => {
+      selectDescribe(mode)(suiteName, fn)
+    },
+    onSome: (options) => {
+      selectDescribe(mode)(suiteName, options, fn)
+    },
+  })
 
 const pickTester = <R>(family: Vitest.Tester<R>, mode: RegisterMode): Vitest.Test<R> =>
-  ({
-    skip: family.skip,
-    only: family.only,
-    run: family,
-  })[mode]
+  ({ skip: family.skip, only: family.only, run: family })[mode]
+
+/**
+ * The live-clock case runner observes wall-clock time; the test-clock runner
+ * shares the suite's controlled clock.
+ */
+const caseClockFamily = (methodsIt: Vitest.Methods, useLiveClock: boolean): Vitest.Tester<Scope.Scope> =>
+  Match.value(useLiveClock).pipe(
+    Match.when(true, () => methodsIt.live),
+    Match.when(false, () => methodsIt.effect),
+    Match.exhaustive,
+  )
 
 export const selectCaseRunner = (
   methodsIt: Vitest.Methods,
   mode: RegisterMode,
   useLiveClock: boolean,
-): Vitest.Test<Scope.Scope> => {
-  if (useLiveClock) {
-    return pickTester(methodsIt.live, mode)
-  }
-  return pickTester(methodsIt.effect, mode)
-}
+): Vitest.Test<Scope.Scope> => pickTester(caseClockFamily(methodsIt, useLiveClock), mode)
 
 export const selectLayeredRunner = <R>(
   scopedIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>,
@@ -68,6 +73,10 @@ if (import.meta.vitest !== void 0) {
     ['skip', describe.skip],
     ['only', describe.only],
   ]
+  const clockRoutes: ReadonlyArray<[boolean, Vitest.Tester<Scope.Scope>]> = [
+    [true, it.live],
+    [false, it.effect],
+  ]
 
   it.prop('∀m_PickTester_=Routed', [Schema.Literals(['run', 'skip', 'only'])], ([mode]) =>
     Effect.sync(() => {
@@ -79,5 +88,11 @@ if (import.meta.vitest !== void 0) {
     Effect.sync(() => {
       const selected = selectDescribe(mode)
       return describeRoutes.every(([route, collector]) => (selected === collector) === (route === mode))
+    }))
+
+  it.prop('∀b_CaseClockFamily_=Routed', [Schema.Boolean], ([useLiveClock]) =>
+    Effect.sync(() => {
+      const family = caseClockFamily(it, useLiveClock)
+      return clockRoutes.every(([route, tester]) => (family === tester) === (route === useLiveClock))
     }))
 }

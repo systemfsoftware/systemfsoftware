@@ -1,6 +1,7 @@
-import { SuiteScope, TaskRef } from '@systemfsoftware/effect-spec-runtime'
+import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { StepError } from './StepError.schema.js'
+import * as SuiteScope from './SuiteScope.js'
 
 export interface PollOptions {
   /**

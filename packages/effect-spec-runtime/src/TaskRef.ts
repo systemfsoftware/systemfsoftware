@@ -1,5 +1,5 @@
 /// <reference types="vitest/importMeta" />
-import { Context, Effect, Schema } from 'effect'
+import { Context, Effect, Option, Schema } from 'effect'
 
 export interface VitestTaskContext<Ann = unknown> {
   readonly annotate?: ((message: string, type?: string) => Promise<void> | void) | undefined
@@ -21,20 +21,21 @@ export const RawVitestTaskRef: Context.Reference<VitestTaskContext | null> = Con
   defaultValue: () => null,
 })
 
-const isPlainTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx === 'object' && ctx !== null
+const isPlainTaskContext = <Ctx>(ctx: Ctx): ctx is Ctx & VitestTaskContext => typeof ctx === 'object' && ctx !== null
 
-const isTaskContext = (ctx: unknown): ctx is VitestTaskContext =>
+const isTaskContext = <Ctx>(ctx: Ctx): ctx is Ctx & VitestTaskContext =>
   typeof ctx === 'object' ? ctx !== null : typeof ctx === 'function'
 
-const readTaskContext = <Ctx>(ctx: Ctx): VitestTaskContext | null => {
-  if (isPlainTaskContext(ctx)) return ctx
-  return null
-}
+const readTaskContext = <Ctx>(ctx: Ctx): VitestTaskContext | null =>
+  Option.getOrNull(Option.liftPredicate(ctx, isPlainTaskContext))
+
+const readRawTaskContext = <Ctx>(ctx: Ctx): VitestTaskContext | null =>
+  Option.getOrNull(Option.liftPredicate(ctx, isTaskContext))
 
 export const provideTaskRef = <A, E, R, Ctx>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R> =>
   effect.pipe(
     Effect.provideService(VitestTaskRef, readTaskContext(ctx)),
-    Effect.provideService(RawVitestTaskRef, isTaskContext(ctx) ? ctx : null),
+    Effect.provideService(RawVitestTaskRef, readRawTaskContext(ctx)),
   )
 
 if (import.meta.vitest !== void 0) {

@@ -1,4 +1,4 @@
-import { type Register, Suite } from '@systemfsoftware/effect-spec-runtime'
+import { Suite } from '@systemfsoftware/effect-spec-runtime'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import { Gherkin, type ScopeMap } from './DoNotation.js'
@@ -20,7 +20,7 @@ export {
   type ScenarioOptions,
 } from './FeatureRuntime.js'
 
-type DescribeMode = Register.DescribeMode
+type DescribeMode = Suite.DescribeMode
 type EmptyScopeMap = Readonly<Record<string, never>>
 
 export { type RegisterMode } from './FeatureRuntime.js'

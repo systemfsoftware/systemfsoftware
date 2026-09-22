@@ -1,5 +1,4 @@
 import { it as vitestIt, layer } from '@effect/vitest'
-import type { Register } from '@systemfsoftware/effect-spec-runtime'
 import { Suite } from '@systemfsoftware/effect-spec-runtime'
 import { Context, Effect, Layer } from 'effect'
 import { describe, expect, it } from 'tstyche'
@@ -68,7 +67,7 @@ describe('Suite.open', () => {
     type ErasedRegister = (
       name: string,
       body: Effect.Effect<number, string, never>,
-      mode: Register.RegisterMode,
+      mode: Suite.RegisterMode,
     ) => void
     expect<Suite.RegisterFn<number, CaseError, never>>().type.not.toBeAssignableTo<ErasedRegister>()
   })
@@ -90,7 +89,7 @@ describe('Suite.openCase', () => {
   })
 
   it('pins the register and describe mode unions exactly', () => {
-    expect<Register.RegisterMode>().type.toBe<'run' | 'skip' | 'only'>()
-    expect<Register.DescribeMode>().type.toBe<'describe' | 'skip' | 'only'>()
+    expect<Suite.RegisterMode>().type.toBe<'run' | 'skip' | 'only'>()
+    expect<Suite.DescribeMode>().type.toBe<'describe' | 'skip' | 'only'>()
   })
 })

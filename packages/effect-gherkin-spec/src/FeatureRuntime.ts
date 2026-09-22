@@ -1,9 +1,10 @@
 /// <reference types="vitest/importMeta" />
-import { CaseLayers, type Register } from '@systemfsoftware/effect-spec-runtime'
+import type { Suite } from '@systemfsoftware/effect-spec-runtime'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
+import * as CaseLayers from './CaseLayers.js'
 import type { GherkinEffect, GivenStage, ScopeIdentifiers, ScopeMap, ScopeServices, ThenStage } from './DoNotation.js'
 import { makeFreshSoftContext, SoftFailuresRef } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
@@ -18,7 +19,7 @@ type Top<T = unknown> = T
 
 export type ScenarioBody<R = never> = Effect.Effect<Top, StepError, R>
 
-export type RegisterMode = Register.RegisterMode
+export type RegisterMode = Suite.RegisterMode
 
 const caseLayersFrom = (opts: ScenarioOptions<never, never> | null): CaseLayers.Layers => {
   if (opts === null) return CaseLayers.empty
