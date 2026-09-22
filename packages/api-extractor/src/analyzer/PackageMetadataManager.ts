@@ -1,4 +1,4 @@
-import * as Effect from 'effect/Effect'
+import type { Schema } from 'effect'
 import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 // Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
@@ -8,11 +8,9 @@ import * as path from './path-helpers.js'
 
 import * as semver from 'semver'
 
-import type { NewlineKind } from '../config/config-file.schema.js'
 import { type INodePackageJson, PackageJsonLookup } from './package-json-lookup.js'
 
-import type { MessageRouter } from '../collector/message-router.js'
-import { ConsoleMessageId } from '../collector/message-router.js'
+import { ConsoleMessageId, type MessageLog } from '../collector/message-log.js'
 
 /*
  * Represents analyzed information for a package.json file.
@@ -63,37 +61,49 @@ function _tryResolveTsdocMetadataFromTsdocMetadataField({
  * a "types" field in that entry.
  */
 
+type JsonRecordValue = { [key: string]: Schema.Json }
+
+const isJsonRecord = (value: Schema.Json | undefined): value is JsonRecordValue =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
+const pathEntryOf = (entry: Schema.Json | undefined): readonly string[] | undefined => {
+  if (typeof entry === 'string') {
+    return [entry]
+  }
+  if (Array.isArray(entry)) {
+    return entry.filter((item): item is string => typeof item === 'string')
+  }
+  return undefined
+}
+
+const typesExportFolderPath = (typesExport: Schema.Json | undefined): string | undefined => {
+  if (typeof typesExport === 'string') {
+    return `${path.dirname(typesExport)}/${TSDOC_METADATA_FILENAME}`
+  }
+  if (isJsonRecord(typesExport)) {
+    return typesExportFolderPath(typesExport['types'])
+  }
+  return undefined
+}
+
 function _tryResolveTsdocMetadataFromExportsField({ exports }: INodePackageJson): string | undefined {
   if (typeof exports === 'string') {
     return `${path.dirname(exports)}/${TSDOC_METADATA_FILENAME}`
   }
-  if (exports !== null && typeof exports === 'object') {
-    if (Array.isArray(exports)) {
-      const firstExport = exports[0]
-      if (typeof firstExport === 'string') {
-        return `${path.dirname(firstExport)}/${TSDOC_METADATA_FILENAME}`
-      }
-    } else {
-      const record = exports as Record<string, string | Record<string, string>>
-      const rootExport = record['.'] ?? record['*']
-      if (typeof rootExport === 'string') {
-        return `${path.dirname(rootExport)}/${TSDOC_METADATA_FILENAME}`
-      }
-      if (rootExport !== null && typeof rootExport === 'object' && !Array.isArray(rootExport)) {
-        let typesExport: string | Record<string, string> | undefined = typeof rootExport === 'string'
-          ? undefined
-          : (rootExport as Record<string, string>)['types']
-        while (typesExport) {
-          if (typeof typesExport === 'string') {
-            return `${path.dirname(typesExport)}/${TSDOC_METADATA_FILENAME}`
-          }
-          if (typeof typesExport === 'object' && typesExport !== null && !Array.isArray(typesExport)) {
-            typesExport = (typesExport as Record<string, string>)['types']
-          } else {
-            break
-          }
-        }
-      }
+  if (Array.isArray(exports)) {
+    const firstExport = exports[0]
+    if (typeof firstExport === 'string') {
+      return `${path.dirname(firstExport)}/${TSDOC_METADATA_FILENAME}`
+    }
+    return undefined
+  }
+  if (isJsonRecord(exports)) {
+    const rootExport = exports['.'] ?? exports['*']
+    if (typeof rootExport === 'string') {
+      return `${path.dirname(rootExport)}/${TSDOC_METADATA_FILENAME}`
+    }
+    if (isJsonRecord(rootExport)) {
+      return typesExportFolderPath(rootExport['types'])
     }
   }
   return undefined
@@ -106,55 +116,50 @@ function _tryResolveTsdocMetadataFromExportsField({ exports }: INodePackageJson)
 function _tryResolveTsdocMetadataFromTypesVersionsField({
   typesVersions,
 }: INodePackageJson): string | undefined {
-  if (typesVersions) {
-    let highestMinimumMatchingSemver: semver.SemVer | undefined
-    let latestMatchingPath: string | undefined
-    for (const [version, paths] of Object.entries(typesVersions)) {
-      let range: semver.Range
-      try {
-        range = new semver.Range(version)
-      } catch {
-        continue
-      }
-
-      const minimumMatchingSemver: semver.SemVer | null = semver.minVersion(range)
-      if (
-        minimumMatchingSemver &&
-        (!highestMinimumMatchingSemver || semver.gt(minimumMatchingSemver, highestMinimumMatchingSemver))
-      ) {
-        let pathEntry: readonly string[] | undefined
-        if (Array.isArray(paths)) {
-          pathEntry = paths
-        } else if (typeof paths === 'string') {
-          // typesVersions map entry may be a bare path string: { "4": { "types": "..." } } or "lib"
-          pathEntry = [paths]
-        } else if (typeof paths === 'object' && paths !== null) {
-          // After the Array.isArray guard above, a non-array object here is a
-          // typesVersions sub-record such as { ".": ["lib/types.d.ts"] }.
-          // Object.entries reads it without a cast; only the well-known keys matter.
-          const entries: readonly (readonly [string, readonly string[] | undefined])[] = Object.entries(
-            paths as object as Readonly<Record<string, readonly string[] | undefined>>,
-          )
-          const record = new Map(entries)
-          pathEntry = record.get('.') ?? record.get('*')
-        } else {
-          pathEntry = undefined
-        }
-        const firstPath: string | undefined = pathEntry?.[0]
-        if (firstPath) {
-          highestMinimumMatchingSemver = minimumMatchingSemver
-          latestMatchingPath = firstPath
-        }
-      }
+  if (!isJsonRecord(typesVersions)) {
+    return undefined
+  }
+  let highestMinimumMatchingSemver: semver.SemVer | undefined
+  let latestMatchingPath: string | undefined
+  for (const [version, paths] of Object.entries(typesVersions)) {
+    let range: semver.Range
+    try {
+      range = new semver.Range(version)
+    } catch {
+      continue
     }
 
-    if (latestMatchingPath) {
-      return `${path.dirname(latestMatchingPath)}/${TSDOC_METADATA_FILENAME}`
+    const minimumMatchingSemver: semver.SemVer | null = semver.minVersion(range)
+    if (
+      minimumMatchingSemver &&
+      (!highestMinimumMatchingSemver || semver.gt(minimumMatchingSemver, highestMinimumMatchingSemver))
+    ) {
+      let pathEntry: readonly string[] | undefined
+      if (Array.isArray(paths)) {
+        pathEntry = paths.filter((entry): entry is string => typeof entry === 'string')
+      } else if (typeof paths === 'string') {
+        // typesVersions map entry may be a bare path string: { "4": { "types": "..." } } or "lib"
+        pathEntry = [paths]
+      } else if (isJsonRecord(paths)) {
+        // A typesVersions sub-record such as { ".": ["lib/types.d.ts"] }.
+        const record = new Map(Object.entries(paths))
+        pathEntry = pathEntryOf(record.get('.') ?? record.get('*'))
+      } else {
+        pathEntry = undefined
+      }
+      const firstPath: string | undefined = pathEntry?.[0]
+      if (firstPath) {
+        highestMinimumMatchingSemver = minimumMatchingSemver
+        latestMatchingPath = firstPath
+      }
     }
+  }
+
+  if (latestMatchingPath) {
+    return `${path.dirname(latestMatchingPath)}/${TSDOC_METADATA_FILENAME}`
   }
   return undefined
 }
-
 /*
  * 4. If package.json contains a `"types": "./path1/path2/index.d.ts"` or a `"typings": "./path1/path2/index.d.ts"`
  * field, then we look for the file under "./path1/path2/tsdoc-metadata.json".
@@ -227,16 +232,16 @@ export class PackageMetadataManager extends Pipeable.Class {
   public static tsdocMetadataFilename: string = TSDOC_METADATA_FILENAME
 
   readonly #packageJsonLookup: PackageJsonLookup
-  readonly #messageRouter: MessageRouter
+  readonly #messageLog: MessageLog
   readonly #packageMetadataByPackageJsonPath: Map<string, PackageMetadata> = new Map<
     string,
     PackageMetadata
   >()
 
-  public constructor(packageJsonLookup: PackageJsonLookup, messageRouter: MessageRouter) {
+  public constructor(packageJsonLookup: PackageJsonLookup, messageLog: MessageLog) {
     super()
     this.#packageJsonLookup = packageJsonLookup
-    this.#messageRouter = messageRouter
+    this.#messageLog = messageLog
   }
 
   /*
@@ -254,28 +259,6 @@ export class PackageMetadataManager extends Pipeable.Class {
     }
 
     return _resolveTsdocMetadataPathFromPackageJson(packageFolder, packageJson)
-  }
-
-  /*
-   * Writes the TSDoc metadata file to the specified output file.
-   */
-  public static writeTsdocMetadataFile(tsdocMetadataPath: string, _newlineKind: NewlineKind): void {
-    const fileObject = {
-      tsdocVersion: '0.12',
-      toolPackages: [
-        {
-          packageName: '@systemfsoftware/api-extractor',
-          packageVersion: '0.1.0',
-        },
-      ],
-    }
-
-    const fileContent: string =
-      '// This file is read by tools that parse documentation comments conforming to the TSDoc standard.\n' +
-      '// It should be published with your NPM package.  It should not be tracked by Git.\n' +
-      JSON.stringify(fileObject, undefined, 2) + '\n'
-
-    ts.sys.writeFile(tsdocMetadataPath, fileContent)
   }
 
   /*
@@ -303,11 +286,10 @@ export class PackageMetadataManager extends Pipeable.Class {
       )
 
       if (ts.sys.fileExists(tsdocMetadataPath)) {
-        Effect.runSync(
-          this.#messageRouter.logVerbose(
-            ConsoleMessageId.FoundTSDocMetadata,
-            'Found metadata in ' + tsdocMetadataPath,
-          ),
+        this.#messageLog.addConsoleMessage(
+          ConsoleMessageId.FoundTSDocMetadata,
+          'verbose',
+          'Found metadata in ' + tsdocMetadataPath,
         )
         aedocSupported = true
       }

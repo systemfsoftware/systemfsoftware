@@ -27,12 +27,11 @@ const streamFor = (level: LogLevel, options: ConsoleMessageWriterOptions): TextW
 /**
  * A MessageWriter whose writes are synchronous console output.
  *
- * The ported Collector emits log lines fire-and-forget from deep inside
- * synchronous analysis code (upstream called `console.log` directly). A
- * Terminal-backed writer is asynchronous under NodeServices, which makes
- * `Effect.runSync` around those emits a defect (AsyncFiberError). The console
- * writer keeps the fire-and-forget call sites lawful: every write is
- * `Effect.sync`, so `runSync` never suspends.
+ * Every console line is emitted through this writer from a write phase, and a
+ * Terminal-backed writer under NodeServices is asynchronous — a write that
+ * suspends would turn the synchronous residue flush into a defect. The driver
+ * keeps every write `Effect.sync`, so emitting a run's console lines never
+ * suspends the fiber that emits them.
  */
 export const layer = (options: ConsoleMessageWriterOptions = {}): Layer.Layer<MessageWriter> =>
   Layer.succeed(MessageWriter, {

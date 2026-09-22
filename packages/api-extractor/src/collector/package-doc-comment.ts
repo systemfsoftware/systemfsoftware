@@ -1,8 +1,7 @@
-import * as Effect from 'effect/Effect'
 import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 import type { Collector } from './Collector.js'
-import { ConsoleMessageId } from './message-router.js'
+import { ConsoleMessageId } from './message-log.js'
 
 export class PackageDocComment extends Pipeable.Class {
   public static tryFindInSourceFile(
@@ -34,11 +33,10 @@ export class PackageDocComment extends Pipeable.Class {
           const commentBody = sourceFile.text.substring(commentRange.pos, commentRange.end)
 
           if (/@packageDocumentation/i.test(commentBody)) {
-            Effect.runSync(
-              collector.messageRouter.logWarning(
-                ConsoleMessageId.Preamble,
-                'The @packageDocumentation comment must appear at the top of entry point *.d.ts file',
-              ),
+            collector.messageLog.addConsoleMessage(
+              ConsoleMessageId.Preamble,
+              'warning',
+              'The @packageDocumentation comment must appear at the top of entry point *.d.ts file',
             )
             break
           }

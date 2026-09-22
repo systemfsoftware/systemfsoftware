@@ -125,9 +125,9 @@ interface WriterRunOutput {
 }
 
 // The pin: construction + emission survive `Effect.runSync` as ONE program when
-// the real console driver is bound — the sync edge `invoke` and the Collector's
-// fire-and-forget call sites depend on. The driver writes to a recording sink
-// so observation never bypasses the code under test.
+// the real console driver is bound — the sync edge `invoke` and the write-phase
+// emission of a run's console lines depend on it. The driver writes to a
+// recording sink so observation never bypasses the code under test.
 const runRouterWithConsoleWriter = (message: string): Effect.Effect<WriterRunOutput> =>
   Effect.sync(() => {
     const emitted: Array<string> = []

@@ -8,7 +8,8 @@ import * as Result from 'effect/Result'
 import type * as Ts from 'typescript'
 
 import { Collector } from './collector/Collector.js'
-import { ConsoleMessageId, makeMessageRouter } from './collector/message-router.js'
+import { ConsoleMessageId } from './collector/message-log.js'
+import { makeMessageRouter } from './collector/message-router.js'
 import type { MessageRouter } from './collector/message-router.js'
 import { SourceMapper } from './collector/SourceMapper.js'
 import type { CliFlags } from './collector/verbosity.schema.js'
@@ -65,6 +66,7 @@ const buildRouter = (
       messagesConfig: config.messages,
       workingPackageFolder: config.projectFolder,
       sourceMapper,
+      reportEnabled: config.apiReport.enabled,
     },
   ).pipe(
     Effect.mapError(
@@ -221,6 +223,7 @@ const runPlanned = (
     const { compilerState, config, router, sourceMapper } = runtime
     yield* announce(router, ConsoleMessageId.Preamble, preambleText(plan.compilerVersion))
     const collector = yield* Effect.sync(() => collectSymbols(config, router, compilerState.program, sourceMapper))
+    yield* router.emitAnalysisConsoleMessages
     yield* runGenerators(collector, config, router, {
       localBuild,
       printApiReportDiff: plan.printApiReportDiff,

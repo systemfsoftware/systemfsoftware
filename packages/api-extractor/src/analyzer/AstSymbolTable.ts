@@ -1,4 +1,3 @@
-import * as Effect from 'effect/Effect'
 import * as Pipeable from 'effect/Pipeable'
 // Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
 // See LICENSE in the project root for license information.
@@ -12,7 +11,7 @@ import { InternalInvariantError, UnsupportedSyntaxError } from '../errors/index.
 import { invariant } from '../utils/invariant.js'
 import type { PackageJsonLookup } from './package-json-lookup.js'
 
-import type { MessageRouter } from '../collector/message-router.js'
+import type { MessageLog } from '../collector/message-log.js'
 import { AstDeclaration } from './AstDeclaration.js'
 import type { AstEntity } from './AstEntity.js'
 import type { AstModule, IAstModuleExportInfo } from './AstModule.js'
@@ -69,7 +68,7 @@ export interface IFetchAstSymbolOptions {
 export class AstSymbolTable extends Pipeable.Class {
   readonly #program: ts.Program
   readonly #typeChecker: ts.TypeChecker
-  readonly #messageRouter: MessageRouter
+  readonly #messageLog: MessageLog
   readonly #globalVariableAnalyzer: IGlobalVariableAnalyzer
   readonly #packageMetadataManager: PackageMetadataManager
   readonly #exportAnalyzer: ExportAnalyzer
@@ -104,14 +103,14 @@ export class AstSymbolTable extends Pipeable.Class {
     typeChecker: ts.TypeChecker,
     packageJsonLookup: PackageJsonLookup,
     bundledPackageNames: ReadonlySet<string>,
-    messageRouter: MessageRouter,
+    messageLog: MessageLog,
   ) {
     super()
     this.#program = program
     this.#typeChecker = typeChecker
-    this.#messageRouter = messageRouter
+    this.#messageLog = messageLog
     this.#globalVariableAnalyzer = TypeScriptInternals.getGlobalVariableAnalyzer(program)
-    this.#packageMetadataManager = new PackageMetadataManager(packageJsonLookup, messageRouter)
+    this.#packageMetadataManager = new PackageMetadataManager(packageJsonLookup, messageLog)
 
     this.#exportAnalyzer = new ExportAnalyzer(this.#program, this.#typeChecker, bundledPackageNames, {
       analyze: this.analyze.bind(this),
@@ -405,15 +404,13 @@ export class AstSymbolTable extends Pipeable.Class {
                   // that include interesting global variables in their API, but API Extractor doesn't support
                   // that yet; it would be a feature request.)
 
-                  if (this.#messageRouter.verbosity === 'diagnostics') {
+                  if (this.#messageLog.diagnostics) {
                     if (!this.#alreadyWarnedGlobalNames.has(identifierNode.text)) {
                       this.#alreadyWarnedGlobalNames.add(identifierNode.text)
-                      Effect.runSync(
-                        this.#messageRouter.logDiagnostic(
-                          `Ignoring reference to global variable "${identifierNode.text}"` +
-                            ` in ` +
-                            SourceFileLocationFormatter.formatDeclaration(identifierNode),
-                        ),
+                      this.#messageLog.addDiagnostic(
+                        `Ignoring reference to global variable "${identifierNode.text}"` +
+                          ` in ` +
+                          SourceFileLocationFormatter.formatDeclaration(identifierNode),
                       )
                     }
                   }

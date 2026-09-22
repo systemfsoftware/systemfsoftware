@@ -6,11 +6,10 @@ import * as Layer from 'effect/Layer'
 import { layer } from './drivers/console-message-writer.js'
 import { type ExtractorResult, type ExtractorRunOptions, runEffect } from './extractor.js'
 
-// The ported Collector emits log lines fire-and-forget from synchronous
-// analysis code (Effect.runSync), so the writer bound at this edge must be
-// synchronous: the Terminal-backed writer from NodeServices is asynchronous
-// and turns those emits into AsyncFiberError defects. The console writer
-// keeps every write `Effect.sync`.
+// The console driver is the writer bound at this edge: every write is
+// `Effect.sync`, so a run's console lines never suspend the fiber that emits
+// them. A Terminal-backed writer under NodeServices is asynchronous and would
+// turn those emissions into AsyncFiberError defects.
 const NodeLive = Layer.mergeAll(
   NodeFileSystem.layer,
   NodePath.layer,

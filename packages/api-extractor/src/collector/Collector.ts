@@ -1,4 +1,3 @@
-import * as Effect from 'effect/Effect'
 import * as Pipeable from 'effect/Pipeable'
 import { type INodePackageJson, PackageJsonLookup } from '../analyzer/package-json-lookup.js'
 import { AedocDefinitions } from '../model/index.js'
@@ -32,7 +31,7 @@ import { ApiItemMetadata, type IApiItemMetadataOptions } from './ApiItemMetadata
 import { CollectorEntity } from './CollectorEntity.js'
 import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
 import { ExtractorMessageId } from './extractor-message-id.js'
-import type { ExtractorMessageProperties } from './message-router.js'
+import type { ExtractorMessageProperties, MessageLog } from './message-log.js'
 import type { MessageRouter } from './message-router.js'
 import { PackageDocComment } from './package-doc-comment.js'
 import type { SourceMapper } from './SourceMapper.js'
@@ -75,6 +74,7 @@ export class Collector extends Pipeable.Class {
 
   public readonly packageJsonLookup: PackageJsonLookup
   public readonly messageRouter: MessageRouter
+  public readonly messageLog: MessageLog
 
   public readonly workingPackage: WorkingPackage
 
@@ -144,6 +144,7 @@ export class Collector extends Pipeable.Class {
     })
 
     this.messageRouter = messageRouter
+    this.messageLog = messageRouter.messageLog
 
     this.program = program
     this.typeChecker = program.getTypeChecker()
@@ -163,7 +164,7 @@ export class Collector extends Pipeable.Class {
       this.typeChecker,
       this.packageJsonLookup,
       this.bundledPackageNames,
-      this.messageRouter,
+      this.messageLog,
     )
     this.astReferenceResolver = new AstReferenceResolver(this)
 
@@ -179,7 +180,7 @@ export class Collector extends Pipeable.Class {
     if (astDeclarationOrSymbol === undefined) {
       return
     }
-    this.messageRouter.addAnalyzerIssue(
+    this.messageLog.addAnalyzerIssue(
       messageId,
       messageText,
       astDeclarationOrSymbol,
@@ -196,7 +197,7 @@ export class Collector extends Pipeable.Class {
     if (sourceFile === undefined) {
       return
     }
-    this.messageRouter.addAnalyzerIssueForPosition(messageId, messageText, sourceFile, pos)
+    this.messageLog.addAnalyzerIssueForPosition(messageId, messageText, sourceFile, pos)
   }
 
   public addTsdocMessages(
@@ -204,11 +205,11 @@ export class Collector extends Pipeable.Class {
     sourceFile: ts.SourceFile,
     astDeclaration?: AstDeclaration,
   ): void {
-    this.messageRouter.addTsdocMessages(parserContext, sourceFile, astDeclaration)
+    this.messageLog.addTsdocMessages(parserContext, sourceFile, astDeclaration)
   }
 
   public addCompilerDiagnostic(diagnostic: ts.Diagnostic): void {
-    this.messageRouter.addCompilerDiagnostic(diagnostic)
+    this.messageLog.addCompilerDiagnostic(diagnostic)
   }
 
   /*a
@@ -262,18 +263,18 @@ export class Collector extends Pipeable.Class {
 
     const sourceFiles: readonly ts.SourceFile[] = this.program.getSourceFiles()
 
-    if (this.messageRouter.verbosity === 'diagnostics') {
-      Effect.runSync(this.messageRouter.logDiagnosticHeader('Root filenames'))
+    if (this.messageLog.diagnostics) {
+      this.messageLog.addDiagnosticHeader('Root filenames')
       for (const fileName of this.program.getRootFileNames()) {
-        Effect.runSync(this.messageRouter.logDiagnostic(fileName))
+        this.messageLog.addDiagnostic(fileName)
       }
-      Effect.runSync(this.messageRouter.logDiagnosticFooter)
+      this.messageLog.addDiagnosticFooter()
 
-      Effect.runSync(this.messageRouter.logDiagnosticHeader('Files analyzed by compiler'))
+      this.messageLog.addDiagnosticHeader('Files analyzed by compiler')
       for (const sourceFile of sourceFiles) {
-        Effect.runSync(this.messageRouter.logDiagnostic(sourceFile.fileName))
+        this.messageLog.addDiagnostic(sourceFile.fileName)
       }
-      Effect.runSync(this.messageRouter.logDiagnosticFooter)
+      this.messageLog.addDiagnosticFooter()
     }
 
     // We can throw this error earlier in CompilerState.ts, but intentionally wait until after we've logged the

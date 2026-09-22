@@ -1,4 +1,6 @@
 import * as Pipeable from 'effect/Pipeable'
+import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 // Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
 // See LICENSE in the project root for license information.
 
@@ -6,6 +8,23 @@ import { type MappingItem, type Position, type RawSourceMap, SourceMapConsumer }
 import * as ts from 'typescript'
 import { dirname, resolve } from '../analyzer/path-helpers.js'
 import { invariant } from '../utils/invariant.js'
+import { type SourceMapJson, SourceMapJsonFromString } from './source-map.schema.js'
+
+const rawSourceMapOf = (decoded: SourceMapJson): RawSourceMap => {
+  const rawSourceMap: RawSourceMap = {
+    version: String(decoded.version),
+    sources: [...(decoded.sources ?? [])],
+    names: [...(decoded.names ?? [])],
+    mappings: decoded.mappings,
+  }
+  if (decoded.file !== undefined) {
+    rawSourceMap.file = decoded.file
+  }
+  if (decoded.sourceRoot !== undefined) {
+    rawSourceMap.sourceRoot = decoded.sourceRoot
+  }
+  return rawSourceMap
+}
 
 interface ISourceMap {
   sourceMapConsumer: SourceMapConsumer
@@ -183,7 +202,12 @@ export class SourceMapper extends Pipeable.Class {
         const sourceMapPath: string = normalizedPath + '.map'
         if (ts.sys.fileExists(sourceMapPath)) {
           // Load up the source map
-          const rawSourceMap: RawSourceMap = JSON.parse(ts.sys.readFile(sourceMapPath) ?? '{}') as RawSourceMap
+          const sourceMapContent: string = ts.sys.readFile(sourceMapPath) ?? ''
+          const decoded = Schema.decodeResult(SourceMapJsonFromString)(sourceMapContent)
+          if (Result.isFailure(decoded)) {
+            throw invariant(`Malformed source map at ${sourceMapPath}: ${decoded.failure.message}`)
+          }
+          const rawSourceMap: RawSourceMap = rawSourceMapOf(decoded.success)
 
           const sourceMapConsumer: SourceMapConsumer = new SourceMapConsumer(rawSourceMap)
           const mappingItems: MappingItem[] = []

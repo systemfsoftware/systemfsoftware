@@ -1,138 +1,34 @@
-import type * as tsdoc from '@microsoft/tsdoc'
-import { Data, Effect, Match, Result } from 'effect'
+import { Effect, Match, Option, Result } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
-import * as Ts from 'typescript'
 
-import { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import type { AstSymbol } from '../analyzer/AstSymbol.js'
-import { SourceFileLocationFormatter } from '../analyzer/SourceFileLocationFormatter.js'
-import type { MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
+import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
+import type { MessageLogLevel, MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
 import { MessageWriter } from '../message-writer.service.js'
-import { allExtractorMessageIds, type ExtractorMessageId } from './extractor-message-id.js'
-import { LogLevel, MessageRuleError } from './message-router.schema.js'
+import { allExtractorMessageIds } from './extractor-message-id.js'
+import {
+  ConsoleMessageId,
+  ExtractorMessage,
+  MessageLog,
+  type ReportCandidate,
+  selectReportMessages,
+} from './message-log.js'
+import { type ExtractorMessageCategory, LogLevel, MessageRuleError } from './message-router.schema.js'
 import { ResolveVerbosity, resolveVerbosity } from './resolve-verbosity.workflow.js'
+import {
+  type MessageReportingRules,
+  type ReportingRule,
+  RouteExtractorMessage,
+  routeExtractorMessage,
+  type RoutingDecision,
+} from './route-extractor-message.workflow.js'
 import type { SourceMapper } from './SourceMapper.js'
-
-export const ExtractorMessageCategory = {
-  Compiler: 'Compiler',
-  TSDoc: 'TSDoc',
-  Extractor: 'Extractor',
-  Console: 'console',
-} as const
-
-export type ExtractorMessageCategory = (typeof ExtractorMessageCategory)[keyof typeof ExtractorMessageCategory]
-
-export interface ExtractorMessageProperties {
-  readonly exportName?: string
-}
-
-export type LogLevelValue = 'error' | 'warning' | 'none' | 'info' | 'verbose'
-
-export interface ExtractorMessageProps {
-  readonly category: ExtractorMessageCategory
-  readonly messageId: string
-  readonly text: string
-  readonly sourceFilePath?: string | undefined
-  readonly sourceFileLine?: number | undefined
-  readonly sourceFileColumn?: number | undefined
-  readonly properties?: ExtractorMessageProperties | undefined
-  readonly logLevel?: LogLevelValue | undefined
-}
-
-export class ExtractorMessage extends Data.Class<ExtractorMessageProps> {
-  declare public properties: ExtractorMessageProperties
-  declare public logLevel: LogLevelValue
-  declare public sourceFilePath: string | undefined
-  declare public sourceFileLine: number | undefined
-  declare public sourceFileColumn: number | undefined
-
-  #handled: boolean
-
-  constructor(props: ExtractorMessageProps) {
-    super({
-      ...props,
-      properties: props.properties ?? {},
-      logLevel: props.logLevel ?? 'none',
-    })
-    this.#handled = false
-  }
-
-  public get handled(): boolean {
-    return this.#handled
-  }
-
-  public markHandled(): void {
-    this.#handled = true
-  }
-
-  public formatMessageWithLocation(workingPackageFolderPath: string | undefined): string {
-    let result = ''
-    if (this.sourceFilePath !== undefined && this.sourceFilePath.length > 0) {
-      result += SourceFileLocationFormatter.formatPath(this.sourceFilePath, {
-        sourceFileLine: this.sourceFileLine,
-        sourceFileColumn: this.sourceFileColumn,
-        workingPackageFolderPath,
-      })
-      if (result.length > 0) {
-        result += ' - '
-      }
-    }
-    result += this.formatMessageWithoutLocation()
-    return result
-  }
-
-  public formatMessageWithoutLocation(): string {
-    return `(${this.messageId}) ${this.text}`
-  }
-}
-
 import { Verbosity, type VerbosityRequest } from './verbosity.schema.js'
-
-export { LogLevel } from './message-router.schema.js'
-
-export const ConsoleMessageId = {
-  Preamble: 'console-preamble',
-  CompilerVersionNotice: 'console-compiler-version-notice',
-  UsingCustomTSDocConfig: 'console-using-custom-tsdoc-config',
-  FoundTSDocMetadata: 'console-found-tsdoc-metadata',
-  WritingDocModelFile: 'console-writing-doc-model-file',
-  WritingDtsRollup: 'console-writing-dts-rollup',
-  WritingApiReport: 'console-writing-api-report',
-  ApiReportNotCopied: 'console-api-report-not-copied',
-  ApiReportDiff: 'console-api-report-diff',
-  ApiReportCopied: 'console-api-report-copied',
-  ApiReportUnchanged: 'console-api-report-unchanged',
-  ApiReportCreated: 'console-api-report-created',
-  ApiReportFolderMissing: 'console-api-report-folder-missing',
-  Diagnostics: 'console-diagnostics',
-  Banner: 'console-banner',
-  ConfigPath: 'console-config-path',
-  CompletedSuccessfully: 'console-completed-successfully',
-} as const
-
-export type ConsoleMessageId = (typeof ConsoleMessageId)[keyof typeof ConsoleMessageId]
-
-interface ReportingRule {
-  readonly logLevel: LogLevelValue
-  readonly addToApiReportFile: boolean
-}
-
-const compilerDefaultRule: ReportingRule = { logLevel: 'none', addToApiReportFile: false }
-const extractorDefaultRule: ReportingRule = { logLevel: 'none', addToApiReportFile: false }
-const tsdocDefaultRule: ReportingRule = { logLevel: 'none', addToApiReportFile: false }
-
-const normalizeRule = (rule: {
-  readonly logLevel: LogLevelValue
-  readonly addToApiReportFile?: boolean | undefined
-}): ReportingRule => ({
-  logLevel: rule.logLevel,
-  addToApiReportFile: rule.addToApiReportFile ?? false,
-})
 
 export interface MessageRouterOptions {
   readonly messagesConfig?: MessagesConfig | undefined
   readonly workingPackageFolder?: string | undefined
   readonly sourceMapper?: SourceMapper | undefined
+  readonly reportEnabled?: boolean | undefined
 }
 
 const levelLabel: Readonly<Record<LogLevel, string>> = {
@@ -156,8 +52,6 @@ const levelMatrix: Readonly<Record<LogLevel, (verbosity: Verbosity) => boolean>>
 }
 
 const admits = (verbosity: Verbosity, level: LogLevel): boolean => levelMatrix[level](verbosity)
-
-const diagnosticsLine = '='.repeat(60)
 
 const compareByValue = (a: string | number | undefined, b: string | number | undefined): number => {
   if (a === b) {
@@ -184,34 +78,13 @@ const sortMessagesForOutput = (messages: ExtractorMessage[]): void => {
 
 export interface MessageRouter {
   readonly verbosity: Verbosity
+  readonly messageLog: MessageLog
   readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect.Effect<void, PlatformError>
   readonly logError: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
   readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
   readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
   readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
-  readonly logDiagnostic: (text: string) => Effect.Effect<void, PlatformError>
-  readonly logDiagnosticHeader: (title: string) => Effect.Effect<void, PlatformError>
-  readonly logDiagnosticFooter: Effect.Effect<void, PlatformError>
-
-  readonly addCompilerDiagnostic: (diagnostic: Ts.Diagnostic) => void
-  readonly addAnalyzerIssue: (
-    messageId: ExtractorMessageId | string,
-    messageText: string,
-    astDeclarationOrSymbol: AstDeclaration | AstSymbol,
-    properties?: ExtractorMessageProperties,
-  ) => void
-  readonly addAnalyzerIssueForPosition: (
-    messageId: ExtractorMessageId | string,
-    messageText: string,
-    sourceFile: Ts.SourceFile,
-    pos: number,
-    properties?: ExtractorMessageProperties,
-  ) => ExtractorMessage
-  readonly addTsdocMessages: (
-    parserContext: tsdoc.ParserContext,
-    sourceFile: Ts.SourceFile,
-    astDeclaration?: AstDeclaration,
-  ) => void
+  readonly emitAnalysisConsoleMessages: Effect.Effect<void, PlatformError>
   readonly fetchAssociatedMessagesForReviewFile: (astDeclaration: AstDeclaration) => readonly ExtractorMessage[]
   readonly fetchUnassociatedMessagesForReviewFile: () => readonly ExtractorMessage[]
   readonly handleRemainingNonConsoleMessages: Effect.Effect<void, PlatformError>
@@ -220,30 +93,20 @@ export interface MessageRouter {
   readonly warningCount: () => number
 }
 
-interface RuleTable {
-  readonly ruleByMessageId: Map<string, ReportingRule>
-  readonly defaults: Readonly<Record<ExtractorMessageCategory, ReportingRule>>
-}
-
-const initialRuleTable = (): {
-  ruleByMessageId: Map<string, ReportingRule>
-  defaults: Record<ExtractorMessageCategory, ReportingRule>
-} => ({
-  ruleByMessageId: new Map<string, ReportingRule>(),
-  defaults: {
-    [ExtractorMessageCategory.Compiler]: compilerDefaultRule,
-    [ExtractorMessageCategory.Extractor]: extractorDefaultRule,
-    [ExtractorMessageCategory.TSDoc]: tsdocDefaultRule,
-    [ExtractorMessageCategory.Console]: compilerDefaultRule,
-  },
-})
-type MutableRuleTable = ReturnType<typeof initialRuleTable>
-
 interface RuleSection {
   readonly category: ExtractorMessageCategory
+  readonly defaultKey: 'compilerDefault' | 'extractorDefault' | 'tsdocDefault'
   readonly entries: MessageReportingTable | undefined
   readonly validate: (messageId: string) => Result.Result<void, MessageRuleError>
 }
+
+const normalizeRule = (rule: {
+  readonly logLevel: MessageLogLevel
+  readonly addToApiReportFile?: boolean | undefined
+}): ReportingRule => ({
+  logLevel: rule.logLevel,
+  addToApiReportFile: rule.addToApiReportFile ?? false,
+})
 
 const validateCompilerMessageId = (messageId: string): Result.Result<void, MessageRuleError> =>
   /^TS[0-9]+$/.test(messageId)
@@ -284,62 +147,122 @@ const validateTsdocMessageId = (messageId: string): Result.Result<void, MessageR
       }),
     )
 
-const applyRuleSection = (table: MutableRuleTable, section: RuleSection): Result.Result<void, MessageRuleError> => {
+const applyRuleSection = (
+  rules: MessageReportingRules,
+  section: RuleSection,
+): Result.Result<MessageReportingRules, MessageRuleError> => {
   const { entries } = section
   if (entries === undefined) {
-    return Result.void
+    return Result.succeed(rules)
   }
-  return Object.getOwnPropertyNames(entries).reduce<Result.Result<void, MessageRuleError>>((outcome, messageId) => {
-    if (Result.isFailure(outcome)) {
-      return outcome
-    }
-    const entry = entries[messageId]
-    if (entry === undefined) {
-      return Result.void
-    }
-    const reportingRule = normalizeRule(entry)
-    if (messageId === 'default') {
-      table.defaults[section.category] = reportingRule
-      return Result.void
-    }
-    const validation = section.validate(messageId)
-    if (Result.isFailure(validation)) {
-      return validation
-    }
-    table.ruleByMessageId.set(messageId, reportingRule)
-    return Result.void
-  }, Result.void)
+  return Object.getOwnPropertyNames(entries).reduce<Result.Result<MessageReportingRules, MessageRuleError>>(
+    (outcome, messageId) => {
+      if (Result.isFailure(outcome)) {
+        return outcome
+      }
+      const table = outcome.success
+      const entry = entries[messageId]
+      if (entry === undefined) {
+        return Result.succeed(table)
+      }
+      const reportingRule = normalizeRule(entry)
+      if (messageId === 'default') {
+        return Result.succeed({ ...table, [section.defaultKey]: reportingRule })
+      }
+      const validation = section.validate(messageId)
+      if (Result.isFailure(validation)) {
+        return Result.fail(validation.failure)
+      }
+      return Result.succeed({
+        ...table,
+        byMessageId: { ...table.byMessageId, [messageId]: reportingRule },
+      })
+    },
+    Result.succeed(rules),
+  )
 }
 
 const ruleSections = (messagesConfig: MessagesConfig | undefined): readonly RuleSection[] => [
   {
-    category: ExtractorMessageCategory.Compiler,
+    category: 'Compiler',
+    defaultKey: 'compilerDefault',
     entries: messagesConfig?.compilerMessageReporting,
     validate: validateCompilerMessageId,
   },
   {
-    category: ExtractorMessageCategory.Extractor,
+    category: 'Extractor',
+    defaultKey: 'extractorDefault',
     entries: messagesConfig?.extractorMessageReporting,
     validate: validateExtractorMessageId,
   },
   {
-    category: ExtractorMessageCategory.TSDoc,
+    category: 'TSDoc',
+    defaultKey: 'tsdocDefault',
     entries: messagesConfig?.tsdocMessageReporting,
     validate: validateTsdocMessageId,
   },
 ]
 
-const buildRuleTable = (messagesConfig: MessagesConfig | undefined): Result.Result<RuleTable, MessageRuleError> => {
-  const table = initialRuleTable()
-  const outcome = ruleSections(messagesConfig).reduce<Result.Result<void, MessageRuleError>>(
-    (acc, section) => (Result.isFailure(acc) ? acc : applyRuleSection(table, section)),
-    Result.void,
+const initialRuleTable = (): MessageReportingRules => ({
+  byMessageId: {},
+  compilerDefault: { logLevel: 'none', addToApiReportFile: false },
+  extractorDefault: { logLevel: 'none', addToApiReportFile: false },
+  tsdocDefault: { logLevel: 'none', addToApiReportFile: false },
+})
+
+const buildRuleTable = (
+  messagesConfig: MessagesConfig | undefined,
+): Result.Result<MessageReportingRules, MessageRuleError> =>
+  ruleSections(messagesConfig).reduce<Result.Result<MessageReportingRules, MessageRuleError>>(
+    (outcome, section) => (Result.isFailure(outcome) ? outcome : applyRuleSection(outcome.success, section)),
+    Result.succeed(initialRuleTable()),
   )
-  return Result.isFailure(outcome) ? Result.fail(outcome.failure) : Result.succeed(table)
+
+const verbosityOf = (request: VerbosityRequest): Verbosity => {
+  const decision = Result.getOrThrow(
+    resolveVerbosity(
+      ResolveVerbosity.make({
+        cliFlags: request.cliFlags,
+        configQuiet: request.configQuiet === true,
+      }),
+    ),
+  )
+  return Match.value(decision).pipe(
+    Match.tag('VerbosityDiagnostics', (): Verbosity => 'diagnostics'),
+    Match.tag('VerbosityVerbose', (): Verbosity => 'verbose'),
+    Match.tag('VerbositySilent', (): Verbosity => 'silent'),
+    Match.tag('VerbosityNormal', (): Verbosity => 'normal'),
+    Match.exhaustive,
+  )
 }
 
-const createAssociatedMessagesStore = (): Map<AstDeclaration, ExtractorMessage[]> =>
-  new Map<AstDeclaration, ExtractorMessage[]>()
+const commandOf = (
+  message: ExtractorMessage,
+  rules: MessageReportingRules,
+  reportEnabled: boolean,
+): RouteExtractorMessage =>
+  message.category === 'console'
+    ? RouteExtractorMessage.make({
+      category: message.category,
+      messageId: message.messageId,
+      logLevel: message.logLevel,
+      rules,
+      reportEnabled,
+    })
+    : RouteExtractorMessage.make({
+      category: message.category,
+      messageId: message.messageId,
+      rules,
+      reportEnabled,
+    })
+
+const consoleLevelOf = (decision: RoutingDecision): Option.Option<LogLevel> =>
+  Match.value(decision).pipe(
+    Match.tag('RoutedToConsole', ({ level }) => Option.some(level)),
+    Match.tag('RoutedToReport', () => Option.none<LogLevel>()),
+    Match.tag('RoutedSuppressed', () => Option.none<LogLevel>()),
+    Match.exhaustive,
+  )
 
 export const makeMessageRouter = (
   request: VerbosityRequest,
@@ -347,288 +270,92 @@ export const makeMessageRouter = (
 ): Effect.Effect<MessageRouter, MessageRuleError, MessageWriter> =>
   Effect.gen(function*() {
     const writer = yield* MessageWriter
-    const decision = Result.getOrThrow(
-      resolveVerbosity(
-        ResolveVerbosity.make({
-          cliFlags: request.cliFlags,
-          configQuiet: request.configQuiet === true,
-        }),
-      ),
-    )
-    const verbosity: Verbosity = Match.value(decision).pipe(
-      Match.tag('VerbosityDiagnostics', () => 'diagnostics' as const),
-      Match.tag('VerbosityVerbose', () => 'verbose' as const),
-      Match.tag('VerbositySilent', () => 'silent' as const),
-      Match.tag('VerbosityNormal', () => 'normal' as const),
-      Match.exhaustive,
-    )
-    const { ruleByMessageId, defaults } = yield* Effect.fromResult(buildRuleTable(options.messagesConfig))
+    const verbosity = verbosityOf(request)
+    const rules = yield* Effect.fromResult(buildRuleTable(options.messagesConfig))
+    const reportEnabled = options.reportEnabled ?? false
     const workingPackageFolder = options.workingPackageFolder
-    const sourceMapper = options.sourceMapper
 
-    const messages: ExtractorMessage[] = []
-    const associatedMessagesForAstDeclaration = createAssociatedMessagesStore()
-    let errorCount = 0
-    let warningCount = 0
+    const messageLog = new MessageLog({
+      sourceMapper: options.sourceMapper,
+      diagnostics: verbosity === 'diagnostics',
+    })
+
+    const decisionOf = (message: ExtractorMessage): RoutingDecision =>
+      Result.getOrThrow(routeExtractorMessage(commandOf(message, rules, reportEnabled)))
 
     const emit = (level: LogLevel, text: string): Effect.Effect<void, PlatformError> =>
       Effect.suspend(() => (admits(verbosity, level) ? writer.write(level, format(level, text)) : Effect.void))
 
-    const logDiagnostic = (text: string): Effect.Effect<void, PlatformError> =>
-      verbosity === 'diagnostics' ? emit('verbose', text) : Effect.void
+    const logMessage = (level: LogLevel, text: string): Effect.Effect<void, PlatformError> =>
+      Effect.sync(() => {
+        messageLog.addConsoleMessage('console', level, text).markHandled()
+      }).pipe(Effect.andThen(emit(level, text)))
 
-    const ruleForCategory = (category: ExtractorMessageCategory): Result.Result<ReportingRule, MessageRuleError> =>
-      Match.value(category).pipe(
-        Match.when(
-          ExtractorMessageCategory.Compiler,
-          () => Result.succeed(defaults[ExtractorMessageCategory.Compiler]),
-        ),
-        Match.when(
-          ExtractorMessageCategory.Extractor,
-          () => Result.succeed(defaults[ExtractorMessageCategory.Extractor]),
-        ),
-        Match.when(ExtractorMessageCategory.TSDoc, () => Result.succeed(defaults[ExtractorMessageCategory.TSDoc])),
-        Match.when(ExtractorMessageCategory.Console, () =>
-          Result.fail(
-            new MessageRuleError({
-              message: 'ExtractorMessageCategory.Console is not supported with IReportingRule',
-            }),
-          )),
+    const consoleLine = (message: ExtractorMessage): { readonly level: LogLevel; readonly text: string } => ({
+      level: message.logLevel,
+      text: message.text,
+    })
+
+    const candidatesOf = (messages: readonly ExtractorMessage[]): readonly ReportCandidate[] =>
+      messages.map((message) => ({ message, decision: decisionOf(message), consumed: message.handled }))
+
+    const consumedLevelOf = (message: ExtractorMessage): LogLevel =>
+      message.handled ? 'none' : Option.getOrElse(consoleLevelOf(decisionOf(message)), () => 'none' as const)
+
+    const analysisLevelOf = (message: ExtractorMessage): LogLevel =>
+      Match.value(message.category).pipe(
+        Match.when('console', () => message.logLevel),
+        Match.when('Compiler', () => consumedLevelOf(message)),
+        Match.when('Extractor', () => consumedLevelOf(message)),
+        Match.when('TSDoc', () => consumedLevelOf(message)),
         Match.exhaustive,
       )
 
-    const getRuleForMessage = (message: ExtractorMessage): Result.Result<ReportingRule, MessageRuleError> => {
-      const reportingRule = ruleByMessageId.get(message.messageId)
-      return reportingRule !== undefined ? Result.succeed(reportingRule) : ruleForCategory(message.category)
-    }
-
-    const prepareMessage = (message: ExtractorMessage): LogLevelValue => {
-      if (message.handled) {
-        return 'none'
-      }
-      if (message.category !== ExtractorMessageCategory.Console) {
-        message.logLevel = Result.match(getRuleForMessage(message), {
-          onSuccess: (rule) => rule.logLevel,
-          onFailure: () => message.logLevel,
-        })
-      }
-      if (message.logLevel === 'error') {
-        errorCount++
-      } else if (message.logLevel === 'warning') {
-        warningCount++
-      }
-      message.markHandled()
-      return message.logLevel
-    }
-
-    const messageTextOf = (message: ExtractorMessage): string =>
-      message.category === ExtractorMessageCategory.Console
-        ? message.text
-        : message.formatMessageWithLocation(workingPackageFolder)
-
-    const associateMessageWithAstDeclaration = (message: ExtractorMessage, astDeclaration: AstDeclaration): void => {
-      const associatedMessages = associatedMessagesForAstDeclaration.get(astDeclaration)
-      if (associatedMessages === undefined) {
-        associatedMessagesForAstDeclaration.set(astDeclaration, [message])
-      } else {
-        associatedMessages.push(message)
-      }
-    }
-
-    const addAnalyzerIssueForPosition = (
-      messageId: ExtractorMessageId | string,
-      messageText: string,
-      sourceFile: Ts.SourceFile,
-      pos: number,
-      properties?: ExtractorMessageProperties,
-    ): ExtractorMessage => {
-      const sourceLocation = sourceMapper?.getSourceLocation({ sourceFile, pos })
-      const { line, character } = sourceFile.getLineAndCharacterOfPosition(pos)
-      const message = new ExtractorMessage({
-        category: ExtractorMessageCategory.Extractor,
-        messageId,
-        text: messageText,
-        properties,
-        sourceFilePath: sourceLocation?.sourceFilePath ?? sourceFile.fileName,
-        sourceFileLine: sourceLocation?.sourceFileLine ?? line + 1,
-        sourceFileColumn: sourceLocation?.sourceFileColumn ?? character + 1,
-      })
-      messages.push(message)
-      return message
-    }
-
-    const logMessage = (message: ExtractorMessage): Effect.Effect<void, PlatformError> => {
-      const level = prepareMessage(message)
-      return level === 'none' ? Effect.void : emit(level, messageTextOf(message))
-    }
-
-    const consoleMessage = (level: LogLevelValue, text: string): ExtractorMessage =>
-      new ExtractorMessage({
-        category: ExtractorMessageCategory.Console,
-        messageId: 'console',
-        text,
-        logLevel: level,
-      })
-
     return {
       verbosity,
-      log: (_id, level, text) => logMessage(consoleMessage(level, text)),
-      logError: (_id, text) => logMessage(consoleMessage('error', text)),
-      logWarning: (_id, text) => logMessage(consoleMessage('warning', text)),
-      logInfo: (_id, text) => logMessage(consoleMessage('info', text)),
-      logVerbose: (_id, text) => logMessage(consoleMessage('verbose', text)),
-      logDiagnostic,
-      logDiagnosticHeader: (title) =>
-        Effect.andThen(
-          logDiagnostic(diagnosticsLine),
-          Effect.andThen(
-            logDiagnostic(`DIAGNOSTIC: ${title}`),
-            logDiagnostic(diagnosticsLine),
-          ),
-        ),
-      logDiagnosticFooter: logDiagnostic(`${diagnosticsLine}\n`),
+      messageLog,
+      log: (_id, level, text) => logMessage(level, text),
+      logError: (_id, text) => logMessage('error', text),
+      logWarning: (_id, text) => logMessage('warning', text),
+      logInfo: (_id, text) => logMessage('info', text),
+      logVerbose: (_id, text) => logMessage('verbose', text),
 
-      addCompilerDiagnostic: (diagnostic) => {
-        if (
-          diagnostic.category === Ts.DiagnosticCategory.Suggestion ||
-          diagnostic.category === Ts.DiagnosticCategory.Message
-        ) {
-          return
-        }
-        const messageText = Ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
-        const message = new ExtractorMessage({
-          category: ExtractorMessageCategory.Compiler,
-          messageId: `TS${diagnostic.code}`,
-          text: messageText,
-        })
-        if (diagnostic.file !== undefined) {
-          const sourceLocation = sourceMapper?.getSourceLocation({
-            sourceFile: diagnostic.file,
-            pos: diagnostic.start ?? 0,
-            useDtsLocation: true,
-          })
-          if (sourceLocation !== undefined) {
-            message.sourceFilePath = sourceLocation.sourceFilePath
-            message.sourceFileLine = sourceLocation.sourceFileLine
-            message.sourceFileColumn = sourceLocation.sourceFileColumn
-          } else {
-            const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start ?? 0)
-            message.sourceFilePath = diagnostic.file.fileName
-            message.sourceFileLine = line + 1
-            message.sourceFileColumn = character + 1
-          }
-        }
-        messages.push(message)
-      },
-
-      addAnalyzerIssue: (messageId, messageText, astDeclarationOrSymbol, properties) => {
-        const astDeclaration = astDeclarationOrSymbol instanceof AstDeclaration
-          ? astDeclarationOrSymbol
-          : astDeclarationOrSymbol.astDeclarations[0]
-        if (astDeclaration === undefined) {
-          return
-        }
-        const message = addAnalyzerIssueForPosition(
-          messageId,
-          messageText,
-          astDeclaration.declaration.getSourceFile(),
-          astDeclaration.declaration.getStart(),
-          properties,
-        )
-        associateMessageWithAstDeclaration(message, astDeclaration)
-      },
-
-      addAnalyzerIssueForPosition: (messageId, messageText, sourceFile, pos, properties) => {
-        const sourceLocation = sourceMapper?.getSourceLocation({ sourceFile, pos })
-        const { line, character } = sourceFile.getLineAndCharacterOfPosition(pos)
-        const message = new ExtractorMessage({
-          category: ExtractorMessageCategory.Extractor,
-          messageId,
-          text: messageText,
-          properties,
-          sourceFilePath: sourceLocation?.sourceFilePath ?? sourceFile.fileName,
-          sourceFileLine: sourceLocation?.sourceFileLine ?? line + 1,
-          sourceFileColumn: sourceLocation?.sourceFileColumn ?? character + 1,
-        })
-        messages.push(message)
-        return message
-      },
-
-      addTsdocMessages: (parserContext, sourceFile, astDeclaration) => {
-        for (const message of parserContext.log.messages) {
-          const sourceLocation = sourceMapper?.getSourceLocation({ sourceFile, pos: message.textRange.pos })
-          const { line, character } = sourceFile.getLineAndCharacterOfPosition(message.textRange.pos)
-          const extractorMessage = new ExtractorMessage({
-            category: ExtractorMessageCategory.TSDoc,
-            messageId: message.messageId,
-            text: message.unformattedText,
-            sourceFilePath: sourceLocation?.sourceFilePath ?? sourceFile.fileName,
-            sourceFileLine: sourceLocation?.sourceFileLine ?? line + 1,
-            sourceFileColumn: sourceLocation?.sourceFileColumn ?? character + 1,
-          })
-          if (astDeclaration !== undefined) {
-            associateMessageWithAstDeclaration(extractorMessage, astDeclaration)
-          }
-          messages.push(extractorMessage)
-        }
-      },
+      emitAnalysisConsoleMessages: Effect.suspend(() => {
+        const pending = messageLog.messages().filter((message) => message.category === 'console' && !message.handled)
+        pending.forEach((message) => message.markHandled())
+        const writes = pending.map(consoleLine)
+        return Effect.forEach(writes, ({ level, text }) => emit(level, text), { discard: true })
+      }),
 
       fetchAssociatedMessagesForReviewFile: (astDeclaration) => {
-        const associatedMessages = associatedMessagesForAstDeclaration.get(astDeclaration) ?? []
-        const messagesForApiReportFile = associatedMessages.filter((associatedMessage) => {
-          if (associatedMessage.handled) {
-            return false
-          }
-          const admitsRule = Result.match(getRuleForMessage(associatedMessage), {
-            onSuccess: (rule) => rule.addToApiReportFile,
-            onFailure: () => false,
-          })
-          if (!admitsRule) {
-            return false
-          }
-          associatedMessage.markHandled()
-          return true
-        })
-        sortMessagesForOutput(messagesForApiReportFile)
-        return messagesForApiReportFile
+        const selected = selectReportMessages(candidatesOf(messageLog.associatedMessagesOf(astDeclaration)))
+        sortMessagesForOutput(selected)
+        selected.forEach((message) => message.markHandled())
+        return selected
       },
 
       fetchUnassociatedMessagesForReviewFile: () => {
-        const messagesForApiReportFile = messages.filter((unassociatedMessage) => {
-          if (unassociatedMessage.handled) {
-            return false
-          }
-          const admitsRule = Result.match(getRuleForMessage(unassociatedMessage), {
-            onSuccess: (rule) => rule.addToApiReportFile,
-            onFailure: () => false,
-          })
-          if (!admitsRule) {
-            return false
-          }
-          unassociatedMessage.markHandled()
-          return true
-        })
-        sortMessagesForOutput(messagesForApiReportFile)
-        return messagesForApiReportFile
+        const selected = selectReportMessages(candidatesOf(messageLog.messages()))
+        sortMessagesForOutput(selected)
+        selected.forEach((message) => message.markHandled())
+        return selected
       },
 
       handleRemainingNonConsoleMessages: Effect.suspend(() => {
-        const messagesForLogger = messages.filter((message) => !message.handled)
-        sortMessagesForOutput(messagesForLogger)
-        const writes: Array<{ readonly level: LogLevel; readonly text: string }> = messagesForLogger.flatMap(
-          (message) => {
-            const level = prepareMessage(message)
-            return level === 'none' ? [] : [{ level, text: messageTextOf(message) }]
-          },
+        const messagesForLogger = messageLog.messages().filter(
+          (message) => message.category !== 'console' && !message.handled,
         )
-        return Effect.forEach(writes, ({ level, text }) => emit(level, text), {
-          discard: true,
+        sortMessagesForOutput(messagesForLogger)
+        const writes = messagesForLogger.flatMap((message) => {
+          const level = Option.getOrUndefined(consoleLevelOf(decisionOf(message)))
+          return level === undefined ? [] : [{ level, text: message.formatMessageWithLocation(workingPackageFolder) }]
         })
+        return Effect.forEach(writes, ({ level, text }) => emit(level, text), { discard: true })
       }),
 
-      messages: () => messages,
-      errorCount: () => errorCount,
-      warningCount: () => warningCount,
+      messages: () => messageLog.messages(),
+      errorCount: () => messageLog.messages().filter((message) => analysisLevelOf(message) === 'error').length,
+      warningCount: () => messageLog.messages().filter((message) => analysisLevelOf(message) === 'warning').length,
     }
   })
 
@@ -677,18 +404,6 @@ if (import.meta.vitest !== void 0) {
           lines.length === expectedLineCount(shouldAdmit) &&
           hasExpectedContent(lines, format(level, 'payload'))
         )
-      }),
-  )
-
-  it.effect.prop(
-    '∀v_Diagnostics_≡Flagged',
-    [Verbosity],
-    ([verbosity]) =>
-      Effect.gen(function*() {
-        const lines: RecordedLine[] = []
-        const router = yield* routerForVerbosity(verbosity, lines)
-        yield* router.logDiagnostic('test-diag')
-        return lines.length === expectedLineCount(verbosity === 'diagnostics')
       }),
   )
 }

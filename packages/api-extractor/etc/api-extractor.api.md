@@ -224,7 +224,7 @@ export class AstSymbol extends AstEntity {
 // @public (undocumented)
 export class AstSymbolTable extends Pipeable.Class {
     // Warning: (ae-forgotten-export) The symbol "PackageJsonLookup" needs to be exported by the entry point index.d.ts
-    constructor(program: ts.Program, typeChecker: ts.TypeChecker, packageJsonLookup: PackageJsonLookup, bundledPackageNames: ReadonlySet<string>, messageRouter: MessageRouter);
+    constructor(program: ts.Program, typeChecker: ts.TypeChecker, packageJsonLookup: PackageJsonLookup, bundledPackageNames: ReadonlySet<string>, messageLog: MessageLog);
     // (undocumented)
     analyze(astEntity: AstEntity): void;
     // (undocumented)
@@ -308,6 +308,8 @@ export class Collector extends Pipeable.Class {
     readonly globalVariableAnalyzer: IGlobalVariableAnalyzer;
     // (undocumented)
     isAncillaryDeclaration(astDeclaration: AstDeclaration): boolean;
+    // (undocumented)
+    readonly messageLog: MessageLog;
     // (undocumented)
     readonly messageRouter: MessageRouter;
     // (undocumented)
@@ -755,8 +757,10 @@ export class ExtractorMessage extends Data.Class<ExtractorMessageProps> {
     formatMessageWithoutLocation(): string;
     // (undocumented)
     get handled(): boolean;
+    // Warning: (ae-forgotten-export) The symbol "LogLevel" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    logLevel: LogLevelValue;
+    logLevel: LogLevel;
     // (undocumented)
     markHandled(): void;
     // (undocumented)
@@ -770,17 +774,6 @@ export class ExtractorMessage extends Data.Class<ExtractorMessageProps> {
 }
 
 // @public (undocumented)
-export const ExtractorMessageCategory: {
-    readonly Compiler: "Compiler";
-    readonly TSDoc: "TSDoc";
-    readonly Extractor: "Extractor";
-    readonly Console: "console";
-};
-
-// @public (undocumented)
-export type ExtractorMessageCategory = (typeof ExtractorMessageCategory)[keyof typeof ExtractorMessageCategory];
-
-// @public (undocumented)
 export interface ExtractorMessageProperties {
     // (undocumented)
     readonly exportName?: string;
@@ -788,10 +781,12 @@ export interface ExtractorMessageProperties {
 
 // @public (undocumented)
 export interface ExtractorMessageProps {
+    // Warning: (ae-forgotten-export) The symbol "ExtractorMessageCategory" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly category: ExtractorMessageCategory;
     // (undocumented)
-    readonly logLevel?: LogLevelValue | undefined;
+    readonly logLevel?: LogLevel | undefined;
     // (undocumented)
     readonly messageId: string;
     // (undocumented)
@@ -1056,15 +1051,6 @@ export const loadCompilerState: (options: CompilerStateOptions) => Effect$1.Effe
 // @public (undocumented)
 export const loadExtractorConfig: (filePath: string) => Effect$1.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
 
-// @public (undocumented)
-export const LogLevel: Schema$1.Literals<readonly ["error", "warning", "info", "verbose", "none"]>;
-
-// @public (undocumented)
-export type LogLevel = typeof LogLevel.Type;
-
-// @public (undocumented)
-export type LogLevelValue = 'error' | 'warning' | 'none' | 'info' | 'verbose';
-
 // Warning: (ae-forgotten-export) The symbol "MessageRuleError" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -1073,11 +1059,47 @@ export const makeMessageRouter: (request: VerbosityRequest, options?: MessageRou
 // @public (undocumented)
 export const mergeConfigObjects: (base: MutableJsonRecord, derived: MutableJsonRecord) => MutableJsonRecord;
 
+// @public
+export class MessageLog extends Pipeable.Class {
+    constructor(options: MessageLogOptions);
+    // (undocumented)
+    addAnalyzerIssue(messageId: ExtractorMessageId | string, messageText: string, astDeclarationOrSymbol: AstDeclaration | AstSymbol, properties?: ExtractorMessageProperties): void;
+    // (undocumented)
+    addAnalyzerIssueForPosition(messageId: ExtractorMessageId | string, messageText: string, sourceFile: ts.SourceFile, pos: number, properties?: ExtractorMessageProperties): ExtractorMessage;
+    // (undocumented)
+    addCompilerDiagnostic(diagnostic: ts.Diagnostic): void;
+    // (undocumented)
+    addConsoleMessage(messageId: string, level: LogLevel, text: string): ExtractorMessage;
+    // (undocumented)
+    addDiagnostic(text: string): void;
+    // (undocumented)
+    addDiagnosticFooter(): void;
+    // (undocumented)
+    addDiagnosticHeader(title: string): void;
+    // (undocumented)
+    addTsdocMessages(parserContext: tsdoc.ParserContext, sourceFile: ts.SourceFile, astDeclaration?: AstDeclaration): void;
+    // (undocumented)
+    append(message: ExtractorMessage): ExtractorMessage;
+    // (undocumented)
+    associatedMessagesOf(astDeclaration: AstDeclaration): readonly ExtractorMessage[];
+    // (undocumented)
+    readonly diagnostics: boolean;
+    // (undocumented)
+    messages(): readonly ExtractorMessage[];
+}
+
 // @public (undocumented)
 export const MessageLogLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
 
 // @public (undocumented)
 export type MessageLogLevel = typeof MessageLogLevel.Type;
+
+// @public (undocumented)
+export interface MessageLogOptions {
+    readonly diagnostics: boolean;
+    // (undocumented)
+    readonly sourceMapper?: SourceMapper | undefined;
+}
 
 // @public (undocumented)
 export const MessageReportingRule: Schema.Struct<{
@@ -1100,13 +1122,7 @@ export type MessageReportingTable = typeof MessageReportingTable.Type;
 // @public (undocumented)
 export interface MessageRouter {
     // (undocumented)
-    readonly addAnalyzerIssue: (messageId: ExtractorMessageId | string, messageText: string, astDeclarationOrSymbol: AstDeclaration | AstSymbol, properties?: ExtractorMessageProperties) => void;
-    // (undocumented)
-    readonly addAnalyzerIssueForPosition: (messageId: ExtractorMessageId | string, messageText: string, sourceFile: ts.SourceFile, pos: number, properties?: ExtractorMessageProperties) => ExtractorMessage;
-    // (undocumented)
-    readonly addCompilerDiagnostic: (diagnostic: ts.Diagnostic) => void;
-    // (undocumented)
-    readonly addTsdocMessages: (parserContext: tsdoc.ParserContext, sourceFile: ts.SourceFile, astDeclaration?: AstDeclaration) => void;
+    readonly emitAnalysisConsoleMessages: Effect.Effect<void, PlatformError>;
     // (undocumented)
     readonly errorCount: () => number;
     // (undocumented)
@@ -1118,12 +1134,6 @@ export interface MessageRouter {
     // (undocumented)
     readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnostic: (text: string) => Effect.Effect<void, PlatformError>;
-    // (undocumented)
-    readonly logDiagnosticFooter: Effect.Effect<void, PlatformError>;
-    // (undocumented)
-    readonly logDiagnosticHeader: (title: string) => Effect.Effect<void, PlatformError>;
-    // (undocumented)
     readonly logError: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
     readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
@@ -1131,6 +1141,8 @@ export interface MessageRouter {
     readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
     readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
+    // (undocumented)
+    readonly messageLog: MessageLog;
     // (undocumented)
     readonly messages: () => readonly ExtractorMessage[];
     // (undocumented)
@@ -1143,6 +1155,8 @@ export interface MessageRouter {
 export interface MessageRouterOptions {
     // (undocumented)
     readonly messagesConfig?: MessagesConfig | undefined;
+    // (undocumented)
+    readonly reportEnabled?: boolean | undefined;
     // (undocumented)
     readonly sourceMapper?: SourceMapper | undefined;
     // (undocumented)
@@ -1218,7 +1232,7 @@ export class PackageMetadata extends Pipeable.Class {
 
 // @public (undocumented)
 export class PackageMetadataManager extends Pipeable.Class {
-    constructor(packageJsonLookup: PackageJsonLookup, messageRouter: MessageRouter);
+    constructor(packageJsonLookup: PackageJsonLookup, messageLog: MessageLog);
     // (undocumented)
     isAedocSupportedFor(sourceFilePath: string): boolean;
     // (undocumented)
@@ -1227,8 +1241,6 @@ export class PackageMetadataManager extends Pipeable.Class {
     tryFetchPackageMetadata(sourceFilePath: string): PackageMetadata | undefined;
     // (undocumented)
     static tsdocMetadataFilename: string;
-    // (undocumented)
-    static writeTsdocMetadataFile(tsdocMetadataPath: string, _newlineKind: NewlineKind): void;
 }
 
 // @public (undocumented)
@@ -1265,6 +1277,18 @@ export const ReleaseTagForTrim: Schema.Literals<readonly ["@internal", "@alpha",
 // @public (undocumented)
 export type ReleaseTagForTrim = typeof ReleaseTagForTrim.Type;
 
+// @public (undocumented)
+export interface ReportCandidate {
+    // (undocumented)
+    readonly consumed: boolean;
+    // Warning: (ae-forgotten-export) The symbol "RoutingDecision" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly decision: RoutingDecision;
+    // (undocumented)
+    readonly message: ExtractorMessage;
+}
+
 // Warning: (ae-forgotten-export) The symbol "ResolveVerbosity_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -1289,6 +1313,9 @@ export interface RunGeneratorsOptions {
     // (undocumented)
     readonly printApiReportDiff?: boolean | undefined;
 }
+
+// @public
+export const selectReportMessages: (candidates: readonly ReportCandidate[]) => ExtractorMessage[];
 
 // @public (undocumented)
 export class SourceMapper extends Pipeable.Class {

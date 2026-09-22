@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
-import * as Effect from 'effect/Effect'
 import * as Pipeable from 'effect/Pipeable'
+import * as Result from 'effect/Result'
 import * as ts from 'typescript'
 import type { JsonRecord } from '../config/json-record.schema.js'
 import { JsonRecordFromString } from '../config/json-record.schema.js'
@@ -14,7 +14,7 @@ export interface INodePackageJson {
   readonly typings?: string | undefined
   readonly tsdocMetadata?: string | undefined
   readonly exports?: Schema.Json | undefined
-  readonly typesVersions?: Readonly<Record<string, readonly string[]>> | undefined
+  readonly typesVersions?: Schema.Json | undefined
   readonly dependencies?: Readonly<Record<string, string>> | undefined
   readonly devDependencies?: Readonly<Record<string, string>> | undefined
   readonly peerDependencies?: Readonly<Record<string, string>> | undefined
@@ -83,7 +83,14 @@ export class PackageJsonLookup extends Pipeable.Class {
       throw new InternalInvariantError({ message: `Input file not found: ${packageJsonFilePath}` })
     }
 
-    const raw: JsonRecord = Effect.runSync(Schema.decodeEffect(JsonRecordFromString)(content))
+    const decoded = Schema.decodeResult(JsonRecordFromString)(content)
+    if (Result.isFailure(decoded)) {
+      throw new InternalInvariantError({
+        message: `Malformed JSON in ${packageJsonFilePath}`,
+        cause: decoded.failure,
+      })
+    }
+    const raw: JsonRecord = decoded.success
 
     const parsed: INodePackageJson = {
       name: readOptionalString(raw, 'name'),
