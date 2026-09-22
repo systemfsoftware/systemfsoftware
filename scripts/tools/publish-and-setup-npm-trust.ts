@@ -1,142 +1,96 @@
 #!/usr/bin/env -S deno run --allow-run=git,corepack,pnpm,npm --allow-read --allow-write --allow-env=NPM_REGISTRY,GITHUB_REPOSITORY --allow-net=registry.npmjs.org
-// publish-and-setup-npm-trust.ts — bring every non-private workspace package to
-// the state CI needs: published on npm AND carrying a trusted publisher (OIDC).
-//
-// Existing on the registry is not that state. A package published from a
-// maintainer machine, or published before its trusted publisher was registered,
-// answers HTTP 200 while its latest version carries no provenance attestation —
-// so keying the skip on the status code alone declares the bootstrap finished on
-// exactly the packages that still need it, and the release pipeline then meets
-// them as unattested forever. The skip is keyed on the attestation instead:
-//
-//   unpublished (404)         -> debut:     build -> publish -> trust -> list
-//   published, no attestation -> untrusted: trust -> list  (the version exists,
-//                                so re-publishing it would be rejected)
-//   published + attested      -> skipped
-//   unreadable registry       -> named, and the run ends non-zero
-//
-// An untrusted package does not become attested by being registered: an
-// attestation is stamped at publish time and never granted retroactively, so its
-// already-published version stays unattested until its next version ships from
-// CI. Re-running therefore picks the same package up again — safe only because
-// the trust configuration is read before it is written. The registry allows one
-// trusted publisher per package, so a second `npm trust github` for a package
-// that already carries one is rejected with 409, and reading first is the only
-// thing that keeps a re-run from pairing a registered package with that error.
-//
-// That read costs an interactive two-factor challenge: GET
-// /-/package/<pkg>/trust requires `npm-otp` on every request, and the npm CLI
-// answers such a challenge only when stdin and stdout are terminals — its
-// `otplease` rethrows whenever either is not, which a captured stdout makes
-// permanent. The first trust call of a run is therefore one the CLI can carry
-// out interactively; completing it opens the account-wide two-factor skip window
-// that the captured reads then ride. A configuration that cannot be read is
-// reported as unreadable and left alone, never assumed absent: that assumption
-// is what turns a correctly registered package into a 409.
-//
-// Chains run concurrently, bounded by --jobs.
-//
-// Flags: --dry-run --only a,b --jobs N (default 4) --fix --all-trust
-// Env:  NPM_REGISTRY overrides the registry base URL.
-
 import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
-import { queryRegistry } from './npm-query.ts'
-import { expectedSlug, publicWorkspacePackages, WORKFLOW_FILE } from './oidc.ts'
+import { join } from '@std/path'
+import { queryRegistry, type RegistrySnapshot } from './npm-query.ts'
+import { expectedSlug, publicWorkspacePackages, WORKFLOW_FILE, type WorkspacePackage } from './oidc.ts'
 
-const {
-  'dry-run': dryRun = false,
-  jobs: jobsArg = '1',
-  only: onlyArg,
-  fix: fixRepo = false,
-  'all-trust': allTrust = false,
-} = parseArgs(Deno.args, {
-  boolean: ['dry-run', 'fix', 'all-trust'],
-  string: ['only', 'jobs'],
-  alias: { o: 'only' },
-  default: { 'dry-run': false, jobs: '1', 'all-trust': false },
-})
+type PackageAction =
+  | { readonly kind: 'debut'; readonly name: string; readonly dir: string }
+  | { readonly kind: 'untrusted'; readonly name: string; readonly dir: string }
 
-const jobs = Math.max(1, Number(jobsArg) || 4)
-const only = new Set((onlyArg ?? '').split(',').map((s) => s.trim()).filter(Boolean))
-const targetSlug = await expectedSlug()
-const registry = Deno.env.get('NPM_REGISTRY') ?? 'https://registry.npmjs.org'
-
-console.log(`Repository target slug: ${targetSlug}`)
-console.log(`Workflow file: ${WORKFLOW_FILE}`)
-
-const allPackages = await publicWorkspacePackages()
-if (fixRepo) {
-  for (const pkg of allPackages) {
-    if (pkg.repositorySlug !== targetSlug) {
-      const content = await Deno.readTextFile(pkg.filePath)
-      const parsed = JSON.parse(content)
-      if (typeof parsed.repository === 'object' && parsed.repository !== null) {
-        parsed.repository.url = `git+https://github.com/${targetSlug}.git`
-      } else {
-        parsed.repository = `git+https://github.com/${targetSlug}.git`
-      }
-      await Deno.writeTextFile(pkg.filePath, JSON.stringify(parsed, null, 2) + '\n')
-      console.log(`Updated repository.url for ${pkg.name}`)
-    }
-  }
+type PlanResult = {
+  readonly owed: readonly PackageAction[]
+  readonly unreadable: readonly string[]
 }
 
-const rows = allPackages.filter((p) => only.size === 0 || only.has(p.name))
-if (rows.length === 0) {
-  console.error(
-    only.size > 0
-      ? `--only matched no workspace package: ${[...only].join(', ')}`
-      : 'no non-private workspace packages discovered',
-  )
-  Deno.exit(1)
+type TrustConfig = {
+  readonly id?: string
+  readonly type?: string
+  readonly file?: string
+  readonly repository?: string
 }
 
-interface Owed {
+type TrustRead =
+  | { readonly kind: 'configs'; readonly configs: readonly TrustConfig[] }
+  | { readonly kind: 'unreadable' }
+
+type ReconcileStep =
+  | { readonly action: 'already-trusted'; readonly staleIds: readonly string[] }
+  | { readonly action: 'replace'; readonly staleIds: readonly string[] }
+
+type PackageRunResult = {
   readonly name: string
-  readonly dir: string
-  readonly mode: 'debut' | 'untrusted'
+  readonly ok: boolean
 }
 
-// Bounded, because an unbounded map over every member is an fd and rate-limit
-// hazard. `queryRegistry` never throws, and `pooledMap` yields in input order,
-// so a snapshot still pairs with its row by index.
-const snapshots = await Array.fromAsync(pooledMap(jobs, rows, (p) => queryRegistry(p.name, registry)))
-const owed: Owed[] = []
-const unreadable: string[] = []
+const resolveAction = (
+  pkg: WorkspacePackage,
+  snapshot: RegistrySnapshot,
+  forceTrust: boolean,
+): { readonly action?: PackageAction; readonly unreadable?: string } => {
+  const dir = pkg.filePath.replace(/\/package\.json$/, '')
 
-for (let i = 0; i < rows.length; i++) {
-  const p = rows[i]
-  const dir = p.filePath.replace(/\/package\.json$/, '')
-  const snapshot = snapshots[i]
   if (snapshot.status === 'error') {
-    console.error(`${p.name} … registry unreadable`)
-    unreadable.push(p.name)
-  } else if (snapshot.status === 'unpublished') {
-    console.log(`${p.name} … unpublished (404) — debut`)
-    owed.push({ name: p.name, dir, mode: 'debut' })
-  } else if (!snapshot.attested) {
-    console.log(`${p.name} … published ${snapshot.latest}, no provenance attestation — registering trusted publisher`)
-    owed.push({ name: p.name, dir, mode: 'untrusted' })
-  } else if (allTrust) {
-    console.log(`${p.name} … published ${snapshot.latest} + attested — re-applying trusted publisher (--all-trust)`)
-    owed.push({ name: p.name, dir, mode: 'untrusted' })
-  } else {
-    console.log(`${p.name} … published ${snapshot.latest} + attested — skipped (use --all-trust to force trust update)`)
+    console.error(`${pkg.name} … registry unreadable`)
+    return { unreadable: pkg.name }
   }
-}
-if (owed.length === 0) {
-  console.log(
-    unreadable.length > 0
-      ? 'no package has outstanding work, but the registry could not be read for some'
-      : 'every package is published and attested — nothing to do',
-  )
-  Deno.exit(unreadable.length > 0 ? 1 : 0)
+
+  if (snapshot.status === 'unpublished') {
+    console.log(`${pkg.name} … unpublished (404) — debut`)
+    return { action: { kind: 'debut', name: pkg.name, dir } }
+  }
+
+  if (!snapshot.attested) {
+    console.log(`${pkg.name} … published ${snapshot.latest}, no provenance attestation — registering trusted publisher`)
+    return { action: { kind: 'untrusted', name: pkg.name, dir } }
+  }
+
+  if (forceTrust) {
+    console.log(`${pkg.name} … published ${snapshot.latest} + attested — re-applying trusted publisher (--all-trust)`)
+    return { action: { kind: 'untrusted', name: pkg.name, dir } }
+  }
+
+  console.log(`${pkg.name} … published ${snapshot.latest} + attested — skipped (use --all-trust to force trust update)`)
+  return {}
 }
 
-async function runInteractive(args: string[], cwd: string): Promise<{ success: boolean; code: number }> {
-  const child = new Deno.Command(args[0], {
-    args: args.slice(1),
+const planExecution = async (
+  packages: readonly WorkspacePackage[],
+  registryUrl: string,
+  concurrency: number,
+  forceTrust: boolean,
+): Promise<PlanResult> => {
+  const snapshots = await Array.fromAsync(
+    pooledMap(concurrency, packages, (pkg: WorkspacePackage) => queryRegistry(pkg.name, registryUrl)),
+  )
+
+  const owed: PackageAction[] = []
+  const unreadable: string[] = []
+
+  for (let i = 0; i < packages.length; i++) {
+    const outcome = resolveAction(packages[i], snapshots[i], forceTrust)
+    if (outcome.action) owed.push(outcome.action)
+    if (outcome.unreadable) unreadable.push(outcome.unreadable)
+  }
+
+  return { owed, unreadable }
+}
+
+const runInteractive = async (args: readonly string[], cwd: string): Promise<{ success: boolean; code: number }> => {
+  const [command, ...commandArgs] = args
+  const child = new Deno.Command(command, {
+    args: commandArgs,
     cwd,
     stdin: 'inherit',
     stdout: 'inherit',
@@ -146,23 +100,17 @@ async function runInteractive(args: string[], cwd: string): Promise<{ success: b
   return { success: status.success, code: status.code }
 }
 
-type TrustConfig = {
-  id?: string
-  type?: string
-  file?: string
-  repository?: string
-}
-
-/** Trust configs from `npm trust list --json`, tolerant of surrounding prose. */
-function parseTrustJson(raw: string): TrustConfig[] {
+const parseTrustJson = (raw: string): readonly TrustConfig[] => {
   const configs: TrustConfig[] = []
   let depth = 0
   let start = -1
+
   for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '{') {
+    const char = raw[i]
+    if (char === '{') {
       if (depth === 0) start = i
       depth++
-    } else if (raw[i] === '}') {
+    } else if (char === '}') {
       depth--
       if (depth === 0 && start !== -1) {
         const slice = raw.slice(start, i + 1)
@@ -171,23 +119,15 @@ function parseTrustJson(raw: string): TrustConfig[] {
           if (Array.isArray(parsed)) configs.push(...(parsed as TrustConfig[]))
           else if (parsed && typeof parsed === 'object') configs.push(parsed as TrustConfig)
         } catch {
-          // ignore parse errors
+          // Ignore malformed json chunks
         }
         start = -1
       }
     }
   }
+
   return configs
 }
-
-/**
- * The registry's answer, with "it would not tell us" kept distinct from "there
- * is nothing configured". Collapsing the two is what makes a blind write look
- * justified.
- */
-type TrustRead =
-  | { readonly kind: 'configs'; readonly configs: readonly TrustConfig[] }
-  | { readonly kind: 'unreadable' }
 
 const readTrustConfigs = async (pkgName: string, cwd: string): Promise<TrustRead> => {
   const out = await new Deno.Command('npm', {
@@ -197,70 +137,80 @@ const readTrustConfigs = async (pkgName: string, cwd: string): Promise<TrustRead
     stdout: 'piped',
     stderr: 'inherit',
   }).output()
+
   if (!out.success) return { kind: 'unreadable' }
   return { kind: 'configs', configs: parseTrustJson(new TextDecoder().decode(out.stdout)) }
 }
 
-/**
- * One interactive `npm trust list` to satisfy the two-factor challenge, which is
- * what opens the account-wide skip window the captured reads need. Single-flight,
- * so concurrent chains share one prompt, and released on failure so a later
- * package can offer it again.
- */
-let trustWindow: Promise<void> | null = null
+let trustWindowLock: Promise<void> | null = null
 
 const openTrustWindow = (pkgName: string, cwd: string): Promise<void> => {
-  trustWindow ??= runInteractive(['npm', 'trust', 'list', pkgName], cwd).then((res) => {
-    if (!res.success) trustWindow = null
+  trustWindowLock ??= runInteractive(['npm', 'trust', 'list', pkgName], cwd).then((res) => {
+    if (!res.success) trustWindowLock = null
   })
-  return trustWindow
+  return trustWindowLock
 }
 
 const getTrustConfigs = async (pkgName: string, cwd: string): Promise<TrustRead> => {
-  const captured = await readTrustConfigs(pkgName, cwd)
-  if (captured.kind === 'configs') return captured
-  console.log(`  Trust configuration unreadable — reading it needs two-factor authentication`)
+  const initial = await readTrustConfigs(pkgName, cwd)
+  if (initial.kind === 'configs') return initial
+
+  console.log('  Trust configuration unreadable — reading it needs two-factor authentication')
   await openTrustWindow(pkgName, cwd)
   return readTrustConfigs(pkgName, cwd)
 }
 
-/** Converge a package's trust config on exactly this repo + workflow file. */
-async function reconcileTrust(pkgName: string, cwd: string, dryRun: boolean): Promise<boolean> {
-  const matchesTarget = (cfg: TrustConfig) =>
-    cfg.type === 'github' && cfg.repository === targetSlug && cfg.file === WORKFLOW_FILE
+const planReconcile = (
+  configs: readonly TrustConfig[],
+  targetRepo: string,
+  targetWorkflow: string,
+): ReconcileStep => {
+  const isTarget = (cfg: TrustConfig) =>
+    cfg.type === 'github' && cfg.repository === targetRepo && cfg.file === targetWorkflow
 
+  const hasTarget = configs.some(isTarget)
+  const staleIds = configs
+    .filter((c) => hasTarget ? !isTarget(c) : true)
+    .map((c) => c.id)
+    .filter((id): id is string => typeof id === 'string')
+
+  return hasTarget
+    ? { action: 'already-trusted', staleIds }
+    : { action: 'replace', staleIds }
+}
+
+const reconcileTrust = async (
+  pkgName: string,
+  cwd: string,
+  targetSlug: string,
+  dryRun: boolean,
+): Promise<boolean> => {
   console.log(`  Querying trust configuration for ${pkgName}...`)
   const read = await getTrustConfigs(pkgName, cwd)
+
   if (read.kind === 'unreadable') {
     console.error(
       `  Cannot read the trust configuration for ${pkgName}: \`npm trust list\` needs a two-factor challenge this run could not complete. Nothing was changed — run it once in a terminal, then re-run.`,
     )
     return false
   }
-  const existing = read.configs
 
-  if (existing.some(matchesTarget)) {
-    for (const cfg of existing.filter((c) => !matchesTarget(c))) {
-      if (!cfg.id) continue
-      console.log(`  Cleaning up stale config ${cfg.id} (${cfg.repository ?? 'other repo'})`)
-      if (!dryRun) {
-        await runInteractive(['npm', 'trust', 'revoke', pkgName, `--id=${cfg.id}`], cwd)
-      }
-    }
-    console.log(`  Already trusted for ${targetSlug} (${WORKFLOW_FILE}) — no changes needed`)
-    return true
-  }
+  const step = planReconcile(read.configs, targetSlug, WORKFLOW_FILE)
 
-  for (const cfg of existing) {
-    if (!cfg.id) continue
-    console.log(`  Revoking non-matching config ${cfg.id} (${cfg.repository ?? 'unknown'})`)
+  for (const id of step.staleIds) {
+    console.log(`  Cleaning up stale config ${id}`)
     if (!dryRun) {
-      const res = await runInteractive(['npm', 'trust', 'revoke', pkgName, `--id=${cfg.id}`], cwd)
-      if (!res.success) {
-        console.error(`  Failed to revoke existing trust id ${cfg.id}`)
+      const res = await runInteractive(['npm', 'trust', 'revoke', pkgName, `--id=${id}`], cwd)
+      if (!res.success && step.action === 'replace') {
+        console.error(`  Failed to revoke existing trust id ${id}`)
         return false
       }
     }
+  }
+
+  if (step.action === 'already-trusted') {
+    console.log(`  Already trusted for ${targetSlug} (${WORKFLOW_FILE}) — no changes needed`)
+    return true
   }
 
   const addCmd = [
@@ -276,6 +226,7 @@ async function reconcileTrust(pkgName: string, cwd: string, dryRun: boolean): Pr
     '--allow-stage-publish',
     '--yes',
   ]
+
   console.log(`  > ${addCmd.join(' ')}`)
   if (!dryRun) {
     const res = await runInteractive(addCmd, cwd)
@@ -284,12 +235,13 @@ async function reconcileTrust(pkgName: string, cwd: string, dryRun: boolean): Pr
       return false
     }
   }
+
   return true
 }
 
-async function hasBuildScript(packagePath: string): Promise<boolean> {
+const hasBuildScript = async (packagePath: string): Promise<boolean> => {
   try {
-    const raw = await Deno.readTextFile(`${packagePath}/package.json`)
+    const raw = await Deno.readTextFile(join(packagePath, 'package.json'))
     const manifest = JSON.parse(raw) as { scripts?: Record<string, string> }
     return typeof manifest.scripts?.build === 'string'
   } catch {
@@ -297,48 +249,135 @@ async function hasBuildScript(packagePath: string): Promise<boolean> {
   }
 }
 
-async function publishAndTrust(p: Owed): Promise<{ name: string; ok: boolean }> {
-  const name = p.name
-  console.log(`\n== ${name} (${p.mode})`)
-  if (p.mode === 'debut') {
-    if (await hasBuildScript(p.dir)) {
-      console.log(`  > corepack pnpm --filter ${name} build`)
-      if (!dryRun && !(await runInteractive(['corepack', 'pnpm', '--filter', name, 'build'], p.dir)).success) {
-        return { name, ok: false }
-      }
-    }
-    console.log(`  > corepack pnpm --filter ${name} publish --access public --no-git-checks`)
-    if (
-      !dryRun &&
-      !(await runInteractive(
-        ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
-        p.dir,
-      )).success
-    ) {
-      return { name, ok: false }
+const executeDebut = async (name: string, dir: string, dryRun: boolean): Promise<boolean> => {
+  if (await hasBuildScript(dir)) {
+    console.log(`  > corepack pnpm --filter ${name} build`)
+    if (!dryRun && !(await runInteractive(['corepack', 'pnpm', '--filter', name, 'build'], dir)).success) {
+      return false
     }
   }
 
-  if (!(await reconcileTrust(name, p.dir, dryRun))) return { name, ok: false }
-
-  console.log(`  > npm trust list ${name}`)
-  if (!dryRun) {
-    await runInteractive(['npm', 'trust', 'list', name], p.dir)
+  console.log(`  > corepack pnpm --filter ${name} publish --access public --no-git-checks`)
+  if (
+    !dryRun &&
+    !(await runInteractive(
+      ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
+      dir,
+    )).success
+  ) {
+    return false
   }
-  return { name, ok: true }
+
+  return true
 }
 
-const debuts = owed.filter((p) => p.mode === 'debut').length
-console.log(
-  `\nprocessing ${owed.length} package(s) with --jobs ${jobs}: ${debuts} debut, ${owed.length - debuts} untrusted`,
-)
+const processPackage = async (
+  action: PackageAction,
+  targetSlug: string,
+  dryRun: boolean,
+): Promise<PackageRunResult> => {
+  console.log(`\n== ${action.name} (${action.kind})`)
 
-const results: Array<{ name: string; ok: boolean }> = await Array.fromAsync(
-  pooledMap(jobs, owed, publishAndTrust),
-)
+  if (action.kind === 'debut') {
+    const published = await executeDebut(action.name, action.dir, dryRun)
+    if (!published) return { name: action.name, ok: false }
+  }
 
-const failed = results.filter((r) => !r.ok).map((r) => r.name)
-if (failed.length > 0) console.error(`failed: ${failed.join(', ')}`)
-if (unreadable.length > 0) console.error(`registry unreadable: ${unreadable.join(', ')}`)
-if (failed.length > 0 || unreadable.length > 0) Deno.exit(1)
-console.log('\ndone')
+  const trusted = await reconcileTrust(action.name, action.dir, targetSlug, dryRun)
+  if (!trusted) return { name: action.name, ok: false }
+
+  console.log(`  > npm trust list ${action.name}`)
+  if (!dryRun) {
+    await runInteractive(['npm', 'trust', 'list', action.name], action.dir)
+  }
+
+  return { name: action.name, ok: true }
+}
+
+const alignRepositoryUrls = async (
+  packages: readonly WorkspacePackage[],
+  targetSlug: string,
+): Promise<void> => {
+  const repositoryUrl = `git+https://github.com/${targetSlug}.git`
+
+  for (const pkg of packages) {
+    if (pkg.repositorySlug !== targetSlug) {
+      const content = await Deno.readTextFile(pkg.filePath)
+      const parsed = JSON.parse(content) as Record<string, unknown>
+      if (typeof parsed.repository === 'object' && parsed.repository !== null) {
+        ;(parsed.repository as Record<string, unknown>).url = repositoryUrl
+      } else {
+        parsed.repository = repositoryUrl
+      }
+      await Deno.writeTextFile(pkg.filePath, JSON.stringify(parsed, null, 2) + '\n')
+      console.log(`Updated repository.url for ${pkg.name}`)
+    }
+  }
+}
+
+const main = async (): Promise<void> => {
+  const {
+    'dry-run': dryRun = false,
+    jobs: jobsArg = '1',
+    only: onlyArg,
+    fix: fixRepo = false,
+    'all-trust': allTrust = false,
+  } = parseArgs(Deno.args, {
+    boolean: ['dry-run', 'fix', 'all-trust'],
+    string: ['only', 'jobs'],
+    alias: { o: 'only' },
+    default: { 'dry-run': false, jobs: '1', 'all-trust': false },
+  })
+
+  const jobs = Math.max(1, Number(jobsArg) || 4)
+  const onlyList = (onlyArg ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const only = onlyList.length > 0 ? new Set(onlyList) : null
+
+  const targetSlug = await expectedSlug()
+  const registry = Deno.env.get('NPM_REGISTRY') ?? 'https://registry.npmjs.org'
+
+  console.log(`Repository target slug: ${targetSlug}`)
+  console.log(`Workflow file: ${WORKFLOW_FILE}`)
+
+  const allPackages = await publicWorkspacePackages()
+  if (fixRepo) await alignRepositoryUrls(allPackages, targetSlug)
+
+  const targetPackages = only ? allPackages.filter((p) => only.has(p.name)) : allPackages
+  if (targetPackages.length === 0) {
+    console.error(
+      only
+        ? `--only matched no workspace package: ${[...only].join(', ')}`
+        : 'no non-private workspace packages discovered',
+    )
+    Deno.exit(1)
+  }
+
+  const { owed, unreadable } = await planExecution(targetPackages, registry, jobs, allTrust)
+
+  if (owed.length === 0) {
+    console.log(
+      unreadable.length > 0
+        ? 'no package has outstanding work, but the registry could not be read for some'
+        : 'every package is published and attested — nothing to do',
+    )
+    Deno.exit(unreadable.length > 0 ? 1 : 0)
+  }
+
+  const debuts = owed.filter((p) => p.kind === 'debut').length
+  console.log(
+    `\nprocessing ${owed.length} package(s) with --jobs ${jobs}: ${debuts} debut, ${owed.length - debuts} untrusted`,
+  )
+
+  const results: readonly PackageRunResult[] = await Array.fromAsync(
+    pooledMap(jobs, owed, (action: PackageAction) => processPackage(action, targetSlug, dryRun)),
+  )
+
+  const failed = results.filter((r) => !r.ok).map((r) => r.name)
+  if (failed.length > 0) console.error(`failed: ${failed.join(', ')}`)
+  if (unreadable.length > 0) console.error(`registry unreadable: ${unreadable.join(', ')}`)
+
+  if (failed.length > 0 || unreadable.length > 0) Deno.exit(1)
+  console.log('\ndone')
+}
+
+await main()
