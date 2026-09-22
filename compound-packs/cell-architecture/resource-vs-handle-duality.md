@@ -38,9 +38,6 @@ In idiomatic Effect (`Socket`, `Queue`, `Fiber`, `Ref`), **handles are not OOP-s
 export const TypeId = Symbol.for('~my-org/package/RunningInstance')
 export type TypeId = typeof TypeId
 
-// 1b. Module-private symbol slot for third-party driver tokens:
-const DriverId: unique symbol = Symbol.for('~my-org/package/RunningInstance/driver')
-
 // 2. Type guard:
 export const isRunningInstance = (u: unknown): u is RunningInstance =>
   Predicate.hasProperty(u, TypeId)
@@ -48,7 +45,6 @@ export const isRunningInstance = (u: unknown): u is RunningInstance =>
 // 3. Minimal protocol record extending Pipeable:
 export interface RunningInstance extends Pipeable {
   readonly [TypeId]: typeof TypeId
-  readonly [DriverId]: RawDriver
   readonly id: string
   readonly endpoint: string
 }
@@ -59,6 +55,8 @@ export const exec: {
   (self: RunningInstance, cmd: string): Effect.Effect<ExecResult, ExecError>
 } = dual(2, (self: RunningInstance, cmd: string) => ...)
 ```
+
+Where a handle carries a third-party driver token, the symbol-slot mechanism is prescribed by `handle-state-privacy.md`.
 
 ```ts
 // WRONG: Modeling an acquired entity as an ambient singleton Service

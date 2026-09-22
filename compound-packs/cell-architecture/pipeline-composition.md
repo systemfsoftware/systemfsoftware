@@ -33,4 +33,4 @@ export const handleOrderCell = validateCell.pipe(
 ```
 
 Gate: `type-checker` — verifies output-to-input type alignment across `andThen` chains.
-Lint: `oxlint` rule `no-sequential-cell-run` flags multiple `yield* cell.run(...)` calls in a single generator.
+Review: verify a multi-step interaction is one composed cell, not several `cell.run` calls inside an `Effect.gen` body. No lint rule covers this shape today.

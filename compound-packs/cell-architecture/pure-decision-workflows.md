@@ -39,5 +39,5 @@ export const decideDiscount = Workflow.make(
 )
 ```
 
-Gate: `type-checker` — `Sandwich.decide` rejects values missing `WorkflowBrand`.
+Gate: `type-checker` — the chain's `decide` method accepts only a `WorkflowBrand`-branded workflow, so a bare function fails compilation.
 Lint: `oxlint` bans control flow keywords (`if`, `switch`, `for`, `while`) in `*.workflow.ts`.

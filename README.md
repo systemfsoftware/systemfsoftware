@@ -223,15 +223,10 @@ Following `compound-packs/cell-architecture/ports-separate-from-layers.md`:
 
 ### Resource & Lifecycle Algebra
 
-Infrastructure and capability packages (container runners, sandbox drivers, process managers) manage resources directly without application port ceremony, as codified in `compound-packs/cell-architecture/`:
+Infrastructure and capability packages (container runners, sandbox drivers, process managers) manage resources directly without application port ceremony:
 
 - **Scoped lifecycles**: Resources acquire inside Effect `Scope` with escalating finalizers. Imperative `start()` and `stop()` methods are prohibited (`scoped-lifecycle-boundaries.md`).
-- **Resource and handle pairing**: Declarative specifications compile directly to scoped instances or parameterized layers (`resource-vs-handle-duality.md`):
-  ```ts
-  const spec = MicroVM.spec({ image: 'alpine:latest', memory: 256 })
-  const handle = yield * spec.scoped // Scoped acquisition
-  const layer = spec.layer // Parameterized Layer constructor
-  ```
+- **Resource and handle pairing**: Declarative specifications compile directly to scoped instances or parameterized layers (`resource-vs-handle-duality.md`).
 - **Dual syntax support**: Operations are callable both as object methods and as data-last `pipe()` combinators (`pipeable-dual-parity.md`).
 - **Cause preservation**: Errors preserve underlying failure details via `cause: Schema.optional(Schema.Unknown)` (`four-channel-contracts.md`).
 
