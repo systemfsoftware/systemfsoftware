@@ -1,28 +1,43 @@
 /**
  * @beta
  */
-export class BetaFeature {
+export declare class BetaFeature {
   run(): Promise<void>
 }
 
-export function computeValue(input: string): number
+/**
+ * @public
+ */
+export declare function computeValue(input: string): number
 
 /**
  * @internal
  */
-export function internalHelper(): void
+export declare function internalHelper(): void
 
+/**
+ * @public
+ */
 export type SimpleId = string
 
-export namespace SimpleNamespace {
+/**
+ * @public
+ */
+export declare namespace SimpleNamespace {
   export function helper(x: number): number
 }
 
+/**
+ * @public
+ */
 export interface SimpleOptions {
   timeout?: number
 }
 
-export class SimpleService {
+/**
+ * @public
+ */
+export declare class SimpleService {
   readonly id: SimpleId
   start(): void
 }
