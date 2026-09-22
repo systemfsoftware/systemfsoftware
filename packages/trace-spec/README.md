@@ -38,16 +38,29 @@ const paymentUnderCheckout = Contract.of(checkout)
 | A contracted span lacked a required attribute | `ContractDecodeError`   | names the declaration and the attribute — never reported as a broken relation           |
 | Nothing ran under the owned trace             | `EmptyObservationError` | the observation was empty, which is its own outcome, not a break                        |
 
-## Observe in memory
+## Register cases
 
 ```ts
-Feature('Checkout places an order')
-  .withScenarioLayer(Observe.inMemory)
-  .liveClock()
-  .body(({ scenario }) => {/* … */})
+import { NodeFileSystem } from '@effect/platform-node'
+import { it, layer } from '@effect/vitest'
+import { Observe, Suite } from '@systemfsoftware/trace-spec'
+import { Layer } from 'effect'
+
+const TraceSuite = Suite.make({ it, layer })
+const harness = Layer.mergeAll(Observe.inMemory, NodeFileSystem.layer, CheckoutDoubles)
+
+TraceSuite('checkout.place_order')
+  .withScenarioLayer(harness)
+  .body(({ Case }) => {
+    Case('one item is paid for under the order', paymentUnderCheckout, { userId, items: 1 })
+  })
 ```
 
-`Observe.inMemory` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observe.Observation` for reading a trace back. Specs isolate by the trace id each one owns, so two specs in one process never see each other's spans. Observation runs on the live clock: the export happens outside any test-clock boundary.
+Each `Case` is one stimulus, one owned trace, one relation. The scenario layer is built fresh per case and must provide `Observe.Observation` and a `FileSystem` for failure dumps, plus whatever the stimulated behaviour needs. A failing case fails with the harness's own error channel — the three outcomes above, or `StimulusFailure` when the behaviour itself failed before its trace could be judged. Cases run on the live clock.
+
+## Observe in memory
+
+`Observe.inMemory` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observe.Observation` for reading a trace back. Specs isolate by the trace id each one owns, so two specs in one process never see each other's spans. The export happens outside any test-clock boundary.
 
 ## Relations
 
