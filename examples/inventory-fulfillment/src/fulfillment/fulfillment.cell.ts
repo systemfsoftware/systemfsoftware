@@ -32,7 +32,11 @@ import {
 } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
 import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './explode-bundle.workflow.js'
-import { FulfillmentSettle } from './fulfillment-settle.span.js'
+import {
+  CreditCharge,
+  FulfillmentSettle,
+  ReservationCommit as ReservationCommitSpan,
+} from './fulfillment-settle.span.js'
 import { type Order, OrderFulfillmentCommand, OrderLine } from './order.schema.js'
 import {
   type OrderAllocated,
@@ -239,32 +243,35 @@ const reservationCommitOf = (plan: ReservationPlan, raw: RawContext): Reservatio
 const commitReservation = (
   plan: ReservationPlan,
   raw: RawContext,
-): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> =>
-  Effect.gen(function*() {
-    const log = yield* ReservationLog
-    return yield* log.commit(reservationCommitOf(plan, raw))
-  })
+): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> => {
+  const commit = reservationCommitOf(plan, raw)
+  return ReservationCommitSpan.start({
+    'app.customer.id': raw.order.customerId,
+    'app.order.id': raw.order.orderId,
+    'app.reservation.event.count': commit.events.length,
+  })(Effect.flatMap(ReservationLog, (log) => log.commit(commit)))
+}
 
 const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
   moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
+
+const chargeCredit = (customerId: string, allocations: readonly LotAllocation[]) => {
+  const amount = chargedAmountOf(allocations)
+  return CreditCharge.start({ 'app.charge.amount': Number(amount), 'app.customer.id': customerId })(
+    Effect.flatMap(CreditLedger, (ledger) => ledger.charge(customerId, amount)),
+  )
+}
 
 const chargeFor = (
   customerId: string,
   decision: FulfillmentDecision | FulfillmentError,
 ): Effect.Effect<void, never, CreditLedger> =>
   Match.value(decision).pipe(
-    Match.tag('AllocatedSplit', (allocated) =>
-      Effect.flatMap(CreditLedger, (ledger) =>
-        ledger.charge(customerId, chargedAmountOf(allocated.allocations)))),
-    Match.tag('AllocatedWithOverdraft', (overdraft) =>
-      Effect.flatMap(CreditLedger, (ledger) =>
-        ledger.charge(customerId, chargedAmountOf(overdraft.allocations)))),
-    Match.tag('CreditHold', () =>
-      Effect.void),
-    Match.tag('Backordered', () =>
-      Effect.void),
-    Match.tag('ConflictRollback', () =>
-      Effect.void),
+    Match.tag('AllocatedSplit', (allocated) => chargeCredit(customerId, allocated.allocations)),
+    Match.tag('AllocatedWithOverdraft', (overdraft) => chargeCredit(customerId, overdraft.allocations)),
+    Match.tag('CreditHold', () => Effect.void),
+    Match.tag('Backordered', () => Effect.void),
+    Match.tag('ConflictRollback', () => Effect.void),
     Match.tag('InsufficientStock', () => Effect.void),
     Match.tag('CreditLimitExceeded', () => Effect.void),
     Match.tag('Unauthorized', () => Effect.void),
