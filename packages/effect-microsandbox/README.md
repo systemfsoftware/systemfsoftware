@@ -65,13 +65,15 @@ const RedisLive = redis.layer
 
 ### Spec Combinators
 
-| Combinator                 | Description                  |
-| -------------------------- | ---------------------------- |
-| `.withEnv(env)`            | Merges environment variables |
-| `.withExposedPorts(ports)` | Replaces exposed guest ports |
-| `.withMount(mount)`        | Appends a host bind mount    |
-| `.withMemoryLimit(mb)`     | Sets memory limit in MiB     |
-| `.withWaitStrategy(s)`     | Sets readiness wait strategy |
+| Combinator                 | Description                                               |
+| -------------------------- | --------------------------------------------------------- |
+| `.withEnv(env)`            | Merges environment variables                              |
+| `.withExposedPorts(ports)` | Replaces exposed guest ports (services only)              |
+| `.withMount(mount)`        | Appends a host bind mount                                 |
+| `.withMemoryLimit(mb)`     | Sets memory limit in MiB                                  |
+| `.withWaitStrategy(s)`     | Sets readiness wait strategy (services only)              |
+| `.withHostAccess(enabled)` | Lets a job reach host services (jobs only)                |
+| `.withWorkdir(path)`       | Sets the working directory of a job's command (jobs only) |
 
 ### Readiness Strategies
 
@@ -80,6 +82,46 @@ VM startup does not complete until the specified wait strategy passes (30-second
 - **Port Probe**: `MicroVM.Wait.forPort(guestPort)` dials the mapped host loopback port.
 - **HTTP Probe**: `MicroVM.Wait.forHttp(path, guestPort)` issues a `GET` request and checks for a `2xx` status.
 - **Log Pattern**: `MicroVM.Wait.forLog(pattern)` polls the guest log stream for a matching regex.
+
+## One-shot Jobs
+
+`MicroVM.job(image, cmd)` declares a VM whose only purpose is to run `cmd` once. Its `.run` boots the VM, runs the command as the image's default workload, waits for it to end, and returns how it ended. The VM is torn down when the enclosing scope closes, whether the job succeeded, failed, or was interrupted.
+
+```ts
+import { NodeRuntime } from '@effect/platform-node'
+import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
+import { MicroVM } from '@systemfsoftware/effect-microsandbox'
+import { Effect, Match } from 'effect'
+
+const probe = MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', 'http://host.microsandbox.internal:4318/health'])
+  .withHostAccess(true)
+  .withWorkdir('/tmp')
+
+const program = Effect.scoped(
+  Effect.gen(function*() {
+    const completion = yield* probe.run
+    const verdict = Match.value(completion.status).pipe(
+      Match.tag('JobExited', ({ code }) => `exited with ${code}`),
+      Match.tag('JobSignaled', () => 'killed by a signal'),
+      Match.exhaustive,
+    )
+    console.log(verdict, new TextDecoder().decode(completion.stdout))
+  }),
+)
+
+NodeRuntime.runMain(Effect.provide(program, nodeServicesLayer))
+```
+
+A `JobCompletion` holds:
+
+- `status`: `JobExited` with the exit code, or `JobSignaled` when a signal ended the workload. A non-zero exit code is a successful `.run`; judging it is up to you. `JobSignaled` carries no signal number, because the runtime reports every signal death the same way.
+- `stdout` and `stderr`: the complete output as bytes (`Uint8Array`), exactly as the workload wrote it. The runtime keeps at most 32 MiB of output per run.
+
+`.run` fails with `ExecError` only when the workload could not be started or its result could not be collected.
+
+### Host Access
+
+A job cannot reach the host by default. `.withHostAccess(true)` opens the host to the guest: every service listening on the host, including one bound to `127.0.0.1`, becomes reachable at `host.microsandbox.internal`. Public internet access stays on. Opt in only for jobs whose command you trust with every host service.
 
 ## Runtime Behaviour
 
@@ -128,7 +170,7 @@ To verify end-to-end integration on a host with virtualization support:
 pnpm --filter @systemfsoftware/effect-microsandbox smoke
 ```
 
-The smoke journey boots Alpine Linux, executes an in-guest command, tests port mapping, confirms resource cleanup on interruption, and exercises layer reuse across sequential VM runs.
+The smoke journey boots Alpine Linux, executes an in-guest command, tests port mapping, confirms resource cleanup on interruption, and exercises layer reuse across sequential VM runs. Its job journeys check exit codes, signals, byte-exact output, host access with and without opt-in, and the working directory. On a host without virtualization it exits non-zero with `VirtualizationUnsupportedError`.
 
 ## License
 
