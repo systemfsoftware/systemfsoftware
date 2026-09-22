@@ -5,7 +5,7 @@
 ```ts
 
 // @public
-export function computeValue(input: string): number;
+export function computeValue(input: string): number
 
 // (No @packageDocumentation comment for this package)
 
