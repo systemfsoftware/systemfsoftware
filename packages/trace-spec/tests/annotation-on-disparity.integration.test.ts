@@ -53,6 +53,7 @@ const runVitestOn = (fixture: string): Effect.Effect<Observed> =>
       startVitest('test', [], {
         include: [`tests/__fixtures__/${fixture}`],
         watch: false,
+        coverage: { enabled: false },
         reporters: [collector.reporter],
       })
     )
