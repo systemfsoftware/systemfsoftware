@@ -1,6 +1,7 @@
 import * as NodeRuntime from '@effect/platform-node/NodeRuntime'
 import * as NodeServices from '@effect/platform-node/NodeServices'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import { Command } from 'effect/unstable/cli'
 
 import { initCommand } from './cli/init-action.js'
@@ -14,8 +15,15 @@ export const cli = Command.make('api-extractor').pipe(
   Command.withSubcommands([runCommand, initCommand]),
 )
 
+import { ConsoleMessageWriter, MessageWriter } from './collector/message-router.js'
+
+const cliLayers = Layer.mergeAll(
+  NodeServices.layer,
+  Layer.succeed(MessageWriter, ConsoleMessageWriter),
+)
+
 const program = Command.run(cli, { version: extractorVersion }).pipe(
-  Effect.provide(NodeServices.layer),
+  Effect.provide(cliLayers),
 )
 
 NodeRuntime.runMain(program)

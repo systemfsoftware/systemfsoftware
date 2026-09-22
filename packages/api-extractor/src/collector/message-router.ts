@@ -102,6 +102,25 @@ export const makeMessageRouter = (
       logDiagnosticFooter: logDiagnostic(`${diagnosticsLine}\n`),
     }
   })
+
+/**
+ * A MessageWriter whose writes are synchronous console output.
+ *
+ * The ported Collector emits log lines fire-and-forget from deep inside
+ * synchronous analysis code (upstream called `console.log` directly). A
+ * Terminal-backed writer is asynchronous under NodeServices, which makes
+ * `Effect.runSync` around those emits a defect (AsyncFiberError). The
+ * console writer keeps the fire-and-forget call sites lawful: every write
+ * is `Effect.sync`, so `runSync` never suspends.
+ */
+export const ConsoleMessageWriter: MessageWriter = {
+  write: (level, text) =>
+    Effect.sync(() => {
+      const stream = level === 'error' ? process.stderr : process.stdout
+      stream.write(format(level, text) + '\n')
+    }),
+}
+
 if (import.meta.vitest !== void 0) {
   // Exception: in-source tests load @effect/vitest dynamically to avoid bundling test libraries
   const { it } = await import('@effect/vitest')

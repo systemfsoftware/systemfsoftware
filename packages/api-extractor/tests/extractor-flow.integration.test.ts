@@ -3,7 +3,8 @@ import { runEffect } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
-import * as Terminal from 'effect/Terminal'
+
+import { ConsoleMessageWriter, MessageWriter } from '@systemfsoftware/api-extractor'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -34,18 +35,14 @@ Feature('Reviewing TypeScript package API surface definitions')
           (s) =>
             Effect.gen(function*() {
               const recordedLines: string[] = []
-              const terminal = Terminal.make({
-                columns: Effect.succeed(80),
-                rows: Effect.succeed(24),
-                readInput: Effect.die('readInput'),
-                readLine: Effect.die('readLine'),
-                display: (text) =>
+              const writer: MessageWriter = {
+                write: (level, text) =>
                   Effect.sync(() => {
                     recordedLines.push(text)
                   }),
-              })
+              }
               const result = yield* runEffect(s.configPath).pipe(
-                Effect.provideService(Terminal.Terminal, terminal),
+                Effect.provideService(MessageWriter, writer),
               )
               return { result, recordedLines }
             }),
@@ -72,21 +69,15 @@ Feature('Reviewing TypeScript package API surface definitions')
           (s) =>
             Effect.gen(function*() {
               const recordedLines: string[] = []
-              const terminal = Terminal.make({
-                columns: Effect.succeed(80),
-                rows: Effect.succeed(24),
-                readInput: Effect.die('readInput'),
-                readLine: Effect.die('readLine'),
-                display: (text) =>
+              const writer: MessageWriter = {
+                write: (level, text) =>
                   Effect.sync(() => {
                     recordedLines.push(text)
                   }),
-              })
+              }
               const result = yield* runEffect(s.configPath, {
                 cliFlags: { quiet: true },
-              }).pipe(
-                Effect.provideService(Terminal.Terminal, terminal),
-              )
+              }).pipe(Effect.provideService(MessageWriter, writer))
               return { result, recordedLines }
             }),
         ),
@@ -114,16 +105,7 @@ Feature('Reviewing TypeScript package API surface definitions')
           'attempt',
           (s) =>
             runEffect(s.configPath).pipe(
-              Effect.provideService(
-                Terminal.Terminal,
-                Terminal.make({
-                  columns: Effect.succeed(80),
-                  rows: Effect.succeed(24),
-                  readInput: Effect.die('readInput'),
-                  readLine: Effect.die('readLine'),
-                  display: () => Effect.void,
-                }),
-              ),
+              Effect.provideService(MessageWriter, ConsoleMessageWriter),
               Effect.map(() => 'unexpected-success'),
               Effect.catch((err) => Effect.succeed(err._tag)),
             ),

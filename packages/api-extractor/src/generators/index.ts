@@ -9,11 +9,14 @@ import type { Collector } from '../collector/Collector.js'
 import { ConsoleMessageId, type MessageRouter } from '../collector/message-router.js'
 import type { NewlineKind } from '../config/config-file.schema.js'
 import type { ExtractorConfig, ExtractorReportConfig } from '../config/extractor-config.js'
-import { UnsupportedSyntaxError } from '../errors/index.js'
+import type { UnsupportedSyntaxError } from '../errors/index.js'
 import { ApiReportGenerator } from './api-report-generator.js'
+import { DtsRollupGenerator, DtsRollupKind } from './dts-rollup-generator.js'
 
 export * from './api-report-generator.js'
 export * from './dts-emit-helpers.js'
+export * from './dts-rollup-generator.js'
+export * from './namespace-aliaser.js'
 
 export interface RunGeneratorsOptions {
   readonly localBuild?: boolean | undefined
@@ -23,6 +26,7 @@ export interface RunGeneratorsOptions {
 export interface GeneratorsResult {
   readonly apiReportChanged: boolean
   readonly apiReportFilePaths: readonly string[]
+  readonly dtsRollupFilePaths: readonly string[]
 }
 
 export const convertNewlines = (text: string, newlineKind: NewlineKind): string => {
@@ -176,6 +180,71 @@ const processSingleReport = (
     return { changed: true, filePath: expectedPath }
   })
 
+interface DtsRollupTarget {
+  readonly filePath: string
+  readonly kind: DtsRollupKind
+}
+
+const resolveDtsTargetFilePath = (rawPath: string, projectFolder: string, path: Path.Path): string => {
+  const withProject = rawPath.replaceAll('<projectFolder>', projectFolder)
+  return path.isAbsolute(withProject) ? withProject : path.resolve(projectFolder, withProject)
+}
+
+const collectDtsRollupTargets = (
+  config: ExtractorConfig,
+  path: Path.Path,
+): readonly DtsRollupTarget[] => {
+  if (!config.dtsRollup.enabled) {
+    return []
+  }
+  const targets: DtsRollupTarget[] = []
+  const { untrimmedFilePath, alphaTrimmedFilePath, betaTrimmedFilePath, publicTrimmedFilePath } = config.dtsRollup
+  if (untrimmedFilePath !== undefined && untrimmedFilePath.length > 0) {
+    targets.push({
+      filePath: resolveDtsTargetFilePath(untrimmedFilePath, config.projectFolder, path),
+      kind: DtsRollupKind.InternalRelease,
+    })
+  }
+  if (alphaTrimmedFilePath !== undefined && alphaTrimmedFilePath.length > 0) {
+    targets.push({
+      filePath: resolveDtsTargetFilePath(alphaTrimmedFilePath, config.projectFolder, path),
+      kind: DtsRollupKind.AlphaRelease,
+    })
+  }
+  if (betaTrimmedFilePath !== undefined && betaTrimmedFilePath.length > 0) {
+    targets.push({
+      filePath: resolveDtsTargetFilePath(betaTrimmedFilePath, config.projectFolder, path),
+      kind: DtsRollupKind.BetaRelease,
+    })
+  }
+  if (publicTrimmedFilePath !== undefined && publicTrimmedFilePath.length > 0) {
+    targets.push({
+      filePath: resolveDtsTargetFilePath(publicTrimmedFilePath, config.projectFolder, path),
+      kind: DtsRollupKind.PublicRelease,
+    })
+  }
+  return targets
+}
+const writeDtsRollupFile = (
+  collector: Collector,
+  config: ExtractorConfig,
+  router: MessageRouter,
+  target: DtsRollupTarget,
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+): Effect.Effect<string, PlatformError> =>
+  Effect.gen(function*() {
+    yield* router.logVerbose(
+      ConsoleMessageId.WritingDtsRollup,
+      `Writing declaration rollup: ${target.filePath}`,
+    )
+    const content = DtsRollupGenerator.generateTypingsFileContent(collector, target.kind)
+    const converted = convertNewlines(content, config.newlineKind)
+    yield* fs.makeDirectory(path.dirname(target.filePath), { recursive: true }).pipe(Effect.orDie)
+    yield* fs.writeFileString(target.filePath, converted).pipe(Effect.orDie)
+    return target.filePath
+  })
+
 export const runGenerators = (
   collector: Collector,
   config: ExtractorConfig,
@@ -183,20 +252,22 @@ export const runGenerators = (
   options?: RunGeneratorsOptions,
 ): Effect.Effect<GeneratorsResult, UnsupportedSyntaxError | PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
-    if (config.dtsRollup.enabled) {
-      return yield* new UnsupportedSyntaxError({
-        file: config.configFilePath,
-        line: 0,
-        message: 'dtsRollup is not yet implemented (owned by U8)',
-      })
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+
+    const dtsFilePaths: string[] = []
+    for (const target of collectDtsRollupTargets(config, path)) {
+      const written = yield* writeDtsRollupFile(collector, config, router, target, fs, path)
+      dtsFilePaths.push(written)
     }
 
     if (!config.apiReport.enabled) {
-      return { apiReportChanged: false, apiReportFilePaths: [] }
+      return {
+        apiReportChanged: false,
+        apiReportFilePaths: [],
+        dtsRollupFilePaths: dtsFilePaths,
+      }
     }
-
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
 
     const reportDirectoryPath = resolveReportFolder(config.apiReport.reportFolder, 'etc', config.projectFolder, path)
     const reportTempDirectoryPath = resolveReportFolder(
@@ -232,6 +303,7 @@ export const runGenerators = (
     return {
       apiReportChanged: anyChanged,
       apiReportFilePaths: filePaths,
+      dtsRollupFilePaths: dtsFilePaths,
     }
   })
 

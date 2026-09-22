@@ -1,15 +1,20 @@
 import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
 import * as NodePath from '@effect/platform-node/NodePath'
-import * as NodeTerminal from '@effect/platform-node/NodeTerminal'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
+import { ConsoleMessageWriter, MessageWriter } from './collector/message-router.js'
 import { type ExtractorResult, type ExtractorRunOptions, runEffect } from './extractor.js'
 
+// The ported Collector emits log lines fire-and-forget from synchronous
+// analysis code (Effect.runSync), so the writer bound at this edge must be
+// synchronous: the Terminal-backed writer from NodeServices is asynchronous
+// and turns those emits into AsyncFiberError defects. The console writer
+// keeps every write `Effect.sync`.
 const NodeLive = Layer.mergeAll(
   NodeFileSystem.layer,
   NodePath.layer,
-  NodeTerminal.layer,
+  Layer.succeed(MessageWriter, ConsoleMessageWriter),
 )
 
 export const invoke = (

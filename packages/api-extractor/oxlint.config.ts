@@ -19,7 +19,7 @@ const portedEngineComplexity: string[] = [
 
 export default defineConfig({
   extends: [recommended],
-  ignorePatterns: ['tests/e2e/vitest.e2e.config.ts', 'src/**/__tests__/**', 'tests/__fixtures__/**'],
+  ignorePatterns: ['tests/e2e/**', 'src/**/__tests__/**', 'tests/__fixtures__/**'],
   overrides: [
     {
       files: portedEngineComplexity,

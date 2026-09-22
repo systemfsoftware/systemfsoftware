@@ -22,7 +22,6 @@ import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import type * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
-import * as Terminal from 'effect/Terminal'
 import type * as Ts from 'typescript'
 
 import { Collector } from './collector/Collector.js'
@@ -129,19 +128,17 @@ const countLevel = (counters: MessageCounters, level: LogLevel): Effect.Effect<v
  */
 const countingWriter = (
   counters: MessageCounters,
-  terminal: Terminal.Terminal,
+  writer: MessageWriter,
 ): MessageWriter => ({
-  write: (level, text) => Effect.andThen(countLevel(counters, level), terminal.display(text)),
+  write: (level, text) => Effect.andThen(countLevel(counters, level), writer.write(level, text)),
 })
 
 const buildRouter = (
   config: ExtractorConfig,
   options: ExtractorRunOptions,
-  counters: MessageCounters,
-  terminal: Terminal.Terminal,
-): Effect.Effect<MessageRouter> =>
+): Effect.Effect<MessageRouter, never, MessageWriter> =>
   makeMessageRouter({ cliFlags: options.cliFlags ?? {}, configQuiet: config.quiet }).pipe(
-    Effect.provideService(MessageWriter, countingWriter(counters, terminal)),
+    Effect.map((router) => router),
   )
 
 const bannerText = (): string => `api-extractor ${extractorVersion} - https://api-extractor.com/`
@@ -246,13 +243,15 @@ export const runEffect = (
 ): Effect.Effect<
   ExtractorResult,
   ExtractorError | PlatformError,
-  FileSystem.FileSystem | Path.Path | Terminal.Terminal
+  FileSystem.FileSystem | Path.Path | MessageWriter
 > =>
   Effect.gen(function*() {
     const counters = { ...EMPTY_COUNTERS }
     const config = yield* loadExtractorConfig(configFilePath)
-    const terminal = yield* Terminal.Terminal
-    const router = yield* buildRouter(config, options, counters, terminal)
+    const writer = yield* MessageWriter
+    const router = yield* buildRouter(config, options).pipe(
+      Effect.provideService(MessageWriter, countingWriter(counters, writer)),
+    )
     yield* announceStart(router, config)
     const result = yield* compileAndGenerate(config, options, router, counters)
     if (result.succeeded) {

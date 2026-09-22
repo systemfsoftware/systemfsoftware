@@ -8,9 +8,9 @@ import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
-import type * as Terminal from 'effect/Terminal'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
 
+import { MessageWriter } from '../collector/message-router.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
 import { findConfigFileUpwards } from '../config/lookup.js'
 import { type ExtractorResult, type ExtractorRunOptions, runEffect } from '../extractor.js'
@@ -120,7 +120,7 @@ export const runActionHandler = (
 ): Effect.Effect<
   void,
   CliError.UserError,
-  FileSystem.FileSystem | Path.Path | Terminal.Terminal
+  FileSystem.FileSystem | Path.Path | MessageWriter
 > =>
   Effect.gen(function*() {
     const configPath = yield* resolveConfigPath(flags.config)
