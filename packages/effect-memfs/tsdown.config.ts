@@ -26,6 +26,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 
 export default defineConfig({
   ...quietBuild,
+  define: { 'import.meta.vitest': 'undefined' },
   entry: {
     index: './src/index.ts',
   },
