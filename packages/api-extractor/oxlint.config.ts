@@ -13,12 +13,13 @@ const portedEngineComplexity: string[] = [
   'src/compiler/**',
   'src/config/**',
   'src/enhancers/**',
+  'src/generators/**',
   'src/model/**',
 ]
 
 export default defineConfig({
   extends: [recommended],
-  ignorePatterns: ['tests/e2e/vitest.e2e.config.ts', 'src/**/__tests__/**'],
+  ignorePatterns: ['tests/e2e/vitest.e2e.config.ts', 'src/**/__tests__/**', 'tests/__fixtures__/**'],
   overrides: [
     {
       files: portedEngineComplexity,
