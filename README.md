@@ -213,13 +213,13 @@ Every Cell is typed as `Cell<in I, out A, out E, out R>`:
 | **`E` (Failure)** | Infrastructure errors.                  | Reserved for transport crashes (`DatabaseCrash`, `SocketTimeout`, `SchemaDecodeError`). Never used for business decisions.                                             |
 | **`R` (Context)** | Service requirements.                   | Services required by `read` and `write`. Must be satisfied ($R = \text{never}$) before `.run()`.                                                                       |
 
-### Separating Ports from Layers
+### Service & Layer Boundaries
 
-Following `compound-packs/cell-architecture/ports-separate-from-layers.md`:
+Following `compound-packs/cell-architecture/service-and-layer-boundaries.md`:
 
-- Ports are declared as bare capability identifiers (`Context.Service<T>`) in interface files.
-- Port files never import database drivers, HTTP clients, or platform APIs.
-- Implementations (`PostgreSqlLive`, `PgLiteTest`, `LocalLoopbackLive`) are defined in separate layer files and wired at application startup (`main.ts`) or in test setup.
+- Capability contracts are declared as `Context.Service<Self, Shape>()(...)` in dedicated `*.service.ts` modules with zero driver imports (`.port.ts` and `.layer.ts` suffixes are prohibited).
+- Concrete implementations export parameterized `layer(options)` factories from dedicated driver/store modules (e.g. `src/drivers/*`, `src/store/*`). Static `*Live` singletons are reserved strictly for the application composition root (`main.ts`).
+- Dependencies bind **once** at the application entrypoint via `Cell.provide(AppStack)`; mid-pipeline binding (`Effect.provide` inside cells) is forbidden.
 
 ### Resource & Lifecycle Algebra
 
