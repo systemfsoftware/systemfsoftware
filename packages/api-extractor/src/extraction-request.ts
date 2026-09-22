@@ -1,12 +1,9 @@
-import type { CliFlags, Verbosity } from './collector/verbosity.schema.js'
+import type { Verbosity } from './collector/verbosity.schema.js'
 import type { ExtractorConfig } from './config/extractor-config.js'
 
-export interface ExtractorRunOptions {
-  readonly localBuild?: boolean | undefined
-  readonly printApiReportDiff?: boolean | undefined
-  readonly typescriptCompilerFolder?: string | undefined
-  readonly cliFlags?: CliFlags | undefined
-}
+import type { ExtractorRunOptions } from './extraction-request.schema.js'
+
+export type { ExtractorRunOptions }
 
 export interface ExtractorRunInput {
   readonly configFilePath: string

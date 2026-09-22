@@ -1,190 +1,222 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
 import { Extractor } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import * as Effect from 'effect/Effect'
+import { Effect } from 'effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import * as Schema from 'effect/Schema'
 import { expect } from 'vitest'
+
+import {
+  changedEntries,
+  type FixtureSandbox,
+  reviewFixture,
+  reviewProject,
+  runExtraction,
+  stdoutLines,
+  withFixtureProject,
+} from './__fixtures__/extractor-harness.js'
 
 const Feature = makeFeature({ it, layer })
 
-const fixturesUrl = new URL('__fixtures__/extractor-flow/', import.meta.url)
+const compilerFolderMessage = 'No usable TypeScript compiler package found in this folder'
 
-const resolveFixturePath = (relative: string): Effect.Effect<string, never, Path.Path> =>
+const cleanPackage = 'extractor-flow/simple-pkg'
+
+const driftedPackage = 'extractor-flow/simple-pkg-drifted'
+
+const withoutReportFolder = ({ projectRoot }: FixtureSandbox) =>
   Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const root = yield* path.fromFileUrl(fixturesUrl).pipe(
-      Effect.orElseSucceed(() => ''),
-    )
-    return path.resolve(root, relative)
+    yield* fs.remove(path.join(projectRoot, 'etc'), { recursive: true })
   })
 
-Feature('Reviewing TypeScript package API surface definitions')
+const reviewVerbosely = ({ projectRoot }: FixtureSandbox) =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path
+    const observed = yield* reviewProject(
+      projectRoot,
+      path.join(projectRoot, 'api-extractor.json'),
+      { cliFlags: { verbose: true } },
+    )
+    return { ...observed, reportPath: path.join(projectRoot, 'etc/simple-pkg.api.md') }
+  })
+
+const reviewWithoutCompiler = ({ projectRoot }: FixtureSandbox) =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path
+    return yield* runExtraction(path.join(projectRoot, 'api-extractor.json'), {
+      typescriptCompilerFolder: projectRoot,
+      cliFlags: { verbose: true },
+    })
+  })
+
+Feature('Keeping a committed API report in step with a package\u2019s declarations')
   .withLayer(NodeServices.layer)
   .body(({ scenario }) => {
     scenario(
-      'A valid package checked in silent mode emits zero console messages',
+      'A package whose committed report matches its declarations passes review and rewrites nothing outside the report draft folder',
       Gherkin.Do.pipe(
-        Given('a package configured for silent execution')(
-          'configPath',
-          () => resolveFixturePath('simple-pkg/api-extractor.json'),
+        Given('a package whose committed report matches its declarations')(
+          'fixture',
+          () => Effect.succeed(cleanPackage),
         ),
-        When('the extraction process reviews the API surface')(
-          'outcome',
-          (s) =>
-            Effect.gen(function*() {
-              const recordedLines: string[] = []
-              const writer: Extractor.MessageWriter = {
-                write: (level, text) =>
-                  Effect.sync(() => {
-                    recordedLines.push(text)
-                  }),
-              }
-              const result = yield* Extractor.run(s.configPath).pipe(
-                Effect.provideService(Extractor.MessageWriter, writer),
-              )
-              return { result, recordedLines }
-            }),
+        When('the package is reviewed in verification mode')(
+          'observed',
+          (s) => reviewFixture(s.fixture),
         ),
-        Then('the extraction succeeds with clean status')((s) => {
-          expect(Schema.is(Extractor.ExtractionPassed)(s.outcome.result)).toBe(true)
-          expect(s.outcome.result.errorCount).toBe(0)
+        Then('the review passes without errors or warnings')((s) => {
+          expect(s.observed.run.outcome).toMatchObject({
+            _tag: 'Success',
+            success: { _tag: 'ExtractionPassed', errorCount: 0, warningCount: 0 },
+          })
         }),
-        Then('no output messages are written to the terminal')((s) => {
-          expect(s.outcome.recordedLines.length).toBe(0)
+        Then('nothing outside the report draft folder changed')((s) => {
+          expect(
+            changedEntries(s.observed.before, s.observed.after).filter((entry) => !entry.startsWith('temp/')),
+          ).toEqual([])
         }),
-      ),
-    )
-
-    scenario(
-      'An uncommitted API change checked in silent mode reports signature drift',
-      Gherkin.Do.pipe(
-        Given('a package whose review file does not match current declarations')(
-          'configPath',
-          () => resolveFixturePath('simple-pkg-drifted/api-extractor.json'),
-        ),
-        When('the extraction runs with chatter suppression enabled')(
-          'outcome',
-          (s) =>
-            Effect.gen(function*() {
-              const recordedLines: string[] = []
-              const writer: Extractor.MessageWriter = {
-                write: (level, text) =>
-                  Effect.sync(() => {
-                    recordedLines.push(text)
-                  }),
-              }
-              const result = yield* Extractor.run(s.configPath, {
-                cliFlags: { quiet: true },
-              }).pipe(Effect.provideService(Extractor.MessageWriter, writer))
-              return { result, recordedLines }
-            }),
-        ),
-        Then('the extraction outcome reports failure')((s) => {
-          expect(Schema.is(Extractor.ExtractionFailed)(s.outcome.result)).toBe(true)
-          expect(s.outcome.result.warningCount).toBeGreaterThan(0)
-        }),
-        Then('the signature change warning is surfaced despite silent mode')((s) => {
-          const hasDriftWarning = s.outcome.recordedLines.some(
-            (line: string) => line.includes('API') || line.includes('report') || line.includes('signature'),
+        Then('the report draft carries the declaration the report promises')((s) => {
+          expect(s.observed.after['temp/simple-pkg.api.md']).toContain(
+            'export function computeValue(input: string): number',
           )
-          expect(hasDriftWarning).toBe(true)
         }),
       ),
     )
 
     scenario(
-      'A malformed configuration file fails with a typed error',
+      'A package whose committed report describes declarations the package no longer exports is refused in verification mode',
       Gherkin.Do.pipe(
-        Given('a package with an unparseable configuration file')(
-          'configPath',
-          () => resolveFixturePath('corrupt-config/broken.json.txt'),
+        Given('a package whose committed report describes an interface the package no longer exports')(
+          'fixture',
+          () => Effect.succeed(driftedPackage),
         ),
-        When('the extraction pipeline loads the configuration')(
-          'attempt',
-          (s) =>
-            Extractor.run(s.configPath).pipe(
-              Effect.provide(Extractor.layer()),
-              Effect.map(() => 'unexpected-success'),
-              Effect.catch((err) => Effect.succeed(err._tag)),
-            ),
+        When('the package is reviewed in verification mode')(
+          'observed',
+          (s) => reviewFixture(s.fixture),
         ),
-        Then('a structured configuration syntax failure is produced')((s) => {
-          expect(s.attempt).toBe('ConfigJsonSyntaxError')
+        Then('the review fails because the committed report is out of date')((s) => {
+          expect(s.observed.run.outcome).toMatchObject({
+            _tag: 'Success',
+            success: { _tag: 'ExtractionFailed', errorCount: 0, warningCount: 1 },
+          })
+        }),
+        Then('the committed report is left untouched')((s) => {
+          expect(s.observed.after['etc/simple-pkg.api.md']).toBe(s.observed.before['etc/simple-pkg.api.md'])
+        }),
+        Then('the reviewer explains that the report must be copied over or the build run locally')((s) => {
+          expect(s.observed.run.stdout).toContain('You have changed the API signature for this project.')
+          expect(s.observed.run.stdout).toContain('Please copy the file')
         }),
       ),
     )
 
     scenario(
-      'The compiler folder points at a location holding no compiler package',
+      'Reviewing as part of a local build refreshes an out-of-date committed report',
       Gherkin.Do.pipe(
-        Given('a package configured normally, and a compiler folder that holds no compiler package')(
-          'paths',
-          () =>
-            Effect.gen(function*() {
-              const configPath = yield* resolveFixturePath('simple-pkg/api-extractor.json')
-              const compilerFolder = yield* resolveFixturePath('simple-pkg')
-              return { configPath, compilerFolder }
-            }),
+        Given('a package whose committed report describes an interface the package no longer exports')(
+          'fixture',
+          () => Effect.succeed(driftedPackage),
         ),
-        When('the engine is asked to review the package using that compiler folder')(
-          'attempt',
-          (s) => {
-            const stdoutLines: string[] = []
-            const stderrLines: string[] = []
-            const stdout: Extractor.TextWritable = {
-              write: (text) => {
-                stdoutLines.push(text)
-              },
-            }
-            const stderr: Extractor.TextWritable = {
-              write: (text) => {
-                stderrLines.push(text)
-              },
-            }
-            return Extractor.run(s.paths.configPath, {
-              typescriptCompilerFolder: s.paths.compilerFolder,
-              cliFlags: { verbose: true },
-            }).pipe(
-              Effect.provide(Extractor.layer({ stdout, stderr })),
-              Effect.map(() => ({ outcome: 'review-completed', stdoutLines, stderrLines })),
-              Effect.catch((err) => Effect.succeed({ outcome: err._tag, stdoutLines, stderrLines })),
-            )
-          },
+        When('the package is reviewed as part of a local build')(
+          'observed',
+          (s) => reviewFixture(s.fixture, { localBuild: true }),
         ),
-        Then('the review is refused because the compiler could not be loaded from that folder')((s) => {
-          expect(s.attempt).toMatchObject({ outcome: 'TsCompilerLoadError' })
+        Then('the review passes')((s) => {
+          expect(s.observed.run.outcome).toMatchObject({
+            _tag: 'Success',
+            success: { _tag: 'ExtractionPassed', errorCount: 0 },
+          })
+        }),
+        Then('the committed report now describes the declarations the package exports today')((s) => {
+          expect(s.observed.after['etc/simple-pkg.api.md']).not.toBe(s.observed.before['etc/simple-pkg.api.md'])
+          expect(s.observed.after['etc/simple-pkg.api.md']).toContain('makeSimpleWidget')
+        }),
+        Then('the committed report is the freshly rendered report')((s) => {
+          expect(s.observed.after['etc/simple-pkg.api.md']).toBe(s.observed.after['temp/simple-pkg.api.md'])
+        }),
+      ),
+    )
+
+    scenario(
+      'A package with neither a committed report nor a report folder is refused during a local build',
+      Gherkin.Do.pipe(
+        Given('a package whose report folder does not exist')(
+          'fixture',
+          () => Effect.succeed(cleanPackage),
+        ),
+        When('the package is reviewed as part of a local build')(
+          'observed',
+          (s) => reviewFixture(s.fixture, { localBuild: true }, withoutReportFolder),
+        ),
+        Then('the review fails with a single error and no warnings')((s) => {
+          expect(s.observed.run.outcome).toMatchObject({
+            _tag: 'Success',
+            success: { _tag: 'ExtractionFailed', errorCount: 1, warningCount: 0 },
+          })
+        }),
+        Then('the refusal names the report folder that does not exist')((s) => {
+          expect(s.observed.run.stderr).toContain('Unable to create the API report file.')
+          expect(s.observed.run.stderr).toContain('Please make sure the target folder exists:')
+          expect(s.observed.run.stderr).toContain('/etc')
+        }),
+      ),
+    )
+
+    scenario(
+      'A verbose review narrates the whole run on standard output and prints nothing on the error stream',
+      Gherkin.Do.pipe(
+        Given('a clean package reviewed with the narration turned up')(
+          'fixture',
+          () => Effect.succeed(cleanPackage),
+        ),
+        When('the package is reviewed')(
+          'observed',
+          (s) => withFixtureProject(s.fixture, reviewVerbosely),
+        ),
+        Then('the narration opens with the tool banner and the configuration it read')((s) => {
+          const lines = stdoutLines(s.observed.run)
+          expect(lines[0]).toBe(`api-extractor ${Extractor.version} - https://api-extractor.com/`)
+          expect(lines[1]).toBe(`Using configuration from ${s.observed.configPath}`)
         }),
         Then(
-          'the startup notice already reached the captured standard output and the captured error stream stayed empty',
+          'the narration continues with the compiler preamble, the report lines, and the closing footer in that order',
         )((s) => {
-          expect(s.attempt.stdoutLines.join('')).toContain('api-extractor')
-          expect(s.attempt.stderrLines).toEqual([])
+          expect(stdoutLines(s.observed.run)).toEqual([
+            `api-extractor ${Extractor.version} - https://api-extractor.com/`,
+            `Using configuration from ${s.observed.configPath}`,
+            expect.stringMatching(/^Analysis will use the bundled TypeScript version \d+\.\d+\.\d+$/),
+            `Generating complete API report: ${s.observed.reportPath}`,
+            'The API report is up to date: temp/simple-pkg.api.md',
+            'API Extractor completed successfully',
+          ])
+        }),
+        Then('the error stream stays empty')((s) => {
+          expect(s.observed.run.stderr).toBe('')
         }),
       ),
     )
 
     scenario(
-      'The configuration file does not exist at the requested path',
+      'A project that names a folder holding no TypeScript compiler is refused after the banner is narrated',
       Gherkin.Do.pipe(
-        Given('a configuration path where no configuration file exists')(
-          'configPath',
-          () => resolveFixturePath('does-not-exist/api-extractor.json'),
+        Given('a package whose configuration names a folder that holds no compiler')(
+          'fixture',
+          () => Effect.succeed(cleanPackage),
         ),
-        When('the engine is asked to review the package at that path')(
-          'attempt',
-          (s) =>
-            Extractor.run(s.configPath).pipe(
-              Effect.provide(Extractor.layer()),
-              Effect.map(() => 'unexpected-success'),
-              Effect.catch((err) => Effect.succeed(err)),
-            ),
+        When('the package is reviewed against that folder')(
+          'observed',
+          (s) => withFixtureProject(s.fixture, reviewWithoutCompiler),
         ),
-        Then('the review is refused because the configuration file is missing')((s) => {
-          expect(s.attempt).toMatchObject({ _tag: 'ConfigFileNotFound' })
+        Then('the review is refused because no compiler could be loaded from that folder')((s) => {
+          expect(s.observed.outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'TsCompilerLoadError', message: compilerFolderMessage },
+          })
         }),
-        Then('the refusal names the path that was requested')((s) => {
-          expect(s.attempt).toMatchObject({ filePath: s.configPath })
+        Then('the banner had already reached standard output and the error stream stayed empty')((s) => {
+          expect(s.observed.stdout).toContain(`api-extractor ${Extractor.version} - https://api-extractor.com/`)
+          expect(s.observed.stderr).toBe('')
         }),
       ),
     )

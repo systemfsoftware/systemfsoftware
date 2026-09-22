@@ -64,7 +64,7 @@ describe('CLI journeys (e2e)', () => {
     )
 
     it.skipIf(!isCliReady)(
-      'runs on a drifted fixture under --quiet and exits with non-zero status',
+      'runs on a drifted fixture under --quiet, prints the out-of-date report warning on stdout, and exits 1',
       () => {
         const result = spawnSync(
           process.execPath,
@@ -76,6 +76,7 @@ describe('CLI journeys (e2e)', () => {
           },
         )
         expect(result.status).toBe(1)
+        expect(result.stdout).toContain('You have changed the API signature for this project.')
       },
     )
   })

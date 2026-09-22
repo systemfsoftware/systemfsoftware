@@ -13,6 +13,8 @@ export class BetaFeature {
 // @public (undocumented)
 export function computeValue(input: string): number;
 
+// Warning: (ae-internal-missing-underscore) The name "internalHelper" should be prefixed with an underscore because the declaration is marked as @internal
+//
 // @internal (undocumented)
 export function internalHelper(): void;
 

@@ -11,53 +11,17 @@ import {
   ConfigJsonSyntaxError,
   ConfigSchemaValidationError,
 } from '../errors/config.schema.js'
-import type {
-  ApiReportConfig,
-  ApiReportVariant,
-  DocModelConfig,
-  DtsRollupConfig,
-  EnumMemberOrder,
-  MessagesConfig,
-  NewlineKind,
-  TsdocMetadataConfig,
-} from './config-file.schema.js'
+import type { ApiReportConfig, ApiReportVariant } from './config-file.schema.js'
 import { ConfigFile } from './config-file.schema.js'
 import { DEFAULT_CONFIG_RECORD } from './defaults.js'
+import type { ExtractorConfig, ExtractorReportConfig } from './extractor-config.schema.js'
 import type { JsonRecord } from './json-record.schema.js'
 import { JsonRecordFromString } from './json-record.schema.js'
 import { MergeConfig, mergeConfig } from './merge-config.workflow.js'
 import type { TokenContext } from './tokens.js'
 import { expandTokens, unscopedPackageName } from './tokens.js'
 
-export interface ExtractorReportConfig {
-  readonly variant: ApiReportVariant
-  readonly fileName: string
-}
-
-export interface ExtractorConfig {
-  readonly configFilePath: string
-  readonly projectFolder: string
-  readonly packageFolder: string | undefined
-  readonly packageJson: Record<string, Schema.Json> | undefined
-  readonly mainEntryPointFilePath: string
-  readonly bundledPackages: readonly string[]
-  readonly tsconfigFilePath: string
-  readonly overrideTsconfig: Schema.Json | undefined
-  readonly skipLibCheck: boolean
-  readonly newlineKind: NewlineKind
-  readonly enumMemberOrder: EnumMemberOrder
-  readonly testMode: boolean
-  readonly quiet: boolean
-  readonly apiReport: ApiReportConfig & {
-    readonly reportConfigs: readonly ExtractorReportConfig[]
-  }
-  readonly docModel: DocModelConfig
-  readonly dtsRollup: DtsRollupConfig
-  readonly tsdocMetadata: TsdocMetadataConfig & {
-    readonly filePath: string
-  }
-  readonly messages: MessagesConfig
-}
+export type { ExtractorConfig, ExtractorReportConfig }
 
 export type MutableJsonRecord = Record<string, Schema.Json>
 

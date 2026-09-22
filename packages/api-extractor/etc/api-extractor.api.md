@@ -16,7 +16,7 @@ import { Schema } from 'effect';
 import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
-const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
+const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | CircularConfigExtendsError | ConfigSchemaValidationError | UnresolvedTokenError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
 
 // Warning: (ae-forgotten-export) The symbol "CircularConfigExtendsError_base" needs to be exported by the entry point index.d.ts
 //
@@ -127,18 +127,19 @@ interface ExtractorRunInput {
 }
 
 // @public (undocumented)
-interface ExtractorRunOptions {
-    // Warning: (ae-forgotten-export) The symbol "CliFlags" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly cliFlags?: CliFlags | undefined;
-    // (undocumented)
-    readonly localBuild?: boolean | undefined;
-    // (undocumented)
-    readonly printApiReportDiff?: boolean | undefined;
-    // (undocumented)
-    readonly typescriptCompilerFolder?: string | undefined;
-}
+const ExtractorRunOptions: Schema.Struct<{
+    readonly localBuild: Schema.optional<Schema.Boolean>;
+    readonly printApiReportDiff: Schema.optional<Schema.Boolean>;
+    readonly typescriptCompilerFolder: Schema.optional<Schema.String>;
+    readonly cliFlags: Schema.optional<Schema.Struct<{
+        readonly quiet: Schema.optional<Schema.Boolean>;
+        readonly verbose: Schema.optional<Schema.Boolean>;
+        readonly diagnostics: Schema.optional<Schema.Boolean>;
+    }>>;
+}>;
+
+// @public (undocumented)
+type ExtractorRunOptions = typeof ExtractorRunOptions.Type;
 
 // @public (undocumented)
 const extractorVersion = "0.1.0";

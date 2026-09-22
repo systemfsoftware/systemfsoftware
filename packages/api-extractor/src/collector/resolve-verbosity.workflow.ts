@@ -2,11 +2,10 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-import type { ExtractorConfig } from '../config/extractor-config.js'
-import type { ExtractorRunOptions } from '../extraction-request.js'
+import { ExtractorConfig } from '../config/extractor-config.schema.js'
+import { ExtractorRunOptions } from '../extraction-request.schema.js'
 
 import { CliFlags } from './verbosity.schema.js'
 
@@ -34,12 +33,8 @@ export type VerbosityDecision = VerbosityDiagnostics | VerbosityVerbose | Verbos
 export class AnnounceRun extends Schema.TaggedClass<AnnounceRun>()('AnnounceRun', {
   cliFlags: CliFlags,
   configQuiet: Schema.Boolean,
-  config: Schema.declare<ExtractorConfig>(
-    (value: unknown): value is ExtractorConfig => Predicate.isObject(value),
-  ),
-  options: Schema.declare<ExtractorRunOptions>(
-    (value: unknown): value is ExtractorRunOptions => Predicate.isObject(value),
-  ),
+  config: ExtractorConfig,
+  options: ExtractorRunOptions,
 }) {
   static readonly [Workflow.InstrumentationBrand] = [] as const
 }
