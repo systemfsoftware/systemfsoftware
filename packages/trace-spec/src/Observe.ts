@@ -90,10 +90,19 @@ export class Observation extends Context.Service<Observation, Collector>()(
   '@systemfsoftware/trace-spec/Observation',
 ) {}
 
-const exporter = new InMemorySpanExporter()
+interface Sink {
+  readonly exporter: InMemorySpanExporter
+  readonly provider: BasicTracerProvider
+}
 
-const recordsFor = (traceId: string): ReadonlyArray<SpanRecord> =>
-  exporter.getFinishedSpans().filter((span) => span.spanContext().traceId === traceId).map(spanRecordOf)
+const makeSink = (): Sink => {
+  const exporter = new InMemorySpanExporter()
+  const provider = new BasicTracerProvider({
+    sampler: new AlwaysOnSampler(),
+    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  })
+  return { exporter, provider }
+}
 
 const emptyObservation = (traceId: string): EmptyObservationError =>
   new EmptyObservationError({
@@ -101,29 +110,29 @@ const emptyObservation = (traceId: string): EmptyObservationError =>
     detail: 'the observation window closed with no span carrying the stimulated trace id',
   })
 
-const collector: Collector = {
+const collectorOf = (exporter: InMemorySpanExporter): Collector => ({
   collect: (traceId) =>
     Effect.suspend(() => {
-      const records = recordsFor(traceId)
+      const records = exporter.getFinishedSpans()
+        .filter((span) => span.spanContext().traceId === traceId)
+        .map(spanRecordOf)
       return records.length > 0 ? Effect.succeed(records) : Effect.fail(emptyObservation(traceId))
     }),
-}
+})
 
-const providerLayer = Layer.sync(
-  OtelTracer.OtelTracerProvider,
-  () =>
-    new BasicTracerProvider({
-      sampler: new AlwaysOnSampler(),
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
-    }),
+const acquireSink = Effect.acquireRelease(
+  Effect.sync(makeSink),
+  (sink) => Effect.promise(() => sink.provider.shutdown()),
 )
 
-const tracerLayer = OtelTracer.layer.pipe(
-  Layer.provide(providerLayer),
+const sinkLayer = Layer.effectContext(
+  Effect.map(acquireSink, (sink) =>
+    Context.make(Observation, collectorOf(sink.exporter)).pipe(
+      Context.add(OtelTracer.OtelTracerProvider, sink.provider),
+    )),
+)
+
+export const inMemory: Layer.Layer<Observation | OtelTracer.OtelTracer> = OtelTracer.layer.pipe(
   Layer.provide(OtelResource.layer({ serviceName: 'trace-spec' })),
-)
-
-export const inMemory: Layer.Layer<Observation | OtelTracer.OtelTracer> = Layer.merge(
-  Layer.succeed(Observation, collector),
-  tracerLayer,
+  Layer.provideMerge(sinkLayer),
 )
