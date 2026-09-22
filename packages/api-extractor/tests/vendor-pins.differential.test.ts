@@ -5,7 +5,7 @@ import {
   MessageWriter,
 } from '@systemfsoftware/api-extractor'
 import { Differential, Metamorphic } from '@systemfsoftware/differential-spec'
-import { Effect } from 'effect'
+import { Effect, Exit } from 'effect'
 import * as Ts from 'typescript'
 import {
   type CompilerTargetPair,
@@ -120,48 +120,39 @@ Differential.compare({
   )
 
 interface WriterRunOutput {
-  readonly didThrow: boolean
-  readonly captured: string
+  readonly exitedDefectively: boolean
+  readonly emitted: ReadonlyArray<string>
 }
 
+// The pin: construction + emission survive `Effect.runSync` as ONE program when
+// the real console writer is bound — the sync edge `invoke` and the Collector's
+// fire-and-forget call sites depend on. A recording writer decorates the real
+// one so observation never bypasses the code under test.
 const runRouterWithConsoleWriter = (message: string): Effect.Effect<WriterRunOutput> =>
   Effect.sync(() => {
-    let captured = ''
-    const originalStdoutWrite = process.stdout.write.bind(process.stdout)
-
-    process.stdout.write = (chunk: string | Uint8Array): boolean => {
-      captured += typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8')
-      return true
+    const emitted: Array<string> = []
+    const recordingWriter: MessageWriter = {
+      write: (level, text) =>
+        Effect.gen(function*() {
+          yield* ConsoleMessageWriter.write(level, text)
+          emitted.push(text)
+        }),
     }
-
-    let didThrow = false
-    try {
-      const router = Effect.runSync(
-        makeMessageRouter({ cliFlags: { verbose: true } }).pipe(
-          Effect.provideService(
-            MessageWriter,
-            ConsoleMessageWriter,
-          ),
-        ),
-      )
-
-      Effect.runSync(router.logInfo(ConsoleMessageId.Preamble, message))
-    } catch {
-      didThrow = true
-    } finally {
-      process.stdout.write = originalStdoutWrite
-    }
-
-    return { didThrow, captured }
+    const probe = Effect.gen(function*() {
+      const router = yield* makeMessageRouter({ cliFlags: { verbose: true } })
+      yield* router.logInfo(ConsoleMessageId.Preamble, message)
+    })
+    const exit = Effect.runSync(Effect.exit(probe.pipe(Effect.provideService(MessageWriter, recordingWriter))))
+    return { exitedDefectively: Exit.isFailure(exit), emitted }
   })
 
 Metamorphic.on(runRouterWithConsoleWriter)
   .relation({
     transformInput: (msg) => `transformed_${msg}`,
     assertOutput: (baseline, transformed) =>
-      !baseline.didThrow &&
-      !transformed.didThrow &&
-      baseline.captured.includes('\n') &&
-      transformed.captured.includes('transformed_'),
+      !baseline.exitedDefectively &&
+      !transformed.exitedDefectively &&
+      baseline.emitted.length === 1 &&
+      transformed.emitted.join('').includes('transformed_'),
   })
   .on(nonEmptyIdentifiers, { runBudget: 15, interruptAfterTimeLimit: 30_000 })
