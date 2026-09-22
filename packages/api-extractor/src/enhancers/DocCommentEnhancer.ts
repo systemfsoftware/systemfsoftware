@@ -1,0 +1,285 @@
+import * as Pipeable from 'effect/Pipeable'
+import { AedocDefinitions } from '../model/index.js'
+// Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
+// See LICENSE in the project root for license information.
+
+import * as ts from 'typescript'
+
+import * as tsdoc from '@microsoft/tsdoc'
+import { ReleaseTag } from '../model/index.js'
+
+import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
+import { ResolverFailure } from '../analyzer/AstReferenceResolver.js'
+import { AstSymbol } from '../analyzer/AstSymbol.js'
+import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
+import type { Collector } from '../collector/Collector.js'
+import { ExtractorMessageId } from '../collector/extractor-message-id.js'
+import { VisitorState } from '../collector/VisitorState.js'
+
+export class DocCommentEnhancer extends Pipeable.Class {
+  readonly #collector: Collector
+
+  public constructor(collector: Collector) {
+    super()
+    this.#collector = collector
+  }
+
+  public static analyze(collector: Collector): void {
+    const docCommentEnhancer: DocCommentEnhancer = new DocCommentEnhancer(collector)
+    docCommentEnhancer.analyze()
+  }
+
+  public analyze(): void {
+    for (const entity of this.#collector.entities) {
+      if (entity.astEntity instanceof AstSymbol) {
+        if (
+          entity.consumable ||
+          this.#collector.extractorConfig.apiReport.includeForgottenExports ||
+          this.#collector.extractorConfig.docModel.includeForgottenExports
+        ) {
+          entity.astEntity.forEachDeclarationRecursive((astDeclaration: AstDeclaration) => {
+            this.#analyzeApiItem(astDeclaration)
+          })
+        }
+      }
+    }
+  }
+
+  #analyzeApiItem(astDeclaration: AstDeclaration): void {
+    const metadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(astDeclaration)
+    if (metadata.docCommentEnhancerVisitorState === VisitorState.Visited) {
+      return
+    }
+
+    if (metadata.docCommentEnhancerVisitorState === VisitorState.Visiting) {
+      this.#collector.addAnalyzerIssue(
+        ExtractorMessageId.CyclicInheritDoc,
+        `The @inheritDoc tag for "${astDeclaration.astSymbol.localName}" refers to its own declaration`,
+        astDeclaration,
+      )
+      return
+    }
+    metadata.docCommentEnhancerVisitorState = VisitorState.Visiting
+
+    if (metadata.tsdocComment && metadata.tsdocComment.inheritDocTag) {
+      this.#applyInheritDoc(astDeclaration, metadata.tsdocComment, metadata.tsdocComment.inheritDocTag)
+    }
+
+    this.#analyzeNeedsDocumentation(astDeclaration, metadata)
+
+    this.#checkForBrokenLinks(astDeclaration, metadata)
+
+    metadata.docCommentEnhancerVisitorState = VisitorState.Visited
+  }
+
+  #analyzeNeedsDocumentation(astDeclaration: AstDeclaration, metadata: ApiItemMetadata): void {
+    if (astDeclaration.declaration.kind === ts.SyntaxKind.Constructor) {
+      // Constructors always do pretty much the same thing, so it's annoying to require people to write
+      // descriptions for them.  Instead, if the constructor lacks a TSDoc summary, then API Extractor
+      // will auto-generate one.
+      metadata.undocumented = false
+
+      // The class that contains this constructor
+      const classDeclaration: AstDeclaration = astDeclaration.parent!
+
+      const configuration: tsdoc.TSDocConfiguration = AedocDefinitions.tsdocConfiguration
+
+      if (!metadata.tsdocComment) {
+        metadata.tsdocComment = new tsdoc.DocComment({ configuration })
+      }
+
+      if (!tsdoc.PlainTextEmitter.hasAnyTextContent(metadata.tsdocComment.summarySection)) {
+        metadata.tsdocComment.summarySection.appendNodesInParagraph([
+          new tsdoc.DocPlainText({ configuration, text: 'Constructs a new instance of the ' }),
+          new tsdoc.DocCodeSpan({
+            configuration,
+            code: classDeclaration.astSymbol.localName,
+          }),
+          new tsdoc.DocPlainText({ configuration, text: ' class' }),
+        ])
+      }
+
+      const apiItemMetadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(astDeclaration)
+      if (apiItemMetadata.effectiveReleaseTag === ReleaseTag.Internal) {
+        // If the constructor is marked as internal, then add a boilerplate notice for the containing class
+        const classMetadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(classDeclaration)
+
+        if (!classMetadata.tsdocComment) {
+          classMetadata.tsdocComment = new tsdoc.DocComment({ configuration })
+        }
+
+        if (classMetadata.tsdocComment.remarksBlock === undefined) {
+          classMetadata.tsdocComment.remarksBlock = new tsdoc.DocBlock({
+            configuration,
+            blockTag: new tsdoc.DocBlockTag({
+              configuration,
+              tagName: tsdoc.StandardTags.remarks.tagName,
+            }),
+          })
+        }
+
+        classMetadata.tsdocComment.remarksBlock.content.appendNode(
+          new tsdoc.DocParagraph({ configuration }, [
+            new tsdoc.DocPlainText({
+              configuration,
+              text: `The constructor for this class is marked as internal. Third-party code should not` +
+                ` call the constructor directly or create subclasses that extend the `,
+            }),
+            new tsdoc.DocCodeSpan({
+              configuration,
+              code: classDeclaration.astSymbol.localName,
+            }),
+            new tsdoc.DocPlainText({ configuration, text: ' class.' }),
+          ]),
+        )
+      }
+      return
+    } else {
+      // For non-constructor items, we will determine whether or not the item is documented as follows:
+      // 1. If it contains a summary section with at least 10 characters, then it is considered "documented".
+      // 2. If it contains an @inheritDoc tag, then it *may* be considered "documented", depending on whether or not
+      //    the tag resolves to a "documented" API member.
+      //    - Note: for external members, we cannot currently determine this, so we will consider the "documented"
+      //      status to be unknown.
+      if (metadata.tsdocComment) {
+        if (tsdoc.PlainTextEmitter.hasAnyTextContent(metadata.tsdocComment.summarySection, 10)) {
+          // If the API item has a summary comment block (with at least 10 characters), mark it as "documented".
+          metadata.undocumented = false
+        } else if (metadata.tsdocComment.inheritDocTag) {
+          if (
+            this.#refersToDeclarationInWorkingPackage(
+              metadata.tsdocComment.inheritDocTag.declarationReference,
+            )
+          ) {
+            // If the API item has an `@inheritDoc` comment that points to an API item in the working package,
+            // then the documentation contents should have already been copied from the target via `_applyInheritDoc`.
+            // The continued existence of the tag indicates that the declaration reference was invalid, and not
+            // documentation contents could be copied.
+            // An analyzer issue will have already been logged for this.
+            // We will treat such an API as "undocumented".
+            metadata.undocumented = true
+          } else {
+            // If the API item has an `@inheritDoc` comment that points to an external API item, we cannot currently
+            // determine whether or not the target is "documented", so we cannot say definitively that this is "undocumented".
+            metadata.undocumented = false
+          }
+        } else {
+          // If the API item has neither a summary comment block, nor an `@inheritDoc` comment, mark it as "undocumented".
+          metadata.undocumented = true
+        }
+      } else {
+        // If there is no tsdoc comment at all, mark "undocumented".
+        metadata.undocumented = true
+      }
+    }
+  }
+
+  #checkForBrokenLinks(astDeclaration: AstDeclaration, metadata: ApiItemMetadata): void {
+    if (!metadata.tsdocComment) {
+      return
+    }
+    this.#checkForBrokenLinksRecursive(astDeclaration, metadata.tsdocComment)
+  }
+
+  #checkForBrokenLinksRecursive(astDeclaration: AstDeclaration, node: tsdoc.DocNode): void {
+    if (node instanceof tsdoc.DocLinkTag) {
+      if (node.codeDestination) {
+        // Is it referring to the working package?  If not, we don't do any link validation, because
+        // AstReferenceResolver doesn't support it yet (but ModelReferenceResolver does of course).
+        // Tracked by:  https://github.com/microsoft/rushstack/issues/1195
+        if (this.#refersToDeclarationInWorkingPackage(node.codeDestination)) {
+          const referencedAstDeclaration: AstDeclaration | ResolverFailure = this.#collector.astReferenceResolver
+            .resolve(node.codeDestination)
+
+          if (referencedAstDeclaration instanceof ResolverFailure) {
+            this.#collector.addAnalyzerIssue(
+              ExtractorMessageId.UnresolvedLink,
+              'The @link reference could not be resolved: ' + referencedAstDeclaration.reason,
+              astDeclaration,
+            )
+          }
+        }
+      }
+    }
+    for (const childNode of node.getChildNodes()) {
+      this.#checkForBrokenLinksRecursive(astDeclaration, childNode)
+    }
+  }
+
+  /*
+   * Follow an `{@inheritDoc ___}` reference and copy the content that we find in the referenced comment.
+   */
+  #applyInheritDoc(
+    astDeclaration: AstDeclaration,
+    docComment: tsdoc.DocComment,
+    inheritDocTag: tsdoc.DocInheritDocTag,
+  ): void {
+    if (!inheritDocTag.declarationReference) {
+      this.#collector.addAnalyzerIssue(
+        ExtractorMessageId.UnresolvedInheritDocBase,
+        'The @inheritDoc tag needs a TSDoc declaration reference; signature matching is not supported yet',
+        astDeclaration,
+      )
+      return
+    }
+
+    if (!this.#refersToDeclarationInWorkingPackage(inheritDocTag.declarationReference)) {
+      // The `@inheritDoc` tag is referencing an external package. Skip it, since AstReferenceResolver doesn't
+      // support it yet.  As a workaround, this tag will get handled later by api-documenter.
+      // Tracked by:  https://github.com/microsoft/rushstack/issues/1195
+      return
+    }
+
+    const referencedAstDeclaration: AstDeclaration | ResolverFailure = this.#collector.astReferenceResolver.resolve(
+      inheritDocTag.declarationReference,
+    )
+
+    if (referencedAstDeclaration instanceof ResolverFailure) {
+      this.#collector.addAnalyzerIssue(
+        ExtractorMessageId.UnresolvedInheritDocReference,
+        'The @inheritDoc reference could not be resolved: ' + referencedAstDeclaration.reason,
+        astDeclaration,
+      )
+      return
+    }
+
+    this.#analyzeApiItem(referencedAstDeclaration)
+
+    const referencedMetadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(referencedAstDeclaration)
+
+    if (referencedMetadata.tsdocComment) {
+      this.#copyInheritedDocs(docComment, referencedMetadata.tsdocComment)
+    }
+  }
+
+  /*
+   * Copy the content from `sourceDocComment` to `targetDocComment`.
+   */
+  #copyInheritedDocs(targetDocComment: tsdoc.DocComment, sourceDocComment: tsdoc.DocComment): void {
+    targetDocComment.summarySection = sourceDocComment.summarySection
+    targetDocComment.remarksBlock = sourceDocComment.remarksBlock
+
+    targetDocComment.params.clear()
+    for (const param of sourceDocComment.params) {
+      targetDocComment.params.add(param)
+    }
+    for (const typeParam of sourceDocComment.typeParams) {
+      targetDocComment.typeParams.add(typeParam)
+    }
+    targetDocComment.returnsBlock = sourceDocComment.returnsBlock
+
+    targetDocComment.inheritDocTag = undefined
+  }
+
+  /*
+   * Determines whether or not the provided declaration reference points to an item in the working package.
+   */
+  #refersToDeclarationInWorkingPackage(
+    declarationReference: tsdoc.DocDeclarationReference | undefined,
+  ): boolean {
+    return (
+      declarationReference?.packageName === undefined ||
+      declarationReference.packageName === this.#collector.workingPackage.name
+    )
+  }
+}

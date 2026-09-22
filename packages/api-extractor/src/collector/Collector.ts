@@ -1,0 +1,1139 @@
+import * as Effect from 'effect/Effect'
+import * as Pipeable from 'effect/Pipeable'
+import { type INodePackageJson, PackageJsonLookup } from '../analyzer/package-json-lookup.js'
+import { AedocDefinitions } from '../model/index.js'
+import { invariant } from '../utils/invariant.js'
+import { ConsoleMessageId } from './message-router.js'
+import { PackageName } from './package-name.js'
+
+const hasDtsFileExtension = (filePath: string): boolean => /\.d(\.[^./\\]+)?\.(c|m)?ts$/i.test(filePath)
+// Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
+// See LICENSE in the project root for license information.
+
+import { minimatch } from 'minimatch'
+import * as ts from 'typescript'
+
+import * as tsdoc from '@microsoft/tsdoc'
+import { ReleaseTag } from '../model/index.js'
+import { sortBy, sortSet } from './sort.js'
+
+import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
+import type { AstEntity } from '../analyzer/AstEntity.js'
+import { AstImport } from '../analyzer/AstImport.js'
+import type { AstModule, IAstModuleExportInfo } from '../analyzer/AstModule.js'
+import { AstNamespaceImport } from '../analyzer/AstNamespaceImport.js'
+import { AstReferenceResolver } from '../analyzer/AstReferenceResolver.js'
+import { AstSymbol } from '../analyzer/AstSymbol.js'
+import { AstSymbolTable } from '../analyzer/AstSymbolTable.js'
+import { TypeScriptHelpers } from '../analyzer/TypeScriptHelpers.js'
+import { type IGlobalVariableAnalyzer, TypeScriptInternals } from '../analyzer/TypeScriptInternals.js'
+import type { ExtractorConfig } from '../config/index.js'
+import { ApiItemMetadata, type IApiItemMetadataOptions } from './ApiItemMetadata.js'
+import { CollectorEntity } from './CollectorEntity.js'
+import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
+import { ExtractorMessageId } from './extractor-message-id.js'
+import type { MessageRouter } from './message-router.js'
+import { PackageDocComment } from './package-doc-comment.js'
+import type { SourceMapper } from './SourceMapper.js'
+import { SymbolMetadata } from './SymbolMetadata.js'
+import { WorkingPackage } from './WorkingPackage.js'
+
+/*
+ * Options for Collector constructor.
+ */
+export interface ICollectorOptions {
+  /*
+   * Configuration for the TypeScript compiler.  The most important options to set are:
+   *
+   * - target: ts.ScriptTarget.ES5
+   * - module: ts.ModuleKind.CommonJS
+   * - moduleResolution: ts.ModuleResolutionKind.NodeJs
+   * - rootDir: inputFolder
+   */
+  program: ts.Program
+
+  messageRouter: MessageRouter
+
+  extractorConfig: ExtractorConfig
+
+  sourceMapper: SourceMapper
+}
+
+/*
+ * The `Collector` manages the overall data set that is used by `ApiModelGenerator`,
+ * `DtsRollupGenerator`, and `ApiReportGenerator`.  Starting from the working package's entry point,
+ * the `Collector` collects all exported symbols, determines how to import any symbols they reference,
+ * assigns unique names, and sorts everything into a normalized alphabetical ordering.
+ */
+export class Collector extends Pipeable.Class {
+  public readonly program: ts.Program
+  public readonly typeChecker: ts.TypeChecker
+  public readonly globalVariableAnalyzer: IGlobalVariableAnalyzer
+  public readonly astSymbolTable: AstSymbolTable
+  public readonly astReferenceResolver: AstReferenceResolver
+
+  public readonly packageJsonLookup: PackageJsonLookup
+  public readonly messageRouter: MessageRouter
+
+  public readonly workingPackage: WorkingPackage
+
+  public readonly extractorConfig: ExtractorConfig
+
+  public readonly sourceMapper: SourceMapper
+
+  /*
+   * The `ExtractorConfig.bundledPackages` names in a set.
+   */
+  public readonly bundledPackageNames: ReadonlySet<string>
+
+  readonly #program: ts.Program
+
+  readonly #tsdocParser: tsdoc.TSDocParser
+
+  #astEntryPoint: AstModule | undefined
+
+  readonly #entities: CollectorEntity[] = []
+  readonly #entitiesByAstEntity: Map<AstEntity, CollectorEntity> = new Map<
+    AstEntity,
+    CollectorEntity
+  >()
+  readonly #entitiesBySymbol: Map<ts.Symbol, CollectorEntity> = new Map<ts.Symbol, CollectorEntity>()
+
+  readonly #starExportedExternalModulePaths: string[] = []
+
+  readonly #dtsTypeReferenceDirectives: Set<string> = new Set<string>()
+  readonly #dtsLibReferenceDirectives: Set<string> = new Set<string>()
+
+  // Used by getOverloadIndex()
+  readonly #cachedOverloadIndexesByDeclaration: Map<AstDeclaration, number>
+
+  public constructor(options: ICollectorOptions) {
+    super()
+    this.packageJsonLookup = new PackageJsonLookup()
+
+    const { program, extractorConfig, sourceMapper, messageRouter } = options
+    this.#program = program
+    this.extractorConfig = extractorConfig
+    this.sourceMapper = sourceMapper
+
+    const entryPointSourceFile: ts.SourceFile | undefined = program.getSourceFile(
+      this.extractorConfig.mainEntryPointFilePath,
+    )
+
+    if (!entryPointSourceFile) {
+      throw new Error('Unable to load file: ' + this.extractorConfig.mainEntryPointFilePath)
+    }
+
+    if (!this.extractorConfig.packageFolder || !this.extractorConfig.packageJson) {
+      // TODO: We should be able to analyze projects that don't have any package.json.
+      // The ExtractorConfig class is already designed to allow this.
+      throw new Error('Unable to find a package.json file for the project being analyzed')
+    }
+
+    this.workingPackage = new WorkingPackage({
+      packageFolder: this.extractorConfig.packageFolder,
+      packageJson: this.extractorConfig.packageJson,
+      entryPointSourceFile,
+    })
+
+    this.messageRouter = messageRouter
+
+    this.program = program
+    this.typeChecker = program.getTypeChecker()
+    this.globalVariableAnalyzer = TypeScriptInternals.getGlobalVariableAnalyzer(this.program)
+
+    this.#tsdocParser = new tsdoc.TSDocParser(AedocDefinitions.tsdocConfiguration)
+
+    // Resolve package name patterns and store concrete set of bundled package dependency names
+    this.bundledPackageNames = _resolveBundledPackagePatterns(
+      this.extractorConfig.bundledPackages,
+      this.extractorConfig.packageJson,
+    )
+
+    this.astSymbolTable = new AstSymbolTable(
+      this.program,
+      this.typeChecker,
+      this.packageJsonLookup,
+      this.bundledPackageNames,
+      this.messageRouter,
+    )
+    this.astReferenceResolver = new AstReferenceResolver(this)
+
+    this.#cachedOverloadIndexesByDeclaration = new Map<AstDeclaration, number>()
+  }
+
+  public addAnalyzerIssue(
+    messageId: ExtractorMessageId,
+    messageText: string,
+    _astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
+    _properties?: Readonly<Record<string, string | number | boolean>>,
+  ): void {
+    Effect.runSync(this.messageRouter.logWarning(ConsoleMessageId.Preamble, `(${messageId}) ${messageText}`))
+  }
+
+  public addAnalyzerIssueForPosition(
+    messageId: ExtractorMessageId,
+    messageText: string,
+    _sourceFile?: ts.SourceFile,
+    _pos?: number,
+  ): void {
+    Effect.runSync(this.messageRouter.logWarning(ConsoleMessageId.Preamble, `(${messageId}) ${messageText}`))
+  }
+
+  public addTsdocMessages(
+    parserContext: tsdoc.ParserContext,
+    _sourceFile: ts.SourceFile,
+    _astDeclaration?: AstDeclaration,
+  ): void {
+    for (const message of parserContext.log.messages) {
+      Effect.runSync(
+        this.messageRouter.logWarning(
+          ConsoleMessageId.Preamble,
+          `(${message.messageId}) ${message.unformattedText}`,
+        ),
+      )
+    }
+  }
+
+  public addCompilerDiagnostic(diagnostic: ts.Diagnostic): void {
+    const text = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+    Effect.runSync(this.messageRouter.logError(ConsoleMessageId.Preamble, text))
+  }
+
+  /*a
+   * Returns a list of names (e.g. "example-library") that should appear in a reference like this:
+   *
+   * ```
+   * /// <reference types="example-library" />
+   * ```
+   */
+  public get dtsTypeReferenceDirectives(): ReadonlySet<string> {
+    return this.#dtsTypeReferenceDirectives
+  }
+
+  /*
+   * A list of names (e.g. "runtime-library") that should appear in a reference like this:
+   *
+   * ```
+   * /// <reference lib="runtime-library" />
+   * ```
+   */
+  public get dtsLibReferenceDirectives(): ReadonlySet<string> {
+    return this.#dtsLibReferenceDirectives
+  }
+
+  public get entities(): ReadonlyArray<CollectorEntity> {
+    return this.#entities
+  }
+
+  /*
+   * A list of module specifiers (e.g. `"@rushstack/node-core-library/lib/FileSystem"`) that should be emitted
+   * as star exports (e.g. `export * from "@rushstack/node-core-library/lib/FileSystem"`).
+   */
+  public get starExportedExternalModulePaths(): ReadonlyArray<string> {
+    return this.#starExportedExternalModulePaths
+  }
+
+  /*
+   * Perform the analysis.
+   */
+  public analyze(): void {
+    if (this.#astEntryPoint) {
+      throw new Error('DtsRollupGenerator.analyze() was already called')
+    }
+
+    // This runs a full type analysis, and then augments the Abstract Syntax Tree (i.e. declarations)
+    // with semantic information (i.e. symbols).  The "diagnostics" are a subset of the everyday
+    // compile errors that would result from a full compilation.
+    for (const diagnostic of this.#program.getSemanticDiagnostics()) {
+      this.addCompilerDiagnostic(diagnostic)
+    }
+
+    const sourceFiles: readonly ts.SourceFile[] = this.program.getSourceFiles()
+
+    if (this.messageRouter.verbosity === 'diagnostics') {
+      Effect.runSync(this.messageRouter.logDiagnosticHeader('Root filenames'))
+      for (const fileName of this.program.getRootFileNames()) {
+        Effect.runSync(this.messageRouter.logDiagnostic(fileName))
+      }
+      Effect.runSync(this.messageRouter.logDiagnosticFooter)
+
+      Effect.runSync(this.messageRouter.logDiagnosticHeader('Files analyzed by compiler'))
+      for (const sourceFile of sourceFiles) {
+        Effect.runSync(this.messageRouter.logDiagnostic(sourceFile.fileName))
+      }
+      Effect.runSync(this.messageRouter.logDiagnosticFooter)
+    }
+
+    // We can throw this error earlier in CompilerState.ts, but intentionally wait until after we've logged the
+    // associated diagnostic message above to make debugging easier for developers.
+    // Typically there will be many such files -- to avoid too much noise, only report the first one.
+    const badSourceFile: ts.SourceFile | undefined = sourceFiles.find(
+      ({ fileName }) => !hasDtsFileExtension(fileName),
+    )
+    if (badSourceFile) {
+      this.addAnalyzerIssueForPosition(
+        ExtractorMessageId.WrongInputFileType,
+        'Incorrect file type; API Extractor expects to analyze compiler outputs with the .d.ts file extension. ' +
+          'Troubleshooting tips: https://api-extractor.com/link/dts-error',
+        badSourceFile,
+        0,
+      )
+    }
+
+    // Build the entry point
+    const entryPointSourceFile: ts.SourceFile = this.workingPackage.entryPointSourceFile
+
+    const astEntryPoint: AstModule = this.astSymbolTable.fetchAstModuleFromWorkingPackage(entryPointSourceFile)
+    this.#astEntryPoint = astEntryPoint
+
+    const packageDocCommentTextRange: ts.TextRange | undefined = PackageDocComment.tryFindInSourceFile(
+      entryPointSourceFile,
+      this,
+    )
+
+    if (packageDocCommentTextRange) {
+      const range: tsdoc.TextRange = tsdoc.TextRange.fromStringRange(
+        entryPointSourceFile.text,
+        packageDocCommentTextRange.pos,
+        packageDocCommentTextRange.end,
+      )
+
+      this.workingPackage.tsdocParserContext = this.#tsdocParser.parseRange(range)
+
+      this.addTsdocMessages(this.workingPackage.tsdocParserContext, entryPointSourceFile)
+
+      this.workingPackage.tsdocComment = this.workingPackage.tsdocParserContext!.docComment
+    }
+
+    const { exportedLocalEntities, starExportedExternalModules, visitedAstModules }: IAstModuleExportInfo = this
+      .astSymbolTable.fetchAstModuleExportInfo(astEntryPoint)
+
+    // Create a CollectorEntity for each top-level export.
+    const processedAstEntities: AstEntity[] = []
+    for (const [exportName, astEntity] of exportedLocalEntities) {
+      this.#createCollectorEntity(astEntity, exportName)
+      processedAstEntities.push(astEntity)
+    }
+
+    // Recursively create the remaining CollectorEntities after the top-level entities
+    // have been processed.
+    const alreadySeenAstEntities: Set<AstEntity> = new Set<AstEntity>()
+    for (const astEntity of processedAstEntities) {
+      this.#recursivelyCreateEntities(astEntity, alreadySeenAstEntities)
+      if (astEntity instanceof AstSymbol) {
+        this.fetchSymbolMetadata(astEntity)
+      }
+    }
+
+    // Ensure references are collected from any intermediate files that
+    // only include exports
+    const nonExternalSourceFiles: Set<ts.SourceFile> = new Set()
+    for (const { sourceFile, isExternal } of visitedAstModules) {
+      if (!nonExternalSourceFiles.has(sourceFile) && !isExternal) {
+        nonExternalSourceFiles.add(sourceFile)
+      }
+    }
+
+    // Here, we're collecting reference directives from all non-external source files
+    // that were encountered while looking for exports, but only those references that
+    // were explicitly written by the developer and marked with the `preserve="true"`
+    // attribute. In TS >= 5.5, only references that are explicitly authored and marked
+    // with `preserve="true"` are included in the output. See https://github.com/microsoft/TypeScript/pull/57681
+    //
+    // The `_collectReferenceDirectives` function pulls in all references in files that
+    // contain definitions, but does not examine files that only reexport from other
+    // files. Here, we're looking through files that were missed by `_collectReferenceDirectives`,
+    // but only collecting references that were explicitly marked with `preserve="true"`.
+    // It is intuitive for developers to include references that they explicitly want part of
+    // their public API in a file like the entrypoint, which is likely to only contain reexports,
+    // and this picks those up.
+    this.#collectReferenceDirectivesFromSourceFiles(nonExternalSourceFiles, true)
+
+    this.#makeUniqueNames()
+
+    for (const starExportedExternalModule of starExportedExternalModules) {
+      if (starExportedExternalModule.externalModulePath !== undefined) {
+        this.#starExportedExternalModulePaths.push(starExportedExternalModule.externalModulePath)
+      }
+    }
+
+    sortBy(this.#entities, (x: CollectorEntity) => x.getSortKey())
+    sortSet(this.#dtsTypeReferenceDirectives)
+    sortSet(this.#dtsLibReferenceDirectives)
+    this.#starExportedExternalModulePaths.sort()
+  }
+
+  /*
+   * For a given ts.Identifier that is part of an AstSymbol that we analyzed, return the CollectorEntity that
+   * it refers to.  Returns undefined if it doesn't refer to anything interesting.
+   * @remarks
+   * Throws an Error if the ts.Identifier is not part of node tree that was analyzed.
+   */
+  public tryGetEntityForNode(identifier: ts.Identifier | ts.ImportTypeNode): CollectorEntity | undefined {
+    const astEntity: AstEntity | undefined = this.astSymbolTable.tryGetEntityForNode(identifier)
+    if (astEntity) {
+      return this.#entitiesByAstEntity.get(astEntity)
+    }
+    return undefined
+  }
+
+  /*
+   * For a given analyzed ts.Symbol, return the CollectorEntity that it refers to. Returns undefined if it
+   * doesn't refer to anything interesting.
+   */
+  public tryGetEntityForSymbol(symbol: ts.Symbol): CollectorEntity | undefined {
+    return this.#entitiesBySymbol.get(symbol)
+  }
+
+  /*
+   * Returns the associated `CollectorEntity` for the given `astEntity`, if one was created during analysis.
+   */
+  public tryGetCollectorEntity(astEntity: AstEntity): CollectorEntity | undefined {
+    return this.#entitiesByAstEntity.get(astEntity)
+  }
+
+  public fetchSymbolMetadata(astSymbol: AstSymbol): SymbolMetadata {
+    if (astSymbol.symbolMetadata === undefined) {
+      this.#fetchSymbolMetadata(astSymbol)
+    }
+    return astSymbol.symbolMetadata as SymbolMetadata
+  }
+
+  public fetchDeclarationMetadata(astDeclaration: AstDeclaration): DeclarationMetadata {
+    if (astDeclaration.declarationMetadata === undefined) {
+      // Fetching the SymbolMetadata always constructs the DeclarationMetadata
+      this.#fetchSymbolMetadata(astDeclaration.astSymbol)
+    }
+    return astDeclaration.declarationMetadata as DeclarationMetadata
+  }
+
+  public fetchApiItemMetadata(astDeclaration: AstDeclaration): ApiItemMetadata {
+    if (astDeclaration.apiItemMetadata === undefined) {
+      // Fetching the SymbolMetadata always constructs the ApiItemMetadata
+      this.#fetchSymbolMetadata(astDeclaration.astSymbol)
+    }
+    return astDeclaration.apiItemMetadata as ApiItemMetadata
+  }
+
+  public tryFetchMetadataForAstEntity(astEntity: AstEntity): SymbolMetadata | undefined {
+    if (astEntity instanceof AstSymbol) {
+      return this.fetchSymbolMetadata(astEntity)
+    }
+    if (astEntity instanceof AstImport) {
+      if (astEntity.astSymbol) {
+        return this.fetchSymbolMetadata(astEntity.astSymbol)
+      }
+    }
+    return undefined
+  }
+
+  public isAncillaryDeclaration(astDeclaration: AstDeclaration): boolean {
+    const declarationMetadata: DeclarationMetadata = this.fetchDeclarationMetadata(astDeclaration)
+    return declarationMetadata.isAncillary
+  }
+
+  public getNonAncillaryDeclarations(astSymbol: AstSymbol): ReadonlyArray<AstDeclaration> {
+    const result: AstDeclaration[] = []
+    for (const astDeclaration of astSymbol.astDeclarations) {
+      const declarationMetadata: DeclarationMetadata = this.fetchDeclarationMetadata(astDeclaration)
+      if (!declarationMetadata.isAncillary) {
+        result.push(astDeclaration)
+      }
+    }
+    return result
+  }
+
+  /*
+   * Removes the leading underscore, for example: "_Example" --> "example*Example*_"
+   *
+   * @remarks
+   * This causes internal definitions to sort alphabetically case-insensitive, then case-sensitive, and
+   * initially ignoring the underscore prefix, while still deterministically comparing it.
+   * The star is used as a delimiter because it is not a legal  identifier character.
+   */
+  public static getSortKeyIgnoringUnderscore(identifier: string | undefined): string {
+    if (!identifier) return ''
+
+    let parts: string[]
+
+    if (identifier[0] === '_') {
+      const withoutUnderscore: string = identifier.substr(1)
+      parts = [withoutUnderscore.toLowerCase(), '*', withoutUnderscore, '*', '_']
+    } else {
+      parts = [identifier.toLowerCase(), '*', identifier]
+    }
+
+    return parts.join('')
+  }
+
+  /*
+   * For function-like signatures, this returns the TSDoc "overload index" which can be used to identify
+   * a specific overload.
+   */
+  public getOverloadIndex(astDeclaration: AstDeclaration): number {
+    const allDeclarations: ReadonlyArray<AstDeclaration> = astDeclaration.astSymbol.astDeclarations
+    if (allDeclarations.length === 1) {
+      return 1 // trivial case
+    }
+
+    let overloadIndex: number | undefined = this.#cachedOverloadIndexesByDeclaration.get(astDeclaration)
+
+    if (overloadIndex === undefined) {
+      // TSDoc index selectors are positive integers counting from 1
+      let nextIndex: number = 1
+      for (const other of allDeclarations) {
+        // Filter out other declarations that are not overloads.  For example, an overloaded function can also
+        // be a namespace.
+        if (other.declaration.kind === astDeclaration.declaration.kind) {
+          this.#cachedOverloadIndexesByDeclaration.set(other, nextIndex)
+          ++nextIndex
+        }
+      }
+      overloadIndex = this.#cachedOverloadIndexesByDeclaration.get(astDeclaration)
+    }
+
+    if (overloadIndex === undefined) {
+      // This should never happen
+      throw invariant('Error calculating overload index for declaration')
+    }
+
+    return overloadIndex
+  }
+
+  #createCollectorEntity(
+    astEntity: AstEntity,
+    exportName?: string,
+    parent?: CollectorEntity,
+  ): CollectorEntity {
+    let entity: CollectorEntity | undefined = this.#entitiesByAstEntity.get(astEntity)
+
+    if (!entity) {
+      entity = new CollectorEntity(astEntity)
+
+      this.#entitiesByAstEntity.set(astEntity, entity)
+      if (astEntity instanceof AstSymbol) {
+        this.#entitiesBySymbol.set(astEntity.followedSymbol, entity)
+      } else if (astEntity instanceof AstNamespaceImport) {
+        this.#entitiesBySymbol.set(astEntity.symbol, entity)
+      }
+      this.#entities.push(entity)
+      this.#collectReferenceDirectives(astEntity)
+    }
+
+    if (exportName) {
+      if (parent) {
+        entity.addLocalExportName(exportName, parent)
+      } else {
+        entity.addExportName(exportName)
+      }
+    }
+
+    return entity
+  }
+
+  #recursivelyCreateEntities(astEntity: AstEntity, alreadySeenAstEntities: Set<AstEntity>): void {
+    if (alreadySeenAstEntities.has(astEntity)) return
+    alreadySeenAstEntities.add(astEntity)
+
+    if (astEntity instanceof AstSymbol) {
+      astEntity.forEachDeclarationRecursive((astDeclaration: AstDeclaration) => {
+        for (const referencedAstEntity of astDeclaration.referencedAstEntities) {
+          if (referencedAstEntity instanceof AstSymbol) {
+            // We only create collector entities for root-level symbols. For example, if a symbol is
+            // nested inside a namespace, only the namespace gets a collector entity. Note that this
+            // is not true for AstNamespaceImports below.
+            if (referencedAstEntity.parentAstSymbol === undefined) {
+              this.#createCollectorEntity(referencedAstEntity)
+            }
+          } else {
+            this.#createCollectorEntity(referencedAstEntity)
+          }
+
+          this.#recursivelyCreateEntities(referencedAstEntity, alreadySeenAstEntities)
+        }
+      })
+    }
+
+    if (astEntity instanceof AstNamespaceImport) {
+      const astModuleExportInfo: IAstModuleExportInfo = astEntity.fetchAstModuleExportInfo(this)
+      const parentEntity: CollectorEntity | undefined = this.#entitiesByAstEntity.get(astEntity)
+      if (!parentEntity) {
+        // This should never happen, as we've already created entities for all AstNamespaceImports.
+        throw invariant(
+          `Failed to get CollectorEntity for AstNamespaceImport with namespace name "${astEntity.namespaceName}"`,
+        )
+      }
+
+      for (const [localExportName, localAstEntity] of astModuleExportInfo.exportedLocalEntities) {
+        // Create a CollectorEntity for each local export within an AstNamespaceImport entity.
+        this.#createCollectorEntity(localAstEntity, localExportName, parentEntity)
+        this.#recursivelyCreateEntities(localAstEntity, alreadySeenAstEntities)
+      }
+    }
+  }
+
+  /*
+   * Ensures a unique name for each item in the package typings file.
+   */
+  #makeUniqueNames(): void {
+    // The following examples illustrate the nameForEmit heuristics:
+    //
+    // Example 1:
+    //   class X extends Pipeable.Class { } <--- nameForEmit should be "A" to simplify things and reduce possibility of conflicts
+    //   export { X as A };
+    //
+    // Example 2:
+    //   class X extends Pipeable.Class { } <--- nameForEmit should be "X" because choosing A or B would be nondeterministic
+    //   export { X as A };
+    //   export { X as B };
+    //
+    // Example 3:
+    //   class X extends Pipeable.Class { } <--- nameForEmit should be "X_1" because Y has a stronger claim to the name
+    //   export { X as A };
+    //   export { X as B };
+    //   class Y extends Pipeable.Class { } <--- nameForEmit should be "X"
+    //   export { Y as X };
+
+    // Set of names that should NOT be used when generating a unique nameForEmit
+    const usedNames: Set<string> = new Set<string>()
+
+    // First collect the names of explicit package exports, and perform a sanity check.
+    for (const entity of this.#entities) {
+      for (const exportName of entity.exportNames) {
+        if (usedNames.has(exportName)) {
+          // This should be impossible
+          throw invariant(`A package cannot have two exports with the name "${exportName}"`)
+        }
+        usedNames.add(exportName)
+      }
+    }
+
+    // Ensure that each entity has a unique nameForEmit
+    for (const entity of this.#entities) {
+      // What name would we ideally want to emit it as?
+      let idealNameForEmit: string
+
+      // If this entity is exported exactly once, then we prefer the exported name
+      if (
+        entity.singleExportName !== undefined &&
+        entity.singleExportName !== ts.InternalSymbolName.Default
+      ) {
+        idealNameForEmit = entity.singleExportName
+      } else {
+        // otherwise use the local name
+        idealNameForEmit = entity.astEntity.localName
+      }
+
+      if (idealNameForEmit.includes('.')) {
+        // For an ImportType with a namespace chain, only the top namespace is imported.
+        idealNameForEmit = idealNameForEmit.split('.')[0] ?? idealNameForEmit
+      }
+
+      // If the idealNameForEmit happens to be the same as one of the exports, then we're safe to use that...
+      if (entity.exportNames.has(idealNameForEmit)) {
+        // ...except that if it conflicts with a global name, then the global name wins
+        if (!this.globalVariableAnalyzer.hasGlobalName(idealNameForEmit)) {
+          // ...also avoid "default" which can interfere with "export { default } from 'some-module;'"
+          if (idealNameForEmit !== 'default') {
+            entity.nameForEmit = idealNameForEmit
+            continue
+          }
+        }
+      }
+
+      // Generate a unique name based on idealNameForEmit
+      let suffix: number = 1
+      let nameForEmit: string = idealNameForEmit
+
+      // Choose a name that doesn't conflict with usedNames or a global name
+      while (
+        nameForEmit === 'default' ||
+        usedNames.has(nameForEmit) ||
+        this.globalVariableAnalyzer.hasGlobalName(nameForEmit)
+      ) {
+        nameForEmit = `${idealNameForEmit}_${++suffix}`
+      }
+      entity.nameForEmit = nameForEmit
+      usedNames.add(nameForEmit)
+    }
+  }
+
+  #fetchSymbolMetadata(astSymbol: AstSymbol): void {
+    if (astSymbol.symbolMetadata) {
+      return
+    }
+
+    // When we solve an astSymbol, then we always also solve all of its parents and all of its declarations.
+    // The parent is solved first.
+    if (astSymbol.parentAstSymbol && astSymbol.parentAstSymbol.symbolMetadata === undefined) {
+      this.#fetchSymbolMetadata(astSymbol.parentAstSymbol)
+    }
+
+    // Construct the DeclarationMetadata objects, and detect any ancillary declarations
+    this.#calculateDeclarationMetadataForDeclarations(astSymbol)
+
+    // Calculate the ApiItemMetadata objects
+    for (const astDeclaration of astSymbol.astDeclarations) {
+      this.#calculateApiItemMetadata(astDeclaration)
+    }
+
+    // The most public effectiveReleaseTag for all declarations
+    let maxEffectiveReleaseTag: ReleaseTag = ReleaseTag.None
+
+    for (const astDeclaration of astSymbol.astDeclarations) {
+      // We know we solved this above
+      const apiItemMetadata: ApiItemMetadata = astDeclaration.apiItemMetadata as ApiItemMetadata
+
+      const effectiveReleaseTag: ReleaseTag = apiItemMetadata.effectiveReleaseTag
+
+      if (effectiveReleaseTag > maxEffectiveReleaseTag) {
+        maxEffectiveReleaseTag = effectiveReleaseTag
+      }
+    }
+
+    // Update this last when we're sure no exceptions were thrown
+    astSymbol.symbolMetadata = new SymbolMetadata({
+      maxEffectiveReleaseTag,
+    })
+  }
+
+  #calculateDeclarationMetadataForDeclarations(astSymbol: AstSymbol): void {
+    // Initialize DeclarationMetadata for each declaration
+    for (const astDeclaration of astSymbol.astDeclarations) {
+      if (astDeclaration.declarationMetadata) {
+        throw invariant(
+          'AstDeclaration.declarationMetadata is not expected to have been initialized yet',
+        )
+      }
+
+      const metadata: InternalDeclarationMetadata = new InternalDeclarationMetadata()
+      metadata.tsdocParserContext = this.#parseTsdocForAstDeclaration(astDeclaration)
+
+      astDeclaration.declarationMetadata = metadata
+    }
+
+    // Detect ancillary declarations
+    for (const astDeclaration of astSymbol.astDeclarations) {
+      // For a getter/setter pair, make the setter ancillary to the getter
+      if (astDeclaration.declaration.kind === ts.SyntaxKind.SetAccessor) {
+        let foundGetter: boolean = false
+        for (const getterAstDeclaration of astDeclaration.astSymbol.astDeclarations) {
+          if (getterAstDeclaration.declaration.kind === ts.SyntaxKind.GetAccessor) {
+            // Associate it with the getter
+            this.#addAncillaryDeclaration(getterAstDeclaration, astDeclaration)
+
+            foundGetter = true
+          }
+        }
+
+        if (!foundGetter) {
+          this.addAnalyzerIssue(
+            ExtractorMessageId.MissingGetter,
+            `The property "${astDeclaration.astSymbol.localName}" has a setter but no getter.`,
+            astDeclaration,
+          )
+        }
+      }
+    }
+  }
+
+  #addAncillaryDeclaration(
+    mainAstDeclaration: AstDeclaration,
+    ancillaryAstDeclaration: AstDeclaration,
+  ): void {
+    const mainMetadata: InternalDeclarationMetadata = mainAstDeclaration
+      .declarationMetadata as InternalDeclarationMetadata
+    const ancillaryMetadata: InternalDeclarationMetadata = ancillaryAstDeclaration
+      .declarationMetadata as InternalDeclarationMetadata
+
+    if (mainMetadata.ancillaryDeclarations.indexOf(ancillaryAstDeclaration) >= 0) {
+      return // already added
+    }
+
+    if (mainAstDeclaration.astSymbol !== ancillaryAstDeclaration.astSymbol) {
+      throw invariant(
+        'Invalid call to _addAncillaryDeclaration() because declarations do not' +
+          ' belong to the same symbol',
+      )
+    }
+
+    if (mainMetadata.isAncillary) {
+      throw invariant(
+        'Invalid call to _addAncillaryDeclaration() because the target is ancillary itself',
+      )
+    }
+
+    if (ancillaryMetadata.isAncillary) {
+      throw invariant(
+        'Invalid call to _addAncillaryDeclaration() because source is already ancillary' +
+          ' to another declaration',
+      )
+    }
+
+    if (mainAstDeclaration.apiItemMetadata || ancillaryAstDeclaration.apiItemMetadata) {
+      throw invariant(
+        'Invalid call to _addAncillaryDeclaration() because the API item metadata' +
+          ' has already been constructed',
+      )
+    }
+
+    ancillaryMetadata.isAncillary = true
+    mainMetadata.ancillaryDeclarations.push(ancillaryAstDeclaration)
+  }
+
+  #calculateApiItemMetadata(astDeclaration: AstDeclaration): void {
+    const declarationMetadata: InternalDeclarationMetadata = astDeclaration
+      .declarationMetadata as InternalDeclarationMetadata
+    if (declarationMetadata.isAncillary) {
+      if (astDeclaration.declaration.kind === ts.SyntaxKind.SetAccessor) {
+        if (declarationMetadata.tsdocParserContext) {
+          this.addAnalyzerIssue(
+            ExtractorMessageId.SetterWithDocs,
+            `The doc comment for the property "${astDeclaration.astSymbol.localName}"` +
+              ` must appear on the getter, not the setter.`,
+            astDeclaration,
+          )
+        }
+      }
+
+      // We never calculate ApiItemMetadata for an ancillary declaration; instead, it is assigned when
+      // the main declaration is processed.
+      return
+    }
+
+    const options: IApiItemMetadataOptions = {
+      declaredReleaseTag: ReleaseTag.None,
+      effectiveReleaseTag: ReleaseTag.None,
+      isEventProperty: false,
+      isOverride: false,
+      isSealed: false,
+      isVirtual: false,
+      isPreapproved: false,
+      releaseTagSameAsParent: false,
+    }
+
+    const parserContext: tsdoc.ParserContext | undefined = declarationMetadata.tsdocParserContext
+    if (parserContext) {
+      const modifierTagSet: tsdoc.StandardModifierTagSet = parserContext.docComment.modifierTagSet
+
+      let declaredReleaseTag: ReleaseTag = ReleaseTag.None
+      let extraReleaseTags: boolean = false
+
+      if (modifierTagSet.isPublic()) {
+        declaredReleaseTag = ReleaseTag.Public
+      }
+      if (modifierTagSet.isBeta()) {
+        if (declaredReleaseTag !== ReleaseTag.None) {
+          extraReleaseTags = true
+        } else {
+          declaredReleaseTag = ReleaseTag.Beta
+        }
+      }
+      if (modifierTagSet.isAlpha()) {
+        if (declaredReleaseTag !== ReleaseTag.None) {
+          extraReleaseTags = true
+        } else {
+          declaredReleaseTag = ReleaseTag.Alpha
+        }
+      }
+      if (modifierTagSet.isInternal()) {
+        if (declaredReleaseTag !== ReleaseTag.None) {
+          extraReleaseTags = true
+        } else {
+          declaredReleaseTag = ReleaseTag.Internal
+        }
+      }
+
+      if (extraReleaseTags) {
+        if (!astDeclaration.astSymbol.isExternal) {
+          // for now, don't report errors for external code
+          this.addAnalyzerIssue(
+            ExtractorMessageId.ExtraReleaseTag,
+            'The doc comment should not contain more than one release tag',
+            astDeclaration,
+          )
+        }
+      }
+
+      options.declaredReleaseTag = declaredReleaseTag
+
+      options.isEventProperty = modifierTagSet.isEventProperty()
+      options.isOverride = modifierTagSet.isOverride()
+      options.isSealed = modifierTagSet.isSealed()
+      options.isVirtual = modifierTagSet.isVirtual()
+      const preapprovedTag: tsdoc.TSDocTagDefinition | void = AedocDefinitions.tsdocConfiguration.tryGetTagDefinition(
+        '@preapproved',
+      )
+
+      if (preapprovedTag && modifierTagSet.hasTag(preapprovedTag)) {
+        // This feature only makes sense for potentially big declarations.
+        switch (astDeclaration.declaration.kind) {
+          case ts.SyntaxKind.ClassDeclaration:
+          case ts.SyntaxKind.EnumDeclaration:
+          case ts.SyntaxKind.InterfaceDeclaration:
+          case ts.SyntaxKind.ModuleDeclaration:
+            if (declaredReleaseTag === ReleaseTag.Internal) {
+              options.isPreapproved = true
+            } else {
+              this.addAnalyzerIssue(
+                ExtractorMessageId.PreapprovedBadReleaseTag,
+                `The @preapproved tag cannot be applied to "${astDeclaration.astSymbol.localName}"` +
+                  ` without an @internal release tag`,
+                astDeclaration,
+              )
+            }
+            break
+          default:
+            this.addAnalyzerIssue(
+              ExtractorMessageId.PreapprovedUnsupportedType,
+              `The @preapproved tag cannot be applied to "${astDeclaration.astSymbol.localName}"` +
+                ` because it is not a supported declaration type`,
+              astDeclaration,
+            )
+            break
+        }
+      }
+    }
+
+    // This needs to be set regardless of whether or not a parserContext exists
+    if (astDeclaration.parent) {
+      const parentApiItemMetadata: ApiItemMetadata = this.fetchApiItemMetadata(astDeclaration.parent)
+      options.effectiveReleaseTag = options.declaredReleaseTag === ReleaseTag.None
+        ? parentApiItemMetadata.effectiveReleaseTag
+        : options.declaredReleaseTag
+
+      options.releaseTagSameAsParent = parentApiItemMetadata.effectiveReleaseTag === options.effectiveReleaseTag
+    } else {
+      options.effectiveReleaseTag = options.declaredReleaseTag
+    }
+
+    if (options.effectiveReleaseTag === ReleaseTag.None) {
+      if (!astDeclaration.astSymbol.isExternal) {
+        // for now, don't report errors for external code
+        // Don't report missing release tags for forgotten exports (unless we're including forgotten exports
+        // in either the API report or doc model).
+        const astSymbol: AstSymbol = astDeclaration.astSymbol
+        const entity: CollectorEntity | undefined = this.#entitiesByAstEntity.get(astSymbol.rootAstSymbol)
+        if (
+          entity &&
+          (entity.consumable ||
+            this.extractorConfig.apiReport.includeForgottenExports ||
+            this.extractorConfig.docModel.includeForgottenExports)
+        ) {
+          // We also don't report errors for the default export of an entry point, since its doc comment
+          // isn't easy to obtain from the .d.ts file
+          if (astSymbol.rootAstSymbol.localName !== '_default') {
+            this.addAnalyzerIssue(
+              ExtractorMessageId.MissingReleaseTag,
+              `"${entity.astEntity.localName}" is part of the package's API, but it is missing ` +
+                `a release tag (@alpha, @beta, @public, or @internal)`,
+              astSymbol,
+            )
+          }
+        }
+      }
+
+      options.effectiveReleaseTag = ReleaseTag.Public
+    }
+
+    const apiItemMetadata: ApiItemMetadata = new ApiItemMetadata(options)
+    if (parserContext) {
+      apiItemMetadata.tsdocComment = parserContext.docComment
+    }
+
+    astDeclaration.apiItemMetadata = apiItemMetadata
+
+    // Lastly, share the result with any ancillary declarations
+    for (const ancillaryDeclaration of declarationMetadata.ancillaryDeclarations) {
+      ancillaryDeclaration.apiItemMetadata = apiItemMetadata
+    }
+  }
+
+  #parseTsdocForAstDeclaration(astDeclaration: AstDeclaration): tsdoc.ParserContext | undefined {
+    const declaration: ts.Declaration = astDeclaration.declaration
+    let nodeForComment: ts.Node = declaration
+
+    if (ts.isVariableDeclaration(declaration)) {
+      // Variable declarations are special because they can be combined into a list.  For example:
+      //
+      // /* A */ export /* B */ const /* C */ x = 1, /* D **/ [ /* E */ y, z] = [3, 4];
+      //
+      // The compiler will only emit comments A and C in the .d.ts file, so in general there isn't a well-defined
+      // way to document these parts.  API Extractor requires you to break them into separate exports like this:
+      //
+      // /* A */ export const x = 1;
+      //
+      // But _getReleaseTagForDeclaration() still receives a node corresponding to "x", so we need to walk upwards
+      // and find the containing statement in order for getJSDocCommentRanges() to read the comment that we expect.
+      const statement: ts.VariableStatement | undefined = TypeScriptHelpers.findFirstParent(
+        declaration,
+        ts.SyntaxKind.VariableStatement,
+      ) as ts.VariableStatement | undefined
+      if (statement !== undefined) {
+        // For a compound declaration, fall back to looking for C instead of A
+        if (statement.declarationList.declarations.length === 1) {
+          nodeForComment = statement
+        }
+      }
+    }
+
+    const sourceFileText: string = declaration.getSourceFile().text
+    const ranges: ts.CommentRange[] = TypeScriptInternals.getJSDocCommentRanges(nodeForComment, sourceFileText) || []
+
+    if (ranges.length === 0) {
+      return undefined
+    }
+
+    // We use the JSDoc comment block that is closest to the definition, i.e.
+    // the last one preceding it
+    const range: ts.CommentRange | undefined = ranges[ranges.length - 1]
+    if (!range) return undefined
+
+    const tsdocTextRange: tsdoc.TextRange = tsdoc.TextRange.fromStringRange(
+      sourceFileText,
+      range.pos,
+      range.end,
+    )
+
+    const parserContext: tsdoc.ParserContext = this.#tsdocParser.parseRange(tsdocTextRange)
+
+    this.addTsdocMessages(parserContext, declaration.getSourceFile(), astDeclaration)
+
+    // We delete the @privateRemarks block as early as possible, to ensure that it never leaks through
+    // into one of the output files.
+    parserContext.docComment.privateRemarks = undefined
+
+    return parserContext
+  }
+
+  #collectReferenceDirectives(astEntity: AstEntity): void {
+    // Here, we're collecting reference directives from source files that contain extracted
+    // definitions (i.e. - files that contain `export class ...`, `export interface ...`, ...).
+    // These references may or may not include the `preserve="true" attribute. In TS < 5.5,
+    // references that end up in .D.TS files may or may not be explicity written by the developer.
+    // In TS >= 5.5, only references that are explicitly authored and are marked with
+    // `preserve="true"` are included in the output. See https://github.com/microsoft/TypeScript/pull/57681
+    //
+    // The calls to `_collectReferenceDirectivesFromSourceFiles` in this function are
+    // preserving existing behavior, which is to include all reference directives
+    // regardless of whether they are explicitly authored or not, but only in files that
+    // contain definitions.
+
+    if (astEntity instanceof AstSymbol) {
+      const sourceFiles: ts.SourceFile[] = astEntity.astDeclarations.map((astDeclaration) =>
+        astDeclaration.declaration.getSourceFile()
+      )
+      return this.#collectReferenceDirectivesFromSourceFiles(sourceFiles, false)
+    }
+
+    if (astEntity instanceof AstNamespaceImport) {
+      const sourceFiles: ts.SourceFile[] = [astEntity.astModule.sourceFile]
+      return this.#collectReferenceDirectivesFromSourceFiles(sourceFiles, false)
+    }
+  }
+
+  #collectReferenceDirectivesFromSourceFiles(
+    sourceFiles: Iterable<ts.SourceFile>,
+    onlyIncludeExplicitlyPreserved: boolean,
+  ): void {
+    const seenFilenames: Set<string> = new Set<string>()
+
+    for (const sourceFile of sourceFiles) {
+      if (sourceFile?.fileName) {
+        const {
+          fileName,
+          typeReferenceDirectives,
+          libReferenceDirectives,
+          text: sourceFileText,
+        } = sourceFile
+        if (!seenFilenames.has(fileName)) {
+          seenFilenames.add(fileName)
+
+          for (const typeReferenceDirective of typeReferenceDirectives) {
+            const name: string | undefined = this.#getReferenceDirectiveFromSourceFile(
+              sourceFileText,
+              typeReferenceDirective,
+              onlyIncludeExplicitlyPreserved,
+            )
+            if (name) {
+              this.#dtsTypeReferenceDirectives.add(name)
+            }
+          }
+
+          for (const libReferenceDirective of libReferenceDirectives) {
+            const reference: string | undefined = this.#getReferenceDirectiveFromSourceFile(
+              sourceFileText,
+              libReferenceDirective,
+              onlyIncludeExplicitlyPreserved,
+            )
+            if (reference) {
+              this.#dtsLibReferenceDirectives.add(reference)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  #getReferenceDirectiveFromSourceFile(
+    sourceFileText: string,
+    { pos, end, preserve }: ts.FileReference,
+    onlyIncludeExplicitlyPreserved: boolean,
+  ): string | undefined {
+    const reference: string = sourceFileText.substring(pos, end)
+    if (preserve || !onlyIncludeExplicitlyPreserved) {
+      return reference
+    }
+    return undefined
+  }
+}
+
+/*
+ * Resolve provided `bundledPackages` names and glob patterns to a list of explicit package names.
+ *
+ * @remarks
+ * Explicit package names will be included in the output unconditionally. However, wildcard patterns will
+ * only be matched against the various dependencies listed in the provided package.json (if there was one).
+ * Patterns will be matched against `dependencies`, `devDependencies`, `optionalDependencies`, and `peerDependencies`.
+ *
+ * @param bundledPackages - The list of package names and/or glob patterns to resolve.
+ * @param packageJson - The package.json of the package being processed (if there is one).
+ * @returns The set of resolved package names to be bundled during analysis.
+ */
+function _resolveBundledPackagePatterns(
+  bundledPackages: readonly string[],
+  packageJson: INodePackageJson | undefined,
+): ReadonlySet<string> {
+  if (bundledPackages.length === 0) {
+    // If no `bundledPackages` were specified, then there is nothing to resolve.
+    // Return an empty set.
+    return new Set<string>()
+  }
+
+  // Accumulate all declared dependencies.
+  // Any wildcard patterns in `bundledPackages` will be resolved against these.
+  const dependencyNames: Set<string> = new Set<string>()
+  Object.keys(packageJson?.dependencies ?? {}).forEach((dep) => dependencyNames.add(dep))
+  Object.keys(packageJson?.devDependencies ?? {}).forEach((dep) => dependencyNames.add(dep))
+  Object.keys(packageJson?.peerDependencies ?? {}).forEach((dep) => dependencyNames.add(dep))
+  Object.keys(packageJson?.optionalDependencies ?? {}).forEach((dep) => dependencyNames.add(dep))
+
+  // The set of resolved package names to be populated and returned
+  const resolvedPackageNames: Set<string> = new Set<string>()
+
+  for (const packageNameOrPattern of bundledPackages) {
+    // If the string is an exact package name, use it regardless of package.json contents
+    if (PackageName.isValidName(packageNameOrPattern)) {
+      resolvedPackageNames.add(packageNameOrPattern)
+    } else {
+      // If the entry isn't an exact package name, assume glob pattern and search for matches
+      for (const dependencyName of dependencyNames) {
+        if (minimatch(dependencyName, packageNameOrPattern)) {
+          resolvedPackageNames.add(dependencyName)
+        }
+      }
+    }
+  }
+  return resolvedPackageNames
+}
