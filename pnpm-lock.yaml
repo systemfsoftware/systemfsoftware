@@ -337,9 +337,6 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.116(effect@4.0.0-rc.116)(vitest@5.0.1)
-      '@systemfsoftware/api-extractor':
-        specifier: workspace:*
-        version: 'link:'
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0

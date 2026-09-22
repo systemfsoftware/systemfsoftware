@@ -31,9 +31,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsdown -l warn && pnpm api:check",
-    "api:check": "tsdown -l warn && api-extractor run --local --quiet",
-    "api:update": "api-extractor run --local",
+    "build": "tsdown -l warn && node dist/cli.mjs run --local --quiet",
+    "api:check": "tsdown -l warn && node dist/cli.mjs run --local --quiet",
+    "api:update": "node dist/cli.mjs run --local",
     "attw": "attw --pack .",
     "clean": "rimraf dist",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json",
@@ -58,7 +58,6 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/api-extractor": "workspace:*",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
