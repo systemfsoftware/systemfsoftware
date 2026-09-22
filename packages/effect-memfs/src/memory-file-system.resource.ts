@@ -1,16 +1,10 @@
 import { Effect, Layer } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
-import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Handle from './memory-file-system.handle.js'
 import { type Contents, MemoryFileSystemSpec } from './MemoryFileSystemSpec.schema.js'
 
 export { type Contents, MemoryFileSystemSpec }
-export {
-  isMemoryFileSystem,
-  type MemoryFileSystem,
-  TypeId as MemoryFileSystemTypeId,
-} from './memory-file-system.handle.js'
 
 const TypeId = Symbol.for('~systemfsoftware/memfs/MemoryFileSystemResource')
 export type TypeId = typeof TypeId
@@ -46,23 +40,3 @@ const makeProto = (spec: MemoryFileSystemSpec): MemoryFileSystemResource => ({
 
 export const make = (contents: Contents = {}): MemoryFileSystemResource =>
   makeProto(new MemoryFileSystemSpec({ cwd: '/', contents }))
-
-export const spec = make
-
-export const withContents: {
-  (contents: Contents): (self: MemoryFileSystemSpec) => MemoryFileSystemSpec
-  (self: MemoryFileSystemSpec, contents: Contents): MemoryFileSystemSpec
-} = dual(
-  2,
-  (self: MemoryFileSystemSpec, contents: Contents): MemoryFileSystemSpec =>
-    new MemoryFileSystemSpec({ cwd: self.cwd, contents }),
-)
-
-export const withCwd: {
-  (cwd: string): (self: MemoryFileSystemSpec) => MemoryFileSystemSpec
-  (self: MemoryFileSystemSpec, cwd: string): MemoryFileSystemSpec
-} = dual(
-  2,
-  (self: MemoryFileSystemSpec, cwd: string): MemoryFileSystemSpec =>
-    new MemoryFileSystemSpec({ cwd, contents: self.contents }),
-)

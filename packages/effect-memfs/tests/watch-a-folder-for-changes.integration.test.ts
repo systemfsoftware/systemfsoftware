@@ -21,53 +21,77 @@ const subscribed = <A, E>(
 type Change = {
   readonly change: string
   readonly reported: string
-  readonly seeded: boolean
-  readonly act: (fs: FileSystem.FileSystem) => Effect.Effect<void, Error.PlatformError>
+  readonly path: string
+  readonly act: (fs: FileSystem.FileSystem, folder: string) => Effect.Effect<void, Error.PlatformError>
 }
 
 const changes: ReadonlyArray<Change> = [
   {
-    change: 'added to',
+    change: 'added',
     reported: 'Create',
-    seeded: false,
-    act: (fs) => fs.writeFile('/inbox/letter.txt', encode('first')),
+    path: 'letter.txt',
+    act: (fs, folder) => fs.writeFile(`${folder}/letter.txt`, encode('first')),
   },
   {
-    change: 'rewritten in',
+    change: 'rewritten',
     reported: 'Update',
-    seeded: true,
-    act: (fs) => fs.writeFile('/inbox/letter.txt', encode('second')),
+    path: 'kept.txt',
+    act: (fs, folder) => fs.writeFile(`${folder}/kept.txt`, encode('second')),
   },
   {
-    change: 'deleted from',
+    change: 'deleted',
     reported: 'Remove',
-    seeded: true,
-    act: (fs) => fs.remove('/inbox/letter.txt'),
+    path: 'kept.txt',
+    act: (fs, folder) => fs.remove(`${folder}/kept.txt`),
   },
 ]
 
-Feature('Being told when a watched folder changes')
+type Watch = {
+  readonly watched: string
+  readonly folder: string
+  readonly target: string
+  readonly recursive: boolean
+}
+
+const folderWatches: ReadonlyArray<Watch> = [
+  { watched: 'the inbox', folder: '/inbox', target: '/inbox', recursive: false },
+  { watched: 'the inbox, named with a closing slash,', folder: '/inbox', target: '/inbox/', recursive: false },
+  { watched: 'the inbox and everything beneath it', folder: '/inbox', target: '/inbox', recursive: true },
+]
+
+const fileWatches: ReadonlyArray<Watch> = [
+  { watched: 'the kept letter in the inbox', folder: '/inbox', target: '/inbox/kept.txt', recursive: false },
+  { watched: 'the kept letter at the top of the store', folder: '', target: '/kept.txt', recursive: false },
+]
+
+const watchedChanges = [
+  ...folderWatches.flatMap((watch) => changes.map((change) => ({ ...watch, ...change }))),
+  ...fileWatches.flatMap((watch) => changes.slice(1).map((change) => ({ ...watch, ...change }))),
+]
+
+Feature('Being told when a watched folder or letter changes')
   .withScenarioLayer(MemoryFileSystem.make({}).layer)
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
-      'A letter <change> a watched folder is reported by name',
-      changes,
+      'A letter <change> while <watched> is watched is reported by name',
+      watchedChanges,
       (row) =>
         Gherkin.Do.pipe(
-          Given('an inbox folder someone is watching')('fs', () =>
+          Given('an inbox and the top of the store each holding a kept letter')('fs', () =>
             Effect.tap(filesystem, (fs) =>
-              Effect.flatMap(
-                fs.makeDirectory('/inbox', { recursive: true }),
-                () => row.seeded ? fs.writeFile('/inbox/letter.txt', encode('first')) : Effect.void,
-              ))),
-          When('the letter is changed while the folder is watched')('event', (s) =>
+              Effect.gen(function*() {
+                yield* fs.makeDirectory('/inbox', { recursive: true })
+                yield* fs.writeFile('/inbox/kept.txt', encode('first'))
+                yield* fs.writeFile('/kept.txt', encode('first'))
+              }))),
+          When('the letter is changed while it is watched')('event', (s) =>
             Effect.scoped(Effect.gen(function*() {
-              const reports = yield* subscribed(s.fs.watch('/inbox'))
-              yield* row.act(s.fs)
+              const reports = yield* subscribed(s.fs.watch(row.target, { recursive: row.recursive }))
+              yield* row.act(s.fs, row.folder)
               return yield* Queue.take(reports)
             }))),
           Then('the watcher is told which letter changed and how')((s) => {
-            expect(s.event).toEqual({ _tag: row.reported, path: 'letter.txt' })
+            expect(s.event).toEqual({ _tag: row.reported, path: row.path })
           }),
         ),
     )

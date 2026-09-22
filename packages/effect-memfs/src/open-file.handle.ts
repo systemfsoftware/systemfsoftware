@@ -5,9 +5,8 @@ import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Error from 'effect/PlatformError'
 import * as Result from 'effect/Result'
-import { ShapeRefusal } from './MemoryFileSystemError.schema.js'
+import { CursorRefusal } from './MemoryFileSystemError.schema.js'
 import { planReadSlice, ReadSlice, type ReadSliceDecision } from './plan-read-slice.workflow.js'
-import { PlanSeek, planSeek, type SeekBeforeStart, type SeekPlanned } from './plan-seek.workflow.js'
 import { PlanTruncateCursor, planTruncateCursor, type TruncateCursorDecision } from './plan-truncate-cursor.workflow.js'
 import {
   planWriteContinuation,
@@ -54,13 +53,13 @@ export interface Driver {
     offset: number,
     length: number,
     position: number,
-  ): Promise<{ bytesRead: number; buffer: Buffer }>
+  ): Promise<{ bytesRead: number; buffer: Uint8Array }>
   write(
     buffer: Uint8Array,
     offset: number | undefined,
     length: number,
     position?: number | null,
-  ): Promise<{ bytesWritten: number; buffer: Buffer }>
+  ): Promise<{ bytesWritten: number; buffer: Uint8Array }>
   truncate(len?: number): Promise<void>
   close(): Promise<void>
 }
@@ -94,7 +93,22 @@ const failureOf = (method: string) => <E = unknown>(cause: E): Error.PlatformErr
     cause,
   })
 
-const seekRefusal = (cause: SeekBeforeStart): Error.PlatformError =>
+const nextPosition = (position: bigint, offset: bigint, from: FileSystem.SeekMode): bigint =>
+  from === 'start' ? offset : position + offset
+
+const planSeekPosition = (
+  position: bigint,
+  offset: bigint,
+  from: FileSystem.SeekMode,
+): Result.Result<bigint, CursorRefusal> => {
+  const next = nextPosition(position, offset, from)
+  if (next < 0n) {
+    return Result.fail(new CursorRefusal({ method: 'seek', cause: next }))
+  }
+  return Result.succeed(next)
+}
+
+const seekRefusal = (cause: CursorRefusal): Error.PlatformError =>
   Error.badArgument({
     module: 'FileSystem',
     method: 'seek',
@@ -112,25 +126,8 @@ const writeZeroRefusal = (cause: WriteZero): Error.PlatformError =>
     cause,
   })
 
-const shapeRefusal = (cause: ShapeRefusal): Error.PlatformError =>
-  Error.systemError({
-    _tag: 'BadResource',
-    module: 'FileSystem',
-    method: cause.method,
-    description: `${cause.method} failed: the driver returned a value of the wrong shape`,
-    cause,
-  })
-
-const positioned = (self: OpenFile, planned: SeekPlanned): Effect.Effect<bigint> =>
-  Ref.set(self[CursorId], planned.position).pipe(Effect.as(planned.position))
-
-const applySeek =
-  (self: OpenFile) => (decision: SeekPlanned | SeekBeforeStart): Effect.Effect<bigint, Error.PlatformError> =>
-    Match.value(decision).pipe(
-      Match.tag('SeekPlanned', (planned) => positioned(self, planned)),
-      Match.tag('SeekBeforeStart', (refusal) => Effect.fail(seekRefusal(refusal))),
-      Match.exhaustive,
-    )
+const positioned = (self: OpenFile, position: bigint): Effect.Effect<bigint> =>
+  Ref.set(self[CursorId], position).pipe(Effect.as(position))
 
 export const seek: {
   (offset: bigint, from: FileSystem.SeekMode): (self: OpenFile) => Effect.Effect<bigint, Error.PlatformError>
@@ -139,9 +136,9 @@ export const seek: {
   3,
   (self: OpenFile, offset: bigint, from: FileSystem.SeekMode): Effect.Effect<bigint, Error.PlatformError> =>
     Ref.get(self[CursorId]).pipe(
-      Effect.flatMap((position) => Effect.fromResult(planSeek(new PlanSeek({ position, offset, from })))),
+      Effect.flatMap((position) => Effect.fromResult(planSeekPosition(position, offset, from))),
       Effect.mapError(seekRefusal),
-      Effect.flatMap(applySeek(self)),
+      Effect.flatMap((position) => positioned(self, position)),
     ),
 )
 
@@ -171,7 +168,7 @@ export const read: {
     ),
 )
 
-const sliceOf = (buf: Buffer) => (decision: ReadSliceDecision): Option.Option<Uint8Array> =>
+const sliceOf = (buf: Uint8Array) => (decision: ReadSliceDecision): Option.Option<Uint8Array> =>
   Match.value(decision).pipe(
     Match.tag('ReadExhausted', () => Option.none<Uint8Array>()),
     Match.tag('ReadWhole', () => Option.some<Uint8Array>(buf)),
@@ -186,7 +183,7 @@ export const readAlloc: {
   2,
   (self: OpenFile, size: number): Effect.Effect<Option.Option<Uint8Array>, Error.PlatformError> =>
     Effect.suspend(() => {
-      const buf = Buffer.allocUnsafeSlow(size)
+      const buf = new Uint8Array(size)
       return Ref.get(self[CursorId]).pipe(
         Effect.flatMap((position) =>
           Effect.tryPromise({
@@ -297,8 +294,6 @@ export const truncate: {
 export const close = (self: OpenFile): Effect.Effect<void, Error.PlatformError> =>
   Effect.tryPromise({ try: () => self[DriverId].close(), catch: failureOf('close') })
 
-export const refusalOf = shapeRefusal
-
 export const file = (
   self: OpenFile,
   info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>,
@@ -319,25 +314,79 @@ if (import.meta.vitest !== void 0) {
   const { Schema } = await import('effect')
 
   const Size = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: 64 })))
-  const Count = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 64 })))
 
-  it.prop('∀nr_Slice_≡MinReadRequested', [Size, Count], ([requested, bytesRead]) =>
-    Option.match(
-      sliceOf(Buffer.alloc(requested))(Result.getOrThrow(planReadSlice(new ReadSlice({ bytesRead, requested })))),
-      {
-        onNone: () => bytesRead === 0,
-        onSome: (bytes) => bytes.length === Math.min(bytesRead, requested),
-      },
-    ))
+  const magnitudeOf = (value: bigint): bigint => value < 0n ? -value : value
+
+  const seekOutcomeOf = (position: bigint, offset: bigint, from: FileSystem.SeekMode): bigint | string =>
+    Result.match(planSeekPosition(position, offset, from), {
+      onFailure: (refusal) => refusal._tag,
+      onSuccess: (planned) => planned,
+    })
+
+  const stalled = (): Promise<{ bytesRead: number; bytesWritten: number; buffer: Uint8Array }> =>
+    Promise.resolve({ bytesRead: 0, bytesWritten: 0, buffer: new Uint8Array(0) })
+
+  const stalledDriver: Driver = {
+    fd: 3,
+    stat: () => Promise.reject(new globalThis.Error('a stalled driver describes nothing')),
+    sync: Promise.resolve.bind(Promise),
+    read: stalled,
+    write: stalled,
+    truncate: Promise.resolve.bind(Promise),
+    close: Promise.resolve.bind(Promise),
+  }
 
   it.prop(
-    '∀nw_Pending_≡Remainder',
-    [Size, Count],
-    ([remaining, written]) =>
-      Result.match(planWriteContinuation(new WriteAllChunk({ fd: 3, written, remaining })), {
-        onFailure: () => written === 0,
-        onSuccess: (decision) =>
-          pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
-      }),
+    '∀s_SeekRefusal_≡NegativePosition',
+    [Schema.BigInt, Schema.BigInt],
+    ([pos, delta]) => {
+      const position = magnitudeOf(pos)
+      const span = magnitudeOf(delta)
+      return seekOutcomeOf(position, -(position + span + 1n), 'current') === 'CursorRefusal' &&
+        seekOutcomeOf(position, -1n - span, 'start') === 'CursorRefusal'
+    },
   )
+
+  it.prop(
+    '∀s_SeekPlanned_≡ExactBigIntStart',
+    [Schema.BigInt, Schema.BigInt],
+    ([pos, off]) => seekOutcomeOf(magnitudeOf(pos), magnitudeOf(off), 'start') === magnitudeOf(off),
+  )
+
+  it.prop(
+    '∀s_SeekPlanned_≡ExactBigIntCurrent',
+    [Schema.BigInt, Schema.BigInt],
+    ([pos, off]) =>
+      seekOutcomeOf(magnitudeOf(pos), magnitudeOf(off), 'current') === magnitudeOf(pos) + magnitudeOf(off),
+  )
+
+  it.effect.prop(
+    '∀n_StalledDriver_≡RefusedNotLooped',
+    [Size],
+    ([size]) =>
+      Effect.flatMap(make(stalledDriver), (file) =>
+        Effect.map(
+          Effect.all([Effect.flip(writeAll(file, new Uint8Array(size))), Effect.flip(stat(file))]),
+          ([written, described]) =>
+            Predicate.isTagged(written.reason, 'WriteZero') && described.reason.method === 'stat',
+        )),
+  )
+
+  const sliceFor = (requested: number, bytesRead: number): Option.Option<Uint8Array> =>
+    sliceOf(new Uint8Array(requested))(Result.getOrThrow(planReadSlice(new ReadSlice({ bytesRead, requested }))))
+
+  it.prop(
+    '∀nr_Slice_≡MinReadRequested',
+    [Size, Size],
+    ([requested, bytesRead]) =>
+      Option.exists(sliceFor(requested, bytesRead), (bytes) => bytes.length === Math.min(bytesRead, requested)),
+  )
+
+  it.prop('∀nr_Slice_≡NothingWhenNothingRead', [Size], ([requested]) => Option.isNone(sliceFor(requested, 0)))
+
+  it.prop('∀nw_Pending_≡Remainder', [Size, Size], ([remaining, written]) =>
+    Option.exists(
+      Result.getSuccess(planWriteContinuation(new WriteAllChunk({ fd: 3, written, remaining }))),
+      (decision) => pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
+    ))
 }

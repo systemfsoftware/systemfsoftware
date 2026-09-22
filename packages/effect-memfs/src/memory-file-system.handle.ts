@@ -1,6 +1,4 @@
-import { Effect, Match, Option, Predicate, Queue, Stream } from 'effect'
-import * as Arr from 'effect/Array'
-import * as ByteSize from 'effect/ByteSize'
+import { Effect, Match, Queue, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Error from 'effect/PlatformError'
@@ -13,6 +11,18 @@ import {
   type DriverWatchEventType,
   type WatchEventDecision,
 } from './decode-watch-event.workflow.js'
+import {
+  byteBodiesOf,
+  bytesOf,
+  driverOf,
+  entryPathOf,
+  failureOf,
+  infoOf,
+  shapeFailure,
+  statOf,
+  stringOrEmpty,
+  volumeJSONOf,
+} from './driver-values.js'
 import { ShapeRefusal } from './MemoryFileSystemError.schema.js'
 import type { MemoryFileSystemSpec } from './MemoryFileSystemSpec.schema.js'
 import * as OpenFile from './open-file.handle.js'
@@ -28,64 +38,18 @@ export interface MemoryFileSystem extends Pipeable {
   readonly cwd: string
 }
 
-export const isMemoryFileSystem = (u: unknown): u is MemoryFileSystem => Predicate.hasProperty(u, TypeId)
+const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
+  const driver = memfs.createFsFromVolume(memfs.Volume.fromJSON(volumeJSONOf(spec.contents), spec.cwd))
+  byteBodiesOf(spec.cwd, spec.contents).forEach(([path, bytes]) => driver.writeFileSync(path, bytes))
+  return driver
+}
 
 export const make = (spec: MemoryFileSystemSpec): MemoryFileSystem => ({
   [TypeId]: TypeId,
-  [DriverId]: memfs.createFsFromVolume(memfs.Volume.fromJSON(spec.contents, spec.cwd)),
+  [DriverId]: mounted(spec),
   cwd: spec.cwd,
   ...Prototype,
 })
-
-// ---------------------------------------------------------------------------
-// The driver's failures, named in the domain's vocabulary
-// ---------------------------------------------------------------------------
-
-const REASON_BY_ERRNO: Readonly<Record<string, Error.SystemErrorTag>> = {
-  EACCES: 'PermissionDenied',
-  EBUSY: 'Busy',
-  EEXIST: 'AlreadyExists',
-  EISDIR: 'BadResource',
-  ELOOP: 'BadResource',
-  ENOENT: 'NotFound',
-  ENOTDIR: 'BadResource',
-  EINVAL: 'InvalidData',
-  EPERM: 'PermissionDenied',
-  ENOTEMPTY: 'BadResource',
-  EBADF: 'BadResource',
-  EAGAIN: 'WouldBlock',
-}
-
-const stringOrEmpty = <V = unknown>(value: V): string => (typeof value === 'string' ? value : '')
-
-const stringFieldOf = <E = unknown>(error: E, property: string): string => {
-  if (!Predicate.hasProperty(error, property)) {
-    return ''
-  }
-  return stringOrEmpty(error[property])
-}
-
-const tagOf = (code: string): Error.SystemErrorTag => REASON_BY_ERRNO[code] ?? 'Unknown'
-
-const failureOf = (method: string) => <E = unknown>(error: E): Error.PlatformError =>
-  Error.systemError({
-    _tag: tagOf(stringFieldOf(error, 'code')),
-    module: 'FileSystem',
-    method,
-    description: `${method} failed`,
-    pathOrDescriptor: stringFieldOf(error, 'path'),
-    syscall: stringFieldOf(error, 'syscall'),
-    cause: error,
-  })
-
-const shapeFailure = (shape: string) => (cause: ShapeRefusal): Error.PlatformError =>
-  Error.systemError({
-    _tag: 'BadResource',
-    module: 'FileSystem',
-    method: cause.method,
-    description: `${cause.method} failed: the driver returned a value that is not a ${shape}`,
-    cause,
-  })
 
 // ---------------------------------------------------------------------------
 // What the port asks for, translated into what the driver takes
@@ -248,27 +212,25 @@ const writeFileArgsOf = (
 }
 
 const withGlobExclude = (
-  args: { readonly cwd?: string },
+  args: { readonly cwd: string },
   exclude: ReadonlyArray<string> | undefined,
-): { readonly cwd?: string; readonly exclude?: Array<string> } => {
+): { readonly cwd: string; readonly exclude?: Array<string> } => {
   if (exclude === undefined) {
     return args
   }
   return { ...args, exclude: [...exclude] }
 }
 
-const globBaseArgs = (root: string | undefined): { readonly cwd?: string } => {
-  if (root === undefined) {
-    return {}
-  }
-  return { cwd: root }
-}
+const globRootOf = (cwd: string, root: string | undefined): string => root ?? cwd
 
-const globArgsOf = (options?: GlobOptions): { readonly cwd?: string; readonly exclude?: Array<string> } => {
+const globArgsOf = (
+  cwd: string,
+  options?: GlobOptions,
+): { readonly cwd: string; readonly exclude?: Array<string> } => {
   if (options === undefined) {
-    return {}
+    return { cwd }
   }
-  return withGlobExclude(globBaseArgs(options.root), options.exclude)
+  return withGlobExclude({ cwd: globRootOf(cwd, options.root) }, options.exclude)
 }
 
 const truncateLengthOf = (length?: number): number => length ?? 0
@@ -312,102 +274,6 @@ const tempDirectoryOf = (options?: TempOptions): string => tempParentOf(options)
 const tempFileOf = (entropy: string, options?: TempOptions): string =>
   tempParentOf(options) + tempPrefix(options) + entropy + tempSuffix(options)
 
-// ---------------------------------------------------------------------------
-// What the driver returned, decoded into the domain
-// ---------------------------------------------------------------------------
-
-const isObject = (value: unknown): value is object => typeof value === 'object' && value !== null
-
-const isFunctionProperty = (value: object, property: string): boolean => {
-  if (!Predicate.hasProperty(value, property)) {
-    return false
-  }
-  return typeof value[property] === 'function'
-}
-
-const isStatRecord = (value: object): value is OpenFile.Stat =>
-  isFunctionProperty(value, 'isFile') && isFunctionProperty(value, 'isDirectory')
-
-const isReadWrite = (value: object): boolean => isFunctionProperty(value, 'read') && isFunctionProperty(value, 'write')
-
-const isDriverRecord = (value: object): value is OpenFile.Driver =>
-  isFunctionProperty(value, 'close') && isReadWrite(value)
-
-const isStat = (value: unknown): value is OpenFile.Stat => isObject(value) && isStatRecord(value)
-
-const isDriver = (value: unknown): value is OpenFile.Driver => isObject(value) && isDriverRecord(value)
-
-const statOf = <S = unknown>(value: S): Result.Result<OpenFile.Stat, ShapeRefusal> => {
-  if (isStat(value)) {
-    return Result.succeed(value)
-  }
-  return Result.fail(new ShapeRefusal({ method: 'stat', cause: value }))
-}
-
-const driverOf = <H = unknown>(value: H): Result.Result<OpenFile.Driver, ShapeRefusal> => {
-  if (isDriver(value)) {
-    return Result.succeed(value)
-  }
-  return Result.fail(new ShapeRefusal({ method: 'open', cause: value }))
-}
-
-const isZeroOrNaN = (value: number): boolean => value === 0 || Number.isNaN(value)
-
-const numberOptionOf = (value: number): Option.Option<number> => {
-  if (isZeroOrNaN(value)) {
-    return Option.none()
-  }
-  return Option.some(value)
-}
-
-const sizeOptionOf = (value: number): Option.Option<ByteSize.ByteSize> =>
-  Option.map(numberOptionOf(value), (n) => ByteSize.bytes(n))
-
-const kindAssociations = (stat: OpenFile.Stat): ReadonlyArray<readonly [boolean, FileSystem.File.Type]> => [
-  [stat.isFile(), 'File'],
-  [stat.isDirectory(), 'Directory'],
-  [stat.isSymbolicLink(), 'SymbolicLink'],
-  [stat.isBlockDevice(), 'BlockDevice'],
-  [stat.isCharacterDevice(), 'CharacterDevice'],
-  [stat.isFIFO(), 'FIFO'],
-  [stat.isSocket(), 'Socket'],
-]
-
-const kindOf = (stat: OpenFile.Stat): FileSystem.File.Type =>
-  Option.match(Arr.findFirst(kindAssociations(stat), ([matches]) => matches), {
-    onNone: () => 'Unknown',
-    onSome: ([, type]) => type,
-  })
-
-const infoOf = (stat: OpenFile.Stat): FileSystem.File.Info => ({
-  type: kindOf(stat),
-  mtime: Option.fromNullishOr(stat.mtime),
-  atime: Option.fromNullishOr(stat.atime),
-  birthtime: Option.fromNullishOr(stat.birthtime),
-  dev: Number(stat.dev),
-  rdev: numberOptionOf(stat.rdev),
-  ino: numberOptionOf(stat.ino),
-  mode: stat.mode,
-  nlink: numberOptionOf(stat.nlink),
-  uid: numberOptionOf(stat.uid),
-  gid: numberOptionOf(stat.gid),
-  size: ByteSize.bytes(Number(stat.size)),
-  blksize: sizeOptionOf(stat.blksize),
-  blocks: numberOptionOf(stat.blocks),
-})
-
-const textOf = (value: string | Uint8Array): string =>
-  typeof value === 'string' ? value : new TextDecoder().decode(value)
-
-const bytesOf = (contents: string | Uint8Array): Uint8Array =>
-  typeof contents === 'string' ? new TextEncoder().encode(contents) : contents
-
-const isNamed = (entry: unknown): entry is { readonly name: string | Uint8Array } =>
-  isObject(entry) && Predicate.hasProperty(entry, 'name')
-
-const entryPathOf = (entry: string | Uint8Array | { readonly name: string | Uint8Array }): string =>
-  isNamed(entry) ? textOf(entry.name) : textOf(entry)
-
 const eventTypeOf = (eventType: string): DriverWatchEventType => (eventType === 'rename' ? 'rename' : 'change')
 
 const eventOf = (decision: WatchEventDecision): FileSystem.WatchEvent =>
@@ -445,7 +311,7 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
 
   const glob: FileSystem.FileSystem['glob'] = (pattern, options) =>
     Effect.tryPromise({
-      try: () => Array.fromAsync(nfs.promises.glob(pattern, globArgsOf(options))),
+      try: () => Array.fromAsync(nfs.promises.glob(pattern, globArgsOf(self.cwd, options))),
       catch: failureOf('glob'),
     }).pipe(Effect.map((matches) => matches.map(entryPathOf)))
 
