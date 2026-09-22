@@ -1,17 +1,11 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { type Contents, MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { type DirectoryJSON, toDirectoryJSON } from '@systemfsoftware/npm-package'
+import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { toDirectoryJSON } from '@systemfsoftware/npm-package'
 import { Effect, Exit, Layer } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
-
-const volumeOf = (contents: DirectoryJSON): Contents => {
-  const volume: Contents = {}
-  Object.assign(volume, contents)
-  return volume
-}
 
 Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
   .withLayer(Layer.empty)
@@ -25,9 +19,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
             'package.json': pkgJson,
             'index.d.ts': 'export declare const x: number',
           }
-          const contents = toDirectoryJSON(tree, 'demo')
-          const fs = MemoryFileSystem.make(volumeOf(contents))
-          return Effect.succeed({ fs, pkgJson })
+          return Effect.map(MemoryFileSystem.make(toDirectoryJSON(tree, 'demo')).effect, (fs) => ({ fs, pkgJson }))
         }),
         When('the package manifest is read from the memory filesystem')('content', (s) =>
           Effect.gen(function*() {
@@ -48,8 +40,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
             'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
             'index.js': 'export const x = 1',
           }
-          const contents = toDirectoryJSON(tree, 'demo')
-          return Effect.succeed(MemoryFileSystem.make(volumeOf(contents)))
+          return MemoryFileSystem.make(toDirectoryJSON(tree, 'demo')).effect
         }),
         When('a non-existent file is read from the filesystem')(
           'exit',
@@ -70,9 +61,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
             'package.json': jsonString({ name: 'demo', version: '1.0.0' }),
             'data.bin': binary,
           }
-          const contents = toDirectoryJSON(tree, 'demo')
-          const fs = MemoryFileSystem.make(volumeOf(contents))
-          return Effect.succeed({ fs, binary })
+          return Effect.map(MemoryFileSystem.make(toDirectoryJSON(tree, 'demo')).effect, (fs) => ({ fs, binary }))
         }),
         When('the binary file is read from the mounted filesystem')(
           'readBytes',
@@ -135,8 +124,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
             'package.json': jsonString({ name: '@acme/pkg', version: '1.0.0' }),
             'index.js': 'export const x = 1',
           }
-          const contents = toDirectoryJSON(tree, '@acme/pkg')
-          return Effect.succeed(MemoryFileSystem.make(volumeOf(contents)))
+          return MemoryFileSystem.make(toDirectoryJSON(tree, '@acme/pkg')).effect
         }),
         When('the scoped manifest is read through the nested scoped path')('text', (s) =>
           Effect.gen(function*() {

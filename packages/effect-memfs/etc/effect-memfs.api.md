@@ -4,29 +4,10 @@
 
 ```ts
 
-import * as FileSystem_2 from 'effect/FileSystem';
-import { Layer } from 'effect';
-import * as memfs from 'memfs';
-
 // @public (undocumented)
-export type Contents = memfs.DirectoryJSON;
-
-// @public (undocumented)
-export const layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;
-
-// @public (undocumented)
-export function make(contents?: Contents, opts?: {
-    cwd: string;
-}): FileSystem_2.FileSystem;
-
-// @public (undocumented)
-export const MemoryFileSystem: {
-    readonly layer: Layer.Layer<FileSystem_2.FileSystem>;
-    readonly layerWith: (contents: Contents) => Layer.Layer<FileSystem_2.FileSystem>;
-    readonly make: (contents?: Contents, opts?: {
-        cwd: string;
-    }) => FileSystem_2.FileSystem;
-};
+export namespace MemoryFileSystem {
+    export { Contents, CursorRefusal, MemoryFileSystemError, MemoryFileSystemResource, MemoryFileSystemSpec, ShapeRefusal, TypeId, effect, layer, make };
+}
 
 // (No @packageDocumentation comment for this package)
 
