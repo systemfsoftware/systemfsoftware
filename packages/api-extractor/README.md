@@ -30,19 +30,25 @@ api-extractor init
 
 ## Programmatic API
 
-Both Effect-native and Promise-based entrypoints are exposed:
+The package root exports a single `Extractor` namespace. `Extractor.run(configPath, options)` returns an `Effect` that resolves to `ExtractionPassed` or `ExtractionFailed` — errors fail the run, and in verification mode warnings fail it too. The outcome carries `errorCount`, `warningCount`, and one outcome per report variant. Config and compiler problems surface as typed `ExtractorError` variants on the error channel.
 
 ```ts
-import { invoke, runEffect } from '@systemfsoftware/api-extractor'
+import * as NodeServices from '@effect/platform-node/NodeServices'
+import { Extractor } from '@systemfsoftware/api-extractor'
+import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 
-// Promise-based execution (resolves with ExtractorResult, never throws on findings)
-const result = await invoke('./api-extractor.json', {
-  localBuild: true,
-  cliFlags: { quiet: true },
-})
-
-console.log(result.succeeded)
+await Effect.runPromise(
+  Extractor.run('./api-extractor.json', {
+    localBuild: true,
+    cliFlags: { quiet: true },
+  }).pipe(
+    Effect.provide(Layer.mergeAll(NodeServices.layer, Extractor.layer())),
+  ),
+)
 ```
+
+`Extractor.layer()` binds the console `MessageWriter`, and the Node services layer supplies `FileSystem` and `Path` — the same composition the CLI uses. Pass `Extractor.layer({ stdout, stderr })` to capture the run's console lines in your own streams instead of `process.stdout` and `process.stderr`.
 
 ## License
 
