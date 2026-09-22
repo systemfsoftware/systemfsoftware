@@ -124,7 +124,6 @@ const makeProto = (raw: MicroVMSpec): MicroVMResource => {
 }
 
 export interface JobResource extends MicroVMResource {
-  readonly spec: JobSpec
   withExposedPorts(ports: ReadonlyArray<number>): JobResource
   withEnv(env: Record<string, string>): JobResource
   withMount(mount: Mount): JobResource

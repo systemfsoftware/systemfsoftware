@@ -143,14 +143,14 @@ Exposed guest ports are automatically paired with unallocated ephemeral ports on
 
 All operational failures are returned as typed errors in the `MicroVMError.MicroVMError` union:
 
-| Error                            | Cause                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------- |
-| `VirtualizationUnsupportedError` | Missing KVM (`/dev/kvm`), Hypervisor.framework, or WHP with specific diagnostic remediation |
-| `SandboxBootError`               | Runtime failed to initialize or start the microVM sandbox                                   |
-| `PortAllocationError`            | Unable to bind a free host loopback port                                                    |
-| `LoopbackViolationError`         | Port mapping targeted a disallowed non-loopback address                                     |
-| `WaitTimeoutError`               | Readiness condition was not satisfied within the 30-second deadline                         |
-| `ExecError`                      | In-guest command execution exited with failure or could not run                             |
+| Error                            | Cause                                                                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `VirtualizationUnsupportedError` | Missing KVM (`/dev/kvm`), Hypervisor.framework, or WHP with specific diagnostic remediation        |
+| `SandboxBootError`               | Runtime failed to initialize or start the microVM sandbox                                          |
+| `PortAllocationError`            | Unable to bind a free host loopback port                                                           |
+| `LoopbackViolationError`         | Port mapping targeted a disallowed non-loopback address                                            |
+| `WaitTimeoutError`               | Readiness condition was not satisfied within the 30-second deadline                                |
+| `ExecError`                      | An in-guest command or a job's workload could not be started, or its result could not be collected |
 
 ## Verification
 
