@@ -18,8 +18,21 @@
 // An untrusted package does not become attested by being registered: an
 // attestation is stamped at publish time and never granted retroactively, so its
 // already-published version stays unattested until its next version ships from
-// CI. Re-running therefore picks the same package up again, and
-// `npm trust github` is idempotent, so that is safe.
+// CI. Re-running therefore picks the same package up again — safe only because
+// the trust configuration is read before it is written. The registry allows one
+// trusted publisher per package, so a second `npm trust github` for a package
+// that already carries one is rejected with 409, and reading first is the only
+// thing that keeps a re-run from pairing a registered package with that error.
+//
+// That read costs an interactive two-factor challenge: GET
+// /-/package/<pkg>/trust requires `npm-otp` on every request, and the npm CLI
+// answers such a challenge only when stdin and stdout are terminals — its
+// `otplease` rethrows whenever either is not, which a captured stdout makes
+// permanent. The first trust call of a run is therefore one the CLI can carry
+// out interactively; completing it opens the account-wide two-factor skip window
+// that the captured reads then ride. A configuration that cannot be read is
+// reported as unreadable and left alone, never assumed absent: that assumption
+// is what turns a correctly registered package into a 409.
 //
 // Chains run concurrently, bounded by --jobs.
 //
@@ -167,7 +180,16 @@ function parseTrustJson(raw: string): TrustConfig[] {
   return configs
 }
 
-async function getTrustConfigs(pkgName: string, cwd: string): Promise<TrustConfig[]> {
+/**
+ * The registry's answer, with "it would not tell us" kept distinct from "there
+ * is nothing configured". Collapsing the two is what makes a blind write look
+ * justified.
+ */
+type TrustRead =
+  | { readonly kind: 'configs'; readonly configs: readonly TrustConfig[] }
+  | { readonly kind: 'unreadable' }
+
+const readTrustConfigs = async (pkgName: string, cwd: string): Promise<TrustRead> => {
   const out = await new Deno.Command('npm', {
     args: ['trust', 'list', pkgName, '--json'],
     cwd,
@@ -175,10 +197,31 @@ async function getTrustConfigs(pkgName: string, cwd: string): Promise<TrustConfi
     stdout: 'piped',
     stderr: 'inherit',
   }).output()
-  if (out.success) {
-    return parseTrustJson(new TextDecoder().decode(out.stdout))
-  }
-  return []
+  if (!out.success) return { kind: 'unreadable' }
+  return { kind: 'configs', configs: parseTrustJson(new TextDecoder().decode(out.stdout)) }
+}
+
+/**
+ * One interactive `npm trust list` to satisfy the two-factor challenge, which is
+ * what opens the account-wide skip window the captured reads need. Single-flight,
+ * so concurrent chains share one prompt, and released on failure so a later
+ * package can offer it again.
+ */
+let trustWindow: Promise<void> | null = null
+
+const openTrustWindow = (pkgName: string, cwd: string): Promise<void> => {
+  trustWindow ??= runInteractive(['npm', 'trust', 'list', pkgName], cwd).then((res) => {
+    if (!res.success) trustWindow = null
+  })
+  return trustWindow
+}
+
+const getTrustConfigs = async (pkgName: string, cwd: string): Promise<TrustRead> => {
+  const captured = await readTrustConfigs(pkgName, cwd)
+  if (captured.kind === 'configs') return captured
+  console.log(`  Trust configuration unreadable — reading it needs two-factor authentication`)
+  await openTrustWindow(pkgName, cwd)
+  return readTrustConfigs(pkgName, cwd)
 }
 
 /** Converge a package's trust config on exactly this repo + workflow file. */
@@ -187,7 +230,14 @@ async function reconcileTrust(pkgName: string, cwd: string, dryRun: boolean): Pr
     cfg.type === 'github' && cfg.repository === targetSlug && cfg.file === WORKFLOW_FILE
 
   console.log(`  Querying trust configuration for ${pkgName}...`)
-  const existing = await getTrustConfigs(pkgName, cwd)
+  const read = await getTrustConfigs(pkgName, cwd)
+  if (read.kind === 'unreadable') {
+    console.error(
+      `  Cannot read the trust configuration for ${pkgName}: \`npm trust list\` needs a two-factor challenge this run could not complete. Nothing was changed — run it once in a terminal, then re-run.`,
+    )
+    return false
+  }
+  const existing = read.configs
 
   if (existing.some(matchesTarget)) {
     for (const cfg of existing.filter((c) => !matchesTarget(c))) {
