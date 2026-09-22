@@ -3,5 +3,5 @@ import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [recommended],
-  ignorePatterns: ['tests/e2e/vitest.e2e.config.ts'],
+  ignorePatterns: ['tests/e2e/vitest.e2e.config.ts', 'src/**/__tests__/**'],
 })
