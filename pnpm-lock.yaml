@@ -286,6 +286,9 @@ importers:
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../packages/oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/trace-spec':
+        specifier: workspace:^
+        version: link:../../packages/trace-spec
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../packages/toolchain/tsconfig
@@ -650,6 +653,10 @@ importers:
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   packages/effect-gherkin-spec:
+    dependencies:
+      '@systemfsoftware/effect-spec-runtime':
+        specifier: workspace:^
+        version: link:../effect-spec-runtime
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
