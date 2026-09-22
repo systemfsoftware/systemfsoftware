@@ -1,6 +1,6 @@
-## 1.1.0
+## 1.2.0
 
-### Patch Changes
+### Minor Changes
 
 - `ban-unknown` rejects `unknown` except as a generic default (`<A = unknown>`), a type-predicate parameter (`(u: unknown): u is T`), or a catch binding. The recommended config enables it.
 

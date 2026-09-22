@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-cell-types",
   "license": "Apache-2.0",
-  "version": "8.3.2",
+  "version": "9.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -48,9 +48,8 @@
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:*",
-    "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

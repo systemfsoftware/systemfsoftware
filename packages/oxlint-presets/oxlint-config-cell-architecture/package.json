@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-config-cell-architecture",
   "license": "Apache-2.0",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -45,8 +45,8 @@
     "oxlint": "catalog:oxlint"
   },
   "devDependencies": {
-    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config-rule-authoring": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@types/node": "catalog:",
