@@ -128,6 +128,30 @@ const childIdsOf = (graph: TraceGraph, parents: ReadonlyArray<GraphNode>): Reado
 const descendantIdsOf = (graph: TraceGraph, parents: ReadonlyArray<GraphNode>): ReadonlySet<string> =>
   new Set(parents.flatMap((parent) => graph.descendants(parent)).map((node) => node.spanId))
 
+const startsAtOrAfter = (earlier: GraphNode, later: GraphNode): boolean => later.startMillis >= earlier.startMillis
+
+const startsAfterSome = (earlier: ReadonlyArray<GraphNode>, later: GraphNode): boolean =>
+  earlier.some((node) => startsAtOrAfter(node, later))
+
+export const order = (before: Span.SpanRef, after: Span.SpanRef): Relation => {
+  const id = `order(${before.id},${after.id})`
+  return {
+    id,
+    soft: false,
+    softenable: true,
+    evaluate: (graph) => {
+      const earlies = matchedNodes(graph, before)
+      const lates = matchedNodes(graph, after)
+      return verdictOf({
+        id,
+        inspected: [...inspectedOf(earlies), ...inspectedOf(lates)],
+        holds: matchedAll(lates, (node) => startsAfterSome(earlies, node)),
+        detail: `a ${after.id} span starts before every ${before.id} span`,
+      })
+    },
+  }
+}
+
 export const child = (parent: Span.SpanRef, childSpec: Span.SpanRef): Relation =>
   edgeRelation({
     id: `child(${parent.id},${childSpec.id})`,
@@ -208,6 +232,38 @@ export const durationLessThan = (spec: Span.SpanRef, millis: number): Relation =
     predicate: (node) => node.durationMillis < millis,
   })
 
+const carriesEvent = (name: string) => (node: GraphNode): boolean => node.events.some((event) => event.name === name)
+
+export const event = (spec: Span.SpanRef, name: string): Relation =>
+  everyRelation({
+    id: `event(${spec.id},${name})`,
+    spec,
+    detail: `a ${spec.id} span carries no ${name} event`,
+    predicate: carriesEvent(name),
+  })
+
+export const forall = (
+  spec: Span.SpanRef,
+  predicate: (node: GraphNode) => boolean,
+  detail: string,
+): Relation => {
+  const id = `forall(${spec.id})`
+  return {
+    id,
+    soft: false,
+    softenable: true,
+    evaluate: (graph) => {
+      const nodes = matchedNodes(graph, spec)
+      return verdictOf({
+        id,
+        inspected: inspectedOf(nodes),
+        holds: matchedAll(nodes, predicate),
+        detail: nodes.length === 0 ? `no ${spec.id} span was emitted: forall is non-vacuous` : detail,
+      })
+    },
+  }
+}
+
 export const soft = (relation: Relation): Relation => (relation.softenable ? { ...relation, soft: true } : relation)
 
 const firstHardBreak = (relations: ReadonlyArray<Relation>, graph: TraceGraph): Break | null =>
@@ -241,6 +297,43 @@ export const all = (...relations: ReadonlyArray<Relation>): Relation => {
     soft: relations.every((relation) => relation.soft),
     softenable: true,
     evaluate: (graph) => evaluateAll(id, relations, graph),
+  }
+}
+
+const inspectedAcross = (verdicts: ReadonlyArray<Verdict>): ReadonlyArray<string> =>
+  verdicts.flatMap((verdict) => verdict.inspected)
+
+const anyVerdict = (id: string, verdicts: ReadonlyArray<Verdict>): Verdict =>
+  verdicts.some(isHold)
+    ? Hold.make({ conjunct: id, inspected: inspectedAcross(verdicts) })
+    : Break.make({
+      conjunct: id,
+      inspected: inspectedAcross(verdicts),
+      detail: verdicts.map((verdict) => verdict.conjunct).join(', '),
+    })
+
+export const any = (...relations: ReadonlyArray<Relation>): Relation => {
+  const id = `any(${relations.map((relation) => relation.id).join(', ')})`
+  return {
+    id,
+    soft: false,
+    softenable: false,
+    evaluate: (graph) => anyVerdict(id, relations.map((relation) => relation.evaluate(graph))),
+  }
+}
+
+const negatedVerdict = (id: string, inner: Verdict): Verdict =>
+  isHold(inner)
+    ? Break.make({ conjunct: id, inspected: inner.inspected, detail: `${inner.conjunct} held` })
+    : Hold.make({ conjunct: id, inspected: inner.inspected })
+
+export const not = (relation: Relation): Relation => {
+  const id = `not(${relation.id})`
+  return {
+    id,
+    soft: false,
+    softenable: false,
+    evaluate: (graph) => negatedVerdict(id, relation.evaluate(graph)),
   }
 }
 
@@ -293,28 +386,36 @@ if (import.meta.vitest !== void 0) {
   const TraceTaxonomy = Taxonomy.make({ id: 'taxonomy-rel', spans: [Settle, Charge, Ship], edges: [], forbid: [] })
 
   const StatusSchema = Schema.Literals(['ok', 'unset', 'error'])
+  const EventSchema = Schema.Literals(['placed', 'charged'])
   const Root = Schema.Struct({
     id: Schema.Literals(['s0', 's1', 's2']),
     status: StatusSchema,
+    startMillis: Schema.Finite,
     durationMillis: Schema.Finite,
+    events: Schema.Array(EventSchema),
   })
   const Leaf = Schema.Struct({
     id: Schema.Literals(['c0', 'c1', 'c2']),
     parentId: Schema.NullOr(Schema.Literals(['s0', 's1', 's2', 'ghost'])),
     status: StatusSchema,
+    startMillis: Schema.Finite,
     durationMillis: Schema.Finite,
+    events: Schema.Array(EventSchema),
   })
   const GrandChild = Schema.Struct({
     id: Schema.Literals(['d0', 'd1', 'd2']),
     parentId: Schema.NullOr(Schema.Literals(['c0', 'c1', 'c2', 'ghost'])),
     status: StatusSchema,
+    startMillis: Schema.Finite,
     durationMillis: Schema.Finite,
+    events: Schema.Array(EventSchema),
   })
   const GraphSpec = Schema.Struct({
     settles: Schema.Array(Root),
     charges: Schema.Array(Leaf),
     ships: Schema.Array(GrandChild),
     bound: Schema.Finite,
+    event: EventSchema,
   })
 
   type RootSpec = Schema.Schema.Type<typeof Root>
@@ -324,7 +425,13 @@ if (import.meta.vitest !== void 0) {
 
   const recordOf = (
     name: string,
-    node: { readonly id: string; readonly status: Status; readonly durationMillis: number },
+    node: {
+      readonly id: string
+      readonly status: Status
+      readonly startMillis: number
+      readonly durationMillis: number
+      readonly events: ReadonlyArray<'placed' | 'charged'>
+    },
     parentSpanId: string | null,
   ): SpanRecord => ({
     traceId: TRACE_ID,
@@ -333,9 +440,10 @@ if (import.meta.vitest !== void 0) {
     name,
     status: node.status,
     errorType: null,
+    startMillis: node.startMillis,
     durationMillis: node.durationMillis,
     attributes: new Map([[ORDER_ATTR, node.id]]),
-    events: [],
+    events: node.events.map((item) => ({ name: item, attributes: new Map<string, Span.AttributeValue>() })),
     links: [],
   })
 
@@ -470,4 +578,88 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.prop('∀g_Forbid_=AbsentOffPath', [GraphSpec], ([spec]) => forbidHonoursPath(spec))
+
+  const always = (): boolean => true
+
+  const expectedForall = (spec: Spec): boolean =>
+    spec.charges.length > 0 && spec.charges.every((node) => node.durationMillis < spec.bound)
+
+  const expectedEvent = (spec: Spec): boolean =>
+    spec.charges.length > 0 && spec.charges.every((node) => node.events.includes(spec.event))
+
+  const expectedOrder = (spec: Spec): boolean =>
+    spec.charges.length > 0 &&
+    spec.charges.every((charge) => spec.settles.some((settle) => charge.startMillis >= settle.startMillis))
+
+  it.prop(
+    '∀g_Forall_=EveryNodePredicate',
+    [GraphSpec],
+    ([spec]) =>
+      holdsLike(
+        forall(Charge, (node) => node.durationMillis < spec.bound, 'a charge span exceeded the bound'),
+        spec,
+        expectedForall(spec),
+      ),
+  )
+
+  it.prop(
+    '∀g_Forall_→NonVacuous',
+    [GraphSpec],
+    ([spec]) => isBreak(forall(Charge, always, 'unused detail').evaluate(graphOf({ ...spec, charges: [] }))),
+  )
+
+  it.prop(
+    '∀g_Event_=EveryNodeCarries',
+    [GraphSpec],
+    ([spec]) => holdsLike(event(Charge, spec.event), spec, expectedEvent(spec)),
+  )
+
+  it.prop(
+    '∀g_Order_=AfterSomeBefore',
+    [GraphSpec],
+    ([spec]) => holdsLike(order(Settle, Charge), spec, expectedOrder(spec)),
+  )
+
+  it.prop(
+    '∀g_Any_=AtLeastOneHolds',
+    [GraphSpec],
+    ([spec]) =>
+      holdsLike(any(exists(Settle), exists(Charge)), spec, spec.settles.length > 0 || spec.charges.length > 0),
+  )
+
+  const anyFixture = (): Relation => any(exists(Settle), unique(Charge))
+
+  const anyExpected = (spec: Spec): boolean => spec.settles.length > 0 || spec.charges.length === 1
+
+  const anyBehaves = (spec: Spec): boolean => {
+    const verdict = anyFixture().evaluate(graphOf(spec))
+    return anyExpected(spec) ? isHold(verdict) : namesBreak(verdict, [exists(Settle).id, unique(Charge).id])
+  }
+
+  it.prop('∀g_Any_→NamesEveryConjunct', [GraphSpec], ([spec]) => anyBehaves(spec))
+
+  it.prop(
+    '∀g_Any_=ConjunctAgreement',
+    [GraphSpec],
+    ([spec]) => isHold(any(unique(Charge)).evaluate(graphOf(spec))) === isHold(unique(Charge).evaluate(graphOf(spec))),
+  )
+
+  it.prop(
+    '∀g_Not_=Negation',
+    [GraphSpec],
+    ([spec]) => isHold(not(unique(Charge)).evaluate(graphOf(spec))) === !isHold(unique(Charge).evaluate(graphOf(spec))),
+  )
+
+  it.prop('∀g_Not_→NamesInnerOnHold', [GraphSpec], ([spec]) => {
+    const inner = unique(Charge)
+    const verdict = not(inner).evaluate(graphOf(spec))
+    return isHold(inner.evaluate(graphOf(spec))) ? namesBreak(verdict, [inner.id]) : isHold(verdict)
+  })
+
+  it.prop(
+    '∀g_NotNot_=Relation',
+    [GraphSpec],
+    ([spec]) =>
+      isHold(not(not(unique(Charge))).evaluate(graphOf(spec))) === isHold(unique(Charge).evaluate(graphOf(spec))),
+  )
 }

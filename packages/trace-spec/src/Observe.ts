@@ -74,6 +74,7 @@ export const spanRecordOf = (span: ReadableSpan): SpanRecord => {
     name: span.name,
     status: statusOf(span.status.code),
     errorType: errorTypeOf(attributes),
+    startMillis: millisOf(span.startTime),
     durationMillis: millisOf(span.duration),
     attributes,
     events: eventsOf(span),

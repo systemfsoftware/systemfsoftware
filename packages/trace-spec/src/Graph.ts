@@ -22,6 +22,7 @@ export interface SpanRecord {
   readonly name: string
   readonly status: Status
   readonly errorType: string | null
+  readonly startMillis: number
   readonly durationMillis: number
   readonly attributes: ReadonlyMap<string, Span.AttributeValue>
   readonly events: ReadonlyArray<SpanEvent>
@@ -34,6 +35,7 @@ export interface Node<Attrs extends Span.AttributeRecord> {
   readonly name: string
   readonly status: Status
   readonly errorType: string | null
+  readonly startMillis: number
   readonly durationMillis: number
   readonly attrs: Attrs
   readonly events: ReadonlyArray<SpanEvent>
@@ -119,6 +121,7 @@ const nodeOf = (record: SpanRecord, attrs: Span.AttributeRecord): GraphNode => (
   name: record.name,
   status: record.status,
   errorType: record.errorType,
+  startMillis: record.startMillis,
   durationMillis: record.durationMillis,
   attrs,
   events: record.events,
@@ -209,6 +212,7 @@ if (import.meta.vitest !== void 0) {
     name,
     status: 'ok',
     errorType: null,
+    startMillis: 0,
     durationMillis: 3,
     attributes: new Map(pairs),
     events: [],
