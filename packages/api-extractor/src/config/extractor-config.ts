@@ -10,6 +10,7 @@ import {
   ConfigFileNotFound,
   ConfigJsonSyntaxError,
   ConfigSchemaValidationError,
+  type UnresolvedTokenError,
 } from '../errors/config.schema.js'
 import type { ApiReportConfig, ApiReportVariant } from './config-file.schema.js'
 import { ConfigFile } from './config-file.schema.js'
@@ -213,13 +214,12 @@ const defaultReportConfigs = (
   tokenCtx: TokenContext,
   configPath: string,
   join: (folder: string, rest: string) => string,
-): readonly ExtractorReportConfig[] =>
-  variants.map((variant) => {
+): Effect.Effect<readonly ExtractorReportConfig[], UnresolvedTokenError> =>
+  Effect.forEach(variants, (variant) => {
     const suffix = variant === 'complete' ? '.api.md' : `.${variant}.api.md`
-    const rawName = `${reportFileNameBase}${suffix}`
-    const expanded = expandTokens(rawName, tokenCtx, configPath, join)
-    const fileName = Result.isSuccess(expanded) ? expanded.success : rawName
-    return { variant, fileName }
+    return Effect.fromResult(expandTokens(`${reportFileNameBase}${suffix}`, tokenCtx, configPath, join)).pipe(
+      Effect.map((fileName) => ({ variant, fileName })),
+    )
   })
 
 const probeTsconfigInFolder = (
@@ -298,7 +298,7 @@ const buildReportConfigs = (
   tokenCtx: TokenContext,
   resolvedConfigPath: string,
   join: (folder: string, rest: string) => string,
-): readonly ExtractorReportConfig[] => {
+): Effect.Effect<readonly ExtractorReportConfig[], UnresolvedTokenError> => {
   const variants = reportCfg.reportVariants ?? ['complete']
   const rawFileName = reportCfg.reportFileName ?? '<unscopedPackageName>'
   const reportBase = rawFileName.replace(/\.api\.md$/, '')
@@ -316,7 +316,11 @@ export const loadExtractorConfig = (
   filePath: string,
 ): Effect.Effect<
   ExtractorConfig,
-  ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError,
+  | ConfigFileNotFound
+  | ConfigJsonSyntaxError
+  | ConfigSchemaValidationError
+  | CircularConfigExtendsError
+  | UnresolvedTokenError,
   FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
@@ -346,18 +350,16 @@ export const loadExtractorConfig = (
 
     const tokenCtx = buildTokenContext(projectFolder, packageJson)
 
-    const expand = (val: string | undefined): string => {
-      const isPresent = typeof val === 'string' && val.length > 0
-      if (!isPresent) return ''
-      const res = expandTokens(val, tokenCtx, resolvedConfigPath, path.join)
-      return Result.isSuccess(res) ? path.resolve(projectFolder, res.success) : val
-    }
+    const expand = (val: string | undefined): Effect.Effect<string, UnresolvedTokenError> =>
+      Effect.fromResult(expandTokens(val ?? '', tokenCtx, resolvedConfigPath, path.join)).pipe(
+        Effect.map((expanded) => expanded.length === 0 ? '' : path.resolve(projectFolder, expanded)),
+      )
 
-    const mainEntryPoint = expand(validated.mainEntryPointFilePath)
-    const tsconfigPath = expand(validated.compiler?.tsconfigFilePath)
+    const mainEntryPoint = yield* expand(validated.mainEntryPointFilePath)
+    const tsconfigPath = yield* expand(validated.compiler?.tsconfigFilePath)
 
     const reportCfg = validated.apiReport ?? { enabled: false }
-    const reportConfigs = buildReportConfigs(reportCfg, tokenCtx, resolvedConfigPath, path.join)
+    const reportConfigs = yield* buildReportConfigs(reportCfg, tokenCtx, resolvedConfigPath, path.join)
     const overrideTsconfig = extractOverrideTsconfig(withDefaults['compiler'])
 
     return {
@@ -380,10 +382,7 @@ export const loadExtractorConfig = (
       },
       docModel: validated.docModel ?? { enabled: false },
       dtsRollup: validated.dtsRollup ?? { enabled: false },
-      tsdocMetadata: {
-        ...validated.tsdocMetadata,
-        filePath: expand(validated.tsdocMetadata?.tsdocMetadataFilePath),
-      },
+      tsdocMetadata: validated.tsdocMetadata ?? { enabled: false },
       messages: validated.messages ?? {},
     }
   })

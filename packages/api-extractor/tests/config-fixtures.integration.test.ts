@@ -167,6 +167,29 @@ Feature('Locating and reading a project\u2019s extractor configuration')
     )
 
     scenario(
+      'A configuration that names its entry point with a placeholder the engine does not know is refused',
+      Gherkin.Do.pipe(
+        Given('a project whose entry point is written under an unknown "<sourceFolder>" placeholder')(
+          'review',
+          () =>
+            withFixtureProject(
+              workingPackage,
+              reviewWithConfiguration(
+                '{"mainEntryPointFilePath": "<sourceFolder>/index.d.ts", "apiReport": {"enabled": false},' +
+                  ' "docModel": {"enabled": false}, "dtsRollup": {"enabled": false}}',
+              ),
+            ),
+        ),
+        Then('the review is refused because of the unknown placeholder')((s) => {
+          expect(s.review.run.outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'UnresolvedTokenError', token: '<sourceFolder>', configPath: s.review.configPath },
+          })
+        }),
+      ),
+    )
+
+    scenario(
       'A configuration file that is not valid JSON is refused',
       Gherkin.Do.pipe(
         Given('a project whose configuration file stops midway through')(

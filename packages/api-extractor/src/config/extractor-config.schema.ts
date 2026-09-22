@@ -23,12 +23,6 @@ export const ResolvedApiReport = Schema.Struct({
 })
 export type ResolvedApiReport = typeof ResolvedApiReport.Type
 
-export const ResolvedTsdocMetadata = Schema.Struct({
-  ...TsdocMetadataConfig.fields,
-  filePath: Schema.String,
-})
-export type ResolvedTsdocMetadata = typeof ResolvedTsdocMetadata.Type
-
 export const ExtractorConfig = Schema.Struct({
   configFilePath: Schema.String,
   projectFolder: Schema.String,
@@ -46,7 +40,7 @@ export const ExtractorConfig = Schema.Struct({
   apiReport: ResolvedApiReport,
   docModel: DocModelConfig,
   dtsRollup: DtsRollupConfig,
-  tsdocMetadata: ResolvedTsdocMetadata,
+  tsdocMetadata: TsdocMetadataConfig,
   messages: MessagesConfig,
 })
 export type ExtractorConfig = typeof ExtractorConfig.Type

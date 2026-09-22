@@ -16,7 +16,7 @@ import { Schema } from 'effect';
 import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
-const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | CircularConfigExtendsError | ConfigSchemaValidationError | UnresolvedTokenError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
+const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
 
 // Warning: (ae-forgotten-export) The symbol "CircularConfigExtendsError_base" needs to be exported by the entry point index.d.ts
 //
@@ -148,7 +148,7 @@ const extractorVersion = "0.1.0";
 const layer: (options?: ConsoleMessageWriterOptions) => Layer.Layer<MessageWriter>;
 
 // @public (undocumented)
-const loadExtractorConfig: (filePath: string) => Effect.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
+const loadExtractorConfig: (filePath: string) => Effect.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError | UnresolvedTokenError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 interface MessageWriter {

@@ -46,7 +46,7 @@ const stubConfig: ExtractorConfig = {
   apiReport: { enabled: false, reportConfigs: [] },
   docModel: { enabled: false },
   dtsRollup: { enabled: false },
-  tsdocMetadata: { enabled: false, filePath: '' },
+  tsdocMetadata: { enabled: false },
   messages: {},
 }
 
