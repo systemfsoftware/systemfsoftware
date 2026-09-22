@@ -4,6 +4,9 @@ import { EMIT_CALLEES } from './ban-raw-span-name-emit.config.js'
 import { TRACE_SPEC_PACKAGE, TRACE_SUFFIX } from './path.config.js'
 import {
   HARNESS_PRESCRIPTION,
+  HTTP_MEMBERS,
+  HTTP_OBJECT_MATCHERS,
+  HTTP_PROPERTY_MATCHER,
   HTTP_TERMINATION_ACTUAL,
   HTTP_TERMINATION_EXPECTED,
   HTTP_TERMINATION_FIX,
@@ -16,7 +19,8 @@ import {
 
 export type MessageIds = 'missingHarnessImport' | 'httpTermination' | 'rawEmitCall'
 
-const HTTP_MEMBERS: Record<string, true> = { body: true, status: true, statusText: true }
+type TraceLiteral = Extract<ESTree.Node, { type: 'Literal' }>
+type ObjectKey = ESTree.ObjectProperty['key']
 
 const asIdentifierName = (
   expression: ESTree.Expression | ESTree.SpreadElement | ESTree.PrivateIdentifier | undefined,
@@ -47,14 +51,14 @@ const httpReadName = (node: ESTree.CallExpression): string | null => {
   return read
 }
 
-const memberEmitName = (callee: ESTree.CallExpression['callee']): string | null => {
+const memberCallName = (callee: ESTree.CallExpression['callee']): string | null => {
   if (callee.type !== 'MemberExpression') return null
   return callee.computed ? null : asIdentifierName(callee.property)
 }
 
 const emitCalleeName = (node: ESTree.CallExpression): string | null => {
   const direct = asIdentifierName(node.callee)
-  return direct ?? memberEmitName(node.callee)
+  return direct ?? memberCallName(node.callee)
 }
 
 const rawEmitName = (node: ESTree.CallExpression): string | null => {
@@ -65,6 +69,126 @@ const rawEmitName = (node: ESTree.CallExpression): string | null => {
 
 const hasHarnessBinding = (node: ESTree.ImportDeclaration): boolean =>
   node.source.value === TRACE_SPEC_PACKAGE && node.specifiers.length > 0
+
+const literalValueOf = (node: ESTree.Node | undefined): TraceLiteral['value'] | null => {
+  if (node === undefined || node.type !== 'Literal') return null
+  return node.value
+}
+
+const stringLiteralValue = (node: ESTree.Node | undefined): string | null => {
+  const value = literalValueOf(node)
+  return typeof value === 'string' ? value : null
+}
+
+const httpMemberName = (name: string): string | null => (HTTP_MEMBERS[name] === true ? name : null)
+
+const httpMemberHead = (path: string): string | null => {
+  const head = path.split('.')[0]
+  return head === undefined ? null : httpMemberName(head)
+}
+
+const toHavePropertyMember = (node: ESTree.CallExpression): string | null => {
+  const path = stringLiteralValue(node.arguments[0])
+  return path === null ? null : httpMemberHead(path)
+}
+
+const propertyMatchTermination = (node: ESTree.CallExpression, matcher: string): string | null => {
+  const member = toHavePropertyMember(node)
+  return matcher === HTTP_PROPERTY_MATCHER ? member : null
+}
+
+const identifierKeyName = (key: ObjectKey): string | null => {
+  if (key.type !== 'Identifier') return null
+  return key.name
+}
+
+const keyLiteralValue = (key: ObjectKey): TraceLiteral['value'] | null => {
+  if (key.type !== 'Literal') return null
+  return key.value
+}
+
+const stringKeyName = (key: ObjectKey): string | null => {
+  const value = keyLiteralValue(key)
+  return typeof value === 'string' ? value : null
+}
+
+const objectKeyName = (key: ObjectKey): string | null => {
+  const identifier = identifierKeyName(key)
+  return identifier === null ? stringKeyName(key) : identifier
+}
+
+const objectPropertyKey = (property: ESTree.ObjectPropertyKind): ObjectKey | null => {
+  if (property.type !== 'Property' || property.computed) return null
+  return property.key
+}
+
+const propertyKeyName = (property: ESTree.ObjectPropertyKind): string | null => {
+  const key = objectPropertyKey(property)
+  return key === null ? null : objectKeyName(key)
+}
+
+const httpMemberOr = (name: string | null): string | null => name === null ? null : httpMemberName(name)
+
+const httpKeyOfProperty = (property: ESTree.ObjectPropertyKind): string | null =>
+  httpMemberOr(propertyKeyName(property))
+
+const propertiesHttpKey = (properties: Array<ESTree.ObjectPropertyKind>): string | null => {
+  const hit = properties.find((property) => httpKeyOfProperty(property) !== null)
+  return hit === undefined ? null : httpKeyOfProperty(hit)
+}
+
+const isObjectExpression = (node: ESTree.Node): node is ESTree.ObjectExpression => node.type === 'ObjectExpression'
+
+const objectArgumentHttpKey = (node: ESTree.CallExpression): string | null => {
+  const argument = node.arguments.find(isObjectExpression)
+  return argument === undefined ? null : propertiesHttpKey(argument.properties)
+}
+
+const isObjectShapeMatcher = (matcher: string): boolean => HTTP_OBJECT_MATCHERS[matcher] === true
+
+const objectMatchTermination = (node: ESTree.CallExpression, matcher: string): string | null => {
+  const key = objectArgumentHttpKey(node)
+  return isObjectShapeMatcher(matcher) ? key : null
+}
+
+const isExpectIdentifier = (node: ESTree.Expression): boolean => node.type === 'Identifier' && node.name === 'expect'
+
+const isExpectReference = (node: ESTree.Expression): boolean => isExpectCall(node) || isExpectIdentifier(node)
+
+const chainRootsAtExpect = (node: ESTree.Expression): boolean =>
+  node.type === 'MemberExpression' ? chainRootsAtExpect(node.object) : isExpectReference(node)
+
+const calleeRootsAtExpect = (callee: ESTree.CallExpression['callee']): boolean =>
+  callee.type === 'MemberExpression' ? chainRootsAtExpect(callee.object) : false
+
+const matcherCallName = (node: ESTree.CallExpression): string | null => {
+  if (!calleeRootsAtExpect(node.callee)) return null
+  return memberCallName(node.callee)
+}
+
+const propertyMatchName = (member: string): string => `expect(...).${HTTP_PROPERTY_MATCHER}('${member}')`
+
+const objectMatchName = (matcher: string, key: string): string => `expect(...).${matcher}({ ${key}: ... })`
+
+const objectMatchedName = (node: ESTree.CallExpression, matcher: string): string | null => {
+  const key = objectMatchTermination(node, matcher)
+  return key === null ? null : objectMatchName(matcher, key)
+}
+
+const matchedShapeName = (node: ESTree.CallExpression, matcher: string): string | null => {
+  const member = propertyMatchTermination(node, matcher)
+  return member === null ? objectMatchedName(node, matcher) : propertyMatchName(member)
+}
+
+const shapeTerminationName = (node: ESTree.CallExpression): string | null => {
+  const matcher = matcherCallName(node)
+  return matcher === null ? null : matchedShapeName(node, matcher)
+}
+
+const httpTerminationName = (node: ESTree.CallExpression): string | null => {
+  const direct = httpReadName(node)
+  return direct === null ? shapeTerminationName(node) : `expect(...${direct})`
+}
 
 const reportRawEmit = (context: Context, node: ESTree.CallExpression): void => {
   const name = rawEmitName(node)
@@ -82,13 +206,13 @@ const reportRawEmit = (context: Context, node: ESTree.CallExpression): void => {
 }
 
 const reportHttpTermination = (context: Context, node: ESTree.CallExpression): void => {
-  const member = httpReadName(node)
-  if (member === null) return
+  const name = httpTerminationName(node)
+  if (name === null) return
   context.report({
     node,
     messageId: 'httpTermination',
     data: {
-      name: `expect(...${member}) inside a trace spec`,
+      name: `${name} inside a trace spec`,
       expected: HTTP_TERMINATION_EXPECTED,
       actual: HTTP_TERMINATION_ACTUAL,
       fix: HTTP_TERMINATION_FIX,

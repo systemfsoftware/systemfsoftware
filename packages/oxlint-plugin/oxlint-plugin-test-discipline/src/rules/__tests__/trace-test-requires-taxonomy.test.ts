@@ -35,6 +35,16 @@ const httpTerminationError = (member: string) => ({
   },
 })
 
+const httpTerminationShapeError = (shape: string) => ({
+  messageId: 'httpTermination' as const,
+  data: {
+    name: `expect(...).${shape} inside a trace spec`,
+    expected: HTTP_TERMINATION_EXPECTED,
+    actual: HTTP_TERMINATION_ACTUAL,
+    fix: HTTP_TERMINATION_FIX,
+  },
+})
+
 const rawEmitError = (name: string) => ({
   messageId: 'rawEmitCall' as const,
   data: {
@@ -77,6 +87,40 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       filename: '/repo/examples/inventory-fulfillment/tests/inventory-fulfillment.integration.test.ts',
     },
     {
+      name: 'Should_Allow_DomainPropertyPath_When_TraceSpecAssertsNonHttpPath',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty('app.order.id')
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+    },
+    {
+      name: 'Should_Allow_ComputedPropertyKey_When_TraceSpecAssertsNonLiteralPath',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty(order.path)
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+    },
+    {
+      name: 'Should_Allow_DomainObjectShape_When_TraceSpecAssertsNonHttpKeys',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toMatchObject({ orderId: 'order-1' })
+          expect(res).toEqual({ orderId: 'order-1' })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+    },
+    {
       name: 'Should_Allow_MissingHarnessImport_When_FileIsNotATraceSpec',
       code: "const order = { id: '1' }",
       filename: '/repo/examples/inventory-fulfillment/src/fulfillment/settle.ts',
@@ -104,6 +148,138 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       `,
       filename: TRACE_SPEC_FILENAME,
       errors: [httpTerminationError('body')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToHavePropertyStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty('status', 200)
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('status')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToHavePropertyBody',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty('body')
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('body')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToHavePropertyStatusText',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty('statusText')
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('statusText')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToHavePropertyNestedBodyPath',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty('body.items')
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('body')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecNotAssertsToHavePropertyStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).not.toHaveProperty('status')
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('status')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToMatchObjectStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toMatchObject({ status: 200 })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toMatchObject({ status: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecResolvesToMatchObjectStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(async () => {
+          await expect(res).resolves.toMatchObject({ status: 200 })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toMatchObject({ status: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecRejectsToMatchObjectStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(async () => {
+          await expect(res).rejects.toMatchObject({ status: 500 })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toMatchObject({ status: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToEqualStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toEqual({ status: 200 })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toEqual({ status: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToStrictEqualBody',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toStrictEqual({ body: 'fulfilled' })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toStrictEqual({ body: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsObjectContainingStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toEqual(expect.objectContaining({ status: 200 }))
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('objectContaining({ status: ... })')],
     },
     {
       name: 'Should_Report_MissingHarnessImport_When_TraceSpecImportsNothing',
