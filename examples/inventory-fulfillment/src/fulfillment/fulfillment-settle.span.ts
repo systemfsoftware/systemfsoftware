@@ -35,6 +35,6 @@ export const CreditCharge = Span.declare({
 export const fulfillmentTaxonomy = Taxonomy.make({
   id: 'inventory.fulfillment',
   spans: [FulfillmentSettle, ReservationCommit, CreditCharge],
-  edges: [Edge.child(FulfillmentSettle, ReservationCommit), Edge.child(FulfillmentSettle, CreditCharge)],
+  edges: [Edge.descendant(FulfillmentSettle, ReservationCommit), Edge.descendant(FulfillmentSettle, CreditCharge)],
   forbid: [{ span: CreditCharge, unless: 'allocate' }],
 })
