@@ -77,5 +77,5 @@ Each failure surfaced only through a compatibility spike that composed the real 
 ## Related
 
 - `docs/plans/2026-09-20-2240-feat-cell-architecture-stress-test-plan.md` (U0 spike, Backend Stack Contract)
-- `compound-packs/cell-architecture/dependencies-point-inward.md`
+- `compound-packs/cell-architecture/service-and-layer-boundaries.md`
 - `docs/solutions/tooling-decisions/pnpm-catalogs-for-monorepo-dependency-management.md`
