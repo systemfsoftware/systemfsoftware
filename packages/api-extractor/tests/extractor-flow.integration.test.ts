@@ -4,7 +4,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
 
-import { ConsoleMessageWriter, MessageWriter } from '@systemfsoftware/api-extractor'
+import { layer as consoleMessageWriterLayer, MessageWriter, type TextWritable } from '@systemfsoftware/api-extractor'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -105,13 +105,87 @@ Feature('Reviewing TypeScript package API surface definitions')
           'attempt',
           (s) =>
             runEffect(s.configPath).pipe(
-              Effect.provideService(MessageWriter, ConsoleMessageWriter),
+              Effect.provide(consoleMessageWriterLayer()),
               Effect.map(() => 'unexpected-success'),
               Effect.catch((err) => Effect.succeed(err._tag)),
             ),
         ),
         Then('a structured configuration syntax failure is produced')((s) => {
           expect(s.attempt).toBe('ConfigJsonSyntaxError')
+        }),
+      ),
+    )
+
+    scenario(
+      'The compiler folder points at a location holding no compiler package',
+      Gherkin.Do.pipe(
+        Given('a package configured normally, and a compiler folder that holds no compiler package')(
+          'paths',
+          () =>
+            Effect.gen(function*() {
+              const configPath = yield* resolveFixturePath('simple-pkg/api-extractor.json')
+              const compilerFolder = yield* resolveFixturePath('simple-pkg')
+              return { configPath, compilerFolder }
+            }),
+        ),
+        When('the engine is asked to review the package using that compiler folder')(
+          'attempt',
+          (s) => {
+            const stdoutLines: string[] = []
+            const stderrLines: string[] = []
+            const stdout: TextWritable = {
+              write: (text) => {
+                stdoutLines.push(text)
+              },
+            }
+            const stderr: TextWritable = {
+              write: (text) => {
+                stderrLines.push(text)
+              },
+            }
+            return runEffect(s.paths.configPath, {
+              typescriptCompilerFolder: s.paths.compilerFolder,
+              cliFlags: { verbose: true },
+            }).pipe(
+              Effect.provide(consoleMessageWriterLayer({ stdout, stderr })),
+              Effect.map(() => ({ outcome: 'review-completed', stdoutLines, stderrLines })),
+              Effect.catch((err) => Effect.succeed({ outcome: err._tag, stdoutLines, stderrLines })),
+            )
+          },
+        ),
+        Then('the review is refused because the compiler could not be loaded from that folder')((s) => {
+          expect(s.attempt).toMatchObject({ outcome: 'TsCompilerLoadError' })
+        }),
+        Then(
+          'the startup notice already reached the captured standard output and the captured error stream stayed empty',
+        )((s) => {
+          expect(s.attempt.stdoutLines.join('')).toContain('api-extractor')
+          expect(s.attempt.stderrLines).toEqual([])
+        }),
+      ),
+    )
+
+    scenario(
+      'The configuration file does not exist at the requested path',
+      Gherkin.Do.pipe(
+        Given('a configuration path where no configuration file exists')(
+          'configPath',
+          () => resolveFixturePath('does-not-exist/api-extractor.json'),
+        ),
+        When('the engine is asked to review the package at that path')(
+          'attempt',
+          (s) =>
+            runEffect(s.configPath).pipe(
+              Effect.provide(consoleMessageWriterLayer()),
+              Effect.map(() => 'unexpected-success'),
+              Effect.catch((err) => Effect.succeed(err)),
+            ),
+        ),
+        Then('the review is refused because the configuration file is missing')((s) => {
+          expect(s.attempt).toMatchObject({ _tag: 'ConfigFileNotFound' })
+        }),
+        Then('the refusal names the path that was requested')((s) => {
+          expect(s.attempt).toMatchObject({ filePath: s.configPath })
         }),
       ),
     )

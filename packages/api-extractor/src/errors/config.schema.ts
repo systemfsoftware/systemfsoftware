@@ -2,6 +2,7 @@ import { Schema } from 'effect'
 
 export class ConfigFileNotFound extends Schema.TaggedError<ConfigFileNotFound>()('ConfigFileNotFound', {
   filePath: Schema.String,
+  cause: Schema.optional(Schema.Unknown),
 }) {}
 
 export class ConfigJsonSyntaxError extends Schema.TaggedError<ConfigJsonSyntaxError>()('ConfigJsonSyntaxError', {

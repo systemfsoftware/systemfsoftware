@@ -231,7 +231,7 @@ export class Span extends Pipeable.Class {
       if (childSpan.endIndex > this.endIndex) {
         // This has never been observed empirically, but here's how we would handle it
         this.endIndex = childSpan.endIndex
-        invariant('Unexpected AST case')
+        throw invariant('Unexpected AST case')
       }
 
       if (previousChildSpan) {
@@ -606,14 +606,14 @@ export class Span extends Pipeable.Class {
 
   #beginIndentDocComment(options: IWriteModifiedTextOptions): void {
     if (options.indentDocCommentState !== IndentDocCommentState.Inactive) {
-      invariant('indentDocComment cannot be nested')
+      throw invariant('indentDocComment cannot be nested')
     }
     options.indentDocCommentState = IndentDocCommentState.AwaitingOpenDelimiter
   }
 
   #endIndentDocComment(options: IWriteModifiedTextOptions): void {
     if (options.indentDocCommentState === IndentDocCommentState.AwaitingCloseDelimiter) {
-      invariant('missing "*/" delimiter for comment block')
+      throw invariant('missing "*/" delimiter for comment block')
     }
     options.indentDocCommentState = IndentDocCommentState.Inactive
   }

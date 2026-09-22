@@ -10,7 +10,7 @@ import {
   ConfigFileNotFound,
   ConfigJsonSyntaxError,
   ConfigSchemaValidationError,
-} from '../errors/config.js'
+} from '../errors/config.schema.js'
 import type {
   ApiReportConfig,
   ApiReportVariant,

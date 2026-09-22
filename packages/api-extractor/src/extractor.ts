@@ -23,10 +23,10 @@ import type * as FileSystem from 'effect/FileSystem'
 import type * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 
-import type { MessageWriter } from './collector/message-router.js'
 import type { ExtractorError } from './errors/index.js'
 import { runExtractor } from './extractor.cell.js'
 import type { ExtractorResult, ExtractorRunOptions } from './extractor.cell.js'
+import type { MessageWriter } from './message-writer.service.js'
 
 export type { ExtractorResult, ExtractorRunOptions }
 

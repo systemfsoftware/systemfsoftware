@@ -1,10 +1,12 @@
+import { InternalInvariantError } from '../errors/index.js'
+
 const newLineRegExp = /\r\n|\r|\n/g
 
 export const convertToLf = (input: string): string => input.replace(newLineRegExp, '\n')
 
 export const truncateWithEllipsis = (s: string, maximumLength: number): string => {
   if (maximumLength < 0) {
-    throw new Error('The maximumLength cannot be a negative number')
+    throw new InternalInvariantError({ message: 'The maximumLength cannot be a negative number' })
   }
 
   if (s.length <= maximumLength) {

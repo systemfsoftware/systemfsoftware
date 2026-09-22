@@ -5,10 +5,10 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
 
-import { MessageWriter } from '../collector/message-router.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
 import { findConfigFileUpwards } from '../config/lookup.js'
 import { type ExtractorResult, type ExtractorRunOptions, runEffect } from '../extractor.js'
+import { MessageWriter } from '../message-writer.service.js'
 
 export interface ParsedRunFlags {
   readonly config: Option.Option<string>

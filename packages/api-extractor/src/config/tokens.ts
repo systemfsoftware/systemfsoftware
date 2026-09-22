@@ -1,6 +1,6 @@
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import { UnresolvedTokenError } from '../errors/config.js'
+import { UnresolvedTokenError } from '../errors/config.schema.js'
 
 export type TokenName = 'projectFolder' | 'packageName' | 'unscopedPackageName'
 

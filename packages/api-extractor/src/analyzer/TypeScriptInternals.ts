@@ -133,15 +133,15 @@ export class TypeScriptInternals extends Pipeable.Class {
     const typeCheckerInstance: any = anyProgram.getDiagnosticsProducingTypeChecker ?? anyProgram.getTypeChecker
 
     if (!typeCheckerInstance) {
-      invariant('Missing Program.getDiagnosticsProducingTypeChecker or Program.getTypeChecker')
+      throw invariant('Missing Program.getDiagnosticsProducingTypeChecker or Program.getTypeChecker')
     }
     const typeChecker: any = typeCheckerInstance()
     if (!typeChecker.getEmitResolver) {
-      invariant('Missing TypeChecker.getEmitResolver')
+      throw invariant('Missing TypeChecker.getEmitResolver')
     }
     const resolver: any = typeChecker.getEmitResolver()
     if (!resolver.hasGlobalName) {
-      invariant('Missing EmitResolver.hasGlobalName')
+      throw invariant('Missing EmitResolver.hasGlobalName')
     }
     return resolver
   }

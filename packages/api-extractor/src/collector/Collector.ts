@@ -27,6 +27,7 @@ import { AstSymbolTable } from '../analyzer/AstSymbolTable.js'
 import { TypeScriptHelpers } from '../analyzer/TypeScriptHelpers.js'
 import { type IGlobalVariableAnalyzer, TypeScriptInternals } from '../analyzer/TypeScriptInternals.js'
 import type { ExtractorConfig } from '../config/index.js'
+import { InternalInvariantError } from '../errors/index.js'
 import { ApiItemMetadata, type IApiItemMetadataOptions } from './ApiItemMetadata.js'
 import { CollectorEntity } from './CollectorEntity.js'
 import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
@@ -86,6 +87,8 @@ export class Collector extends Pipeable.Class {
    */
   public readonly bundledPackageNames: ReadonlySet<string>
 
+  public readonly tsdocConfiguration: tsdoc.TSDocConfiguration
+
   readonly #program: ts.Program
 
   readonly #tsdocParser: tsdoc.TSDocParser
@@ -121,13 +124,17 @@ export class Collector extends Pipeable.Class {
     )
 
     if (!entryPointSourceFile) {
-      throw new Error('Unable to load file: ' + this.extractorConfig.mainEntryPointFilePath)
+      throw new InternalInvariantError({
+        message: 'Unable to load file: ' + this.extractorConfig.mainEntryPointFilePath,
+      })
     }
 
     if (!this.extractorConfig.packageFolder || !this.extractorConfig.packageJson) {
       // TODO: We should be able to analyze projects that don't have any package.json.
       // The ExtractorConfig class is already designed to allow this.
-      throw new Error('Unable to find a package.json file for the project being analyzed')
+      throw new InternalInvariantError({
+        message: 'Unable to find a package.json file for the project being analyzed',
+      })
     }
 
     this.workingPackage = new WorkingPackage({
@@ -142,7 +149,8 @@ export class Collector extends Pipeable.Class {
     this.typeChecker = program.getTypeChecker()
     this.globalVariableAnalyzer = TypeScriptInternals.getGlobalVariableAnalyzer(this.program)
 
-    this.#tsdocParser = new tsdoc.TSDocParser(AedocDefinitions.tsdocConfiguration)
+    this.tsdocConfiguration = AedocDefinitions.createTsdocConfiguration()
+    this.#tsdocParser = new tsdoc.TSDocParser(this.tsdocConfiguration)
 
     // Resolve package name patterns and store concrete set of bundled package dependency names
     this.bundledPackageNames = _resolveBundledPackagePatterns(
@@ -242,7 +250,7 @@ export class Collector extends Pipeable.Class {
    */
   public analyze(): void {
     if (this.#astEntryPoint) {
-      throw new Error('DtsRollupGenerator.analyze() was already called')
+      throw new InternalInvariantError({ message: 'DtsRollupGenerator.analyze() was already called' })
     }
 
     // This runs a full type analysis, and then augments the Abstract Syntax Tree (i.e. declarations)
@@ -865,7 +873,7 @@ export class Collector extends Pipeable.Class {
       options.isOverride = modifierTagSet.isOverride()
       options.isSealed = modifierTagSet.isSealed()
       options.isVirtual = modifierTagSet.isVirtual()
-      const preapprovedTag: tsdoc.TSDocTagDefinition | void = AedocDefinitions.tsdocConfiguration.tryGetTagDefinition(
+      const preapprovedTag: tsdoc.TSDocTagDefinition | void = this.tsdocConfiguration.tryGetTagDefinition(
         '@preapproved',
       )
 

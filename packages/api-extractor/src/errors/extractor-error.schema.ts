@@ -1,11 +1,6 @@
 import { Schema } from 'effect'
-import {
-  CircularNamespaceReferenceError,
-  ForgottenExportError,
-  UnsupportedStarExportError,
-  UnsupportedSyntaxError,
-} from './analysis.schema.js'
-import { TsConfigReadError, TypeScriptDiagnosticError } from './compiler.schema.js'
+import { UnsupportedStarExportError, UnsupportedSyntaxError } from './analysis.schema.js'
+import { TsCompilerLoadError, TsConfigReadError } from './compiler.schema.js'
 import {
   CircularConfigExtendsError,
   ConfigFileNotFound,
@@ -13,7 +8,6 @@ import {
   ConfigSchemaValidationError,
   UnresolvedTokenError,
 } from './config.schema.js'
-import { ApiReportMismatchError, ApiReportMissingError } from './report.schema.js'
 
 const extractorErrorVariants = [
   ConfigFileNotFound,
@@ -22,13 +16,9 @@ const extractorErrorVariants = [
   UnresolvedTokenError,
   CircularConfigExtendsError,
   TsConfigReadError,
-  TypeScriptDiagnosticError,
+  TsCompilerLoadError,
   UnsupportedSyntaxError,
-  CircularNamespaceReferenceError,
   UnsupportedStarExportError,
-  ForgottenExportError,
-  ApiReportMismatchError,
-  ApiReportMissingError,
 ] as const
 
 export const ExtractorError = Schema.Union(extractorErrorVariants)

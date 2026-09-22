@@ -4,6 +4,7 @@ import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 import type { JsonRecord } from '../config/json-record.schema.js'
 import { JsonRecordFromString } from '../config/json-record.schema.js'
+import { InternalInvariantError } from '../errors/index.js'
 
 export interface INodePackageJson {
   readonly name?: string | undefined
@@ -79,7 +80,7 @@ export class PackageJsonLookup extends Pipeable.Class {
 
     const content = this.#readFile(normalized)
     if (content === '') {
-      throw new Error(`Input file not found: ${packageJsonFilePath}`)
+      throw new InternalInvariantError({ message: `Input file not found: ${packageJsonFilePath}` })
     }
 
     const raw: JsonRecord = Effect.runSync(Schema.decodeEffect(JsonRecordFromString)(content))

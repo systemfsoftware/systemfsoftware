@@ -8,6 +8,7 @@ import * as Pipeable from 'effect/Pipeable'
 
 import * as ts from 'typescript'
 
+import { InternalInvariantError, UnsupportedSyntaxError } from '../errors/index.js'
 import { invariant } from '../utils/invariant.js'
 import type { PackageJsonLookup } from './package-json-lookup.js'
 
@@ -173,15 +174,17 @@ export class AstSymbolTable extends Pipeable.Class {
   // NOTE: This could be a method of AstSymbol if it had a backpointer to its AstSymbolTable.
   public getChildAstDeclarationByNode(node: ts.Node, parentAstDeclaration: AstDeclaration): AstDeclaration {
     if (!parentAstDeclaration.astSymbol.analyzed) {
-      throw new Error('getChildDeclarationByNode() cannot be used for an AstSymbol that was not analyzed')
+      throw new InternalInvariantError({
+        message: 'getChildDeclarationByNode() cannot be used for an AstSymbol that was not analyzed',
+      })
     }
 
     const childAstDeclaration: AstDeclaration | undefined = this.#astDeclarationsByDeclaration.get(node)
     if (!childAstDeclaration) {
-      throw new Error('Child declaration not found for the specified node')
+      throw new InternalInvariantError({ message: 'Child declaration not found for the specified node' })
     }
     if (childAstDeclaration.parent !== parentAstDeclaration) {
-      invariant('The found child is not attached to the parent AstDeclaration')
+      throw invariant('The found child is not attached to the parent AstDeclaration')
     }
 
     return childAstDeclaration
@@ -195,7 +198,7 @@ export class AstSymbolTable extends Pipeable.Class {
    */
   public tryGetEntityForNode(identifier: ts.Identifier | ts.ImportTypeNode): AstEntity | undefined {
     if (!this.#entitiesByNode.has(identifier)) {
-      invariant('tryGetEntityForIdentifier() called for an identifier that was not analyzed')
+      throw invariant('tryGetEntityForIdentifier() called for an identifier that was not analyzed')
     }
     return this.#entitiesByNode.get(identifier)
   }
@@ -370,7 +373,13 @@ export class AstSymbolTable extends Pipeable.Class {
             if (!referencedAstEntity) {
               const symbol: ts.Symbol | undefined = this.#typeChecker.getSymbolAtLocation(identifierNode)
               if (!symbol) {
-                throw new Error('Symbol not found for identifier: ' + identifierNode.getText())
+                const identifierSourceFile = identifierNode.getSourceFile()
+                const { line } = identifierSourceFile.getLineAndCharacterOfPosition(identifierNode.getStart())
+                throw new UnsupportedSyntaxError({
+                  file: identifierSourceFile.fileName,
+                  line: line + 1,
+                  message: 'Symbol not found for identifier: ' + identifierNode.getText(),
+                })
               }
 
               // Normally we expect getSymbolAtLocation() to take us to a declaration within the same source
@@ -411,7 +420,7 @@ export class AstSymbolTable extends Pipeable.Class {
                 } else {
                   // If you encounter this, please report a bug with a repro.  We're interested to know
                   // how it can occur.
-                  invariant(`Unable to follow symbol for "${identifierNode.text}"`)
+                  throw invariant(`Unable to follow symbol for "${identifierNode.text}"`)
                 }
               } else {
                 referencedAstEntity = this.#exportAnalyzer.fetchReferencedAstEntity(
@@ -458,7 +467,9 @@ export class AstSymbolTable extends Pipeable.Class {
 
             if (!referencedAstEntity) {
               // This should never happen
-              throw new Error('Failed to fetch entity for import() type node: ' + importTypeNode.getText())
+              throw new InternalInvariantError({
+                message: 'Failed to fetch entity for import() type node: ' + importTypeNode.getText(),
+              })
             }
 
             this.#entitiesByNode.set(importTypeNode, referencedAstEntity)
@@ -496,7 +507,13 @@ export class AstSymbolTable extends Pipeable.Class {
       } else {
         const symbol: ts.Symbol | undefined = this.#typeChecker.getSymbolAtLocation(node)
         if (!symbol) {
-          throw new Error('Symbol not found for identifier: ' + node.getText())
+          const nodeSourceFile = node.getSourceFile()
+          const { line } = nodeSourceFile.getLineAndCharacterOfPosition(node.getStart())
+          throw new UnsupportedSyntaxError({
+            file: nodeSourceFile.fileName,
+            line: line + 1,
+            message: 'Symbol not found for identifier: ' + node.getText(),
+          })
         }
 
         referencedAstEntity = this.#exportAnalyzer.fetchReferencedAstEntity(
@@ -520,7 +537,7 @@ export class AstSymbolTable extends Pipeable.Class {
       this.#typeChecker,
     )
     if (!symbol) {
-      invariant('Unable to find symbol for node')
+      throw invariant('Unable to find symbol for node')
     }
 
     const astSymbol: AstSymbol | undefined = this.#fetchAstSymbol({
@@ -537,7 +554,7 @@ export class AstSymbolTable extends Pipeable.Class {
     const astDeclaration: AstDeclaration | undefined = this.#astDeclarationsByDeclaration.get(node)
 
     if (!astDeclaration) {
-      invariant('Unable to find constructed AstDeclaration')
+      throw invariant('Unable to find constructed AstDeclaration')
     }
 
     return astDeclaration
@@ -573,7 +590,7 @@ export class AstSymbolTable extends Pipeable.Class {
     // Make sure followedSymbol isn't an alias for something else
     if (TypeScriptHelpers.isFollowableAlias(followedSymbol, this.#typeChecker)) {
       // We expect the caller to have already followed any aliases
-      invariant('AstSymbolTable._fetchAstSymbol() cannot be called with a symbol alias')
+      throw invariant('AstSymbolTable._fetchAstSymbol() cannot be called with a symbol alias')
     }
 
     let astSymbol: AstSymbol | undefined = this.#astSymbolsBySymbol.get(followedSymbol)
@@ -602,7 +619,7 @@ export class AstSymbolTable extends Pipeable.Class {
       if (!nominalAnalysis) {
         for (const declaration of followedSymbol.declarations || []) {
           if (!AstDeclaration.isSupportedSyntaxKind(declaration.kind)) {
-            invariant(
+            throw invariant(
               `The "${followedSymbol.name}" symbol has a` +
                 ` ts.SyntaxKind.${ts.SyntaxKind[declaration.kind]} declaration which is not (yet?)` +
                 ` supported by API Extractor`,
@@ -640,7 +657,7 @@ export class AstSymbolTable extends Pipeable.Class {
               addIfMissing: true,
             })
             if (!parentAstSymbol) {
-              invariant('Unable to construct a parent AstSymbol for ' + followedSymbol.name)
+              throw invariant('Unable to construct a parent AstSymbol for ' + followedSymbol.name)
             }
           }
         }
@@ -667,12 +684,12 @@ export class AstSymbolTable extends Pipeable.Class {
           const parentDeclaration: ts.Node | undefined = this.#tryFindFirstAstDeclarationParent(declaration)
 
           if (!parentDeclaration) {
-            throw new Error('Missing parent declaration')
+            throw new InternalInvariantError({ message: 'Missing parent declaration' })
           }
 
           parentAstDeclaration = this.#astDeclarationsByDeclaration.get(parentDeclaration)
           if (!parentAstDeclaration) {
-            invariant('Missing parent AstDeclaration')
+            throw invariant('Missing parent AstDeclaration')
           }
         }
 
@@ -687,7 +704,7 @@ export class AstSymbolTable extends Pipeable.Class {
     }
 
     if (options.isExternal !== astSymbol.isExternal) {
-      invariant(
+      throw invariant(
         `Cannot assign isExternal=${options.isExternal} for` +
           ` the symbol ${astSymbol.localName} because it was previously registered` +
           ` with isExternal=${astSymbol.isExternal}`,

@@ -1,5 +1,4 @@
 import * as Pipeable from 'effect/Pipeable'
-import { AedocDefinitions } from '../model/index.js'
 // Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
 // See LICENSE in the project root for license information.
 
@@ -82,7 +81,7 @@ export class DocCommentEnhancer extends Pipeable.Class {
       // The class that contains this constructor
       const classDeclaration: AstDeclaration = astDeclaration.parent!
 
-      const configuration: tsdoc.TSDocConfiguration = AedocDefinitions.tsdocConfiguration
+      const configuration: tsdoc.TSDocConfiguration = this.#collector.tsdocConfiguration
 
       if (!metadata.tsdocComment) {
         metadata.tsdocComment = new tsdoc.DocComment({ configuration })

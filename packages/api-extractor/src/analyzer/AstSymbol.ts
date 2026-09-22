@@ -165,7 +165,7 @@ export class AstSymbol extends AstEntity {
    */
   public _notifyDeclarationAttach(astDeclaration: AstDeclaration): void {
     if (this.analyzed) {
-      invariant('_notifyDeclarationAttach() called after analysis is already complete')
+      throw invariant('_notifyDeclarationAttach() called after analysis is already complete')
     }
     this.#astDeclarations.push(astDeclaration)
   }
@@ -177,7 +177,7 @@ export class AstSymbol extends AstEntity {
    */
   public _notifyAnalyzed(): void {
     if (this.parentAstSymbol) {
-      invariant('_notifyAnalyzed() called for an AstSymbol which is not the root')
+      throw invariant('_notifyAnalyzed() called for an AstSymbol which is not the root')
     }
     this.#analyzed = true
   }

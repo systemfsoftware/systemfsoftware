@@ -3,7 +3,7 @@ import * as Path from 'effect/Path'
 import * as Struct from 'effect/Struct'
 import type * as Ts from 'typescript'
 
-import { TsConfigReadError } from '../errors/index.js'
+import { TsCompilerLoadError, TsConfigReadError } from '../errors/index.js'
 
 export interface CompilerStateOptions {
   readonly projectFolder: string
@@ -27,40 +27,102 @@ export interface CompilerState {
  * and therefore global-name set — matches the one that generated the package's
  * committed reports), not with whatever copy the engine itself shipped with.
  */
-const isTypeScriptModule = (u: unknown): u is typeof Ts =>
-  typeof u === 'object' && u !== null && 'readConfigFile' in u && typeof u.readConfigFile === 'function'
+const isTypeScriptModule = (candidate: unknown): candidate is typeof Ts =>
+  typeof candidate === 'object' &&
+  candidate !== null &&
+  'readConfigFile' in candidate &&
+  typeof candidate.readConfigFile === 'function' &&
+  'parseJsonConfigFileContent' in candidate &&
+  typeof candidate.parseJsonConfigFileContent === 'function' &&
+  'createCompilerHost' in candidate &&
+  typeof candidate.createCompilerHost === 'function' &&
+  'createProgram' in candidate &&
+  typeof candidate.createProgram === 'function' &&
+  'flattenDiagnosticMessageText' in candidate &&
+  typeof candidate.flattenDiagnosticMessageText === 'function' &&
+  'sys' in candidate &&
+  typeof candidate.sys === 'object' &&
+  'version' in candidate &&
+  typeof candidate.version === 'string'
 
-const loadTypeScript = (
-  consumerPackageJsonPath: string,
-): Effect.Effect<typeof Ts, TsConfigReadError> => {
-  const moduleBuiltin = process.getBuiltinModule('module')
-  const requireFromConsumer = moduleBuiltin.createRequire(consumerPackageJsonPath)
-  const candidates: readonly string[] = ['typescript/lib/typescript.js', 'typescript']
+interface RequireFrom {
+  (specifier: string): object
+  resolve: (specifier: string) => string
+}
+
+const consumerEntryCandidates = ['typescript/lib/typescript.js', 'typescript'] as const
+
+const folderEntryCandidates = ['.'] as const
+
+const requireCandidate = (requireFrom: RequireFrom, candidates: readonly string[]): typeof Ts | undefined => {
   for (const candidate of candidates) {
-    let entry: string | undefined
+    let entry: string
     try {
-      entry = requireFromConsumer.resolve(candidate)
+      entry = requireFrom.resolve(candidate)
     } catch {
       continue
     }
     try {
-      const mod = requireFromConsumer(entry)
-      if (isTypeScriptModule(mod)) {
-        return Effect.succeed(mod)
+      const loaded = requireFrom(entry)
+      if (isTypeScriptModule(loaded)) {
+        return loaded
       }
     } catch {
       continue
     }
   }
-  return Effect.tryPromise({
-    try: () => import('typescript'),
-    catch: (cause) =>
-      new TsConfigReadError({
-        filePath: 'typescript',
-        cause,
-      }),
-  })
+  return undefined
 }
+
+const loadCompilerFromFolder = (folderPackageJsonPath: string): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+  Effect.gen(function*() {
+    const requireFrom = process.getBuiltinModule('module').createRequire(folderPackageJsonPath)
+    const loaded = requireCandidate(requireFrom, folderEntryCandidates)
+    if (loaded === undefined) {
+      return yield* new TsCompilerLoadError({
+        modulePath: folderPackageJsonPath,
+        message: 'No usable TypeScript compiler package found in this folder',
+      })
+    }
+    return loaded
+  })
+
+const loadEngineBundledFallback = (): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+  Effect.gen(function*() {
+    const mod = yield* Effect.tryPromise({
+      try: () => import('typescript'),
+      catch: (cause) =>
+        new TsCompilerLoadError({
+          modulePath: 'typescript',
+          message: 'Unable to load the TypeScript compiler',
+          cause,
+        }),
+    })
+    return isTypeScriptModule(mod)
+      ? mod
+      : yield* new TsCompilerLoadError({
+        modulePath: 'typescript',
+        message: 'The loaded module does not expose the TypeScript compiler API',
+      })
+  })
+
+const loadCompilerFromConsumer = (consumerPackageJsonPath: string): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+  Effect.gen(function*() {
+    const requireFrom = process.getBuiltinModule('module').createRequire(consumerPackageJsonPath)
+    const loaded = requireCandidate(requireFrom, consumerEntryCandidates)
+    if (loaded !== undefined) {
+      return loaded
+    }
+    return yield* loadEngineBundledFallback()
+  })
+
+const loadTypeScript = (
+  consumerPackageJsonPath: string,
+  compilerFolderPackageJsonPath: string | undefined,
+): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+  compilerFolderPackageJsonPath === undefined
+    ? loadCompilerFromConsumer(consumerPackageJsonPath)
+    : loadCompilerFromFolder(compilerFolderPackageJsonPath)
 
 const readTsConfig = (
   typescript: typeof Ts,
@@ -179,10 +241,16 @@ const createCompilerHost = (
 
 export const loadCompilerState = (
   options: CompilerStateOptions,
-): Effect.Effect<CompilerState, TsConfigReadError, Path.Path> =>
+): Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError, Path.Path> =>
   Effect.gen(function*() {
     const path = yield* Path.Path
-    const typescript = yield* loadTypeScript(path.join(options.projectFolder, 'package.json'))
+    const compilerFolderPackageJsonPath = options.typescriptCompilerFolder === undefined
+      ? undefined
+      : path.join(options.typescriptCompilerFolder, 'package.json')
+    const typescript = yield* loadTypeScript(
+      path.join(options.projectFolder, 'package.json'),
+      compilerFolderPackageJsonPath,
+    )
     const commandLine = yield* readTsConfig(typescript, path, options.tsconfigFilePath)
 
     const cleanedOptions: Ts.CompilerOptions = Struct.omit(commandLine.options, ['outDir', 'declarationDir'])

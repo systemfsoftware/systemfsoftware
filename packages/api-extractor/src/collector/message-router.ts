@@ -1,5 +1,5 @@
 import type * as tsdoc from '@microsoft/tsdoc'
-import { Context, Data, Effect, Match, Result } from 'effect'
+import { Data, Effect, Match, Result } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Ts from 'typescript'
 
@@ -7,6 +7,7 @@ import { AstDeclaration } from '../analyzer/AstDeclaration.js'
 import type { AstSymbol } from '../analyzer/AstSymbol.js'
 import { SourceFileLocationFormatter } from '../analyzer/SourceFileLocationFormatter.js'
 import type { MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
+import { MessageWriter } from '../message-writer.service.js'
 import { allExtractorMessageIds, type ExtractorMessageId } from './extractor-message-id.js'
 import { LogLevel, MessageRuleError } from './message-router.schema.js'
 import { ResolveVerbosity, resolveVerbosity } from './resolve-verbosity.workflow.js'
@@ -110,12 +111,6 @@ export const ConsoleMessageId = {
 } as const
 
 export type ConsoleMessageId = (typeof ConsoleMessageId)[keyof typeof ConsoleMessageId]
-
-export interface MessageWriter {
-  readonly write: (level: LogLevel, text: string) => Effect.Effect<void, PlatformError>
-}
-
-export const MessageWriter = Context.Service<MessageWriter>('@systemfsoftware/api-extractor/MessageWriter')
 
 interface ReportingRule {
   readonly logLevel: LogLevelValue

@@ -1,8 +1,8 @@
 import {
   ConsoleMessageId,
-  ConsoleMessageWriter,
+  layer as consoleMessageWriterLayer,
   makeMessageRouter,
-  MessageWriter,
+  type TextWritable,
 } from '@systemfsoftware/api-extractor'
 import { Differential, Metamorphic } from '@systemfsoftware/differential-spec'
 import { Effect, Exit } from 'effect'
@@ -125,24 +125,22 @@ interface WriterRunOutput {
 }
 
 // The pin: construction + emission survive `Effect.runSync` as ONE program when
-// the real console writer is bound — the sync edge `invoke` and the Collector's
-// fire-and-forget call sites depend on. A recording writer decorates the real
-// one so observation never bypasses the code under test.
+// the real console driver is bound — the sync edge `invoke` and the Collector's
+// fire-and-forget call sites depend on. The driver writes to a recording sink
+// so observation never bypasses the code under test.
 const runRouterWithConsoleWriter = (message: string): Effect.Effect<WriterRunOutput> =>
   Effect.sync(() => {
     const emitted: Array<string> = []
-    const recordingWriter: MessageWriter = {
-      write: (level, text) =>
-        Effect.gen(function*() {
-          yield* ConsoleMessageWriter.write(level, text)
-          emitted.push(text)
-        }),
+    const stdout: TextWritable = {
+      write: (text) => {
+        emitted.push(text)
+      },
     }
     const probe = Effect.gen(function*() {
       const router = yield* makeMessageRouter({ cliFlags: { verbose: true } })
       yield* router.logInfo(ConsoleMessageId.Preamble, message)
     })
-    const exit = Effect.runSync(Effect.exit(probe.pipe(Effect.provideService(MessageWriter, recordingWriter))))
+    const exit = Effect.runSync(Effect.exit(probe.pipe(Effect.provide(consoleMessageWriterLayer({ stdout })))))
     return { exitedDefectively: Exit.isFailure(exit), emitted }
   })
 

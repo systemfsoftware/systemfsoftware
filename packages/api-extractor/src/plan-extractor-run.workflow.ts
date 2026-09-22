@@ -6,7 +6,7 @@ import * as Result from 'effect/Result'
 import type { MessageRouter } from './collector/message-router.js'
 import type { SourceMapper } from './collector/SourceMapper.js'
 import { Verbosity } from './collector/verbosity.schema.js'
-import type { CompilerState } from './compiler/compiler-state.resource.js'
+import type { CompilerState } from './compiler/typescript-program.js'
 import { ApiReportVariant } from './config/config-file.schema.js'
 import type { ExtractorConfig } from './config/extractor-config.js'
 

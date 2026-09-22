@@ -136,11 +136,11 @@ export class AstDeclaration extends Pipeable.Class {
    */
   public _notifyChildAttach(child: AstDeclaration): void {
     if (child.parent !== this) {
-      invariant('Invalid call to notifyChildAttach()')
+      throw invariant('Invalid call to notifyChildAttach()')
     }
 
     if (this.astSymbol.analyzed) {
-      invariant('_notifyChildAttach() called after analysis is already complete')
+      throw invariant('_notifyChildAttach() called after analysis is already complete')
     }
 
     this.#analyzedChildren.push(child)
@@ -185,7 +185,7 @@ export class AstDeclaration extends Pipeable.Class {
    */
   public _notifyReferencedAstEntity(referencedAstEntity: AstEntity): void {
     if (this.astSymbol.analyzed) {
-      invariant('_notifyReferencedAstEntity() called after analysis is already complete')
+      throw invariant('_notifyReferencedAstEntity() called after analysis is already complete')
     }
 
     for (let current: AstDeclaration | undefined = this; current; current = current.parent) {

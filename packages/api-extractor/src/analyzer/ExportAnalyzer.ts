@@ -4,6 +4,7 @@ import * as Pipeable from 'effect/Pipeable'
 
 import * as ts from 'typescript'
 
+import { InternalInvariantError, UnsupportedSyntaxError } from '../errors/index.js'
 import { invariant } from '../utils/invariant.js'
 
 import type { AstEntity } from './AstEntity.js'
@@ -138,10 +139,14 @@ export class ExportAnalyzer extends Pipeable.Class {
             })
 
             if (!astSymbol) {
-              throw new Error(
-                `Unsupported export ${JSON.stringify(exportedSymbol.name)}:\n` +
+              const unsupportedSourceFile = arbitraryDeclaration.getSourceFile()
+              const { line } = unsupportedSourceFile.getLineAndCharacterOfPosition(arbitraryDeclaration.getStart())
+              throw new UnsupportedSyntaxError({
+                file: unsupportedSourceFile.fileName,
+                line: line + 1,
+                message: `Unsupported export ${JSON.stringify(exportedSymbol.name)}:\n` +
                   SourceFileLocationFormatter.formatDeclaration(arbitraryDeclaration),
-              )
+              })
             }
 
             astModule.cachedExportedEntities.set(exportedSymbol.name, astSymbol)
@@ -242,7 +247,9 @@ export class ExportAnalyzer extends Pipeable.Class {
    */
   public fetchAstModuleExportInfo(entryPointAstModule: AstModule): IAstModuleExportInfo {
     if (entryPointAstModule.isExternal) {
-      throw new Error('fetchAstModuleExportInfo() is not supported for external modules')
+      throw new InternalInvariantError({
+        message: 'fetchAstModuleExportInfo() is not supported for external modules',
+      })
     }
 
     if (entryPointAstModule.astModuleExportInfo === undefined) {

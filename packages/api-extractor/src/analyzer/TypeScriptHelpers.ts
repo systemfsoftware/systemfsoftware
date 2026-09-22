@@ -139,7 +139,7 @@ export class TypeScriptHelpers extends Pipeable.Class {
         nodeWithModuleSpecifier.argument.kind !== ts.SyntaxKind.LiteralType ||
         (nodeWithModuleSpecifier.argument as ts.LiteralTypeNode).literal.kind !== ts.SyntaxKind.StringLiteral
       ) {
-        invariant(
+        throw invariant(
           `Invalid ImportTypeNode: ${nodeWithModuleSpecifier.getText()}\n` +
             SourceFileLocationFormatter.formatDeclaration(nodeWithModuleSpecifier),
         )

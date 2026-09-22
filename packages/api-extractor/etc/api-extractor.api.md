@@ -9,6 +9,7 @@ import { Data } from 'effect';
 import * as Effect$1 from 'effect/Effect';
 import { Effect } from 'effect';
 import * as FileSystem_2 from 'effect/FileSystem';
+import * as Layer from 'effect/Layer';
 import * as Option$1 from 'effect/Option';
 import * as Path from 'effect/Path';
 import * as Pipeable from 'effect/Pipeable';
@@ -28,11 +29,11 @@ export class AedocDefinitions extends Pipeable.Class {
     // (undocumented)
     static readonly betaDocumentation: TSDocTagDefinition;
     // (undocumented)
+    static createTsdocConfiguration(): TSDocConfiguration;
+    // (undocumented)
     static readonly internalRemarks: TSDocTagDefinition;
     // (undocumented)
     static readonly preapprovedTag: TSDocTagDefinition;
-    // (undocumented)
-    static get tsdocConfiguration(): TSDocConfiguration;
 }
 
 // @public (undocumented)
@@ -59,16 +60,6 @@ export class ApiReportGenerator extends Pipeable.Class {
     // (undocumented)
     static generateReviewFileContent(collector: Collector, reportVariant: ApiReportVariant): string;
 }
-
-// Warning: (ae-forgotten-export) The symbol "ApiReportMismatchError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ApiReportMismatchError extends ApiReportMismatchError_base {}
-
-// Warning: (ae-forgotten-export) The symbol "ApiReportMissingError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ApiReportMissingError extends ApiReportMissingError_base {}
 
 // @public (undocumented)
 export const ApiReportVariant: Schema.Literals<readonly ["public", "beta", "alpha", "complete"]>;
@@ -258,11 +249,6 @@ export abstract class AstSyntheticEntity extends AstEntity {}
 // @public (undocumented)
 export class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
 
-// Warning: (ae-forgotten-export) The symbol "CircularNamespaceReferenceError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class CircularNamespaceReferenceError extends CircularNamespaceReferenceError_base {}
-
 // @public (undocumented)
 export const CliFlags: Schema$1.Struct<{
     readonly quiet: Schema$1.optional<Schema$1.Boolean>;
@@ -340,6 +326,8 @@ export class Collector extends Pipeable.Class {
     tryGetEntityForNode(identifier: ts.Identifier | ts.ImportTypeNode): CollectorEntity | undefined;
     // (undocumented)
     tryGetEntityForSymbol(symbol: ts.Symbol): CollectorEntity | undefined;
+    // (undocumented)
+    readonly tsdocConfiguration: tsdoc.TSDocConfiguration;
     // (undocumented)
     readonly typeChecker: ts.TypeChecker;
     // (undocumented)
@@ -516,8 +504,13 @@ export const ConsoleMessageId: {
 // @public (undocumented)
 export type ConsoleMessageId = (typeof ConsoleMessageId)[keyof typeof ConsoleMessageId];
 
-// @public
-export const ConsoleMessageWriter: MessageWriter;
+// @public (undocumented)
+export interface ConsoleMessageWriterOptions {
+    // (undocumented)
+    readonly stderr?: TextWritable | undefined;
+    // (undocumented)
+    readonly stdout?: TextWritable | undefined;
+}
 
 // @public (undocumented)
 export const convertNewlines: (text: string, newlineKind: NewlineKind) => string;
@@ -748,7 +741,7 @@ export interface ExtractorConfig {
 }
 
 // @public (undocumented)
-export const ExtractorError: Schema.Union<readonly [typeof ConfigFileNotFound, typeof ConfigJsonSyntaxError, typeof ConfigSchemaValidationError, typeof UnresolvedTokenError, typeof CircularConfigExtendsError, typeof TsConfigReadError, typeof TypeScriptDiagnosticError, typeof UnsupportedSyntaxError, typeof CircularNamespaceReferenceError, typeof UnsupportedStarExportError, typeof ForgottenExportError, typeof ApiReportMismatchError, typeof ApiReportMissingError]>;
+export const ExtractorError: Schema.Union<readonly [typeof ConfigFileNotFound, typeof ConfigJsonSyntaxError, typeof ConfigSchemaValidationError, typeof UnresolvedTokenError, typeof CircularConfigExtendsError, typeof TsConfigReadError, typeof TsCompilerLoadError, typeof UnsupportedSyntaxError, typeof UnsupportedStarExportError]>;
 
 // @public (undocumented)
 export type ExtractorError = typeof ExtractorError.Type;
@@ -850,11 +843,6 @@ export { extractorVersion as version }
 
 // @public (undocumented)
 export const findConfigFileUpwards: (startFolder: string) => Effect$1.Effect<Option$1.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
-
-// Warning: (ae-forgotten-export) The symbol "ForgottenExportError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ForgottenExportError extends ForgottenExportError_base {}
 
 // @public (undocumented)
 export const formatAliasDeclarations: (alias: NamespaceAlias) => readonly string[];
@@ -1002,6 +990,11 @@ export enum IndentDocCommentScope {
     SpanAndChildren = 2
 }
 
+// Warning: (ae-forgotten-export) The symbol "InternalInvariantError_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class InternalInvariantError extends InternalInvariantError_base {}
+
 // @public (undocumented)
 export const invoke: (configFilePath: string, options?: ExtractorRunOptions) => Promise<ExtractorResult>;
 
@@ -1009,7 +1002,7 @@ export const invoke: (configFilePath: string, options?: ExtractorRunOptions) => 
 export const isConfigRecord: (u: Schema.Json) => u is MutableJsonRecord;
 
 // @public (undocumented)
-export const isExtractorError: <I>(input: I) => input is I & (ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TypeScriptDiagnosticError | UnsupportedSyntaxError | CircularNamespaceReferenceError | UnsupportedStarExportError | ForgottenExportError | ApiReportMismatchError | ApiReportMissingError);
+export const isExtractorError: <I>(input: I) => input is I & (ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError);
 
 // @public (undocumented)
 export interface ISourceLocation {
@@ -1054,8 +1047,11 @@ export const JsonUnknownFromString: Schema.fromJsonString<Schema.Codec<Schema.Js
 // @public (undocumented)
 export type JsonUnknownFromString = typeof JsonUnknownFromString.Type;
 
+// @public
+export const layer: (options?: ConsoleMessageWriterOptions) => Layer.Layer<MessageWriter>;
+
 // @public (undocumented)
-export const loadCompilerState: (options: CompilerStateOptions) => Effect$1.Effect<CompilerState, TsConfigReadError, Path.Path>;
+export const loadCompilerState: (options: CompilerStateOptions) => Effect$1.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError, Path.Path>;
 
 // @public (undocumented)
 export const loadExtractorConfig: (filePath: string) => Effect$1.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
@@ -1175,7 +1171,7 @@ export type MessagesConfig = typeof MessagesConfig.Type;
 // @public (undocumented)
 export interface MessageWriter {
     // (undocumented)
-    readonly write: (level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
+    readonly write: (level: LogLevel, text: string) => Effect$1.Effect<void, PlatformError>;
 }
 
 // @public (undocumented)
@@ -1384,6 +1380,12 @@ export class SyntaxHelpers extends Pipeable.Class {
     static makeCamelCaseIdentifier(input: string): string;
 }
 
+// @public
+export interface TextWritable {
+    // (undocumented)
+    readonly write: (text: string) => void;
+}
+
 // @public (undocumented)
 export interface TokenContext {
     // (undocumented)
@@ -1396,6 +1398,11 @@ export interface TokenContext {
 
 // @public (undocumented)
 export type TokenName = 'projectFolder' | 'packageName' | 'unscopedPackageName';
+
+// Warning: (ae-forgotten-export) The symbol "TsCompilerLoadError_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class TsCompilerLoadError extends TsCompilerLoadError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "TsConfigReadError_base" needs to be exported by the entry point index.d.ts
 //
@@ -1410,11 +1417,6 @@ export const TsdocMetadataConfig: Schema.Struct<{
 
 // @public (undocumented)
 export type TsdocMetadataConfig = typeof TsdocMetadataConfig.Type;
-
-// Warning: (ae-forgotten-export) The symbol "TypeScriptDiagnosticError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class TypeScriptDiagnosticError extends TypeScriptDiagnosticError_base {}
 
 // @public (undocumented)
 export const UNKNOWN_PACKAGE_NAME = "unknown-package";
