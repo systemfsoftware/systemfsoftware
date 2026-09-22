@@ -3,7 +3,6 @@ import * as Pipeable from 'effect/Pipeable'
 import { type INodePackageJson, PackageJsonLookup } from '../analyzer/package-json-lookup.js'
 import { AedocDefinitions } from '../model/index.js'
 import { invariant } from '../utils/invariant.js'
-import { ConsoleMessageId } from './message-router.js'
 import { PackageName } from './package-name.js'
 
 const hasDtsFileExtension = (filePath: string): boolean => /\.d(\.[^./\\]+)?\.(c|m)?ts$/i.test(filePath)
@@ -32,6 +31,7 @@ import { ApiItemMetadata, type IApiItemMetadataOptions } from './ApiItemMetadata
 import { CollectorEntity } from './CollectorEntity.js'
 import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
 import { ExtractorMessageId } from './extractor-message-id.js'
+import type { ExtractorMessageProperties } from './extractor-message.js'
 import type { MessageRouter } from './message-router.js'
 import { PackageDocComment } from './package-doc-comment.js'
 import type { SourceMapper } from './SourceMapper.js'
@@ -165,39 +165,42 @@ export class Collector extends Pipeable.Class {
   public addAnalyzerIssue(
     messageId: ExtractorMessageId,
     messageText: string,
-    _astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
-    _properties?: Readonly<Record<string, string | number | boolean>>,
+    astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
+    properties?: Readonly<Record<string, string | number | boolean>>,
   ): void {
-    Effect.runSync(this.messageRouter.logWarning(ConsoleMessageId.Preamble, `(${messageId}) ${messageText}`))
+    if (astDeclarationOrSymbol === undefined) {
+      return
+    }
+    this.messageRouter.addAnalyzerIssue(
+      messageId,
+      messageText,
+      astDeclarationOrSymbol,
+      properties as ExtractorMessageProperties | undefined,
+    )
   }
 
   public addAnalyzerIssueForPosition(
     messageId: ExtractorMessageId,
     messageText: string,
-    _sourceFile?: ts.SourceFile,
-    _pos?: number,
+    sourceFile: ts.SourceFile | undefined,
+    pos: number,
   ): void {
-    Effect.runSync(this.messageRouter.logWarning(ConsoleMessageId.Preamble, `(${messageId}) ${messageText}`))
+    if (sourceFile === undefined) {
+      return
+    }
+    this.messageRouter.addAnalyzerIssueForPosition(messageId, messageText, sourceFile, pos)
   }
 
   public addTsdocMessages(
     parserContext: tsdoc.ParserContext,
-    _sourceFile: ts.SourceFile,
-    _astDeclaration?: AstDeclaration,
+    sourceFile: ts.SourceFile,
+    astDeclaration?: AstDeclaration,
   ): void {
-    for (const message of parserContext.log.messages) {
-      Effect.runSync(
-        this.messageRouter.logWarning(
-          ConsoleMessageId.Preamble,
-          `(${message.messageId}) ${message.unformattedText}`,
-        ),
-      )
-    }
+    this.messageRouter.addTsdocMessages(parserContext, sourceFile, astDeclaration)
   }
 
   public addCompilerDiagnostic(diagnostic: ts.Diagnostic): void {
-    const text = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
-    Effect.runSync(this.messageRouter.logError(ConsoleMessageId.Preamble, text))
+    this.messageRouter.addCompilerDiagnostic(diagnostic)
   }
 
   /*a

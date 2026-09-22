@@ -33,6 +33,15 @@ export default defineConfig({
     // values, pre-ES2015 `this` aliasing in the ported Span serializer). The
     // repo's authored code carries none of these relaxations.
     {
+      files: ['src/compiler/compiler-state.ts'],
+      rules: {
+        'typescript/consistent-type-assertions': 'off',
+        'typescript/no-unsafe-assignment': 'off',
+        'typescript/no-unsafe-return': 'off',
+        'typescript/no-unsafe-call': 'off',
+      },
+    },
+    {
       files: ['src/analyzer/AstDeclaration.ts'],
       rules: {
         'typescript/no-this-alias': 'off',

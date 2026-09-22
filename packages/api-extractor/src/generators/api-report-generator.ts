@@ -16,6 +16,7 @@ import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
 import { Collector } from '../collector/Collector.js'
 import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
+import { ExtractorMessage } from '../collector/extractor-message.js'
 import type { ApiReportVariant } from '../config/config-file.schema.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
@@ -135,11 +136,25 @@ const emitSymbolDeclarations = (
   astEntity: AstSymbol,
   reportVariant: ApiReportVariant,
   context: IContext,
+  exportsToEmit: Map<string, { readonly associatedMessages: ExtractorMessage[] }>,
 ): void => {
   for (const astDeclaration of astEntity.astDeclarations) {
+    const fetchedMessages = collector.messageRouter.fetchAssociatedMessagesForReviewFile(astDeclaration)
+
+    const messagesToReport: ExtractorMessage[] = []
+    for (const message of fetchedMessages) {
+      const exportName = message.properties.exportName
+      const exportToEmit = exportName === undefined ? undefined : exportsToEmit.get(exportName)
+      if (exportToEmit !== undefined) {
+        exportToEmit.associatedMessages.push(message)
+        continue
+      }
+      messagesToReport.push(message)
+    }
+
     if (_shouldIncludeDeclaration(collector, astDeclaration, reportVariant)) {
       writer.ensureSkippedLine()
-      writer.write(_getAedocSynopsis(collector, astDeclaration))
+      writer.write(_getAedocSynopsis(collector, astDeclaration, messagesToReport))
 
       const span = new Span(astDeclaration.declaration)
       const apiItemMetadata = collector.fetchApiItemMetadata(astDeclaration)
@@ -175,23 +190,32 @@ const emitEntity = (
     return
   }
 
-  const exportsToEmit: string[] = []
+  const exportsToEmit = new Map<
+    string,
+    { readonly exportName: string; readonly associatedMessages: ExtractorMessage[] }
+  >()
   for (const exportName of entity.exportNames) {
     if (!entity.shouldInlineExport) {
-      exportsToEmit.push(exportName)
+      exportsToEmit.set(exportName, { exportName, associatedMessages: [] })
     }
   }
 
   if (astEntity instanceof AstSymbol) {
-    emitSymbolDeclarations(writer, collector, entity, astEntity, reportVariant, context)
+    emitSymbolDeclarations(writer, collector, entity, astEntity, reportVariant, context, exportsToEmit)
   }
 
   if (astEntity instanceof AstNamespaceImport) {
     emitNamespaceEntity(writer, collector, entity, astEntity)
   }
 
-  for (const exportName of exportsToEmit) {
-    DtsEmitHelpers.emitNamedExport(writer, exportName, entity)
+  for (const exportToEmit of exportsToEmit.values()) {
+    if (exportToEmit.associatedMessages.length > 0) {
+      writer.ensureSkippedLine()
+      for (const message of exportToEmit.associatedMessages) {
+        _writeLineAsComments(writer, 'Warning: ' + message.formatMessageWithoutLocation())
+      }
+    }
+    DtsEmitHelpers.emitNamedExport(writer, exportToEmit.exportName, entity)
   }
   writer.ensureSkippedLine()
 }
@@ -225,6 +249,19 @@ export class ApiReportGenerator extends Pipeable.Class {
     }
 
     DtsEmitHelpers.emitStarExports(writer, collector)
+
+    const unassociatedMessages = collector.messageRouter.fetchUnassociatedMessagesForReviewFile()
+    if (unassociatedMessages.length > 0) {
+      writer.ensureSkippedLine()
+      _writeLineAsComments(writer, 'Warnings were encountered during analysis:')
+      _writeLineAsComments(writer, '')
+      for (const message of unassociatedMessages) {
+        _writeLineAsComments(
+          writer,
+          message.formatMessageWithLocation(collector.workingPackage.packageFolder),
+        )
+      }
+    }
 
     if (collector.workingPackage.tsdocComment === undefined) {
       writer.ensureSkippedLine()
@@ -386,7 +423,8 @@ function _modifySpan(
           }
 
           if (!nextInsideTypeLiteral) {
-            const aedocSynopsis = _getAedocSynopsis(collector, childAstDeclaration)
+            const messagesToReport = collector.messageRouter.fetchAssociatedMessagesForReviewFile(childAstDeclaration)
+            const aedocSynopsis = _getAedocSynopsis(collector, childAstDeclaration, messagesToReport)
             child.modification.prefix = aedocSynopsis + child.modification.prefix
           }
         }
@@ -491,11 +529,16 @@ const collectCustomTags = (
 function _getAedocSynopsis(
   collector: Collector,
   astDeclaration: AstDeclaration,
+  messagesToReport: readonly ExtractorMessage[] = [],
 ): string {
   const writer = new IndentedWriter()
 
   if (collector.isAncillaryDeclaration(astDeclaration)) {
     return ''
+  }
+
+  for (const message of messagesToReport) {
+    _writeLineAsComments(writer, 'Warning: ' + message.formatMessageWithoutLocation())
   }
 
   const footerParts: string[] = []
@@ -537,6 +580,10 @@ function _getAedocSynopsis(
   }
 
   if (footerParts.length > 0) {
+    if (messagesToReport.length > 0) {
+      _writeLineAsComments(writer, '')
+    }
+
     _writeLineAsComments(writer, footerParts.join(' '))
   }
 

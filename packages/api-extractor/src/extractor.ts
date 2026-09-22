@@ -27,7 +27,6 @@ import type * as Ts from 'typescript'
 import { Collector } from './collector/Collector.js'
 import { ConsoleMessageId, makeMessageRouter, MessageWriter } from './collector/message-router.js'
 import type { MessageRouter } from './collector/message-router.js'
-import type { LogLevel } from './collector/message-router.schema.js'
 import { SourceMapper } from './collector/SourceMapper.js'
 import type { CliFlags } from './collector/verbosity.schema.js'
 import type { CompilerStateOptions } from './compiler/compiler-state.js'
@@ -82,62 +81,35 @@ export interface ExtractorRunOptions {
   readonly cliFlags?: CliFlags
 }
 
-/** What a run counts as it emits messages. */
-interface MessageCounters {
-  errorCount: number
-  warningCount: number
-}
-
 /** The generator options `runGenerators` accepts (`GeneratorOptions` in U7's module). */
 interface GeneratorRunOptions {
-  readonly localBuild?: boolean
-  readonly printApiReportDiff?: boolean
+  readonly localBuild: boolean | undefined
+  readonly printApiReportDiff: boolean | undefined
 }
 
-const EMPTY_COUNTERS: MessageCounters = { errorCount: 0, warningCount: 0 }
-
-const bumpError = (counters: MessageCounters): void => {
-  counters.errorCount += 1
+interface MessageRouterCounters {
+  readonly errorCount: number
+  readonly warningCount: number
 }
 
-const bumpWarning = (counters: MessageCounters): void => {
-  counters.warningCount += 1
-}
-
-const ignoreLevel = (): void => undefined
-
-/**
- * How each log level moves the counters. Errors and warnings are admitted by
- * every verbosity, so counting at the writer is counting the whole run.
- */
-const counterFor: Record<LogLevel, (counters: MessageCounters) => void> = {
-  error: bumpError,
-  warning: bumpWarning,
-  info: ignoreLevel,
-  verbose: ignoreLevel,
-  none: ignoreLevel,
-}
-
-const countLevel = (counters: MessageCounters, level: LogLevel): Effect.Effect<void> =>
-  Effect.sync(() => counterFor[level](counters))
-
-/**
- * The writer the run's router emits through: counts the message, then displays
- * it. Nothing is displayed unless the router admitted the message, so a silent
- * run writes nothing at all.
- */
-const countingWriter = (
-  counters: MessageCounters,
-  writer: MessageWriter,
-): MessageWriter => ({
-  write: (level, text) => Effect.andThen(countLevel(counters, level), writer.write(level, text)),
+const routerCountersOf = (router: MessageRouter): MessageRouterCounters => ({
+  errorCount: router.errorCount(),
+  warningCount: router.warningCount(),
 })
 
 const buildRouter = (
   config: ExtractorConfig,
   options: ExtractorRunOptions,
+  sourceMapper: SourceMapper,
 ): Effect.Effect<MessageRouter, never, MessageWriter> =>
-  makeMessageRouter({ cliFlags: options.cliFlags ?? {}, configQuiet: config.quiet })
+  makeMessageRouter(
+    { cliFlags: options.cliFlags ?? {}, configQuiet: config.quiet },
+    {
+      messagesConfig: config.messages,
+      workingPackageFolder: config.projectFolder,
+      sourceMapper,
+    },
+  )
 
 const bannerText = (): string => `api-extractor ${extractorVersion} - https://api-extractor.com/`
 
@@ -172,22 +144,15 @@ const compilerOptionsOf = (
   ...optionalCompilerFolder(options.typescriptCompilerFolder),
 })
 
-const optionalLocalBuild = (localBuild: boolean | undefined): { readonly localBuild?: boolean } =>
-  localBuild === undefined ? {} : { localBuild }
-
-const optionalPrintDiff = (
-  printApiReportDiff: boolean | undefined,
-): { readonly printApiReportDiff?: boolean } => printApiReportDiff === undefined ? {} : { printApiReportDiff }
-
 const generatorOptionsOf = (options: ExtractorRunOptions): GeneratorRunOptions => ({
-  ...optionalLocalBuild(options.localBuild),
-  ...optionalPrintDiff(options.printApiReportDiff),
+  localBuild: options.localBuild,
+  printApiReportDiff: options.printApiReportDiff,
 })
 
-const succeededOf = (counters: MessageCounters, localBuild: boolean | undefined): boolean =>
+const succeededOf = (counters: MessageRouterCounters, localBuild: boolean | undefined): boolean =>
   localBuild === true ? counters.errorCount === 0 : counters.errorCount + counters.warningCount === 0
 
-const resultOf = (counters: MessageCounters, localBuild: boolean | undefined): ExtractorResult => ({
+const resultOf = (counters: MessageRouterCounters, localBuild: boolean | undefined): ExtractorResult => ({
   succeeded: succeededOf(counters, localBuild),
   errorCount: counters.errorCount,
   warningCount: counters.warningCount,
@@ -201,12 +166,13 @@ const collectSymbols = (
   config: ExtractorConfig,
   router: MessageRouter,
   program: Ts.Program,
+  sourceMapper: SourceMapper,
 ): Collector => {
   const collector = new Collector({
     program,
     extractorConfig: config,
     messageRouter: router,
-    sourceMapper: new SourceMapper(),
+    sourceMapper,
   })
   collector.analyze()
   DocCommentEnhancer.analyze(collector)
@@ -218,14 +184,15 @@ const compileAndGenerate = (
   config: ExtractorConfig,
   options: ExtractorRunOptions,
   router: MessageRouter,
-  counters: MessageCounters,
+  sourceMapper: SourceMapper,
 ): Effect.Effect<ExtractorResult, ExtractorError | PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const compilerState = yield* loadCompilerState(compilerOptionsOf(config, options))
     yield* announce(router, ConsoleMessageId.Preamble, preambleText(compilerState.compiler.version))
-    const collector = yield* Effect.sync(() => collectSymbols(config, router, compilerState.program))
+    const collector = yield* Effect.sync(() => collectSymbols(config, router, compilerState.program, sourceMapper))
     yield* runGenerators(collector, config, router, generatorOptionsOf(options))
-    return resultOf(counters, options.localBuild)
+    yield* router.handleRemainingNonConsoleMessages
+    return resultOf(routerCountersOf(router), options.localBuild)
   })
 
 /**
@@ -244,14 +211,14 @@ export const runEffect = (
   FileSystem.FileSystem | Path.Path | MessageWriter
 > =>
   Effect.gen(function*() {
-    const counters = { ...EMPTY_COUNTERS }
     const config = yield* loadExtractorConfig(configFilePath)
     const writer = yield* MessageWriter
-    const router = yield* buildRouter(config, options).pipe(
-      Effect.provideService(MessageWriter, countingWriter(counters, writer)),
+    const sourceMapper = new SourceMapper()
+    const router = yield* buildRouter(config, options, sourceMapper).pipe(
+      Effect.provideService(MessageWriter, writer),
     )
     yield* announceStart(router, config)
-    const result = yield* compileAndGenerate(config, options, router, counters)
+    const result = yield* compileAndGenerate(config, options, router, sourceMapper)
     if (result.succeeded) {
       yield* announceSuccess(router)
     }

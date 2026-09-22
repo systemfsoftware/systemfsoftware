@@ -35,10 +35,12 @@ const resolveFixturePath = (relative: string): Effect.Effect<string, never, Path
 
 const analyzeFixturePackage = (configPath: string) =>
   Effect.gen(function*() {
+    const config = yield* loadExtractorConfig(configPath)
     const recordedLogs: RecordedLog[] = []
-    const router = yield* makeMessageRouter({
-      cliFlags: { verbose: true },
-    }).pipe(
+    const router = yield* makeMessageRouter(
+      { cliFlags: { verbose: true } },
+      { messagesConfig: config.messages, workingPackageFolder: config.projectFolder },
+    ).pipe(
       Effect.provideService(MessageWriter, {
         write: (level, text) =>
           Effect.sync(() => {
@@ -47,7 +49,6 @@ const analyzeFixturePackage = (configPath: string) =>
       }),
     )
 
-    const config = yield* loadExtractorConfig(configPath)
     const compilerState = yield* loadCompilerState({
       projectFolder: config.projectFolder,
       tsconfigFilePath: config.tsconfigFilePath,
@@ -66,6 +67,7 @@ const analyzeFixturePackage = (configPath: string) =>
     collector.analyze()
     DocCommentEnhancer.analyze(collector)
     ValidationEnhancer.analyze(collector)
+    yield* router.handleRemainingNonConsoleMessages
 
     return {
       collector,

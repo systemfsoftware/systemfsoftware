@@ -2,7 +2,7 @@ import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
 import type * as Ts from 'typescript'
 
-import { TsConfigReadError, TypeScriptDiagnosticError } from '../errors/index.js'
+import { TsConfigReadError } from '../errors/index.js'
 
 export interface CompilerStateOptions {
   readonly projectFolder: string
@@ -20,8 +20,36 @@ export interface CompilerState {
   readonly entryPoints: readonly string[]
 }
 
-const loadTypeScript = (): Effect.Effect<typeof Ts, TsConfigReadError> =>
-  Effect.tryPromise({
+/**
+ * Resolves TypeScript from the package under analysis, mirroring upstream: the
+ * engine must analyze with the consumer's own compiler (whose standard library —
+ * and therefore global-name set — matches the one that generated the package's
+ * committed reports), not with whatever copy the engine itself shipped with.
+ */
+const loadTypeScript = (
+  consumerPackageJsonPath: string,
+): Effect.Effect<typeof Ts, TsConfigReadError> => {
+  const moduleBuiltin = process.getBuiltinModule('module')
+  const requireFromConsumer = moduleBuiltin.createRequire(consumerPackageJsonPath)
+  const candidates: readonly string[] = ['typescript/lib/typescript.js', 'typescript']
+  for (const candidate of candidates) {
+    let entry: string | undefined
+    try {
+      entry = requireFromConsumer.resolve(candidate)
+    } catch {
+      continue
+    }
+    let mod: typeof Ts | undefined
+    try {
+      mod = requireFromConsumer(entry)
+    } catch {
+      mod = undefined
+    }
+    if (mod !== undefined && typeof mod.readConfigFile === 'function') {
+      return Effect.succeed(mod)
+    }
+  }
+  return Effect.tryPromise({
     try: () => import('typescript'),
     catch: (cause) =>
       new TsConfigReadError({
@@ -29,6 +57,7 @@ const loadTypeScript = (): Effect.Effect<typeof Ts, TsConfigReadError> =>
         cause,
       }),
   })
+}
 
 const readTsConfig = (
   typescript: typeof Ts,
@@ -131,48 +160,12 @@ const createCompilerHost = (
   return compilerHost
 }
 
-const mapDiagnostic = (
-  typescript: typeof Ts,
-  d: Ts.Diagnostic,
-): { readonly file?: string; readonly line?: number; readonly message: string } => {
-  const message = typescript.flattenDiagnosticMessageText(d.messageText, '\n')
-  if (d.file === undefined || d.start === undefined) {
-    return { message }
-  }
-  const { line } = d.file.getLineAndCharacterOfPosition(d.start)
-  return {
-    file: d.file.fileName,
-    line: line + 1,
-    message,
-  }
-}
-
-const collectDiagnostics = (
-  typescript: typeof Ts,
-  program: Ts.Program,
-): Effect.Effect<void, TypeScriptDiagnosticError> => {
-  const optionsDiags = program.getOptionsDiagnostics()
-  const globalDiags = program.getGlobalDiagnostics()
-  const allDiags = [...optionsDiags, ...globalDiags]
-  const errorDiags = allDiags.filter((d) => d.category === typescript.DiagnosticCategory.Error)
-
-  if (errorDiags.length === 0) {
-    return Effect.void
-  }
-
-  return Effect.fail(
-    new TypeScriptDiagnosticError({
-      diagnostics: errorDiags.map((d) => mapDiagnostic(typescript, d)),
-    }),
-  )
-}
-
 export const loadCompilerState = (
   options: CompilerStateOptions,
-): Effect.Effect<CompilerState, TsConfigReadError | TypeScriptDiagnosticError, Path.Path> =>
+): Effect.Effect<CompilerState, TsConfigReadError, Path.Path> =>
   Effect.gen(function*() {
     const path = yield* Path.Path
-    const typescript = yield* loadTypeScript()
+    const typescript = yield* loadTypeScript(path.join(options.projectFolder, 'package.json'))
     const commandLine = yield* readTsConfig(typescript, path, options.tsconfigFilePath)
 
     delete commandLine.options.outDir
@@ -190,8 +183,6 @@ export const loadCompilerState = (
     const analysisFiles = collectAnalysisFiles(inputFiles)
     const host = createCompilerHost(typescript, path, commandLine, options.typescriptCompilerFolder)
     const program = typescript.createProgram(analysisFiles, commandLine.options, host)
-
-    yield* collectDiagnostics(typescript, program)
 
     return {
       compiler: typescript,

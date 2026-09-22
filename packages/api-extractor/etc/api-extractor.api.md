@@ -5,6 +5,7 @@
 ```ts
 
 import * as Context from 'effect/Context';
+import { Data } from 'effect';
 import * as Effect$1 from 'effect/Effect';
 import * as FileSystem_2 from 'effect/FileSystem';
 import * as Option_2 from 'effect/Option';
@@ -12,8 +13,8 @@ import * as Path from 'effect/Path';
 import * as Pipeable from 'effect/Pipeable';
 import { PlatformError } from 'effect/PlatformError';
 import * as Result from 'effect/Result';
+import * as Schema$1 from 'effect/Schema';
 import { Schema } from 'effect';
-import * as Schema_2 from 'effect/Schema';
 import * as ts from 'typescript';
 import * as tsdoc from '@microsoft/tsdoc';
 import { TSDocConfiguration } from '@microsoft/tsdoc';
@@ -57,9 +58,13 @@ export class ApiReportGenerator extends Pipeable.Class {
     static generateReviewFileContent(collector: Collector, reportVariant: ApiReportVariant): string;
 }
 
+// Warning: (ae-forgotten-export) The symbol "ApiReportMismatchError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class ApiReportMismatchError extends ApiReportMismatchError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "ApiReportMissingError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class ApiReportMissingError extends ApiReportMissingError_base {}
 
@@ -72,6 +77,8 @@ export type ApiReportVariant = typeof ApiReportVariant.Type;
 // @public (undocumented)
 export class AstDeclaration extends Pipeable.Class {
     constructor(options: IAstDeclarationOptions);
+    // Warning: (ae-forgotten-export) The symbol "ApiItemMetadata" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     apiItemMetadata: ApiItemMetadata;
     // (undocumented)
@@ -80,6 +87,8 @@ export class AstDeclaration extends Pipeable.Class {
     get children(): ReadonlyArray<AstDeclaration>;
     // (undocumented)
     readonly declaration: ts.Declaration;
+    // Warning: (ae-forgotten-export) The symbol "DeclarationMetadata" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     declarationMetadata: DeclarationMetadata;
     // (undocumented)
@@ -213,12 +222,15 @@ export class AstSymbol extends AstEntity {
     readonly parentAstSymbol: AstSymbol | undefined;
     // (undocumented)
     readonly rootAstSymbol: AstSymbol;
+    // Warning: (ae-forgotten-export) The symbol "SymbolMetadata" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     symbolMetadata: SymbolMetadata;
 }
 
 // @public (undocumented)
 export class AstSymbolTable extends Pipeable.Class {
+    // Warning: (ae-forgotten-export) The symbol "PackageJsonLookup" needs to be exported by the entry point index.d.ts
     constructor(program: ts.Program, typeChecker: ts.TypeChecker, packageJsonLookup: PackageJsonLookup, bundledPackageNames: ReadonlySet<string>, messageRouter: MessageRouter);
     // (undocumented)
     analyze(astEntity: AstEntity): void;
@@ -239,17 +251,21 @@ export class AstSymbolTable extends Pipeable.Class {
 // @public (undocumented)
 export abstract class AstSyntheticEntity extends AstEntity {}
 
+// Warning: (ae-forgotten-export) The symbol "CircularConfigExtendsError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "CircularNamespaceReferenceError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class CircularNamespaceReferenceError extends CircularNamespaceReferenceError_base {}
 
 // @public (undocumented)
-export const CliFlags: Schema_2.Struct<{
-    readonly quiet: Schema_2.optional<Schema_2.Boolean>;
-    readonly verbose: Schema_2.optional<Schema_2.Boolean>;
-    readonly diagnostics: Schema_2.optional<Schema_2.Boolean>;
+export const CliFlags: Schema$1.Struct<{
+    readonly quiet: Schema$1.optional<Schema$1.Boolean>;
+    readonly verbose: Schema$1.optional<Schema$1.Boolean>;
+    readonly diagnostics: Schema$1.optional<Schema$1.Boolean>;
 }>;
 
 // @public (undocumented)
@@ -258,16 +274,20 @@ export type CliFlags = typeof CliFlags.Type;
 // @public (undocumented)
 export class Collector extends Pipeable.Class {
     constructor(options: ICollectorOptions);
+    // Warning: (ae-forgotten-export) The symbol "ExtractorMessageId" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    addAnalyzerIssue(messageId: ExtractorMessageId, messageText: string, _astDeclarationOrSymbol?: AstDeclaration | AstSymbol, _properties?: Readonly<Record<string, string | number | boolean>>): void;
+    addAnalyzerIssue(messageId: ExtractorMessageId, messageText: string, astDeclarationOrSymbol?: AstDeclaration | AstSymbol, properties?: Readonly<Record<string, string | number | boolean>>): void;
     // (undocumented)
-    addAnalyzerIssueForPosition(messageId: ExtractorMessageId, messageText: string, _sourceFile?: ts.SourceFile, _pos?: number): void;
+    addAnalyzerIssueForPosition(messageId: ExtractorMessageId, messageText: string, sourceFile: ts.SourceFile | undefined, pos: number): void;
     // (undocumented)
     addCompilerDiagnostic(diagnostic: ts.Diagnostic): void;
     // (undocumented)
-    addTsdocMessages(parserContext: tsdoc.ParserContext, _sourceFile: ts.SourceFile, _astDeclaration?: AstDeclaration): void;
+    addTsdocMessages(parserContext: tsdoc.ParserContext, sourceFile: ts.SourceFile, astDeclaration?: AstDeclaration): void;
     // (undocumented)
     analyze(): void;
+    // Warning: (ae-forgotten-export) The symbol "AstReferenceResolver" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly astReferenceResolver: AstReferenceResolver;
     // (undocumented)
@@ -294,6 +314,8 @@ export class Collector extends Pipeable.Class {
     getOverloadIndex(astDeclaration: AstDeclaration): number;
     // (undocumented)
     static getSortKeyIgnoringUnderscore(identifier: string | undefined): string;
+    // Warning: (ae-forgotten-export) The symbol "IGlobalVariableAnalyzer" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly globalVariableAnalyzer: IGlobalVariableAnalyzer;
     // (undocumented)
@@ -453,12 +475,18 @@ export const ConfigFile: Schema.Struct<{
 // @public (undocumented)
 export type ConfigFile = typeof ConfigFile.Type;
 
+// Warning: (ae-forgotten-export) The symbol "ConfigFileNotFound_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class ConfigFileNotFound extends ConfigFileNotFound_base {}
 
+// Warning: (ae-forgotten-export) The symbol "ConfigJsonSyntaxError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class ConfigJsonSyntaxError extends ConfigJsonSyntaxError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "ConfigSchemaValidationError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class ConfigSchemaValidationError extends ConfigSchemaValidationError_base {}
 
@@ -596,6 +624,8 @@ export type DocModelConfig = typeof DocModelConfig.Type;
 
 // @public (undocumented)
 export class DtsEmitHelpers extends Pipeable.Class {
+    // Warning: (ae-forgotten-export) The symbol "IndentedWriter" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     static emitImport(writer: IndentedWriter, collectorEntity: CollectorEntity, astImport: AstImport): void;
     // (undocumented)
@@ -657,6 +687,8 @@ export class ExportAnalyzer extends Pipeable.Class {
     constructor(program: ts.Program, typeChecker: ts.TypeChecker, bundledPackageNames: ReadonlySet<string>, astSymbolTable: IAstSymbolTable);
     // (undocumented)
     fetchAstModuleExportInfo(entryPointAstModule: AstModule): IAstModuleExportInfo;
+    // Warning: (ae-forgotten-export) The symbol "IAstModuleReference" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     fetchAstModuleFromSourceFile(sourceFile: ts.SourceFile, moduleReference: IAstModuleReference | undefined, isExternal: boolean): AstModule;
     // (undocumented)
@@ -750,6 +782,8 @@ export { extractorVersion as version }
 // @public (undocumented)
 export const findConfigFileUpwards: (startFolder: string) => Effect$1.Effect<Option_2.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
 
+// Warning: (ae-forgotten-export) The symbol "ForgottenExportError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class ForgottenExportError extends ForgottenExportError_base {}
 
@@ -924,6 +958,8 @@ export interface IWorkingPackageOptions {
     entryPointSourceFile: ts.SourceFile;
     // (undocumented)
     packageFolder: string;
+    // Warning: (ae-forgotten-export) The symbol "INodePackageJson" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     packageJson: INodePackageJson;
 }
@@ -950,19 +986,19 @@ export const JsonUnknownFromString: Schema.fromJsonString<Schema.Codec<Schema.Js
 export type JsonUnknownFromString = typeof JsonUnknownFromString.Type;
 
 // @public (undocumented)
-export const loadCompilerState: (options: CompilerStateOptions) => Effect$1.Effect<CompilerState, TsConfigReadError | TypeScriptDiagnosticError, Path.Path>;
+export const loadCompilerState: (options: CompilerStateOptions) => Effect$1.Effect<CompilerState, TsConfigReadError, Path.Path>;
 
 // @public (undocumented)
 export const loadExtractorConfig: (filePath: string) => Effect$1.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
-export const LogLevel: Schema_2.Literals<readonly ["error", "warning", "info", "verbose", "none"]>;
+export const LogLevel: Schema$1.Literals<readonly ["error", "warning", "info", "verbose", "none"]>;
 
 // @public (undocumented)
 export type LogLevel = typeof LogLevel.Type;
 
 // @public (undocumented)
-export const makeMessageRouter: (request: VerbosityRequest) => Effect$1.Effect<MessageRouter, never, MessageWriter>;
+export const makeMessageRouter: (request: VerbosityRequest, options?: MessageRouterOptions) => Effect$1.Effect<MessageRouter, never, MessageWriter>;
 
 // @public (undocumented)
 export const mergeConfigObjects: (base: MutableJsonRecord, derived: MutableJsonRecord) => MutableJsonRecord;
@@ -993,6 +1029,26 @@ export type MessageReportingTable = typeof MessageReportingTable.Type;
 
 // @public (undocumented)
 export interface MessageRouter {
+    // Warning: (ae-forgotten-export) The symbol "ExtractorMessageProperties" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly addAnalyzerIssue: (messageId: ExtractorMessageId | string, messageText: string, astDeclarationOrSymbol: AstDeclaration | AstSymbol, properties?: ExtractorMessageProperties) => void;
+    // Warning: (ae-forgotten-export) The symbol "ExtractorMessage" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly addAnalyzerIssueForPosition: (messageId: ExtractorMessageId | string, messageText: string, sourceFile: ts.SourceFile, pos: number, properties?: ExtractorMessageProperties) => ExtractorMessage;
+    // (undocumented)
+    readonly addCompilerDiagnostic: (diagnostic: ts.Diagnostic) => void;
+    // (undocumented)
+    readonly addTsdocMessages: (parserContext: tsdoc.ParserContext, sourceFile: ts.SourceFile, astDeclaration?: AstDeclaration) => void;
+    // (undocumented)
+    readonly errorCount: () => number;
+    // (undocumented)
+    readonly fetchAssociatedMessagesForReviewFile: (astDeclaration: AstDeclaration) => readonly ExtractorMessage[];
+    // (undocumented)
+    readonly fetchUnassociatedMessagesForReviewFile: () => readonly ExtractorMessage[];
+    // (undocumented)
+    readonly handleRemainingNonConsoleMessages: Effect$1.Effect<void, PlatformError>;
     // (undocumented)
     readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
@@ -1010,7 +1066,21 @@ export interface MessageRouter {
     // (undocumented)
     readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
+    readonly messages: () => readonly ExtractorMessage[];
+    // (undocumented)
     readonly verbosity: Verbosity;
+    // (undocumented)
+    readonly warningCount: () => number;
+}
+
+// @public (undocumented)
+export interface MessageRouterOptions {
+    // (undocumented)
+    readonly messagesConfig?: MessagesConfig | undefined;
+    // (undocumented)
+    readonly sourceMapper?: SourceMapper | undefined;
+    // (undocumented)
+    readonly workingPackageFolder?: string | undefined;
 }
 
 // @public (undocumented)
@@ -1249,6 +1319,8 @@ export interface TokenContext {
 // @public (undocumented)
 export type TokenName = 'projectFolder' | 'packageName' | 'unscopedPackageName';
 
+// Warning: (ae-forgotten-export) The symbol "TsConfigReadError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class TsConfigReadError extends TsConfigReadError_base {}
 
@@ -1261,21 +1333,29 @@ export const TsdocMetadataConfig: Schema.Struct<{
 // @public (undocumented)
 export type TsdocMetadataConfig = typeof TsdocMetadataConfig.Type;
 
+// Warning: (ae-forgotten-export) The symbol "TypeScriptDiagnosticError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class TypeScriptDiagnosticError extends TypeScriptDiagnosticError_base {}
 
 // @public (undocumented)
 export const UNKNOWN_PACKAGE_NAME = "unknown-package";
 
+// Warning: (ae-forgotten-export) The symbol "UnresolvedTokenError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class UnresolvedTokenError extends UnresolvedTokenError_base {}
 
 // @public (undocumented)
 export const unscopedPackageName: (packageName: string) => string;
 
+// Warning: (ae-forgotten-export) The symbol "UnsupportedStarExportError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class UnsupportedStarExportError extends UnsupportedStarExportError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "UnsupportedSyntaxError_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export class UnsupportedSyntaxError extends UnsupportedSyntaxError_base {}
 
@@ -1286,19 +1366,19 @@ export class ValidationEnhancer extends Pipeable.Class {
 }
 
 // @public (undocumented)
-export const Verbosity: Schema_2.Literals<readonly ["silent", "normal", "verbose", "diagnostics"]>;
+export const Verbosity: Schema$1.Literals<readonly ["silent", "normal", "verbose", "diagnostics"]>;
 
 // @public (undocumented)
 export type Verbosity = typeof Verbosity.Type;
 
 // @public (undocumented)
-export const VerbosityRequest: Schema_2.Struct<{
-    readonly cliFlags: Schema_2.Struct<{
-        readonly quiet: Schema_2.optional<Schema_2.Boolean>;
-        readonly verbose: Schema_2.optional<Schema_2.Boolean>;
-        readonly diagnostics: Schema_2.optional<Schema_2.Boolean>;
+export const VerbosityRequest: Schema$1.Struct<{
+    readonly cliFlags: Schema$1.Struct<{
+        readonly quiet: Schema$1.optional<Schema$1.Boolean>;
+        readonly verbose: Schema$1.optional<Schema$1.Boolean>;
+        readonly diagnostics: Schema$1.optional<Schema$1.Boolean>;
     }>;
-    readonly configQuiet: Schema_2.optional<Schema_2.Boolean>;
+    readonly configQuiet: Schema$1.optional<Schema$1.Boolean>;
 }>;
 
 // @public (undocumented)
