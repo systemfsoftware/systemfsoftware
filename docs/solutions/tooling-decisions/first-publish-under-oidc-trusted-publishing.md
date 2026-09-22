@@ -140,12 +140,27 @@ ships unattested. Every subsequent version is published from CI with
 provenance. One unattested version per package is the accepted cost of not
 reintroducing an `NPM_TOKEN` secret for a once-per-package operation.
 
-### Bulk mode
+### Bulk mode, and the two-factor challenge the read costs
 
-The first `npm trust` call triggers 2FA and offers a "skip 2FA for the next 5
-minutes" option on npmjs.com. With a 2-second sleep between calls, roughly 80
-packages fit in that window — enough to bootstrap the full unpublished set in
-one sitting.
+Reading a configuration is not free. The registry demands `npm-otp` on every
+`GET /-/package/<pkg>/trust`, and the npm CLI answers such a challenge only when
+its stdin **and** stdout are terminals — its `otplease` rethrows whenever either
+is not, so a captured stdout makes the refusal permanent, not promptable. The
+bootstrap therefore reads through a captured stdout (it parses the JSON) and pays
+once per run: the first trust call of a run is an interactive `npm trust list`,
+whose completion opens the account-wide "skip 2FA for the next 5 minutes" window
+that the captured reads then ride. Concurrent chains share that one prompt, and a
+window that failed to open is released so a later package can offer it again.
+
+**A configuration that cannot be read is unreadable, and unreadable is not
+absent.** Collapsing "the registry would not tell us" into "nothing is
+configured" is what makes a blind write look justified: the registry allows one
+trusted publisher per package, so a second `npm trust github` for a package that
+already carries one is rejected with 409, and a run fails for a package already
+in the state CI needs. The read-before-write is what keeps a re-run safe, and a
+re-run is expected — registering does not attest an already-published version
+(see "The debut version carries no provenance attestation"), so the same package
+is picked up again until its next version ships from CI.
 
 ## Why This Matters
 
