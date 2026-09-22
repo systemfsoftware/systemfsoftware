@@ -4,7 +4,7 @@ applies_when:
   - authoring combinators and methods on resource builders
   - implementing fluent APIs in capability packages
   - integrating builders with Effect pipe workflows
-tags: [resource-algebra, pipeable, dual, combinators, effect-style]
+tags: [cell, pipeable, dual, combinators]
 ---
 
 In accordance with `skill://gcanti-tim-smart-style` (Rule `R6`), every fluent builder and combinator must provide full parity between direct method chaining and data-last functional composition using Effect's `pipe(...)`.
@@ -20,7 +20,6 @@ export interface ResourceBuilder<Spec> extends Pipeable {
   readonly [TypeId]: typeof TypeId
   readonly spec: Spec
   withPort(port: number): ResourceBuilder<Spec>
-  // ...
 }
 ```
 

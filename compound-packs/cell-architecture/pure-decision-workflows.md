@@ -2,16 +2,16 @@
 title: Decisions inside the sandwich must be pure Workflow values with cyclomatic complexity 1
 applies_when:
   - authoring a domain decision or business workflow
-  - passing a decider to Sandwich.decide or Cell.decide
+  - passing a decider to Sandwich.decide
   - reviewing logic inside *.workflow.ts
 tags: [cell, workflow, pure-core, cyclomatic-complexity, match-exhaustive]
 ---
 
-The `decide` phase of a sandwich must receive a `Workflow` instantiated with `Workflow.make` (or `Workflow.total`). The slot requires the nominal `WorkflowBrand`; passing an unwrapped anonymous function `(cmd) => Result` fails type-checking.
+The `decide` phase of a sandwich must receive a `Workflow` instantiated with `Workflow.make` (or `Workflow.total` for decisions that cannot fail). The slot requires the nominal `WorkflowBrand`; passing an unwrapped anonymous function fails type-checking.
 
 A workflow is a total, single-path expression: Cyclomatic Complexity = 1. Branching must be expressed as exhaustive dispatch over a closed tagged union (`Match.value(cmd).pipe(...)` terminating in `Match.exhaustive`). Iteration must be expressed as `map`, `filter`, or `fold`, never imperative loops.
 
-Control flow keywords (`if`, `else`, `switch`, ternary `?:`, `for`, `while`) are forbidden in decision bodies. Decisions must not perform I/O, read clocks (`Date.now`), call random generators, or yield Effect services. If a decision needs current time, the time must be gathered in `read` and passed in the command.
+Control flow keywords (`if`, `else`, `switch`, ternary `?:`, `for`, `while`) are forbidden in decision bodies. Decisions must not perform I/O, read clocks (`Date.now`), call random generators, or yield Effect services. If a decision needs current time, the time must be gathered in `read` and passed in the command schema.
 
 ```ts
 // WRONG: imperative control flow with complexity > 1, bare unbranded function
