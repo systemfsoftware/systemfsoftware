@@ -2,7 +2,7 @@ import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Effect, Layer, Option, type Scope } from 'effect'
 import type * as Socket from 'effect/unstable/socket/Socket'
 import type { DialEvidence, HttpEvidence } from '../DialEvidence.schema.js'
-import { HostProber } from '../HostProber.js'
+import { HostProber } from '../host-prober.service.js'
 import type { PortBinding } from '../Port.schema.js'
 
 const decoder = new TextDecoder()
@@ -47,7 +47,12 @@ const exchangeEvidenceOf = (socket: Socket.Socket, path: string): Effect.Effect<
     ),
   )
 
-export const NodeHostProber = Layer.succeed(HostProber, {
+/**
+ * The Node driver for {@link HostProber}: the driver module exports `layer`,
+ * never a `*Live` singleton. A `Layer` is lazy already, and this driver takes no
+ * spec, so it exports the layer itself rather than a zero-argument factory.
+ */
+export const layer: Layer.Layer<HostProber> = Layer.succeed(HostProber, {
   dial: (binding) =>
     Effect.scoped(
       Effect.flatMap(
