@@ -195,7 +195,7 @@ The Evaluator change lands in its own commit, never sharing one with the migrati
   - The same, with the inline `import { type Stats }` form, is silent.
   - A module importing a filesystem binding but never calling it is silent.
   - A module calling a filesystem function with no in-source block is silent.
-  - A file named `foo.acl.ts` with no I/O call and an in-source block is silent, proving the filename no longer triggers.
+  - A file named `foo.ts` with no I/O call and an in-source block is silent, proving the filename no longer triggers.
   - A file with an I/O call and an in-source block is reported regardless of its name, proving the trigger is content.
   - A separate test file containing test calls is silent, because this rule judges only the module it is given.
 - Verification: `pnpm --filter @systemfsoftware/oxlint-plugin-test-placement test` reports the new case count, not merely exit zero. Then `pnpm lint` across the tree reports zero diagnostics for this rule, matching the measured zero fallout.

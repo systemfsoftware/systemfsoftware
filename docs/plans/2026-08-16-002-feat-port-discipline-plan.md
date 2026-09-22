@@ -27,11 +27,11 @@ A port discipline: five criteria that decide whether a capability earns a servic
 
 ### Problem Frame
 
-The 2026-08-16 retirement ordered the thirteen-role vocabulary deleted and left three properties with no instrument: whether a capability should be a service at all, whether an implementation is reached outside a composition root, and whether a key exists with a single provider and no non-determinism. The retirement is in flight, not complete — `SHELL_CELL_SUFFIXES` (`packages/oxlint-plugins/test-placement/src/rules/path.config.ts:50`), the `IO_SOURCE_FILE` and `IO_TEST_FILE` regexes (`packages/oxlint-plugins/core/src/rules/no-io-boundary-tests.config.ts:1`), and the `IO_CELLS` role list (`packages/effect-cell-types/src/Cell.ts:154`) still ship. Their removal belongs to the 001 plan; this plan depends on it and re-orders nothing.
+The 2026-08-16 retirement ordered the thirteen-role vocabulary deleted and left three properties with no instrument: whether a capability should be a service at all, whether an implementation is reached outside a composition root, and whether a key exists with a single provider and no non-determinism. The retirement is in flight, not complete — `SHELL_CELL_SUFFIXES` (`packages/oxlint-plugins/test-placement/src/rules/path.config.ts:50`), the `IO_CELLS` role list (`packages/effect-cell-types/src/Cell.ts:154`) still ship. Their removal belongs to the 001 plan; this plan depends on it and re-orders nothing.
 
 The rule that preceded them did worse than nothing. Forbidding a value edge into a file holding both the port and its implementation left an executor one legal route — mint its own projection tag — and the tree grew 25 production `*ExecutorDeps` tags, of which the source records 22 as having neither a second implementation nor a test substitution (`docs/solutions/architecture-patterns/one-cell-cannot-hold-a-port-and-its-implementation.md:42-45`). That source's three category counts sum to 28 against a population of 25, so the categories overlap; the population is the reliable figure and the split is re-measured before it becomes a target.
 
-Collocation is the shipped state. `packages/arethetypeswrong/cli/src/filesystem.adapter.ts` declares the key at line 23 and exports `FilesystemLive` at line 50. That package also ships no `exports` map at all (`packages/arethetypeswrong/cli/package.json:12-18` declares `files` and `bin` only), so nothing today refuses a deep import into its `dist/` — the packaging half of the discipline does not exist yet rather than merely being violated.
+Collocation is the shipped state. `packages/arethetypeswrong/cli/src/filesystem.ts` declares the key at line 23 and exports `FilesystemLive` at line 50. That package also ships no `exports` map at all (`packages/arethetypeswrong/cli/package.json:12-18` declares `files` and `bin` only), so nothing today refuses a deep import into its `dist/` — the packaging half of the discipline does not exist yet rather than merely being violated.
 
 ### Key Decisions
 
@@ -110,7 +110,7 @@ flowchart TB
 ### Success Criteria
 
 - Every service key under `packages/**` carries a warrant argument or is deleted.
-- No module declaring a key is forward-reachable to a provider of that key. `packages/arethetypeswrong/cli/src/filesystem.adapter.ts` is the verified instance; the full count is measured during planning.
+- No module declaring a key is forward-reachable to a provider of that key. `packages/arethetypeswrong/cli/src/filesystem.ts` is the verified instance; the full count is measured during planning.
 - Every publishable package has a generated exports map with no wildcard subpath, `packages/arethetypeswrong/cli` included.
 - The contract lane's interpreter observation passes against the packed tarball of every publishable package.
 - The residue scan finds no cell-role identifier, and fails when one is planted.

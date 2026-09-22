@@ -30,7 +30,7 @@ Bridge the three Claude Code hook events OMP can carry faithfully, wire the `Ses
 
 Claude Code documents 30 hook events. The bridge implements 6, so a hook configured on any of the other 24 never runs. Nothing tells the user which case they are in: `hook-dispatcher.handler.ts:87` emits `Ignoring unsupported hook event(s) in settings.json: <name>`, which reads as "your settings file is wrong". For `UserPromptExpansion` — a real Claude Code event — that message is false. The user's config is correct; the bridge is incomplete.
 
-The same list drives a second failure. `ALL_HOOK_EVENTS` in `hook-settings.acl.ts:81` is simultaneously the set of events the bridge _runs_ and the set it _recognizes_, so the two can never be reported apart.
+The same list drives a second failure. `ALL_HOOK_EVENTS` in `hook-settings.ts:81` is simultaneously the set of events the bridge _runs_ and the set it _recognizes_, so the two can never be reported apart.
 
 The gap also reaches inside an event that is already bridged. `hook-dispatcher.handler.ts:124` wires OMP's `agent_start` to `runSessionStartHooks` passing the reason `resume`; `agent_start` is a turn boundary, so `SessionStart` hooks currently run on every turn — and a hook scoped `matcher: "resume"` fires on every turn rather than on a resume. Separately, `hook-dispatcher.handler.ts:105` passes the reason `start` where Claude Code's documented matcher value is `startup`, so a `SessionStart` hook scoped with `matcher: "startup"` has never matched. Event-level coverage is not enough; a bridged event whose matcher values are wrong is its own silent failure.
 
@@ -116,7 +116,7 @@ Coverage is also per-matcher, not only per-event. `SessionStart` accepts five ma
 
 KTD1. Bridge only where the moment and the decision both carry. A hook that fires at the wrong moment is worse than one that does not fire, because the user believes it is working. This resolves the trade-off toward silence over imprecision, and that is a judgment call rather than a law: an observation-only `SubagentStop` would still be useful to a logger, and it is rejected here only because `agent_end` also fires for the main agent's loop, so the hook would fabricate subagent events that never happened. An explicitly-opted, clearly-labelled approximate mode stays a deferred option, not a forbidden one.
 
-KTD2. Split the one list into three. `hook-settings.acl.ts` currently uses `ALL_HOOK_EVENTS` as both "events we run" and "events we recognize", which is why the two cannot be reported apart. Replace with a vendored catalog of all 30 Claude Code events, a derived set of bridged events, and a per-event reason for the rest.
+KTD2. Split the one list into three. `hook-settings.ts` currently uses `ALL_HOOK_EVENTS` as both "events we run" and "events we recognize", which is why the two cannot be reported apart. Replace with a vendored catalog of all 30 Claude Code events, a derived set of bridged events, and a per-event reason for the rest.
 
 KTD3. Reasons live in the catalog, not in the reporter. Each unbridged event and each unreachable matcher value carries its own reason string, so the report is a projection of the table rather than a switch the next event has to be added to.
 
@@ -205,8 +205,8 @@ U1 is the foundation — U2, U3, U4 all read the catalog it introduces, and its 
 - Requirements: R7, R9
 - Dependencies: none
 - Files: `omp/plugins/omp-claude-compat/src/hook-catalog.schema.ts` (new), `omp/plugins/omp-claude-compat/__tests__/hook-catalog.test.ts` (new)
-- Approach: declare the 30 event names, the bridged subset, a matcher-evaluable flag per bridged event, the reachable `SessionStart` matcher values, and a reason string for every unbridged event, every unreachable matcher, and every partially-reachable matcher. `resume` is the partial case: reachable mid-session, absent on a cold start. Record the Claude Code doc version the list was drawn from. This is a declaration cell — `.schema.ts`, not `.acl.ts`, because it decodes nothing — which is also what makes a colocated law test permissible here. Its export shape is the contract U2, U3, and U4 are written against; settle it before they start.
-- Patterns to follow: the branded-constant style already used for `ALL_HOOK_EVENTS` in `src/hook-settings.acl.ts:81`.
+- Approach: declare the 30 event names, the bridged subset, a matcher-evaluable flag per bridged event, the reachable `SessionStart` matcher values, and a reason string for every unbridged event, every unreachable matcher, and every partially-reachable matcher. `resume` is the partial case: reachable mid-session, absent on a cold start. Record the Claude Code doc version the list was drawn from. This is a declaration cell — `.schema.ts`, not `.acl`, because it decodes nothing — which is also what makes a colocated law test permissible here. Its export shape is the contract U2, U3, and U4 are written against; settle it before they start.
+- Patterns to follow: the branded-constant style already used for `ALL_HOOK_EVENTS` in `src/hook-settings.ts:81`.
 - Test scenarios:
   - The catalog contains exactly 30 events.
   - The bridged, has-signal-but-skipped, and no-signal sets partition those 30 with no overlap and nothing left over.
@@ -220,7 +220,7 @@ U1 is the foundation — U2, U3, U4 all read the catalog it introduces, and its 
 - Goal: adding a bridged event cannot silently half-land.
 - Requirements: R10
 - Dependencies: U1
-- Files: `omp/plugins/omp-claude-compat/src/hook-settings.acl.ts`, `omp/plugins/omp-claude-compat/__tests__/multi-level-settings.feature.test.ts`
+- Files: `omp/plugins/omp-claude-compat/src/hook-settings.ts`, `omp/plugins/omp-claude-compat/__tests__/multi-level-settings.feature.test.ts`
 - Approach: re-export `ALL_HOOK_EVENTS` as the catalog's bridged subset and drive the `mergeSettings` initialization record from it. Keep `HookGroups` a static `S.Struct` per KTD4 and add a compile-time guard that its keys equal the bridged list, so a missing field is a type error rather than a silent decode drop. Note the changed meaning of `unknownHookEvents` where it is defined.
 - Patterns to follow: existing `S.optionalWith(S.Array(HookEntry), …)` field shape; leave `LiftFlatSettingsACL` and the wrapped/flat union untouched.
 - Test scenarios:
@@ -228,7 +228,7 @@ U1 is the foundation — U2, U3, U4 all read the catalog it introduces, and its 
   - `mergeSettings` across user, project, and local sources still concatenates per event and still refuses to let a non-managed source disable managed hooks.
   - A settings file with an unrecognized key still decodes, with the key ignored rather than failing the parse.
   - Removing one event from the bridged list fails the type check rather than dropping its hooks silently.
-- Verification: the existing multi-level-settings scenarios pass unmodified; mutation stays at 100% on `hook-settings.acl.ts`.
+- Verification: the existing multi-level-settings scenarios pass unmodified; mutation stays at 100% on `hook-settings.ts`.
 
 ### U3. Replace the session-start warning with a coverage report
 
@@ -338,12 +338,12 @@ U1 is the foundation — U2, U3, U4 all read the catalog it introduces, and its 
 | Gate                     | Command                                                                                                                       | Applies to                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Full repo check          | `pnpm check`                                                                                                                  | All units. Must exit 0 after the last edit.                                                |
-| Mutation                 | `pnpm --filter @systemfsoftware/omp-claude-compat mutation`                                                                   | U2 — the changed `.acl.ts` cell. Break at 100.                                             |
+| Mutation                 | `pnpm --filter @systemfsoftware/omp-claude-compat mutation`                                                                   | U2 — the changed `.acl` cell. Break at 100.                                                |
 | Dist loads and registers | `node omp/scripts/smoke-plugin.mjs omp/plugins/omp-claude-compat/dist/index.js`                                               | U3, U5, U6, U7, U8 — proves handlers still register after the registration changes.        |
 | Hook actually executes   | Fire a synthetic failing tool call through the smoke tool with a hook that writes a sentinel file, and assert the file exists | U5 — no other gate proves a bridged event reaches the hook process.                        |
 | Coverage report          | Configure `UserPromptExpansion` in a scratch `.claude/settings.json` and start a session                                      | U1, U3 — the originating symptom; the message must name the bridge, not the settings file. |
 
-Mutation covers the `.acl.ts` cell and the catalog's law test; `.executor.ts` and `.handler.ts` behavior is proven by composition tests, not mutation, so a scenario that would pass with the behavior deleted is not adequate coverage there.
+Mutation covers the `.acl` cell and the catalog's law test; `.executor.ts` and `.handler.ts` behavior is proven by composition tests, not mutation, so a scenario that would pass with the behavior deleted is not adequate coverage there.
 
 Gherkin scenarios go in `__tests__/hook-dispatcher.feature.test.ts` unless they need real elapsed time, in which case they go in a plain vitest file — the Gherkin harness runs on `TestClock`, where `Effect.timeout` never elapses (see `__tests__/hook-timeout.test.ts:14`).
 
@@ -353,9 +353,9 @@ Gherkin scenarios go in `__tests__/hook-dispatcher.feature.test.ts` unless they 
 
 - Every requirement R1-R10 is exercised by at least one scenario that fails when its implementation is reverted.
 - `pnpm check` exits 0 in the same session as the last edit.
-- Mutation is 100% on every changed `.acl.ts` file.
+- Mutation is 100% on every changed `.acl` file.
 - The three bridged events and the four reachable `SessionStart` matcher values run end to end; the 21 unbridged events, the `clear` matcher, and the cold-start-resume gap each carry a recorded reason surfaced by the coverage report.
-- No `.acl.ts`, `.executor.ts`, `.handler.ts`, or `.state.ts` file gained its own unit test. The catalog's colocated test is permitted because it is a `.schema.ts` declaration cell.
+- No `.acl`, `.executor.ts`, `.handler.ts`, or `.state.ts` file gained its own unit test. The catalog's colocated test is permitted because it is a `.schema.ts` declaration cell.
 - No approximated bridge shipped: no event fires from an OMP signal whose moment or decision does not match, and no event was added to the bridged set to make a count look better.
 - The three observable behavior changes — `SessionStart` cadence, the `startup` matcher, and `PostToolUse` no longer firing on tool failure — are stated in the commit message, not just the plan.
 - Scaffolding from abandoned approaches is removed from the diff.

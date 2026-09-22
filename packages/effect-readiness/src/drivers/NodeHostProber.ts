@@ -2,7 +2,7 @@ import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Effect, Layer, Option, type Scope } from 'effect'
 import type * as Socket from 'effect/unstable/socket/Socket'
 import type { DialEvidence, HttpEvidence } from '../DialEvidence.schema.js'
-import { HostProber } from '../HostProber.port.js'
+import { HostProber } from '../HostProber.js'
 import type { PortBinding } from '../Port.schema.js'
 
 const decoder = new TextDecoder()
