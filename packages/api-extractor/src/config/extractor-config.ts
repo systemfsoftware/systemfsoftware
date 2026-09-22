@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Match, Schema } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
@@ -25,6 +25,7 @@ import { ConfigFile } from './config-file.schema.js'
 import { DEFAULT_CONFIG_RECORD } from './defaults.js'
 import type { JsonRecord } from './json-record.schema.js'
 import { JsonRecordFromString } from './json-record.schema.js'
+import { MergeConfig, mergeConfig } from './merge-config.workflow.js'
 import type { TokenContext } from './tokens.js'
 import { expandTokens, unscopedPackageName } from './tokens.js'
 
@@ -63,25 +64,17 @@ export type MutableJsonRecord = Record<string, Schema.Json>
 export const isConfigRecord = (u: Schema.Json): u is MutableJsonRecord =>
   typeof u === 'object' && u !== null && !Array.isArray(u)
 
-const mergeKey = (
-  result: MutableJsonRecord,
-  key: string,
-  derivedVal: Schema.Json,
-): void => {
-  const baseVal = result[key]
-  const canRecurse = baseVal !== undefined && isConfigRecord(baseVal) && isConfigRecord(derivedVal)
-  result[key] = canRecurse ? mergeConfigObjects(baseVal, derivedVal) : derivedVal
-}
-
 export const mergeConfigObjects = (
   base: MutableJsonRecord,
   derived: MutableJsonRecord,
 ): MutableJsonRecord => {
-  const result: MutableJsonRecord = { ...base }
-  for (const [key, val] of Object.entries(derived)) {
-    mergeKey(result, key, val)
-  }
-  return result
+  const outcome = mergeConfig(MergeConfig.make({ base, derived }))
+  const decision = Result.getOrThrow(outcome)
+  return Match.value(decision).pipe(
+    Match.tag('ConfigMerged', (d) => ({ ...d.merged })),
+    Match.tag('ConfigReplaced', (d) => ({ ...d.derived })),
+    Match.exhaustive,
+  )
 }
 
 export const splitExtends = (

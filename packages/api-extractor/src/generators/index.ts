@@ -197,33 +197,18 @@ const collectDtsRollupTargets = (
   if (!config.dtsRollup.enabled) {
     return []
   }
-  const targets: DtsRollupTarget[] = []
   const { untrimmedFilePath, alphaTrimmedFilePath, betaTrimmedFilePath, publicTrimmedFilePath } = config.dtsRollup
-  if (untrimmedFilePath !== undefined && untrimmedFilePath.length > 0) {
-    targets.push({
-      filePath: resolveDtsTargetFilePath(untrimmedFilePath, config.projectFolder, path),
-      kind: DtsRollupKind.InternalRelease,
-    })
-  }
-  if (alphaTrimmedFilePath !== undefined && alphaTrimmedFilePath.length > 0) {
-    targets.push({
-      filePath: resolveDtsTargetFilePath(alphaTrimmedFilePath, config.projectFolder, path),
-      kind: DtsRollupKind.AlphaRelease,
-    })
-  }
-  if (betaTrimmedFilePath !== undefined && betaTrimmedFilePath.length > 0) {
-    targets.push({
-      filePath: resolveDtsTargetFilePath(betaTrimmedFilePath, config.projectFolder, path),
-      kind: DtsRollupKind.BetaRelease,
-    })
-  }
-  if (publicTrimmedFilePath !== undefined && publicTrimmedFilePath.length > 0) {
-    targets.push({
-      filePath: resolveDtsTargetFilePath(publicTrimmedFilePath, config.projectFolder, path),
-      kind: DtsRollupKind.PublicRelease,
-    })
-  }
-  return targets
+  const candidates: readonly (readonly [string | undefined, DtsRollupKind])[] = [
+    [untrimmedFilePath, DtsRollupKind.InternalRelease],
+    [alphaTrimmedFilePath, DtsRollupKind.AlphaRelease],
+    [betaTrimmedFilePath, DtsRollupKind.BetaRelease],
+    [publicTrimmedFilePath, DtsRollupKind.PublicRelease],
+  ]
+  return candidates.flatMap(([rawPath, kind]) =>
+    rawPath !== undefined && rawPath.length > 0
+      ? [{ filePath: resolveDtsTargetFilePath(rawPath, config.projectFolder, path), kind }]
+      : []
+  )
 }
 const writeDtsRollupFile = (
   collector: Collector,
@@ -255,11 +240,11 @@ export const runGenerators = (
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
 
-    const dtsFilePaths: string[] = []
-    for (const target of collectDtsRollupTargets(config, path)) {
-      const written = yield* writeDtsRollupFile(collector, config, router, target, fs, path)
-      dtsFilePaths.push(written)
-    }
+    const dtsFilePaths = yield* Effect.forEach(
+      collectDtsRollupTargets(config, path),
+      (target) => writeDtsRollupFile(collector, config, router, target, fs, path),
+      { concurrency: 1 },
+    )
 
     if (!config.apiReport.enabled) {
       return {
@@ -289,16 +274,13 @@ export const runGenerators = (
       printApiReportDiff: options?.printApiReportDiff === true,
     }
 
-    let anyChanged = false
-    const filePaths: string[] = []
-
-    for (const reportConfig of config.apiReport.reportConfigs) {
-      const result = yield* processSingleReport(ctx, reportConfig)
-      if (result.changed) {
-        anyChanged = true
-      }
-      filePaths.push(result.filePath)
-    }
+    const reportResults = yield* Effect.forEach(
+      config.apiReport.reportConfigs,
+      (reportConfig) => processSingleReport(ctx, reportConfig),
+      { concurrency: 1 },
+    )
+    const anyChanged = reportResults.some((result) => result.changed)
+    const filePaths = reportResults.map((result) => result.filePath)
 
     return {
       apiReportChanged: anyChanged,

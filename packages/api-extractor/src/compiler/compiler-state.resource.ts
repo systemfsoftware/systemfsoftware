@@ -1,5 +1,6 @@
 import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
+import * as Struct from 'effect/Struct'
 import type * as Ts from 'typescript'
 
 import { TsConfigReadError } from '../errors/index.js'
@@ -26,6 +27,9 @@ export interface CompilerState {
  * and therefore global-name set — matches the one that generated the package's
  * committed reports), not with whatever copy the engine itself shipped with.
  */
+const isTypeScriptModule = (u: unknown): u is typeof Ts =>
+  typeof u === 'object' && u !== null && 'readConfigFile' in u && typeof u.readConfigFile === 'function'
+
 const loadTypeScript = (
   consumerPackageJsonPath: string,
 ): Effect.Effect<typeof Ts, TsConfigReadError> => {
@@ -39,14 +43,13 @@ const loadTypeScript = (
     } catch {
       continue
     }
-    let mod: typeof Ts | undefined
     try {
-      mod = requireFromConsumer(entry)
+      const mod = requireFromConsumer(entry)
+      if (isTypeScriptModule(mod)) {
+        return Effect.succeed(mod)
+      }
     } catch {
-      mod = undefined
-    }
-    if (mod !== undefined && typeof mod.readConfigFile === 'function') {
-      return Effect.succeed(mod)
+      continue
     }
   }
   return Effect.tryPromise({
@@ -64,32 +67,46 @@ const readTsConfig = (
   path: Path.Path,
   tsconfigFilePath: string,
 ): Effect.Effect<Ts.ParsedCommandLine, TsConfigReadError> =>
-  Effect.try({
-    try: () => {
-      const configFile = typescript.readConfigFile(tsconfigFilePath, (p) => typescript.sys.readFile(p))
-      if (configFile.error !== undefined) {
-        const message = typescript.flattenDiagnosticMessageText(configFile.error.messageText, '\n')
-        throw new Error(message)
-      }
-      const basePath = path.resolve(path.dirname(tsconfigFilePath))
-      const parsed = typescript.parseJsonConfigFileContent(
-        configFile.config,
-        typescript.sys,
-        basePath,
-      )
-      if (parsed.errors.length > 0) {
-        const firstError = parsed.errors[0]
-        const messageText = firstError === undefined ? '' : firstError.messageText
-        const message = typescript.flattenDiagnosticMessageText(messageText, '\n')
-        throw new Error(message)
-      }
-      return parsed
-    },
-    catch: (cause) =>
-      new TsConfigReadError({
+  Effect.gen(function*() {
+    const configFile = yield* Effect.try({
+      try: () => typescript.readConfigFile(tsconfigFilePath, (p) => typescript.sys.readFile(p)),
+      catch: (cause) =>
+        new TsConfigReadError({
+          filePath: tsconfigFilePath,
+          cause,
+        }),
+    })
+    if (configFile.error !== undefined) {
+      const message = typescript.flattenDiagnosticMessageText(configFile.error.messageText, '\n')
+      return yield* new TsConfigReadError({
         filePath: tsconfigFilePath,
-        cause,
-      }),
+        cause: new Error(message),
+      })
+    }
+    const basePath = path.resolve(path.dirname(tsconfigFilePath))
+    const parsed = yield* Effect.try({
+      try: () =>
+        typescript.parseJsonConfigFileContent(
+          configFile.config,
+          typescript.sys,
+          basePath,
+        ),
+      catch: (cause) =>
+        new TsConfigReadError({
+          filePath: tsconfigFilePath,
+          cause,
+        }),
+    })
+    if (parsed.errors.length > 0) {
+      const firstError = parsed.errors[0]
+      const messageText = firstError === undefined ? '' : firstError.messageText
+      const message = typescript.flattenDiagnosticMessageText(messageText, '\n')
+      return yield* new TsConfigReadError({
+        filePath: tsconfigFilePath,
+        cause: new Error(message),
+      })
+    }
+    return parsed
   })
 
 const declarationFilePattern = /\.d(\.[^./\\]+)?\.(c|m)?ts$/i
@@ -122,10 +139,10 @@ const sourceExtensions: Readonly<Record<string, true>> = {
 const createCompilerHost = (
   typescript: typeof Ts,
   path: Path.Path,
-  commandLine: Ts.ParsedCommandLine,
+  compilerOptions: Ts.CompilerOptions,
   typescriptCompilerFolder?: string,
 ): Ts.CompilerHost => {
-  const compilerHost = typescript.createCompilerHost(commandLine.options)
+  const compilerHost = typescript.createCompilerHost(compilerOptions)
   const defaultCompilerHost = { ...compilerHost }
 
   if (typescriptCompilerFolder !== undefined) {
@@ -168,12 +185,10 @@ export const loadCompilerState = (
     const typescript = yield* loadTypeScript(path.join(options.projectFolder, 'package.json'))
     const commandLine = yield* readTsConfig(typescript, path, options.tsconfigFilePath)
 
-    delete commandLine.options.outDir
-    delete commandLine.options.declarationDir
-
-    if (commandLine.options.skipLibCheck !== true && options.skipLibCheck === true) {
-      commandLine.options.skipLibCheck = true
-    }
+    const cleanedOptions: Ts.CompilerOptions = Struct.omit(commandLine.options, ['outDir', 'declarationDir'])
+    const compilerOptions: Ts.CompilerOptions = cleanedOptions.skipLibCheck !== true && options.skipLibCheck === true
+      ? { ...cleanedOptions, skipLibCheck: true }
+      : cleanedOptions
 
     const inputFiles = [
       ...commandLine.fileNames,
@@ -181,8 +196,8 @@ export const loadCompilerState = (
       ...(options.additionalEntryPoints ?? []),
     ]
     const analysisFiles = collectAnalysisFiles(inputFiles)
-    const host = createCompilerHost(typescript, path, commandLine, options.typescriptCompilerFolder)
-    const program = typescript.createProgram(analysisFiles, commandLine.options, host)
+    const host = createCompilerHost(typescript, path, compilerOptions, options.typescriptCompilerFolder)
+    const program = typescript.createProgram(analysisFiles, compilerOptions, host)
 
     return {
       compiler: typescript,

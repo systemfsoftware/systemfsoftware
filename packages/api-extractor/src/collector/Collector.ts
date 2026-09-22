@@ -31,7 +31,7 @@ import { ApiItemMetadata, type IApiItemMetadataOptions } from './ApiItemMetadata
 import { CollectorEntity } from './CollectorEntity.js'
 import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
 import { ExtractorMessageId } from './extractor-message-id.js'
-import type { ExtractorMessageProperties } from './extractor-message.js'
+import type { ExtractorMessageProperties } from './message-router.js'
 import type { MessageRouter } from './message-router.js'
 import { PackageDocComment } from './package-doc-comment.js'
 import type { SourceMapper } from './SourceMapper.js'

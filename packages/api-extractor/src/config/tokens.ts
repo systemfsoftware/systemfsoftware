@@ -1,3 +1,4 @@
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { UnresolvedTokenError } from '../errors/config.js'
 
@@ -49,45 +50,61 @@ const substituteProjectFolder = (
   return atStart ? join(folder, text.slice(PROJECT_FOLDER_TOKEN.length)) : text
 }
 
-const findProjectResidual = (text: string): string | undefined =>
-  text.includes(PROJECT_FOLDER_TOKEN) ? PROJECT_FOLDER_TOKEN : undefined
+const ProjectFolderTag = { _tag: 'ProjectFolder' } as const
+type ProjectFolderTag = typeof ProjectFolderTag
+interface ProjectFolderProbe extends ProjectFolderTag {}
 
-const findLookupResidual = (text: string): string | undefined => text.includes(LOOKUP_TOKEN) ? LOOKUP_TOKEN : undefined
+const LookupTag = { _tag: 'Lookup' } as const
+type LookupTag = typeof LookupTag
+interface LookupProbe extends LookupTag {}
 
-const findPatternResidual = (text: string): string | undefined => {
-  const match = TOKEN_PATTERN.exec(text)
-  return match === null ? undefined : match[0]
-}
+const PatternTag = { _tag: 'Pattern' } as const
+type PatternTag = typeof PatternTag
+interface PatternProbe extends PatternTag {}
 
-const findStrayOpen = (text: string): string | undefined => text.includes('<') ? '<' : undefined
+const StrayOpenTag = { _tag: 'StrayOpen' } as const
+type StrayOpenTag = typeof StrayOpenTag
+interface StrayOpenProbe extends StrayOpenTag {}
 
-const findStrayClose = (text: string): string | undefined => text.includes('>') ? '>' : undefined
+const StrayCloseTag = { _tag: 'StrayClose' } as const
+type StrayCloseTag = typeof StrayCloseTag
+interface StrayCloseProbe extends StrayCloseTag {}
 
-const findStrayAngle = (text: string): string | undefined => {
-  const open = findStrayOpen(text)
-  return open ?? findStrayClose(text)
-}
+type ResidualProbe =
+  | ProjectFolderProbe
+  | LookupProbe
+  | PatternProbe
+  | StrayOpenProbe
+  | StrayCloseProbe
 
-const findKnownResidual = (text: string): string | undefined => {
-  const project = findProjectResidual(text)
-  return project ?? findLookupResidual(text)
-}
+const RESIDUAL_PROBES: readonly ResidualProbe[] = [
+  ProjectFolderTag,
+  LookupTag,
+  PatternTag,
+  StrayOpenTag,
+  StrayCloseTag,
+]
 
-const findPatternOrStray = (text: string): string | undefined => {
-  const pattern = findPatternResidual(text)
-  return pattern ?? findStrayAngle(text)
-}
+const probeResidual = (text: string, probe: ResidualProbe): string | undefined =>
+  Match.value(probe).pipe(
+    Match.tag('ProjectFolder', () => (text.includes(PROJECT_FOLDER_TOKEN) ? PROJECT_FOLDER_TOKEN : undefined)),
+    Match.tag('Lookup', () => (text.includes(LOOKUP_TOKEN) ? LOOKUP_TOKEN : undefined)),
+    Match.tag('Pattern', () => TOKEN_PATTERN.exec(text)?.[0]),
+    Match.tag('StrayOpen', () => (text.includes('<') ? '<' : undefined)),
+    Match.tag('StrayClose', () => (text.includes('>') ? '>' : undefined)),
+    Match.exhaustive,
+  )
 
-const findResidualToken = (text: string): string | undefined => {
-  const known = findKnownResidual(text)
-  return known ?? findPatternOrStray(text)
+const findMatchingToken = (text: string): string | undefined => {
+  const probe = RESIDUAL_PROBES.find((candidate) => probeResidual(text, candidate) !== undefined)
+  return probe === undefined ? undefined : probeResidual(text, probe)
 }
 
 const finishExpansion = (
   expanded: string,
   configPath: string,
 ): Result.Result<string, UnresolvedTokenError> => {
-  const residual = findResidualToken(expanded)
+  const residual = findMatchingToken(expanded)
   return residual === undefined
     ? Result.succeed(expanded)
     : Result.fail(new UnresolvedTokenError({ token: residual, configPath }))
@@ -169,6 +186,72 @@ if (import.meta.vitest !== void 0) {
       const res = expandTokens(rawClean, cleanCtx, 'config.json')
       return Result.match(res, {
         onSuccess: (out) => out === applied,
+        onFailure: () => false,
+      })
+    },
+  )
+
+  const cleanContext = (ctx: TokenContext): TokenContext => ({
+    projectFolder: normalizeAngleFree(ctx.projectFolder),
+    packageName: normalizeAngleFree(ctx.packageName),
+    unscopedPackageName: normalizeAngleFree(ctx.unscopedPackageName),
+  })
+
+  it.prop(
+    '∀text_Expansion_≡Total',
+    [S.String, ContextSchema],
+    ([raw, ctx]) => {
+      const res = expandTokens(raw, ctx, 'config.json')
+      return Result.match(res, {
+        onSuccess: (out) => typeof out === 'string',
+        onFailure: (err) =>
+          Match.value(err).pipe(
+            Match.tag('UnresolvedTokenError', (e) => e.token.length > 0 && e.configPath === 'config.json'),
+            Match.exhaustive,
+          ),
+      })
+    },
+  )
+  it.prop(
+    '∀body_StrayOpen_≡NamesOpenBracket',
+    [S.String, ContextSchema],
+    ([rawBody, ctx]) => {
+      const body = normalizeAngleFree(rawBody)
+      const res = expandTokens(`<${body}`, cleanContext(ctx), 'config.json')
+      return Result.match(res, {
+        onSuccess: () => false,
+        onFailure: (err) => err.token === '<' && err.configPath === 'config.json',
+      })
+    },
+  )
+
+  it.prop(
+    '∀body_StrayClose_≡NamesCloseBracket',
+    [S.String, ContextSchema],
+    ([rawBody, ctx]) => {
+      const body = normalizeAngleFree(rawBody)
+      const res = expandTokens(`>${body}`, cleanContext(ctx), 'config.json')
+      return Result.match(res, {
+        onSuccess: () => false,
+        onFailure: (err) => err.token === '>' && err.configPath === 'config.json',
+      })
+    },
+  )
+
+  it.prop(
+    '∀tokenFree_Expansion_≡Idempotent',
+    [S.String, ContextSchema],
+    ([raw, ctx]) => {
+      const cleanCtx = cleanContext(ctx)
+      const once = expandTokens(normalizeAngleFree(raw), cleanCtx, 'config.json')
+      return Result.match(once, {
+        onSuccess: (expanded) => {
+          const twice = expandTokens(expanded, cleanCtx, 'config.json')
+          return Result.match(twice, {
+            onSuccess: (again) => again === expanded,
+            onFailure: () => false,
+          })
+        },
         onFailure: () => false,
       })
     },

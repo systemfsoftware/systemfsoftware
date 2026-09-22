@@ -1,11 +1,6 @@
-/**
- * The `run` subcommand for the `api-extractor` CLI.
- *
- * Resolves flags, discovers or accepts `--config`, invokes `runEffect`, and
- * maps the outcome to clean exit (0) or error (1) via `CliError.UserError`.
- */
 import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
@@ -83,9 +78,11 @@ const resolveConfigPath = (
   })
 
 const failureOutcomeMessage = (result: ExtractorResult): string =>
-  result.errorCount > 0
-    ? 'API Extractor completed with errors'
-    : 'API Extractor completed with warnings'
+  Match.value(result.errorCount > 0).pipe(
+    Match.when(true, () => 'API Extractor completed with errors'),
+    Match.when(false, () => 'API Extractor completed with warnings'),
+    Match.exhaustive,
+  )
 
 const executionFailedError = (result: ExtractorResult): CliError.UserError =>
   new CliError.UserError({
@@ -135,9 +132,11 @@ export const runActionHandler = (
       ),
     )
 
-    if (!result.succeeded) {
-      return yield* executionFailedError(result)
-    }
+    return yield* Match.value(result.succeeded).pipe(
+      Match.when(true, () => Effect.void),
+      Match.when(false, () => executionFailedError(result)),
+      Match.exhaustive,
+    )
   })
 
 export const runCommand = Command.make('run', runFlagsConfig, runActionHandler).pipe(

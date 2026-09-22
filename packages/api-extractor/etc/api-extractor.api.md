@@ -4,21 +4,23 @@
 
 ```ts
 
-import * as Context from 'effect/Context';
+import { Context } from 'effect';
 import { Data } from 'effect';
 import * as Effect$1 from 'effect/Effect';
+import { Effect } from 'effect';
 import * as FileSystem_2 from 'effect/FileSystem';
-import * as Option_2 from 'effect/Option';
+import * as Option$1 from 'effect/Option';
 import * as Path from 'effect/Path';
 import * as Pipeable from 'effect/Pipeable';
 import { PlatformError } from 'effect/PlatformError';
-import * as Result from 'effect/Result';
+import * as Result$1 from 'effect/Result';
 import * as Schema$1 from 'effect/Schema';
 import { Schema } from 'effect';
 import * as ts from 'typescript';
 import * as tsdoc from '@microsoft/tsdoc';
 import { TSDocConfiguration } from '@microsoft/tsdoc';
 import { TSDocTagDefinition } from '@microsoft/tsdoc';
+import { Workflow } from '@systemfsoftware/effect-cell-types';
 import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
@@ -680,7 +682,7 @@ export const EnumMemberOrder: Schema.Literals<readonly ["by-name", "preserve"]>;
 export type EnumMemberOrder = typeof EnumMemberOrder.Type;
 
 // @public (undocumented)
-export const expandTokens: (value: string, context: TokenContext, configPath: string, join?: JoinSegments) => Result.Result<string, UnresolvedTokenError>;
+export const expandTokens: (value: string, context: TokenContext, configPath: string, join?: JoinSegments) => Result$1.Result<string, UnresolvedTokenError>;
 
 // @public (undocumented)
 export class ExportAnalyzer extends Pipeable.Class {
@@ -752,6 +754,66 @@ export const ExtractorError: Schema.Union<readonly [typeof ConfigFileNotFound, t
 export type ExtractorError = typeof ExtractorError.Type;
 
 // @public (undocumented)
+export class ExtractorMessage extends Data.Class<ExtractorMessageProps> {
+    constructor(props: ExtractorMessageProps);
+    // (undocumented)
+    formatMessageWithLocation(workingPackageFolderPath: string | undefined): string;
+    // (undocumented)
+    formatMessageWithoutLocation(): string;
+    // (undocumented)
+    get handled(): boolean;
+    // (undocumented)
+    logLevel: LogLevelValue;
+    // (undocumented)
+    markHandled(): void;
+    // (undocumented)
+    properties: ExtractorMessageProperties;
+    // (undocumented)
+    sourceFileColumn: number | undefined;
+    // (undocumented)
+    sourceFileLine: number | undefined;
+    // (undocumented)
+    sourceFilePath: string | undefined;
+}
+
+// @public (undocumented)
+export const ExtractorMessageCategory: {
+    readonly Compiler: "Compiler";
+    readonly TSDoc: "TSDoc";
+    readonly Extractor: "Extractor";
+    readonly Console: "console";
+};
+
+// @public (undocumented)
+export type ExtractorMessageCategory = (typeof ExtractorMessageCategory)[keyof typeof ExtractorMessageCategory];
+
+// @public (undocumented)
+export interface ExtractorMessageProperties {
+    // (undocumented)
+    readonly exportName?: string;
+}
+
+// @public (undocumented)
+export interface ExtractorMessageProps {
+    // (undocumented)
+    readonly category: ExtractorMessageCategory;
+    // (undocumented)
+    readonly logLevel?: LogLevelValue | undefined;
+    // (undocumented)
+    readonly messageId: string;
+    // (undocumented)
+    readonly properties?: ExtractorMessageProperties | undefined;
+    // (undocumented)
+    readonly sourceFileColumn?: number | undefined;
+    // (undocumented)
+    readonly sourceFileLine?: number | undefined;
+    // (undocumented)
+    readonly sourceFilePath?: string | undefined;
+    // (undocumented)
+    readonly text: string;
+}
+
+// @public (undocumented)
 export interface ExtractorReportConfig {
     // (undocumented)
     readonly fileName: string;
@@ -759,18 +821,25 @@ export interface ExtractorReportConfig {
     readonly variant: ApiReportVariant;
 }
 
-// @public
+// @public (undocumented)
 export interface ExtractorResult {
+    // (undocumented)
     readonly errorCount: number;
+    // (undocumented)
     readonly succeeded: boolean;
+    // (undocumented)
     readonly warningCount: number;
 }
 
-// @public
+// @public (undocumented)
 export interface ExtractorRunOptions {
+    // (undocumented)
     readonly cliFlags?: CliFlags;
+    // (undocumented)
     readonly localBuild?: boolean;
+    // (undocumented)
     readonly printApiReportDiff?: boolean;
+    // (undocumented)
     readonly typescriptCompilerFolder?: string;
 }
 
@@ -780,7 +849,7 @@ export { extractorVersion }
 export { extractorVersion as version }
 
 // @public (undocumented)
-export const findConfigFileUpwards: (startFolder: string) => Effect$1.Effect<Option_2.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
+export const findConfigFileUpwards: (startFolder: string) => Effect$1.Effect<Option$1.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
 
 // Warning: (ae-forgotten-export) The symbol "ForgottenExportError_base" needs to be exported by the entry point index.d.ts
 //
@@ -998,7 +1067,12 @@ export const LogLevel: Schema$1.Literals<readonly ["error", "warning", "info", "
 export type LogLevel = typeof LogLevel.Type;
 
 // @public (undocumented)
-export const makeMessageRouter: (request: VerbosityRequest, options?: MessageRouterOptions) => Effect$1.Effect<MessageRouter, never, MessageWriter>;
+export type LogLevelValue = 'error' | 'warning' | 'none' | 'info' | 'verbose';
+
+// Warning: (ae-forgotten-export) The symbol "MessageRuleError" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const makeMessageRouter: (request: VerbosityRequest, options?: MessageRouterOptions) => Effect.Effect<MessageRouter, MessageRuleError, MessageWriter>;
 
 // @public (undocumented)
 export const mergeConfigObjects: (base: MutableJsonRecord, derived: MutableJsonRecord) => MutableJsonRecord;
@@ -1029,12 +1103,8 @@ export type MessageReportingTable = typeof MessageReportingTable.Type;
 
 // @public (undocumented)
 export interface MessageRouter {
-    // Warning: (ae-forgotten-export) The symbol "ExtractorMessageProperties" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     readonly addAnalyzerIssue: (messageId: ExtractorMessageId | string, messageText: string, astDeclarationOrSymbol: AstDeclaration | AstSymbol, properties?: ExtractorMessageProperties) => void;
-    // Warning: (ae-forgotten-export) The symbol "ExtractorMessage" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     readonly addAnalyzerIssueForPosition: (messageId: ExtractorMessageId | string, messageText: string, sourceFile: ts.SourceFile, pos: number, properties?: ExtractorMessageProperties) => ExtractorMessage;
     // (undocumented)
@@ -1048,23 +1118,23 @@ export interface MessageRouter {
     // (undocumented)
     readonly fetchUnassociatedMessagesForReviewFile: () => readonly ExtractorMessage[];
     // (undocumented)
-    readonly handleRemainingNonConsoleMessages: Effect$1.Effect<void, PlatformError>;
+    readonly handleRemainingNonConsoleMessages: Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnostic: (text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly logDiagnostic: (text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnosticFooter: Effect$1.Effect<void, PlatformError>;
+    readonly logDiagnosticFooter: Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnosticHeader: (title: string) => Effect$1.Effect<void, PlatformError>;
+    readonly logDiagnosticHeader: (title: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logError: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly logError: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
     // (undocumented)
     readonly messages: () => readonly ExtractorMessage[];
     // (undocumented)
@@ -1105,7 +1175,7 @@ export type MessagesConfig = typeof MessagesConfig.Type;
 // @public (undocumented)
 export interface MessageWriter {
     // (undocumented)
-    readonly write: (level: LogLevel, text: string) => Effect$1.Effect<void, PlatformError>;
+    readonly write: (level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
 }
 
 // @public (undocumented)
@@ -1199,8 +1269,16 @@ export const ReleaseTagForTrim: Schema.Literals<readonly ["@internal", "@alpha",
 // @public (undocumented)
 export type ReleaseTagForTrim = typeof ReleaseTagForTrim.Type;
 
+// Warning: (ae-forgotten-export) The symbol "ResolveVerbosity_base" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const resolveVerbosity: (request: VerbosityRequest) => Verbosity;
+export class ResolveVerbosity extends ResolveVerbosity_base {
+    // (undocumented)
+    static readonly [Workflow.InstrumentationBrand]: readonly [];
+}
+
+// @public (undocumented)
+export const resolveVerbosity: ((command: ResolveVerbosity) => Result$1.Result<VerbosityDiagnostics | VerbosityVerbose | VerbositySilent | VerbosityNormal, never>) & Workflow.WorkflowBrand;
 
 // @public
 export const runEffect: (configFilePath: string, options?: ExtractorRunOptions) => Effect$1.Effect<ExtractorResult, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
@@ -1372,6 +1450,27 @@ export const Verbosity: Schema$1.Literals<readonly ["silent", "normal", "verbose
 export type Verbosity = typeof Verbosity.Type;
 
 // @public (undocumented)
+export type VerbosityDecision = VerbosityDiagnostics | VerbosityVerbose | VerbositySilent | VerbosityNormal;
+
+// Warning: (ae-forgotten-export) The symbol "VerbosityDiagnostics_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class VerbosityDiagnostics extends VerbosityDiagnostics_base {
+    // Warning: (ae-forgotten-export) The symbol "VerbosityTypeId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly [VerbosityTypeId]: symbol;
+}
+
+// Warning: (ae-forgotten-export) The symbol "VerbosityNormal_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class VerbosityNormal extends VerbosityNormal_base {
+    // (undocumented)
+    readonly [VerbosityTypeId]: symbol;
+}
+
+// @public (undocumented)
 export const VerbosityRequest: Schema$1.Struct<{
     readonly cliFlags: Schema$1.Struct<{
         readonly quiet: Schema$1.optional<Schema$1.Boolean>;
@@ -1383,6 +1482,22 @@ export const VerbosityRequest: Schema$1.Struct<{
 
 // @public (undocumented)
 export type VerbosityRequest = typeof VerbosityRequest.Type;
+
+// Warning: (ae-forgotten-export) The symbol "VerbositySilent_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class VerbositySilent extends VerbositySilent_base {
+    // (undocumented)
+    readonly [VerbosityTypeId]: symbol;
+}
+
+// Warning: (ae-forgotten-export) The symbol "VerbosityVerbose_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class VerbosityVerbose extends VerbosityVerbose_base {
+    // (undocumented)
+    readonly [VerbosityTypeId]: symbol;
+}
 
 // @public (undocumented)
 export const walkExtendsChain: (entryPath: string, chain?: readonly string[], accumulated?: MutableJsonRecord) => Effect$1.Effect<MutableJsonRecord, CircularConfigExtendsError | ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem | Path.Path>;

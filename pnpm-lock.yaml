@@ -318,6 +318,9 @@ importers:
       '@microsoft/tsdoc-config':
         specifier: ~0.18.2
         version: 0.18.2
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
       diff:
         specifier: ^8.0.2
         version: 8.0.4
@@ -343,6 +346,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/differential-spec':
+        specifier: workspace:^
+        version: link:../differential-spec
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -364,6 +370,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 5.0.1(@vitest/browser@5.0.1)(vitest@5.0.1)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)

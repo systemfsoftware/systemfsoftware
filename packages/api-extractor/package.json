@@ -47,6 +47,7 @@
     "@effect/platform-node": "catalog:",
     "@microsoft/tsdoc": "~0.17.0",
     "@microsoft/tsdoc-config": "~0.18.2",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "diff": "^8.0.2",
     "effect": "catalog:",
     "minimatch": "^10.2.3",
@@ -57,6 +58,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -64,6 +66,7 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

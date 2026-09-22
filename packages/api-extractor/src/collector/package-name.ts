@@ -1,3 +1,5 @@
+import * as Result from 'effect/Result'
+
 const invalidNameCharactersRegExp = /[^A-Za-z0-9\-_.]/
 const maximumNameLength = 214
 
@@ -11,6 +13,26 @@ export interface IParsedPackageName {
   readonly scope: string
   readonly unscopedName: string
 }
+
+const PackageNameParseErrorTag = { _tag: 'PackageNameParseError' } as const
+type PackageNameParseErrorTag = typeof PackageNameParseErrorTag
+
+export interface PackageNameParseError extends PackageNameParseErrorTag {
+  readonly packageName: string
+  readonly message: string
+  readonly cause?: string | undefined
+}
+
+export const makePackageNameParseError = (
+  packageName: string,
+  message: string,
+  cause?: string,
+): PackageNameParseError => ({
+  _tag: 'PackageNameParseError',
+  packageName,
+  message,
+  cause,
+})
 
 const failure = (error: string): IParsedPackageNameOrError => ({ scope: '', unscopedName: '', error })
 
@@ -64,15 +86,19 @@ export const tryParsePackageName = (packageName: string): IParsedPackageNameOrEr
   return succeed(scope, unscopedName)
 }
 
-export const parsePackageName = (packageName: string): IParsedPackageName => {
+export const parsePackageName = (
+  packageName: string,
+): Result.Result<IParsedPackageName, PackageNameParseError> => {
   const result = tryParsePackageName(packageName)
-  if (result.error !== '') {
-    throw new Error(result.error)
-  }
-  return { scope: result.scope, unscopedName: result.unscopedName }
+  return result.error === ''
+    ? Result.succeed({ scope: result.scope, unscopedName: result.unscopedName })
+    : Result.fail(makePackageNameParseError(packageName, result.error))
 }
 
-export const getUnscopedPackageName = (packageName: string): string => parsePackageName(packageName).unscopedName
+export const getUnscopedPackageName = (
+  packageName: string,
+): Result.Result<string, PackageNameParseError> =>
+  Result.map(parsePackageName(packageName), (parsed) => parsed.unscopedName)
 
 export const isValidPackageName = (packageName: string): boolean => tryParsePackageName(packageName).error === ''
 
