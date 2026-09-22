@@ -1,18 +1,34 @@
 /// <reference types="vitest/importMeta" />
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
-import { Effect, Equal, Match, Schema } from 'effect'
-import type { AttrsOf, GraphNode, SpanRecord, Status, TraceGraph } from './Graph.js'
+import { Effect, Equal, Match, Option, Schema } from 'effect'
+import type { GraphNode, SpanRecord, Status, TraceGraph } from './Graph.js'
 import { decode } from './Graph.js'
-import { Break, Hold, type Verdict } from './Verdict.schema.js'
+import { Break, Hold, Verdict } from './Verdict.schema.js'
+
+export { Break, Hold, Verdict }
 
 export interface Relation {
+  readonly id: string
+  readonly soft: boolean
+  readonly softenable: boolean
+  (graph: TraceGraph): Verdict
+}
+
+interface Parts {
   readonly id: string
   readonly soft: boolean
   readonly softenable: boolean
   readonly evaluate: (graph: TraceGraph) => Verdict
 }
 
-const matchedNodes = (graph: TraceGraph, spec: Span.SpanRef): ReadonlyArray<GraphNode> => graph.byId(spec)
+const relation = (parts: Parts): Relation =>
+  Object.assign((graph: TraceGraph): Verdict => parts.evaluate(graph), {
+    id: parts.id,
+    soft: parts.soft,
+    softenable: parts.softenable,
+  })
+
+const matchedNodes = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> => graph.byId(spec)
 
 const inspectedOf = (nodes: ReadonlyArray<GraphNode>): ReadonlyArray<string> => nodes.map((node) => node.spanId)
 
@@ -21,8 +37,7 @@ const matchedAll = <A>(items: ReadonlyArray<A>, predicate: (item: A) => boolean)
 
 const isBreak = (verdict: Verdict): verdict is Break => Schema.is(Break)(verdict)
 
-const isHold = (verdict: Verdict): boolean =>
-  Match.value(verdict).pipe(Match.tag('Hold', () => true), Match.orElse(() => false))
+const isHold = (verdict: Verdict): boolean => Schema.is(Hold)(verdict)
 
 const verdictOf = (options: {
   readonly id: string
@@ -34,93 +49,68 @@ const verdictOf = (options: {
     ? Hold.make({ conjunct: options.id, inspected: options.inspected })
     : Break.make({ conjunct: options.id, inspected: options.inspected, detail: options.detail })
 
-interface SpecOptions {
+interface Declaration {
   readonly id: string
-  readonly spec: Span.SpanRef
+  readonly spans: ReadonlyArray<Span.Span>
   readonly softenable: boolean
   readonly detail: string
-  readonly holds: (nodes: ReadonlyArray<GraphNode>) => boolean
+  readonly holds: (graph: TraceGraph) => boolean
 }
 
-const specRelation = (options: SpecOptions): Relation => ({
-  id: options.id,
-  soft: false,
-  softenable: options.softenable,
-  evaluate: (graph) => {
-    const nodes = matchedNodes(graph, options.spec)
-    return verdictOf({
-      id: options.id,
-      inspected: inspectedOf(nodes),
-      holds: options.holds(nodes),
-      detail: options.detail,
-    })
-  },
-})
-
-interface CountOptions {
-  readonly spec: Span.SpanRef
-  readonly softenable: boolean
-  readonly detail: string
-  readonly holds: (count: number) => boolean
-}
-
-const existenceOf = (id: string, options: CountOptions): Relation =>
-  specRelation({
-    id,
-    spec: options.spec,
-    softenable: options.softenable,
-    detail: options.detail,
-    holds: (nodes) => options.holds(nodes.length),
+const declared = (declaration: Declaration): Relation =>
+  relation({
+    id: declaration.id,
+    soft: false,
+    softenable: declaration.softenable,
+    evaluate: (graph) => {
+      const inspected = declaration.spans.flatMap((span) => inspectedOf(graph.byId(span)))
+      return verdictOf({
+        id: declaration.id,
+        inspected,
+        holds: declaration.holds(graph),
+        detail: declaration.detail,
+      })
+    },
   })
 
-export const exists = <S extends Span.SpanRef>(spec: S): Relation =>
-  existenceOf(`exists(${spec.id})`, {
-    spec,
+const holdsCountOf = (
+  spec: Span.Span,
+  expected: (count: number) => boolean,
+): (graph: TraceGraph) => boolean =>
+(graph) => expected(matchedNodes(graph, spec).length)
+
+const holdsEveryOf = (
+  spec: Span.Span,
+  predicate: (node: GraphNode) => boolean,
+): (graph: TraceGraph) => boolean =>
+(graph) => matchedAll(matchedNodes(graph, spec), predicate)
+
+export const exists = <S extends Span.Span>(spec: S): Relation =>
+  declared({
+    id: `exists(${spec.id})`,
+    spans: [spec],
     softenable: false,
     detail: `no ${spec.id} span was emitted`,
-    holds: (count) => count > 0,
+    holds: holdsCountOf(spec, (count) => count > 0),
   })
 
-export const absent = <S extends Span.SpanRef>(spec: S): Relation =>
-  existenceOf(`absent(${spec.id})`, {
-    spec,
+export const absent = <S extends Span.Span>(spec: S): Relation =>
+  declared({
+    id: `absent(${spec.id})`,
+    spans: [spec],
     softenable: false,
     detail: `a ${spec.id} span was emitted`,
-    holds: (count) => count === 0,
+    holds: holdsCountOf(spec, (count) => count === 0),
   })
 
-export const unique = <S extends Span.SpanRef>(spec: S): Relation =>
-  existenceOf(`unique(${spec.id})`, {
-    spec,
+export const unique = <S extends Span.Span>(spec: S): Relation =>
+  declared({
+    id: `unique(${spec.id})`,
+    spans: [spec],
     softenable: true,
     detail: `expected exactly one ${spec.id} span`,
-    holds: (count) => count === 1,
+    holds: holdsCountOf(spec, (count) => count === 1),
   })
-
-interface EdgeOptions {
-  readonly id: string
-  readonly parent: Span.SpanRef
-  readonly childSpec: Span.SpanRef
-  readonly detail: string
-  readonly reached: (graph: TraceGraph, parents: ReadonlyArray<GraphNode>) => ReadonlySet<string>
-}
-
-const edgeRelation = (options: EdgeOptions): Relation => ({
-  id: options.id,
-  soft: false,
-  softenable: true,
-  evaluate: (graph) => {
-    const parents = matchedNodes(graph, options.parent)
-    const children = matchedNodes(graph, options.childSpec)
-    const reached = options.reached(graph, parents)
-    return verdictOf({
-      id: options.id,
-      inspected: [...inspectedOf(parents), ...inspectedOf(children)],
-      holds: children.some((node) => reached.has(node.spanId)),
-      detail: options.detail,
-    })
-  },
-})
 
 const childIdsOf = (graph: TraceGraph, parents: ReadonlyArray<GraphNode>): ReadonlySet<string> =>
   new Set(parents.flatMap((parent) => graph.children(parent)).map((node) => node.spanId))
@@ -133,79 +123,60 @@ const startsAtOrAfter = (earlier: GraphNode, later: GraphNode): boolean => later
 const startsAfterSome = (earlier: ReadonlyArray<GraphNode>, later: GraphNode): boolean =>
   earlier.some((node) => startsAtOrAfter(node, later))
 
-export const order = (before: Span.SpanRef, after: Span.SpanRef): Relation => {
-  const id = `order(${before.id},${after.id})`
-  return {
-    id,
-    soft: false,
+const reachedUnder = (
+  graph: TraceGraph,
+  parent: Span.Span,
+  childSpan: Span.Span,
+  reach: (graph: TraceGraph, parents: ReadonlyArray<GraphNode>) => ReadonlySet<string>,
+): boolean => {
+  const reached = reach(graph, matchedNodes(graph, parent))
+  return matchedNodes(graph, childSpan).some((node) => reached.has(node.spanId))
+}
+
+export const child = (parent: Span.Span, childSpan: Span.Span): Relation =>
+  declared({
+    id: `child(${parent.id},${childSpan.id})`,
+    spans: [parent, childSpan],
     softenable: true,
-    evaluate: (graph) => {
-      const earlies = matchedNodes(graph, before)
-      const lates = matchedNodes(graph, after)
-      return verdictOf({
-        id,
-        inspected: [...inspectedOf(earlies), ...inspectedOf(lates)],
-        holds: matchedAll(lates, (node) => startsAfterSome(earlies, node)),
-        detail: `a ${after.id} span starts before every ${before.id} span`,
-      })
-    },
-  }
-}
-
-export const child = (parent: Span.SpanRef, childSpec: Span.SpanRef): Relation =>
-  edgeRelation({
-    id: `child(${parent.id},${childSpec.id})`,
-    parent,
-    childSpec,
-    detail: `no ${childSpec.id} span is a direct child of a ${parent.id} span`,
-    reached: childIdsOf,
+    detail: `no ${childSpan.id} span is a direct child of a ${parent.id} span`,
+    holds: (graph) => reachedUnder(graph, parent, childSpan, childIdsOf),
   })
 
-export const descendant = (parent: Span.SpanRef, childSpec: Span.SpanRef): Relation =>
-  edgeRelation({
-    id: `descendant(${parent.id},${childSpec.id})`,
-    parent,
-    childSpec,
-    detail: `no ${childSpec.id} span descends from a ${parent.id} span`,
-    reached: descendantIdsOf,
+export const descendant = (parent: Span.Span, childSpan: Span.Span): Relation =>
+  declared({
+    id: `descendant(${parent.id},${childSpan.id})`,
+    spans: [parent, childSpan],
+    softenable: true,
+    detail: `no ${childSpan.id} span descends from a ${parent.id} span`,
+    holds: (graph) => reachedUnder(graph, parent, childSpan, descendantIdsOf),
   })
 
-interface EveryOptions {
-  readonly id: string
-  readonly spec: Span.SpanRef
-  readonly detail: string
-  readonly predicate: (node: GraphNode) => boolean
-}
+export const order = (before: Span.Span, after: Span.Span): Relation =>
+  declared({
+    id: `order(${before.id},${after.id})`,
+    spans: [before, after],
+    softenable: true,
+    detail: `a ${after.id} span starts before every ${before.id} span`,
+    holds: (graph) =>
+      matchedAll(matchedNodes(graph, after), (node) => startsAfterSome(matchedNodes(graph, before), node)),
+  })
 
-const everyRelation = (options: EveryOptions): Relation => ({
-  id: options.id,
-  soft: false,
-  softenable: true,
-  evaluate: (graph) => {
-    const nodes = matchedNodes(graph, options.spec)
-    return verdictOf({
-      id: options.id,
-      inspected: inspectedOf(nodes),
-      holds: matchedAll(nodes, options.predicate),
-      detail: options.detail,
-    })
-  },
-})
-
-export const status = (spec: Span.SpanRef, expected: Status): Relation =>
-  everyRelation({
+export const status = (spec: Span.Span, expected: Status): Relation =>
+  declared({
     id: `status(${spec.id},${expected})`,
-    spec,
+    spans: [spec],
+    softenable: true,
     detail: `a ${spec.id} span is not ${expected}`,
-    predicate: (node) => node.status === expected,
+    holds: holdsEveryOf(spec, (node) => node.status === expected),
   })
 
-export const errorType = (spec: Span.SpanRef, expected: string): Relation =>
-  everyRelation({
+export const errorType = (spec: Span.Span, expected: string): Relation =>
+  declared({
     id: `errorType(${spec.id},${expected})`,
-    spec,
+    spans: [spec],
+    softenable: true,
     detail: `a ${spec.id} span carries a different error.type`,
-    predicate: (node) => node.errorType === expected,
+    holds: holdsEveryOf(spec, (node) => node.errorType === expected),
   })
 
 const partialMatches = (
@@ -216,39 +187,38 @@ const partialMatches = (
     .filter(([, value]) => value !== undefined)
     .every(([key, value]) => Equal.equals(attributes[key], value))
 
-export const attrs = <S extends Span.SpanRef>(spec: S, partial: Partial<AttrsOf<S>>): Relation =>
-  everyRelation({
+export const attrs = <S extends Span.Span>(spec: S, partial: Partial<Span.AttrsOf<S>>): Relation =>
+  declared({
     id: `attrs(${spec.id})`,
-    spec,
+    spans: [spec],
+    softenable: true,
     detail: `a ${spec.id} span carries a different declared attribute`,
-    predicate: (node) => partialMatches(node.attrs, partial),
+    holds: holdsEveryOf(spec, (node) => partialMatches(node.attrs, partial)),
   })
 
-export const durationLessThan = (spec: Span.SpanRef, millis: number): Relation =>
-  everyRelation({
+export const durationLessThan = (spec: Span.Span, millis: number): Relation =>
+  declared({
     id: `durationLessThan(${spec.id},${millis})`,
-    spec,
+    spans: [spec],
+    softenable: true,
     detail: `a ${spec.id} span exceeded ${millis}ms`,
-    predicate: (node) => node.durationMillis < millis,
+    holds: holdsEveryOf(spec, (node) => node.durationMillis < millis),
   })
 
 const carriesEvent = (name: string) => (node: GraphNode): boolean => node.events.some((event) => event.name === name)
 
-export const event = (spec: Span.SpanRef, name: string): Relation =>
-  everyRelation({
+export const event = (spec: Span.Span, name: string): Relation =>
+  declared({
     id: `event(${spec.id},${name})`,
-    spec,
+    spans: [spec],
+    softenable: true,
     detail: `a ${spec.id} span carries no ${name} event`,
-    predicate: carriesEvent(name),
+    holds: holdsEveryOf(spec, carriesEvent(name)),
   })
 
-export const forall = (
-  spec: Span.SpanRef,
-  predicate: (node: GraphNode) => boolean,
-  detail: string,
-): Relation => {
+export const forall = (spec: Span.Span, predicate: (node: GraphNode) => boolean, detail: string): Relation => {
   const id = `forall(${spec.id})`
-  return {
+  return relation({
     id,
     soft: false,
     softenable: true,
@@ -261,93 +231,104 @@ export const forall = (
         detail: nodes.length === 0 ? `no ${spec.id} span was emitted: forall is non-vacuous` : detail,
       })
     },
-  }
+  })
 }
 
-export const soft = (relation: Relation): Relation => (relation.softenable ? { ...relation, soft: true } : relation)
+export const soft = (self: Relation): Relation =>
+  self.softenable
+    ? relation({ id: self.id, soft: true, softenable: true, evaluate: (graph) => self(graph) })
+    : self
+
+const negatedVerdict = (id: string, inner: Verdict): Verdict =>
+  Match.value(inner).pipe(
+    Match.tag(
+      'Hold',
+      (held) => Break.make({ conjunct: id, inspected: held.inspected, detail: `${held.conjunct} held` }),
+    ),
+    Match.tag('Break', (breach) => Hold.make({ conjunct: id, inspected: breach.inspected })),
+    Match.exhaustive,
+  )
+
+export const not = (self: Relation): Relation => {
+  const id = `not(${self.id})`
+  return relation({
+    id,
+    soft: false,
+    softenable: false,
+    evaluate: (graph) => negatedVerdict(id, self(graph)),
+  })
+}
+
+const collectSoft = (id: string, breaks: ReadonlyArray<Break>): Verdict => {
+  const inspected = breaks.flatMap((breach) => breach.inspected)
+  return breaks.length === 0
+    ? Hold.make({ conjunct: id, inspected })
+    : Break.make({ conjunct: id, inspected, detail: breaks.map((breach) => breach.conjunct).join(', ') })
+}
 
 const firstHardBreak = (relations: ReadonlyArray<Relation>, graph: TraceGraph): Break | null =>
   relations
     .filter((relation) => !relation.soft)
-    .map((relation) => relation.evaluate(graph))
+    .map((relation) => relation(graph))
     .find(isBreak) ?? null
 
 const softBreaks = (relations: ReadonlyArray<Relation>, graph: TraceGraph): ReadonlyArray<Break> =>
   relations
     .filter((relation) => relation.soft)
-    .map((relation) => relation.evaluate(graph))
+    .map((relation) => relation(graph))
     .filter(isBreak)
 
-const collectSoft = (id: string, breaks: ReadonlyArray<Break>): Verdict => {
-  const inspected = breaks.flatMap((item) => item.inspected)
-  return breaks.length === 0
-    ? Hold.make({ conjunct: id, inspected })
-    : Break.make({ conjunct: id, inspected, detail: breaks.map((item) => item.conjunct).join(', ') })
+interface Combination {
+  readonly id: string
+  readonly relations: ReadonlyArray<Relation>
+  readonly soft: boolean
+  readonly softenable: boolean
 }
 
-const evaluateAll = (id: string, relations: ReadonlyArray<Relation>, graph: TraceGraph): Verdict => {
-  const hard = firstHardBreak(relations, graph)
-  return hard !== null ? hard : collectSoft(id, softBreaks(relations, graph))
-}
+const combined = (options: Combination): Relation =>
+  relation({
+    id: options.id,
+    soft: options.soft,
+    softenable: options.softenable,
+    evaluate: (graph) =>
+      firstHardBreak(options.relations, graph) ?? collectSoft(options.id, softBreaks(options.relations, graph)),
+  })
 
-export const all = (...relations: ReadonlyArray<Relation>): Relation => {
-  const id = `all(${relations.map((relation) => relation.id).join(', ')})`
-  return {
-    id,
+export const all = (...relations: ReadonlyArray<Relation>): Relation =>
+  combined({
+    id: `all(${relations.map((relation) => relation.id).join(', ')})`,
+    relations,
     soft: relations.every((relation) => relation.soft),
     softenable: true,
-    evaluate: (graph) => evaluateAll(id, relations, graph),
-  }
-}
-
-const inspectedAcross = (verdicts: ReadonlyArray<Verdict>): ReadonlyArray<string> =>
-  verdicts.flatMap((verdict) => verdict.inspected)
-
-const anyVerdict = (id: string, verdicts: ReadonlyArray<Verdict>): Verdict =>
-  verdicts.some(isHold)
-    ? Hold.make({ conjunct: id, inspected: inspectedAcross(verdicts) })
-    : Break.make({
-      conjunct: id,
-      inspected: inspectedAcross(verdicts),
-      detail: verdicts.map((verdict) => verdict.conjunct).join(', '),
-    })
+  })
 
 export const any = (...relations: ReadonlyArray<Relation>): Relation => {
   const id = `any(${relations.map((relation) => relation.id).join(', ')})`
-  return {
+  return relation({
     id,
     soft: false,
     softenable: false,
-    evaluate: (graph) => anyVerdict(id, relations.map((relation) => relation.evaluate(graph))),
-  }
-}
-
-const negatedVerdict = (id: string, inner: Verdict): Verdict =>
-  isHold(inner)
-    ? Break.make({ conjunct: id, inspected: inner.inspected, detail: `${inner.conjunct} held` })
-    : Hold.make({ conjunct: id, inspected: inner.inspected })
-
-export const not = (relation: Relation): Relation => {
-  const id = `not(${relation.id})`
-  return {
-    id,
-    soft: false,
-    softenable: false,
-    evaluate: (graph) => negatedVerdict(id, relation.evaluate(graph)),
-  }
+    evaluate: (graph) => {
+      const verdicts = relations.map((relation) => relation(graph))
+      const inspected = verdicts.flatMap((verdict) => verdict.inspected)
+      return verdicts.some(isHold)
+        ? Hold.make({ conjunct: id, inspected })
+        : Break.make({ conjunct: id, inspected, detail: verdicts.map((verdict) => verdict.conjunct).join(', ') })
+    },
+  })
 }
 
 const REACH_BY_RELATION: Record<
-  Taxonomy.EdgeRelation,
+  Taxonomy.Edge['relation'],
   (graph: TraceGraph, parents: ReadonlyArray<GraphNode>) => ReadonlySet<string>
 > = {
   child: childIdsOf,
   descendant: descendantIdsOf,
 }
 
-const placementOf = (edge: Taxonomy.TaxonomyEdge): Relation => {
+const placementOf = (edge: Taxonomy.Edge): Relation => {
   const id = `placement(${edge.relation}:${edge.parent.id},${edge.child.id})`
-  return {
+  return relation({
     id,
     soft: false,
     softenable: false,
@@ -361,16 +342,22 @@ const placementOf = (edge: Taxonomy.TaxonomyEdge): Relation => {
         detail: `a ${edge.child.id} span is not a ${edge.relation} of any ${edge.parent.id} span`,
       })
     },
-  }
+  })
 }
 
-const forbiddenOn = (path: string) => (entry: Taxonomy.ForbiddenSpan): ReadonlyArray<Relation> =>
-  entry.unless === path ? [] : [absent(entry.span)]
+const forbidsAt = (entry: Taxonomy.Forbidden, path: string): boolean =>
+  Option.match(entry.unless, { onNone: () => true, onSome: (tag) => tag !== path })
 
-export const fromTaxonomy = (taxonomy: Taxonomy.Taxonomy, options: { readonly path: string }): Relation => {
-  const contract = all(...taxonomy.edges.map(placementOf), ...taxonomy.forbid.flatMap(forbiddenOn(options.path)))
-  return { ...contract, id: `fromTaxonomy(${taxonomy.id},${options.path})`, soft: false, softenable: false }
-}
+const forbiddenOn = (path: string) => (entry: Taxonomy.Forbidden): ReadonlyArray<Relation> =>
+  forbidsAt(entry, path) ? [absent(entry.span)] : []
+
+export const fromTaxonomy = (taxonomy: Taxonomy.Taxonomy, options: { readonly path: string }): Relation =>
+  combined({
+    id: `fromTaxonomy(${taxonomy.id},${options.path})`,
+    relations: [...taxonomy.edges.map(placementOf), ...taxonomy.forbidden.flatMap(forbiddenOn(options.path))],
+    soft: false,
+    softenable: false,
+  })
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
@@ -383,7 +370,11 @@ if (import.meta.vitest !== void 0) {
   const Settle = Span.declare({ id: 'fulfillment.settle', name: 'fulfillment.settle', attrs: SettleAttrs })
   const Charge = Span.declare({ id: 'credit.charge', name: 'credit.charge', attrs: SettleAttrs })
   const Ship = Span.declare({ id: 'shipment.dispatch', name: 'shipment.dispatch', attrs: SettleAttrs })
-  const TraceTaxonomy = Taxonomy.make({ id: 'taxonomy-rel', spans: [Settle, Charge, Ship], edges: [], forbid: [] })
+  const TraceTaxonomy = Taxonomy.make('taxonomy-rel').pipe(
+    Taxonomy.add(Settle),
+    Taxonomy.add(Charge),
+    Taxonomy.add(Ship),
+  )
 
   const StatusSchema = Schema.Literals(['ok', 'unset', 'error'])
   const EventSchema = Schema.Literals(['placed', 'charged'])
@@ -473,7 +464,7 @@ if (import.meta.vitest !== void 0) {
   }
 
   const holdsLike = (relation: Relation, spec: Spec, expected: boolean): boolean =>
-    isHold(relation.evaluate(graphOf(spec))) === expected
+    isHold(relation(graphOf(spec))) === expected
 
   const allFixture = (spec: Spec): Relation =>
     all(exists(Settle), unique(Charge), soft(status(Charge, 'error')), soft(durationLessThan(Charge, spec.bound)))
@@ -504,14 +495,14 @@ if (import.meta.vitest !== void 0) {
     expected.length === 0 ? isHold(verdict) : namesBreak(verdict, expected)
 
   const allBehaves = (spec: Spec): boolean => {
-    const verdict = allFixture(spec).evaluate(graphOf(spec))
+    const verdict = allFixture(spec)(graphOf(spec))
     const hard = expectedHardBreaks(spec)
     return hard.length > 0 ? verdict.conjunct === hard[0] : reportsSoft(verdict, expectedSoftBreaks(spec))
   }
 
   const softeningPreserves = (spec: Spec): boolean =>
-    isHold(soft(unique(Charge)).evaluate(graphOf(spec))) ===
-      isHold(unique(Charge).evaluate(graphOf(spec))) && soft(exists(Settle)).soft === false
+    isHold(soft(unique(Charge))(graphOf(spec))) ===
+      isHold(unique(Charge)(graphOf(spec))) && soft(exists(Settle)).soft === false
 
   const placedShipIds = (spec: Spec): ReadonlySet<string> => {
     const linked = linkedChargeIds(spec)
@@ -530,12 +521,12 @@ if (import.meta.vitest !== void 0) {
     return spec.ships.every((ship) => placed.has(ship.id))
   }
 
-  const ForbidTaxonomy = Taxonomy.make({
-    id: 'taxonomy-forbid',
-    spans: [Settle, Charge, Ship],
-    edges: [],
-    forbid: [{ span: Charge, unless: 'allocate' }],
-  })
+  const ForbidTaxonomy = Taxonomy.make('taxonomy-forbid').pipe(
+    Taxonomy.add(Settle),
+    Taxonomy.add(Charge),
+    Taxonomy.add(Ship),
+    Taxonomy.forbid(Charge, { unless: 'allocate' }),
+  )
 
   const forbidHonoursPath = (spec: Spec): boolean =>
     holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'hold' }), spec, spec.charges.length === 0) &&
@@ -579,7 +570,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop('∀g_Forbid_=AbsentOffPath', [GraphSpec], ([spec]) => forbidHonoursPath(spec))
 
-  const always = (): boolean => true
+  const alwaysHolds = (): boolean => true
 
   const expectedForall = (spec: Spec): boolean =>
     spec.charges.length > 0 && spec.charges.every((node) => node.durationMillis < spec.bound)
@@ -605,7 +596,7 @@ if (import.meta.vitest !== void 0) {
   it.prop(
     '∀g_Forall_→NonVacuous',
     [GraphSpec],
-    ([spec]) => isBreak(forall(Charge, always, 'unused detail').evaluate(graphOf({ ...spec, charges: [] }))),
+    ([spec]) => isBreak(forall(Charge, alwaysHolds, 'unused detail')(graphOf({ ...spec, charges: [] }))),
   )
 
   it.prop(
@@ -632,7 +623,7 @@ if (import.meta.vitest !== void 0) {
   const anyExpected = (spec: Spec): boolean => spec.settles.length > 0 || spec.charges.length === 1
 
   const anyBehaves = (spec: Spec): boolean => {
-    const verdict = anyFixture().evaluate(graphOf(spec))
+    const verdict = anyFixture()(graphOf(spec))
     return anyExpected(spec) ? isHold(verdict) : namesBreak(verdict, [exists(Settle).id, unique(Charge).id])
   }
 
@@ -641,25 +632,24 @@ if (import.meta.vitest !== void 0) {
   it.prop(
     '∀g_Any_=ConjunctAgreement',
     [GraphSpec],
-    ([spec]) => isHold(any(unique(Charge)).evaluate(graphOf(spec))) === isHold(unique(Charge).evaluate(graphOf(spec))),
+    ([spec]) => isHold(any(unique(Charge))(graphOf(spec))) === isHold(unique(Charge)(graphOf(spec))),
   )
 
   it.prop(
     '∀g_Not_=Negation',
     [GraphSpec],
-    ([spec]) => isHold(not(unique(Charge)).evaluate(graphOf(spec))) === !isHold(unique(Charge).evaluate(graphOf(spec))),
+    ([spec]) => isHold(not(unique(Charge))(graphOf(spec))) === !isHold(unique(Charge)(graphOf(spec))),
   )
 
   it.prop('∀g_Not_→NamesInnerOnHold', [GraphSpec], ([spec]) => {
     const inner = unique(Charge)
-    const verdict = not(inner).evaluate(graphOf(spec))
-    return isHold(inner.evaluate(graphOf(spec))) ? namesBreak(verdict, [inner.id]) : isHold(verdict)
+    const verdict = not(inner)(graphOf(spec))
+    return isHold(inner(graphOf(spec))) ? namesBreak(verdict, [inner.id]) : isHold(verdict)
   })
 
   it.prop(
     '∀g_NotNot_=Relation',
     [GraphSpec],
-    ([spec]) =>
-      isHold(not(not(unique(Charge))).evaluate(graphOf(spec))) === isHold(unique(Charge).evaluate(graphOf(spec))),
+    ([spec]) => isHold(not(not(unique(Charge)))(graphOf(spec))) === isHold(unique(Charge)(graphOf(spec))),
   )
 }

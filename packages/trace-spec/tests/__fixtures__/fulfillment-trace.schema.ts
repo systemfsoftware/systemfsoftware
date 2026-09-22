@@ -1,5 +1,5 @@
 import type { Graph } from '@systemfsoftware/trace-spec'
-import { Edge, Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Schema as S } from 'effect'
 
 export const TRACE_ID = 'trace-fixture-1'
@@ -13,12 +13,11 @@ export const Settle = Span.declare({ id: 'fulfillment.settle', name: 'fulfillmen
 
 export const Charge = Span.declare({ id: 'credit.charge', name: 'credit.charge', attrs: SettleAttrs })
 
-export const FulfillmentTaxonomy = Taxonomy.make({
-  id: 'fulfillment',
-  spans: [Settle, Charge],
-  edges: [Edge.child(Settle, Charge)],
-  forbid: [],
-})
+export const FulfillmentTaxonomy = Taxonomy.make('fulfillment').pipe(
+  Taxonomy.add(Settle),
+  Taxonomy.add(Charge),
+  Taxonomy.child(Settle, Charge),
+)
 
 export interface RecordedSpan {
   readonly spanId: string

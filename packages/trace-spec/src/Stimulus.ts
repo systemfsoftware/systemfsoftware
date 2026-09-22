@@ -26,7 +26,7 @@ export interface Run<Input, Output> {
 
 export interface Stimulus<Input, Output, E, R> {
   readonly name: string
-  readonly run: (input: Input) => Effect.Effect<Run<Input, Output>, E, R>
+  (input: Input): Effect.Effect<Run<Input, Output>, E, R>
 }
 
 export const make = <Input, Output, E, R>(options: {
@@ -36,9 +36,8 @@ export const make = <Input, Output, E, R>(options: {
     readonly traceId: string
     readonly traceparent: string
   }) => Effect.Effect<Output, E, R>
-}): Stimulus<Input, Output, E, R> => ({
-  name: options.name,
-  run: (input) =>
+}): Stimulus<Input, Output, E, R> => {
+  const stimulus = (input: Input): Effect.Effect<Run<Input, Output>, E, R> =>
     Effect.gen(function*() {
       const context = yield* traceContext
       const output = yield* options.run({ input, traceId: context.traceId, traceparent: context.traceparent })
@@ -48,5 +47,7 @@ export const make = <Input, Output, E, R>(options: {
           ),
         )
       return { input, traceId: context.traceId, output }
-    }),
-})
+    })
+  Object.defineProperty(stimulus, 'name', { value: options.name })
+  return stimulus
+}

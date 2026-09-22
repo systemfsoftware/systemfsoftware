@@ -1,5 +1,5 @@
 import { it, layer } from '@effect/vitest'
-import { Contract, Observe, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, FileSystem, Layer, Ref, Schema } from 'effect'
 
@@ -10,7 +10,7 @@ const discardingFileSystem = Layer.succeed(
   FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
 )
 
-const harness = Layer.merge(Observe.inMemory, discardingFileSystem)
+const harness = Layer.merge(InMemory.layer(), discardingFileSystem)
 
 class SharedBuild extends Context.Service<SharedBuild, { readonly built: number }>()('trace-spec/test/SharedBuild') {}
 class ScenarioBuild extends Context.Service<ScenarioBuild, { readonly built: number }>()(
@@ -45,7 +45,7 @@ const Probe = Span.declare({
   attrs: Schema.Struct({ 'shared.build': Schema.Finite, 'scenario.build': Schema.Finite }),
 })
 
-const ProbeTaxonomy = Taxonomy.make({ id: 'probe-layers', spans: [Probe], edges: [], forbid: [] })
+const ProbeTaxonomy = Taxonomy.make('probe-layers').pipe(Taxonomy.add(Probe))
 
 const SharedProbe = Span.declare({
   id: 'probe.shared',
@@ -53,7 +53,7 @@ const SharedProbe = Span.declare({
   attrs: Schema.Struct({ 'shared.build': Schema.Finite }),
 })
 
-const SharedTaxonomy = Taxonomy.make({ id: 'probe-shared', spans: [SharedProbe], edges: [], forbid: [] })
+const SharedTaxonomy = Taxonomy.make('probe-shared').pipe(Taxonomy.add(SharedProbe))
 
 const probeStimulus = Stimulus.make({
   name: 'probe.layers',
@@ -61,7 +61,7 @@ const probeStimulus = Stimulus.make({
     Effect.gen(function*() {
       const shared = yield* SharedBuild
       const scenario = yield* ScenarioBuild
-      return yield* Probe.start({ 'shared.build': shared.built, 'scenario.build': scenario.built })(Effect.void)
+      return yield* Span.start(Probe, { 'shared.build': shared.built, 'scenario.build': scenario.built })(Effect.void)
     }),
 })
 
@@ -70,7 +70,7 @@ const sharedProbeStimulus = Stimulus.make({
   run: () =>
     Effect.gen(function*() {
       const shared = yield* SharedBuild
-      return yield* SharedProbe.start({ 'shared.build': shared.built })(Effect.void)
+      return yield* Span.start(SharedProbe, { 'shared.build': shared.built })(Effect.void)
     }),
 })
 

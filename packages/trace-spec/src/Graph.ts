@@ -42,14 +42,12 @@ export interface Node<Attrs extends Span.AttributeRecord> {
   readonly links: ReadonlyArray<SpanLink>
 }
 
-export type AttrsOf<S extends Span.SpanRef> = S extends Span.SpanRef<infer Attrs> ? Attrs : Span.AttributeRecord
-
 export type GraphNode = Node<Span.AttributeRecord>
 
 export interface TraceGraph {
   readonly traceId: string
   readonly nodes: ReadonlyArray<GraphNode>
-  readonly byId: (spec: Span.SpanRef) => ReadonlyArray<GraphNode>
+  readonly byId: (spec: Span.Span) => ReadonlyArray<GraphNode>
   readonly children: (node: GraphNode) => ReadonlyArray<GraphNode>
   readonly descendants: (node: GraphNode) => ReadonlyArray<GraphNode>
 }
@@ -58,8 +56,8 @@ const plainAttributes = (
   attributes: ReadonlyMap<string, Span.AttributeValue>,
 ): Record<string, Span.AttributeValue> => Object.fromEntries(attributes)
 
-const indexDeclarations = (taxonomy: Taxonomy.Taxonomy): ReadonlyMap<string, Span.SpanRef> =>
-  new Map(taxonomy.spans.map((span): readonly [string, Span.SpanRef] => [span.name, span]))
+const indexDeclarations = (taxonomy: Taxonomy.Taxonomy): ReadonlyMap<string, Span.Span> =>
+  new Map(taxonomy.spans.map((span): readonly [string, Span.Span] => [span.name, span]))
 
 const keyOfPath = (path: ReadonlyArray<PropertyKey>): string | null => {
   const last = path.at(-1)
@@ -93,7 +91,7 @@ const firstAttributeName = (issues: ReadonlyArray<SchemaIssue.Issue>): string | 
   issues.map(attributeNameOf).find((name) => name !== null) ?? null
 
 const decodeFailure = (
-  spec: Span.SpanRef,
+  spec: Span.Span,
   record: SpanRecord,
   detail: string,
   attribute: string | null,
@@ -107,11 +105,11 @@ const decodeFailure = (
   })
 
 const decodeAttrs = (
-  spec: Span.SpanRef,
+  spec: Span.Span,
   record: SpanRecord,
 ): Result.Result<Span.AttributeRecord, ContractDecodeError> =>
   Result.mapError(
-    Schema.decodeResult(Schema.toType(spec.attrsSchema))(plainAttributes(record.attributes)),
+    Schema.decodeResult(Schema.toType(spec.attrs))(plainAttributes(record.attributes)),
     (error) => decodeFailure(spec, record, error.message, attributeNameOf(error.issue)),
   )
 
@@ -130,13 +128,13 @@ const nodeOf = (record: SpanRecord, attrs: Span.AttributeRecord): GraphNode => (
 
 const decodedNodeOf = (
   record: SpanRecord,
-  spec: Span.SpanRef,
+  spec: Span.Span,
 ): Result.Result<GraphNode, ContractDecodeError> =>
   Result.map(decodeAttrs(spec, record), (attrs) => nodeOf(record, attrs))
 
 const declaredNodeOf = (
   record: SpanRecord,
-  declarations: ReadonlyMap<string, Span.SpanRef>,
+  declarations: ReadonlyMap<string, Span.Span>,
 ): Result.Result<GraphNode, ContractDecodeError> => {
   const spec = declarations.get(record.name)
   return spec === undefined
@@ -194,7 +192,7 @@ if (import.meta.vitest !== void 0) {
     name: ORDER_SPAN,
     attrs: Schema.Struct({ [ORDER_ATTR]: Schema.String }),
   })
-  const PlaceOrderTaxonomy = Taxonomy.make({ id: 'taxonomy-1', spans: [PlaceOrder], edges: [], forbid: [] })
+  const PlaceOrderTaxonomy = Taxonomy.make('taxonomy-1').pipe(Taxonomy.add(PlaceOrder))
 
   const AttributeValue = Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])
   const Pair = Schema.Struct({ key: Schema.String, value: AttributeValue })

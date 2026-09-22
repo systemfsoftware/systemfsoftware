@@ -1,13 +1,5 @@
 import { CreditLedger, Fulfillment, Inventory, ReservationLog } from '@systemfsoftware/example-inventory-fulfillment'
-import {
-  Contract,
-  ContractDecodeError,
-  EmptyObservationError,
-  Observe,
-  Rel,
-  Stimulus,
-  TraceDisparityError,
-} from '@systemfsoftware/trace-spec'
+import { Contract, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Array as Arr, Effect, FileSystem, Layer, Option, Result, Schema as S } from 'effect'
 
 const SKU = 'sku-porcelain-mug'
@@ -113,13 +105,13 @@ export const settlementLayers = (options: {
   readonly creditLimits: Readonly<Record<string, number>>
   readonly commitOutcomes: Readonly<Record<string, CommitOutcome>>
 }): Layer.Layer<
-  Inventory.InventoryStore | CreditLedger | ReservationLog | Observe.Observation | FileSystem.FileSystem
+  Inventory.InventoryStore | CreditLedger | ReservationLog | Observation.Observation | FileSystem.FileSystem
 > =>
   Layer.mergeAll(
     inventoryStoreLayer([stockPartition()]),
     creditLedgerLayer(options.creditLimits),
     reservationLogLayer(options.commitOutcomes),
-    Observe.inMemory,
+    InMemory.layer(),
     recordingFileSystem,
   )
 
@@ -150,12 +142,12 @@ export const creditHoldContract = Contract.of(Fulfillment.fulfillmentTaxonomy)
   )
 
 export type CheckFailure =
-  | ContractDecodeError.ContractDecodeError
-  | EmptyObservationError.EmptyObservationError
-  | TraceDisparityError.TraceDisparityError
+  | Contract.ContractDecodeError
+  | Observation.EmptyObservationError
+  | Contract.TraceDisparityError
 
-export const disparityOf = (failure: CheckFailure): TraceDisparityError.TraceDisparityError => {
-  if (!S.is(TraceDisparityError.TraceDisparityError)(failure)) {
+export const disparityOf = (failure: CheckFailure): Contract.TraceDisparityError => {
+  if (!S.is(Contract.TraceDisparityError)(failure)) {
     throw new Error('the refusal was not a trace disparity')
   }
   return failure

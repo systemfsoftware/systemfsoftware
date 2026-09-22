@@ -1,5 +1,6 @@
 import { it, layer } from '@effect/vitest'
-import { Contract, Observe, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
@@ -10,14 +11,14 @@ const discardingFileSystem = Layer.succeed(
   FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
 )
 
-const harness = Layer.merge(Observe.inMemory, discardingFileSystem)
+const harness = Layer.merge(InMemory.layer(), discardingFileSystem)
 
 type Order = { readonly orderId: string; readonly charge: boolean }
 
 const settleOrder = (order: Order) => {
   const attrs = { 'app.order.id': order.orderId, 'app.order.total': 3 }
   const settled = Effect.succeed(`settled:${order.orderId}`)
-  return Settle.start(attrs)(order.charge ? Charge.start(attrs)(settled) : settled)
+  return Span.start(Settle, attrs)(order.charge ? Span.start(Charge, attrs)(settled) : settled)
 }
 
 const settlement = Stimulus.make({

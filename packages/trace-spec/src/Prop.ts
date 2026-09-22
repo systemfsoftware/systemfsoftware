@@ -3,12 +3,11 @@ import * as fc from 'fast-check'
 import * as Contract from './Contract.js'
 import type { ContractDecodeError } from './ContractDecodeError.schema.js'
 import type { EmptyObservationError } from './EmptyObservationError.schema.js'
-import type { Observation } from './Observe.js'
+import type { Observation } from './Observation.service.js'
 import { StimulusFailure } from './StimulusFailure.schema.js'
 import * as TaskAnnounce from './TaskAnnounce.js'
 import { TraceDisparityError } from './TraceDisparityError.schema.js'
-
-type CheckFailure<E> = E | ContractDecodeError | EmptyObservationError | TraceDisparityError
+import { Hold } from './Verdict.schema.js'
 
 type PropFailure = ContractDecodeError | EmptyObservationError | TraceDisparityError | StimulusFailure
 
@@ -17,53 +16,29 @@ const RUN_BUDGET = 100
 
 const isDisparity = Schema.is(TraceDisparityError)
 
-const renderInput = <Input>(input: Input): string => JSON.stringify(input)
+const isHold = Schema.is(Hold)
 
-const disparityOf = <E>(cause: Cause.Cause<E>): TraceDisparityError | null => {
-  const failure = Option.getOrNull(Cause.findErrorOption(cause))
-  return isDisparity(failure) ? failure : null
-}
+const disparityOf = <E>(cause: Cause.Cause<E>): Option.Option<TraceDisparityError> =>
+  Option.filter(Cause.findErrorOption(cause), isDisparity)
 
-interface Attempt<Input> {
-  readonly details: fc.RunDetails<[Input]>
-  readonly disparities: ReadonlyArray<TraceDisparityError>
-}
-
-const recordDisparity = <E>(cause: Cause.Cause<E>, disparities: Array<TraceDisparityError>): void => {
-  const disparity = disparityOf(cause)
-  if (disparity !== null) disparities.push(disparity)
-}
-
-const holdsGenerated = <Input, Output, E, R>(
+const drawHolds = <Input, Output, E, R>(
   contract: Contract.Contract<Input, Output, E, R>,
   context: Context.Context<R | Observation | FileSystem.FileSystem>,
-  disparities: Array<TraceDisparityError>,
 ): (input: Input) => Promise<boolean> =>
-(input) => {
-  const checked = Contract.check(contract, input).pipe(Effect.provide(context))
-  return Effect.runPromiseExit(checked).then((exit) =>
+(input) =>
+  Effect.runPromiseExitWith(context)(Contract.trace(contract, input)).then((exit) =>
     Exit.match(exit, {
-      onSuccess: () => true,
-      onFailure: (cause) => {
-        recordDisparity(cause, disparities)
-        return false
-      },
+      onSuccess: (traced) => isHold(traced.verdict),
+      onFailure: () => false,
     })
   )
-}
 
 const attempt = <Input, Output, E, R>(
   contract: Contract.Contract<Input, Output, E, R>,
   arbitrary: fc.Arbitrary<Input>,
   context: Context.Context<R | Observation | FileSystem.FileSystem>,
-): Promise<Attempt<Input>> => {
-  const disparities: Array<TraceDisparityError> = []
-  const generated = holdsGenerated(contract, context, disparities)
-  return fc.check(fc.asyncProperty(arbitrary, generated), { numRuns: RUN_BUDGET }).then((details) => ({
-    details,
-    disparities,
-  }))
-}
+): Promise<fc.RunDetails<[Input]>> =>
+  fc.check(fc.asyncProperty(arbitrary, drawHolds(contract, context)), { numRuns: RUN_BUDGET })
 
 const counterexampleInput = <Input>(details: fc.RunDetails<[Input]>): Input | undefined =>
   details.counterexample === null ? undefined : details.counterexample[0]
@@ -87,18 +62,16 @@ const unreproduced = <Input>(
   Effect.fail(
     new StimulusFailure({
       stimulus,
-      detail: `the shrunk input ${renderInput(input)} did not reproduce a relation break`,
+      detail: `the shrunk input ${JSON.stringify(input)} did not reproduce a relation break`,
     }),
   )
 
-const disparityBreak = <Input, Output, E, R>(
-  contract: Contract.Contract<Input, Output, E, R>,
+const reproducedFailure = <Input>(
+  stimulus: string,
   input: Input,
-  cause: Cause.Cause<CheckFailure<E>>,
-): Effect.Effect<never, PropFailure, R | Observation | FileSystem.FileSystem> =>
+  disparity: TraceDisparityError,
+): Effect.Effect<never, PropFailure, FileSystem.FileSystem> =>
   Effect.gen(function*() {
-    const disparity = disparityOf(cause)
-    if (disparity === null) return yield* unreproduced(contract.stimulus.name, input)
     yield* TaskAnnounce.announceCounterexample(input)
     yield* TaskAnnounce.announceDump(disparity)
     return yield* disparity
@@ -112,16 +85,20 @@ const shrunkFailure = <Input, Output, E, R>(
     const exit = yield* Effect.exit(Contract.check(contract, input))
     return yield* Exit.match(exit, {
       onSuccess: () => unreproduced(contract.stimulus.name, input),
-      onFailure: (cause) => disparityBreak(contract, input, cause),
+      onFailure: (cause) =>
+        Option.match(disparityOf(cause), {
+          onNone: () => unreproduced(contract.stimulus.name, input),
+          onSome: (disparity) => reproducedFailure(contract.stimulus.name, input, disparity),
+        }),
     })
   })
 
 const conclude = <Input, Output, E, R>(
   contract: Contract.Contract<Input, Output, E, R>,
-  run: Attempt<Input>,
+  details: fc.RunDetails<[Input]>,
 ): Effect.Effect<void, PropFailure, R | Observation | FileSystem.FileSystem> => {
-  const input = counterexampleInput(run.details)
-  return input === undefined ? notFound(contract.stimulus.name, run.details) : shrunkFailure(contract, input)
+  const input = counterexampleInput(details)
+  return input === undefined ? notFound(contract.stimulus.name, details) : shrunkFailure(contract, input)
 }
 
 export const body = <Input, Output, E, R>(
@@ -130,8 +107,8 @@ export const body = <Input, Output, E, R>(
 ): Effect.Effect<void, PropFailure, R | Observation | FileSystem.FileSystem> =>
   Effect.gen(function*() {
     const context = yield* Effect.context<R | Observation | FileSystem.FileSystem>()
-    const run = yield* Effect.promise(() => attempt(contract, arbitrary, context))
-    return yield* conclude(contract, run)
+    const details = yield* Effect.promise(() => attempt(contract, arbitrary, context))
+    return yield* conclude(contract, details)
   })
 
 if (import.meta.vitest !== void 0) {
@@ -144,13 +121,14 @@ if (import.meta.vitest !== void 0) {
     ([dumpPath]) =>
       Effect.sync(() => {
         const error = new TraceDisparityError({ relationId: 'r', traceId: 't', breaks: [], dumpPath })
-        return disparityOf(Cause.fail(error)) === error
+        return Option.contains(disparityOf(Cause.fail(error)), error)
       }),
   )
 
   it.prop(
-    '∀d_DisparityOf_=NullForForeignFailures',
+    '∀d_DisparityOf_=NoneForForeignFailures',
     [Schema.String],
-    ([detail]) => Effect.sync(() => disparityOf(Cause.fail(new StimulusFailure({ stimulus: 's', detail }))) === null),
+    ([detail]) =>
+      Effect.sync(() => Option.isNone(disparityOf(Cause.fail(new StimulusFailure({ stimulus: 's', detail }))))),
   )
 }

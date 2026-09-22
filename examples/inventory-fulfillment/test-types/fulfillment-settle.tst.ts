@@ -1,45 +1,22 @@
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect } from 'effect'
 import { describe, expect, it } from 'tstyche'
 import { CreditCharge, FulfillmentSettle, ReservationCommit } from '../src/fulfillment/fulfillment-settle.span.js'
 
-const settleWith = (orderId: string) =>
-  FulfillmentSettle.start({
-    'app.customer.id': 'customer-1',
-    'app.fraud.risk.score': 12,
-    'app.kit.count': 1,
-    'app.order.id': orderId,
-    'app.order.line.count': 2,
-  })
+const settleWith = (orderId: string) => Span.start(FulfillmentSettle, { orderId })
 
-describe('FulfillmentSettle.start', () => {
+describe('Span.start(FulfillmentSettle)', () => {
   it('start takes the full declared attribute record', () => {
-    expect(FulfillmentSettle.start).type.toBeCallableWith({
-      'app.customer.id': 'customer-1',
-      'app.fraud.risk.score': 12,
-      'app.kit.count': 1,
-      'app.order.id': 'order-1',
-      'app.order.line.count': 2,
-    })
+    expect(Span.start).type.toBeCallableWith(FulfillmentSettle, { orderId: 'order-1' })
   })
 
   it('start refuses a record missing a declared attribute', () => {
-    expect(FulfillmentSettle.start).type.not.toBeCallableWith({
-      'app.customer.id': 'customer-1',
-      'app.fraud.risk.score': 12,
-      'app.kit.count': 1,
-      'app.order.id': 'order-1',
-    })
+    expect(Span.start).type.not.toBeCallableWith(FulfillmentSettle, {})
   })
 
   it('start refuses a record mistyping a declared attribute', () => {
     expect(settleWith('order-1')).type.toBeCallableWith(Effect.succeed(7))
-    expect(FulfillmentSettle.start).type.not.toBeCallableWith({
-      'app.customer.id': 'customer-1',
-      'app.fraud.risk.score': 12,
-      'app.kit.count': 1,
-      'app.order.id': 7,
-      'app.order.line.count': 2,
-    })
+    expect(Span.start).type.not.toBeCallableWith(FulfillmentSettle, { orderId: 7 })
   })
 
   it('start preserves the wrapped outcome and its channels', () => {
@@ -48,27 +25,27 @@ describe('FulfillmentSettle.start', () => {
   })
 })
 
-describe('ReservationCommit.start', () => {
+describe('Span.start(ReservationCommit)', () => {
   it('start takes the full declared attribute record and refuses one missing a key', () => {
-    expect(ReservationCommit.start).type.toBeCallableWith({
+    expect(Span.start).type.toBeCallableWith(ReservationCommit, {
       'app.customer.id': 'customer-1',
       'app.order.id': 'order-1',
       'app.reservation.event.count': 1,
     })
-    expect(ReservationCommit.start).type.not.toBeCallableWith({
+    expect(Span.start).type.not.toBeCallableWith(ReservationCommit, {
       'app.customer.id': 'customer-1',
       'app.order.id': 'order-1',
     })
   })
 })
 
-describe('CreditCharge.start', () => {
+describe('Span.start(CreditCharge)', () => {
   it('start takes the full declared attribute record and refuses one missing a key', () => {
-    expect(CreditCharge.start).type.toBeCallableWith({
+    expect(Span.start).type.toBeCallableWith(CreditCharge, {
       'app.charge.amount': 42,
       'app.customer.id': 'customer-1',
     })
-    expect(CreditCharge.start).type.not.toBeCallableWith({
+    expect(Span.start).type.not.toBeCallableWith(CreditCharge, {
       'app.customer.id': 'customer-1',
     })
   })

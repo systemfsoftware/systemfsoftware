@@ -1,13 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import {
-  Contract,
-  ContractDecodeError,
-  EmptyObservationError,
-  Observe,
-  Rel,
-  Stimulus,
-  TraceDisparityError,
-} from '@systemfsoftware/trace-spec'
+import { Contract, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
@@ -15,12 +8,12 @@ import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-
 const Feature = makeFeature({ it, layer })
 
 type CheckFailure =
-  | ContractDecodeError.ContractDecodeError
-  | EmptyObservationError.EmptyObservationError
-  | TraceDisparityError.TraceDisparityError
+  | Contract.ContractDecodeError
+  | Observation.EmptyObservationError
+  | Contract.TraceDisparityError
 
-const disparityOf = (failure: CheckFailure): TraceDisparityError.TraceDisparityError => {
-  if (!Schema.is(TraceDisparityError.TraceDisparityError)(failure)) {
+const disparityOf = (failure: CheckFailure): Contract.TraceDisparityError => {
+  if (!Schema.is(Contract.TraceDisparityError)(failure)) {
     throw new Error('expected the contract to refuse with a trace disparity')
   }
   return failure
@@ -44,9 +37,9 @@ const recordingFileSystem = Layer.effect(
 type Order = { readonly orderId: string; readonly charge: boolean }
 
 const settleOrder = (order: Order) => {
-  const settled = Effect.succeed(`settled:${order.orderId}`)
   const attrs = { 'app.order.id': order.orderId, 'app.order.total': 9 }
-  return Settle.start(attrs)(order.charge ? Charge.start(attrs)(settled) : settled)
+  const settled = Effect.succeed(`settled:${order.orderId}`)
+  return Span.start(Settle, attrs)(order.charge ? Span.start(Charge, attrs)(settled) : settled)
 }
 
 const settlement = Stimulus.make({
@@ -59,7 +52,7 @@ const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 Feature('Settling an order under a contract that names the charge')
-  .withScenarioLayer(Layer.merge(Observe.inMemory, recordingFileSystem))
+  .withScenarioLayer(Layer.merge(InMemory.layer(), recordingFileSystem))
   .liveClock()
   .body(({ scenario }) => {
     scenario(
@@ -89,12 +82,11 @@ Feature('Settling an order under a contract that names the charge')
         ),
         When('the settlement is held to the contract')(
           'refusal',
-          (s) => Effect.flip(Contract.check(chargeBeneathSettlement, s.order)),
+          (s) => Effect.flip(Contract.check(chargeBeneathSettlement, s.order)).pipe(Effect.map(disparityOf)),
         ),
         Then('the refusal names the missing charge and where the trace was written')((s) => {
-          const refusal = disparityOf(s.refusal)
-          expect(refusal.relationId).toContain('credit.charge')
-          expect(refusal.dumpPath).toContain('artifacts/traces/')
+          expect(s.refusal.relationId).toContain('credit.charge')
+          expect(s.refusal.dumpPath).toContain('artifacts/traces/')
         }),
       ),
     )

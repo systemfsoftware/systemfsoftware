@@ -2,10 +2,6 @@
 "@systemfsoftware/trace-spec": minor
 ---
 
-New package: hold a behaviour to the trace it produced.
+Exports `Contract`, `Graph`, `Observation`, `Rel`, `Stimulus`, `Suite`, and the `InMemory` driver layer. `Contract.of(taxonomy).stimulate(stimulus).holds(relation)` composes a spec through dual stages around a callable stimulus and relation; `Contract.trace` observes a run, answering the graph and verdict; `Contract.check` adds the judgement and writes exactly one dump per failing run.
 
-`Contract.of(taxonomy).stimulate(stimulus).holds(relation)` composes a spec; `Contract.check` runs it under a trace id it owns, reads the trace back through `Observe.inMemory`, decodes it against the taxonomy, and evaluates the relation. `Suite.make({ it, layer })` registers a `Case` per example input or a `Case.prop` per fast-check arbitrary, shrinking a failure to a minimal input; `withLayer` shares a layer across the suite.
-
-`Rel` relations answer a verdict naming the broken conjunct and the spans inspected, never a bare boolean; the set covers existence, attributes, status, events, placement, ordering, duration, and `all`/`any`/`not`.
-
-A break fails with `TraceDisparityError` and annotates the test with the dump path; a missing required attribute fails with `ContractDecodeError`; an empty trace with `EmptyObservationError`.
+`Suite.make({ it, layer })` registers a `Case` per input or a `Case.prop` per fast-check arbitrary, shrinking failures to a minimal input; the scenario layer must provide `Observation.Observation` and a `FileSystem`, enforced at the type level. A break fails with `Contract.TraceDisparityError` and annotates the test with its dump path; a missing attribute with `Contract.ContractDecodeError`, an empty trace with `Observation.EmptyObservationError`, a failing behaviour with `Suite.StimulusFailure`.

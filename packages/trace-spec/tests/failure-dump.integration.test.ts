@@ -1,10 +1,23 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { FailureDump, Graph, Rel, Verdict } from '@systemfsoftware/trace-spec'
+import { Contract, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
-import { Charge, FulfillmentTaxonomy, Settle, spanRecord, TRACE_ID } from './__fixtures__/fulfillment-trace.schema.js'
+import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
 const Feature = makeFeature({ it, layer })
+
+type CheckFailure =
+  | Contract.ContractDecodeError
+  | Observation.EmptyObservationError
+  | Contract.TraceDisparityError
+
+const disparityOf = (failure: CheckFailure): Contract.TraceDisparityError => {
+  if (!Schema.is(Contract.TraceDisparityError)(failure)) {
+    throw new Error('expected the contract to refuse with a trace disparity')
+  }
+  return failure
+}
 
 const memoryTraceFileSystem = Layer.effect(
   FileSystem.FileSystem,
@@ -21,68 +34,50 @@ const memoryTraceFileSystem = Layer.effect(
   }),
 )
 
-const breakOf = (verdict: Verdict.Verdict): Verdict.Break => {
-  if (!Schema.is(Verdict.Break)(verdict)) throw new Error('expected the recorded relation to break')
-  return verdict
-}
+type Order = { readonly orderId: string }
+
+const recordSettleAndOrphanCharge = Stimulus.make({
+  name: 'fulfillment.settle',
+  run: ({ input }: { readonly input: Order }) =>
+    Effect.gen(function*() {
+      yield* Span.start(Settle, { 'app.order.id': input.orderId, 'app.order.total': 1 })(Effect.void)
+      yield* Span.start(Charge, { 'app.order.id': 'order-8', 'app.order.total': 2 })(Effect.void)
+      return input.orderId
+    }),
+})
+
+const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
+  .stimulate(recordSettleAndOrphanCharge)
+  .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 Feature('A failed trace contract')
-  .withScenarioLayer(memoryTraceFileSystem)
+  .withScenarioLayer(Layer.merge(InMemory.layer(), memoryTraceFileSystem))
   .body(({ scenario }) => {
     scenario(
-      'A charge is recorded without its settlement parent',
+      'A charge recorded outside its settlement parent is written down',
       Gherkin.Do.pipe(
-        Given('a finished trace recorded a charge without its settlement parent')(
-          'observed',
-          () =>
-            Graph.decode(
-              TRACE_ID,
-              [
-                spanRecord({
-                  spanId: 'settle-1',
-                  name: Settle.name,
-                  parentSpanId: null,
-                  status: 'ok',
-                  attributes: { 'app.order.id': 'order-7', 'app.order.total': 1 },
-                }),
-                spanRecord({
-                  spanId: 'charge-1',
-                  name: Charge.name,
-                  parentSpanId: null,
-                  status: 'ok',
-                  attributes: { 'app.order.id': 'order-8', 'app.order.total': 2 },
-                }),
-              ],
-              FulfillmentTaxonomy,
-            ),
+        Given('an order whose settlement recorded a charge outside its parent')(
+          'order',
+          () => Effect.succeed({ orderId: 'order-7' }),
         ),
-        When('the failing relation is written down')(
-          'failure',
-          (s) =>
-            Effect.gen(function*() {
-              const breach = breakOf(Rel.child(Settle, Charge).evaluate(s.observed))
-              return yield* FailureDump.disparity({
-                graph: s.observed,
-                relation: Rel.child(Settle, Charge),
-                break: breach,
-              })
-            }),
+        When('the settlement is held to the contract')(
+          'refusal',
+          (s) => Effect.flip(Contract.check(chargeBeneathSettlement, s.order)).pipe(Effect.map(disparityOf)),
         ),
-        Then('the failure names where the decoded trace was written')((s) => {
-          expect(s.failure.relationId).toContain('child(fulfillment.settle')
-          expect(s.failure.breaks).toHaveLength(1)
-          expect(s.failure.breaks[0]?.inspected).toContain('charge-1')
-          expect(s.failure.dumpPath).toContain('artifacts/traces/')
-          expect(s.failure.dumpPath).toContain(TRACE_ID)
+        Then('the refusal names the parent it inspected and where the trace was written')((s) => {
+          expect(s.refusal.relationId).toContain('child(fulfillment.settle')
+          expect(s.refusal.breaks).toHaveLength(1)
+          expect(s.refusal.breaks[0]?.inspected).toHaveLength(2)
+          expect(s.refusal.dumpPath).toContain('artifacts/traces/')
+          expect(s.refusal.dumpPath).toContain(s.refusal.traceId)
         }),
         And('the written trace names both recorded spans')((s) =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
-            const dump = s.failure.dumpPath === null ? '' : yield* fs.readFileString(s.failure.dumpPath)
+            const dump = s.refusal.dumpPath === null ? '' : yield* fs.readFileString(s.refusal.dumpPath)
             expect(dump).toContain('fulfillment.settle')
             expect(dump).toContain('credit.charge')
-            expect(dump).toContain('settle-1')
-            expect(dump).toContain('charge-1')
+            expect(dump).toContain(s.refusal.traceId)
           })
         ),
       ),

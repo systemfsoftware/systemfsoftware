@@ -1,5 +1,6 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Graph, Observe, Rel, Stimulus, Verdict } from '@systemfsoftware/trace-spec'
+import { Graph, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
@@ -7,8 +8,8 @@ import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-
 const Feature = makeFeature({ it, layer })
 
 const settleOrder = (orderId: string, total: number) =>
-  Settle.start({ 'app.order.id': orderId, 'app.order.total': total })(
-    Charge.start({ 'app.order.id': orderId, 'app.order.total': total })(Effect.succeed(`settled:${orderId}`)),
+  Span.start(Settle, { 'app.order.id': orderId, 'app.order.total': total })(
+    Span.start(Charge, { 'app.order.id': orderId, 'app.order.total': total })(Effect.succeed(`settled:${orderId}`)),
   )
 
 const settlement = Stimulus.make({
@@ -19,13 +20,13 @@ const settlement = Stimulus.make({
 
 const observedGraph = (traceId: string) =>
   Effect.gen(function*() {
-    const observation = yield* Observe.Observation
+    const observation = yield* Observation.Observation
     const spans = yield* observation.collect(traceId)
     return yield* Graph.decode(traceId, spans, FulfillmentTaxonomy)
   })
 
 Feature('Holding a settlement to the trace it produced')
-  .withScenarioLayer(Observe.inMemory)
+  .withScenarioLayer(InMemory.layer())
   .liveClock()
   .body(({ scenario }) => {
     scenario(
@@ -35,11 +36,11 @@ Feature('Holding a settlement to the trace it produced')
           'order',
           () => Effect.succeed({ orderId: 'order-7', total: 42 }),
         ),
-        When('the settlement runs under a trace of its own')('run', (s) => settlement.run(s.order)),
+        When('the settlement runs under a trace of its own')('run', (s) => settlement(s.order)),
         When('the finished trace is read back')('graph', (s) => observedGraph(s.run.traceId)),
         Then('the trace shows the charge beneath the settlement')((s) => {
-          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)).evaluate(s.graph)
-          expect(Schema.is(Verdict.Hold)(verdict)).toBe(true)
+          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))(s.graph)
+          expect(Schema.is(Rel.Hold)(verdict)).toBe(true)
           expect(s.run.output).toBe('settled:order-7')
         }),
       ),
@@ -53,7 +54,7 @@ Feature('Holding a settlement to the trace it produced')
           'outcome',
           (s) =>
             Effect.gen(function*() {
-              const observation = yield* Observe.Observation
+              const observation = yield* Observation.Observation
               return yield* Effect.flip(observation.collect(s.idle.traceId))
             }),
         ),
@@ -67,10 +68,10 @@ Feature('Holding a settlement to the trace it produced')
     scenario(
       'Two settlements in one run answer only for their own order',
       Gherkin.Do.pipe(
-        Given('a settlement for one order')('first', () => settlement.run({ orderId: 'order-1', total: 1 })),
+        Given('a settlement for one order')('first', () => settlement({ orderId: 'order-1', total: 1 })),
         When('a second settlement runs for another order')(
           'second',
-          () => settlement.run({ orderId: 'order-2', total: 2 }),
+          () => settlement({ orderId: 'order-2', total: 2 }),
         ),
         Then('each trace carries only the spans of its own settlement')((s) =>
           Effect.gen(function*() {
@@ -91,10 +92,10 @@ Feature('Holding a settlement to the trace it produced')
         Given('a settlement was served under its own observation window')('window', () =>
           Effect.scoped(
             Effect.gen(function*() {
-              const window = yield* Layer.build(Observe.inMemory)
-              const run = yield* settlement.run({ orderId: 'order-3', total: 3 }).pipe(Effect.provide(window))
+              const window = yield* Layer.build(InMemory.layer())
+              const run = yield* settlement({ orderId: 'order-3', total: 3 }).pipe(Effect.provide(window))
               const spans = yield* Effect.flatMap(
-                Observe.Observation,
+                Observation.Observation,
                 (observation) => observation.collect(run.traceId),
               ).pipe(Effect.provide(window))
               const graph = yield* Graph.decode(run.traceId, spans, FulfillmentTaxonomy)
@@ -103,8 +104,8 @@ Feature('Holding a settlement to the trace it produced')
           )),
         When('the same trace is asked for at a separate window')('reread', (s) =>
           Effect.scoped(
-            Effect.flatMap(Layer.build(Observe.inMemory), (window) =>
-              Effect.flatMap(Observe.Observation, (observation) =>
+            Effect.flatMap(Layer.build(InMemory.layer()), (window) =>
+              Effect.flatMap(Observation.Observation, (observation) =>
                 observation.collect(s.window.run.traceId)).pipe(
                   Effect.provide(window),
                 )).pipe(Effect.flip),
@@ -114,8 +115,8 @@ Feature('Holding a settlement to the trace it produced')
           expect(s.reread.traceId).toBe(s.window.run.traceId)
         }),
         And('the window that served the settlement still answers with its graph')((s) => {
-          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)).evaluate(s.window.graph)
-          expect(Schema.is(Verdict.Hold)(verdict)).toBe(true)
+          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))(s.window.graph)
+          expect(Schema.is(Rel.Hold)(verdict)).toBe(true)
         }),
       ),
     )

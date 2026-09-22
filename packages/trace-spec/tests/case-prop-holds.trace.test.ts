@@ -1,5 +1,5 @@
 import { it, layer } from '@effect/vitest'
-import { Contract, Observe, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { probeInputs } from './__fixtures__/probe-arbitrary.js'
@@ -7,7 +7,7 @@ import { probeInputs } from './__fixtures__/probe-arbitrary.js'
 const TraceSuite = Suite.make({ it, layer })
 
 const harness = Layer.merge(
-  Observe.inMemory,
+  InMemory.layer(),
   Layer.succeed(
     FileSystem.FileSystem,
     FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
@@ -20,11 +20,11 @@ const Probe = Span.declare({
   attrs: Schema.Struct({ 'probe.value': Schema.Finite }),
 })
 
-const ProbeTaxonomy = Taxonomy.make({ id: 'probe-prop', spans: [Probe], edges: [], forbid: [] })
+const ProbeTaxonomy = Taxonomy.make('probe-prop').pipe(Taxonomy.add(Probe))
 
 const emitExactlyOne = Stimulus.make({
   name: 'probe.prop',
-  run: ({ input }: { readonly input: number }) => Probe.start({ 'probe.value': input })(Effect.void),
+  run: ({ input }: { readonly input: number }) => Span.start(Probe, { 'probe.value': input })(Effect.void),
 })
 
 const uniqueProbe = Contract.of(ProbeTaxonomy).stimulate(emitExactlyOne).holds(Rel.unique(Probe))

@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import type { Span } from '@systemfsoftware/trace-taxonomy'
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
 import type { SchemaError } from 'effect/Schema'
 import {
@@ -245,11 +245,13 @@ const commitReservation = (
   raw: RawContext,
 ): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> => {
   const commit = reservationCommitOf(plan, raw)
-  return ReservationCommitSpan.start({
-    'app.customer.id': raw.order.customerId,
-    'app.order.id': raw.order.orderId,
-    'app.reservation.event.count': commit.events.length,
-  })(Effect.flatMap(ReservationLog, (log) => log.commit(commit)))
+  return Effect.flatMap(ReservationLog, (log) => log.commit(commit)).pipe(
+    Span.start(ReservationCommitSpan, {
+      'app.customer.id': raw.order.customerId,
+      'app.order.id': raw.order.orderId,
+      'app.reservation.event.count': commit.events.length,
+    }),
+  )
 }
 
 const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
@@ -257,8 +259,8 @@ const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
 
 const chargeCredit = (customerId: string, allocations: readonly LotAllocation[]) => {
   const amount = chargedAmountOf(allocations)
-  return CreditCharge.start({ 'app.charge.amount': Number(amount), 'app.customer.id': customerId })(
-    Effect.flatMap(CreditLedger, (ledger) => ledger.charge(customerId, amount)),
+  return Effect.flatMap(CreditLedger, (ledger) => ledger.charge(customerId, amount)).pipe(
+    Span.start(CreditCharge, { 'app.charge.amount': Number(amount), 'app.customer.id': customerId }),
   )
 }
 
@@ -269,13 +271,16 @@ const chargeFor = (
   Match.value(decision).pipe(
     Match.tag('AllocatedSplit', (allocated) => chargeCredit(customerId, allocated.allocations)),
     Match.tag('AllocatedWithOverdraft', (overdraft) => chargeCredit(customerId, overdraft.allocations)),
-    Match.tag('CreditHold', () => Effect.void),
-    Match.tag('Backordered', () => Effect.void),
-    Match.tag('ConflictRollback', () => Effect.void),
-    Match.tag('InsufficientStock', () => Effect.void),
-    Match.tag('CreditLimitExceeded', () => Effect.void),
-    Match.tag('Unauthorized', () => Effect.void),
-    Match.tag('Forbidden', () => Effect.void),
+    Match.tag(
+      'Backordered',
+      'ConflictRollback',
+      'CreditHold',
+      'CreditLimitExceeded',
+      'Forbidden',
+      'InsufficientStock',
+      'Unauthorized',
+      () => Effect.void,
+    ),
     Match.exhaustive,
   )
 
@@ -298,7 +303,7 @@ const writeFulfillment = (encoded: EncodedFulfillment, raw: RawContext) =>
  * The fulfillment sandwich. Callers run `fulfillmentCell.run(request)`.
  * CAS retries and per-customer gating live at the RPC edge (Effect.retry, CustomerGate).
  */
-const settleCell = Sandwich.named('fulfillment.settle')(readContext)
+export const fulfillmentCell = Sandwich.named(FulfillmentSettle.name)(readContext)
   .decode(Sandwich.pure(decodeContext))
   .decide(settleFulfillment)
   .encode(
@@ -307,16 +312,3 @@ const settleCell = Sandwich.named('fulfillment.settle')(readContext)
     ),
   )
   .write(writeFulfillment)
-
-const settleAttributesOf = (request: FulfillmentRequest): Span.AttrsOf<typeof FulfillmentSettle> => ({
-  'app.customer.id': request.order.customerId,
-  'app.fraud.risk.score': request.fraudRisk,
-  'app.kit.count': request.kits.length,
-  'app.order.id': request.order.orderId,
-  'app.order.line.count': request.order.lines.length,
-})
-
-export const fulfillmentCell: typeof settleCell = {
-  ...settleCell,
-  run: (request) => FulfillmentSettle.start(settleAttributesOf(request))(settleCell.run(request)),
-}

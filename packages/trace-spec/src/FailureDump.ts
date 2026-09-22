@@ -23,18 +23,10 @@ export const render = (graph: TraceGraph, breaches: ReadonlyArray<Break>): strin
 
 const DEFAULT_DIRECTORY = 'artifacts/traces'
 
-const stringify = <V>(value: V): string | undefined => {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return undefined
-  }
-}
-
-const renderUnknown = <V>(value: V): string => stringify(value) ?? String(value)
+const renderValue = (value: Span.AttributeValue): string => JSON.stringify(value)
 
 const renderEntries = (entries: Iterable<readonly [string, Span.AttributeValue]>): string =>
-  [...entries].map(([key, value]) => `${key}=${renderUnknown(value)}`).join(' ')
+  [...entries].map(([key, value]) => `${key}=${renderValue(value)}`).join(' ')
 
 const indentOf = (depth: number): string => '  '.repeat(depth)
 

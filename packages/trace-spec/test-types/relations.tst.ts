@@ -1,5 +1,5 @@
-import { ContractDecodeError, FailureDump, Graph, Rel, TraceDisparityError, Verdict } from '@systemfsoftware/trace-spec'
-import { Effect, FileSystem } from 'effect'
+import { Contract, Graph, Rel } from '@systemfsoftware/trace-spec'
+import { Effect } from 'effect'
 import { describe, expect, it } from 'tstyche'
 import {
   Charge,
@@ -9,16 +9,13 @@ import {
   TRACE_ID,
 } from '../tests/__fixtures__/fulfillment-trace.schema.js'
 
-declare const graph: Graph.TraceGraph
-declare const breach: Verdict.Break
-
 describe('Rel', () => {
-  it('a relation answers with the verdict union, never a bare boolean', () => {
+  it('a relation is the evaluation itself and answers with the verdict union, never a bare boolean', () => {
     const relation = Rel.child(Settle, Charge)
-    expect(relation.evaluate).type.toBe<(graph: Graph.TraceGraph) => Verdict.Verdict>()
-    expect(relation.evaluate).type.not.toBeAssignableTo<(graph: Graph.TraceGraph) => boolean>()
-    expect<Verdict.Verdict>().type.toBe<Verdict.Hold | Verdict.Break>()
-    expect<Verdict.Verdict>().type.not.toBe<boolean>()
+    expect(relation).type.toBe<Rel.Relation>()
+    expect(relation).type.not.toBeAssignableTo<(graph: Graph.TraceGraph) => boolean>()
+    expect<Rel.Verdict>().type.toBe<Rel.Hold | Rel.Break>()
+    expect<Rel.Verdict>().type.not.toBe<boolean>()
   })
 
   it('status accepts a declared span status and refuses another', () => {
@@ -48,7 +45,7 @@ describe('Rel compound relations', () => {
     expect(Rel.event).type.not.toBeCallableWith(Charge, 7)
   })
 
-  it('order takes two span refs and refuses a bare span name string', () => {
+  it('order takes two declared spans and refuses a bare span name string', () => {
     expect(Rel.order).type.toBeCallableWith(Settle, Charge)
     expect(Rel.order).type.not.toBeCallableWith(Settle, 'credit.charge')
   })
@@ -86,20 +83,20 @@ describe('Graph.decode', () => {
       ],
       FulfillmentTaxonomy,
     )
-    expect(decoded).type.toBe<Effect.Effect<Graph.TraceGraph, ContractDecodeError.ContractDecodeError, never>>()
-  })
-})
-
-describe('FailureDump', () => {
-  it('records the failure without failing and needs the file system', () => {
-    const recorded = FailureDump.disparity({ graph, relation: Rel.exists(Settle), break: breach })
-    expect(recorded).type.toBe<Effect.Effect<TraceDisparityError.TraceDisparityError, never, FileSystem.FileSystem>>()
+    expect(decoded).type.toBe<Effect.Effect<Graph.TraceGraph, Contract.ContractDecodeError, never>>()
   })
 })
 
 describe('TraceDisparityError', () => {
   it('carries the failure without gherkin vocabulary', () => {
-    expect<TraceDisparityError.TraceDisparityError>().type.not.toBeAssignableTo<{ readonly keyword: string }>()
-    expect<TraceDisparityError.TraceDisparityError>().type.not.toBeAssignableTo<{ readonly text: string }>()
+    expect<Contract.TraceDisparityError>().type.not.toBeAssignableTo<{ readonly keyword: string }>()
+    expect<Contract.TraceDisparityError>().type.not.toBeAssignableTo<{ readonly text: string }>()
+  })
+
+  it('carries the broken relation and where the observed graph was written', () => {
+    expect<Contract.TraceDisparityError>().type.toBeAssignableTo<{
+      readonly relationId: string
+      readonly dumpPath: string | null
+    }>()
   })
 })

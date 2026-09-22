@@ -11,8 +11,11 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import type { Span } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, Layer } from 'effect'
-import { EmptyObservationError } from './EmptyObservationError.schema.js'
-import type { SpanEvent, SpanLink, SpanRecord, Status } from './Graph.js'
+import { EmptyObservationError } from '../EmptyObservationError.schema.js'
+import type { SpanEvent, SpanLink, SpanRecord, Status } from '../Graph.js'
+import { type Collector, Observation } from '../Observation.service.js'
+
+const DEFAULT_SERVICE_NAME = 'trace-spec'
 
 const SCALAR_TYPES: Record<string, true> = { string: true, number: true, boolean: true }
 
@@ -65,7 +68,7 @@ const linksOf = (span: ReadableSpan): ReadonlyArray<SpanLink> =>
 
 const millisOf = (duration: readonly [number, number]): number => duration[0] * 1_000 + duration[1] / 1_000_000
 
-export const spanRecordOf = (span: ReadableSpan): SpanRecord => {
+const spanRecordOf = (span: ReadableSpan): SpanRecord => {
   const attributes = attributeMap(span.attributes)
   return {
     traceId: span.spanContext().traceId,
@@ -81,14 +84,6 @@ export const spanRecordOf = (span: ReadableSpan): SpanRecord => {
     links: linksOf(span),
   }
 }
-
-export interface Collector {
-  readonly collect: (traceId: string) => Effect.Effect<ReadonlyArray<SpanRecord>, EmptyObservationError>
-}
-
-export class Observation extends Context.Service<Observation, Collector>()(
-  '@systemfsoftware/trace-spec/Observation',
-) {}
 
 interface Sink {
   readonly exporter: InMemorySpanExporter
@@ -125,14 +120,21 @@ const acquireSink = Effect.acquireRelease(
   (sink) => Effect.promise(() => sink.provider.shutdown()),
 )
 
-const sinkLayer = Layer.effectContext(
+const sinkLayer: Layer.Layer<Observation | OtelTracer.OtelTracerProvider> = Layer.effectContext(
   Effect.map(acquireSink, (sink) =>
     Context.make(Observation, collectorOf(sink.exporter)).pipe(
       Context.add(OtelTracer.OtelTracerProvider, sink.provider),
     )),
 )
 
-export const inMemory: Layer.Layer<Observation | OtelTracer.OtelTracer> = OtelTracer.layer.pipe(
-  Layer.provide(OtelResource.layer({ serviceName: 'trace-spec' })),
-  Layer.provideMerge(sinkLayer),
-)
+const serviceNameOrDefault = (options: { readonly serviceName?: string }): string =>
+  options.serviceName ?? DEFAULT_SERVICE_NAME
+
+const serviceNameOf = (options: { readonly serviceName?: string } | undefined): string =>
+  options === undefined ? DEFAULT_SERVICE_NAME : serviceNameOrDefault(options)
+
+export const layer = (options?: { readonly serviceName?: string }): Layer.Layer<Observation | OtelTracer.OtelTracer> =>
+  OtelTracer.layer.pipe(
+    Layer.provideMerge(OtelResource.layer({ serviceName: serviceNameOf(options) })),
+    Layer.provideMerge(sinkLayer),
+  )

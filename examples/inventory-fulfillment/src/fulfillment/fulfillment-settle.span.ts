@@ -1,16 +1,10 @@
-import { Edge, Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Schema as S } from 'effect'
 
 export const FulfillmentSettle = Span.declare({
   id: 'inventory.fulfillment.settle',
   name: 'inventory.fulfillment.settle',
-  attrs: S.Struct({
-    'app.customer.id': S.String,
-    'app.fraud.risk.score': S.Finite,
-    'app.kit.count': S.Finite,
-    'app.order.id': S.String,
-    'app.order.line.count': S.Finite,
-  }),
+  attrs: S.Struct({ orderId: S.String }),
 })
 
 export const ReservationCommit = Span.declare({
@@ -32,9 +26,8 @@ export const CreditCharge = Span.declare({
   }),
 })
 
-export const fulfillmentTaxonomy = Taxonomy.make({
-  id: 'inventory.fulfillment',
-  spans: [FulfillmentSettle, ReservationCommit, CreditCharge],
-  edges: [Edge.descendant(FulfillmentSettle, ReservationCommit), Edge.descendant(FulfillmentSettle, CreditCharge)],
-  forbid: [{ span: CreditCharge, unless: 'allocate' }],
-})
+export const fulfillmentTaxonomy = Taxonomy.make('inventory.fulfillment').pipe(
+  Taxonomy.descendant(FulfillmentSettle, ReservationCommit),
+  Taxonomy.descendant(FulfillmentSettle, CreditCharge),
+  Taxonomy.forbid(CreditCharge, { unless: 'allocate' }),
+)
