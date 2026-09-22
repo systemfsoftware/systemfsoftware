@@ -60,6 +60,7 @@
     "@effect/vitest": "catalog:",
     "@systemfsoftware/api-extractor": "workspace:*",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
@@ -69,7 +70,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "6.0.3",
     "vitest": "catalog:"
   },
   "publishConfig": {
