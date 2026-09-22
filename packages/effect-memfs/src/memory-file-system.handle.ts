@@ -573,29 +573,66 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
       catch: failureOf('writeFile'),
     })
 
-  const decoded = (eventType: string, filename: string | Uint8Array): FileSystem.WatchEvent =>
+  const parentOf = (path: string): string => {
+    const cut = path.lastIndexOf('/')
+    return cut <= 0 ? '/' : path.slice(0, cut)
+  }
+
+  const watchedDirectoryOf = (path: string): string => nfs.statSync(path).isDirectory() ? path : parentOf(path)
+
+  const entryUnder = (directory: string, entry: string): string =>
+    directory.endsWith('/') ? `${directory}${entry}` : `${directory}/${entry}`
+
+  const existsUnder = (directory: string, entry: string): Effect.Effect<boolean> =>
+    Effect.match(
+      Effect.tryPromise({
+        try: () => nfs.promises.stat(entryUnder(directory, entry)),
+        catch: () => new ShapeRefusal({ method: 'watch' }),
+      }),
+      { onFailure: () => false, onSuccess: () => true },
+    )
+
+  const decidedFrom = (entry: string, exists: boolean): FileSystem.WatchEvent =>
     eventOf(
       Result.getOrThrow(
-        decodeWatchEvent(
-          new DriverWatchEvent({
-            eventType: eventTypeOf(eventType),
-            filename: entryPathOf(filename),
-            exists: nfs.existsSync(entryPathOf(filename)),
-          }),
-        ),
+        decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })),
       ),
     )
 
+  const changedFrom = (entry: string): FileSystem.WatchEvent =>
+    eventOf(
+      Result.getOrThrow(
+        decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })),
+      ),
+    )
+
+  type DriverEvent = { readonly eventType: string; readonly entry: string }
+
+  const decideEvent = (directory: string) => (event: DriverEvent): Effect.Effect<FileSystem.WatchEvent> =>
+    eventTypeOf(event.eventType) === 'change'
+      ? Effect.succeed(changedFrom(event.entry))
+      : Effect.map(existsUnder(directory, event.entry), (exists) => decidedFrom(event.entry, exists))
+
   const watch: FileSystem.FileSystem['watch'] = (path, options) =>
     Stream.callback<FileSystem.WatchEvent, Error.PlatformError>((queue) =>
-      Effect.acquireRelease(
-        Effect.sync(() =>
-          nfs.watch(path, { persistent: false, recursive: isRecursive(options) }, (eventType, filename) => {
-            Queue.offerUnsafe(queue, decoded(eventType, filename))
-          })
-        ),
-        (watcher) => Effect.sync(() => watcher.close()),
-      )
+      Effect.gen(function*() {
+        const decide = decideEvent(watchedDirectoryOf(path))
+        const driverEvents = yield* Queue.unbounded<DriverEvent>()
+        yield* Effect.forkScoped(Effect.forever(
+          Effect.flatMap(
+            Effect.flatMap(Queue.take(driverEvents), decide),
+            (event) => Queue.offer(queue, event),
+          ),
+        ))
+        return yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            nfs.watch(path, { persistent: false, recursive: isRecursive(options) }, (eventType, filename) => {
+              Queue.offerUnsafe(driverEvents, { entry: entryPathOf(filename), eventType })
+            })
+          ),
+          (watcher) => Effect.sync(() => watcher.close()),
+        )
+      })
     )
 
   return FileSystem.make({
