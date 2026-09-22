@@ -42,7 +42,7 @@ Shared-kernel containers leak state between tests and require a local Docker soc
 
 ### Layer & Scoped Execution
 
-A configured container specification (`MicroVM.spec(...)`) directly exposes `.scoped` (to acquire inside an `Effect.scoped` block) and `.layer` (to provide as a testcontainer `Layer`). In accordance with `compound-packs/resource-algebra`, platform dependencies (`Crypto` and `FileSystem`) cleanly propagate to `R` and are satisfied once at your application or test composition root (such as `@effect/platform-node/NodeServices`).
+A configured container specification (`MicroVM.spec(...)`) directly exposes `.scoped` (to acquire inside an `Effect.scoped` block) and `.layer` (to provide as a testcontainer `Layer`). In accordance with `compound-packs/cell-architecture`, platform dependencies (`Crypto` and `FileSystem`) cleanly propagate to `R` and are satisfied once at your application or test composition root (such as `@effect/platform-node/NodeServices`).
 
 ## Specifying Containers
 

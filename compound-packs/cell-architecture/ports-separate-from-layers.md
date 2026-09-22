@@ -35,5 +35,4 @@ import { LedgerStore } from '../ports/LedgerStore.js'
 export const LedgerStoreLive = Layer.effect(LedgerStore, ...)
 ```
 
-Gate: `lint` — import-origin lint forbids importing database drivers or platform modules into port files.
-Review: verify port files export no `Layer` values.
+Gate: `review` — verify port files import no database drivers or platform modules and export no `Layer` values.

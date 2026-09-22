@@ -4,7 +4,7 @@ applies_when:
   - structuring public package exports in mod.ts or index.ts
   - designing API surface for a capability package
   - deciding between fragmented namespace barrels and consolidated modules
-tags: [resource-algebra, namespace-barrel, export-topology, effect-style]
+tags: [cell, namespace-barrel, export-topology]
 ---
 
 In the Effect lineage, core domain abstractions are exported as cohesive, single-noun namespace barrels (e.g. `export * as Effect from './Effect.ts'`, `export * as Layer from './Layer.ts'`). Reusable capability packages follow this exact topology:

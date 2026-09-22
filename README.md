@@ -52,10 +52,10 @@ LLMs generate code with subtle failure modes: stubs on internal glue that pass w
   - [Pure Decision Workflows (CC = 1)](#pure-decision-workflows-cc--1)
   - [The Four-Channel Contract](#the-four-channel-contract)
   - [Separating Ports from Layers](#separating-ports-from-layers)
+  - [Resource & Lifecycle Algebra](#resource--lifecycle-algebra)
 - [Boundary Testing & Local Oracles](#boundary-testing--local-oracles)
   - [No Mocks on Internal Glue](#no-mocks-on-internal-glue)
   - [Local System Oracles](#local-system-oracles)
-- [Resource Algebra](#resource-algebra)
 - [Monorepo Package Map](#monorepo-package-map)
   - [Cell & Workflow Core](#cell--workflow-core)
   - [Schema & Property Law](#schema--property-law)
@@ -221,6 +221,15 @@ Following `compound-packs/cell-architecture/ports-separate-from-layers.md`:
 - Port files never import database drivers, HTTP clients, or platform APIs.
 - Implementations (`PostgreSqlLive`, `PgLiteTest`, `LocalLoopbackLive`) are defined in separate layer files and wired at application startup (`main.ts`) or in test setup.
 
+### Resource & Lifecycle Algebra
+
+Infrastructure and capability packages (container runners, sandbox drivers, process managers) manage resources directly without application port ceremony:
+
+- **Scoped lifecycles**: Resources acquire inside Effect `Scope` with escalating finalizers. Imperative `start()` and `stop()` methods are prohibited (`scoped-lifecycle-boundaries.md`).
+- **Resource and handle pairing**: Declarative specifications compile directly to scoped instances or parameterized layers (`resource-vs-handle-duality.md`).
+- **Dual syntax support**: Operations are callable both as object methods and as data-last `pipe()` combinators (`pipeable-dual-parity.md`).
+- **Cause preservation**: Errors preserve underlying failure details via `cause: Schema.optional(Schema.Unknown)` (`four-channel-contracts.md`).
+
 ---
 
 ## Boundary Testing & Local Oracles
@@ -242,24 +251,6 @@ The Boundary Testing doctrine (`compound-packs/boundary-testing/`) requires:
 1. **No driver mocks**: Do not mock platform modules (`net`, `fs`, `child_process`, `sql`). Pure logic belongs in a `Workflow` covered by property tests. Boundary adapters must run against real local OS resources.
 2. **Local system oracles**: Ephemeral kernel ports (`127.0.0.1:0`), temporary file directories, and child processes serve as test fixtures.
 3. **Dual-condition checks**: Every boundary test verifies both acceptance (an active listener connects) and refusal (a closed port refuses immediately without timing out or leaking resources).
-
----
-
-## Resource Algebra
-
-Infrastructure and capability packages (container runners, sandbox drivers, process managers) manage resources directly without application port ceremony.
-
-The Resource Algebra doctrine (`compound-packs/resource-algebra/`) requires:
-
-- **Scoped lifecycles**: Resources acquire inside Effect `Scope` with finalizers. Imperative `start()` and `stop()` methods are prohibited.
-- **Resource and handle pairing**: Declarative specifications compile directly to scoped instances or parameterized layers:
-  ```ts
-  const spec = MicroVM.spec({ image: 'alpine:latest', memory: 256 })
-  const handle = yield * spec.scoped // Scoped acquisition
-  const layer = spec.layer // Parameterized Layer constructor
-  ```
-- **Dual syntax support**: Operations are callable both as object methods and as data-last `pipe()` combinators.
-- **Cause preservation**: Errors preserve underlying failure details via `cause: Schema.optional(Schema.Unknown)`.
 
 ---
 
@@ -317,9 +308,8 @@ Run `pnpm map` to inspect packages, versions, and build gates:
 
 Architectural rules are published as [Compound Engineering Packs](https://every.to/compound-engineering/guides/packs):
 
-- [`compound-packs/cell-architecture/`](compound-packs/cell-architecture): The five-phase sandwich chain, single-path workflows, four-channel separation, and inward dependencies.
+- [`compound-packs/cell-architecture/`](compound-packs/cell-architecture): The five-phase sandwich chain, single-path workflows, four-channel separation, inward dependencies, scoped resource lifecycles, and parameterized layer constructors.
 - [`compound-packs/boundary-testing/`](compound-packs/boundary-testing): Zero driver mocks, local loopback oracles, and staged protocol evidence.
-- [`compound-packs/resource-algebra/`](compound-packs/resource-algebra): Scoped resource lifecycles, dual method/pipeable syntax, and parameterized layer constructors.
 
 ### Using Packs in Downstream Projects
 
@@ -329,7 +319,6 @@ To vendor and enforce these packs in downstream repositories using the Compound 
 packs:
   - source: https://github.com/systemfsoftware/systemfsoftware/tree/main/compound-packs/cell-architecture
   - source: https://github.com/systemfsoftware/systemfsoftware/tree/main/compound-packs/boundary-testing
-  - source: https://github.com/systemfsoftware/systemfsoftware/tree/main/compound-packs/resource-algebra
 ```
 
 ---

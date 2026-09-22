@@ -1,15 +1,25 @@
 # Cell Architecture Compound Pack
 
-This pack codifies what code written with `@systemfsoftware/effect-cell-types` must honor.
+Principles and design law for structuring systems with `@systemfsoftware/effect-cell-types` and Effect-TS.
 
-Every outside interaction is an authored unit called a **Cell**: a five-phase I/O sandwich compiled into a single arrow `Cell<in I, out A, out E, out R>`. The compiler refuses misordered phases, untagged decisions, and unprovided services. This pack supplies the citations and calibration pairs that lint and review use to ensure cells compose lawfully, dependencies point inward, and layers attach only at the root.
+Every interaction with the outside world is an authored unit called a **Cell**: a pure core enclosed by a typed imperative shell. The rules below are disjoint; each owns one invariant.
+
+---
 
 ## Rules in this Pack
 
-- `sandwich-phase-order.md`: Outside interactions follow the five-phase sandwich chain (`read -> decode -> decide -> encode -> write`).
-- `pure-decision-workflows.md`: Decisions inside the sandwich are pure `Workflow` values with cyclomatic complexity 1.
-- `four-channel-contracts.md`: The cell's four channels (`I`, `A`, `E`, `R`) separate inputs, outcomes, failures, and service dependencies.
-- `pipeline-composition.md`: Cells compose algebraically via `Cell.andThen`, `Cell.zip`, `Cell.gate`, and `Cell.Do`, never through sequential `yield* cell.run()`.
-- `layer-provision-boundary.md`: Adapters and services in `R` bind once at the composition root via `Cell.provide`; `cell.run` requires $R = \text{never}$.
-- `cross-cell-lifetimes.md`: Cross-cell resource lifetimes close at the process edge via `Effect.scoped`; intermediate scopes are forbidden.
-- `ports-separate-from-layers.md`: Capability tags (`Context.Service`) are published separately from concrete implementation layers (`Layer`).
+| Rule                                                               | Title                       | Primary Invariant                                                                                            | Gate           |
+| :----------------------------------------------------------------- | :-------------------------- | :----------------------------------------------------------------------------------------------------------- | :------------- |
+| [`sandwich-phase-order.md`](sandwich-phase-order.md)               | Sandwich Phase Order        | Outside interactions follow the typed five-phase sandwich chain (`read → decode → decide → encode → write`)  | `type-checker` |
+| [`pure-decision-workflows.md`](pure-decision-workflows.md)         | Pure Decision Workflows     | Decisions are total `Workflow.make` values with cyclomatic complexity 1 and exhaustive dispatch              | `type-checker` |
+| [`four-channel-contracts.md`](four-channel-contracts.md)           | Four-Channel Contracts      | Channels (`I`, `A`, `E`, `R`) separate inputs, outcomes, typed errors with causes, and dependencies          | `type-checker` |
+| [`pipeline-composition.md`](pipeline-composition.md)               | Pipeline Composition        | Cells compose algebraically via `Cell.andThen`, `Cell.zip`, and `Cell.gate`, never sequential `cell.run`     | `type-checker` |
+| [`composition-root-binding.md`](composition-root-binding.md)       | Composition Root Binding    | Dependencies bind once at the composition root; libraries export parameterized `layer(spec)` constructors    | `type-checker` |
+| [`ports-separate-from-layers.md`](ports-separate-from-layers.md)   | Ports Separate from Layers  | Capability tags (`Context.Service`) live in pure declaration modules separate from concrete `Layer` adapters | `review`       |
+| [`scoped-lifecycle-boundaries.md`](scoped-lifecycle-boundaries.md) | Scoped Lifecycle Boundaries | Resources acquire inside native Effect `Scope` with escalating finalizers; no imperative `start()`/`stop()`  | `type-checker` |
+| [`staged-lawful-builders.md`](staged-lawful-builders.md)           | Staged Lawful Builders      | Mandatory identity required before exposing combinators and terminal execution handles                       | `type-checker` |
+| [`resource-vs-handle-duality.md`](resource-vs-handle-duality.md)   | Resource vs Handle Duality  | Cold specifications compile to live Pipeable handles inside Scope, never ambient Context.Services            | `review`       |
+| [`handle-state-privacy.md`](handle-state-privacy.md)               | Handle State Privacy        | Per-instance state travels inside the instance via symbol slots; module mutable registries are forbidden     | `review`       |
+| [`pipeable-dual-parity.md`](pipeable-dual-parity.md)               | Pipeable Dual Parity        | Builders and combinators provide full parity between method chaining and data-last `pipe(...)`               | `review`       |
+| [`single-namespace-barrel.md`](single-namespace-barrel.md)         | Single Namespace Barrel     | Domain abstractions export as single cohesive namespace barrels matching Effect lineage                      | `review`       |
+| [`callable-vs-resource-syntax.md`](callable-vs-resource-syntax.md) | Callable vs Resource Syntax | Evaluators/workflows use callable syntax `fn(input)`; resources/entities use interface properties            | `review`       |
