@@ -18,6 +18,7 @@
     "build": "tsdown -l warn",
     "lint": "oxlint .",
     "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "typecheck": "tsc -b"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "@effect/sql-pglite": "catalog:",
     "@electric-sql/pglite": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/trace-taxonomy": "workspace:^",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
@@ -46,6 +48,7 @@
     "oxlint": "catalog:oxlint",
     "pg": "catalog:",
     "tsdown": "catalog:",
+    "tstyche": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

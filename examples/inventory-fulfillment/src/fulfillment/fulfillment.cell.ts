@@ -1,4 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
+import type { Span } from '@systemfsoftware/trace-taxonomy'
 import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
 import type { SchemaError } from 'effect/Schema'
 import {
@@ -31,6 +32,7 @@ import {
 } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
 import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './explode-bundle.workflow.js'
+import { FulfillmentSettle } from './fulfillment-settle.span.js'
 import { type Order, OrderFulfillmentCommand, OrderLine } from './order.schema.js'
 import {
   type OrderAllocated,
@@ -289,7 +291,7 @@ const writeFulfillment = (encoded: EncodedFulfillment, raw: RawContext) =>
  * The fulfillment sandwich. Callers run `fulfillmentCell.run(request)`.
  * CAS retries and per-customer gating live at the RPC edge (Effect.retry, CustomerGate).
  */
-export const fulfillmentCell = Sandwich.named('fulfillment.settle')(readContext)
+const settleCell = Sandwich.named('fulfillment.settle')(readContext)
   .decode(Sandwich.pure(decodeContext))
   .decide(settleFulfillment)
   .encode(
@@ -298,3 +300,16 @@ export const fulfillmentCell = Sandwich.named('fulfillment.settle')(readContext)
     ),
   )
   .write(writeFulfillment)
+
+const settleAttributesOf = (request: FulfillmentRequest): Span.AttrsOf<typeof FulfillmentSettle> => ({
+  'app.customer.id': request.order.customerId,
+  'app.fraud.risk.score': request.fraudRisk,
+  'app.kit.count': request.kits.length,
+  'app.order.id': request.order.orderId,
+  'app.order.line.count': request.order.lines.length,
+})
+
+export const fulfillmentCell: typeof settleCell = {
+  ...settleCell,
+  run: (request) => FulfillmentSettle.start(settleAttributesOf(request))(settleCell.run(request)),
+}
