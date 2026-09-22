@@ -84,8 +84,8 @@ const handleExistingReportDiff = (
         ConsoleMessageId.ApiReportCopied,
         `You have changed the API signature for this project. Updating ${expectedPath}`,
       )
-      yield* ctx.fs.makeDirectory(ctx.path.dirname(expectedPath), { recursive: true }).pipe(Effect.orDie)
-      yield* ctx.fs.writeFileString(expectedPath, actualContentConverted).pipe(Effect.orDie)
+      yield* ctx.fs.makeDirectory(ctx.path.dirname(expectedPath), { recursive: true })
+      yield* ctx.fs.writeFileString(expectedPath, actualContentConverted)
     }
 
     const showDiff = ctx.router.verbosity === 'verbose' || ctx.router.verbosity === 'diagnostics' ||
@@ -117,7 +117,7 @@ const handleMissingReport = (
     }
 
     const targetFolder = ctx.path.dirname(expectedPath)
-    const folderExists = yield* ctx.fs.exists(targetFolder).pipe(Effect.orDie)
+    const folderExists = yield* ctx.fs.exists(targetFolder)
     if (!folderExists) {
       yield* ctx.router.logError(
         ConsoleMessageId.ApiReportFolderMissing,
@@ -126,7 +126,7 @@ const handleMissingReport = (
       return
     }
 
-    yield* ctx.fs.writeFileString(expectedPath, actualContentConverted).pipe(Effect.orDie)
+    yield* ctx.fs.writeFileString(expectedPath, actualContentConverted)
     yield* ctx.router.logWarning(
       ConsoleMessageId.ApiReportCreated,
       `The API report file was missing, so a new file was created. Please add this file to Git:\n${expectedPath}`,
@@ -149,12 +149,12 @@ const processSingleReport = (
     const actualContent = ApiReportGenerator.generateReviewFileContent(ctx.collector, reportConfig.variant)
     const actualContentConverted = convertNewlines(actualContent, ctx.config.newlineKind)
 
-    yield* ctx.fs.makeDirectory(ctx.path.dirname(actualPath), { recursive: true }).pipe(Effect.orDie)
-    yield* ctx.fs.writeFileString(actualPath, actualContentConverted).pipe(Effect.orDie)
+    yield* ctx.fs.makeDirectory(ctx.path.dirname(actualPath), { recursive: true })
+    yield* ctx.fs.writeFileString(actualPath, actualContentConverted)
 
-    const expectedExists = yield* ctx.fs.exists(expectedPath).pipe(Effect.orDie)
+    const expectedExists = yield* ctx.fs.exists(expectedPath)
     if (expectedExists) {
-      const expectedRaw = yield* ctx.fs.readFileString(expectedPath).pipe(Effect.orDie)
+      const expectedRaw = yield* ctx.fs.readFileString(expectedPath)
       const expectedContent = convertToLf(expectedRaw)
 
       if (!ApiReportGenerator.areEquivalentApiFileContents(actualContent, expectedContent)) {
@@ -240,8 +240,8 @@ const writeDtsRollupFile = (
     )
     const content = DtsRollupGenerator.generateTypingsFileContent(collector, target.kind)
     const converted = convertNewlines(content, config.newlineKind)
-    yield* fs.makeDirectory(path.dirname(target.filePath), { recursive: true }).pipe(Effect.orDie)
-    yield* fs.writeFileString(target.filePath, converted).pipe(Effect.orDie)
+    yield* fs.makeDirectory(path.dirname(target.filePath), { recursive: true })
+    yield* fs.writeFileString(target.filePath, converted)
     return target.filePath
   })
 

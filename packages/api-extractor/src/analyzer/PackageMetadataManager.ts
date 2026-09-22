@@ -264,7 +264,7 @@ export class PackageMetadataManager extends Pipeable.Class {
       tsdocVersion: '0.12',
       toolPackages: [
         {
-          packageName: '@microsoft/api-extractor',
+          packageName: '@systemfsoftware/api-extractor',
           packageVersion: '0.1.0',
         },
       ],

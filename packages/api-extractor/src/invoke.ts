@@ -3,7 +3,8 @@ import * as NodePath from '@effect/platform-node/NodePath'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
-import { ConsoleMessageWriter, MessageWriter } from './collector/message-router.js'
+import { ConsoleMessageWriter } from './collector/console-message-writer.js'
+import { MessageWriter } from './collector/message-router.js'
 import { type ExtractorResult, type ExtractorRunOptions, runEffect } from './extractor.js'
 
 // The ported Collector emits log lines fire-and-forget from synchronous

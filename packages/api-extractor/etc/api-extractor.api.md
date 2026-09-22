@@ -5,7 +5,7 @@
 ```ts
 
 import * as Context from 'effect/Context';
-import * as Effect from 'effect/Effect';
+import * as Effect$1 from 'effect/Effect';
 import * as FileSystem_2 from 'effect/FileSystem';
 import * as Option_2 from 'effect/Option';
 import * as Path from 'effect/Path';
@@ -748,7 +748,7 @@ export { extractorVersion }
 export { extractorVersion as version }
 
 // @public (undocumented)
-export const findConfigFileUpwards: (startFolder: string) => Effect.Effect<Option_2.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
+export const findConfigFileUpwards: (startFolder: string) => Effect$1.Effect<Option_2.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 export class ForgottenExportError extends ForgottenExportError_base {}
@@ -760,7 +760,7 @@ export const formatAliasDeclarations: (alias: NamespaceAlias) => readonly string
 export const formatAliasExportClause: (alias: NamespaceAlias, isSafeName: (name: string) => boolean) => string;
 
 // @public (undocumented)
-export const generateApiReport: (collector: Collector, config: ExtractorConfig, router: MessageRouter, options?: RunGeneratorsOptions) => Effect.Effect<GeneratorsResult, UnsupportedSyntaxError | PlatformError, FileSystem_2.FileSystem | Path.Path>;
+export const generateApiReport: (collector: Collector, config: ExtractorConfig, router: MessageRouter, options?: RunGeneratorsOptions) => Effect$1.Effect<GeneratorsResult, UnsupportedSyntaxError | PlatformError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 export interface GeneratorsResult {
@@ -950,10 +950,10 @@ export const JsonUnknownFromString: Schema.fromJsonString<Schema.Codec<Schema.Js
 export type JsonUnknownFromString = typeof JsonUnknownFromString.Type;
 
 // @public (undocumented)
-export const loadCompilerState: (options: CompilerStateOptions) => Effect.Effect<CompilerState, TsConfigReadError | TypeScriptDiagnosticError, Path.Path>;
+export const loadCompilerState: (options: CompilerStateOptions) => Effect$1.Effect<CompilerState, TsConfigReadError | TypeScriptDiagnosticError, Path.Path>;
 
 // @public (undocumented)
-export const loadExtractorConfig: (filePath: string) => Effect.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
+export const loadExtractorConfig: (filePath: string) => Effect$1.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 export const LogLevel: Schema_2.Literals<readonly ["error", "warning", "info", "verbose", "none"]>;
@@ -962,7 +962,7 @@ export const LogLevel: Schema_2.Literals<readonly ["error", "warning", "info", "
 export type LogLevel = typeof LogLevel.Type;
 
 // @public (undocumented)
-export const makeMessageRouter: (request: VerbosityRequest) => Effect.Effect<MessageRouter, never, MessageWriter>;
+export const makeMessageRouter: (request: VerbosityRequest) => Effect$1.Effect<MessageRouter, never, MessageWriter>;
 
 // @public (undocumented)
 export const mergeConfigObjects: (base: MutableJsonRecord, derived: MutableJsonRecord) => MutableJsonRecord;
@@ -994,21 +994,21 @@ export type MessageReportingTable = typeof MessageReportingTable.Type;
 // @public (undocumented)
 export interface MessageRouter {
     // (undocumented)
-    readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
+    readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnostic: (text: string) => Effect.Effect<void, PlatformError>;
+    readonly logDiagnostic: (text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnosticFooter: Effect.Effect<void, PlatformError>;
+    readonly logDiagnosticFooter: Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logDiagnosticHeader: (title: string) => Effect.Effect<void, PlatformError>;
+    readonly logDiagnosticHeader: (title: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logError: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
+    readonly logError: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
+    readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
+    readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
-    readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>;
+    readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect$1.Effect<void, PlatformError>;
     // (undocumented)
     readonly verbosity: Verbosity;
 }
@@ -1035,7 +1035,7 @@ export type MessagesConfig = typeof MessagesConfig.Type;
 // @public (undocumented)
 export interface MessageWriter {
     // (undocumented)
-    readonly write: (level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
+    readonly write: (level: LogLevel, text: string) => Effect$1.Effect<void, PlatformError>;
 }
 
 // @public (undocumented)
@@ -1099,7 +1099,7 @@ export class PackageMetadataManager extends Pipeable.Class {
 export const planNamespaceAliases: (namespaceName: string, members: readonly NamespaceMember[], reservedNames: ReadonlySet<string>) => readonly NamespaceAlias[];
 
 // @public (undocumented)
-export const readConfigJson: (filePath: string) => Effect.Effect<MutableJsonRecord, ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem>;
+export const readConfigJson: (filePath: string) => Effect$1.Effect<MutableJsonRecord, ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem>;
 
 // @public (undocumented)
 export enum ReleaseTag {
@@ -1133,10 +1133,10 @@ export type ReleaseTagForTrim = typeof ReleaseTagForTrim.Type;
 export const resolveVerbosity: (request: VerbosityRequest) => Verbosity;
 
 // @public
-export const runEffect: (configFilePath: string, options?: ExtractorRunOptions) => Effect.Effect<ExtractorResult, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
+export const runEffect: (configFilePath: string, options?: ExtractorRunOptions) => Effect$1.Effect<ExtractorResult, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
 
 // @public (undocumented)
-export const runGenerators: (collector: Collector, config: ExtractorConfig, router: MessageRouter, options?: RunGeneratorsOptions) => Effect.Effect<GeneratorsResult, UnsupportedSyntaxError | PlatformError, FileSystem_2.FileSystem | Path.Path>;
+export const runGenerators: (collector: Collector, config: ExtractorConfig, router: MessageRouter, options?: RunGeneratorsOptions) => Effect$1.Effect<GeneratorsResult, UnsupportedSyntaxError | PlatformError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 export interface RunGeneratorsOptions {
@@ -1305,7 +1305,7 @@ export const VerbosityRequest: Schema_2.Struct<{
 export type VerbosityRequest = typeof VerbosityRequest.Type;
 
 // @public (undocumented)
-export const walkExtendsChain: (entryPath: string, chain?: readonly string[], accumulated?: MutableJsonRecord) => Effect.Effect<MutableJsonRecord, CircularConfigExtendsError | ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem | Path.Path>;
+export const walkExtendsChain: (entryPath: string, chain?: readonly string[], accumulated?: MutableJsonRecord) => Effect$1.Effect<MutableJsonRecord, CircularConfigExtendsError | ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
 export class WorkingPackage extends Pipeable.Class {

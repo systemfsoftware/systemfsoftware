@@ -36,10 +36,9 @@ Both Effect-native and Promise-based entrypoints are exposed:
 import { invoke, runEffect } from '@systemfsoftware/api-extractor'
 
 // Promise-based execution (resolves with ExtractorResult, never throws on findings)
-const result = await invoke({
-  configObjectFullPath: './api-extractor.json',
+const result = await invoke('./api-extractor.json', {
   localBuild: true,
-  quiet: true,
+  cliFlags: { quiet: true },
 })
 
 console.log(result.succeeded)

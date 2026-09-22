@@ -137,9 +137,7 @@ const buildRouter = (
   config: ExtractorConfig,
   options: ExtractorRunOptions,
 ): Effect.Effect<MessageRouter, never, MessageWriter> =>
-  makeMessageRouter({ cliFlags: options.cliFlags ?? {}, configQuiet: config.quiet }).pipe(
-    Effect.map((router) => router),
-  )
+  makeMessageRouter({ cliFlags: options.cliFlags ?? {}, configQuiet: config.quiet })
 
 const bannerText = (): string => `api-extractor ${extractorVersion} - https://api-extractor.com/`
 

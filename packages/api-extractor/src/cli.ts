@@ -6,6 +6,8 @@ import { Command } from 'effect/unstable/cli'
 
 import { initCommand } from './cli/init-action.js'
 import { runCommand } from './cli/run-action.js'
+import { ConsoleMessageWriter } from './collector/console-message-writer.js'
+import { MessageWriter } from './collector/message-router.js'
 import { extractorVersion } from './extractor.js'
 
 export const cli = Command.make('api-extractor').pipe(
@@ -14,8 +16,6 @@ export const cli = Command.make('api-extractor').pipe(
   ),
   Command.withSubcommands([runCommand, initCommand]),
 )
-
-import { ConsoleMessageWriter, MessageWriter } from './collector/message-router.js'
 
 const cliLayers = Layer.mergeAll(
   NodeServices.layer,
