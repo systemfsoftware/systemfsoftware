@@ -10,6 +10,8 @@ An `exports` condition tsdown writes into every workspace package's map — the 
 
 An api-extractor must point at a tsconfig that clears the condition (`tsconfig.api.json`, `customConditions: []`); otherwise its program follows the condition into a sibling's `src/*.ts` and reports `ae-wrong-input-file-type`.
 
+A consumer that resolves the condition compiles the provider's source under the consumer's own `compilerOptions`. The provider's source may therefore use only the ambient types every consumer declares. A bare `Buffer` global breaks a consumer whose tsconfig sets `types: []`, and the error appears in the provider's files during the consumer's typecheck (`docs/solutions/build-errors/tests-outside-tsconfig-hide-workspace-source-errors.md`).
+
 _Gate:_ `pnpm --filter <pkg> build` regenerates both maps; `node scripts/tools/pack-all.mjs` proves the packed map carries no condition and every entry it names is in the tarball.
 
 _Aliases:_ the condition is declared as `customConditions: ["@systemfsoftware/source"]` in a tsconfig, and as `exports.devExports` in tsdown — the same name surfaced by two tools.
