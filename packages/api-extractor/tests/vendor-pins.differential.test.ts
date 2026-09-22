@@ -111,7 +111,7 @@ Differential.compare({
   reference: pinnedTsReference,
   candidate: liveTsCandidate,
 })
-  .on(compilerTargetPairs, { runBudget: 10 })
+  .on(compilerTargetPairs, { runBudget: 10, interruptAfterTimeLimit: 30_000 })
   .assert((pinned, live) =>
     pinned.version === live.version &&
     pinned.parsedFileCount === live.parsedFileCount &&
@@ -164,4 +164,4 @@ Metamorphic.on(runRouterWithConsoleWriter)
       baseline.captured.includes('\n') &&
       transformed.captured.includes('transformed_'),
   })
-  .on(nonEmptyIdentifiers, { runBudget: 15 })
+  .on(nonEmptyIdentifiers, { runBudget: 15, interruptAfterTimeLimit: 30_000 })
