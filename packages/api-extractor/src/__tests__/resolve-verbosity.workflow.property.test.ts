@@ -1,9 +1,10 @@
 import { it } from '@effect/vitest'
 import { Match, Schema } from 'effect'
-import * as Result from 'effect/Result'
 
-import { ResolveVerbosity, resolveVerbosity, type VerbosityDecision } from '../collector/resolve-verbosity.workflow.js'
+import * as Result from 'effect/Result'
+import { AnnounceRun, resolveVerbosity, type VerbosityDecision } from '../collector/resolve-verbosity.workflow.js'
 import type { Verbosity, VerbosityRequest } from '../collector/verbosity.schema.js'
+import type { ExtractorConfig } from '../config/extractor-config.js'
 
 const precedenceTable: readonly (VerbosityRequest & { readonly expected: Verbosity })[] = [
   { cliFlags: {}, configQuiet: false, expected: 'normal' },
@@ -28,14 +29,37 @@ const RequestMask = Schema.Literals([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1
 
 const bitOf = (mask: number, shift: number): boolean => ((mask >> shift) & 1) === 1
 
-const commandOfMask = (mask: number): ResolveVerbosity =>
-  ResolveVerbosity.make({
+const stubConfig: ExtractorConfig = {
+  configFilePath: '/project/api-extractor.json',
+  projectFolder: '/project',
+  packageFolder: '/project',
+  packageJson: undefined,
+  mainEntryPointFilePath: '/project/lib/index.d.ts',
+  bundledPackages: [],
+  tsconfigFilePath: '/project/tsconfig.json',
+  overrideTsconfig: undefined,
+  skipLibCheck: false,
+  newlineKind: 'crlf',
+  enumMemberOrder: 'by-name',
+  testMode: false,
+  quiet: false,
+  apiReport: { enabled: false, reportConfigs: [] },
+  docModel: { enabled: false },
+  dtsRollup: { enabled: false },
+  tsdocMetadata: { enabled: false, filePath: '' },
+  messages: {},
+}
+
+const commandOfMask = (mask: number): AnnounceRun =>
+  AnnounceRun.make({
     cliFlags: {
       diagnostics: bitOf(mask, 0),
       verbose: bitOf(mask, 1),
       quiet: bitOf(mask, 2),
     },
     configQuiet: bitOf(mask, 3),
+    config: stubConfig,
+    options: {},
   })
 
 const bit = (flag: boolean | undefined): number => Number(flag === true)
@@ -66,6 +90,6 @@ it.prop('∀m_ResolveVerbosity_≡Table', [RequestMask], ([mask]) => {
   const command = commandOfMask(mask)
   const matching = precedenceTable.filter((row) => toMask(row) === mask)
   const outcome = resolveVerbosity(command)
-  const decision = Result.getOrThrow(outcome)
+  const decision = Result.merge(outcome)
   return tagOfDecision(decision) === singleExpected(matching)
 })

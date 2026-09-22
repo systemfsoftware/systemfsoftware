@@ -1,19 +1,11 @@
-import { Effect, Match, Option, Result } from 'effect'
-import type { PlatformError } from 'effect/PlatformError'
+import { Match, Option, Result } from 'effect'
 
 import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
 import type { MessageLogLevel, MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
-import { MessageWriter } from '../message-writer.service.js'
 import { allExtractorMessageIds } from './extractor-message-id.js'
-import {
-  ConsoleMessageId,
-  ExtractorMessage,
-  MessageLog,
-  type ReportCandidate,
-  selectReportMessages,
-} from './message-log.js'
+import type { ExtractorMessage, MessageLog } from './message-log.js'
+import { type ReportCandidate, selectReportMessages } from './message-log.js'
 import { type ExtractorMessageCategory, LogLevel, MessageRuleError } from './message-router.schema.js'
-import { ResolveVerbosity, resolveVerbosity } from './resolve-verbosity.workflow.js'
 import {
   type MessageReportingRules,
   type ReportingRule,
@@ -21,14 +13,35 @@ import {
   routeExtractorMessage,
   type RoutingDecision,
 } from './route-extractor-message.workflow.js'
-import type { SourceMapper } from './SourceMapper.js'
-import { Verbosity, type VerbosityRequest } from './verbosity.schema.js'
+import type { Verbosity } from './verbosity.schema.js'
 
-export interface MessageRouterOptions {
-  readonly messagesConfig?: MessagesConfig | undefined
-  readonly workingPackageFolder?: string | undefined
-  readonly sourceMapper?: SourceMapper | undefined
-  readonly reportEnabled?: boolean | undefined
+export interface ConsoleLine {
+  readonly level: LogLevel
+  readonly text: string
+}
+
+/**
+ * The report-bound messages one report variant may consume. Consumption is
+ * recorded on the messages themselves, so a second variant never sees what an
+ * earlier variant already rendered.
+ */
+export interface ReportMessageSource {
+  readonly associatedReportMessages: (astDeclaration: AstDeclaration) => readonly ExtractorMessage[]
+  readonly unassociatedReportMessages: () => readonly ExtractorMessage[]
+}
+
+export interface MessageView extends ReportMessageSource {
+  readonly consoleLines: () => readonly ConsoleLine[]
+  readonly residue: () => readonly ConsoleLine[]
+  readonly errorCount: () => number
+  readonly warningCount: () => number
+}
+
+export interface MessageViewRequest {
+  readonly log: MessageLog
+  readonly messagesConfig: MessagesConfig | undefined
+  readonly reportEnabled: boolean
+  readonly workingPackageFolder: string | undefined
 }
 
 const levelLabel: Readonly<Record<LogLevel, string>> = {
@@ -39,7 +52,7 @@ const levelLabel: Readonly<Record<LogLevel, string>> = {
   verbose: '',
 }
 
-const format = (level: LogLevel, text: string): string => levelLabel[level] + text
+export const formatConsoleLine = (level: LogLevel, text: string): string => levelLabel[level] + text
 
 const isVerboseAdmitted = (v: Verbosity): boolean => v === 'verbose' || v === 'diagnostics'
 
@@ -51,7 +64,7 @@ const levelMatrix: Readonly<Record<LogLevel, (verbosity: Verbosity) => boolean>>
   verbose: isVerboseAdmitted,
 }
 
-const admits = (verbosity: Verbosity, level: LogLevel): boolean => levelMatrix[level](verbosity)
+export const admits = (verbosity: Verbosity, level: LogLevel): boolean => levelMatrix[level](verbosity)
 
 const compareByValue = (a: string | number | undefined, b: string | number | undefined): number => {
   if (a === b) {
@@ -74,23 +87,6 @@ const sortMessagesForOutput = (messages: ExtractorMessage[]): void => {
     }
     return compareByValue(a.messageId, b.messageId)
   })
-}
-
-export interface MessageRouter {
-  readonly verbosity: Verbosity
-  readonly messageLog: MessageLog
-  readonly log: (messageId: ConsoleMessageId, level: LogLevel, text: string) => Effect.Effect<void, PlatformError>
-  readonly logError: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
-  readonly logWarning: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
-  readonly logInfo: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
-  readonly logVerbose: (messageId: ConsoleMessageId, text: string) => Effect.Effect<void, PlatformError>
-  readonly emitAnalysisConsoleMessages: Effect.Effect<void, PlatformError>
-  readonly fetchAssociatedMessagesForReviewFile: (astDeclaration: AstDeclaration) => readonly ExtractorMessage[]
-  readonly fetchUnassociatedMessagesForReviewFile: () => readonly ExtractorMessage[]
-  readonly handleRemainingNonConsoleMessages: Effect.Effect<void, PlatformError>
-  readonly messages: () => readonly ExtractorMessage[]
-  readonly errorCount: () => number
-  readonly warningCount: () => number
 }
 
 interface RuleSection {
@@ -218,24 +214,6 @@ const buildRuleTable = (
     Result.succeed(initialRuleTable()),
   )
 
-const verbosityOf = (request: VerbosityRequest): Verbosity => {
-  const decision = Result.getOrThrow(
-    resolveVerbosity(
-      ResolveVerbosity.make({
-        cliFlags: request.cliFlags,
-        configQuiet: request.configQuiet === true,
-      }),
-    ),
-  )
-  return Match.value(decision).pipe(
-    Match.tag('VerbosityDiagnostics', (): Verbosity => 'diagnostics'),
-    Match.tag('VerbosityVerbose', (): Verbosity => 'verbose'),
-    Match.tag('VerbositySilent', (): Verbosity => 'silent'),
-    Match.tag('VerbosityNormal', (): Verbosity => 'normal'),
-    Match.exhaustive,
-  )
-}
-
 const commandOf = (
   message: ExtractorMessage,
   rules: MessageReportingRules,
@@ -264,146 +242,65 @@ const consoleLevelOf = (decision: RoutingDecision): Option.Option<LogLevel> =>
     Match.exhaustive,
   )
 
-export const makeMessageRouter = (
-  request: VerbosityRequest,
-  options: MessageRouterOptions = {},
-): Effect.Effect<MessageRouter, MessageRuleError, MessageWriter> =>
-  Effect.gen(function*() {
-    const writer = yield* MessageWriter
-    const verbosity = verbosityOf(request)
-    const rules = yield* Effect.fromResult(buildRuleTable(options.messagesConfig))
-    const reportEnabled = options.reportEnabled ?? false
-    const workingPackageFolder = options.workingPackageFolder
+const messageViewOf = (request: MessageViewRequest, rules: MessageReportingRules): MessageView => {
+  const decisionOf = (message: ExtractorMessage): RoutingDecision =>
+    Result.merge(routeExtractorMessage(commandOf(message, rules, request.reportEnabled)))
 
-    const messageLog = new MessageLog({
-      sourceMapper: options.sourceMapper,
-      diagnostics: verbosity === 'diagnostics',
-    })
+  const consumedLevelOf = (message: ExtractorMessage): LogLevel =>
+    message.handled ? 'none' : Option.getOrElse(consoleLevelOf(decisionOf(message)), () => 'none' as const)
 
-    const decisionOf = (message: ExtractorMessage): RoutingDecision =>
-      Result.getOrThrow(routeExtractorMessage(commandOf(message, rules, reportEnabled)))
+  const analysisLevelOf = (message: ExtractorMessage): LogLevel =>
+    Match.value(message.category).pipe(
+      Match.when('console', () => message.logLevel),
+      Match.when('Compiler', () => consumedLevelOf(message)),
+      Match.when('Extractor', () => consumedLevelOf(message)),
+      Match.when('TSDoc', () => consumedLevelOf(message)),
+      Match.exhaustive,
+    )
 
-    const emit = (level: LogLevel, text: string): Effect.Effect<void, PlatformError> =>
-      Effect.suspend(() => (admits(verbosity, level) ? writer.write(level, format(level, text)) : Effect.void))
+  const candidatesOf = (messages: readonly ExtractorMessage[]): readonly ReportCandidate[] =>
+    messages.map((message) => ({ message, decision: decisionOf(message), consumed: message.handled }))
 
-    const logMessage = (level: LogLevel, text: string): Effect.Effect<void, PlatformError> =>
-      Effect.sync(() => {
-        messageLog.addConsoleMessage('console', level, text).markHandled()
-      }).pipe(Effect.andThen(emit(level, text)))
-
-    const consoleLine = (message: ExtractorMessage): { readonly level: LogLevel; readonly text: string } => ({
-      level: message.logLevel,
-      text: message.text,
-    })
-
-    const candidatesOf = (messages: readonly ExtractorMessage[]): readonly ReportCandidate[] =>
-      messages.map((message) => ({ message, decision: decisionOf(message), consumed: message.handled }))
-
-    const consumedLevelOf = (message: ExtractorMessage): LogLevel =>
-      message.handled ? 'none' : Option.getOrElse(consoleLevelOf(decisionOf(message)), () => 'none' as const)
-
-    const analysisLevelOf = (message: ExtractorMessage): LogLevel =>
-      Match.value(message.category).pipe(
-        Match.when('console', () => message.logLevel),
-        Match.when('Compiler', () => consumedLevelOf(message)),
-        Match.when('Extractor', () => consumedLevelOf(message)),
-        Match.when('TSDoc', () => consumedLevelOf(message)),
-        Match.exhaustive,
-      )
-
-    return {
-      verbosity,
-      messageLog,
-      log: (_id, level, text) => logMessage(level, text),
-      logError: (_id, text) => logMessage('error', text),
-      logWarning: (_id, text) => logMessage('warning', text),
-      logInfo: (_id, text) => logMessage('info', text),
-      logVerbose: (_id, text) => logMessage('verbose', text),
-
-      emitAnalysisConsoleMessages: Effect.suspend(() => {
-        const pending = messageLog.messages().filter((message) => message.category === 'console' && !message.handled)
-        pending.forEach((message) => message.markHandled())
-        const writes = pending.map(consoleLine)
-        return Effect.forEach(writes, ({ level, text }) => emit(level, text), { discard: true })
-      }),
-
-      fetchAssociatedMessagesForReviewFile: (astDeclaration) => {
-        const selected = selectReportMessages(candidatesOf(messageLog.associatedMessagesOf(astDeclaration)))
-        sortMessagesForOutput(selected)
-        selected.forEach((message) => message.markHandled())
-        return selected
-      },
-
-      fetchUnassociatedMessagesForReviewFile: () => {
-        const selected = selectReportMessages(candidatesOf(messageLog.messages()))
-        sortMessagesForOutput(selected)
-        selected.forEach((message) => message.markHandled())
-        return selected
-      },
-
-      handleRemainingNonConsoleMessages: Effect.suspend(() => {
-        const messagesForLogger = messageLog.messages().filter(
-          (message) => message.category !== 'console' && !message.handled,
-        )
-        sortMessagesForOutput(messagesForLogger)
-        const writes = messagesForLogger.flatMap((message) => {
-          const level = Option.getOrUndefined(consoleLevelOf(decisionOf(message)))
-          return level === undefined ? [] : [{ level, text: message.formatMessageWithLocation(workingPackageFolder) }]
-        })
-        return Effect.forEach(writes, ({ level, text }) => emit(level, text), { discard: true })
-      }),
-
-      messages: () => messageLog.messages(),
-      errorCount: () => messageLog.messages().filter((message) => analysisLevelOf(message) === 'error').length,
-      warningCount: () => messageLog.messages().filter((message) => analysisLevelOf(message) === 'warning').length,
-    }
-  })
-
-if (import.meta.vitest !== void 0) {
-  // Exception: in-source tests load @effect/vitest dynamically to avoid bundling test libraries
-  const { it } = await import('@effect/vitest')
-
-  interface RecordedLine {
-    readonly level: LogLevel
-    readonly text: string
+  const consumed = (selected: ExtractorMessage[]): readonly ExtractorMessage[] => {
+    sortMessagesForOutput(selected)
+    selected.forEach((message) => message.markHandled())
+    return selected
   }
 
-  const createRecordingWriter = (lines: RecordedLine[]): MessageWriter => ({
-    write: (level, text) =>
-      Effect.sync(() => {
-        lines.push({ level, text })
-      }),
+  const isUnemittedConsole = (message: ExtractorMessage): boolean => message.category === 'console' && !message.handled
+
+  const consoleLineOf = (message: ExtractorMessage): ConsoleLine => ({
+    level: message.logLevel,
+    text: message.text,
   })
 
-  const expectedLineCount = (admitted: boolean): number => (admitted ? 1 : 0)
+  const levelLineOf = (message: ExtractorMessage): readonly ConsoleLine[] =>
+    Option.match(consoleLevelOf(decisionOf(message)), {
+      onNone: () => [],
+      onSome: (level) => [{ level, text: message.formatMessageWithLocation(request.workingPackageFolder) }],
+    })
 
-  const hasExpectedContent = (lines: readonly RecordedLine[], expectedText: string): boolean => {
-    const first = lines[0]
-    return first === undefined ? true : first.text === expectedText
+  const pendingNonConsole = (): ExtractorMessage[] => {
+    const pending = request.log.messages().filter((message) => message.category !== 'console' && !message.handled)
+    sortMessagesForOutput(pending)
+    return pending
   }
 
-  const routerForVerbosity = (verbosity: Verbosity, lines: RecordedLine[]) =>
-    makeMessageRouter({
-      cliFlags: {
-        quiet: verbosity === 'silent',
-        verbose: verbosity === 'verbose',
-        diagnostics: verbosity === 'diagnostics',
-      },
-    }).pipe(Effect.provideService(MessageWriter, createRecordingWriter(lines)))
+  const countOfLevel = (level: LogLevel): number =>
+    request.log.messages().filter((message) => analysisLevelOf(message) === level).length
 
-  it.effect.prop(
-    '∀v_Routing_≡Admitted',
-    [Verbosity, LogLevel],
-    ([verbosity, level]) =>
-      Effect.gen(function*() {
-        const lines: RecordedLine[] = []
-        const router = yield* routerForVerbosity(verbosity, lines)
-        yield* router.log(ConsoleMessageId.Preamble, level, 'payload')
-        const shouldAdmit = admits(verbosity, level)
-        return (
-          lines.length === expectedLineCount(shouldAdmit) &&
-          hasExpectedContent(lines, format(level, 'payload'))
-        )
-      }),
-  )
+  return {
+    associatedReportMessages: (astDeclaration) =>
+      consumed(selectReportMessages(candidatesOf(request.log.associatedMessagesOf(astDeclaration)))),
+    unassociatedReportMessages: () => consumed(selectReportMessages(candidatesOf(request.log.messages()))),
+    consoleLines: () => request.log.messages().filter(isUnemittedConsole).map(consoleLineOf),
+    residue: () => pendingNonConsole().flatMap(levelLineOf),
+    errorCount: () => countOfLevel('error'),
+    warningCount: () => countOfLevel('warning'),
+  }
 }
+
+export const makeMessageView = (
+  request: MessageViewRequest,
+): Result.Result<MessageView, MessageRuleError> =>
+  Result.map(buildRuleTable(request.messagesConfig), (rules) => messageViewOf(request, rules))

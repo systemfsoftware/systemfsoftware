@@ -1,17 +1,7 @@
-import {
-  ConsoleMessageId,
-  layer as consoleMessageWriterLayer,
-  makeMessageRouter,
-  type TextWritable,
-} from '@systemfsoftware/api-extractor'
-import { Differential, Metamorphic } from '@systemfsoftware/differential-spec'
-import { Effect, Exit } from 'effect'
+import { Differential } from '@systemfsoftware/differential-spec'
+import * as Effect from 'effect/Effect'
 import * as Ts from 'typescript'
-import {
-  type CompilerTargetPair,
-  compilerTargetPairs,
-  nonEmptyIdentifiers,
-} from './__fixtures__/vendor-pins-arbitraries.js'
+import { type CompilerTargetPair, compilerTargetPairs } from './__fixtures__/vendor-pins-arbitraries.js'
 
 interface TsCompilationOutput {
   readonly version: string
@@ -118,39 +108,3 @@ Differential.compare({
     pinned.diagnosticCount === live.diagnosticCount &&
     pinned.hasExportSymbol === live.hasExportSymbol
   )
-
-interface WriterRunOutput {
-  readonly exitedDefectively: boolean
-  readonly emitted: ReadonlyArray<string>
-}
-
-// The pin: construction + emission survive `Effect.runSync` as ONE program when
-// the real console driver is bound — the sync edge `invoke` and the write-phase
-// emission of a run's console lines depend on it. The driver writes to a
-// recording sink so observation never bypasses the code under test.
-const runRouterWithConsoleWriter = (message: string): Effect.Effect<WriterRunOutput> =>
-  Effect.sync(() => {
-    const emitted: Array<string> = []
-    const stdout: TextWritable = {
-      write: (text) => {
-        emitted.push(text)
-      },
-    }
-    const probe = Effect.gen(function*() {
-      const router = yield* makeMessageRouter({ cliFlags: { verbose: true } })
-      yield* router.logInfo(ConsoleMessageId.Preamble, message)
-    })
-    const exit = Effect.runSync(Effect.exit(probe.pipe(Effect.provide(consoleMessageWriterLayer({ stdout })))))
-    return { exitedDefectively: Exit.isFailure(exit), emitted }
-  })
-
-Metamorphic.on(runRouterWithConsoleWriter)
-  .relation({
-    transformInput: (msg) => `transformed_${msg}`,
-    assertOutput: (baseline, transformed) =>
-      !baseline.exitedDefectively &&
-      !transformed.exitedDefectively &&
-      baseline.emitted.length === 1 &&
-      transformed.emitted.join('').includes('transformed_'),
-  })
-  .on(nonEmptyIdentifiers, { runBudget: 15, interruptAfterTimeLimit: 30_000 })

@@ -23,7 +23,7 @@ const ObjectsRecord = Schema.Struct({
 const decisionOf = (
   base: Record<string, Schema.Json>,
   derived: Record<string, Schema.Json>,
-): MergeConfigDecision => Result.getOrThrow(mergeConfig(MergeConfig.make({ base, derived })))
+): MergeConfigDecision => Result.merge(mergeConfig(MergeConfig.make({ base, derived })))
 
 const mergedOf = (
   base: Record<string, Schema.Json>,

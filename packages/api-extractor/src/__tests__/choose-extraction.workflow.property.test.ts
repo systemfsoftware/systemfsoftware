@@ -86,7 +86,7 @@ const commandArb = Arbitrary.map(
     }),
 )
 
-const decisionOf = (command: DecideExtraction): ExtractionDecision => Result.getOrThrow(chooseExtraction(command))
+const decisionOf = (command: DecideExtraction): ExtractionDecision => Result.merge(chooseExtraction(command))
 
 const signatureOf = (content: string): string => content.replace(/\s+/g, ' ')
 

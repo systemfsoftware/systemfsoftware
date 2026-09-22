@@ -1,9 +1,10 @@
 import { it } from '@effect/vitest'
-import { Effect, Match, Result, Schema } from 'effect'
+import { Effect, Match, Schema } from 'effect'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 
+import * as Result from 'effect/Result'
 import { ConsoleMessageId, ExtractorMessage, MessageLog } from '../collector/message-log.js'
-import { makeMessageRouter } from '../collector/message-router.js'
+import { admits, formatConsoleLine, makeMessageView } from '../collector/message-router.js'
 import {
   ExtractorMessageCategorySchema,
   LogLevel,
@@ -16,7 +17,6 @@ import {
   type RoutingDecision,
 } from '../collector/route-extractor-message.workflow.js'
 import { Verbosity } from '../collector/verbosity.schema.js'
-import { MessageWriter } from '../message-writer.service.js'
 
 const RuleLevel = Schema.Literals(['error', 'warning', 'none'])
 const ConfigRule = Schema.Struct({
@@ -98,7 +98,7 @@ it.prop(
   '∀id_Routing_≡UpstreamRuleLookup',
   [RoutingCase],
   ([c]) =>
-    destinationOf(Result.getOrThrow(routeExtractorMessage(c.command))) ===
+    destinationOf(Result.merge(routeExtractorMessage(c.command))) ===
       referenceDestination(c.category, c.messageId, c.consoleLevel, c.table, c.reportEnabled),
 )
 
@@ -153,20 +153,15 @@ const ResidueScenario = Arbitrary.map(
 
 it.effect.prop('∀log_ReportRouted_∉Residue', [ResidueScenario], ([scenario]) =>
   Effect.gen(function*() {
-    const lines: Array<{ readonly level: LogLevelValue; readonly text: string }> = []
-    const table = tableOf(scenario.rules)
-    const router = yield* makeMessageRouter(
-      { cliFlags: { verbose: true }, configQuiet: false },
-      { messagesConfig: messagesConfigOf(scenario.rules), reportEnabled: scenario.reportEnabled },
-    ).pipe(
-      Effect.provideService(MessageWriter, {
-        write: (level, text) =>
-          Effect.sync(() => {
-            lines.push({ level, text })
-          }),
+    const log = new MessageLog({ diagnostics: false })
+    const view = yield* Effect.fromResult(
+      makeMessageView({
+        log,
+        messagesConfig: messagesConfigOf(scenario.rules),
+        reportEnabled: scenario.reportEnabled,
+        workingPackageFolder: undefined,
       }),
     )
-    const log = router.messageLog
     scenario.messages.forEach((message, index) => {
       const text = `message-${index}`
       log.append(
@@ -181,9 +176,13 @@ it.effect.prop('∀log_ReportRouted_∉Residue', [ResidueScenario], ([scenario])
       )
     })
 
-    router.fetchUnassociatedMessagesForReviewFile()
-    yield* router.emitAnalysisConsoleMessages
-    yield* router.handleRemainingNonConsoleMessages
+    view.unassociatedReportMessages()
+    const lines = [...view.consoleLines(), ...view.residue()]
+      .filter((line) => admits('verbose', line.level))
+      .map((line) => ({
+        level: line.level,
+        text: formatConsoleLine(line.level, line.text),
+      }))
 
     const prefixOf = (level: string): string => level === 'error' ? 'Error: ' : level === 'warning' ? 'Warning: ' : ''
     const occurrencesOfText = (text: string): number => lines.filter((line) => line.text.includes(text)).length
@@ -197,7 +196,7 @@ it.effect.prop('∀log_ReportRouted_∉Residue', [ResidueScenario], ([scenario])
         scenario.messages[index]!.category,
         scenario.messages[index]!.messageId,
         scenario.messages[index]!.logLevel,
-        table,
+        tableOf(scenario.rules),
         scenario.reportEnabled,
       )
     const eachMessageInExactlyOneBucket = scenario.messages.every((_, index) => {
@@ -218,8 +217,8 @@ it.effect.prop('∀log_ReportRouted_∉Residue', [ResidueScenario], ([scenario])
 
     return (
       eachMessageInExactlyOneBucket &&
-      router.errorCount() === countOfDestination('console-error') &&
-      router.warningCount() === countOfDestination('console-warning')
+      view.errorCount() === countOfDestination('console-error') &&
+      view.warningCount() === countOfDestination('console-warning')
     )
   }))
 

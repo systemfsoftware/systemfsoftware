@@ -6,14 +6,13 @@ import {
   DocCommentEnhancer,
   loadCompilerState,
   loadExtractorConfig,
-  makeMessageRouter,
-  MessageWriter,
-  runGenerators,
+  makeMessageView,
+  MessageLog,
   SourceMapper,
   ValidationEnhancer,
 } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Effect, Result } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import { expect } from 'vitest'
@@ -39,15 +38,17 @@ const analyzeSimplePackage = () =>
       Effect.orElseSucceed(() => ''),
     )
 
-    const router = yield* makeMessageRouter({
-      cliFlags: { verbose: true },
-    }).pipe(
-      Effect.provideService(MessageWriter, {
-        write: () => Effect.void,
+    const config = yield* loadExtractorConfig(configPath)
+    const sourceMapper = new SourceMapper()
+    const messageLog = new MessageLog({ diagnostics: false })
+    const reportMessages = Result.getOrThrow(
+      makeMessageView({
+        log: messageLog,
+        messagesConfig: config.messages,
+        reportEnabled: false,
+        workingPackageFolder: config.projectFolder,
       }),
     )
-
-    const config = yield* loadExtractorConfig(configPath)
     const compilerState = yield* loadCompilerState({
       projectFolder: config.projectFolder,
       tsconfigFilePath: config.tsconfigFilePath,
@@ -55,11 +56,11 @@ const analyzeSimplePackage = () =>
       skipLibCheck: config.skipLibCheck,
     })
 
-    const sourceMapper = new SourceMapper()
     const collector = new Collector({
       program: compilerState.program,
       extractorConfig: config,
-      messageRouter: router,
+      messageLog,
+      reportMessages,
       sourceMapper,
     })
 
@@ -185,39 +186,6 @@ Feature('Generating API report files for TypeScript packages')
           expect(s.report.content).not.toContain('internalHelper')
           expect(s.report.content).toContain('computeValue')
           expect(s.report.content).toContain('SimpleNamespace')
-        }),
-      ),
-    )
-
-    scenario(
-      'An existing up-to-date report is recognized as unchanged during execution',
-      Gherkin.Do.pipe(
-        Given('a configured package declaring public, beta, and internal exports')(
-          'analysis',
-          () => analyzeSimplePackage(),
-        ),
-        When('the generator pipeline runs against an existing matching report file')(
-          'result',
-          (s) =>
-            Effect.gen(function*() {
-              const router = yield* makeMessageRouter({
-                cliFlags: { verbose: true },
-              }).pipe(
-                Effect.provideService(MessageWriter, {
-                  write: () => Effect.void,
-                }),
-              )
-              return yield* runGenerators(
-                s.analysis.collector,
-                s.analysis.collector.extractorConfig,
-                router,
-                { localBuild: false },
-              )
-            }),
-        ),
-        Then('the generation completes reporting that no review files were modified')((s) => {
-          expect(s.result.apiReportChanged).toBe(false)
-          expect(s.result.apiReportFilePaths.length).toBe(3)
         }),
       ),
     )

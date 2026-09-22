@@ -1,8 +1,9 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { runEffect } from '@systemfsoftware/api-extractor'
+import { ExtractionFailed, ExtractionPassed, runEffect } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
+import * as Schema from 'effect/Schema'
 
 import { layer as consoleMessageWriterLayer, MessageWriter, type TextWritable } from '@systemfsoftware/api-extractor'
 import { expect } from 'vitest'
@@ -48,7 +49,7 @@ Feature('Reviewing TypeScript package API surface definitions')
             }),
         ),
         Then('the extraction succeeds with clean status')((s) => {
-          expect(s.outcome.result.succeeded).toBe(true)
+          expect(Schema.is(ExtractionPassed)(s.outcome.result)).toBe(true)
           expect(s.outcome.result.errorCount).toBe(0)
         }),
         Then('no output messages are written to the terminal')((s) => {
@@ -82,7 +83,7 @@ Feature('Reviewing TypeScript package API surface definitions')
             }),
         ),
         Then('the extraction outcome reports failure')((s) => {
-          expect(s.outcome.result.succeeded).toBe(false)
+          expect(Schema.is(ExtractionFailed)(s.outcome.result)).toBe(true)
           expect(s.outcome.result.warningCount).toBeGreaterThan(0)
         }),
         Then('the signature change warning is surfaced despite silent mode')((s) => {

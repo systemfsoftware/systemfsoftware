@@ -3,22 +3,18 @@ import {
   AstNamespaceExport,
   Collector,
   DocCommentEnhancer,
+  formatConsoleLine,
   loadCompilerState,
   loadExtractorConfig,
-  makeMessageRouter,
-  MessageWriter,
+  makeMessageView,
+  MessageLog,
   SourceMapper,
   ValidationEnhancer,
 } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Effect, Result } from 'effect'
 import * as Path from 'effect/Path'
 import { expect } from 'vitest'
-
-interface RecordedLog {
-  readonly level: string
-  readonly text: string
-}
 
 const Feature = makeFeature({ it, layer })
 
@@ -36,16 +32,14 @@ const resolveFixturePath = (relative: string): Effect.Effect<string, never, Path
 const analyzeFixturePackage = (configPath: string) =>
   Effect.gen(function*() {
     const config = yield* loadExtractorConfig(configPath)
-    const recordedLogs: RecordedLog[] = []
-    const router = yield* makeMessageRouter(
-      { cliFlags: { verbose: true } },
-      { messagesConfig: config.messages, workingPackageFolder: config.projectFolder },
-    ).pipe(
-      Effect.provideService(MessageWriter, {
-        write: (level, text) =>
-          Effect.sync(() => {
-            recordedLogs.push({ level, text })
-          }),
+    const sourceMapper = new SourceMapper()
+    const messageLog = new MessageLog({ diagnostics: false })
+    const view = Result.getOrThrow(
+      makeMessageView({
+        log: messageLog,
+        messagesConfig: config.messages,
+        reportEnabled: false,
+        workingPackageFolder: config.projectFolder,
       }),
     )
 
@@ -56,18 +50,22 @@ const analyzeFixturePackage = (configPath: string) =>
       skipLibCheck: config.skipLibCheck,
     })
 
-    const sourceMapper = new SourceMapper()
     const collector = new Collector({
       program: compilerState.program,
       extractorConfig: config,
-      messageRouter: router,
+      messageLog,
+      reportMessages: view,
       sourceMapper,
     })
 
     collector.analyze()
     DocCommentEnhancer.analyze(collector)
     ValidationEnhancer.analyze(collector)
-    yield* router.handleRemainingNonConsoleMessages
+
+    const recordedLogs = view.residue().map((line) => ({
+      level: line.level,
+      text: formatConsoleLine(line.level, line.text),
+    }))
 
     return {
       collector,

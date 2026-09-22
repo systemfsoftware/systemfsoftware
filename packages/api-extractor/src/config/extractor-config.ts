@@ -68,8 +68,7 @@ export const mergeConfigObjects = (
   base: MutableJsonRecord,
   derived: MutableJsonRecord,
 ): MutableJsonRecord => {
-  const outcome = mergeConfig(MergeConfig.make({ base, derived }))
-  const decision = Result.getOrThrow(outcome)
+  const decision = Result.merge(mergeConfig(MergeConfig.make({ base, derived })))
   return Match.value(decision).pipe(
     Match.tag('ConfigMerged', (d) => ({ ...d.merged })),
     Match.tag('ConfigReplaced', (d) => ({ ...d.derived })),

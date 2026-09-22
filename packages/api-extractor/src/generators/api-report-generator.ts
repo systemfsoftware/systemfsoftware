@@ -139,7 +139,7 @@ const emitSymbolDeclarations = (
   exportsToEmit: Map<string, { readonly associatedMessages: ExtractorMessage[] }>,
 ): void => {
   for (const astDeclaration of astEntity.astDeclarations) {
-    const fetchedMessages = collector.messageRouter.fetchAssociatedMessagesForReviewFile(astDeclaration)
+    const fetchedMessages = collector.reportMessages.associatedReportMessages(astDeclaration)
 
     const messagesToReport: ExtractorMessage[] = []
     for (const message of fetchedMessages) {
@@ -250,7 +250,7 @@ export class ApiReportGenerator extends Pipeable.Class {
 
     DtsEmitHelpers.emitStarExports(writer, collector)
 
-    const unassociatedMessages = collector.messageRouter.fetchUnassociatedMessagesForReviewFile()
+    const unassociatedMessages = collector.reportMessages.unassociatedReportMessages()
     if (unassociatedMessages.length > 0) {
       writer.ensureSkippedLine()
       _writeLineAsComments(writer, 'Warnings were encountered during analysis:')
@@ -423,7 +423,7 @@ function _modifySpan(
           }
 
           if (!nextInsideTypeLiteral) {
-            const messagesToReport = collector.messageRouter.fetchAssociatedMessagesForReviewFile(childAstDeclaration)
+            const messagesToReport = collector.reportMessages.associatedReportMessages(childAstDeclaration)
             const aedocSynopsis = _getAedocSynopsis(collector, childAstDeclaration, messagesToReport)
             child.modification.prefix = aedocSynopsis + child.modification.prefix
           }

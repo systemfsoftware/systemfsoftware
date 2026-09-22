@@ -3,12 +3,15 @@ import type * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import * as Schema from 'effect/Schema'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
 
+import { ExtractionPassed } from '../choose-extraction.workflow.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
 import { findConfigFileUpwards } from '../config/lookup.js'
-import { type ExtractorResult, type ExtractorRunOptions, runEffect } from '../extractor.js'
+import type { ExtractorRunOptions } from '../extraction-request.js'
 import { MessageWriter } from '../message-writer.service.js'
+import { runEffect } from '../run-extractor.js'
 
 export interface ParsedRunFlags {
   readonly config: Option.Option<string>
@@ -77,18 +80,20 @@ const resolveConfigPath = (
       ),
   })
 
-const failureOutcomeMessage = (result: ExtractorResult): string =>
-  Match.value(result.errorCount > 0).pipe(
+const outcomeMessageOf = (errorCount: number): string =>
+  Match.value(errorCount > 0).pipe(
     Match.when(true, () => 'API Extractor completed with errors'),
     Match.when(false, () => 'API Extractor completed with warnings'),
     Match.exhaustive,
   )
 
-const executionFailedError = (result: ExtractorResult): CliError.UserError =>
-  new CliError.UserError({
-    cause: new Error(failureOutcomeMessage(result)),
-    userMessage: failureOutcomeMessage(result),
+const executionFailedError = (errorCount: number): CliError.UserError => {
+  const message = outcomeMessageOf(errorCount)
+  return new CliError.UserError({
+    cause: new Error(message),
+    userMessage: message,
   })
+}
 
 const optionalFolder = (
   opt: Option.Option<string>,
@@ -112,7 +117,9 @@ const toExtractorOptions = (flags: ParsedRunFlags): ExtractorRunOptions => {
   }
 }
 
-export const runActionHandler = (
+const isPassed = Schema.is(ExtractionPassed)
+
+const runActionHandler = (
   flags: ParsedRunFlags,
 ): Effect.Effect<
   void,
@@ -132,9 +139,9 @@ export const runActionHandler = (
       ),
     )
 
-    return yield* Match.value(result.succeeded).pipe(
+    return yield* Match.value(isPassed(result)).pipe(
       Match.when(true, () => Effect.void),
-      Match.when(false, () => executionFailedError(result)),
+      Match.when(false, () => executionFailedError(result.errorCount)),
       Match.exhaustive,
     )
   })

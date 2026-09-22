@@ -32,7 +32,7 @@ import { CollectorEntity } from './CollectorEntity.js'
 import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
 import { ExtractorMessageId } from './extractor-message-id.js'
 import type { ExtractorMessageProperties, MessageLog } from './message-log.js'
-import type { MessageRouter } from './message-router.js'
+import type { ReportMessageSource } from './message-router.js'
 import { PackageDocComment } from './package-doc-comment.js'
 import type { SourceMapper } from './SourceMapper.js'
 import { SymbolMetadata } from './SymbolMetadata.js'
@@ -52,7 +52,9 @@ export interface ICollectorOptions {
    */
   program: ts.Program
 
-  messageRouter: MessageRouter
+  messageLog: MessageLog
+
+  reportMessages: ReportMessageSource
 
   extractorConfig: ExtractorConfig
 
@@ -73,7 +75,7 @@ export class Collector extends Pipeable.Class {
   public readonly astReferenceResolver: AstReferenceResolver
 
   public readonly packageJsonLookup: PackageJsonLookup
-  public readonly messageRouter: MessageRouter
+  public readonly reportMessages: ReportMessageSource
   public readonly messageLog: MessageLog
 
   public readonly workingPackage: WorkingPackage
@@ -114,7 +116,7 @@ export class Collector extends Pipeable.Class {
     super()
     this.packageJsonLookup = new PackageJsonLookup()
 
-    const { program, extractorConfig, sourceMapper, messageRouter } = options
+    const { program, extractorConfig, sourceMapper, messageLog, reportMessages } = options
     this.#program = program
     this.extractorConfig = extractorConfig
     this.sourceMapper = sourceMapper
@@ -143,8 +145,8 @@ export class Collector extends Pipeable.Class {
       entryPointSourceFile,
     })
 
-    this.messageRouter = messageRouter
-    this.messageLog = messageRouter.messageLog
+    this.reportMessages = reportMessages
+    this.messageLog = messageLog
 
     this.program = program
     this.typeChecker = program.getTypeChecker()

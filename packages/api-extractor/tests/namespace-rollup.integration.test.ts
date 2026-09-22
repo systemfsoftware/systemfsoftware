@@ -3,9 +3,11 @@ import {
   Collector,
   DtsRollupGenerator,
   DtsRollupKind,
+  ExtractionPassed,
   loadCompilerState,
   loadExtractorConfig,
-  makeMessageRouter,
+  makeMessageView,
+  MessageLog,
   MessageWriter,
   runEffect,
   SourceMapper,
@@ -14,6 +16,8 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
+import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 import * as ts from 'typescript'
 import { expect } from 'vitest'
 
@@ -82,18 +86,22 @@ Feature('Bundling declaration files with namespace exports')
                 mainEntryPointFilePath: config.mainEntryPointFilePath,
                 skipLibCheck: config.skipLibCheck,
               })
-              const router = yield* makeMessageRouter({
-                cliFlags: { verbose: true },
-              }).pipe(
-                Effect.provideService(MessageWriter, {
-                  write: () => Effect.void,
+              const sourceMapper = new SourceMapper()
+              const messageLog = new MessageLog({ diagnostics: false })
+              const reportMessages = Result.getOrThrow(
+                makeMessageView({
+                  log: messageLog,
+                  messagesConfig: config.messages,
+                  reportEnabled: false,
+                  workingPackageFolder: config.projectFolder,
                 }),
               )
               const collector = new Collector({
                 program: compilerState.program,
                 extractorConfig: config,
-                messageRouter: router,
-                sourceMapper: new SourceMapper(),
+                messageLog,
+                reportMessages,
+                sourceMapper,
               })
               collector.analyze()
               const content = DtsRollupGenerator.generateTypingsFileContent(
@@ -142,18 +150,22 @@ Feature('Bundling declaration files with namespace exports')
                 mainEntryPointFilePath: config.mainEntryPointFilePath,
                 skipLibCheck: config.skipLibCheck,
               })
-              const router = yield* makeMessageRouter({
-                cliFlags: { verbose: true },
-              }).pipe(
-                Effect.provideService(MessageWriter, {
-                  write: () => Effect.void,
+              const sourceMapper = new SourceMapper()
+              const messageLog = new MessageLog({ diagnostics: false })
+              const reportMessages = Result.getOrThrow(
+                makeMessageView({
+                  log: messageLog,
+                  messagesConfig: config.messages,
+                  reportEnabled: false,
+                  workingPackageFolder: config.projectFolder,
                 }),
               )
               const collector = new Collector({
                 program: compilerState.program,
                 extractorConfig: config,
-                messageRouter: router,
-                sourceMapper: new SourceMapper(),
+                messageLog,
+                reportMessages,
+                sourceMapper,
               })
               collector.analyze()
               const content = DtsRollupGenerator.generateTypingsFileContent(
@@ -191,18 +203,22 @@ Feature('Bundling declaration files with namespace exports')
                 mainEntryPointFilePath: config.mainEntryPointFilePath,
                 skipLibCheck: config.skipLibCheck,
               })
-              const router = yield* makeMessageRouter({
-                cliFlags: { verbose: true },
-              }).pipe(
-                Effect.provideService(MessageWriter, {
-                  write: () => Effect.void,
+              const sourceMapper = new SourceMapper()
+              const messageLog = new MessageLog({ diagnostics: false })
+              const reportMessages = Result.getOrThrow(
+                makeMessageView({
+                  log: messageLog,
+                  messagesConfig: config.messages,
+                  reportEnabled: false,
+                  workingPackageFolder: config.projectFolder,
                 }),
               )
               const collector = new Collector({
                 program: compilerState.program,
                 extractorConfig: config,
-                messageRouter: router,
-                sourceMapper: new SourceMapper(),
+                messageLog,
+                reportMessages,
+                sourceMapper,
               })
               collector.analyze()
               const content = DtsRollupGenerator.generateTypingsFileContent(
@@ -253,14 +269,14 @@ Feature('Bundling declaration files with namespace exports')
             }),
         ),
         Then('the extraction completes cleanly with zero errors')((s) => {
-          if (!s.outcome.result.succeeded) {
+          if (!Schema.is(ExtractionPassed)(s.outcome.result)) {
             throw new Error(
               `Run failed (errors=${s.outcome.result.errorCount}, warnings=${s.outcome.result.warningCount}):\n${
                 s.outcome.messages.join('\n')
               }`,
             )
           }
-          expect(s.outcome.result.succeeded).toBe(true)
+          expect(Schema.is(ExtractionPassed)(s.outcome.result)).toBe(true)
         }),
         Then('the declaration rollup file is written to the expected path')((s) => {
           expect(s.outcome.exists).toBe(true)

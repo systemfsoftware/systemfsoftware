@@ -7,7 +7,7 @@ import { Command } from 'effect/unstable/cli'
 import { initCommand } from './cli/init-action.js'
 import { runCommand } from './cli/run-action.js'
 import { layer } from './drivers/console-message-writer.js'
-import { extractorVersion } from './extractor.js'
+import { extractorVersion } from './version.js'
 
 export const cli = Command.make('api-extractor').pipe(
   Command.withDescription(
