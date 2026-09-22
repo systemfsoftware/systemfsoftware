@@ -1,23 +1,23 @@
 {
-  "name": "@systemfsoftware/effect-microsandbox",
+  "name": "@systemfsoftware/effect-readiness",
   "license": "Apache-2.0",
   "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-microsandbox"
+    "directory": "packages/effect-readiness"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-microsandbox#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-readiness#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Effect-native microVM integration testing via microsandbox — pure-data container specs, Scope/Layer lifecycle, Schedule-driven waits, zero Docker.",
+  "description": "Effect-native readiness waits — TCP, HTTP, and log conditions over a port mapping, with driver ports, staged dial evidence, and a loopback conformance suite.",
   "keywords": [
     "effect",
     "effect-ts",
-    "microvm",
-    "microsandbox",
-    "testcontainers",
-    "integration-testing",
+    "readiness",
+    "health-check",
+    "wait-for",
+    "ports",
     "testing"
   ],
   "type": "module",
@@ -40,9 +40,6 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --config vitest.config.ts",
     "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
-    "smoke": "pnpm exec turbo run smoke:journey --filter=@systemfsoftware/effect-microsandbox",
-    "smoke:journey": "node examples/boot-alpine.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor-quiet run",
@@ -50,17 +47,13 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/effect-readiness": "workspace:*",
-    "microsandbox": "catalog:"
+    "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/effect-schema-law": "workspace:^",
-    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",

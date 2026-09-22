@@ -1,9 +1,7 @@
-import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect, Option, Schedule } from 'effect'
-import * as Match from 'effect/Match'
+import { Readiness } from '@systemfsoftware/effect-readiness'
+import { Effect, Layer, Match } from 'effect'
 import * as Result from 'effect/Result'
-import * as Socket from 'effect/unstable/socket/Socket'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { SandboxBootError, WaitTimeoutError } from './MicroVMError.schema.js'
 import type { WaitStrategy } from './MicroVMSpec.schema.js'
@@ -16,71 +14,8 @@ import {
 
 const WAIT_TIMEOUT_MS = 30_000
 const WAIT_POLL_MS = 250
-const LOOPBACK_HOST = '127.0.0.1'
 
-const probeConnect = (hostPort: number) => Effect.option(NodeSocket.makeNet({ host: LOOPBACK_HOST, port: hostPort }))
-
-const dialProbe = (hostPort: number) => Effect.scoped(Effect.map(probeConnect(hostPort), Option.isSome))
-
-const statusOk = (text: string): boolean => /^HTTP\/[\d.]+ 2\d\d/.test(text)
-
-const decoder = new TextDecoder()
-
-const decodeChunk = (chunk: Uint8Array | string): string => typeof chunk === 'string' ? chunk : decoder.decode(chunk)
-
-const exchangeOn = (socket: Socket.Socket, path: string) =>
-  Effect.gen(function*() {
-    const writer = yield* socket.writer
-    const reader = yield* socket.reader
-    yield* writer.write(`GET ${path} HTTP/1.0\r\nHost: ${LOOPBACK_HOST}\r\nConnection: close\r\n\r\n`)
-    const chunks = yield* Effect.option(reader.pull)
-    return Option.isSome(chunks) && statusOk(decodeChunk(chunks.value[0]))
-  })
-
-const httpProbe = (hostPort: number, path: string) =>
-  Effect.scoped(
-    Effect.flatMap(probeConnect(hostPort), (picked) =>
-      Option.match(picked, {
-        onNone: () => Effect.succeed(false),
-        onSome: (socket) => Effect.map(Effect.option(exchangeOn(socket, path)), Option.getOrElse(() => false)),
-      })),
-  )
-
-interface LogReader {
-  readonly name: string
-  readonly logs: () => Promise<ReadonlyArray<{ readonly text: () => string }>>
-}
-
-const logProbe = (reader: LogReader, pattern: RegExp) =>
-  Effect.map(
-    Effect.tryPromise({
-      try: () => reader.logs(),
-      catch: (cause) => new SandboxBootError({ sandboxName: reader.name, cause }),
-    }),
-    (entries) => entries.some((entry) => pattern.test(entry.text())),
-  )
-
-const awaitProbe = (wait: string, timeoutMs: number, probe: Effect.Effect<boolean, SandboxBootError>) =>
-  Effect.asVoid(
-    Effect.timeoutOrElse(
-      Effect.repeat(probe, {
-        schedule: Schedule.spaced(`${WAIT_POLL_MS} millis`),
-        until: (satisfied) => satisfied,
-      }),
-      {
-        duration: `${timeoutMs} millis`,
-        orElse: () => Effect.fail(new WaitTimeoutError({ wait, timeoutMs })),
-      },
-    ),
-  )
-
-const hostPortFor = (vm: AcquiredVM, guest: number) =>
-  Option.map(
-    Arr.findFirst(vm.plan.portBindings, (candidate) => candidate.guest === guest),
-    (candidate) => candidate.hostPort,
-  )
-
-const waitLabel = (strategy: WaitStrategy) =>
+const waitLabel = (strategy: WaitStrategy): string =>
   Match.value(strategy).pipe(
     Match.tag('Port', ({ port }) => `port:${port}`),
     Match.tag('Http', ({ path, port }) => `http:${path}@${port}`),
@@ -88,19 +23,47 @@ const waitLabel = (strategy: WaitStrategy) =>
     Match.exhaustive,
   )
 
-const probeMapped = (vm: AcquiredVM, guestPort: number, probe: (hostPort: number) => Effect.Effect<boolean>) =>
-  Option.match(hostPortFor(vm, guestPort), {
-    onNone: () => Effect.succeed(false),
-    onSome: (hostPort) => probe(hostPort),
-  })
-
-const probeFor = (vm: AcquiredVM, strategy: WaitStrategy) =>
+const conditionOf = (strategy: WaitStrategy): Readiness.Condition =>
   Match.value(strategy).pipe(
-    Match.tag('Port', ({ port }) => probeMapped(vm, port, dialProbe)),
-    Match.tag('Http', ({ path, port }) => probeMapped(vm, port, (hostPort) => httpProbe(hostPort, path))),
-    Match.tag('Log', ({ pattern }) => logProbe(vm.sandbox, new RegExp(pattern))),
+    Match.tag('Port', ({ port }) => Readiness.Wait.forTcp(port)),
+    Match.tag('Http', ({ path, port }) => Readiness.Wait.forHttp(path, port)),
+    Match.tag('Log', ({ pattern }) => Readiness.Wait.forLog(pattern)),
     Match.exhaustive,
   )
+
+const logSourceOf = (sandbox: AcquiredVM['sandbox']): Layer.Layer<Readiness.LogSource> =>
+  Layer.succeed(Readiness.LogSource, {
+    entries: Effect.map(
+      Effect.tryPromise({
+        try: () => sandbox.logs(),
+        catch: (cause) => new Readiness.LogSourceError({ source: sandbox.name, cause }),
+      }),
+      (entries) => entries.map((entry) => entry.text()),
+    ),
+  })
+
+const awaitReadinessForStrategy = (
+  vm: AcquiredVM,
+  strategy: WaitStrategy,
+): Effect.Effect<void, WaitTimeoutError | SandboxBootError> =>
+  Effect.gen(function*() {
+    const target = Readiness.target(vm.plan.portBindings, {
+      timeoutMs: WAIT_TIMEOUT_MS,
+      pollMs: WAIT_POLL_MS,
+    })
+    const condition = conditionOf(strategy)
+    const env = Layer.merge(Readiness.NodeHostProber, logSourceOf(vm.sandbox))
+    const verdict = yield* Readiness.awaitCondition(target, condition).pipe(
+      Effect.provide(env),
+      Effect.mapError((cause) => new SandboxBootError({ sandboxName: vm.sandbox.name, cause })),
+    )
+    return yield* Match.value(verdict).pipe(
+      Match.tag('Satisfied', () => Effect.void),
+      Match.tag('TimedOut', () =>
+        Effect.fail(new WaitTimeoutError({ wait: waitLabel(strategy), timeoutMs: WAIT_TIMEOUT_MS }))),
+      Match.exhaustive,
+    )
+  })
 
 const readReadinessCommand = (vm: AcquiredVM) => Effect.succeed(vm)
 
@@ -108,7 +71,7 @@ const writeReadiness = (outcome: Result.Result<WaitRequired | WaitSkipped, never
   Match.value(Result.getOrThrow(outcome)).pipe(
     Match.tag(
       'WaitRequired',
-      ({ strategy }) => Effect.as(awaitProbe(waitLabel(strategy), WAIT_TIMEOUT_MS, probeFor(vm, strategy)), vm),
+      ({ strategy }) => Effect.as(awaitReadinessForStrategy(vm, strategy), vm),
     ),
     Match.tag('WaitSkipped', () => Effect.succeed(vm)),
     Match.exhaustive,
