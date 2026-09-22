@@ -16,7 +16,7 @@ import { Schema } from 'effect';
 import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
-const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
+const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
 
 // Warning: (ae-forgotten-export) The symbol "CircularConfigExtendsError_base" needs to be exported by the entry point index.d.ts
 //
@@ -88,12 +88,12 @@ declare namespace Extractor {
         ConfigSchemaValidationError,
         UnresolvedTokenError,
         CircularConfigExtendsError,
-        TsConfigReadError,
-        TsCompilerLoadError,
-        UnsupportedSyntaxError,
-        UnsupportedStarExportError,
         ExtractionPassed,
         ExtractionFailed,
+        UnsupportedSyntaxError,
+        UnsupportedStarExportError,
+        TsConfigReadError,
+        TsCompilerLoadError,
         ExtractorError,
         cell,
         run,

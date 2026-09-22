@@ -11,7 +11,12 @@ import { extractApi } from './extract-api.cell.js'
 import type { ExtractorRunInput, ExtractorRunOptions } from './extraction-request.js'
 import { MessageWriter } from './message-writer.service.js'
 
-export const cell = announceRun.pipe(Cell.andThen(extractApi))
+export const cell: Cell.Cell<
+  ExtractorRunInput,
+  ExtractionDecision,
+  ExtractorError | PlatformError,
+  FileSystem.FileSystem | Path.Path | MessageWriter
+> = announceRun.pipe(Cell.andThen(extractApi))
 
 export const run = (
   configFilePath: string,
