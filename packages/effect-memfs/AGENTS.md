@@ -4,10 +4,12 @@ In-memory filesystem: the `@effect/platform` FileSystem port backed by the `memf
 
 ## Rules
 
-| ID      | Rule                                                                                                                                                                                                                               | Gate                                                                                                          |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **MF1** | Narrow driver values with runtime-checked type predicates that throw on mismatch, inside the `Effect.tryPromise` that already maps failures to `PlatformError` — never `as`, `as unknown as`, or an options-laundering `as never`. | `pnpm --filter @systemfsoftware/effect-memfs lint` exits 0 with zero `adapter-no-cast` reports                |
-| **MF2** | Exactly one driver (`memfs`) behind the FileSystem port; never import a second external system into `memory-file-system.adapter.ts`.                                                                                               | `pnpm --filter @systemfsoftware/effect-memfs lint` exits 0 with zero `adapter-single-external-system` reports |
+| ID      | Rule                                                                                                                                                                                                | Gate                                                                                                                                           |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **MF1** | Narrow driver values with the runtime predicates in `src/driver-values.ts`, which refuse a mismatch as a `ShapeRefusal`; never a type assertion.                                                    | `pnpm --filter @systemfsoftware/effect-memfs lint` exits 0 with zero `typescript(consistent-type-assertions)` reports                          |
+| **MF2** | Exactly one driver (`memfs`) behind the FileSystem port, imported only by `src/memory-file-system.handle.ts`; no Node builtin and no second external system reaches the handles or `driver-values`. | Node builtins: `lint` exits 0 with zero `eslint(no-restricted-imports)` and `effecttsgo(node-builtin-import)` reports. Second driver: `review` |
+
+MF2 review pair — wrong: `src/driver-values.ts` imports `memfs` to test `instanceof Dirent`. Right: `driver-values.ts` narrows with `Predicate.hasProperty` over the value the handle hands it.
 
 ## Verification
 

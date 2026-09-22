@@ -27,9 +27,9 @@
   ],
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "types": "./dist/effect-memfs.d.ts",
-      "default": "./dist/index.mjs"
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/mod.d.ts",
+      "default": "./dist/mod.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -44,12 +44,17 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "memfs": "^4.78.1"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/differential-spec": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
@@ -71,8 +76,8 @@
     "provenance": true,
     "exports": {
       ".": {
-        "types": "./dist/effect-memfs.d.ts",
-        "default": "./dist/index.mjs"
+        "types": "./dist/mod.d.ts",
+        "default": "./dist/mod.mjs"
       },
       "./package.json": "./package.json"
     }
