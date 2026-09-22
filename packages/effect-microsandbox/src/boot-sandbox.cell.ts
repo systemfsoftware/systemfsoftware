@@ -4,7 +4,7 @@ import { Array, Effect, Function, Option, pipe } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import type { Sandbox, SandboxBuilder } from 'microsandbox'
+import type { NetworkPolicy, Sandbox, SandboxBuilder } from 'microsandbox'
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
 import {
@@ -16,6 +16,10 @@ import {
 } from './render-sandbox-plan.workflow.js'
 
 type NapiMountBuilderT = { bind(host: string): NapiMountBuilderT }
+type NapiNetworkBuilderT = { policy(policy: NetworkPolicy): NapiNetworkBuilderT }
+type NetworkPolicyFactory = {
+  readonly fromProfiles: (profiles: Iterable<'public' | 'private' | 'host'>) => NetworkPolicy
+}
 
 const STOP_TIMEOUT_MS = 10_000
 const KILL_TIMEOUT_MS = 5_000
@@ -27,53 +31,61 @@ export interface AcquiredVM {
   readonly sandbox: Sandbox
 }
 const compilePlan: {
-  (plan: SandboxPlan): (builder: SandboxBuilder) => SandboxBuilder
-  (builder: SandboxBuilder, plan: SandboxPlan): SandboxBuilder
-} = Function.dual(2, (builder: SandboxBuilder, plan: SandboxPlan): SandboxBuilder =>
-  pipe(
-    builder.image(plan.image).envs({ ...plan.envs }),
-    (b) =>
-      Option.match(Option.fromNullishOr(plan.cpus), {
-        onNone: () => b,
-        onSome: (cpus) => b.cpus(cpus),
-      }),
-    (b) =>
-      Option.match(Option.fromNullishOr(plan.memoryMiB), {
-        onNone: () => b,
-        onSome: (mem) => b.memory(mem),
-      }),
-    (b) =>
-      Option.match(Option.fromNullishOr(plan.workdir), {
-        onNone: () => b,
-        onSome: (wd) => b.workdir(wd),
-      }),
-    (b) =>
-      Option.match(Option.fromNullishOr(plan.cmd), {
-        onNone: () => b,
-        onSome: (cmd) => b.cmd([...cmd]),
-      }),
-    (b) =>
-      Array.reduce(
-        plan.mounts,
-        b,
-        (acc, m) => acc.volume(m.guest, (v: NapiMountBuilderT) => v.bind(m.host)),
-      ),
-    (b) =>
-      Array.reduce(
-        plan.portBindings,
-        b,
-        (acc, p) => acc.portBind(p.host, p.hostPort, p.guest),
-      ),
-  ))
+  (plan: SandboxPlan, networkPolicy: NetworkPolicyFactory): (builder: SandboxBuilder) => SandboxBuilder
+  (builder: SandboxBuilder, plan: SandboxPlan, networkPolicy: NetworkPolicyFactory): SandboxBuilder
+} = Function.dual(
+  3,
+  (builder: SandboxBuilder, plan: SandboxPlan, networkPolicy: NetworkPolicyFactory): SandboxBuilder =>
+    pipe(
+      builder.image(plan.image).envs({ ...plan.envs }),
+      (b) =>
+        Option.match(Option.fromNullishOr(plan.cpus), {
+          onNone: () => b,
+          onSome: (cpus) => b.cpus(cpus),
+        }),
+      (b) =>
+        Option.match(Option.fromNullishOr(plan.memoryMiB), {
+          onNone: () => b,
+          onSome: (mem) => b.memory(mem),
+        }),
+      (b) =>
+        Option.match(Option.fromNullishOr(plan.workdir), {
+          onNone: () => b,
+          onSome: (wd) => b.workdir(wd),
+        }),
+      (b) =>
+        Option.match(Option.fromNullishOr(plan.cmd), {
+          onNone: () => b,
+          onSome: (cmd) => b.cmd([...cmd]),
+        }),
+      (b) =>
+        Array.reduce(
+          plan.mounts,
+          b,
+          (acc, m) => acc.volume(m.guest, (v: NapiMountBuilderT) => v.bind(m.host)),
+        ),
+      (b) =>
+        Array.reduce(
+          plan.portBindings,
+          b,
+          (acc, p) => acc.portBind(p.host, p.hostPort, p.guest),
+        ),
+      (b) =>
+        Option.match(Option.fromNullishOr(plan.networkProfiles), {
+          onNone: () => b,
+          onSome: (profiles) => b.network((n: NapiNetworkBuilderT) => n.policy(networkPolicy.fromProfiles(profiles))),
+        }),
+    ),
+)
 
 const createSandbox = (spec: MicroVMSpec, plan: SandboxPlan) =>
   Effect.tryPromise({
     try: () => import('microsandbox'),
     catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
   }).pipe(
-    Effect.flatMap(({ Sandbox }) =>
+    Effect.flatMap(({ Sandbox, NetworkPolicy }) =>
       Effect.tryPromise({
-        try: () => compilePlan(Sandbox.builder(plan.name), plan).create(),
+        try: () => compilePlan(Sandbox.builder(plan.name), plan, NetworkPolicy).create(),
         catch: (cause) => new SandboxBootError({ sandboxName: plan.name, cause }),
       })
     ),
