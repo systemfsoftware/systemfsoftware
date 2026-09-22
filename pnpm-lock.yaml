@@ -2144,9 +2144,6 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 'catalog:'
         version: 1.43.0
-      '@systemfsoftware/differential-spec':
-        specifier: workspace:^
-        version: link:../differential-spec
       '@systemfsoftware/effect-spec-runtime':
         specifier: workspace:^
         version: link:../effect-spec-runtime

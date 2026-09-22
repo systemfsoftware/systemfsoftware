@@ -61,13 +61,12 @@ const directoryOf = (directory: string | undefined): string => directory ?? DEFA
 const fileNameOf = (options: DisparityInput): string =>
   `${sanitize(options.graph.traceId)}.${sanitize(options.relation.id)}.txt`
 
-const dumpPathOf = (options: DisparityInput): string => `${directoryOf(options.directory)}/${fileNameOf(options)}`
-
 const writeDump = (options: DisparityInput) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
-    const path = dumpPathOf(options)
-    yield* fs.makeDirectory(directoryOf(options.directory), { recursive: true })
+    const directory = directoryOf(options.directory)
+    const path = `${directory}/${fileNameOf(options)}`
+    yield* fs.makeDirectory(directory, { recursive: true })
     yield* fs.writeFileString(path, render(options.graph, [options.break]))
     return path
   })

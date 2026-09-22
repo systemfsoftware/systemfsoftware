@@ -48,7 +48,6 @@
     "@opentelemetry/resources": "catalog:",
     "@opentelemetry/sdk-trace-base": "catalog:",
     "@opentelemetry/semantic-conventions": "catalog:",
-    "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/trace-taxonomy": "workspace:^"
   },
