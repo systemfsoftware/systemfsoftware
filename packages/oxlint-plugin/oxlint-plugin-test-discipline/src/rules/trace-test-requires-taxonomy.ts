@@ -80,6 +80,9 @@ const stringLiteralValue = (node: ESTree.Node | undefined): string | null => {
   return typeof value === 'string' ? value : null
 }
 
+const stringElementValue = (element: ESTree.ArrayExpressionElement | undefined): string | null =>
+  stringLiteralValue(element ?? undefined)
+
 const httpMemberName = (name: string): string | null => (HTTP_MEMBERS[name] === true ? name : null)
 
 const httpMemberHead = (path: string): string | null => {
@@ -87,8 +90,11 @@ const httpMemberHead = (path: string): string | null => {
   return head === undefined ? null : httpMemberName(head)
 }
 
+const propertyPathText = (node: ESTree.Node | undefined): string | null =>
+  node?.type === 'ArrayExpression' ? stringElementValue(node.elements[0]) : stringLiteralValue(node)
+
 const toHavePropertyMember = (node: ESTree.CallExpression): string | null => {
-  const path = stringLiteralValue(node.arguments[0])
+  const path = propertyPathText(node.arguments[0])
   return path === null ? null : httpMemberHead(path)
 }
 
@@ -129,8 +135,27 @@ const propertyKeyName = (property: ESTree.ObjectPropertyKind): string | null => 
 
 const httpMemberOr = (name: string | null): string | null => name === null ? null : httpMemberName(name)
 
-const httpKeyOfProperty = (property: ESTree.ObjectPropertyKind): string | null =>
-  httpMemberOr(propertyKeyName(property))
+const propertyValueOf = (property: ESTree.ObjectPropertyKind): ESTree.Expression | null =>
+  property.type === 'Property' ? property.value : null
+
+const nestedPropertyHttpKey = (property: ESTree.ObjectPropertyKind): string | null =>
+  httpKeyOfValue(propertyValueOf(property))
+
+const httpKeyOfProperty = (property: ESTree.ObjectPropertyKind): string | null => {
+  const named = httpMemberOr(propertyKeyName(property))
+  return named === null ? nestedPropertyHttpKey(property) : named
+}
+
+const elementsHttpKey = (elements: Array<ESTree.ArrayExpressionElement>): string | null => {
+  const hit = elements.find((element) => httpKeyOfValue(element) !== null)
+  return hit === undefined ? null : httpKeyOfValue(hit)
+}
+
+const httpKeyOfNonObject = (value: ESTree.Node | null): string | null =>
+  value?.type === 'ArrayExpression' ? elementsHttpKey(value.elements) : null
+
+const httpKeyOfValue = (value: ESTree.Node | null): string | null =>
+  value?.type === 'ObjectExpression' ? propertiesHttpKey(value.properties) : httpKeyOfNonObject(value)
 
 const propertiesHttpKey = (properties: Array<ESTree.ObjectPropertyKind>): string | null => {
   const hit = properties.find((property) => httpKeyOfProperty(property) !== null)

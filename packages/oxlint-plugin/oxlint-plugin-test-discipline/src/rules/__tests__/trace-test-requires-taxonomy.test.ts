@@ -125,6 +125,39 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       code: "const order = { id: '1' }",
       filename: '/repo/examples/inventory-fulfillment/src/fulfillment/settle.ts',
     },
+    {
+      name: 'Should_Allow_DomainAssertion_When_TraceSpecAssertsNonHttpInsideThenCallback',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          res.then((r) => expect(r.total).toBe(200))
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+    },
+    {
+      name: 'Should_Allow_DomainObjectShape_When_TraceSpecAssertsNestedNonHttpKeys',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toEqual({ data: { orderId: 'order-1' } })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+    },
+    {
+      name: 'Should_Allow_DomainPropertyPath_When_TraceSpecAssertsToHavePropertyArrayPath',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty(['orderId'])
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+    },
   ],
   invalid: [
     {
@@ -296,6 +329,104 @@ ruleTester.run('trace-test-requires-taxonomy', traceTestRequiresTaxonomy, {
       `,
       filename: TRACE_SPEC_FILENAME,
       errors: [rawEmitError('startSpan')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsStatusInsideThenCallback',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          res.then((r) => expect(r.status).toBe(200))
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationError('status')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsStatusInsideThenBlockCallback',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          res.then((r) => {
+            expect(r.status).toBe(200)
+          })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationError('status')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAwaitsThenToHavePropertyStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(async () => {
+          await fetch(url).then((r) => expect(r).toHaveProperty('status', 200))
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('status')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToHavePropertyArrayPathStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty(['status'], 200)
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('status')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToHavePropertyArrayPathBody',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toHaveProperty(['body', 'items'])
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError("toHaveProperty('body')")],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToEqualNestedStatus',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toEqual({ data: { status: 200 } })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toEqual({ status: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsToMatchObjectNestedBody',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toMatchObject({ response: { body: { ok: true } } })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toMatchObject({ body: ... })')],
+    },
+    {
+      name: 'Should_Report_HttpTermination_When_TraceSpecAssertsNestedBodyInsideArrayElement',
+      code: `
+        import { Rel, Suite } from '@systemfsoftware/trace-spec'
+
+        Suite('fulfillment.settle').body(() => {
+          expect(res).toMatchObject({ items: [{ body: 'fulfilled' }] })
+        })
+      `,
+      filename: TRACE_SPEC_FILENAME,
+      errors: [httpTerminationShapeError('toMatchObject({ body: ... })')],
     },
   ],
 })
