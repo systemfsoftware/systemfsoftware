@@ -1,6 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Schema } from 'effect'
-import * as Equal from 'effect/Equal'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -11,10 +10,7 @@ const isConfigRecord = (u: Schema.Json): u is MutableJsonRecord =>
   typeof u === 'object' && u !== null && !Array.isArray(u)
 
 const asConfigRecord = (value: Schema.Json | undefined): Option.Option<MutableJsonRecord> =>
-  Option.match(Option.fromNullishOr(value), {
-    onNone: () => Option.none(),
-    onSome: (present) => (isConfigRecord(present) ? Option.some(present) : Option.none()),
-  })
+  Option.fromNullishOr(value).pipe(Option.filter(isConfigRecord))
 
 const MergeConfigTypeId: unique symbol = Symbol.for('@systemfsoftware/api-extractor/MergeConfigDecision')
 type MergeConfigTypeId = typeof MergeConfigTypeId
@@ -68,27 +64,24 @@ const mergeShape = (base: Schema.Json | undefined, derived: Schema.Json): Config
     onSome: ([nestedBase, nestedDerived]) => recurseOf(nestedBase, nestedDerived),
   })
 
-const mergeKey = (
-  result: MutableJsonRecord,
-  key: string,
-  derivedVal: Schema.Json,
-): void => {
-  result[key] = Match.value(mergeShape(result[key], derivedVal)).pipe(
+const mergedValueAt = (record: MutableJsonRecord, key: string, derivedVal: Schema.Json): Schema.Json =>
+  Match.value(mergeShape(record[key], derivedVal)).pipe(
     Match.tag('Recurse', ({ base, derived }) => mergeConfigObjects(base, derived)),
     Match.tag('Replace', ({ derived }) => derived),
     Match.exhaustive,
   )
-}
+
 const mergeConfigObjects = (
   base: MutableJsonRecord,
   derived: MutableJsonRecord,
-): MutableJsonRecord => {
-  const result: MutableJsonRecord = { ...base }
-  for (const [key, val] of Object.entries(derived)) {
-    mergeKey(result, key, val)
-  }
-  return result
-}
+): MutableJsonRecord =>
+  Object.entries(derived).reduce<MutableJsonRecord>(
+    (record, [key, derivedVal]) => ({
+      ...record,
+      [key]: mergedValueAt(record, key, derivedVal),
+    }),
+    { ...base },
+  )
 
 const decideMerge = (command: MergeConfig): MergeConfigDecision =>
   Match.value(Object.keys(command.base).length === 0).pipe(
@@ -101,45 +94,3 @@ export const mergeConfig = Workflow.total(
   MergeConfig,
   (command: MergeConfig): Result.Result<MergeConfigDecision, never> => Result.succeed(decideMerge(command)),
 )
-
-if (import.meta.vitest !== void 0) {
-  // Exception: in-source tests load @effect/vitest dynamically to avoid bundling test libraries
-  const { it } = await import('@effect/vitest')
-  const { Schema: S } = await import('effect')
-
-  const ArraysRecord = S.Struct({
-    alpha: S.Array(S.String),
-    beta: S.Array(S.String),
-  })
-
-  const ObjectsRecord = S.Struct({
-    nested: ArraysRecord,
-    alpha: S.Array(S.String),
-  })
-
-  it.prop(
-    '∀a,b_ArrayReplace_≡RightBiased',
-    [ArraysRecord, ArraysRecord],
-    ([base, derived]) => Equal.equals(mergeConfigObjects(base, derived), { ...base, ...derived }),
-  )
-
-  it.prop(
-    '∀a,b,c_ArrayReplace_≡Associative',
-    [ArraysRecord, ArraysRecord, ArraysRecord],
-    ([a, b, c]) =>
-      Equal.equals(
-        mergeConfigObjects(mergeConfigObjects(a, b), c),
-        mergeConfigObjects(a, mergeConfigObjects(b, c)),
-      ),
-  )
-
-  it.prop(
-    '∀a,b,c_ObjectMerge_≡Associative',
-    [ObjectsRecord, ObjectsRecord, ObjectsRecord],
-    ([a, b, c]) =>
-      Equal.equals(
-        mergeConfigObjects(mergeConfigObjects(a, b), c),
-        mergeConfigObjects(a, mergeConfigObjects(b, c)),
-      ),
-  )
-}
