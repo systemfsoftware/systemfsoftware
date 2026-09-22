@@ -72,26 +72,20 @@ export const shapeFailure = (shape: string) => (cause: ShapeRefusal): Error.Plat
     cause,
   })
 
-const isObject = (value: unknown): value is object => typeof value === 'object' && value !== null
-
-const isFunctionProperty = (value: object, property: string): boolean => {
+const isFunctionProperty = <V = unknown>(value: V, property: string): boolean => {
   if (!Predicate.hasProperty(value, property)) {
     return false
   }
   return typeof value[property] === 'function'
 }
 
-const isStatRecord = (value: object): value is OpenFile.Stat =>
+const isStat = (value: unknown): value is OpenFile.Stat =>
   isFunctionProperty(value, 'isFile') && isFunctionProperty(value, 'isDirectory')
 
-const isReadWrite = (value: object): boolean => isFunctionProperty(value, 'read') && isFunctionProperty(value, 'write')
+const isReadWrite = <V = unknown>(value: V): boolean =>
+  isFunctionProperty(value, 'read') && isFunctionProperty(value, 'write')
 
-const isDriverRecord = (value: object): value is OpenFile.Driver =>
-  isFunctionProperty(value, 'close') && isReadWrite(value)
-
-const isStat = (value: unknown): value is OpenFile.Stat => isObject(value) && isStatRecord(value)
-
-const isDriver = (value: unknown): value is OpenFile.Driver => isObject(value) && isDriverRecord(value)
+const isDriver = (value: unknown): value is OpenFile.Driver => isFunctionProperty(value, 'close') && isReadWrite(value)
 
 export const statOf = <S = unknown>(value: S): Result.Result<OpenFile.Stat, ShapeRefusal> => {
   if (isStat(value)) {
@@ -164,7 +158,7 @@ export const bytesOf = (contents: string | Uint8Array): Uint8Array =>
   typeof contents === 'string' ? new TextEncoder().encode(contents) : contents
 
 const isNamed = (entry: unknown): entry is { readonly name: string | Uint8Array } =>
-  isObject(entry) && Predicate.hasProperty(entry, 'name')
+  Predicate.hasProperty(entry, 'name')
 
 export const entryPathOf = (entry: string | Uint8Array | { readonly name: string | Uint8Array }): string =>
   isNamed(entry) ? textOf(entry.name) : textOf(entry)

@@ -239,33 +239,13 @@ const truncateLengthOf = (length?: number): number => length ?? 0
 // Temporary entries: one parent, one prefix, one entropy suffix
 // ---------------------------------------------------------------------------
 
-const directoryOrDefault = (directory: string | undefined): string => {
-  if (directory === undefined) {
-    return '/tmp'
-  }
-  return directory
-}
+const directoryOrDefault = (directory?: string): string => directory ?? '/tmp'
 
-const tempDirectory = (options?: TempOptions): string => {
-  if (options === undefined) {
-    return '/tmp'
-  }
-  return directoryOrDefault(options.directory)
-}
+const tempDirectory = (options?: TempOptions): string => directoryOrDefault(options?.directory)
 
-const tempPrefix = (options?: TempOptions): string => {
-  if (options === undefined) {
-    return ''
-  }
-  return stringOrEmpty(options.prefix)
-}
+const tempPrefix = (options?: TempOptions): string => stringOrEmpty(options?.prefix)
 
-const tempSuffix = (options?: TempOptions): string => {
-  if (options === undefined) {
-    return ''
-  }
-  return stringOrEmpty(options.suffix)
-}
+const tempSuffix = (options?: TempOptions): string => stringOrEmpty(options?.suffix)
 
 const tempParentOf = (options?: TempOptions): string => `${tempDirectory(options)}/.`
 
