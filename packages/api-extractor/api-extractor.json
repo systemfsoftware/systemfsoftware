@@ -16,7 +16,7 @@
     "enabled": false
   },
   "dtsRollup": {
-    "enabled": true,
+    "enabled": false,
     "untrimmedFilePath": "<projectFolder>/dist/index.d.ts"
   },
   "tsdocMetadata": {

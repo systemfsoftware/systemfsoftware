@@ -6,12 +6,9 @@ import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
 
-import { ExtractionPassed } from '../choose-extraction.workflow.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
 import { findConfigFileUpwards } from '../config/lookup.js'
-import type { ExtractorRunOptions } from '../extraction-request.js'
-import { MessageWriter } from '../message-writer.service.js'
-import { runEffect } from '../run-extractor.js'
+import { ExtractionPassed, type ExtractorRunOptions, MessageWriter, run } from '../Extractor/mod.js'
 
 export interface ParsedRunFlags {
   readonly config: Option.Option<string>
@@ -129,7 +126,7 @@ const runActionHandler = (
   Effect.gen(function*() {
     const configPath = yield* resolveConfigPath(flags.config)
     const options = toExtractorOptions(flags)
-    const result = yield* runEffect(configPath, options).pipe(
+    const result = yield* run(configPath, options).pipe(
       Effect.mapError(
         (err) =>
           new CliError.UserError({

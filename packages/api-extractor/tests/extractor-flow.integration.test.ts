@@ -1,11 +1,9 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { ExtractionFailed, ExtractionPassed, runEffect } from '@systemfsoftware/api-extractor'
+import { Extractor } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
-
-import { layer as consoleMessageWriterLayer, MessageWriter, type TextWritable } from '@systemfsoftware/api-extractor'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -36,20 +34,20 @@ Feature('Reviewing TypeScript package API surface definitions')
           (s) =>
             Effect.gen(function*() {
               const recordedLines: string[] = []
-              const writer: MessageWriter = {
+              const writer: Extractor.MessageWriter = {
                 write: (level, text) =>
                   Effect.sync(() => {
                     recordedLines.push(text)
                   }),
               }
-              const result = yield* runEffect(s.configPath).pipe(
-                Effect.provideService(MessageWriter, writer),
+              const result = yield* Extractor.run(s.configPath).pipe(
+                Effect.provideService(Extractor.MessageWriter, writer),
               )
               return { result, recordedLines }
             }),
         ),
         Then('the extraction succeeds with clean status')((s) => {
-          expect(Schema.is(ExtractionPassed)(s.outcome.result)).toBe(true)
+          expect(Schema.is(Extractor.ExtractionPassed)(s.outcome.result)).toBe(true)
           expect(s.outcome.result.errorCount).toBe(0)
         }),
         Then('no output messages are written to the terminal')((s) => {
@@ -70,20 +68,20 @@ Feature('Reviewing TypeScript package API surface definitions')
           (s) =>
             Effect.gen(function*() {
               const recordedLines: string[] = []
-              const writer: MessageWriter = {
+              const writer: Extractor.MessageWriter = {
                 write: (level, text) =>
                   Effect.sync(() => {
                     recordedLines.push(text)
                   }),
               }
-              const result = yield* runEffect(s.configPath, {
+              const result = yield* Extractor.run(s.configPath, {
                 cliFlags: { quiet: true },
-              }).pipe(Effect.provideService(MessageWriter, writer))
+              }).pipe(Effect.provideService(Extractor.MessageWriter, writer))
               return { result, recordedLines }
             }),
         ),
         Then('the extraction outcome reports failure')((s) => {
-          expect(Schema.is(ExtractionFailed)(s.outcome.result)).toBe(true)
+          expect(Schema.is(Extractor.ExtractionFailed)(s.outcome.result)).toBe(true)
           expect(s.outcome.result.warningCount).toBeGreaterThan(0)
         }),
         Then('the signature change warning is surfaced despite silent mode')((s) => {
@@ -105,8 +103,8 @@ Feature('Reviewing TypeScript package API surface definitions')
         When('the extraction pipeline loads the configuration')(
           'attempt',
           (s) =>
-            runEffect(s.configPath).pipe(
-              Effect.provide(consoleMessageWriterLayer()),
+            Extractor.run(s.configPath).pipe(
+              Effect.provide(Extractor.layer()),
               Effect.map(() => 'unexpected-success'),
               Effect.catch((err) => Effect.succeed(err._tag)),
             ),
@@ -134,21 +132,21 @@ Feature('Reviewing TypeScript package API surface definitions')
           (s) => {
             const stdoutLines: string[] = []
             const stderrLines: string[] = []
-            const stdout: TextWritable = {
+            const stdout: Extractor.TextWritable = {
               write: (text) => {
                 stdoutLines.push(text)
               },
             }
-            const stderr: TextWritable = {
+            const stderr: Extractor.TextWritable = {
               write: (text) => {
                 stderrLines.push(text)
               },
             }
-            return runEffect(s.paths.configPath, {
+            return Extractor.run(s.paths.configPath, {
               typescriptCompilerFolder: s.paths.compilerFolder,
               cliFlags: { verbose: true },
             }).pipe(
-              Effect.provide(consoleMessageWriterLayer({ stdout, stderr })),
+              Effect.provide(Extractor.layer({ stdout, stderr })),
               Effect.map(() => ({ outcome: 'review-completed', stdoutLines, stderrLines })),
               Effect.catch((err) => Effect.succeed({ outcome: err._tag, stdoutLines, stderrLines })),
             )
@@ -176,8 +174,8 @@ Feature('Reviewing TypeScript package API surface definitions')
         When('the engine is asked to review the package at that path')(
           'attempt',
           (s) =>
-            runEffect(s.configPath).pipe(
-              Effect.provide(consoleMessageWriterLayer()),
+            Extractor.run(s.configPath).pipe(
+              Effect.provide(Extractor.layer()),
               Effect.map(() => 'unexpected-success'),
               Effect.catch((err) => Effect.succeed(err)),
             ),

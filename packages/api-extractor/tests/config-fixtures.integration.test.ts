@@ -1,5 +1,5 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { loadExtractorConfig } from '@systemfsoftware/api-extractor'
+import { Extractor } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import * as Path from 'effect/Path'
@@ -30,7 +30,7 @@ Feature('Discovering and preparing project configuration')
         ),
         When('the engine prepares the configuration')(
           'config',
-          (s) => loadExtractorConfig(s.configPath),
+          (s) => Extractor.loadConfig(s.configPath),
         ),
         Then('bundled packages are replaced by the derived list')(
           (s) => {
@@ -61,7 +61,7 @@ Feature('Discovering and preparing project configuration')
         ),
         When('the engine loads the production configuration')(
           'config',
-          (s) => loadExtractorConfig(s.repoConfigPath),
+          (s) => Extractor.loadConfig(s.repoConfigPath),
         ),
         Then('the declared main entry point matches the build artifact location')(
           (s) => {
@@ -85,7 +85,7 @@ Feature('Discovering and preparing project configuration')
         ),
         When('a configuration load is attempted')(
           'result',
-          (s) => loadExtractorConfig(s.emptyFolder).pipe(Effect.exit),
+          (s) => Extractor.loadConfig(s.emptyFolder).pipe(Effect.exit),
         ),
         Then('the operation fails because the file does not exist')(
           (s) => {

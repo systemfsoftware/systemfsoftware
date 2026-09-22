@@ -6,552 +6,40 @@
 
 import { Cell } from '@systemfsoftware/effect-cell-types';
 import { Context } from 'effect';
-import { Data } from 'effect';
 import * as Effect from 'effect/Effect';
 import * as FileSystem_2 from 'effect/FileSystem';
 import * as Layer from 'effect/Layer';
-import * as Option$1 from 'effect/Option';
 import * as Path from 'effect/Path';
-import * as Pipeable from 'effect/Pipeable';
 import { PlatformError } from 'effect/PlatformError';
-import * as Result$1 from 'effect/Result';
-import { Result } from 'effect';
-import { Sandwich } from '@systemfsoftware/effect-cell-types';
 import * as Schema$1 from 'effect/Schema';
 import { Schema } from 'effect';
-import * as ts from 'typescript';
-import * as tsdoc from '@microsoft/tsdoc';
-import { TSDocConfiguration } from '@microsoft/tsdoc';
-import { TSDocTagDefinition } from '@microsoft/tsdoc';
-import { Workflow } from '@systemfsoftware/effect-cell-types';
 import { YieldableError } from 'effect/Cause';
 
-// Warning: (ae-forgotten-export) The symbol "LogLevel" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export const admits: (verbosity: Verbosity, level: LogLevel) => boolean;
-
-// @public (undocumented)
-export class AedocDefinitions extends Pipeable.Class {
-    // (undocumented)
-    static readonly betaDocumentation: TSDocTagDefinition;
-    // (undocumented)
-    static createTsdocConfiguration(): TSDocConfiguration;
-    // (undocumented)
-    static readonly internalRemarks: TSDocTagDefinition;
-    // (undocumented)
-    static readonly preapprovedTag: TSDocTagDefinition;
-}
-
-// @public (undocumented)
-export const anchorRelativePaths: (config: MutableJsonRecord, folder: string, path: Path.Path) => MutableJsonRecord;
-
-// Warning: (ae-forgotten-export) The symbol "AnnounceRun_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class AnnounceRun extends AnnounceRun_base {
-    // (undocumented)
-    static readonly [Workflow.InstrumentationBrand]: readonly [];
-}
-
-// @public (undocumented)
-export const announceRun: Sandwich.Cell<ExtractorRunInput, ExtractionRequest, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter> & {
-    readonly phases: readonly ["read", "decide", "write"];
-};
-
-// @public (undocumented)
-export const ApiReportConfig: Schema.Struct<{
-    readonly enabled: Schema.Boolean;
-    readonly includeForgottenExports: Schema.optional<Schema.Boolean>;
-    readonly reportFileName: Schema.optional<Schema.String>;
-    readonly reportFolder: Schema.optional<Schema.String>;
-    readonly reportTempFolder: Schema.optional<Schema.String>;
-    readonly reportVariants: Schema.optional<Schema.$Array<Schema.Literals<readonly ["public", "beta", "alpha", "complete"]>>>;
-    readonly tagsToReport: Schema.optional<Schema.$Record<Schema.String, Schema.Boolean>>;
-}>;
-
-// @public (undocumented)
-export type ApiReportConfig = typeof ApiReportConfig.Type;
-
-// @public (undocumented)
-export class ApiReportGenerator extends Pipeable.Class {
-    // (undocumented)
-    static areEquivalentApiFileContents(actualFileContent: string, expectedFileContent: string): boolean;
-    // (undocumented)
-    static generateReviewFileContent(collector: Collector, reportVariant: ApiReportVariant): string;
-}
-
-// @public (undocumented)
-export const ApiReportVariant: Schema.Literals<readonly ["public", "beta", "alpha", "complete"]>;
-
-// @public (undocumented)
-export type ApiReportVariant = typeof ApiReportVariant.Type;
-
-// @public (undocumented)
-export class AstDeclaration extends Pipeable.Class {
-    constructor(options: IAstDeclarationOptions);
-    // Warning: (ae-forgotten-export) The symbol "ApiItemMetadata" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    apiItemMetadata: ApiItemMetadata;
-    // (undocumented)
-    readonly astSymbol: AstSymbol;
-    // (undocumented)
-    get children(): ReadonlyArray<AstDeclaration>;
-    // (undocumented)
-    readonly declaration: ts.Declaration;
-    // Warning: (ae-forgotten-export) The symbol "DeclarationMetadata" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    declarationMetadata: DeclarationMetadata;
-    // (undocumented)
-    findChildrenWithName(name: string): ReadonlyArray<AstDeclaration>;
-    // (undocumented)
-    forEachDeclarationRecursive(action: (astDeclaration: AstDeclaration) => void): void;
-    // (undocumented)
-    getDump(indent?: string): string;
-    // (undocumented)
-    getSpanDump(indent?: string): string;
-    // (undocumented)
-    static isSupportedSyntaxKind(kind: ts.SyntaxKind): boolean;
-    // (undocumented)
-    readonly modifierFlags: ts.ModifierFlags;
-    // (undocumented)
-    _notifyChildAttach(child: AstDeclaration): void;
-    // (undocumented)
-    _notifyReferencedAstEntity(referencedAstEntity: AstEntity): void;
-    // (undocumented)
-    readonly parent: AstDeclaration | undefined;
-    // (undocumented)
-    get referencedAstEntities(): ReadonlyArray<AstEntity>;
-}
-
-// @public (undocumented)
-export abstract class AstEntity extends Pipeable.Class {
-    // (undocumented)
-    abstract readonly localName: string;
-}
-
-// @public (undocumented)
-export class AstImport extends AstSyntheticEntity {
-    constructor(options: IAstImportOptions);
-    // (undocumented)
-    astSymbol: AstSymbol | undefined;
-    // (undocumented)
-    readonly exportName: string;
-    // (undocumented)
-    static getKey(options: IAstImportOptions): string;
-    // (undocumented)
-    readonly importKind: AstImportKind;
-    // (undocumented)
-    isTypeOnlyEverywhere: boolean;
-    // (undocumented)
-    readonly key: string;
-    // (undocumented)
-    get localName(): string;
-    // (undocumented)
-    readonly modulePath: string;
-}
-
-// @public (undocumented)
-export enum AstImportKind {
-    // (undocumented)
-    DefaultImport = 0,
-    // (undocumented)
-    EqualsImport = 3,
-    // (undocumented)
-    ImportType = 4,
-    // (undocumented)
-    NamedImport = 1,
-    // (undocumented)
-    StarImport = 2
-}
-
-// @public (undocumented)
-export class AstModule extends Pipeable.Class {
-    constructor(options: IAstModuleOptions);
-    // (undocumented)
-    astModuleExportInfo: IAstModuleExportInfo | undefined;
-    // (undocumented)
-    readonly cachedExportedEntities: Map<string, AstEntity>;
-    // (undocumented)
-    readonly externalModulePath: string | undefined;
-    // (undocumented)
-    get isExternal(): boolean;
-    // (undocumented)
-    readonly moduleSymbol: ts.Symbol;
-    // (undocumented)
-    readonly sourceFile: ts.SourceFile;
-    // (undocumented)
-    readonly starExportedModules: Set<AstModule>;
-}
-
-// @public (undocumented)
-export class AstNamespaceExport extends AstNamespaceImport {
-    constructor(options: IAstNamespaceExportOptions);
-}
-
-// @public (undocumented)
-export class AstNamespaceImport extends AstSyntheticEntity {
-    constructor(options: IAstNamespaceImportOptions);
-    // (undocumented)
-    analyzed: boolean;
-    // (undocumented)
-    readonly astModule: AstModule;
-    // (undocumented)
-    readonly declaration: ts.Declaration;
-    // (undocumented)
-    fetchAstModuleExportInfo(collector: Collector): IAstModuleExportInfo;
-    // (undocumented)
-    get localName(): string;
-    // (undocumented)
-    readonly namespaceName: string;
-    // (undocumented)
-    readonly symbol: ts.Symbol;
-}
-
-// @public (undocumented)
-export class AstSymbol extends AstEntity {
-    constructor(options: IAstSymbolOptions);
-    // (undocumented)
-    get analyzed(): boolean;
-    // (undocumented)
-    get astDeclarations(): ReadonlyArray<AstDeclaration>;
-    // (undocumented)
-    readonly followedSymbol: ts.Symbol;
-    // (undocumented)
-    forEachDeclarationRecursive(action: (astDeclaration: AstDeclaration) => void): void;
-    // (undocumented)
-    readonly isExternal: boolean;
-    // (undocumented)
-    readonly localName: string;
-    // (undocumented)
-    readonly nominalAnalysis: boolean;
-    // (undocumented)
-    _notifyAnalyzed(): void;
-    // (undocumented)
-    _notifyDeclarationAttach(astDeclaration: AstDeclaration): void;
-    // (undocumented)
-    readonly parentAstSymbol: AstSymbol | undefined;
-    // (undocumented)
-    readonly rootAstSymbol: AstSymbol;
-    // Warning: (ae-forgotten-export) The symbol "SymbolMetadata" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    symbolMetadata: SymbolMetadata;
-}
-
-// @public (undocumented)
-export class AstSymbolTable extends Pipeable.Class {
-    // Warning: (ae-forgotten-export) The symbol "PackageJsonLookup" needs to be exported by the entry point index.d.ts
-    constructor(program: ts.Program, typeChecker: ts.TypeChecker, packageJsonLookup: PackageJsonLookup, bundledPackageNames: ReadonlySet<string>, messageLog: MessageLog);
-    // (undocumented)
-    analyze(astEntity: AstEntity): void;
-    // (undocumented)
-    fetchAstModuleExportInfo(astModule: AstModule): IAstModuleExportInfo;
-    // (undocumented)
-    fetchAstModuleFromWorkingPackage(sourceFile: ts.SourceFile): AstModule;
-    // (undocumented)
-    getChildAstDeclarationByNode(node: ts.Node, parentAstDeclaration: AstDeclaration): AstDeclaration;
-    // (undocumented)
-    static getLocalNameForSymbol(symbol: ts.Symbol): string;
-    // (undocumented)
-    tryGetEntityForNode(identifier: ts.Identifier | ts.ImportTypeNode): AstEntity | undefined;
-    // (undocumented)
-    tryGetExportOfAstModule(exportName: string, astModule: AstModule): AstEntity | undefined;
-}
-
-// @public (undocumented)
-export abstract class AstSyntheticEntity extends AstEntity {}
-
-// Warning: (ae-forgotten-export) The symbol "BaselineAbsent_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class BaselineAbsent extends BaselineAbsent_base {}
-
-// @public (undocumented)
-export type BaselineEvidence = BaselinePresent | BaselineAbsent;
-
-// Warning: (ae-forgotten-export) The symbol "BaselinePresent_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class BaselinePresent extends BaselinePresent_base {}
-
-// @public (undocumented)
-export const chooseExtraction: ((command: DecideExtraction) => Result$1.Result<ExtractionDecision, never>) & Workflow.WorkflowBrand;
+const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
 
 // Warning: (ae-forgotten-export) The symbol "CircularConfigExtendsError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
-
-// @public (undocumented)
-export const CliFlags: Schema$1.Struct<{
-    readonly quiet: Schema$1.optional<Schema$1.Boolean>;
-    readonly verbose: Schema$1.optional<Schema$1.Boolean>;
-    readonly diagnostics: Schema$1.optional<Schema$1.Boolean>;
-}>;
-
-// @public (undocumented)
-export type CliFlags = typeof CliFlags.Type;
-
-// @public (undocumented)
-export class Collector extends Pipeable.Class {
-    constructor(options: ICollectorOptions);
-    // Warning: (ae-forgotten-export) The symbol "ExtractorMessageId" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    addAnalyzerIssue(messageId: ExtractorMessageId, messageText: string, astDeclarationOrSymbol?: AstDeclaration | AstSymbol, properties?: Readonly<Record<string, string | number | boolean>>): void;
-    // (undocumented)
-    addAnalyzerIssueForPosition(messageId: ExtractorMessageId, messageText: string, sourceFile: ts.SourceFile | undefined, pos: number): void;
-    // (undocumented)
-    addCompilerDiagnostic(diagnostic: ts.Diagnostic): void;
-    // (undocumented)
-    addTsdocMessages(parserContext: tsdoc.ParserContext, sourceFile: ts.SourceFile, astDeclaration?: AstDeclaration): void;
-    // (undocumented)
-    analyze(): void;
-    // Warning: (ae-forgotten-export) The symbol "AstReferenceResolver" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly astReferenceResolver: AstReferenceResolver;
-    // (undocumented)
-    readonly astSymbolTable: AstSymbolTable;
-    // (undocumented)
-    readonly bundledPackageNames: ReadonlySet<string>;
-    // (undocumented)
-    get dtsLibReferenceDirectives(): ReadonlySet<string>;
-    // (undocumented)
-    get dtsTypeReferenceDirectives(): ReadonlySet<string>;
-    // (undocumented)
-    get entities(): ReadonlyArray<CollectorEntity>;
-    // (undocumented)
-    readonly extractorConfig: ExtractorConfig;
-    // (undocumented)
-    fetchApiItemMetadata(astDeclaration: AstDeclaration): ApiItemMetadata;
-    // (undocumented)
-    fetchDeclarationMetadata(astDeclaration: AstDeclaration): DeclarationMetadata;
-    // (undocumented)
-    fetchSymbolMetadata(astSymbol: AstSymbol): SymbolMetadata;
-    // (undocumented)
-    getNonAncillaryDeclarations(astSymbol: AstSymbol): ReadonlyArray<AstDeclaration>;
-    // (undocumented)
-    getOverloadIndex(astDeclaration: AstDeclaration): number;
-    // (undocumented)
-    static getSortKeyIgnoringUnderscore(identifier: string | undefined): string;
-    // Warning: (ae-forgotten-export) The symbol "IGlobalVariableAnalyzer" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly globalVariableAnalyzer: IGlobalVariableAnalyzer;
-    // (undocumented)
-    isAncillaryDeclaration(astDeclaration: AstDeclaration): boolean;
-    // (undocumented)
-    readonly messageLog: MessageLog;
-    // (undocumented)
-    readonly packageJsonLookup: PackageJsonLookup;
-    // (undocumented)
-    readonly program: ts.Program;
-    // (undocumented)
-    readonly reportMessages: ReportMessageSource;
-    // (undocumented)
-    readonly sourceMapper: SourceMapper;
-    // (undocumented)
-    get starExportedExternalModulePaths(): ReadonlyArray<string>;
-    // (undocumented)
-    tryFetchMetadataForAstEntity(astEntity: AstEntity): SymbolMetadata | undefined;
-    // (undocumented)
-    tryGetCollectorEntity(astEntity: AstEntity): CollectorEntity | undefined;
-    // (undocumented)
-    tryGetEntityForNode(identifier: ts.Identifier | ts.ImportTypeNode): CollectorEntity | undefined;
-    // (undocumented)
-    tryGetEntityForSymbol(symbol: ts.Symbol): CollectorEntity | undefined;
-    // (undocumented)
-    readonly tsdocConfiguration: tsdoc.TSDocConfiguration;
-    // (undocumented)
-    readonly typeChecker: ts.TypeChecker;
-    // (undocumented)
-    readonly workingPackage: WorkingPackage;
-}
-
-// @public (undocumented)
-export class CollectorEntity extends Pipeable.Class {
-    constructor(astEntity: AstEntity);
-    // (undocumented)
-    addExportName(exportName: string): void;
-    // (undocumented)
-    addLocalExportName(localExportName: string, parent: CollectorEntity): void;
-    // (undocumented)
-    readonly astEntity: AstEntity;
-    // (undocumented)
-    get consumable(): boolean;
-    // (undocumented)
-    get exported(): boolean;
-    // (undocumented)
-    get exportedFromEntryPoint(): boolean;
-    // (undocumented)
-    get exportNames(): ReadonlySet<string>;
-    // (undocumented)
-    getFirstExportingConsumableParent(): CollectorEntity | undefined;
-    // (undocumented)
-    getSortKey(): string;
-    // (undocumented)
-    get nameForEmit(): string | undefined;
-    set nameForEmit(value: string | undefined);
-    // (undocumented)
-    get shouldInlineExport(): boolean;
-    // (undocumented)
-    get singleExportName(): string | undefined;
-}
-
-// @public (undocumented)
-export const CompilerConfig: Schema.Struct<{
-    readonly overrideTsconfig: Schema.optional<Schema.Unknown>;
-    readonly skipLibCheck: Schema.optional<Schema.Boolean>;
-    readonly tsconfigFilePath: Schema.optional<Schema.String>;
-}>;
-
-// @public (undocumented)
-export type CompilerConfig = typeof CompilerConfig.Type;
-
-// @public (undocumented)
-export interface CompilerState {
-    // (undocumented)
-    readonly compiler: typeof ts;
-    // (undocumented)
-    readonly entryPoints: readonly string[];
-    // (undocumented)
-    readonly program: ts.Program;
-    // (undocumented)
-    readonly typeChecker: ts.TypeChecker;
-}
-
-// @public (undocumented)
-export interface CompilerStateOptions {
-    // (undocumented)
-    readonly additionalEntryPoints?: readonly string[];
-    // (undocumented)
-    readonly mainEntryPointFilePath: string;
-    // (undocumented)
-    readonly projectFolder: string;
-    // (undocumented)
-    readonly skipLibCheck?: boolean;
-    // (undocumented)
-    readonly tsconfigFilePath: string;
-    // (undocumented)
-    readonly typescriptCompilerFolder?: string;
-}
-
-// @public (undocumented)
-export const ConfigFile: Schema.Struct<{
-    readonly $schema: Schema.optional<Schema.String>;
-    readonly apiReport: Schema.optional<Schema.Struct<{
-        readonly enabled: Schema.Boolean;
-        readonly includeForgottenExports: Schema.optional<Schema.Boolean>;
-        readonly reportFileName: Schema.optional<Schema.String>;
-        readonly reportFolder: Schema.optional<Schema.String>;
-        readonly reportTempFolder: Schema.optional<Schema.String>;
-        readonly reportVariants: Schema.optional<Schema.$Array<Schema.Literals<readonly ["public", "beta", "alpha", "complete"]>>>;
-        readonly tagsToReport: Schema.optional<Schema.$Record<Schema.String, Schema.Boolean>>;
-    }>>;
-    readonly bundledPackages: Schema.optional<Schema.$Array<Schema.String>>;
-    readonly compiler: Schema.optional<Schema.Struct<{
-        readonly overrideTsconfig: Schema.optional<Schema.Unknown>;
-        readonly skipLibCheck: Schema.optional<Schema.Boolean>;
-        readonly tsconfigFilePath: Schema.optional<Schema.String>;
-    }>>;
-    readonly docModel: Schema.optional<Schema.Struct<{
-        readonly apiJsonFilePath: Schema.optional<Schema.String>;
-        readonly enabled: Schema.Boolean;
-        readonly includeForgottenExports: Schema.optional<Schema.Boolean>;
-        readonly projectFolderUrl: Schema.optional<Schema.String>;
-        readonly releaseTagsToTrim: Schema.optional<Schema.$Array<Schema.Literals<readonly ["@internal", "@alpha", "@beta", "@public"]>>>;
-    }>>;
-    readonly dtsRollup: Schema.optional<Schema.Struct<{
-        readonly alphaTrimmedFilePath: Schema.optional<Schema.String>;
-        readonly betaTrimmedFilePath: Schema.optional<Schema.String>;
-        readonly enabled: Schema.Boolean;
-        readonly omitTrimmingComments: Schema.optional<Schema.Boolean>;
-        readonly publicTrimmedFilePath: Schema.optional<Schema.String>;
-        readonly untrimmedFilePath: Schema.optional<Schema.String>;
-    }>>;
-    readonly enumMemberOrder: Schema.optional<Schema.Literals<readonly ["by-name", "preserve"]>>;
-    readonly extends: Schema.optional<Schema.String>;
-    readonly mainEntryPointFilePath: Schema.optional<Schema.String>;
-    readonly messages: Schema.optional<Schema.Struct<{
-        readonly compilerMessageReporting: Schema.optional<Schema.$Record<Schema.String, Schema.Struct<{
-            readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-            readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-        }>>>;
-        readonly extractorMessageReporting: Schema.optional<Schema.$Record<Schema.String, Schema.Struct<{
-            readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-            readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-        }>>>;
-        readonly tsdocMessageReporting: Schema.optional<Schema.$Record<Schema.String, Schema.Struct<{
-            readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-            readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-        }>>>;
-    }>>;
-    readonly newlineKind: Schema.optional<Schema.Literals<readonly ["crlf", "lf", "os"]>>;
-    readonly projectFolder: Schema.optional<Schema.String>;
-    readonly quiet: Schema.optional<Schema.Boolean>;
-    readonly testMode: Schema.optional<Schema.Boolean>;
-    readonly tsdocMetadata: Schema.optional<Schema.Struct<{
-        readonly enabled: Schema.optional<Schema.Boolean>;
-        readonly tsdocMetadataFilePath: Schema.optional<Schema.String>;
-    }>>;
-}>;
-
-// @public (undocumented)
-export type ConfigFile = typeof ConfigFile.Type;
+class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileNotFound_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class ConfigFileNotFound extends ConfigFileNotFound_base {}
+class ConfigFileNotFound extends ConfigFileNotFound_base {}
 
 // Warning: (ae-forgotten-export) The symbol "ConfigJsonSyntaxError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class ConfigJsonSyntaxError extends ConfigJsonSyntaxError_base {}
+class ConfigJsonSyntaxError extends ConfigJsonSyntaxError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "ConfigSchemaValidationError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class ConfigSchemaValidationError extends ConfigSchemaValidationError_base {}
+class ConfigSchemaValidationError extends ConfigSchemaValidationError_base {}
 
 // @public (undocumented)
-export interface ConsoleLine {
-    // (undocumented)
-    readonly level: LogLevel;
-    // (undocumented)
-    readonly text: string;
-}
-
-// @public (undocumented)
-export const ConsoleMessageId: {
-    readonly Preamble: "console-preamble";
-    readonly CompilerVersionNotice: "console-compiler-version-notice";
-    readonly UsingCustomTSDocConfig: "console-using-custom-tsdoc-config";
-    readonly FoundTSDocMetadata: "console-found-tsdoc-metadata";
-    readonly WritingDocModelFile: "console-writing-doc-model-file";
-    readonly WritingDtsRollup: "console-writing-dts-rollup";
-    readonly WritingApiReport: "console-writing-api-report";
-    readonly ApiReportNotCopied: "console-api-report-not-copied";
-    readonly ApiReportDiff: "console-api-report-diff";
-    readonly ApiReportCopied: "console-api-report-copied";
-    readonly ApiReportUnchanged: "console-api-report-unchanged";
-    readonly ApiReportCreated: "console-api-report-created";
-    readonly ApiReportFolderMissing: "console-api-report-folder-missing";
-    readonly Diagnostics: "console-diagnostics";
-    readonly Banner: "console-banner";
-    readonly ConfigPath: "console-config-path";
-    readonly CompletedSuccessfully: "console-completed-successfully";
-};
-
-// @public (undocumented)
-export type ConsoleMessageId = (typeof ConsoleMessageId)[keyof typeof ConsoleMessageId];
-
-// @public (undocumented)
-export interface ConsoleMessageWriterOptions {
+interface ConsoleMessageWriterOptions {
     // (undocumented)
     readonly stderr?: TextWritable | undefined;
     // (undocumented)
@@ -559,209 +47,12 @@ export interface ConsoleMessageWriterOptions {
 }
 
 // @public (undocumented)
-export const convertNewlines: (text: string, newlineKind: NewlineKind) => string;
-
-// Warning: (ae-forgotten-export) The symbol "DecideExtraction_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class DecideExtraction extends DecideExtraction_base {
-    // (undocumented)
-    static readonly [Workflow.InstrumentationBrand]: readonly [];
-}
-
-// @public (undocumented)
-export const DEFAULT_CONFIG_RECORD: {
-    projectFolder: string;
-    compiler: {
-        tsconfigFilePath: string;
-        skipLibCheck: boolean;
-    };
-    apiReport: {
-        includeForgottenExports: boolean;
-        reportFileName: string;
-        reportFolder: string;
-        reportTempFolder: string;
-    };
-    docModel: {
-        includeForgottenExports: boolean;
-        apiJsonFilePath: string;
-    };
-    dtsRollup: {
-        untrimmedFilePath: string;
-        alphaTrimmedFilePath: string;
-        betaTrimmedFilePath: string;
-        publicTrimmedFilePath: string;
-        omitTrimmingComments: boolean;
-    };
-    tsdocMetadata: {
-        enabled: boolean;
-        tsdocMetadataFilePath: string;
-    };
-    messages: {
-        compilerMessageReporting: {
-            default: {
-                logLevel: string;
-            };
-        };
-        extractorMessageReporting: {
-            default: {
-                logLevel: string;
-            };
-            'ae-forgotten-export': {
-                logLevel: string;
-                addToApiReportFile: boolean;
-            };
-            'ae-incompatible-release-tags': {
-                logLevel: string;
-                addToApiReportFile: boolean;
-            };
-            'ae-internal-missing-underscore': {
-                logLevel: string;
-                addToApiReportFile: boolean;
-            };
-            'ae-internal-mixed-release-tag': {
-                logLevel: string;
-                addToApiReportFile: boolean;
-            };
-            'ae-unresolved-inheritdoc-base': {
-                logLevel: string;
-                addToApiReportFile: boolean;
-            };
-            'ae-unresolved-inheritdoc-reference': {
-                logLevel: string;
-                addToApiReportFile: boolean;
-            };
-            'ae-wrong-input-file-type': {
-                logLevel: string;
-            };
-            'ae-undocumented': {
-                logLevel: string;
-            };
-        };
-        tsdocMessageReporting: {
-            default: {
-                logLevel: string;
-            };
-        };
-    };
-    testMode: boolean;
-    enumMemberOrder: string;
-    newlineKind: string;
-    bundledPackages: never[];
-};
-
-// @public (undocumented)
-export class DocCommentEnhancer extends Pipeable.Class {
-    constructor(collector: Collector);
-    // (undocumented)
-    static analyze(collector: Collector): void;
-    // (undocumented)
-    analyze(): void;
-}
-
-// @public (undocumented)
-export const DocModelConfig: Schema.Struct<{
-    readonly apiJsonFilePath: Schema.optional<Schema.String>;
-    readonly enabled: Schema.Boolean;
-    readonly includeForgottenExports: Schema.optional<Schema.Boolean>;
-    readonly projectFolderUrl: Schema.optional<Schema.String>;
-    readonly releaseTagsToTrim: Schema.optional<Schema.$Array<Schema.Literals<readonly ["@internal", "@alpha", "@beta", "@public"]>>>;
-}>;
-
-// @public (undocumented)
-export type DocModelConfig = typeof DocModelConfig.Type;
-
-// @public (undocumented)
-export class DtsEmitHelpers extends Pipeable.Class {
-    // Warning: (ae-forgotten-export) The symbol "IndentedWriter" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    static emitImport(writer: IndentedWriter, collectorEntity: CollectorEntity, astImport: AstImport): void;
-    // (undocumented)
-    static emitNamedExport(writer: IndentedWriter, exportName: string, collectorEntity: CollectorEntity): void;
-    // (undocumented)
-    static emitStarExports(writer: IndentedWriter, collector: Collector): void;
-    // (undocumented)
-    static forEachParameterToNormalize(nodes: ArrayLike<ts.Node>, action: (parameter: ts.ParameterDeclaration, syntheticName: string | undefined) => void): void;
-    // (undocumented)
-    static isExportKeywordInNamespaceExportDeclaration(node: ts.Node): boolean;
-    // (undocumented)
-    static modifyImportTypeSpan(collector: Collector, span: Span, astDeclaration: AstDeclaration, modifyNestedSpan: (childSpan: Span, childAstDeclaration: AstDeclaration) => void): void;
-    // (undocumented)
-    static normalizeParameterNames(signatureSpan: Span): void;
-}
-
-// @public (undocumented)
-export const DtsRollupConfig: Schema.Struct<{
-    readonly alphaTrimmedFilePath: Schema.optional<Schema.String>;
-    readonly betaTrimmedFilePath: Schema.optional<Schema.String>;
-    readonly enabled: Schema.Boolean;
-    readonly omitTrimmingComments: Schema.optional<Schema.Boolean>;
-    readonly publicTrimmedFilePath: Schema.optional<Schema.String>;
-    readonly untrimmedFilePath: Schema.optional<Schema.String>;
-}>;
-
-// @public (undocumented)
-export type DtsRollupConfig = typeof DtsRollupConfig.Type;
-
-// @public (undocumented)
-export class DtsRollupGenerator extends Pipeable.Class {
-    // (undocumented)
-    static generateTypingsFileContent(collector: Collector, dtsKind: DtsRollupKind): string;
-}
-
-// @public (undocumented)
-export enum DtsRollupKind {
-    // (undocumented)
-    AlphaRelease = 1,
-    // (undocumented)
-    BetaRelease = 2,
-    // (undocumented)
-    InternalRelease = 0,
-    // (undocumented)
-    PublicRelease = 3
-}
-
-// @public (undocumented)
-export const EnumMemberOrder: Schema.Literals<readonly ["by-name", "preserve"]>;
-
-// @public (undocumented)
-export type EnumMemberOrder = typeof EnumMemberOrder.Type;
-
-// @public (undocumented)
-export const expandTokens: (value: string, context: TokenContext, configPath: string, join?: JoinSegments) => Result$1.Result<string, UnresolvedTokenError>;
-
-// @public (undocumented)
-export class ExportAnalyzer extends Pipeable.Class {
-    constructor(program: ts.Program, typeChecker: ts.TypeChecker, bundledPackageNames: ReadonlySet<string>, astSymbolTable: IAstSymbolTable);
-    // (undocumented)
-    fetchAstModuleExportInfo(entryPointAstModule: AstModule): IAstModuleExportInfo;
-    // Warning: (ae-forgotten-export) The symbol "IAstModuleReference" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    fetchAstModuleFromSourceFile(sourceFile: ts.SourceFile, moduleReference: IAstModuleReference | undefined, isExternal: boolean): AstModule;
-    // (undocumented)
-    fetchReferencedAstEntity(symbol: ts.Symbol, referringModuleIsExternal: boolean): AstEntity | undefined;
-    // (undocumented)
-    fetchReferencedAstEntityFromImportTypeNode(node: ts.ImportTypeNode, referringModuleIsExternal: boolean): AstEntity | undefined;
-    // (undocumented)
-    isImportableAmbientSourceFile(sourceFile: ts.SourceFile): boolean;
-    // (undocumented)
-    tryGetExportOfAstModule(exportName: string, astModule: AstModule): AstEntity | undefined;
-}
-
-// @public (undocumented)
-export const extractApi: Sandwich.Cell<ExtractionRequest, ExtractionDecision, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter> & {
-    readonly phases: readonly ["read", "decode", "decide", "encode", "write"];
-};
-
-// @public (undocumented)
-export type ExtractionDecision = ExtractionPassed | ExtractionFailed;
+type ExtractionDecision = ExtractionPassed | ExtractionFailed;
 
 // Warning: (ae-forgotten-export) The symbol "ExtractionFailed_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class ExtractionFailed extends ExtractionFailed_base {
+class ExtractionFailed extends ExtractionFailed_base {
     // Warning: (ae-forgotten-export) The symbol "DecisionTypeId" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -771,132 +62,64 @@ export class ExtractionFailed extends ExtractionFailed_base {
 // Warning: (ae-forgotten-export) The symbol "ExtractionPassed_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class ExtractionPassed extends ExtractionPassed_base {
+class ExtractionPassed extends ExtractionPassed_base {
     // (undocumented)
     readonly [DecisionTypeId]: symbol;
 }
 
 // @public (undocumented)
-export interface ExtractionRequest {
+interface ExtractionRequest {
+    // Warning: (ae-forgotten-export) The symbol "ExtractorConfig" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly config: ExtractorConfig;
     // (undocumented)
     readonly options: ExtractorRunOptions;
+    // Warning: (ae-forgotten-export) The symbol "Verbosity" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly verbosity: Verbosity;
 }
 
-// @public (undocumented)
-export interface ExtractorConfig {
-    // (undocumented)
-    readonly apiReport: ApiReportConfig & {
-        readonly reportConfigs: readonly ExtractorReportConfig[];
-    };
-    // (undocumented)
-    readonly bundledPackages: readonly string[];
-    // (undocumented)
-    readonly configFilePath: string;
-    // (undocumented)
-    readonly docModel: DocModelConfig;
-    // (undocumented)
-    readonly dtsRollup: DtsRollupConfig;
-    // (undocumented)
-    readonly enumMemberOrder: EnumMemberOrder;
-    // (undocumented)
-    readonly mainEntryPointFilePath: string;
-    // (undocumented)
-    readonly messages: MessagesConfig;
-    // (undocumented)
-    readonly newlineKind: NewlineKind;
-    // (undocumented)
-    readonly overrideTsconfig: Schema.Json | undefined;
-    // (undocumented)
-    readonly packageFolder: string | undefined;
-    // (undocumented)
-    readonly packageJson: Record<string, Schema.Json> | undefined;
-    // (undocumented)
-    readonly projectFolder: string;
-    // (undocumented)
-    readonly quiet: boolean;
-    // (undocumented)
-    readonly skipLibCheck: boolean;
-    // (undocumented)
-    readonly testMode: boolean;
-    // (undocumented)
-    readonly tsconfigFilePath: string;
-    // (undocumented)
-    readonly tsdocMetadata: TsdocMetadataConfig & {
-        readonly filePath: string;
-    };
+declare namespace Extractor {
+    export {
+        ConfigFileNotFound,
+        ConfigJsonSyntaxError,
+        ConfigSchemaValidationError,
+        UnresolvedTokenError,
+        CircularConfigExtendsError,
+        TsConfigReadError,
+        TsCompilerLoadError,
+        UnsupportedSyntaxError,
+        UnsupportedStarExportError,
+        ExtractionPassed,
+        ExtractionFailed,
+        ExtractorError,
+        cell,
+        run,
+        layer,
+        ConsoleMessageWriterOptions,
+        ExtractionDecision,
+        ExtractionRequest,
+        ExtractorRunInput,
+        ExtractorRunOptions,
+        MessageWriter,
+        ReportOutcome,
+        TextWritable,
+        loadExtractorConfig as loadConfig,
+        extractorVersion as version
+    }
 }
+export { Extractor }
 
 // @public (undocumented)
-export const ExtractorError: Schema.Union<readonly [typeof ConfigFileNotFound, typeof ConfigJsonSyntaxError, typeof ConfigSchemaValidationError, typeof UnresolvedTokenError, typeof CircularConfigExtendsError, typeof TsConfigReadError, typeof TsCompilerLoadError, typeof UnsupportedSyntaxError, typeof UnsupportedStarExportError]>;
+const ExtractorError: Schema.Union<readonly [typeof ConfigFileNotFound, typeof ConfigJsonSyntaxError, typeof ConfigSchemaValidationError, typeof UnresolvedTokenError, typeof CircularConfigExtendsError, typeof TsConfigReadError, typeof TsCompilerLoadError, typeof UnsupportedSyntaxError, typeof UnsupportedStarExportError]>;
 
 // @public (undocumented)
-export type ExtractorError = typeof ExtractorError.Type;
+type ExtractorError = typeof ExtractorError.Type;
 
 // @public (undocumented)
-export class ExtractorMessage extends Data.Class<ExtractorMessageProps> {
-    constructor(props: ExtractorMessageProps);
-    // (undocumented)
-    formatMessageWithLocation(workingPackageFolderPath: string | undefined): string;
-    // (undocumented)
-    formatMessageWithoutLocation(): string;
-    // (undocumented)
-    get handled(): boolean;
-    // (undocumented)
-    logLevel: LogLevel;
-    // (undocumented)
-    markHandled(): void;
-    // (undocumented)
-    properties: ExtractorMessageProperties;
-    // (undocumented)
-    sourceFileColumn: number | undefined;
-    // (undocumented)
-    sourceFileLine: number | undefined;
-    // (undocumented)
-    sourceFilePath: string | undefined;
-}
-
-// @public (undocumented)
-export interface ExtractorMessageProperties {
-    // (undocumented)
-    readonly exportName?: string;
-}
-
-// @public (undocumented)
-export interface ExtractorMessageProps {
-    // Warning: (ae-forgotten-export) The symbol "ExtractorMessageCategory" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly category: ExtractorMessageCategory;
-    // (undocumented)
-    readonly logLevel?: LogLevel | undefined;
-    // (undocumented)
-    readonly messageId: string;
-    // (undocumented)
-    readonly properties?: ExtractorMessageProperties | undefined;
-    // (undocumented)
-    readonly sourceFileColumn?: number | undefined;
-    // (undocumented)
-    readonly sourceFileLine?: number | undefined;
-    // (undocumented)
-    readonly sourceFilePath?: string | undefined;
-    // (undocumented)
-    readonly text: string;
-}
-
-// @public (undocumented)
-export interface ExtractorReportConfig {
-    // (undocumented)
-    readonly fileName: string;
-    // (undocumented)
-    readonly variant: ApiReportVariant;
-}
-
-// @public (undocumented)
-export interface ExtractorRunInput {
+interface ExtractorRunInput {
     // (undocumented)
     readonly configFilePath: string;
     // (undocumented)
@@ -904,7 +127,9 @@ export interface ExtractorRunInput {
 }
 
 // @public (undocumented)
-export interface ExtractorRunOptions {
+interface ExtractorRunOptions {
+    // Warning: (ae-forgotten-export) The symbol "CliFlags" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly cliFlags?: CliFlags | undefined;
     // (undocumented)
@@ -917,758 +142,67 @@ export interface ExtractorRunOptions {
 
 // @public (undocumented)
 const extractorVersion = "0.1.0";
-export { extractorVersion }
-export { extractorVersion as version }
+
+// @public
+const layer: (options?: ConsoleMessageWriterOptions) => Layer.Layer<MessageWriter>;
 
 // @public (undocumented)
-export const findConfigFileUpwards: (startFolder: string) => Effect.Effect<Option$1.Option<string>, never, FileSystem_2.FileSystem | Path.Path>;
-
-// Warning: (ae-forgotten-export) The symbol "FolderAbsent_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class FolderAbsent extends FolderAbsent_base {}
+const loadExtractorConfig: (filePath: string) => Effect.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
 
 // @public (undocumented)
-export type FolderEvidence = FolderPresent | FolderAbsent;
-
-// Warning: (ae-forgotten-export) The symbol "FolderPresent_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class FolderPresent extends FolderPresent_base {}
-
-// @public (undocumented)
-export const formatAliasDeclarations: (alias: NamespaceAlias) => readonly string[];
-
-// @public (undocumented)
-export const formatAliasExportClause: (alias: NamespaceAlias, isSafeName: (name: string) => boolean) => string;
-
-// @public (undocumented)
-export const formatConsoleLine: (level: LogLevel, text: string) => string;
-
-// @public (undocumented)
-export interface IAstDeclarationOptions {
-    // (undocumented)
-    readonly astSymbol: AstSymbol;
-    // (undocumented)
-    readonly declaration: ts.Declaration;
-    // (undocumented)
-    readonly parent: AstDeclaration | undefined;
-}
-
-// @public (undocumented)
-export interface IAstImportOptions {
-    // (undocumented)
-    readonly exportName: string;
-    // (undocumented)
-    readonly importKind: AstImportKind;
-    // (undocumented)
-    readonly isTypeOnly: boolean;
-    // (undocumented)
-    readonly modulePath: string;
-}
-
-// @public (undocumented)
-export interface IAstModuleExportInfo {
-    // (undocumented)
-    readonly exportedLocalEntities: Map<string, AstEntity>;
-    // (undocumented)
-    readonly starExportedExternalModules: Set<AstModule>;
-    // (undocumented)
-    readonly visitedAstModules: Set<AstModule>;
-}
-
-// @public (undocumented)
-export interface IAstModuleOptions {
-    // (undocumented)
-    externalModulePath: string | undefined;
-    // (undocumented)
-    moduleSymbol: ts.Symbol;
-    // (undocumented)
-    sourceFile: ts.SourceFile;
-}
-
-// @public (undocumented)
-export interface IAstNamespaceExportOptions extends IAstNamespaceImportOptions {}
-
-// @public (undocumented)
-export interface IAstNamespaceImportOptions {
-    // (undocumented)
-    readonly astModule: AstModule;
-    // (undocumented)
-    readonly declaration: ts.Declaration;
-    // (undocumented)
-    readonly namespaceName: string;
-    // (undocumented)
-    readonly symbol: ts.Symbol;
-}
-
-// @public (undocumented)
-export interface IAstSymbolOptions {
-    // (undocumented)
-    readonly followedSymbol: ts.Symbol;
-    // (undocumented)
-    readonly isExternal: boolean;
-    // (undocumented)
-    readonly localName: string;
-    // (undocumented)
-    readonly nominalAnalysis: boolean;
-    // (undocumented)
-    readonly parentAstSymbol: AstSymbol | undefined;
-    // (undocumented)
-    readonly rootAstSymbol: AstSymbol | undefined;
-}
-
-// @public (undocumented)
-export interface IAstSymbolTable {
-    // (undocumented)
-    analyze(astEntity: AstEntity): void;
-    // (undocumented)
-    fetchAstSymbol(options: IFetchAstSymbolOptions): AstSymbol | undefined;
-}
-
-// @public (undocumented)
-export interface ICollectorOptions {
-    // (undocumented)
-    extractorConfig: ExtractorConfig;
-    // (undocumented)
-    messageLog: MessageLog;
-    // (undocumented)
-    program: ts.Program;
-    // (undocumented)
-    reportMessages: ReportMessageSource;
-    // (undocumented)
-    sourceMapper: SourceMapper;
-}
-
-// @public (undocumented)
-export interface IFetchAstSymbolOptions {
-    // (undocumented)
-    addIfMissing: boolean;
-    // (undocumented)
-    followedSymbol: ts.Symbol;
-    // (undocumented)
-    includeNominalAnalysis: boolean;
-    // (undocumented)
-    isExternal: boolean;
-    // (undocumented)
-    localName?: string;
-}
-
-// @public (undocumented)
-export interface IGetSourceLocationOptions {
-    // (undocumented)
-    pos: number;
-    // (undocumented)
-    sourceFile: ts.SourceFile;
-    // (undocumented)
-    useDtsLocation?: boolean;
-}
-
-// @public (undocumented)
-export enum IndentDocCommentScope {
-    // (undocumented)
-    None = 0,
-    // (undocumented)
-    PrefixOnly = 1,
-    // (undocumented)
-    SpanAndChildren = 2
-}
-
-// Warning: (ae-forgotten-export) The symbol "InternalInvariantError_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class InternalInvariantError extends InternalInvariantError_base {}
-
-// @public (undocumented)
-export const isConfigRecord: (u: Schema.Json) => u is MutableJsonRecord;
-
-// @public (undocumented)
-export const isExtractorError: <I>(input: I) => input is I & (ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError);
-
-// @public (undocumented)
-export interface ISourceLocation {
-    // (undocumented)
-    sourceFileColumn: number;
-    // (undocumented)
-    sourceFileLine: number;
-    // (undocumented)
-    sourceFilePath: string;
-}
-
-// @public (undocumented)
-export interface IWorkingPackageOptions {
-    // (undocumented)
-    entryPointSourceFile: ts.SourceFile;
-    // (undocumented)
-    packageFolder: string;
-    // Warning: (ae-forgotten-export) The symbol "INodePackageJson" needs to be exported by the entry point index.d.ts
+interface MessageWriter {
+    // Warning: (ae-forgotten-export) The symbol "LogLevel" needs to be exported by the entry point index.d.ts
     //
-    // (undocumented)
-    packageJson: INodePackageJson;
-}
-
-// @public (undocumented)
-export type JoinSegments = (folder: string, rest: string) => string;
-
-// @public (undocumented)
-export const JsonRecord: Schema.$Record<Schema.String, Schema.Codec<Schema.Json, Schema.Json, never, never>>;
-
-// @public (undocumented)
-export type JsonRecord = typeof JsonRecord.Type;
-
-// @public (undocumented)
-export const JsonRecordFromString: Schema.fromJsonString<Schema.$Record<Schema.String, Schema.Codec<Schema.Json, Schema.Json, never, never>>>;
-
-// @public (undocumented)
-export type JsonRecordFromString = typeof JsonRecordFromString.Type;
-
-// @public (undocumented)
-export const JsonUnknownFromString: Schema.fromJsonString<Schema.Codec<Schema.Json, Schema.Json, never, never>>;
-
-// @public (undocumented)
-export type JsonUnknownFromString = typeof JsonUnknownFromString.Type;
-
-// @public
-export const layer: (options?: ConsoleMessageWriterOptions) => Layer.Layer<MessageWriter>;
-
-// @public (undocumented)
-export const loadCompilerState: (options: CompilerStateOptions) => Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError, Path.Path>;
-
-// @public (undocumented)
-export const loadExtractorConfig: (filePath: string) => Effect.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError, FileSystem_2.FileSystem | Path.Path>;
-
-// Warning: (ae-forgotten-export) The symbol "MessageRuleError" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const makeMessageView: (request: MessageViewRequest) => Result.Result<MessageView, MessageRuleError>;
-
-// @public (undocumented)
-export const mergeConfigObjects: (base: MutableJsonRecord, derived: MutableJsonRecord) => MutableJsonRecord;
-
-// @public
-export class MessageLog extends Pipeable.Class {
-    constructor(options: MessageLogOptions);
-    // (undocumented)
-    addAnalyzerIssue(messageId: ExtractorMessageId | string, messageText: string, astDeclarationOrSymbol: AstDeclaration | AstSymbol, properties?: ExtractorMessageProperties): void;
-    // (undocumented)
-    addAnalyzerIssueForPosition(messageId: ExtractorMessageId | string, messageText: string, sourceFile: ts.SourceFile, pos: number, properties?: ExtractorMessageProperties): ExtractorMessage;
-    // (undocumented)
-    addCompilerDiagnostic(diagnostic: ts.Diagnostic): void;
-    // (undocumented)
-    addConsoleMessage(messageId: string, level: LogLevel, text: string): ExtractorMessage;
-    // (undocumented)
-    addDiagnostic(text: string): void;
-    // (undocumented)
-    addDiagnosticFooter(): void;
-    // (undocumented)
-    addDiagnosticHeader(title: string): void;
-    // (undocumented)
-    addTsdocMessages(parserContext: tsdoc.ParserContext, sourceFile: ts.SourceFile, astDeclaration?: AstDeclaration): void;
-    // (undocumented)
-    append(message: ExtractorMessage): ExtractorMessage;
-    // (undocumented)
-    associatedMessagesOf(astDeclaration: AstDeclaration): readonly ExtractorMessage[];
-    // (undocumented)
-    readonly diagnostics: boolean;
-    // (undocumented)
-    messages(): readonly ExtractorMessage[];
-}
-
-// @public (undocumented)
-export const MessageLogLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-
-// @public (undocumented)
-export type MessageLogLevel = typeof MessageLogLevel.Type;
-
-// @public (undocumented)
-export interface MessageLogOptions {
-    readonly diagnostics: boolean;
-    // (undocumented)
-    readonly sourceMapper?: SourceMapper | undefined;
-}
-
-// @public (undocumented)
-export const MessageReportingRule: Schema.Struct<{
-    readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-    readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-}>;
-
-// @public (undocumented)
-export type MessageReportingRule = typeof MessageReportingRule.Type;
-
-// @public (undocumented)
-export const MessageReportingTable: Schema.$Record<Schema.String, Schema.Struct<{
-    readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-    readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-}>>;
-
-// @public (undocumented)
-export type MessageReportingTable = typeof MessageReportingTable.Type;
-
-// @public (undocumented)
-export const MessagesConfig: Schema.Struct<{
-    readonly compilerMessageReporting: Schema.optional<Schema.$Record<Schema.String, Schema.Struct<{
-        readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-        readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-    }>>>;
-    readonly extractorMessageReporting: Schema.optional<Schema.$Record<Schema.String, Schema.Struct<{
-        readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-        readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-    }>>>;
-    readonly tsdocMessageReporting: Schema.optional<Schema.$Record<Schema.String, Schema.Struct<{
-        readonly logLevel: Schema.Literals<readonly ["error", "warning", "none"]>;
-        readonly addToApiReportFile: Schema.optional<Schema.Boolean>;
-    }>>>;
-}>;
-
-// @public (undocumented)
-export type MessagesConfig = typeof MessagesConfig.Type;
-
-// @public (undocumented)
-export interface MessageView extends ReportMessageSource {
-    // (undocumented)
-    readonly consoleLines: () => readonly ConsoleLine[];
-    // (undocumented)
-    readonly errorCount: () => number;
-    // (undocumented)
-    readonly residue: () => readonly ConsoleLine[];
-    // (undocumented)
-    readonly warningCount: () => number;
-}
-
-// @public (undocumented)
-export interface MessageViewRequest {
-    // (undocumented)
-    readonly log: MessageLog;
-    // (undocumented)
-    readonly messagesConfig: MessagesConfig | undefined;
-    // (undocumented)
-    readonly reportEnabled: boolean;
-    // (undocumented)
-    readonly workingPackageFolder: string | undefined;
-}
-
-// @public (undocumented)
-export interface MessageWriter {
     // (undocumented)
     readonly write: (level: LogLevel, text: string) => Effect.Effect<void, PlatformError>;
 }
 
 // @public (undocumented)
-export const MessageWriter: Context.Service<MessageWriter, MessageWriter>;
+const MessageWriter: Context.Service<MessageWriter, MessageWriter>;
 
-// @public (undocumented)
-export type MutableJsonRecord = Record<string, Schema.Json>;
-
-// @public (undocumented)
-export interface NamespaceAlias extends NamespaceMember {
-    // (undocumented)
-    readonly aliasName: string;
-}
-
-// @public (undocumented)
-export interface NamespaceMember {
-    // (undocumented)
-    readonly kind: NamespaceMemberKind;
-    // (undocumented)
-    readonly memberName: string;
-    // (undocumented)
-    readonly targetName: string;
-}
-
-// @public (undocumented)
-export type NamespaceMemberKind = 'namespace' | 'both' | 'type' | 'value';
-
-// @public (undocumented)
-export const NewlineKind: Schema.Literals<readonly ["crlf", "lf", "os"]>;
-
-// @public (undocumented)
-export type NewlineKind = typeof NewlineKind.Type;
-
-// @public (undocumented)
-export class PackageMetadata extends Pipeable.Class {
-    constructor(packageJsonPath: string, packageJson: INodePackageJson, aedocSupported: boolean);
-    // (undocumented)
-    readonly aedocSupported: boolean;
-    // (undocumented)
-    readonly packageJson: INodePackageJson;
-    // (undocumented)
-    readonly packageJsonPath: string;
-}
-
-// @public (undocumented)
-export class PackageMetadataManager extends Pipeable.Class {
-    constructor(packageJsonLookup: PackageJsonLookup, messageLog: MessageLog);
-    // (undocumented)
-    isAedocSupportedFor(sourceFilePath: string): boolean;
-    // (undocumented)
-    static resolveTsdocMetadataPath(packageFolder: string, packageJson: INodePackageJson, tsdocMetadataPath?: string): string;
-    // (undocumented)
-    tryFetchPackageMetadata(sourceFilePath: string): PackageMetadata | undefined;
-    // (undocumented)
-    static tsdocMetadataFilename: string;
-}
-
-// @public (undocumented)
-export const planNamespaceAliases: (namespaceName: string, members: readonly NamespaceMember[], reservedNames: ReadonlySet<string>) => readonly NamespaceAlias[];
-
-// @public (undocumented)
-export const readConfigJson: (filePath: string) => Effect.Effect<MutableJsonRecord, ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem>;
-
-// @public (undocumented)
-export enum ReleaseTag {
-    // (undocumented)
-    Alpha = 2,
-    // (undocumented)
-    Beta = 3,
-    // (undocumented)
-    Internal = 1,
-    // (undocumented)
-    None = 0,
-    // (undocumented)
-    Public = 4
-}
-
-// @public (undocumented)
-export namespace ReleaseTag {
-    // (undocumented)
-    export function compare(a: ReleaseTag, b: ReleaseTag): number;
-    // (undocumented)
-    export function getTagName(releaseTag: ReleaseTag): string;
-}
-
-// @public (undocumented)
-export const ReleaseTagForTrim: Schema.Literals<readonly ["@internal", "@alpha", "@beta", "@public"]>;
-
-// @public (undocumented)
-export type ReleaseTagForTrim = typeof ReleaseTagForTrim.Type;
-
-// @public (undocumented)
-export const renderApiReport: (collector: Collector, variant: ApiReportVariant) => string;
-
-// @public (undocumented)
-export const renderDtsRollup: (collector: Collector, kind: DtsRollupKind) => string;
-
-// @public (undocumented)
-export interface ReportCandidate {
-    // (undocumented)
-    readonly consumed: boolean;
-    // Warning: (ae-forgotten-export) The symbol "RoutingDecision" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly decision: RoutingDecision;
-    // (undocumented)
-    readonly message: ExtractorMessage;
-}
-
-// Warning: (ae-forgotten-export) The symbol "ReportCreated_base" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReportUnchanged" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReportUpdated" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReportCreated" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReportDriftRefused" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReportMissingRefused" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReportFolderMissing" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class ReportCreated extends ReportCreated_base {
-    // Warning: (ae-forgotten-export) The symbol "OutcomeTypeId" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly [OutcomeTypeId]: symbol;
-}
+type ReportOutcome = ReportUnchanged | ReportUpdated | ReportCreated | ReportDriftRefused | ReportMissingRefused | ReportFolderMissing;
 
-// Warning: (ae-forgotten-export) The symbol "ReportDriftRefused_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class ReportDriftRefused extends ReportDriftRefused_base {
-    // (undocumented)
-    readonly [OutcomeTypeId]: symbol;
-}
-
-// Warning: (ae-forgotten-export) The symbol "ReportEvidence_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ReportEvidence extends ReportEvidence_base {}
-
-// Warning: (ae-forgotten-export) The symbol "ReportFolderMissing_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ReportFolderMissing extends ReportFolderMissing_base {
-    // (undocumented)
-    readonly [OutcomeTypeId]: symbol;
-}
+const run: (configFilePath: string, options?: ExtractorRunOptions) => Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
 
 // @public
-export interface ReportMessageSource {
-    // (undocumented)
-    readonly associatedReportMessages: (astDeclaration: AstDeclaration) => readonly ExtractorMessage[];
-    // (undocumented)
-    readonly unassociatedReportMessages: () => readonly ExtractorMessage[];
-}
-
-// Warning: (ae-forgotten-export) The symbol "ReportMissingRefused_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ReportMissingRefused extends ReportMissingRefused_base {
-    // (undocumented)
-    readonly [OutcomeTypeId]: symbol;
-}
-
-// @public (undocumented)
-export type ReportOutcome = ReportUnchanged | ReportUpdated | ReportCreated | ReportDriftRefused | ReportMissingRefused | ReportFolderMissing;
-
-// Warning: (ae-forgotten-export) The symbol "ReportUnchanged_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ReportUnchanged extends ReportUnchanged_base {
-    // (undocumented)
-    readonly [OutcomeTypeId]: symbol;
-}
-
-// Warning: (ae-forgotten-export) The symbol "ReportUpdated_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class ReportUpdated extends ReportUpdated_base {
-    // (undocumented)
-    readonly [OutcomeTypeId]: symbol;
-}
-
-// @public (undocumented)
-export const resolveVerbosity: ((command: AnnounceRun) => Result$1.Result<VerbosityNormal | VerbosityDiagnostics | VerbosityVerbose | VerbositySilent, never>) & Workflow.WorkflowBrand;
-
-// @public (undocumented)
-export const runEffect: (configFilePath: string, options?: ExtractorRunOptions) => Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
-
-// @public (undocumented)
-export const runExtractor: Cell.Cell<ExtractorRunInput, ExtractionDecision, PlatformError | ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | UnresolvedTokenError | CircularConfigExtendsError | TsConfigReadError | TsCompilerLoadError | UnsupportedSyntaxError | UnsupportedStarExportError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
-
-// @public
-export const selectReportMessages: (candidates: readonly ReportCandidate[]) => ExtractorMessage[];
-
-// @public (undocumented)
-export class SourceMapper extends Pipeable.Class {
-    // (undocumented)
-    getSourceLocation(options: IGetSourceLocationOptions): ISourceLocation;
-}
-
-// @public (undocumented)
-export class Span extends Pipeable.Class {
-    constructor(node: ts.Node);
-    // (undocumented)
-    readonly children: Span[];
-    // (undocumented)
-    readonly endIndex: number;
-    // (undocumented)
-    findFirstParent(kindToMatch: ts.SyntaxKind): Span | undefined;
-    // (undocumented)
-    forEach(callback: (span: Span) => void): void;
-    // (undocumented)
-    getDump(indent?: string): string;
-    // (undocumented)
-    getLastInnerSeparator(): string;
-    // (undocumented)
-    getModifiedDump(indent?: string): string;
-    // (undocumented)
-    getModifiedText(): string;
-    // (undocumented)
-    getText(): string;
-    // (undocumented)
-    get kind(): ts.SyntaxKind;
-    // (undocumented)
-    readonly modification: SpanModification;
-    // (undocumented)
-    get nextSibling(): Span | undefined;
-    // (undocumented)
-    readonly node: ts.Node;
-    // (undocumented)
-    get parent(): Span | undefined;
-    // (undocumented)
-    get prefix(): string;
-    // (undocumented)
-    get previousSibling(): Span | undefined;
-    // (undocumented)
-    get separator(): string;
-    // (undocumented)
-    readonly startIndex: number;
-    // (undocumented)
-    get suffix(): string;
-    // (undocumented)
-    writeModifiedText(output: IndentedWriter): void;
-}
-
-// @public (undocumented)
-export class SpanModification extends Pipeable.Class {
-    constructor(span: Span);
-    // (undocumented)
-    indentDocComment: IndentDocCommentScope;
-    // (undocumented)
-    omitChildren: boolean;
-    // (undocumented)
-    omitSeparatorAfter: boolean;
-    // (undocumented)
-    get prefix(): string;
-    set prefix(value: string);
-    // (undocumented)
-    reset(): void;
-    // (undocumented)
-    skipAll(): void;
-    // (undocumented)
-    sortChildren: boolean;
-    // (undocumented)
-    sortKey: string | undefined;
-    // (undocumented)
-    get suffix(): string;
-    set suffix(value: string);
-}
-
-// @public (undocumented)
-export const splitExtends: (config: MutableJsonRecord) => {
-    readonly extendsSpecifier: string | undefined;
-    readonly stripped: MutableJsonRecord;
-};
-
-// @public (undocumented)
-export class SyntaxHelpers extends Pipeable.Class {
-    // (undocumented)
-    static isSafeUnquotedMemberIdentifier(identifier: string): boolean;
-    // (undocumented)
-    static makeCamelCaseIdentifier(input: string): string;
-}
-
-// @public
-export interface TextWritable {
+interface TextWritable {
     // (undocumented)
     readonly write: (text: string) => void;
 }
 
-// @public (undocumented)
-export interface TokenContext {
-    // (undocumented)
-    readonly packageName: string;
-    // (undocumented)
-    readonly projectFolder: string;
-    // (undocumented)
-    readonly unscopedPackageName: string;
-}
-
-// @public (undocumented)
-export type TokenName = 'projectFolder' | 'packageName' | 'unscopedPackageName';
-
 // Warning: (ae-forgotten-export) The symbol "TsCompilerLoadError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class TsCompilerLoadError extends TsCompilerLoadError_base {}
+class TsCompilerLoadError extends TsCompilerLoadError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "TsConfigReadError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class TsConfigReadError extends TsConfigReadError_base {}
-
-// @public (undocumented)
-export const TsdocMetadataConfig: Schema.Struct<{
-    readonly enabled: Schema.optional<Schema.Boolean>;
-    readonly tsdocMetadataFilePath: Schema.optional<Schema.String>;
-}>;
-
-// @public (undocumented)
-export type TsdocMetadataConfig = typeof TsdocMetadataConfig.Type;
-
-// @public (undocumented)
-export const UNKNOWN_PACKAGE_NAME = "unknown-package";
+class TsConfigReadError extends TsConfigReadError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "UnresolvedTokenError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class UnresolvedTokenError extends UnresolvedTokenError_base {}
-
-// @public (undocumented)
-export const unscopedPackageName: (packageName: string) => string;
+class UnresolvedTokenError extends UnresolvedTokenError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "UnsupportedStarExportError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class UnsupportedStarExportError extends UnsupportedStarExportError_base {}
+class UnsupportedStarExportError extends UnsupportedStarExportError_base {}
 
 // Warning: (ae-forgotten-export) The symbol "UnsupportedSyntaxError_base" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export class UnsupportedSyntaxError extends UnsupportedSyntaxError_base {}
-
-// @public (undocumented)
-export class ValidationEnhancer extends Pipeable.Class {
-    // (undocumented)
-    static analyze(collector: Collector): void;
-}
-
-// @public (undocumented)
-export const Verbosity: Schema$1.Literals<readonly ["silent", "normal", "verbose", "diagnostics"]>;
-
-// @public (undocumented)
-export type Verbosity = typeof Verbosity.Type;
-
-// @public (undocumented)
-export type VerbosityDecision = VerbosityDiagnostics | VerbosityVerbose | VerbositySilent | VerbosityNormal;
-
-// Warning: (ae-forgotten-export) The symbol "VerbosityDiagnostics_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class VerbosityDiagnostics extends VerbosityDiagnostics_base {
-    // Warning: (ae-forgotten-export) The symbol "VerbosityTypeId" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
-    readonly [VerbosityTypeId]: symbol;
-}
-
-// Warning: (ae-forgotten-export) The symbol "VerbosityNormal_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class VerbosityNormal extends VerbosityNormal_base {
-    // (undocumented)
-    readonly [VerbosityTypeId]: symbol;
-}
-
-// @public (undocumented)
-export const VerbosityRequest: Schema$1.Struct<{
-    readonly cliFlags: Schema$1.Struct<{
-        readonly quiet: Schema$1.optional<Schema$1.Boolean>;
-        readonly verbose: Schema$1.optional<Schema$1.Boolean>;
-        readonly diagnostics: Schema$1.optional<Schema$1.Boolean>;
-    }>;
-    readonly configQuiet: Schema$1.optional<Schema$1.Boolean>;
-}>;
-
-// @public (undocumented)
-export type VerbosityRequest = typeof VerbosityRequest.Type;
-
-// Warning: (ae-forgotten-export) The symbol "VerbositySilent_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class VerbositySilent extends VerbositySilent_base {
-    // (undocumented)
-    readonly [VerbosityTypeId]: symbol;
-}
-
-// Warning: (ae-forgotten-export) The symbol "VerbosityVerbose_base" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export class VerbosityVerbose extends VerbosityVerbose_base {
-    // (undocumented)
-    readonly [VerbosityTypeId]: symbol;
-}
-
-// @public (undocumented)
-export const walkExtendsChain: (entryPath: string, chain?: readonly string[], accumulated?: MutableJsonRecord) => Effect.Effect<MutableJsonRecord, CircularConfigExtendsError | ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem_2.FileSystem | Path.Path>;
-
-// @public (undocumented)
-export class WorkingPackage extends Pipeable.Class {
-    constructor(options: IWorkingPackageOptions);
-    // (undocumented)
-    readonly entryPointSourceFile: ts.SourceFile;
-    // (undocumented)
-    get name(): string;
-    // (undocumented)
-    readonly packageFolder: string;
-    // (undocumented)
-    readonly packageJson: INodePackageJson;
-    // (undocumented)
-    tsdocComment: tsdoc.DocComment | undefined;
-    // (undocumented)
-    tsdocParserContext: tsdoc.ParserContext | undefined;
-}
+class UnsupportedSyntaxError extends UnsupportedSyntaxError_base {}
 
 // (No @packageDocumentation comment for this package)
 

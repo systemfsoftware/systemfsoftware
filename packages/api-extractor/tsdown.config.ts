@@ -15,6 +15,11 @@ const typesMap: Record<string, string> = {
  * map cannot claim a surface the tarball does not ship.
  */
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  for (const subpath of Object.keys(exports)) {
+    if (subpath.startsWith('./Extractor/')) {
+      delete exports[subpath]
+    }
+  }
   for (const [subpath, types] of Object.entries(typesMap)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
@@ -33,12 +38,10 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 
 export default defineConfig({
   ...quietBuild,
-  // Two entries own the public surface: the programmatic module and the
-  // `api-extractor` binary. Declaring them here is what makes the build own the
-  // exports map, so `bin` cannot point at a chunk the build never emits.
   entry: {
     index: 'src/index.ts',
     cli: 'src/cli.ts',
+    'Extractor/mod': 'src/Extractor/mod.ts',
   },
   format: 'esm',
   dts: true,
@@ -59,5 +62,8 @@ export default defineConfig({
       'source-map',
       'typescript',
     ],
+    dts: {
+      neverBundle: ['./Extractor/mod.js'],
+    },
   },
 })
