@@ -1,5 +1,5 @@
 ---
-'@systemfsoftware/effect-gherkin-spec': none
+'@systemfsoftware/effect-gherkin-spec': patch
 ---
 
-No consumer-visible change. Suite and scenario registration now runs on `@systemfsoftware/effect-spec-runtime`; every exported type, the stage vocabulary, and every runtime behaviour are unchanged.
+`VitestTaskRef` is now the task reference owned by `@systemfsoftware/effect-spec-runtime`, so its context key changed from `@systemfsoftware/effect-gherkin-spec/VitestTask` to `@systemfsoftware/effect-spec-runtime/VitestTask`. Code that imports `VitestTaskRef` from this package is unaffected; code that re-declared a reference under the old key no longer receives the running test's task. Every exported type, the stage vocabulary, and every other runtime behaviour are unchanged.
