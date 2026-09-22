@@ -244,6 +244,41 @@ export const all = (...relations: ReadonlyArray<Relation>): Relation => {
   }
 }
 
+const REACH_BY_RELATION: Record<
+  Taxonomy.EdgeRelation,
+  (graph: TraceGraph, parents: ReadonlyArray<GraphNode>) => ReadonlySet<string>
+> = {
+  child: childIdsOf,
+  descendant: descendantIdsOf,
+}
+
+const placementOf = (edge: Taxonomy.TaxonomyEdge): Relation => {
+  const id = `placement(${edge.relation}:${edge.parent.id},${edge.child.id})`
+  return {
+    id,
+    soft: false,
+    softenable: false,
+    evaluate: (graph) => {
+      const placed = matchedNodes(graph, edge.child)
+      const reached = REACH_BY_RELATION[edge.relation](graph, matchedNodes(graph, edge.parent))
+      return verdictOf({
+        id,
+        inspected: inspectedOf(placed),
+        holds: placed.every((node) => reached.has(node.spanId)),
+        detail: `a ${edge.child.id} span is not a ${edge.relation} of any ${edge.parent.id} span`,
+      })
+    },
+  }
+}
+
+const forbiddenOn = (path: string) => (entry: Taxonomy.ForbiddenSpan): ReadonlyArray<Relation> =>
+  entry.unless === path ? [] : [absent(entry.span)]
+
+export const fromTaxonomy = (taxonomy: Taxonomy.Taxonomy, options: { readonly path: string }): Relation => {
+  const contract = all(...taxonomy.edges.map(placementOf), ...taxonomy.forbid.flatMap(forbiddenOn(options.path)))
+  return { ...contract, id: `fromTaxonomy(${taxonomy.id},${options.path})`, soft: false, softenable: false }
+}
+
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
   const { it } = await import('@effect/vitest')
@@ -370,6 +405,34 @@ if (import.meta.vitest !== void 0) {
     isHold(soft(unique(Charge)).evaluate(graphOf(spec))) ===
       isHold(unique(Charge).evaluate(graphOf(spec))) && soft(exists(Settle)).soft === false
 
+  const placedShipIds = (spec: Spec): ReadonlySet<string> => {
+    const linked = linkedChargeIds(spec)
+    return new Set(
+      spec.ships.filter((ship) => ship.parentId !== null && linked.has(ship.parentId)).map((ship) => ship.id),
+    )
+  }
+
+  const everyChargePlaced = (spec: Spec): boolean => {
+    const linked = linkedChargeIds(spec)
+    return spec.charges.every((node) => linked.has(node.id))
+  }
+
+  const everyShipPlaced = (spec: Spec): boolean => {
+    const placed = placedShipIds(spec)
+    return spec.ships.every((ship) => placed.has(ship.id))
+  }
+
+  const ForbidTaxonomy = Taxonomy.make({
+    id: 'taxonomy-forbid',
+    spans: [Settle, Charge, Ship],
+    edges: [],
+    forbid: [{ span: Charge, unless: 'allocate' }],
+  })
+
+  const forbidHonoursPath = (spec: Spec): boolean =>
+    holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'hold' }), spec, spec.charges.length === 0) &&
+    holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'allocate' }), spec, true)
+
   it.prop('∀g_Exists_=Nonempty', [GraphSpec], ([spec]) => {
     const graph = graphOf(spec)
     return matchedNodes(graph, Settle).length === spec.settles.length &&
@@ -391,4 +454,20 @@ if (import.meta.vitest !== void 0) {
   it.prop('∀g_All_→FirstHardBreak', [GraphSpec], ([spec]) => allBehaves(spec))
 
   it.prop('∀g_Soft_=HoldsAlike', [GraphSpec], ([spec]) => softeningPreserves(spec))
+
+  it.prop(
+    '∀g_Placement_=EveryChildPlaced',
+    [GraphSpec],
+    ([spec]) =>
+      holdsLike(placementOf({ relation: 'child', parent: Settle, child: Charge }), spec, everyChargePlaced(spec)),
+  )
+
+  it.prop(
+    '∀g_Placement_=EveryDescendantPlaced',
+    [GraphSpec],
+    ([spec]) =>
+      holdsLike(placementOf({ relation: 'descendant', parent: Settle, child: Ship }), spec, everyShipPlaced(spec)),
+  )
+
+  it.prop('∀g_Forbid_=AbsentOffPath', [GraphSpec], ([spec]) => forbidHonoursPath(spec))
 }

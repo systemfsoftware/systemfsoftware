@@ -51,7 +51,9 @@ Feature('Checkout places an order')
 
 ## Relations
 
-`Rel.exists`, `Rel.absent`, `Rel.unique`, `Rel.child`, `Rel.descendant`, `Rel.status`, `Rel.errorType`, `Rel.attrs`, `Rel.durationLessThan`, `Rel.soft`, `Rel.all`.
+`Rel.exists`, `Rel.absent`, `Rel.unique`, `Rel.child`, `Rel.descendant`, `Rel.status`, `Rel.errorType`, `Rel.attrs`, `Rel.durationLessThan`, `Rel.soft`, `Rel.all`, `Rel.fromTaxonomy`.
+
+`Rel.fromTaxonomy(taxonomy, { path })` turns the taxonomy itself into a relation: every declared edge must place each child span under a matching parent (directly for `child`, anywhere above for `descendant`), and every forbidden span must be absent unless its `unless` tag names the given path. Edges constrain placement, not existence — pair it with `Rel.exists` for the spans a scenario requires.
 
 `Rel.all` evaluates hard conjuncts in order and stops at the first hard break; soft conjuncts are all evaluated and reported together. `exists` and `absent` are never soft — a spec cannot go green while the span it is about is missing.
 
