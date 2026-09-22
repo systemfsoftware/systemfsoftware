@@ -1,2 +1,4 @@
 packs:
   - source: compound-packs/cell-architecture
+  - source: compound-packs/resource-algebra
+  - source: compound-packs/boundary-testing
