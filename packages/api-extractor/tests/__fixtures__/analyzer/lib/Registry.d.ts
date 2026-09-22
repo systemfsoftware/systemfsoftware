@@ -2,12 +2,12 @@
  * @public
  */
 export interface RegistryEntry {
-  id: string
+  id: string;
 }
 
 /**
  * @public
  */
 export interface Registry {
-  entries: RegistryEntry[]
+  entries: RegistryEntry[];
 }

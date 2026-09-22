@@ -18,6 +18,7 @@
     ".worktrees/**",
     "pnpm-lock.yaml",
     "**/etc/*.api.md",
+    "**/__fixtures__/**",
     "vendor/**",
     "repos/**",
     "packages/stryker-js/stryker-js-typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json",

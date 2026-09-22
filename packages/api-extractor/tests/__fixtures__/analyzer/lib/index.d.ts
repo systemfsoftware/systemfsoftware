@@ -1,7 +1,7 @@
-import type { ForgottenType } from './forgotten.js'
+import type { ForgottenType } from './forgotten.js';
 
-export { Atom } from './atom.js'
+export { Atom } from './atom.js';
 
-export * as Registry from './Registry.js'
+export * as Registry from './Registry.js';
 
-export declare function useForgotten(): ForgottenType
+export declare function useForgotten(): ForgottenType;

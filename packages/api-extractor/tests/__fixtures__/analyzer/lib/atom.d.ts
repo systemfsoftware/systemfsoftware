@@ -1,3 +1,3 @@
 export declare const Atom: {
-  readonly kind: 'atom'
-}
+    readonly kind: 'atom';
+};

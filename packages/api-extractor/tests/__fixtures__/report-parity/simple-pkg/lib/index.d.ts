@@ -2,42 +2,42 @@
  * @beta
  */
 export declare class BetaFeature {
-  run(): Promise<void>
+  run(): Promise<void>;
 }
 
 /**
  * @public
  */
-export declare function computeValue(input: string): number
+export declare function computeValue(input: string): number;
 
 /**
  * @internal
  */
-export declare function internalHelper(): void
+export declare function internalHelper(): void;
 
 /**
  * @public
  */
-export type SimpleId = string
+export type SimpleId = string;
 
 /**
  * @public
  */
 export declare namespace SimpleNamespace {
-  export function helper(x: number): number
+  export function helper(x: number): number;
 }
 
 /**
  * @public
  */
 export interface SimpleOptions {
-  timeout?: number
+  timeout?: number;
 }
 
 /**
  * @public
  */
 export declare class SimpleService {
-  readonly id: SimpleId
-  start(): void
+  readonly id: SimpleId;
+  start(): void;
 }
