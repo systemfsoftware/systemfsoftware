@@ -2,7 +2,13 @@
 "@systemfsoftware/effect-memfs": major
 ---
 
-The package now exports a single `MemoryFileSystem` namespace. Build a filesystem with `MemoryFileSystem.make(contents)`, adjust it with `.withContents(...)` and `.withCwd(...)`, and get the platform port from `.layer` or `.effect`. Replace `layer` with `MemoryFileSystem.make({}).layer` and `layerWith(contents)` with `MemoryFileSystem.make(contents).layer`.
+The package now exports a single `MemoryFileSystem` namespace. Build a filesystem with `MemoryFileSystem.make(contents)`, adjust it with `.withContents(...)` and `.withCwd(...)`, and get the platform port from `.layer` or `.effect`.
+
+The top-level `make`, `layer`, and `layerWith` exports are removed:
+
+- `layer` becomes `MemoryFileSystem.make().layer`.
+- `layerWith(contents)` becomes `MemoryFileSystem.make(contents).layer`.
+- `make(contents, { cwd })`, which returned a `FileSystem` directly, becomes `MemoryFileSystem.make(contents).withCwd(cwd).effect`, an `Effect` that yields the `FileSystem`.
 
 File bodies in `contents` may be any `Uint8Array`, not only a Node `Buffer`. A plain `Uint8Array` body used to become an empty directory; it is now a file holding those bytes. A body keyed by a relative path is placed under the filesystem's working folder, as string bodies already were.
 
