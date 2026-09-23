@@ -5,8 +5,7 @@ import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 
-import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import { getNodeId } from '../analyzer/TypeScriptInternals.js'
+import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import type { MessageLogLevel, MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
 import { allExtractorMessageIds } from './extractor-message-id.js'
 import { ExtractorMessage, type MessageCandidate, MessageLog } from './message-log.js'
@@ -33,7 +32,7 @@ export interface ConsoleLine {
 export interface ReportMessageSource {
   readonly associatedReportMessages: (
     log: MessageLog,
-    astDeclaration: AstDeclaration,
+    declarationId: NodeId,
     handled: HashSet.HashSet<number>,
   ) => readonly MessageCandidate[]
   readonly unassociatedReportMessages: (
@@ -355,8 +354,8 @@ const messageViewOf = (request: MessageViewRequest, rules: MessageReportingRules
     Arr.filter(MessageLog.candidates(log), (candidate) => analysisLevelOf(handled)(candidate) === level).length
 
   return {
-    associatedReportMessages: (log, astDeclaration, handled) =>
-      selectedOf(handled)(MessageLog.associatedCandidates(log, getNodeId(astDeclaration.declaration))),
+    associatedReportMessages: (log, declarationId, handled) =>
+      selectedOf(handled)(MessageLog.associatedCandidates(log, declarationId)),
     unassociatedReportMessages: (log, handled) => selectedOf(handled)(MessageLog.candidates(log)),
     consoleLines: (log, handled) =>
       Arr.map(

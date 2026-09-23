@@ -142,12 +142,6 @@ export interface LocatedMessage {
   readonly position: Option.Option<MessagePosition>
 }
 
-export interface MessageSink {
-  readonly diagnostics: boolean
-  readonly addDiagnostic: (text: string) => void
-  readonly addConsoleMessage: (messageId: string, level: LogLevel, text: string) => void
-}
-
 const rawPositionOf = (sourceFile: Ts.SourceFile, pos: number): MessagePosition => {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(pos)
   return { sourceFilePath: sourceFile.fileName, line: line + 1, column: character + 1 }

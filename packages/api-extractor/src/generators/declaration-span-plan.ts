@@ -1,4 +1,4 @@
-import { HashMap, HashSet, Option, Result } from 'effect'
+import { Chunk, HashMap, HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
@@ -7,8 +7,6 @@ import { convertToLf } from '../analyzer/text.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
 import { type NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
-import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
-import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import type { ExtractorMessage } from '../collector/message-log.js'
 import type { ApiReportVariant } from '../config/config-file.schema.js'
@@ -35,7 +33,7 @@ export interface ExportToEmit {
 export interface PlanState {
   readonly snapshot: Snapshot.AnalysisSnapshot
   readonly reportVariant: ApiReportVariant
-  readonly entity: CollectorEntity
+  readonly entity: Snapshot.CollectorEntity
   readonly plan: SpanPlan.SpanPlan
   readonly handled: HashSet.HashSet<number>
   readonly consumed: HashSet.HashSet<number>
@@ -46,7 +44,7 @@ export interface PlanState {
 export const initialPlanState = (
   snapshot: Snapshot.AnalysisSnapshot,
   reportVariant: ApiReportVariant,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
   handled: HashSet.HashSet<number>,
   exportsToEmit: ReadonlyArray<ExportToEmit>,
 ): PlanState => ({
@@ -80,7 +78,7 @@ export const associatedMessagesOf = (
 ): SelectedMessages => {
   const selected = Snapshot.reportMessages(state.snapshot).associatedReportMessages(
     Snapshot.messageLog(state.snapshot),
-    astDeclaration,
+    astDeclaration.declarationId,
     effectivelyHandled(state),
   )
   return {
@@ -113,22 +111,23 @@ export const writeLineAsComments = (writer: TextWriter.TextWriter, line: string)
     (current, realLine) => TextWriter.writeLine(TextWriter.write(TextWriter.write(current, '// '), realLine)),
   )
 
-const hasCustomBlock = (apiItemMetadata: ApiItemMetadata, tag: string): boolean =>
-  Option.match(Option.fromNullishOr(apiItemMetadata.tsdocComment), {
+const hasCustomBlock = (apiItemMetadata: Snapshot.ApiItemMetadata, tag: string): boolean =>
+  Option.match(apiItemMetadata.tsdocComment, {
     onNone: () => false,
-    onSome: (tsdocComment) => Arr.some(tsdocComment.customBlocks, (block) => block.blockTag.tagName === tag),
+    onSome: (tsdocComment) =>
+      Arr.some(Chunk.toReadonlyArray(tsdocComment.customBlocks), (block) => block.blockTag.tagName === tag),
   })
 
-const hasModifierTag = (apiItemMetadata: ApiItemMetadata, tag: string): boolean =>
-  Option.match(Option.fromNullishOr(apiItemMetadata.tsdocComment), {
+const hasModifierTag = (apiItemMetadata: Snapshot.ApiItemMetadata, tag: string): boolean =>
+  Option.match(apiItemMetadata.tsdocComment, {
     onNone: () => false,
     onSome: (tsdocComment) => tsdocComment.modifierTagSet.hasTagName(tag),
   })
 
-const hasDeprecatedBlock = (apiItemMetadata: ApiItemMetadata): boolean =>
-  Option.match(Option.fromNullishOr(apiItemMetadata.tsdocComment), {
+const hasDeprecatedBlock = (apiItemMetadata: Snapshot.ApiItemMetadata): boolean =>
+  Option.match(apiItemMetadata.tsdocComment, {
     onNone: () => false,
-    onSome: (tsdocComment) => tsdocComment.deprecatedBlock !== undefined,
+    onSome: (tsdocComment) => Option.isSome(tsdocComment.deprecatedBlock),
   })
 
 interface StandardTagsConfig {
@@ -146,7 +145,7 @@ interface StandardTagRule {
 }
 
 const standardTagRulesOf = (
-  apiItemMetadata: ApiItemMetadata,
+  apiItemMetadata: Snapshot.ApiItemMetadata,
   tags: StandardTagsConfig,
 ): ReadonlyArray<StandardTagRule> => [
   { shouldReport: tags.reportSealedTag === true, isPresent: apiItemMetadata.isSealed, tagName: '@sealed' },
@@ -164,14 +163,14 @@ const standardTagRulesOf = (
   },
 ]
 
-const standardTagNames = (apiItemMetadata: ApiItemMetadata, tags: StandardTagsConfig): ReadonlyArray<string> =>
+const standardTagNames = (apiItemMetadata: Snapshot.ApiItemMetadata, tags: StandardTagsConfig): ReadonlyArray<string> =>
   Arr.map(
     Arr.filter(standardTagRulesOf(apiItemMetadata, tags), (rule) => rule.shouldReport && rule.isPresent),
     (rule) => rule.tagName,
   )
 
 const customTagAdmitted = (
-  apiItemMetadata: ApiItemMetadata,
+  apiItemMetadata: Snapshot.ApiItemMetadata,
   tag: string,
   shouldReport: boolean | undefined,
 ): boolean =>
@@ -182,7 +181,7 @@ const customTagAdmitted = (
   )
 
 const customTagNames = (
-  apiItemMetadata: ApiItemMetadata,
+  apiItemMetadata: Snapshot.ApiItemMetadata,
   otherTags: Readonly<Record<string, boolean | undefined>>,
 ): ReadonlyArray<string> =>
   Arr.map(
@@ -201,13 +200,18 @@ const DEFAULT_TAGS_TO_REPORT: Readonly<Record<string, boolean>> = {
   '@deprecated': true,
 }
 
+export interface AedocSynopsis {
+  readonly text: string
+  readonly snapshot: Snapshot.AnalysisSnapshot
+}
+
 export const getAedocSynopsis = (
   snapshot: Snapshot.AnalysisSnapshot,
   astDeclaration: Snapshot.AstDeclaration,
   messagesToReport: ReadonlyArray<ExtractorMessage> = [],
-): string =>
+): AedocSynopsis =>
   Match.value(Snapshot.isAncillaryDeclaration(snapshot, astDeclaration)).pipe(
-    Match.when(true, () => ''),
+    Match.when(true, (): AedocSynopsis => ({ text: '', snapshot })),
     Match.orElse(() => aedocSynopsisOf(snapshot, astDeclaration, messagesToReport)),
   )
 
@@ -215,20 +219,23 @@ const aedocSynopsisOf = (
   snapshot: Snapshot.AnalysisSnapshot,
   astDeclaration: Snapshot.AstDeclaration,
   messagesToReport: ReadonlyArray<ExtractorMessage>,
-): string => {
-  const footerParts = aedocFooterPartsOf(snapshot, astDeclaration)
+): AedocSynopsis => {
+  const footer = aedocFooterPartsOf(snapshot, astDeclaration)
   const lines = synopsisLinesOf(snapshot, astDeclaration, messagesToReport)
 
-  return Match.value(footerParts.length > 0).pipe(
+  return Match.value(footer.parts.length > 0).pipe(
     Match.when(true, () => {
       const withSeparator = Match.value(messagesToReport.length > 0).pipe(
         Match.when(true, () => writeLineAsComments(lines, '')),
         Match.when(false, () => lines),
         Match.exhaustive,
       )
-      return TextWriter.getText(writeLineAsComments(withSeparator, footerParts.join(' ')))
+      return {
+        text: TextWriter.getText(writeLineAsComments(withSeparator, footer.parts.join(' '))),
+        snapshot: footer.snapshot,
+      }
     }),
-    Match.when(false, () => TextWriter.getText(lines)),
+    Match.when(false, () => ({ text: TextWriter.getText(lines), snapshot: footer.snapshot })),
     Match.exhaustive,
   )
 }
@@ -249,10 +256,15 @@ const tagsToReportOf = (snapshot: Snapshot.AnalysisSnapshot): Readonly<Record<st
   ...Snapshot.extractorConfig(snapshot).apiReport.tagsToReport,
 })
 
+interface AedocFooter {
+  readonly parts: ReadonlyArray<string>
+  readonly snapshot: Snapshot.AnalysisSnapshot
+}
+
 const aedocFooterPartsOf = (
   snapshot: Snapshot.AnalysisSnapshot,
   astDeclaration: Snapshot.AstDeclaration,
-): ReadonlyArray<string> => {
+): AedocFooter => {
   const apiItemMetadata = Snapshot.fetchApiItemMetadata(snapshot, astDeclaration)
   const releaseTagFooter = Match.value(
     !apiItemMetadata.releaseTagSameAsParent && apiItemMetadata.effectiveReleaseTag !== ReleaseTag.None,
@@ -283,16 +295,16 @@ const aedocFooterPartsOf = (
   ]
 
   return Match.value(apiItemMetadata.undocumented).pipe(
-    Match.when(true, () => {
-      Snapshot.addAnalyzerIssue(
+    Match.when(true, (): AedocFooter => ({
+      parts: Arr.append(footerParts, '(undocumented)'),
+      snapshot: Snapshot.addAnalyzerIssue(
         snapshot,
         ExtractorMessageId.Undocumented,
         `Missing documentation for "${Snapshot.localName(snapshot, astDeclaration)}".`,
         astDeclaration,
-      )
-      return Arr.append(footerParts, '(undocumented)')
-    }),
-    Match.when(false, () => footerParts),
+      ),
+    })),
+    Match.when(false, (): AedocFooter => ({ parts: footerParts, snapshot })),
     Match.exhaustive,
   )
 }
@@ -346,10 +358,10 @@ const nestedDeclarationOf = (
   state: PlanState,
   tree: SpanTree,
   astDeclaration: Snapshot.AstDeclaration,
-): Snapshot.AstDeclaration =>
+): Result.Result<Snapshot.AstDeclaration, RenderFailure> =>
   Match.value(Snapshot.isSupportedDeclarationKind(tree.kind)).pipe(
     Match.when(true, () => Snapshot.childDeclarationByNode(state.snapshot, tree.node, astDeclaration)),
-    Match.when(false, () => astDeclaration),
+    Match.when(false, () => Result.succeed(astDeclaration)),
     Match.exhaustive,
   )
 
@@ -426,20 +438,27 @@ const handleKeywordModifiers = (
 const identifierPrefixOf = (
   state: PlanState,
   tree: SpanTree,
-  referencedEntity: CollectorEntity,
+  referencedEntity: Snapshot.CollectorEntity,
 ): Result.Result<PlanState, RenderFailure> =>
-  Option.match(Option.filter(Option.fromNullishOr(referencedEntity.nameForEmit), (name) => name.length > 0), {
+  Option.match(Option.filter(referencedEntity.nameForEmit, (name) => name.length > 0), {
     onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
     onSome: (nameForEmit) => Result.succeed({ ...state, plan: SpanPlan.withPrefix(state.plan, tree, nameForEmit) }),
   })
 
 const handleIdentifier = (state: PlanState, tree: SpanTree): Result.Result<PlanState, RenderFailure> =>
   Match.value(tree.node).pipe(
-    Match.when(ts.isIdentifier, (identifier) =>
-      Option.match(Snapshot.tryGetEntityForNode(state.snapshot, identifier), {
-        onNone: () => Result.succeed(state),
-        onSome: (referencedEntity) => identifierPrefixOf(state, tree, referencedEntity),
-      })),
+    Match.when(
+      ts.isIdentifier,
+      (identifier) =>
+        Result.flatMap(
+          Snapshot.tryGetEntityForNode(state.snapshot, identifier),
+          (referenced) =>
+            Option.match(referenced, {
+              onNone: () => Result.succeed(state),
+              onSome: (referencedEntity) => identifierPrefixOf(state, tree, referencedEntity),
+            }),
+        ),
+    ),
     Match.orElse(() => Result.succeed(state)),
   )
 
@@ -627,33 +646,33 @@ const plannedChildOf = (
   astDeclaration: Snapshot.AstDeclaration,
   insideTypeLiteral: boolean,
   sortChildren: boolean,
-): Result.Result<ChildWalk, RenderFailure> => {
-  const childAstDeclaration = nestedDeclarationOf(walk.state, child, astDeclaration)
-  const afterChildPrefix = Match.value(Snapshot.isSupportedDeclarationKind(child.kind)).pipe(
-    Match.when(true, () =>
-      Match.value(shouldIncludeDeclaration(walk.state, childAstDeclaration)).pipe(
-        Match.when(true, () =>
-          planIncludedChild(walk.state, tree, child, childAstDeclaration, insideTypeLiteral, sortChildren)),
-        Match.when(false, (): Result.Result<PlanState, RenderFailure> =>
-          Result.succeed(walk.state)),
-        Match.exhaustive,
-      )),
-    Match.when(false, (): Result.Result<PlanState, RenderFailure> => Result.succeed(walk.state)),
-    Match.exhaustive,
-  )
-  return Result.flatMap(afterChildPrefix, (plannedState) =>
-    Result.map(
-      planDeclarationSpan(
-        plannedState,
-        child,
-        Option.some(tree),
-        walk.previous,
-        childAstDeclaration,
-        insideTypeLiteral,
-      ),
-      (planned) => ({ state: planned, previous: Option.some(child) }),
-    ))
-}
+): Result.Result<ChildWalk, RenderFailure> =>
+  Result.flatMap(nestedDeclarationOf(walk.state, child, astDeclaration), (childAstDeclaration) => {
+    const afterChildPrefix = Match.value(Snapshot.isSupportedDeclarationKind(child.kind)).pipe(
+      Match.when(true, () =>
+        Match.value(shouldIncludeDeclaration(walk.state, childAstDeclaration)).pipe(
+          Match.when(true, () =>
+            planIncludedChild(walk.state, tree, child, childAstDeclaration, insideTypeLiteral, sortChildren)),
+          Match.when(false, (): Result.Result<PlanState, RenderFailure> =>
+            Result.succeed(walk.state)),
+          Match.exhaustive,
+        )),
+      Match.when(false, (): Result.Result<PlanState, RenderFailure> => Result.succeed(walk.state)),
+      Match.exhaustive,
+    )
+    return Result.flatMap(afterChildPrefix, (plannedState) =>
+      Result.map(
+        planDeclarationSpan(
+          plannedState,
+          child,
+          Option.some(tree),
+          walk.previous,
+          childAstDeclaration,
+          insideTypeLiteral,
+        ),
+        (planned) => ({ state: planned, previous: Option.some(child) }),
+      ))
+  })
 
 const planIncludedChild = (
   state: PlanState,
@@ -698,8 +717,9 @@ const planAedocPrefix = (
   const aedocSynopsis = getAedocSynopsis(state.snapshot, childAstDeclaration, selected.messages)
   return Result.succeed({
     ...state,
+    snapshot: aedocSynopsis.snapshot,
     consumed: selected.consumed,
-    plan: SpanPlan.prependPrefix(state.plan, child, aedocSynopsis),
+    plan: SpanPlan.prependPrefix(state.plan, child, aedocSynopsis.text),
   })
 }
 

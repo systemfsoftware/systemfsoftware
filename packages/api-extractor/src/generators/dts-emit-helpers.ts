@@ -7,7 +7,6 @@ import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationForm
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
 import { getNodeId, type NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
-import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import { InternalInvariantError, UnsupportedStarExportError } from '../errors/index.js'
 import * as RenderSpan from './render-span.js'
@@ -22,11 +21,15 @@ export type RenderFailure = UnsupportedStarExportError | InternalInvariantError
 export const internalInvariantOf = (message: string): Result.Result<never, RenderFailure> =>
   Result.fail(new InternalInvariantError({ message }))
 
-export const entityNameOf = (entity: CollectorEntity): string => entity.nameForEmit ?? ''
+export const entityNameOf = (entity: Snapshot.CollectorEntity): string => Option.getOrElse(entity.nameForEmit, () => '')
 
 // ---------------------------------------------------------------- import/export emit lines
 
-const defaultImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string => {
+const defaultImportLineOf = (
+  prefix: string,
+  entity: Snapshot.CollectorEntity,
+  astImport: Snapshot.AstImport,
+): string => {
   const name = entityNameOf(entity)
   return Match.value(name === astImport.exportName).pipe(
     Match.when(true, () => `${prefix} ${astImport.exportName} from '${astImport.modulePath}';`),
@@ -35,7 +38,7 @@ const defaultImportLineOf = (prefix: string, entity: CollectorEntity, astImport:
   )
 }
 
-const namedImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string => {
+const namedImportLineOf = (prefix: string, entity: Snapshot.CollectorEntity, astImport: Snapshot.AstImport): string => {
   const name = entityNameOf(entity)
   return Match.value(name === astImport.exportName).pipe(
     Match.when(true, () => `${prefix} { ${astImport.exportName} } from '${astImport.modulePath}';`),
@@ -44,13 +47,13 @@ const namedImportLineOf = (prefix: string, entity: CollectorEntity, astImport: S
   )
 }
 
-const starImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string =>
+const starImportLineOf = (prefix: string, entity: Snapshot.CollectorEntity, astImport: Snapshot.AstImport): string =>
   `${prefix} * as ${entityNameOf(entity)} from '${astImport.modulePath}';`
 
-const equalsImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string =>
+const equalsImportLineOf = (prefix: string, entity: Snapshot.CollectorEntity, astImport: Snapshot.AstImport): string =>
   `${prefix} ${entityNameOf(entity)} = require('${astImport.modulePath}');`
 
-const importTypeLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string =>
+const importTypeLineOf = (prefix: string, entity: Snapshot.CollectorEntity, astImport: Snapshot.AstImport): string =>
   Match.value(astImport.exportName.length === 0).pipe(
     Match.when(true, () => `${prefix} * as ${entityNameOf(entity)} from '${astImport.modulePath}';`),
     Match.when(false, () => {
@@ -65,7 +68,7 @@ const importTypeLineOf = (prefix: string, entity: CollectorEntity, astImport: Sn
     Match.exhaustive,
   )
 
-type ImportLineBuilder = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport) => string
+type ImportLineBuilder = (prefix: string, entity: Snapshot.CollectorEntity, astImport: Snapshot.AstImport) => string
 
 const importLineBuilders: Readonly<Record<Snapshot.AstImportKind, ImportLineBuilder>> = {
   [Snapshot.AstImportKind.DefaultImport]: defaultImportLineOf,
@@ -84,7 +87,7 @@ const importPrefixOf = (astImport: Snapshot.AstImport): string =>
 
 export const emitImport = (
   writer: TextWriter.TextWriter,
-  collectorEntity: CollectorEntity,
+  collectorEntity: Snapshot.CollectorEntity,
   astImport: Snapshot.AstImport,
 ): TextWriter.TextWriter =>
   TextWriter.writeLine(
@@ -102,9 +105,9 @@ export const writeImports = (
     initial,
     (accumulated, entity) =>
       Result.flatMap(accumulated, (current) =>
-        Match.value(Snapshot.refOf(Snapshot.astEntityOf(entity))).pipe(
+        Match.value(entity.astEntity).pipe(
           Match.tag('AstImportRef', () =>
-            Option.match(Snapshot.astImportOf(Snapshot.astEntityOf(entity)), {
+            Option.match(Snapshot.astImportOf(snapshot, entity.astEntity), {
               onNone: () => internalInvariantOf('Missing AstImport for an AstImportRef'),
               onSome: (astImport) => Result.succeed(emitImport(current, entity, astImport)),
             })),
@@ -129,7 +132,7 @@ export const formatNamedExport = (exportName: string, name: string): string =>
 export const emitNamedExport = (
   writer: TextWriter.TextWriter,
   exportName: string,
-  collectorEntity: CollectorEntity,
+  collectorEntity: Snapshot.CollectorEntity,
 ): TextWriter.TextWriter => TextWriter.writeLine(writer, formatNamedExport(exportName, entityNameOf(collectorEntity)))
 
 export const emitStarExports = (
@@ -228,7 +231,16 @@ export const syntheticParameterNames = (nodes: ReadonlyArray<ts.Node>): HashMap.
 
 // ---------------------------------------------------------------- import-type span planning
 
-export interface ImportTypePlanner<S extends { readonly plan: SpanPlan.SpanPlan }> {
+/**
+ * The state an import-type planner threads: every planner state carries the plan and the
+ * (possibly message-appending) snapshot, so appends flow back to the render result.
+ */
+export interface ImportTypePlannerState {
+  readonly plan: SpanPlan.SpanPlan
+  readonly snapshot: Snapshot.AnalysisSnapshot
+}
+
+export interface ImportTypePlanner<S extends ImportTypePlannerState> {
   readonly state: S
   readonly snapshot: Snapshot.AnalysisSnapshot
   readonly tree: SpanTree
@@ -241,7 +253,7 @@ export interface ImportTypePlanner<S extends { readonly plan: SpanPlan.SpanPlan 
   ) => Result.Result<S, RenderFailure>
 }
 
-export interface PlannedImportType<S> {
+export interface PlannedImportType<S extends ImportTypePlannerState> {
   readonly state: S
   readonly plan: SpanPlan.SpanPlan
 }
@@ -250,10 +262,10 @@ const importTypeNestedDeclarationOf = (
   snapshot: Snapshot.AnalysisSnapshot,
   tree: SpanTree,
   astDeclaration: Snapshot.AstDeclaration,
-): Snapshot.AstDeclaration =>
+): Result.Result<Snapshot.AstDeclaration, RenderFailure> =>
   Match.value(Snapshot.isSupportedDeclarationKind(tree.kind)).pipe(
     Match.when(true, () => Snapshot.childDeclarationByNode(snapshot, tree.node, astDeclaration)),
-    Match.when(false, () => astDeclaration),
+    Match.when(false, () => Result.succeed(astDeclaration)),
     Match.exhaustive,
   )
 
@@ -304,32 +316,31 @@ const relativeModulePathOf = (node: ts.ImportTypeNode): Option.Option<string> =>
     Option.filter((modulePath) => modulePath.startsWith('.')),
   )
 
-const unresolvedImportTypeOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
+const unresolvedImportTypeOf = <S extends ImportTypePlannerState>(
   planner: ImportTypePlanner<S>,
   node: ts.ImportTypeNode,
 ): PlannedImportType<S> => {
-  Option.match(relativeModulePathOf(node), {
-    onNone: () => undefined,
-    onSome: (modulePath) => {
+  const withIssue = Option.match(relativeModulePathOf(node), {
+    onNone: () => planner.state.snapshot,
+    onSome: (modulePath) =>
       Snapshot.addAnalyzerIssue(
-        planner.snapshot,
+        planner.state.snapshot,
         ExtractorMessageId.UnresolvedImportPath,
         `The inline import path "${modulePath}" could not be resolved, so it would be emitted unchanged` +
           ` into the .d.ts rollup, where it does not resolve to anything. Import the symbol at the top` +
           ` of the file instead of using an inline import() type.`,
         planner.astDeclaration,
-      )
-    },
+      ),
   })
-  return { state: planner.state, plan: planner.state.plan }
+  return { state: { ...planner.state, snapshot: withIssue }, plan: planner.state.plan }
 }
 
 const nestedQualifiersOf = (
   snapshot: Snapshot.AnalysisSnapshot,
   node: ts.ImportTypeNode,
-  entity: CollectorEntity,
+  ref: Snapshot.AstEntityRef,
 ): Result.Result<string, RenderFailure> =>
-  Option.match(Snapshot.astImportOf(Snapshot.astEntityOf(entity)), {
+  Option.match(Snapshot.astImportOf(snapshot, ref), {
     onNone: () => internalInvariantOf('Missing AstImport for an AstImportRef'),
     onSome: (astImport) =>
       Result.succeed(
@@ -346,22 +357,21 @@ interface NestedWalk<S> {
   readonly previous: Option.Option<SpanTree>
 }
 
-const plannedNestedOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
+const plannedNestedOf = <S extends ImportTypePlannerState>(
   planner: ImportTypePlanner<S>,
   walk: NestedWalk<S>,
   span: SpanTree,
 ): Result.Result<NestedWalk<S>, RenderFailure> =>
-  Result.map(
-    planner.planNestedSpan(
-      walk.state,
-      span,
-      walk.previous,
-      importTypeNestedDeclarationOf(planner.snapshot, span, planner.astDeclaration),
-    ),
-    (state) => ({ state, previous: Option.some(span) }),
+  Result.flatMap(
+    importTypeNestedDeclarationOf(planner.snapshot, span, planner.astDeclaration),
+    (nestedDeclaration) =>
+      Result.map(
+        planner.planNestedSpan(walk.state, span, walk.previous, nestedDeclaration),
+        (state) => ({ state, previous: Option.some(span) }),
+      ),
   )
 
-const plannedNestedStateOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
+const plannedNestedStateOf = <S extends ImportTypePlannerState>(
   planner: ImportTypePlanner<S>,
   typeArgumentSpans: ReadonlyArray<SpanTree>,
 ): Result.Result<S, RenderFailure> => {
@@ -384,7 +394,7 @@ interface TypeArgumentsPlan<S> {
   readonly text: string
 }
 
-const typeArgumentsPlanOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
+const typeArgumentsPlanOf = <S extends ImportTypePlannerState>(
   planner: ImportTypePlanner<S>,
   node: ts.ImportTypeNode,
 ): Result.Result<TypeArgumentsPlan<S>, RenderFailure> =>
@@ -409,18 +419,18 @@ const typeArgumentsPlanOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
     },
   )
 
-const resolvedImportTypeOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
+const resolvedImportTypeOf = <S extends ImportTypePlannerState>(
   planner: ImportTypePlanner<S>,
   node: ts.ImportTypeNode,
-  referencedEntity: CollectorEntity,
+  referencedEntity: Snapshot.CollectorEntity,
 ): Result.Result<PlannedImportType<S>, RenderFailure> =>
-  Option.match(Option.filter(Option.fromNullishOr(referencedEntity.nameForEmit), (name) => name.length > 0), {
+  Option.match(Option.filter(referencedEntity.nameForEmit, (name) => name.length > 0), {
     onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
     onSome: (nameForEmit) =>
       Result.flatMap(
         typeArgumentsPlanOf(planner, node),
         ({ state: plannedState, text: typeArgumentsText }) =>
-          Result.map(nestedQualifiersOf(planner.snapshot, node, referencedEntity), (nestedQualifiers) => ({
+          Result.map(nestedQualifiersOf(planner.snapshot, node, referencedEntity.astEntity), (nestedQualifiers) => ({
             state: plannedState,
             plan: SpanPlan.withPrefix(
               SpanPlan.skipAll(plannedState.plan, planner.tree),
@@ -431,16 +441,18 @@ const resolvedImportTypeOf = <S extends { readonly plan: SpanPlan.SpanPlan }>(
       ),
   })
 
-export const planImportTypeSpan = <S extends { readonly plan: SpanPlan.SpanPlan }>(
+export const planImportTypeSpan = <S extends ImportTypePlannerState>(
   planner: ImportTypePlanner<S>,
 ): Result.Result<PlannedImportType<S>, RenderFailure> =>
   Match.value(planner.tree.node).pipe(
     Match.when(ts.isImportTypeNode, (node) =>
-      Option.match(Snapshot.tryGetEntityForNode(planner.snapshot, node), {
-        onNone: (): Result.Result<PlannedImportType<S>, RenderFailure> =>
-          Result.succeed(unresolvedImportTypeOf(planner, node)),
-        onSome: (referencedEntity) => resolvedImportTypeOf(planner, node, referencedEntity),
-      })),
+      Result.flatMap(Snapshot.tryGetEntityForNode(planner.snapshot, node), (referenced) =>
+        Option.match(referenced, {
+          onNone: (): Result.Result<PlannedImportType<S>, RenderFailure> =>
+            Result.succeed(unresolvedImportTypeOf(planner, node)),
+          onSome: (referencedEntity) =>
+            resolvedImportTypeOf(planner, node, referencedEntity),
+        }))),
     Match.orElse((): Result.Result<PlannedImportType<S>, RenderFailure> =>
       Result.succeed({ state: planner.state, plan: planner.state.plan })
     ),

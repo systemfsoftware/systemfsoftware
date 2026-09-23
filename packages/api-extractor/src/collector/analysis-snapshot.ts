@@ -1,258 +1,335 @@
 import type * as tsdoc from '@microsoft/tsdoc'
-import * as Data from 'effect/Data'
-import * as HashSet from 'effect/HashSet'
+import { Chunk, HashMap, HashSet, Option } from 'effect'
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
-import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as ts from 'typescript'
 
-import { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import type { AstEntity } from '../analyzer/AstEntity.js'
-import { AstImport } from '../analyzer/AstImport.js'
-import type { IAstModuleExportInfo } from '../analyzer/AstModule.js'
-import { AstNamespaceImport } from '../analyzer/AstNamespaceImport.js'
-import { ResolverFailure } from '../analyzer/AstReferenceResolver.js'
-import { AstSymbol } from '../analyzer/AstSymbol.js'
-import { getSymbolId, type SymbolId } from '../analyzer/TypeScriptInternals.js'
+import { ApiItemMetadata } from '../analyzer/collect/api-item-metadata.js'
+import type { CollectedAnalysis } from '../analyzer/collect/collect-analysis.js'
+import type { CollectorEntity } from '../analyzer/collect/collector-entity.js'
+import { sortKeyIgnoringUnderscore } from '../analyzer/collect/collector-entity.js'
+import { DeclarationMetadata } from '../analyzer/collect/declaration-metadata.js'
+import {
+  apiItemMetadataOf,
+  declarationIdsOfSymbol,
+  declarationMetadataOf,
+  declarationOf,
+  declarationsOfIds,
+  entityOfRef,
+  isAncillaryOf,
+  localNameOfDeclarationId,
+  localNameOfRef,
+  moduleExportInfoOf,
+  nodeOf,
+  symbolMetadataOf,
+  symbolOf,
+  workingPackageNameOf,
+} from '../analyzer/collect/enhancement-view.js'
+import type { PackageDocComment } from '../analyzer/collect/package-doc-comment.js'
+import type { SymbolMetadata } from '../analyzer/collect/symbol-metadata.js'
+import type { AnalysisGraph } from '../analyzer/graph/analysis-graph.js'
+import { symbolValueOf } from '../analyzer/graph/analysis-graph.js'
+import { isSupportedSyntaxKind } from '../analyzer/graph/ast-declaration.js'
+import type { AstDeclaration } from '../analyzer/graph/ast-declaration.js'
+import type { AstEntity, AstEntityRef } from '../analyzer/graph/ast-entity.js'
+import { AstImportKind } from '../analyzer/graph/ast-import.js'
+import type { AstImport } from '../analyzer/graph/ast-import.js'
+import { emptyAstModuleExportInfo } from '../analyzer/graph/ast-module.js'
+import type { AstModuleExportInfo } from '../analyzer/graph/ast-module.js'
+import type { AstNamespaceImport } from '../analyzer/graph/ast-namespace-import.js'
+import type { AstSymbol } from '../analyzer/graph/ast-symbol.js'
+import type { WorkingPackage } from '../analyzer/graph/working-package.js'
+import type { NodeId } from '../analyzer/TypeScriptInternals.js'
+import { getNodeId } from '../analyzer/TypeScriptInternals.js'
 import type { ExtractorConfig } from '../config/index.js'
-import type { ApiItemMetadata } from './ApiItemMetadata.js'
-import { Collector, type ICollectorOptions } from './Collector.js'
-import type { CollectorEntity } from './CollectorEntity.js'
-import type { DeclarationMetadata } from './DeclarationMetadata.js'
+import { InternalInvariantError } from '../errors/index.js'
+import { ReleaseTag } from '../model/index.js'
 import type { ExtractorMessageId } from './extractor-message-id.js'
-import type { ExtractorMessageProperties, MessageLog } from './message-log.js'
+import { type ExtractorMessageProperties, MessageLog } from './message-log.js'
 import type { ReportMessageSource } from './message-router.js'
 import type { SourceMapIndex } from './SourceMapper.js'
-import type { SymbolMetadata } from './SymbolMetadata.js'
-import type { WorkingPackage } from './WorkingPackage.js'
+import { VisitorState } from './VisitorState.js'
 
-export type { AstDeclaration, AstEntity, AstImport, AstNamespaceImport, AstSymbol }
-export { AstImportKind } from '../analyzer/AstImport.js'
-export type { IAstModuleExportInfo } from '../analyzer/AstModule.js'
+export { AstImportKind, sortKeyIgnoringUnderscore }
+export type { ApiItemMetadata, AstDeclaration, AstEntity, AstEntityRef, AstImport, AstModuleExportInfo }
+export type { AstNamespaceImport, AstSymbol, CollectorEntity, DeclarationMetadata, PackageDocComment }
+export type { SymbolMetadata, WorkingPackage }
 
-export const isSupportedDeclarationKind = (kind: ts.SyntaxKind): boolean => AstDeclaration.isSupportedSyntaxKind(kind)
+/**
+ * The frozen analysis one extraction run reads: the graph the walker built, the collected
+ * entities and metadata the fold computed, and the routing view the run's configuration implies.
+ * Every consumer reaches analysis state through the accessors below, and every accessor returns a
+ * new snapshot when it changes the message log, so no phase observes another phase's writes.
+ */
+export interface AnalysisSnapshot {
+  readonly graph: AnalysisGraph
+  readonly collected: CollectedAnalysis
+  readonly reportMessages: ReportMessageSource
+}
 
-export const sortKeyIgnoringUnderscore = (identifier: string | undefined): string =>
-  Collector.getSortKeyIgnoringUnderscore(identifier)
+export const make = (
+  graph: AnalysisGraph,
+  collected: CollectedAnalysis,
+  reportMessages: ReportMessageSource,
+): AnalysisSnapshot => ({ graph, collected, reportMessages })
 
-export class AstSymbolRef extends Data.TaggedClass('AstSymbolRef')<{ readonly symbolId: SymbolId }> {}
-export class AstImportRef extends Data.TaggedClass('AstImportRef')<{ readonly key: string }> {}
-export class AstNamespaceImportRef extends Data.TaggedClass('AstNamespaceImportRef')<{ readonly symbolId: SymbolId }> {}
-export class AstNamespaceExportRef extends Data.TaggedClass('AstNamespaceExportRef') {}
+export const messageLog = (snapshot: AnalysisSnapshot): MessageLog => snapshot.collected.messageLog
 
-export type AstEntityRef = AstSymbolRef | AstImportRef | AstNamespaceImportRef | AstNamespaceExportRef
+export const withMessageLog = (snapshot: AnalysisSnapshot, log: MessageLog): AnalysisSnapshot => ({
+  ...snapshot,
+  collected: { ...snapshot.collected, messageLog: log },
+})
 
-const asAstSymbolValue = (astEntity: AstEntity): Option.Option<AstSymbol> =>
-  Match.value(astEntity).pipe(
-    Match.when((candidate): candidate is AstSymbol => candidate instanceof AstSymbol, (astSymbol) =>
-      Option.some(astSymbol)),
-    Match.orElse(() =>
-      Option.none()
-    ),
+/** Maps every raw `.d.ts` position in the log through the pre-read index. */
+export const locateMessages = (snapshot: AnalysisSnapshot, index: SourceMapIndex): AnalysisSnapshot =>
+  withMessageLog(snapshot, MessageLog.locate(messageLog(snapshot), index))
+
+export const markHandled = (snapshot: AnalysisSnapshot, handled: HashSet.HashSet<number>): AnalysisSnapshot =>
+  withMessageLog(snapshot, MessageLog.withHandled(messageLog(snapshot), handled))
+
+export const entities = (snapshot: AnalysisSnapshot): Chunk.Chunk<CollectorEntity> => snapshot.collected.entities
+
+export const extractorConfig = (snapshot: AnalysisSnapshot): ExtractorConfig => snapshot.graph.extractorConfig
+
+export const tsdocConfiguration = (snapshot: AnalysisSnapshot): tsdoc.TSDocConfiguration =>
+  snapshot.graph.tsdocConfiguration
+
+export const packageName = (snapshot: AnalysisSnapshot): string => workingPackageNameOf(snapshot.graph)
+
+export const packageFolder = (snapshot: AnalysisSnapshot): string =>
+  Option.getOrElse(
+    Option.map(snapshot.graph.workingPackage, (workingPackage) => workingPackage.packageFolder),
+    () => '',
   )
 
-const asAstImportValue = (astEntity: AstEntity): Option.Option<AstImport> =>
-  Match.value(astEntity).pipe(
-    Match.when((candidate): candidate is AstImport => candidate instanceof AstImport, (astImport) =>
-      Option.some(astImport)),
-    Match.orElse(() =>
-      Option.none()
-    ),
-  )
+export const packageDocComment = (snapshot: AnalysisSnapshot): Option.Option<PackageDocComment> =>
+  snapshot.collected.packageDocComment
 
-const asAstNamespaceImportValue = (astEntity: AstEntity): Option.Option<AstNamespaceImport> =>
-  Match.value(astEntity).pipe(
-    Match.when((candidate): candidate is AstNamespaceImport => candidate instanceof AstNamespaceImport, (
-      astNamespaceImport,
-    ) => Option.some(astNamespaceImport)),
+export const dtsTypeReferenceDirectives = (snapshot: AnalysisSnapshot): Chunk.Chunk<string> =>
+  snapshot.collected.dtsTypeReferenceDirectives
+
+export const dtsLibReferenceDirectives = (snapshot: AnalysisSnapshot): Chunk.Chunk<string> =>
+  snapshot.collected.dtsLibReferenceDirectives
+
+export const starExportedExternalModulePaths = (snapshot: AnalysisSnapshot): ReadonlyArray<string> =>
+  snapshot.collected.starExportedExternalModulePaths
+
+export const reportMessages = (snapshot: AnalysisSnapshot): ReportMessageSource => snapshot.reportMessages
+
+export const isSupportedDeclarationKind = (kind: ts.SyntaxKind): boolean => isSupportedSyntaxKind(kind)
+
+export const refOf = (entity: CollectorEntity): AstEntityRef => entity.astEntity
+
+export const astSymbolOf = (snapshot: AnalysisSnapshot, ref: AstEntityRef): Option.Option<AstSymbol> =>
+  Match.value(ref).pipe(
+    Match.tag('AstSymbolRef', (symbolRef) => symbolOf(snapshot.graph, symbolRef.symbolId)),
     Match.orElse(() => Option.none()),
   )
 
-export const refOf = (entity: AstEntity): AstEntityRef =>
-  Option.match(asAstSymbolValue(entity), {
-    onSome: (astSymbol) => new AstSymbolRef({ symbolId: getSymbolId(astSymbol.followedSymbol) }),
-    onNone: () =>
-      Option.match(asAstImportValue(entity), {
-        onSome: (astImport) => new AstImportRef({ key: astImport.key }),
-        onNone: () =>
-          Option.match(asAstNamespaceImportValue(entity), {
-            onSome: (astNamespaceImport) =>
-              new AstNamespaceImportRef({ symbolId: getSymbolId(astNamespaceImport.symbol) }),
-            onNone: () => new AstNamespaceExportRef(),
-          }),
-      }),
-  })
+export const astImportOf = (snapshot: AnalysisSnapshot, ref: AstEntityRef): Option.Option<AstImport> =>
+  Match.value(ref).pipe(
+    Match.tag('AstImportRef', (importRef) => HashMap.get(snapshot.graph.imports, importRef.key)),
+    Match.orElse(() => Option.none()),
+  )
 
-const snapshotCollector: unique symbol = Symbol.for('~systemfsoftware/api-extractor/analysis-snapshot')
+export const astNamespaceImportOf = (
+  snapshot: AnalysisSnapshot,
+  ref: AstEntityRef,
+): Option.Option<AstNamespaceImport> =>
+  Match.value(ref).pipe(
+    Match.tag('AstNamespaceImportRef', (namespaceRef) =>
+      HashMap.get(snapshot.graph.namespaceImports, namespaceRef.symbolId)),
+    Match.orElse(() =>
+      Option.none()
+    ),
+  )
 
-export interface AnalysisSnapshot {
-  readonly [snapshotCollector]: Collector
-}
+export const localName = (snapshot: AnalysisSnapshot, source: AstEntityRef | AstDeclaration): string =>
+  Match.value(source).pipe(
+    Match.tag(
+      'AstDeclaration',
+      (astDeclaration) => localNameOfDeclarationId(snapshot.graph, astDeclaration.declarationId),
+    ),
+    Match.orElse((ref) => Option.getOrElse(localNameOfRef(snapshot.graph, ref), () => '')),
+  )
 
-export const make = (options: ICollectorOptions): AnalysisSnapshot => ({
-  [snapshotCollector]: new Collector(options),
+export const tryGetCollectorEntity = (
+  snapshot: AnalysisSnapshot,
+  ref: AstEntityRef,
+): Option.Option<CollectorEntity> => entityOfRef(snapshot.collected, ref)
+
+export const tryFetchMetadataForAstEntity = (
+  snapshot: AnalysisSnapshot,
+  ref: AstEntityRef,
+): Option.Option<SymbolMetadata> =>
+  Match.value(ref).pipe(
+    Match.tag('AstSymbolRef', (symbolRef) => symbolMetadataOf(snapshot.collected, symbolRef.symbolId)),
+    Match.orElse(() => Option.none()),
+  )
+
+const defaultApiItemMetadata: ApiItemMetadata = new ApiItemMetadata({
+  declaredReleaseTag: ReleaseTag.None,
+  effectiveReleaseTag: ReleaseTag.None,
+  releaseTagSameAsParent: false,
+  isEventProperty: false,
+  isOverride: false,
+  isSealed: false,
+  isVirtual: false,
+  isPreapproved: false,
+  deprecated: false,
+  customBlockTagNames: Chunk.empty(),
+  modifierTagNames: Chunk.empty(),
+  tsdocComment: Option.none(),
+  undocumented: true,
+  docCommentEnhancerVisitorState: VisitorState.Unvisited,
 })
 
-const collector = (snapshot: AnalysisSnapshot): Collector => snapshot[snapshotCollector]
+const defaultDeclarationMetadata: DeclarationMetadata = new DeclarationMetadata({
+  tsdocParserContext: Option.none(),
+  isAncillary: false,
+  ancillaryDeclarationIds: Chunk.empty(),
+})
 
-export const analyze = (snapshot: AnalysisSnapshot): void => collector(snapshot).analyze()
-
-export const entities = (snapshot: AnalysisSnapshot): ReadonlyArray<CollectorEntity> => collector(snapshot).entities
-
-export const extractorConfig = (snapshot: AnalysisSnapshot): ExtractorConfig => collector(snapshot).extractorConfig
-
-export const workingPackage = (snapshot: AnalysisSnapshot): WorkingPackage => collector(snapshot).workingPackage
-
-export const tsdocConfiguration = (snapshot: AnalysisSnapshot): tsdoc.TSDocConfiguration =>
-  collector(snapshot).tsdocConfiguration
-
-export const dtsTypeReferenceDirectives = (snapshot: AnalysisSnapshot): ReadonlySet<string> =>
-  collector(snapshot).dtsTypeReferenceDirectives
-
-export const dtsLibReferenceDirectives = (snapshot: AnalysisSnapshot): ReadonlySet<string> =>
-  collector(snapshot).dtsLibReferenceDirectives
-
-export const starExportedExternalModulePaths = (snapshot: AnalysisSnapshot): ReadonlyArray<string> =>
-  collector(snapshot).starExportedExternalModulePaths
-
-export const reportMessages = (snapshot: AnalysisSnapshot): ReportMessageSource => collector(snapshot).reportMessages
-
-export const messageLog = (snapshot: AnalysisSnapshot): MessageLog => collector(snapshot).messageLog
-
-export const locateMessages = (snapshot: AnalysisSnapshot, index: SourceMapIndex): void =>
-  collector(snapshot).locateMessages(index)
-
-export const markHandled = (snapshot: AnalysisSnapshot, handled: HashSet.HashSet<number>): void =>
-  collector(snapshot).markHandled(handled)
-
-export const fetchApiItemMetadata = (
-  snapshot: AnalysisSnapshot,
-  astDeclaration: AstDeclaration,
-): ApiItemMetadata => collector(snapshot).fetchApiItemMetadata(astDeclaration)
-
-export const fetchSymbolMetadata = (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): SymbolMetadata =>
-  collector(snapshot).fetchSymbolMetadata(astSymbol)
+export const fetchApiItemMetadata = (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ApiItemMetadata =>
+  Option.getOrElse(apiItemMetadataOf(snapshot.collected, astDeclaration.declarationId), () => defaultApiItemMetadata)
 
 export const fetchDeclarationMetadata = (
   snapshot: AnalysisSnapshot,
   astDeclaration: AstDeclaration,
-): DeclarationMetadata => collector(snapshot).fetchDeclarationMetadata(astDeclaration)
-
-export const tryFetchMetadataForAstEntity = (
-  snapshot: AnalysisSnapshot,
-  astEntity: AstEntity,
-): Option.Option<SymbolMetadata> => Option.fromNullishOr(collector(snapshot).tryFetchMetadataForAstEntity(astEntity))
+): DeclarationMetadata =>
+  Option.getOrElse(
+    declarationMetadataOf(snapshot.collected, astDeclaration.declarationId),
+    () => defaultDeclarationMetadata,
+  )
 
 export const isAncillaryDeclaration = (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): boolean =>
-  collector(snapshot).isAncillaryDeclaration(astDeclaration)
+  isAncillaryOf(snapshot.collected, astDeclaration.declarationId)
 
-export const tryGetCollectorEntity = (
+export const astDeclarations = (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): Chunk.Chunk<AstDeclaration> =>
+  declarationsOfIds(snapshot.graph, declarationIdsOfSymbol(snapshot.graph, astSymbol.followedSymbolId))
+
+export const modifierFlags = (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ts.ModifierFlags =>
+  astDeclaration.modifierFlags
+
+export const symbolFlags = (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): ts.SymbolFlags =>
+  Option.getOrElse(
+    Option.flatMap(symbolOf(snapshot.graph, astSymbol.followedSymbolId), (astSymbol) =>
+      Option.map(symbolValueOf(snapshot.graph, astSymbol.followedSymbolId), (symbol) => symbol.flags)),
+    () =>
+      ts.SymbolFlags.None,
+  )
+
+export const declaration = (
   snapshot: AnalysisSnapshot,
-  astEntity: AstEntity,
-): Option.Option<CollectorEntity> => Option.fromNullishOr(collector(snapshot).tryGetCollectorEntity(astEntity))
+  source: AstDeclaration | AstNamespaceImport,
+): Result.Result<ts.Node, InternalInvariantError> => {
+  const declarationId = Match.value(source).pipe(
+    Match.tag('AstDeclaration', (astDeclaration) => astDeclaration.declarationId),
+    Match.orElse((astNamespaceImport) => astNamespaceImport.declarationId),
+  )
+  return Option.match(nodeOf(snapshot.graph, declarationId), {
+    onNone: () =>
+      Result.fail(new InternalInvariantError({ message: 'Missing declaration node for the analysis graph' })),
+    onSome: (node) => Result.succeed(node),
+  })
+}
+
+export const childDeclarationByNode = (
+  snapshot: AnalysisSnapshot,
+  node: ts.Node,
+  parentAstDeclaration: AstDeclaration,
+): Result.Result<AstDeclaration, InternalInvariantError> =>
+  Option.match(declarationOf(snapshot.graph, getNodeId(node)), {
+    onNone: () =>
+      Result.fail(new InternalInvariantError({ message: 'Child declaration not found for the specified node' })),
+    onSome: (astDeclaration) =>
+      Match.value(
+        Option.exists(
+          astDeclaration.parentDeclarationId,
+          (parentId) => parentId === parentAstDeclaration.declarationId,
+        ),
+      ).pipe(
+        Match.when(true, (): Result.Result<AstDeclaration, InternalInvariantError> => Result.succeed(astDeclaration)),
+        Match.when(
+          false,
+          (): Result.Result<AstDeclaration, InternalInvariantError> =>
+            Result.fail(
+              new InternalInvariantError({ message: 'The found child is not attached to the parent AstDeclaration' }),
+            ),
+        ),
+        Match.exhaustive,
+      ),
+  })
 
 export const tryGetEntityForNode = (
   snapshot: AnalysisSnapshot,
   node: ts.Identifier | ts.ImportTypeNode,
-): Option.Option<CollectorEntity> => Option.fromNullishOr(collector(snapshot).tryGetEntityForNode(node))
-
-export const resolveReference = (
-  snapshot: AnalysisSnapshot,
-  declarationReference: tsdoc.DocDeclarationReference,
-): Result.Result<AstDeclaration, string> =>
-  Match.value(collector(snapshot).astReferenceResolver.resolve(declarationReference)).pipe(
+): Result.Result<Option.Option<CollectorEntity>, InternalInvariantError> => {
+  const nodeId = getNodeId(node)
+  return Match.value(HashMap.has(snapshot.graph.entitiesByNode, nodeId)).pipe(
     Match.when(
-      (candidate): candidate is ResolverFailure => candidate instanceof ResolverFailure,
-      (failure) => Result.fail(failure.reason),
+      false,
+      (): Result.Result<Option.Option<CollectorEntity>, InternalInvariantError> =>
+        Result.fail(
+          new InternalInvariantError({
+            message: 'tryGetEntityForIdentifier() called for an identifier that was not analyzed',
+          }),
+        ),
     ),
-    Match.orElse((astDeclaration) => Result.succeed(astDeclaration)),
+    Match.when(
+      true,
+      (): Result.Result<Option.Option<CollectorEntity>, InternalInvariantError> =>
+        Result.succeed(
+          Option.flatMap(Option.flatten(HashMap.get(snapshot.graph.entitiesByNode, nodeId)), (ref) =>
+            entityOfRef(snapshot.collected, ref)),
+        ),
+    ),
+    Match.exhaustive,
+  )
+}
+
+export const fetchAstModuleExportInfo = (
+  snapshot: AnalysisSnapshot,
+  astNamespaceImport: AstNamespaceImport,
+): AstModuleExportInfo =>
+  Option.getOrElse(moduleExportInfoOf(snapshot.graph, astNamespaceImport.astModuleId), () => emptyAstModuleExportInfo)
+
+const declarationIdOf = (source: AstDeclaration | AstSymbol): Option.Option<NodeId> =>
+  Match.value(source).pipe(
+    Match.tag('AstDeclaration', (astDeclaration) => Option.some(astDeclaration.declarationId)),
+    Match.orElse((astSymbol) => Arr.head(Chunk.toReadonlyArray(astSymbol.declarationIds))),
   )
 
+/** Appends an analyzer issue associated with the declaration (or the symbol's first declaration). */
 export const addAnalyzerIssue = (
   snapshot: AnalysisSnapshot,
   messageId: ExtractorMessageId,
   messageText: string,
   astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
   properties?: ExtractorMessageProperties,
-): void => {
-  collector(snapshot).addAnalyzerIssue(messageId, messageText, astDeclarationOrSymbol, properties)
-}
-
-export const fetchAstModuleExportInfo = (
-  snapshot: AnalysisSnapshot,
-  astNamespaceImport: AstNamespaceImport,
-): IAstModuleExportInfo => astNamespaceImport.fetchAstModuleExportInfo(collector(snapshot))
-
-export const childDeclarationByNode = (
-  snapshot: AnalysisSnapshot,
-  node: ts.Node,
-  parentAstDeclaration: AstDeclaration,
-): AstDeclaration => collector(snapshot).astSymbolTable.getChildAstDeclarationByNode(node, parentAstDeclaration)
-
-export const astDeclarations = (_snapshot: AnalysisSnapshot, astSymbol: AstSymbol): ReadonlyArray<AstDeclaration> =>
-  astSymbol.astDeclarations
-
-export const astSymbol = (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): AstSymbol =>
-  astDeclaration.astSymbol
-
-export const children = (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ReadonlyArray<AstDeclaration> =>
-  astDeclaration.children
-
-export const parentAstDeclaration = (
-  _snapshot: AnalysisSnapshot,
-  astDeclaration: AstDeclaration,
-): Option.Option<AstDeclaration> => Option.fromNullishOr(astDeclaration.parent)
-
-export const declaration = (
-  _snapshot: AnalysisSnapshot,
-  source: AstDeclaration | AstNamespaceImport,
-): ts.Declaration =>
-  Match.value(source).pipe(
-    Match.when(
-      (candidate): candidate is AstNamespaceImport => candidate instanceof AstNamespaceImport,
-      (astNamespaceImport) => astNamespaceImport.declaration,
-    ),
-    Match.orElse((astDeclaration) => astDeclaration.declaration),
-  )
-
-export const modifierFlags = (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ts.ModifierFlags =>
-  astDeclaration.modifierFlags
-
-export const referencedAstEntities = (
-  _snapshot: AnalysisSnapshot,
-  astDeclaration: AstDeclaration,
-): ReadonlyArray<AstEntity> => astDeclaration.referencedAstEntities
-
-export const localName = (_snapshot: AnalysisSnapshot, source: AstEntity | AstDeclaration): string =>
-  Match.value(source).pipe(
-    Match.when(
-      (candidate): candidate is AstDeclaration => candidate instanceof AstDeclaration,
-      (astDeclaration) => astDeclaration.astSymbol.localName,
-    ),
-    Match.orElse((astEntity) => astEntity.localName),
-  )
-
-export const rootAstSymbol = (_snapshot: AnalysisSnapshot, astSymbol: AstSymbol): AstSymbol => astSymbol.rootAstSymbol
-
-export const parentAstSymbol = (_snapshot: AnalysisSnapshot, astSymbol: AstSymbol): Option.Option<AstSymbol> =>
-  Option.fromNullishOr(astSymbol.parentAstSymbol)
-
-export const isExternal = (_snapshot: AnalysisSnapshot, astSymbol: AstSymbol): boolean => astSymbol.isExternal
-
-export const symbolFlags = (_snapshot: AnalysisSnapshot, astSymbol: AstSymbol): ts.SymbolFlags =>
-  astSymbol.followedSymbol.flags
-
-export const forEachDeclarationRecursive = (
-  _snapshot: AnalysisSnapshot,
-  astSymbol: AstSymbol,
-  action: (astDeclaration: AstDeclaration) => void,
-): void => astSymbol.forEachDeclarationRecursive(action)
-
-export const astSymbolOf = (astEntity: AstEntity): Option.Option<AstSymbol> => asAstSymbolValue(astEntity)
-
-export const astImportOf = (astEntity: AstEntity): Option.Option<AstImport> => asAstImportValue(astEntity)
-
-export const astNamespaceImportOf = (astEntity: AstEntity): Option.Option<AstNamespaceImport> =>
-  asAstNamespaceImportValue(astEntity)
-
-export const astEntityOf = (entity: CollectorEntity): AstEntity => entity.astEntity
+): AnalysisSnapshot =>
+  Option.match(Option.fromNullishOr(astDeclarationOrSymbol), {
+    onNone: () => snapshot,
+    onSome: (source) =>
+      Option.match(declarationIdOf(source), {
+        onNone: () => snapshot,
+        onSome: (declarationId) =>
+          Option.match(nodeOf(snapshot.graph, declarationId), {
+            onNone: () => snapshot,
+            onSome: (node) =>
+              withMessageLog(
+                snapshot,
+                MessageLog.addAnalyzerIssue(
+                  messageLog(snapshot),
+                  messageId,
+                  messageText,
+                  node.getSourceFile(),
+                  node.getStart(),
+                  Option.some(declarationId),
+                  properties,
+                ),
+              ),
+          }),
+      }),
+  })

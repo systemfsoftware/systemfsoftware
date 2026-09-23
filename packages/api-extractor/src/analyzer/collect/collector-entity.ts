@@ -68,7 +68,7 @@ export const singleExportNameOf = (view: ConsumableView): Option.Option<string> 
     Match.orElse(() => Option.none<string>()),
   )
 
-const sortKeyIgnoringUnderscore = (identifier: string): string =>
+export const sortKeyIgnoringUnderscore = (identifier: string): string =>
   Match.value(identifier.length === 0).pipe(
     Match.when(true, () => ''),
     Match.when(false, () =>

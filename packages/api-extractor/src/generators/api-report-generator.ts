@@ -1,4 +1,4 @@
-import { HashSet, Option, Result } from 'effect'
+import { Chunk, HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
@@ -7,8 +7,7 @@ import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationForm
 import * as SyntaxHelpers from '../analyzer/SyntaxHelpers.js'
 import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
-import type { CollectorEntity } from '../collector/CollectorEntity.js'
-import type { ExtractorMessage } from '../collector/message-log.js'
+import type { ExtractorMessage, MessageLog } from '../collector/message-log.js'
 import type { ApiReportVariant } from '../config/config-file.schema.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
@@ -37,12 +36,13 @@ import * as SpanTreeModule from './span-tree.js'
 import * as TextWriter from './text-writer.js'
 
 /**
- * The outcome of one api-report render: the finished document plus the indices of the log messages it
- * consumed, so the next variant renders against an updated handled set.
+ * The outcome of one api-report render: the finished document, the indices of the log messages it
+ * consumed, and the log as it stands after the render appended its own analysis issues.
  */
 export interface RenderedApiReport {
   readonly text: string
   readonly consumed: HashSet.HashSet<number>
+  readonly log: MessageLog
 }
 
 interface ReportState {
@@ -106,7 +106,7 @@ const writeTripleSlashDirectives = (
   return TextWriter.ensureSkippedLine(withLibDirectives)
 }
 
-const clauseLineOf = (exportedName: string, collectorEntity: CollectorEntity): string => {
+const clauseLineOf = (exportedName: string, collectorEntity: Snapshot.CollectorEntity): string => {
   const nameForEmit = entityNameOf(collectorEntity)
   return Match.value(nameForEmit === exportedName).pipe(
     Match.when(true, () => nameForEmit),
@@ -125,33 +125,31 @@ const clauseLineOf = (exportedName: string, collectorEntity: CollectorEntity): s
 const exportClauseOf = (
   emit: EntityEmit,
   exportedName: string,
-  exportedEntity: Snapshot.AstEntity,
+  exportedRef: Snapshot.AstEntityRef,
   namespaceName: string,
 ): Result.Result<string, RenderFailure> =>
-  Option.match(Snapshot.tryGetCollectorEntity(emit.planState.snapshot, exportedEntity), {
+  Option.match(Snapshot.tryGetCollectorEntity(emit.planState.snapshot, exportedRef), {
     onNone: () =>
       internalInvariantOf(
-        `Cannot find collector entity for ${namespaceName}.${
-          Snapshot.localName(emit.planState.snapshot, exportedEntity)
-        }`,
+        `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(emit.planState.snapshot, exportedRef)}`,
       ),
     onSome: (collectorEntity) => Result.succeed(clauseLineOf(exportedName, collectorEntity)),
   })
 
 const exportClauseLinesOf = (
   emit: EntityEmit,
-  exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
+  exportedLocalEntities: Chunk.Chunk<readonly [string, Snapshot.AstEntityRef]>,
   namespaceName: string,
 ): Result.Result<ReadonlyArray<string>, RenderFailure> => {
   const initial: Result.Result<ReadonlyArray<string>, RenderFailure> = Result.succeed([])
   return Arr.reduce(
-    Arr.fromIterable(exportedLocalEntities),
+    Chunk.toReadonlyArray(exportedLocalEntities),
     initial,
-    (accumulated, [exportedName, exportedEntity]) =>
+    (accumulated, [exportedName, exportedRef]) =>
       Result.flatMap(
         accumulated,
         (lines) =>
-          Result.map(exportClauseOf(emit, exportedName, exportedEntity, namespaceName), (clause) =>
+          Result.map(exportClauseOf(emit, exportedName, exportedRef, namespaceName), (clause) =>
             Arr.append(lines, clause)),
       ),
   )
@@ -159,7 +157,7 @@ const exportClauseLinesOf = (
 
 const emitNamespaceExportClauses = (
   emit: EntityEmit,
-  exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
+  exportedLocalEntities: Chunk.Chunk<readonly [string, Snapshot.AstEntityRef]>,
   namespaceName: string,
 ): Result.Result<EntityEmit, RenderFailure> =>
   Result.map(exportClauseLinesOf(emit, exportedLocalEntities, namespaceName), (clauseLines) => {
@@ -172,25 +170,34 @@ const emitNamespaceExportClauses = (
     return { writer: afterOuterClose, planState: emit.planState }
   })
 
+const starExportRefusalOf = (
+  emit: EntityEmit,
+  astEntity: Snapshot.AstNamespaceImport,
+  namespaceName: string,
+): Result.Result<never, RenderFailure> =>
+  Result.flatMap(
+    Snapshot.declaration(emit.planState.snapshot, astEntity),
+    (declarationNode): Result.Result<never, RenderFailure> =>
+      Result.fail(
+        new UnsupportedStarExportError({
+          namespaceName,
+          moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(declarationNode),
+        }),
+      ),
+  )
+
 const emitNamespaceEntity = (
   emit: EntityEmit,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
   astEntity: Snapshot.AstNamespaceImport,
 ): Result.Result<EntityEmit, RenderFailure> => {
   const astModuleExportInfo = Snapshot.fetchAstModuleExportInfo(emit.planState.snapshot, astEntity)
-  return Option.match(Option.filter(Option.fromNullishOr(entity.nameForEmit), (name) => name.length > 0), {
+  return Option.match(Option.filter(entity.nameForEmit, (name) => name.length > 0), {
     onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
     onSome: (namespaceName) =>
-      Match.value(astModuleExportInfo.starExportedExternalModules.size > 0).pipe(
+      Match.value(Chunk.size(astModuleExportInfo.starExportedExternalModules) > 0).pipe(
         Match.when(true, (): Result.Result<EntityEmit, RenderFailure> =>
-          Result.fail(
-            new UnsupportedStarExportError({
-              namespaceName,
-              moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(
-                Snapshot.declaration(emit.planState.snapshot, astEntity),
-              ),
-            }),
-          )),
+          starExportRefusalOf(emit, astEntity, namespaceName)),
         Match.when(false, () => {
           const afterSkippedLine: EntityEmit = { ...emit, writer: TextWriter.ensureSkippedLine(emit.writer) }
           const afterHeader: EntityEmit = {
@@ -271,17 +278,19 @@ const emitIncludedDeclaration = (
   emit: EntityEmit,
   astDeclaration: Snapshot.AstDeclaration,
   standalone: ReadonlyArray<ExtractorMessage>,
-): Result.Result<EntityEmit, RenderFailure> => {
-  const tree = SpanTreeModule.build(Snapshot.declaration(emit.planState.snapshot, astDeclaration))
-  const afterSynopsis = TextWriter.write(
-    TextWriter.ensureSkippedLine(emit.writer),
-    getAedocSynopsis(emit.planState.snapshot, astDeclaration, standalone),
-  )
-  return Result.map(plannedDeclarationOf(emit.planState, tree, astDeclaration), (plannedState) => ({
-    writer: TextWriter.ensureNewLine(RenderSpan.writeSpan(tree, plannedState.plan, afterSynopsis)),
-    planState: plannedState,
-  }))
-}
+): Result.Result<EntityEmit, RenderFailure> =>
+  Result.flatMap(Snapshot.declaration(emit.planState.snapshot, astDeclaration), (declarationNode) => {
+    const tree = SpanTreeModule.build(declarationNode)
+    const synopsis = getAedocSynopsis(emit.planState.snapshot, astDeclaration, standalone)
+    const afterSynopsis = TextWriter.write(TextWriter.ensureSkippedLine(emit.writer), synopsis.text)
+    return Result.map(
+      plannedDeclarationOf({ ...emit.planState, snapshot: synopsis.snapshot }, tree, astDeclaration),
+      (plannedState) => ({
+        writer: TextWriter.ensureNewLine(RenderSpan.writeSpan(tree, plannedState.plan, afterSynopsis)),
+        planState: plannedState,
+      }),
+    )
+  })
 
 const plannedDeclarationOf = (
   planState: PlanState,
@@ -300,26 +309,27 @@ const plannedDeclarationOf = (
 
 const emitEntityDeclarations = (
   emit: EntityEmit,
-  entity: CollectorEntity,
-): Result.Result<EntityEmit, RenderFailure> => {
-  const astEntity = Snapshot.astEntityOf(entity)
-  return Match.value(Snapshot.refOf(astEntity)).pipe(
+  entity: Snapshot.CollectorEntity,
+): Result.Result<EntityEmit, RenderFailure> =>
+  Match.value(entity.astEntity).pipe(
     Match.tag('AstSymbolRef', () =>
-      Option.match(Snapshot.astSymbolOf(astEntity), {
+      Option.match(Snapshot.astSymbolOf(emit.planState.snapshot, entity.astEntity), {
         onNone: () => internalInvariantOf('Missing AstSymbol for an AstSymbolRef'),
         onSome: (astSymbol) => emitSymbolDeclarations(emit, astSymbol),
       })),
     Match.tag('AstNamespaceImportRef', () =>
-      Option.match(Snapshot.astNamespaceImportOf(astEntity), {
-        onNone: () => internalInvariantOf('Missing AstNamespaceImport for an AstNamespaceImportRef'),
+      Option.match(Snapshot.astNamespaceImportOf(emit.planState.snapshot, entity.astEntity), {
+        onNone: () =>
+          internalInvariantOf('Missing AstNamespaceImport for an AstNamespaceImportRef'),
         onSome: (astNamespaceImport) => emitNamespaceEntity(emit, entity, astNamespaceImport),
       })),
-    Match.orElse((): Result.Result<EntityEmit, RenderFailure> => Result.succeed(emit)),
+    Match.orElse((): Result.Result<EntityEmit, RenderFailure> =>
+      Result.succeed(emit)
+    ),
   )
-}
 
-const maxEffectiveReleaseTagOf = (report: ReportState, entity: CollectorEntity): ReleaseTag =>
-  Option.match(Snapshot.tryFetchMetadataForAstEntity(report.snapshot, Snapshot.astEntityOf(entity)), {
+const maxEffectiveReleaseTagOf = (report: ReportState, entity: Snapshot.CollectorEntity): ReleaseTag =>
+  Option.match(Snapshot.tryFetchMetadataForAstEntity(report.snapshot, entity.astEntity), {
     onNone: () => ReleaseTag.None,
     onSome: (symbolMetadata) => symbolMetadata.maxEffectiveReleaseTag,
   })
@@ -332,7 +342,7 @@ const includeForgottenExportsOf = (report: ReportState): boolean =>
 
 const emitReleaseEligibleEntity = (
   report: ReportState,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
 ): Result.Result<ReportState, RenderFailure> =>
   Match.value(entity.consumable || includeForgottenExportsOf(report)).pipe(
     Match.when(false, (): Result.Result<ReportState, RenderFailure> => Result.succeed(report)),
@@ -340,7 +350,10 @@ const emitReleaseEligibleEntity = (
     Match.exhaustive,
   )
 
-const emitEntity = (report: ReportState, entity: CollectorEntity): Result.Result<ReportState, RenderFailure> =>
+const emitEntity = (
+  report: ReportState,
+  entity: Snapshot.CollectorEntity,
+): Result.Result<ReportState, RenderFailure> =>
   Match.value(shouldIncludeReleaseTagOf(maxEffectiveReleaseTagOf(report, entity), report.reportVariant)).pipe(
     Match.when(false, (): Result.Result<ReportState, RenderFailure> => Result.succeed(report)),
     Match.when(true, () => emitReleaseEligibleEntity(report, entity)),
@@ -362,15 +375,15 @@ const shouldIncludeReleaseTagOf = (releaseTag: ReleaseTag, reportVariant: ApiRep
 const releaseTagAdmittedOf = (releaseTag: ReleaseTag, admitted: ReadonlyArray<ReleaseTag>): boolean =>
   Arr.some(admitted, (candidate) => candidate === releaseTag)
 
-const entriesOf = (entity: CollectorEntity): ReadonlyArray<ExportToEmit> =>
+const entriesOf = (entity: Snapshot.CollectorEntity): ReadonlyArray<ExportToEmit> =>
   Arr.map(
-    Arr.filter(Arr.fromIterable(entity.exportNames), () => !entity.shouldInlineExport),
+    Arr.filter(Chunk.toReadonlyArray(entity.exportedNames), () => !entity.shouldInlineExport),
     (exportName): ExportToEmit => ({ exportName, associatedMessages: [] }),
   )
 
 const emitConsumableEntity = (
   report: ReportState,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
 ): Result.Result<ReportState, RenderFailure> => {
   const initial: Result.Result<EntityEmit, RenderFailure> = Result.succeed({
     writer: report.writer,
@@ -400,7 +413,7 @@ const writeWarningComments = (
 const writeExportClause = (
   writer: TextWriter.TextWriter,
   exportToEmit: ExportToEmit,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
 ): TextWriter.TextWriter => {
   const withWarnings = Match.value(exportToEmit.associatedMessages.length > 0).pipe(
     Match.when(true, () => writeWarningComments(TextWriter.ensureSkippedLine(writer), exportToEmit.associatedMessages)),
@@ -410,7 +423,7 @@ const writeExportClause = (
   return TextWriter.writeLine(withWarnings, formatNamedExport(exportToEmit.exportName, entityNameOf(entity)))
 }
 
-const writeEntityExports = (emit: EntityEmit, entity: CollectorEntity): ReportState => {
+const writeEntityExports = (emit: EntityEmit, entity: Snapshot.CollectorEntity): ReportState => {
   const afterClauses = Arr.reduce(
     emit.planState.exportsToEmit,
     emit.writer,
@@ -442,7 +455,7 @@ const writeUnassociatedWarnings = (
       return Arr.reduce(messages, afterBlank, (current, message) =>
         writeLineAsComments(
           current,
-          message.formatMessageWithLocation(Snapshot.workingPackage(snapshot).packageFolder),
+          message.formatMessageWithLocation(Snapshot.packageFolder(snapshot)),
         ))
     }),
     Match.exhaustive,
@@ -456,9 +469,7 @@ const finishReport = (report: ReportState): RenderedApiReport => {
     consumed: selected.consumed,
     writer: writeUnassociatedWarnings(withStarExports.writer, selected.messages, withStarExports.snapshot),
   }
-  const withPackageComment = Match.value(
-    Snapshot.workingPackage(withUnassociated.snapshot).tsdocComment === undefined,
-  ).pipe(
+  const withPackageComment = Match.value(Option.isNone(Snapshot.packageDocComment(withUnassociated.snapshot))).pipe(
     Match.when(true, () => ({
       ...withUnassociated,
       writer: writeLineAsComments(
@@ -473,6 +484,7 @@ const finishReport = (report: ReportState): RenderedApiReport => {
   return {
     text: TextWriter.getText(closed).replace(_trimSpacesRegExp, ''),
     consumed: HashSet.union(withPackageComment.handled, HashSet.fromIterable(withPackageComment.consumed)),
+    log: Snapshot.messageLog(withPackageComment.snapshot),
   }
 }
 
@@ -489,7 +501,7 @@ export const generateReviewFileContent = (
 ): Result.Result<RenderedApiReport, RenderFailure> => {
   const header = writeReportHeader(
     TextWriter.make({ trimLeadingSpaces: true }),
-    Snapshot.workingPackage(snapshot).name,
+    Snapshot.packageName(snapshot),
     reportVariant,
   )
   return Result.flatMap(writeImports(writeTripleSlashDirectives(header, snapshot), snapshot), (writer) => {

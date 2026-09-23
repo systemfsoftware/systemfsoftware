@@ -9,8 +9,22 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
+import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
+import { minimatch } from 'minimatch'
 
+import { collectAnalysis } from './analyzer/collect/collect-analysis.js'
+import { enhanceDocComments } from './analyzer/collect/doc-comment-enhancement.js'
+import { validateAnalysis } from './analyzer/collect/validation.js'
+import { analyzeGraph } from './analyzer/graph/analyze-graph.js'
+import {
+  decodeNodePackageJson,
+  type INodePackageJson,
+  PackageIndex,
+  type WorkingPackageJson,
+} from './analyzer/graph/package-index.js'
+import { resolveTsdocMetadataPath } from './analyzer/graph/package-metadata.js'
+import { makeWorkingPackage, type WorkingPackage } from './analyzer/graph/working-package.js'
 import { dirname, resolve } from './analyzer/path-helpers.js'
 import { convertToLf } from './analyzer/text.js'
 import {
@@ -27,6 +41,7 @@ import {
   type ReportOutcome,
 } from './choose-extraction.workflow.js'
 import * as Snapshot from './collector/analysis-snapshot.js'
+import { ExtractorMessageId } from './collector/extractor-message-id.js'
 import { MessageLog } from './collector/message-log.js'
 import {
   admits,
@@ -36,6 +51,7 @@ import {
   type ReportMessageSource,
 } from './collector/message-router.js'
 import { type LogLevel, MessageRuleError } from './collector/message-router.schema.js'
+import { PackageName } from './collector/package-name.js'
 import { type SourceMapIndex, sourcePathsOf } from './collector/SourceMapper.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
 import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
@@ -43,19 +59,13 @@ import type { CompilerState, CompilerStateOptions } from './compiler/typescript-
 import { loadCompilerState } from './compiler/typescript-program.js'
 import type { ApiReportVariant, NewlineKind } from './config/config-file.schema.js'
 import type { ExtractorConfig, ExtractorReportConfig } from './config/extractor-config.js'
-import { DocCommentEnhancer } from './enhancers/DocCommentEnhancer.js'
-import { ValidationEnhancer } from './enhancers/ValidationEnhancer.js'
-import {
-  ConfigSchemaValidationError,
-  type ExtractorError,
-  InternalInvariantError,
-  isExtractorError,
-} from './errors/index.js'
+import { ConfigSchemaValidationError, type ExtractorError, InternalInvariantError } from './errors/index.js'
 import type { ExtractionRequest } from './extraction-request.js'
 import { DtsRollupKind } from './generators/dts-rollup-generator.js'
 import type { RenderedApiReport, RenderFailure } from './generators/index.js'
 import { convertNewlines, renderApiReport, renderDtsRollup } from './generators/index.js'
 import { MessageWriter } from './message-writer.service.js'
+import { AedocDefinitions } from './model/index.js'
 import { type EmitLineStep, type EnsureDirectoryStep, type WriteFileStep } from './write-plan.schema.js'
 
 export interface RenderedRollup {
@@ -63,25 +73,6 @@ export interface RenderedRollup {
   readonly filePath: string
   readonly directoryPath: string
   readonly content: string
-}
-
-/**
- * The render artifacts decode produces and write consumes. The Sandwich hands
- * encode only the decision, so the rendered rollups travel on the snapshot.
- */
-export interface RollupRenders {
-  readonly record: (render: RenderedRollup) => void
-  readonly all: () => readonly RenderedRollup[]
-}
-
-export const makeRollupRenders = (): RollupRenders => {
-  const renders: RenderedRollup[] = []
-  return {
-    record: (render) => {
-      renders.push(render)
-    },
-    all: () => renders,
-  }
 }
 
 interface ReportPaths {
@@ -113,13 +104,16 @@ export interface ExtractionSnapshot {
   readonly compilerVersion: string
   readonly reports: readonly ReportPlan[]
   readonly rollups: readonly RollupTarget[]
-  readonly renderedRollups: RollupRenders
+  readonly renderedRollups: readonly RenderedRollup[]
+  readonly reportRenders: readonly RenderedApiReport[]
   readonly sourceMapIndex: SourceMapIndex
 }
 
 interface AnalysisInputs {
   readonly config: ExtractorConfig
   readonly compilerState: CompilerState
+  readonly workingPackage: WorkingPackage
+  readonly packageIndex: PackageIndex
   readonly messageLog: MessageLog
   readonly reportMessages: ReportMessageSource
 }
@@ -131,38 +125,280 @@ interface WritePlan {
   readonly steps: readonly WriteStep[]
 }
 
-const analysisRefusalOf = <C>(cause: C): ExtractorError => {
-  if (isExtractorError(cause)) {
-    return cause
-  }
-  throw new InternalInvariantError({ message: 'Analysis failed', cause })
+const dtsFileExtension = /\.d(\.[^./\\]+)?\.(c|m)?ts$/i
+
+const WRONG_INPUT_FILE_TYPE_TEXT =
+  'Incorrect file type; API Extractor expects to analyze compiler outputs with the .d.ts file extension. ' +
+  'Troubleshooting tips: https://api-extractor.com/link/dts-error'
+
+const workingPackageOf = (config: ExtractorConfig, compilerState: CompilerState): Effect.Effect<WorkingPackage> => {
+  const entryPointSourceFile = compilerState.program.getSourceFile(config.mainEntryPointFilePath)
+  return Option.match(
+    Option.all([
+      Option.fromNullishOr(entryPointSourceFile),
+      Option.fromNullishOr(config.packageFolder),
+      Option.fromNullishOr(config.packageJson),
+    ]),
+    {
+      onSome: ([sourceFile, packageFolder, packageJson]) =>
+        Effect.succeed(
+          makeWorkingPackage({ entryPointSourceFile: sourceFile, packageFolder, packageJson }),
+        ),
+      onNone: () =>
+        Effect.die(
+          new InternalInvariantError({
+            message: entryPointSourceFile === undefined
+              ? 'Unable to load file: ' + config.mainEntryPointFilePath
+              : 'Unable to find a package.json file for the project being analyzed',
+          }),
+        ),
+    },
+  )
 }
 
-const decodeRefusalOf = <C>(cause: C): Result.Result<never, ExtractorError> => {
-  if (isExtractorError(cause)) {
-    return Result.fail(cause)
-  }
-  throw new InternalInvariantError({ message: 'Report rendering failed', cause })
-}
-
-const analysisOf = (inputs: AnalysisInputs): Snapshot.AnalysisSnapshot => {
-  const snapshot = Snapshot.make({
-    program: inputs.compilerState.program,
-    extractorConfig: inputs.config,
-    messageLog: inputs.messageLog,
-    reportMessages: inputs.reportMessages,
+const keysOf = (table: INodePackageJson['dependencies']): ReadonlyArray<string> =>
+  Option.match(Option.fromNullishOr(table), {
+    onNone: () => [],
+    onSome: (present) => Object.keys(present),
   })
-  Snapshot.analyze(snapshot)
-  DocCommentEnhancer.analyze(snapshot)
-  ValidationEnhancer.analyze(snapshot)
-  return snapshot
+
+const DEPENDENCY_KEYS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const
+
+const dependencyNamesOf = (packageJson: INodePackageJson | undefined): ReadonlyArray<string> =>
+  Option.match(Option.fromNullishOr(packageJson), {
+    onNone: () => [],
+    onSome: (record) => Arr.flatMap(DEPENDENCY_KEYS, (key) => keysOf(record[key])),
+  })
+
+/** Resolves `bundledPackages` names and glob patterns against the working package's dependencies. */
+const bundledPackageNamesOf = (config: ExtractorConfig): Iterable<string> =>
+  Match.value(config.bundledPackages.length === 0).pipe(
+    Match.when(true, (): ReadonlyArray<string> => []),
+    Match.when(
+      false,
+      (): ReadonlyArray<string> =>
+        Arr.flatMap(
+          config.bundledPackages,
+          (packageNameOrPattern) =>
+            Match.value(PackageName.isValidName(packageNameOrPattern)).pipe(
+              Match.when(true, (): ReadonlyArray<string> => [packageNameOrPattern]),
+              Match.when(false, (): ReadonlyArray<string> =>
+                Arr.filter(
+                  dependencyNamesOf(config.packageJson),
+                  (dependencyName) => minimatch(dependencyName, packageNameOrPattern),
+                )),
+              Match.exhaustive,
+            ),
+        ),
+    ),
+    Match.exhaustive,
+  )
+
+const preWalkerLogOf = (log: MessageLog, compilerState: CompilerState): MessageLog => {
+  const program = compilerState.program
+  const withCompilerDiagnostics = Arr.reduce(
+    program.getSemanticDiagnostics(),
+    log,
+    (accumulated, diagnostic) => MessageLog.addCompilerDiagnostic(accumulated, diagnostic),
+  )
+  const withBlocks = Match.value(withCompilerDiagnostics.diagnostics).pipe(
+    Match.when(true, () => {
+      const withRootNames = Arr.reduce(
+        Arr.fromIterable(program.getRootFileNames()),
+        MessageLog.addDiagnosticHeader(withCompilerDiagnostics, 'Root filenames'),
+        (accumulated, fileName) => MessageLog.addDiagnostic(accumulated, fileName),
+      )
+      const withRootFooter = MessageLog.addDiagnosticFooter(withRootNames)
+      const withHeader = MessageLog.addDiagnosticHeader(withRootFooter, 'Files analyzed by compiler')
+      const withAnalyzedFiles = Arr.reduce(
+        Arr.fromIterable(program.getSourceFiles()),
+        withHeader,
+        (accumulated, sourceFile) => MessageLog.addDiagnostic(accumulated, sourceFile.fileName),
+      )
+      return MessageLog.addDiagnosticFooter(withAnalyzedFiles)
+    }),
+    Match.when(false, () => withCompilerDiagnostics),
+    Match.exhaustive,
+  )
+  return Match.value(
+    Arr.findFirst(program.getSourceFiles(), (sourceFile) => !dtsFileExtension.test(sourceFile.fileName)),
+  ).pipe(
+    Match.when(Option.isSome, (found) =>
+      MessageLog.addAnalyzerIssueForPosition(
+        withBlocks,
+        ExtractorMessageId.WrongInputFileType,
+        WRONG_INPUT_FILE_TYPE_TEXT,
+        found.value,
+        0,
+      )),
+    Match.when(Option.isNone, () => withBlocks),
+    Match.exhaustive,
+  )
 }
 
-const collectorOf = (inputs: AnalysisInputs): Effect.Effect<Snapshot.AnalysisSnapshot, ExtractorError> =>
-  Effect.try({
-    try: () => analysisOf(inputs),
-    catch: (cause) => analysisRefusalOf(cause),
+interface PackageWalkState {
+  readonly packageJsonPaths: HashMap.HashMap<string, Option.Option<string>>
+  readonly decoded: HashMap.HashMap<string, Option.Option<INodePackageJson>>
+  readonly probed: HashSet.HashSet<string>
+  readonly index: PackageIndex
+}
+
+const initialPackageWalkState: PackageWalkState = {
+  packageJsonPaths: HashMap.empty(),
+  decoded: HashMap.empty(),
+  probed: HashSet.empty(),
+  index: PackageIndex.empty(),
+}
+
+const nearestPackageJsonPathOf = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  state: PackageWalkState,
+  folder: string,
+): Effect.Effect<readonly [Option.Option<string>, PackageWalkState], PlatformError> =>
+  Option.match(HashMap.get(state.packageJsonPaths, folder), {
+    onSome: (found) => Effect.succeed([found, state] as const),
+    onNone: () =>
+      Effect.flatMap(fs.exists(path.join(folder, 'package.json')), (exists) =>
+        Match.value(exists).pipe(
+          Match.when(true, () => {
+            const packageJsonPath = path.join(folder, 'package.json')
+            return Effect.succeed(
+              [
+                Option.some(packageJsonPath),
+                {
+                  ...state,
+                  packageJsonPaths: HashMap.set(state.packageJsonPaths, folder, Option.some(packageJsonPath)),
+                },
+              ] as const,
+            )
+          }),
+          Match.when(false, () => {
+            const parent = dirname(folder)
+            return Match.value(parent === folder || parent.length === 0).pipe(
+              Match.when(true, () => Effect.succeed([Option.none<string>(), state] as const)),
+              Match.when(false, () =>
+                Effect.map(nearestPackageJsonPathOf(fs, path, state, parent), ([found, walked]) =>
+                  [
+                    found,
+                    { ...walked, packageJsonPaths: HashMap.set(walked.packageJsonPaths, folder, found) },
+                  ] as const)),
+              Match.exhaustive,
+            )
+          }),
+          Match.exhaustive,
+        )),
   })
+
+const workingPackageJsonFor = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  state: PackageWalkState,
+  folder: string,
+): Effect.Effect<readonly [Option.Option<WorkingPackageJson>, PackageWalkState], PlatformError> =>
+  Effect.flatMap(
+    nearestPackageJsonPathOf(fs, path, state, folder),
+    ([packageJsonPath, walked]) =>
+      Option.match(packageJsonPath, {
+        onNone: () => Effect.succeed([Option.none(), walked] as const),
+        onSome: (foundPath) =>
+          Option.match(HashMap.get(walked.decoded, foundPath), {
+            onSome: (decoded) =>
+              Effect.succeed(
+                [
+                  Option.map(decoded, (packageJson) => ({ packageJsonPath: foundPath, packageJson })),
+                  walked,
+                ] as const,
+              ),
+            onNone: () =>
+              Effect.map(
+                Effect.orElseSucceed(fs.readFileString(foundPath), () => ''),
+                (content) => {
+                  const decoded: Option.Option<INodePackageJson> = Result.match(decodeNodePackageJson(content), {
+                    onSuccess: Option.some,
+                    onFailure: () => Option.none(),
+                  })
+                  return [
+                    Option.map(decoded, (packageJson) => ({ packageJsonPath: foundPath, packageJson })),
+                    { ...walked, decoded: HashMap.set(walked.decoded, foundPath, decoded) },
+                  ] as const
+                },
+              ),
+          }),
+      }),
+  )
+
+const withTsdocProbeOf = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  state: PackageWalkState,
+  workingPackage: Option.Option<WorkingPackageJson>,
+): Effect.Effect<PackageWalkState, PlatformError> =>
+  Option.match(workingPackage, {
+    onNone: () => Effect.succeed(state),
+    onSome: (found) =>
+      Match.value(HashSet.has(state.probed, found.packageJsonPath)).pipe(
+        Match.when(true, (): Effect.Effect<PackageWalkState, PlatformError> => Effect.succeed(state)),
+        Match.when(false, (): Effect.Effect<PackageWalkState, PlatformError> => {
+          const tsdocMetadataPath = resolveTsdocMetadataPath(path.dirname(found.packageJsonPath), found.packageJson)
+          return Effect.map(fs.exists(tsdocMetadataPath), (exists) => ({
+            ...state,
+            probed: HashSet.add(state.probed, found.packageJsonPath),
+            index: exists ? PackageIndex.withTsdocMetadataPath(state.index, tsdocMetadataPath) : state.index,
+          }))
+        }),
+        Match.exhaustive,
+      ),
+  })
+
+const readPackageIndex = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  compilerState: CompilerState,
+): Effect.Effect<PackageIndex, PlatformError> => {
+  const initial: Effect.Effect<PackageWalkState, PlatformError> = Effect.succeed(initialPackageWalkState)
+  return Effect.map(
+    Arr.reduce(
+      compilerState.program.getSourceFiles(),
+      initial,
+      (effect, sourceFile) =>
+        Effect.flatMap(effect, (state) =>
+          Effect.flatMap(
+            workingPackageJsonFor(fs, path, state, path.dirname(sourceFile.fileName)),
+            ([workingPackage, walked]) =>
+              Effect.map(
+                withTsdocProbeOf(fs, path, walked, workingPackage),
+                (probed) => ({
+                  ...probed,
+                  index: PackageIndex.withSourceFile(probed.index, sourceFile.fileName, workingPackage),
+                }),
+              ),
+          )),
+    ),
+    (final) => final.index,
+  )
+}
+
+const analysisOf = (inputs: AnalysisInputs): Effect.Effect<Snapshot.AnalysisSnapshot, ExtractorError> =>
+  Effect.flatMap(
+    analyzeGraph({
+      program: inputs.compilerState.program,
+      extractorConfig: inputs.config,
+      tsdocConfiguration: AedocDefinitions.createTsdocConfiguration(),
+      bundledPackageNames: bundledPackageNamesOf(inputs.config),
+      packageIndex: inputs.packageIndex,
+      workingPackage: Option.some(inputs.workingPackage),
+      messageLog: inputs.messageLog,
+    }),
+    (graphAnalysis) =>
+      Effect.flatMap(collectAnalysis(graphAnalysis), (collected) =>
+        Effect.map(Ref.get(graphAnalysis.ref), (graph) =>
+          Snapshot.make(
+            graph,
+            validateAnalysis(enhanceDocComments(collected, graph), graph),
+            inputs.reportMessages,
+          ))),
+  )
 
 const optionalCompilerFolder = (
   folder: string | undefined,
@@ -381,79 +617,126 @@ const readAnalysis = (
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const config = request.config
-    const messageLog = MessageLog.make({ diagnostics: request.verbosity === 'diagnostics' })
     const view = yield* messageViewOf(config)
     const compiler = yield* TypeScriptCompiler
     const compilerState = yield* loadCompilerState(compiler, compilerOptionsOf(request))
-    const analysis = yield* collectorOf({
+    const workingPackage = yield* workingPackageOf(config, compilerState)
+    const messageLog = preWalkerLogOf(
+      MessageLog.make({ diagnostics: request.verbosity === 'diagnostics' }),
+      compilerState,
+    )
+    const packageIndex = yield* readPackageIndex(fs, path, compilerState)
+    const analysis = yield* analysisOf({
       config,
       compilerState,
+      workingPackage,
+      packageIndex,
       messageLog,
       reportMessages: view,
     })
     const sourceMapIndex = yield* readSourceMapIndex(Snapshot.messageLog(analysis))
-    Snapshot.locateMessages(analysis, sourceMapIndex)
+    const located = Snapshot.locateMessages(analysis, sourceMapIndex)
+    const rollups = rollupTargetsOf(config, path)
+    const rollupState = yield* renderRollupsOf(rollups, located)
+    const reports = yield* Effect.forEach(reportPlansOf(config, path), (paths) => reportPlanOf(fs, paths))
+    const reportState = yield* renderReportsOf(reports, rollupState.analysis, sourceMapIndex)
     return {
       request,
-      analysis,
+      analysis: Snapshot.markHandled(reportState.analysis, reportState.handled),
       view,
       compilerVersion: compilerState.compiler.version,
-      reports: yield* Effect.forEach(reportPlansOf(config, path), (paths) => reportPlanOf(fs, paths)),
-      rollups: rollupTargetsOf(config, path),
-      renderedRollups: makeRollupRenders(),
+      reports,
+      rollups,
+      renderedRollups: rollupState.renderedRollups,
+      reportRenders: reportState.renders,
       sourceMapIndex,
     }
   })
 
-const renderRollupsOf = (snapshot: ExtractionSnapshot): Result.Result<void, ExtractorError> => {
-  const initial: Result.Result<void, ExtractorError> = Result.succeed(undefined)
-  return Arr.reduce(snapshot.rollups, initial, (accumulator, target) =>
-    Result.flatMap(accumulator, () =>
-      Result.map(
-        Result.mapError(renderDtsRollup(snapshot.analysis, target.kind), reportRefusalOf),
-        (render) => {
-          snapshot.renderedRollups.record({
-            kind: target.kind,
-            filePath: target.filePath,
-            directoryPath: target.directoryPath,
-            content: render.text,
-          })
-        },
-      )))
+const renderFailureEffectOf = <A>(rendered: Result.Result<A, RenderFailure>): Effect.Effect<A, ExtractorError> =>
+  Result.match(rendered, {
+    onSuccess: Effect.succeed,
+    onFailure: (failure) =>
+      Match.value(failure).pipe(
+        Match.tag('UnsupportedStarExportError', (refusal) => Effect.fail(refusal)),
+        Match.orElse((defect) => Effect.die(defect)),
+      ),
+  })
+
+interface RollupRenderState {
+  readonly renderedRollups: readonly RenderedRollup[]
+  readonly analysis: Snapshot.AnalysisSnapshot
 }
 
-interface ReportFold {
-  readonly handled: HashSet.HashSet<number>
-  readonly renders: ReadonlyArray<RenderedApiReport>
-}
-
-const initialFold: ReportFold = { handled: HashSet.empty(), renders: [] }
-
-const reportRefusalOf = (failure: RenderFailure): ExtractorError =>
-  Match.value(failure).pipe(
-    Match.tag('UnsupportedStarExportError', (refusal) => refusal),
-    Match.orElse((defect) => {
-      throw defect
-    }),
+const renderRollupsOf = (
+  targets: readonly RollupTarget[],
+  analysis: Snapshot.AnalysisSnapshot,
+): Effect.Effect<RollupRenderState, ExtractorError> => {
+  const initial: Effect.Effect<RollupRenderState, ExtractorError> = Effect.succeed({ renderedRollups: [], analysis })
+  return Effect.map(
+    Arr.reduce(
+      targets,
+      initial,
+      (effect, target) =>
+        Effect.flatMap(effect, (state) =>
+          Effect.map(
+            renderFailureEffectOf(renderDtsRollup(state.analysis, target.kind)),
+            (render) => ({
+              renderedRollups: Arr.append(state.renderedRollups, {
+                kind: target.kind,
+                filePath: target.filePath,
+                directoryPath: target.directoryPath,
+                content: render.text,
+              }),
+              analysis: Snapshot.withMessageLog(state.analysis, render.log),
+            }),
+          )),
+    ),
+    (final) => final,
   )
-
-const renderApiReportsOf = (snapshot: ExtractionSnapshot): Result.Result<ReportFold, ExtractorError> => {
-  const initial: Result.Result<ReportFold, ExtractorError> = Result.succeed(initialFold)
-  return Arr.reduce(snapshot.reports, initial, (accumulator, plan) =>
-    Result.flatMap(accumulator, (fold) =>
-      Result.map(
-        Result.mapError(renderApiReport(snapshot.analysis, plan.variant, fold.handled), reportRefusalOf),
-        (render) => {
-          Snapshot.locateMessages(snapshot.analysis, snapshot.sourceMapIndex)
-          return { handled: render.consumed, renders: Arr.append(fold.renders, render) }
-        },
-      )))
 }
 
-const decideExtractionOf = (snapshot: ExtractionSnapshot, fold: ReportFold): DecideExtraction => {
-  Snapshot.markHandled(snapshot.analysis, fold.handled)
+interface ReportRenderState {
+  readonly handled: HashSet.HashSet<number>
+  readonly renders: readonly RenderedApiReport[]
+  readonly analysis: Snapshot.AnalysisSnapshot
+}
+
+const renderReportsOf = (
+  plans: readonly ReportPlan[],
+  analysis: Snapshot.AnalysisSnapshot,
+  sourceMapIndex: SourceMapIndex,
+): Effect.Effect<ReportRenderState, ExtractorError> => {
+  const initial: Effect.Effect<ReportRenderState, ExtractorError> = Effect.succeed({
+    handled: HashSet.empty(),
+    renders: [],
+    analysis,
+  })
+  return Effect.map(
+    Arr.reduce(
+      plans,
+      initial,
+      (effect, plan) =>
+        Effect.flatMap(effect, (state) =>
+          Effect.map(
+            renderFailureEffectOf(renderApiReport(state.analysis, plan.variant, state.handled)),
+            (render) => ({
+              handled: render.consumed,
+              renders: Arr.append(state.renders, render),
+              analysis: Snapshot.locateMessages(
+                Snapshot.withMessageLog(state.analysis, render.log),
+                sourceMapIndex,
+              ),
+            }),
+          )),
+    ),
+    (final) => final,
+  )
+}
+
+const decideExtractionOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
   const log = Snapshot.messageLog(snapshot.analysis)
-  const reports = Arr.map(Arr.zip(snapshot.reports, fold.renders), ([plan, render]) =>
+  const reports = Arr.map(Arr.zip(snapshot.reports, snapshot.reportRenders), ([plan, render]) =>
     new ReportEvidence({
       variant: plan.variant,
       reportFileName: plan.reportFileName,
@@ -467,27 +750,16 @@ const decideExtractionOf = (snapshot: ExtractionSnapshot, fold: ReportFold): Dec
     localBuild: snapshot.request.options.localBuild === true,
     printApiReportDiff: snapshot.request.options.printApiReportDiff === true,
     residue: {
-      errors: snapshot.view.errorCount(log, fold.handled),
-      warnings: snapshot.view.warningCount(log, fold.handled),
+      errors: snapshot.view.errorCount(log, log.handled),
+      warnings: snapshot.view.warningCount(log, log.handled),
     },
     reports,
   })
 }
 
-const decodeOf = (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> =>
-  Result.flatMap(
-    renderRollupsOf(snapshot),
-    () => Result.map(renderApiReportsOf(snapshot), (fold) => decideExtractionOf(snapshot, fold)),
-  )
-
 const decodeSnapshot = Sandwich.pure(
-  (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> => {
-    try {
-      return decodeOf(snapshot)
-    } catch (cause) {
-      return decodeRefusalOf(cause)
-    }
-  },
+  (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, never> =>
+    Result.succeed(decideExtractionOf(snapshot)),
 )
 
 const emitLine = (level: LogLevel, text: string): WriteStep => ({ _tag: 'EmitLine', level, text })
@@ -552,7 +824,7 @@ const analysisConsoleSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[
 }
 
 const rollupSteps = (snapshot: ExtractionSnapshot, newlineKind: NewlineKind): readonly WriteStep[] =>
-  snapshot.renderedRollups.all().flatMap((render) => [
+  Arr.flatMap(snapshot.renderedRollups, (render) => [
     emitLine('verbose', `Writing declaration rollup: ${render.filePath}`),
     ensureDirectory(render.directoryPath),
     writeFile(render.filePath, convertNewlines(render.content, newlineKind)),

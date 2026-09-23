@@ -1,4 +1,4 @@
-import { HashMap, HashSet, Option, Result } from 'effect'
+import { Chunk, HashMap, HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
@@ -8,12 +8,13 @@ import * as SyntaxHelpers from '../analyzer/SyntaxHelpers.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
 import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
-import type { CollectorEntity } from '../collector/CollectorEntity.js'
+import type { MessageLog } from '../collector/message-log.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
 import {
   emitNamedExport,
   emitStarExports,
+  entityNameOf,
   internalInvariantOf,
   isExportKeywordInNamespaceExportDeclaration,
   planImportTypeSpan,
@@ -62,13 +63,13 @@ const isNamespaceImportKind = (astImport: Snapshot.AstImport): boolean =>
 
 const classifyNamespaceMember = (
   snapshot: Snapshot.AnalysisSnapshot,
-  astEntity: Snapshot.AstEntity,
+  ref: Snapshot.AstEntityRef,
 ): Result.Result<NamespaceMemberKind, RenderFailure> =>
-  Match.value(Snapshot.refOf(astEntity)).pipe(
+  Match.value(ref).pipe(
     Match.tag('AstNamespaceImportRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
       Result.succeed('namespace')),
     Match.tag('AstImportRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
-      Option.match(Snapshot.astImportOf(astEntity), {
+      Option.match(Snapshot.astImportOf(snapshot, ref), {
         onNone: () =>
           internalInvariantOf('Missing AstImport for an AstImportRef'),
         onSome: (astImport) =>
@@ -81,14 +82,12 @@ const classifyNamespaceMember = (
           ),
       })),
     Match.tag('AstSymbolRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
-      Option.match(Snapshot.astSymbolOf(astEntity), {
+      Option.match(Snapshot.astSymbolOf(snapshot, ref), {
         onNone: () =>
           internalInvariantOf('Missing AstSymbol for an AstSymbolRef'),
         onSome: (astSymbol) =>
           Result.succeed(symbolMemberKindOf(Snapshot.symbolFlags(snapshot, astSymbol))),
       })),
-    Match.tag('AstNamespaceExportRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
-      Result.succeed('value')),
     Match.exhaustive,
   )
 
@@ -142,13 +141,14 @@ const isKeywordNeedingModifiers = (kind: ts.SyntaxKind): boolean =>
 
 interface RollupPlanState {
   readonly snapshot: Snapshot.AnalysisSnapshot
-  readonly entity: CollectorEntity
+  readonly entity: Snapshot.CollectorEntity
   readonly dtsKind: DtsRollupKind
   readonly ids: HashMap.HashMap<NodeId, SpanTree>
   readonly plan: SpanPlan.SpanPlan
 }
 
 interface RollupEmitState {
+  readonly snapshot: Snapshot.AnalysisSnapshot
   readonly writer: TextWriter.TextWriter
   readonly reservedNames: HashSet.HashSet<string>
 }
@@ -174,7 +174,7 @@ const handleKeywordModifiers = (
   previousSibling: Option.Option<SpanTree>,
   astDeclaration: Snapshot.AstDeclaration,
 ): RollupPlanState => {
-  const declaredPrefix = Match.value(Option.isNone(Snapshot.parentAstDeclaration(state.snapshot, astDeclaration))).pipe(
+  const declaredPrefix = Match.value(Option.isNone(astDeclaration.parentDeclarationId)).pipe(
     Match.when(true, () => 'declare '),
     Match.when(false, () => ''),
     Match.exhaustive,
@@ -215,28 +215,25 @@ const variableDeclarationPlanOf = (
     Match.when(false, () => withListPrefix),
     Match.exhaustive,
   )
-  return Option.match(
-    Option.fromNullishOr(Snapshot.fetchDeclarationMetadata(state.snapshot, astDeclaration).tsdocParserContext),
-    {
-      onNone: () => withExport,
-      onSome: (parserContext) => {
-        const commentText = parserContext.sourceRange.toString()
-        const originalComment = Match.value(/\r?\n\s*$/.test(commentText)).pipe(
-          Match.when(true, () => commentText),
-          Match.when(false, () => `${commentText}\n`),
-          Match.exhaustive,
-        )
-        return {
-          ...withExport,
-          plan: SpanPlan.prependPrefix(
-            SpanPlan.withIndentDocComment(withExport.plan, tree, 'prefixOnly'),
-            tree,
-            originalComment,
-          ),
-        }
-      },
+  return Option.match(Snapshot.fetchDeclarationMetadata(state.snapshot, astDeclaration).tsdocParserContext, {
+    onNone: () => withExport,
+    onSome: (parserContext) => {
+      const commentText = parserContext.sourceRange.toString()
+      const originalComment = Match.value(/\r?\n\s*$/.test(commentText)).pipe(
+        Match.when(true, () => commentText),
+        Match.when(false, () => `${commentText}\n`),
+        Match.exhaustive,
+      )
+      return {
+        ...withExport,
+        plan: SpanPlan.prependPrefix(
+          SpanPlan.withIndentDocComment(withExport.plan, tree, 'prefixOnly'),
+          tree,
+          originalComment,
+        ),
+      }
     },
-  )
+  })
 }
 
 const handleVariableDeclaration = (
@@ -264,16 +261,23 @@ const handleVariableDeclaration = (
 
 const handleIdentifier = (state: RollupPlanState, tree: SpanTree): Result.Result<RollupPlanState, RenderFailure> =>
   Match.value(tree.node).pipe(
-    Match.when(ts.isIdentifier, (identifier) =>
-      Option.match(Snapshot.tryGetEntityForNode(state.snapshot, identifier), {
-        onNone: () => Result.succeed(state),
-        onSome: (referencedEntity) =>
-          Option.match(Option.filter(Option.fromNullishOr(referencedEntity.nameForEmit), (name) => name.length > 0), {
-            onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
-            onSome: (nameForEmit) =>
-              Result.succeed({ ...state, plan: SpanPlan.withPrefix(state.plan, tree, nameForEmit) }),
-          }),
-      })),
+    Match.when(
+      ts.isIdentifier,
+      (identifier) =>
+        Result.flatMap(
+          Snapshot.tryGetEntityForNode(state.snapshot, identifier),
+          (referenced) =>
+            Option.match(referenced, {
+              onNone: () => Result.succeed(state),
+              onSome: (referencedEntity) =>
+                Option.match(Option.filter(referencedEntity.nameForEmit, (name) => name.length > 0), {
+                  onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
+                  onSome: (nameForEmit) =>
+                    Result.succeed({ ...state, plan: SpanPlan.withPrefix(state.plan, tree, nameForEmit) }),
+                }),
+            }),
+        ),
+    ),
     Match.orElse(() => Result.succeed(state)),
   )
 
@@ -472,20 +476,22 @@ const plannedChildOf = (
   astDeclaration: Snapshot.AstDeclaration,
 ): Result.Result<RollupChildWalk, RenderFailure> =>
   Match.value(Snapshot.isSupportedDeclarationKind(child.kind)).pipe(
-    Match.when(true, (): Result.Result<RollupChildWalk, RenderFailure> => {
-      const childDeclaration = Snapshot.childDeclarationByNode(walk.state.snapshot, child.node, astDeclaration)
-      return Result.flatMap(trimChildSpan(walk.state, child, childDeclaration), (trimmed) =>
-        Match.value(trimmed.trimmed).pipe(
-          Match.when(true, (): Result.Result<RollupChildWalk, RenderFailure> =>
-            Result.succeed({ state: trimmed.state, previous: Option.some(child) })),
-          Match.when(false, (): Result.Result<RollupChildWalk, RenderFailure> =>
-            Result.map(
-              planSpanOf(trimmed.state, child, Option.some(tree), walk.previous, childDeclaration),
-              (state) => ({ state, previous: Option.some(child) }),
+    Match.when(true, (): Result.Result<RollupChildWalk, RenderFailure> =>
+      Result.flatMap(
+        Snapshot.childDeclarationByNode(walk.state.snapshot, child.node, astDeclaration),
+        (childDeclaration) =>
+          Result.flatMap(trimChildSpan(walk.state, child, childDeclaration), (trimmed) =>
+            Match.value(trimmed.trimmed).pipe(
+              Match.when(true, (): Result.Result<RollupChildWalk, RenderFailure> =>
+                Result.succeed({ state: trimmed.state, previous: Option.some(child) })),
+              Match.when(false, (): Result.Result<RollupChildWalk, RenderFailure> =>
+                Result.map(
+                  planSpanOf(trimmed.state, child, Option.some(tree), walk.previous, childDeclaration),
+                  (state) => ({ state, previous: Option.some(child) }),
+                )),
+              Match.exhaustive,
             )),
-          Match.exhaustive,
-        ))
-    }),
+      )),
     Match.when(false, (): Result.Result<RollupChildWalk, RenderFailure> =>
       Result.map(
         planSpanOf(walk.state, child, Option.some(tree), walk.previous, astDeclaration),
@@ -494,23 +500,25 @@ const plannedChildOf = (
     Match.exhaustive,
   )
 
-const maxEffectiveReleaseTagOf = (snapshot: Snapshot.AnalysisSnapshot, astEntity: Snapshot.AstEntity): ReleaseTag =>
-  Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, astEntity), {
+const maxEffectiveReleaseTagOf = (
+  snapshot: Snapshot.AnalysisSnapshot,
+  ref: Snapshot.AstEntityRef,
+): ReleaseTag =>
+  Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, ref), {
     onNone: () => ReleaseTag.None,
     onSome: (symbolMetadata) => symbolMetadata.maxEffectiveReleaseTag,
   })
 
 const excludedEntityOf = (
   state: RollupEmitState,
-  entity: CollectorEntity,
-  snapshot: Snapshot.AnalysisSnapshot,
+  entity: Snapshot.CollectorEntity,
 ): RollupEmitState =>
-  Match.value(Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
+  Match.value(Snapshot.extractorConfig(state.snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
     Match.when(true, () => ({
       ...state,
       writer: TextWriter.writeLine(
         TextWriter.ensureSkippedLine(state.writer),
-        `/* Excluded from this release type: ${entity.nameForEmit} */`,
+        `/* Excluded from this release type: ${entityNameOf(entity)} */`,
       ),
     })),
     Match.when(false, () => state),
@@ -519,15 +527,14 @@ const excludedEntityOf = (
 
 const excludedDeclarationOf = (
   state: RollupEmitState,
-  entity: CollectorEntity,
-  snapshot: Snapshot.AnalysisSnapshot,
+  entity: Snapshot.CollectorEntity,
 ): RollupEmitState =>
-  Match.value(Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
+  Match.value(Snapshot.extractorConfig(state.snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
     Match.when(true, () => ({
       ...state,
       writer: TextWriter.writeLine(
         TextWriter.ensureSkippedLine(state.writer),
-        `/* Excluded declaration from this release type: ${entity.nameForEmit} */`,
+        `/* Excluded declaration from this release type: ${entityNameOf(entity)} */`,
       ),
     })),
     Match.when(false, () => state),
@@ -536,34 +543,35 @@ const excludedDeclarationOf = (
 
 const emitDeclarationOf = (
   state: RollupEmitState,
-  snapshot: Snapshot.AnalysisSnapshot,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
   astDeclaration: Snapshot.AstDeclaration,
   dtsKind: DtsRollupKind,
 ): Result.Result<RollupEmitState, RenderFailure> =>
   Match.value(
-    shouldIncludeReleaseTag(Snapshot.fetchApiItemMetadata(snapshot, astDeclaration).effectiveReleaseTag, dtsKind),
+    shouldIncludeReleaseTag(Snapshot.fetchApiItemMetadata(state.snapshot, astDeclaration).effectiveReleaseTag, dtsKind),
   ).pipe(
     Match.when(false, (): Result.Result<RollupEmitState, RenderFailure> =>
-      Result.succeed(excludedDeclarationOf(state, entity, snapshot))),
-    Match.when(true, (): Result.Result<RollupEmitState, RenderFailure> => {
-      const tree = SpanTreeModule.build(Snapshot.declaration(snapshot, astDeclaration))
-      return Result.map(
-        planSpanOf(
-          { snapshot, entity, dtsKind, ids: SpanTreeModule.index(tree), plan: SpanPlan.empty },
-          tree,
-          Option.none(),
-          Option.none(),
-          astDeclaration,
-        ),
-        (planned) => ({
-          ...state,
-          writer: TextWriter.ensureNewLine(
-            RenderSpan.writeSpan(tree, planned.plan, TextWriter.ensureSkippedLine(state.writer)),
+      Result.succeed(excludedDeclarationOf(state, entity))),
+    Match.when(true, (): Result.Result<RollupEmitState, RenderFailure> =>
+      Result.flatMap(Snapshot.declaration(state.snapshot, astDeclaration), (declarationNode) => {
+        const tree = SpanTreeModule.build(declarationNode)
+        return Result.map(
+          planSpanOf(
+            { snapshot: state.snapshot, entity, dtsKind, ids: SpanTreeModule.index(tree), plan: SpanPlan.empty },
+            tree,
+            Option.none(),
+            Option.none(),
+            astDeclaration,
           ),
-        }),
-      )
-    }),
+          (planned) => ({
+            ...state,
+            snapshot: planned.snapshot,
+            writer: TextWriter.ensureNewLine(
+              RenderSpan.writeSpan(tree, planned.plan, TextWriter.ensureSkippedLine(state.writer)),
+            ),
+          }),
+        )
+      })),
     Match.exhaustive,
   )
 
@@ -571,16 +579,16 @@ const plannedNamespaceMemberOf = (
   snapshot: Snapshot.AnalysisSnapshot,
   namespaceName: string,
   exportedName: string,
-  exportedEntity: Snapshot.AstEntity,
+  exportedRef: Snapshot.AstEntityRef,
   dtsKind: DtsRollupKind,
 ): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
-  Option.match(Snapshot.tryGetCollectorEntity(snapshot, exportedEntity), {
+  Option.match(Snapshot.tryGetCollectorEntity(snapshot, exportedRef), {
     onNone: () =>
       internalInvariantOf(
-        `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(snapshot, exportedEntity)}`,
+        `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(snapshot, exportedRef)}`,
       ),
     onSome: (memberEntity) =>
-      Match.value(shouldIncludeReleaseTag(maxEffectiveReleaseTagOf(snapshot, exportedEntity), dtsKind)).pipe(
+      Match.value(shouldIncludeReleaseTag(maxEffectiveReleaseTagOf(snapshot, exportedRef), dtsKind)).pipe(
         Match.when(
           false,
           (): Result.Result<Option.Option<NamespaceMember>, RenderFailure> => Result.succeed(Option.none()),
@@ -588,18 +596,18 @@ const plannedNamespaceMemberOf = (
         Match.when(
           true,
           (): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
-            Result.flatMap(classifyNamespaceMember(snapshot, exportedEntity), (kind) =>
-              Option.match(
-                Option.filter(Option.fromNullishOr(memberEntity.nameForEmit), (name) => name.length > 0),
-                {
+            Result.flatMap(
+              classifyNamespaceMember(snapshot, exportedRef),
+              (kind) =>
+                Option.match(Option.filter(memberEntity.nameForEmit, (name) => name.length > 0), {
                   onNone: (): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
                     internalInvariantOf(
-                      `referencedEntry.nameForEmit is undefined for ${Snapshot.localName(snapshot, exportedEntity)}`,
+                      `referencedEntry.nameForEmit is undefined for ${Snapshot.localName(snapshot, exportedRef)}`,
                     ),
                   onSome: (targetName): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
                     Result.succeed(Option.some({ memberName: exportedName, targetName, kind })),
-                },
-              )),
+                }),
+            ),
         ),
         Match.exhaustive,
       ),
@@ -607,18 +615,18 @@ const plannedNamespaceMemberOf = (
 
 const plannedMembersOf = (
   snapshot: Snapshot.AnalysisSnapshot,
-  exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
+  exportedLocalEntities: Chunk.Chunk<readonly [string, Snapshot.AstEntityRef]>,
   namespaceName: string,
   dtsKind: DtsRollupKind,
 ): Result.Result<ReadonlyArray<NamespaceMember>, RenderFailure> => {
   const initial: Result.Result<ReadonlyArray<NamespaceMember>, RenderFailure> = Result.succeed([])
   return Arr.reduce(
-    Arr.fromIterable(exportedLocalEntities),
+    Chunk.toReadonlyArray(exportedLocalEntities),
     initial,
-    (accumulated, [exportedName, exportedEntity]) =>
+    (accumulated, [exportedName, exportedRef]) =>
       Result.flatMap(accumulated, (members) =>
         Result.map(
-          plannedNamespaceMemberOf(snapshot, namespaceName, exportedName, exportedEntity, dtsKind),
+          plannedNamespaceMemberOf(snapshot, namespaceName, exportedName, exportedRef, dtsKind),
           (member) =>
             Option.match(member, {
               onNone: () => members,
@@ -649,7 +657,7 @@ const aliasedStateOf = (
 
 const namespaceWriterOf = (
   state: RollupEmitState,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
   namespaceName: string,
   aliases: ReadonlyArray<NamespaceAlias>,
 ): RollupEmitState => {
@@ -692,81 +700,82 @@ const namespaceWriterOf = (
 
 const emitNamespaceBlock = (
   state: RollupEmitState,
-  snapshot: Snapshot.AnalysisSnapshot,
-  entity: CollectorEntity,
+  entity: Snapshot.CollectorEntity,
   astEntity: Snapshot.AstNamespaceImport,
   dtsKind: DtsRollupKind,
 ): Result.Result<RollupEmitState, RenderFailure> =>
-  Option.match(Option.filter(Option.fromNullishOr(entity.nameForEmit), (name) => name.length > 0), {
+  Option.match(Option.filter(entity.nameForEmit, (name) => name.length > 0), {
     onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
-    onSome: (namespaceName) =>
-      Match.value(Snapshot.fetchAstModuleExportInfo(snapshot, astEntity)).pipe(
+    onSome: (namespaceName) => {
+      const exportInfo = Snapshot.fetchAstModuleExportInfo(state.snapshot, astEntity)
+      return Match.value(Chunk.size(exportInfo.starExportedExternalModules) > 0).pipe(
         Match.when(
-          (astModuleExportInfo) => astModuleExportInfo.starExportedExternalModules.size > 0,
+          true,
           (): Result.Result<RollupEmitState, RenderFailure> =>
-            Result.fail(
-              new UnsupportedStarExportError({
-                namespaceName,
-                moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(
-                  Snapshot.declaration(snapshot, astEntity),
+            Result.flatMap(
+              Snapshot.declaration(state.snapshot, astEntity),
+              (declarationNode): Result.Result<RollupEmitState, RenderFailure> =>
+                Result.fail(
+                  new UnsupportedStarExportError({
+                    namespaceName,
+                    moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(declarationNode),
+                  }),
                 ),
-              }),
             ),
         ),
-        Match.orElse((astModuleExportInfo) =>
+        Match.orElse(() =>
           Result.flatMap(
-            plannedMembersOf(snapshot, astModuleExportInfo.exportedLocalEntities, namespaceName, dtsKind),
+            plannedMembersOf(state.snapshot, exportInfo.exportedLocalEntities, namespaceName, dtsKind),
             (members) => {
               const aliased = aliasedStateOf(state, namespaceName, members)
               return Result.succeed(namespaceWriterOf(aliased.state, entity, namespaceName, aliased.aliases))
             },
           )
         ),
-      ),
+      )
+    },
   })
 
 const emitIncludedEntityOf = (
   state: RollupEmitState,
-  entity: CollectorEntity,
-  snapshot: Snapshot.AnalysisSnapshot,
+  entity: Snapshot.CollectorEntity,
   dtsKind: DtsRollupKind,
 ): Result.Result<RollupEmitState, RenderFailure> =>
-  Match.value(Snapshot.refOf(Snapshot.astEntityOf(entity))).pipe(
+  Match.value(entity.astEntity).pipe(
     Match.tag('AstSymbolRef', (): Result.Result<RollupEmitState, RenderFailure> =>
-      Option.match(Snapshot.astSymbolOf(Snapshot.astEntityOf(entity)), {
+      Option.match(Snapshot.astSymbolOf(state.snapshot, entity.astEntity), {
         onNone: () =>
           internalInvariantOf('Missing AstSymbol for an AstSymbolRef'),
         onSome: (astSymbol) => {
           const initial: Result.Result<RollupEmitState, RenderFailure> = Result.succeed(state)
           return Arr.reduce(
-            Snapshot.astDeclarations(snapshot, astSymbol),
+            Snapshot.astDeclarations(state.snapshot, astSymbol),
             initial,
             (accumulated, astDeclaration) =>
-              Result.flatMap(accumulated, (current) =>
-                emitDeclarationOf(current, snapshot, entity, astDeclaration, dtsKind)),
+              Result.flatMap(accumulated, (current) => emitDeclarationOf(current, entity, astDeclaration, dtsKind)),
           )
         },
       })),
     Match.tag('AstNamespaceImportRef', (): Result.Result<RollupEmitState, RenderFailure> =>
-      Option.match(Snapshot.astNamespaceImportOf(Snapshot.astEntityOf(entity)), {
+      Option.match(Snapshot.astNamespaceImportOf(state.snapshot, entity.astEntity), {
         onNone: () =>
           internalInvariantOf('Missing AstNamespaceImport for an AstNamespaceImportRef'),
         onSome: (astNamespaceImport) =>
-          emitNamespaceBlock(state, snapshot, entity, astNamespaceImport, dtsKind),
+          emitNamespaceBlock(state, entity, astNamespaceImport, dtsKind),
       })),
     Match.orElse((): Result.Result<RollupEmitState, RenderFailure> =>
       Result.succeed(state)
     ),
   )
 
-const entitySuffixOf = (state: RollupEmitState, entity: CollectorEntity): RollupEmitState =>
+const entitySuffixOf = (state: RollupEmitState, entity: Snapshot.CollectorEntity): RollupEmitState =>
   Match.value(entity.shouldInlineExport).pipe(
     Match.when(true, () => ({ ...state, writer: TextWriter.ensureSkippedLine(state.writer) })),
     Match.when(false, () => ({
       ...state,
       writer: TextWriter.ensureSkippedLine(
         Arr.reduce(
-          entity.exportNames,
+          Chunk.toReadonlyArray(entity.exportedNames),
           state.writer,
           (writer, exportName) => emitNamedExport(writer, exportName, entity),
         ),
@@ -777,20 +786,19 @@ const entitySuffixOf = (state: RollupEmitState, entity: CollectorEntity): Rollup
 
 const emitRollupEntity = (
   state: RollupEmitState,
-  entity: CollectorEntity,
-  snapshot: Snapshot.AnalysisSnapshot,
+  entity: Snapshot.CollectorEntity,
   dtsKind: DtsRollupKind,
 ): Result.Result<RollupEmitState, RenderFailure> =>
-  Match.value(shouldIncludeReleaseTag(maxEffectiveReleaseTagOf(snapshot, Snapshot.astEntityOf(entity)), dtsKind)).pipe(
+  Match.value(shouldIncludeReleaseTag(maxEffectiveReleaseTagOf(state.snapshot, entity.astEntity), dtsKind)).pipe(
     Match.when(
       false,
-      (): Result.Result<RollupEmitState, RenderFailure> => Result.succeed(excludedEntityOf(state, entity, snapshot)),
+      (): Result.Result<RollupEmitState, RenderFailure> => Result.succeed(excludedEntityOf(state, entity)),
     ),
     Match.when(
       true,
       (): Result.Result<RollupEmitState, RenderFailure> =>
         Result.map(
-          emitIncludedEntityOf(state, entity, snapshot, dtsKind),
+          emitIncludedEntityOf(state, entity, dtsKind),
           (emitted) => entitySuffixOf(emitted, entity),
         ),
     ),
@@ -800,17 +808,17 @@ const emitRollupEntity = (
 const reservedNamesOf = (snapshot: Snapshot.AnalysisSnapshot): HashSet.HashSet<string> =>
   Arr.reduce(Snapshot.entities(snapshot), HashSet.empty<string>(), (reserved, entity) =>
     Arr.reduce(
-      entity.exportNames,
-      Match.value(Option.filter(Option.fromNullishOr(entity.nameForEmit), (name) => name.length > 0)).pipe(
-        Match.when(Option.isSome, (name) => HashSet.add(reserved, name.value)),
-        Match.when(Option.isNone, () => reserved),
-        Match.exhaustive,
-      ),
+      Chunk.toReadonlyArray(entity.exportedNames),
+      Option.match(Option.filter(entity.nameForEmit, (name) => name.length > 0), {
+        onSome: (name) => HashSet.add(reserved, name),
+        onNone: () => reserved,
+      }),
       (current, exportName) => HashSet.add(current, exportName),
     ))
 
 export interface RenderedDtsRollup {
   readonly text: string
+  readonly log: MessageLog
 }
 
 export const generateTypingsFileContent = (
@@ -819,7 +827,7 @@ export const generateTypingsFileContent = (
 ): Result.Result<RenderedDtsRollup, RenderFailure> => {
   const initialWriter = TextWriter.make({ trimLeadingSpaces: true })
   const afterPackageComment = Option.match(
-    Option.fromNullishOr(Snapshot.workingPackage(snapshot).tsdocParserContext),
+    Option.map(Snapshot.packageDocComment(snapshot), (comment) => comment.parserContext),
     {
       onNone: () => initialWriter,
       onSome: (parserContext) =>
@@ -842,19 +850,19 @@ export const generateTypingsFileContent = (
   )
   const initial: Result.Result<RollupEmitState, RenderFailure> = Result.flatMap(
     writeImports(withDirectives, snapshot),
-    (afterImports) => Result.succeed({ writer: afterImports, reservedNames: reservedNamesOf(snapshot) }),
+    (afterImports) => Result.succeed({ snapshot, writer: afterImports, reservedNames: reservedNamesOf(snapshot) }),
   )
   return Result.map(
     Arr.reduce(
       Snapshot.entities(snapshot),
       initial,
-      (accumulated, entity) =>
-        Result.flatMap(accumulated, (current) => emitRollupEntity(current, entity, snapshot, dtsKind)),
+      (accumulated, entity) => Result.flatMap(accumulated, (current) => emitRollupEntity(current, entity, dtsKind)),
     ),
     (state) => ({
       text: TextWriter.getText(
         TextWriter.writeLine(TextWriter.ensureSkippedLine(emitStarExports(state.writer, snapshot)), 'export { }'),
       ),
+      log: Snapshot.messageLog(state.snapshot),
     }),
   )
 }

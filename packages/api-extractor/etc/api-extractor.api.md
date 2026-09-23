@@ -171,7 +171,7 @@ const MessageWriter: Context.Service<MessageWriter, MessageWriter>;
 type ReportOutcome = ReportUnchanged | ReportUpdated | ReportCreated | ReportDriftRefused | ReportMissingRefused | ReportFolderMissing;
 
 // @public (undocumented)
-const run: (configFilePath: string, options?: ExtractorRunOptions) => Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler>;
+const run: (input: ExtractorRunInput) => Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler>;
 
 // @public (undocumented)
 interface TextWritable {

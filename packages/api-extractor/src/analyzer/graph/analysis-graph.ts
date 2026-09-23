@@ -11,7 +11,6 @@ import {
   makeExtractorMessage,
   type MessageLog,
 } from '../../collector/message-log.js'
-import type { WorkingPackage } from '../../collector/WorkingPackage.js'
 import type { ExtractorConfig } from '../../config/index.js'
 import type { IGlobalVariableAnalyzer, NodeId, SymbolId } from '../TypeScriptInternals.js'
 import type { AstDeclaration } from './ast-declaration.js'
@@ -22,6 +21,7 @@ import type { AstNamespaceImport } from './ast-namespace-import.js'
 import type { AstSymbol } from './ast-symbol.js'
 import { PackageIndex, type WorkingPackageJson } from './package-index.js'
 import { makePackageMetadata, type PackageMetadata, resolveTsdocMetadataPath } from './package-metadata.js'
+import type { WorkingPackage } from './working-package.js'
 
 export interface AnalysisGraph {
   readonly program: Ts.Program
@@ -61,7 +61,7 @@ export interface AnalysisGraphInput {
   readonly program: Ts.Program
   readonly extractorConfig: ExtractorConfig
   readonly tsdocConfiguration: tsdoc.TSDocConfiguration
-  readonly bundledPackageNames: ReadonlySet<string>
+  readonly bundledPackageNames: Iterable<string>
   readonly packageIndex: PackageIndex
   readonly workingPackage: Option.Option<WorkingPackage>
   readonly messageLog: MessageLog
