@@ -1,7 +1,7 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
-import { Effect, Layer, Schema } from 'effect'
+import { Effect, Layer, Result, Schema } from 'effect'
 import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
@@ -22,11 +22,11 @@ const observedGraph = (traceId: string) =>
   Effect.gen(function*() {
     const observation = yield* Observation.Observation
     const spans = yield* observation.collect(traceId)
-    return yield* Graph.decode(traceId, spans, FulfillmentTaxonomy)
+    return Result.getOrThrow(Graph.decode(traceId, spans, FulfillmentTaxonomy))
   })
 
 Feature('Holding a settlement to the trace it produced')
-  .withScenarioLayer(InMemory.layer())
+  .withScenarioLayer(InMemory.layer(InMemory.make()))
   .liveClock()
   .body(({ scenario }) => {
     scenario(
@@ -77,7 +77,8 @@ Feature('Holding a settlement to the trace it produced')
           Effect.gen(function*() {
             const firstGraph = yield* observedGraph(s.first.traceId)
             const secondGraph = yield* observedGraph(s.second.traceId)
-            const orderOf = (graph: Graph.TraceGraph) => graph.byId(Settle).map((node) => node.attrs['app.order.id'])
+            const orderOf = (graph: Graph.TraceGraph) =>
+              Graph.byId(graph, Settle).map((node) => node.attrs['app.order.id'])
             expect(orderOf(firstGraph)).toStrictEqual(['order-1'])
             expect(orderOf(secondGraph)).toStrictEqual(['order-2'])
             expect(firstGraph.traceId).not.toBe(secondGraph.traceId)
@@ -92,19 +93,19 @@ Feature('Holding a settlement to the trace it produced')
         Given('a settlement was served under its own observation window')('window', () =>
           Effect.scoped(
             Effect.gen(function*() {
-              const window = yield* Layer.build(InMemory.layer())
+              const window = yield* Layer.build(InMemory.layer(InMemory.make()))
               const run = yield* settlement({ orderId: 'order-3', total: 3 }).pipe(Effect.provide(window))
               const spans = yield* Effect.flatMap(
                 Observation.Observation,
                 (observation) => observation.collect(run.traceId),
               ).pipe(Effect.provide(window))
-              const graph = yield* Graph.decode(run.traceId, spans, FulfillmentTaxonomy)
+              const graph = Result.getOrThrow(Graph.decode(run.traceId, spans, FulfillmentTaxonomy))
               return { run, graph }
             }),
           )),
         When('the same trace is asked for at a separate window')('reread', (s) =>
           Effect.scoped(
-            Effect.flatMap(Layer.build(InMemory.layer()), (window) =>
+            Effect.flatMap(Layer.build(InMemory.layer(InMemory.make())), (window) =>
               Effect.flatMap(Observation.Observation, (observation) =>
                 observation.collect(s.window.run.traceId)).pipe(
                   Effect.provide(window),

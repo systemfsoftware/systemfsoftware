@@ -2,6 +2,6 @@
 "@systemfsoftware/trace-spec": minor
 ---
 
-Exports `Contract`, `Graph`, `Observation`, `Rel`, `Stimulus`, `Suite`, and the `InMemory` driver layer. `Contract.of(taxonomy).stimulate(stimulus).holds(relation)` composes a spec through dual stages around a callable stimulus and relation; `Contract.trace` observes a run, answering the graph and verdict; `Contract.check` adds the judgement and writes exactly one dump per failing run.
+`Contract.of(taxonomy).stimulate(stimulus).holds(relation)` now runs as a cell: `Contract.cell(contract)` composes read, decode, decide, encode, and write; `Contract.check(contract, input)` is the test edge that fails with `Contract.TraceDisparityError` and annotates the dump path. `Graph.decode` is pure, answering `Result<TraceGraph, ContractDecodeError>`, with standalone `byId`, `children`, and `descendants`.
 
-`Suite.make({ it, layer })` registers a `Case` per input or a `Case.prop` per fast-check arbitrary, shrinking failures to a minimal input; the scenario layer must provide `Observation.Observation` and a `FileSystem`, enforced at the type level. A break fails with `Contract.TraceDisparityError` and annotates the test with its dump path; a missing attribute with `Contract.ContractDecodeError`, an empty trace with `Observation.EmptyObservationError`, a failing behaviour with `Suite.StimulusFailure`.
+`InMemory.make(options?)` is a cold spec; `InMemory.layer(spec)` provides `Observation | OtelTracer.OtelTracer`, and separate `InMemory.scoped(spec)` acquisitions observe independent traces. `Case.prop` registers through `it.effect.prop` with native shrinking: failing draws overwrite one dump named after the case, and the reported counterexample is the last failing draw.

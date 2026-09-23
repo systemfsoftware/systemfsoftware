@@ -1,5 +1,5 @@
 import { Contract, Graph, Rel } from '@systemfsoftware/trace-spec'
-import { Effect } from 'effect'
+import type * as Result from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 import {
   Charge,
@@ -69,7 +69,7 @@ describe('Rel compound relations', () => {
 })
 
 describe('Graph.decode', () => {
-  it('decodes without services and fails only with the contract decode error', () => {
+  it('decodes purely and fails only with the contract decode error', () => {
     const decoded = Graph.decode(
       TRACE_ID,
       [
@@ -83,7 +83,7 @@ describe('Graph.decode', () => {
       ],
       FulfillmentTaxonomy,
     )
-    expect(decoded).type.toBe<Effect.Effect<Graph.TraceGraph, Contract.ContractDecodeError, never>>()
+    expect(decoded).type.toBe<Result.Result<Graph.TraceGraph, Contract.ContractDecodeError>>()
   })
 })
 

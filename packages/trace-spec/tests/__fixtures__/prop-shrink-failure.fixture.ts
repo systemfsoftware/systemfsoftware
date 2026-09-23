@@ -3,9 +3,7 @@ import { it, layer } from '@effect/vitest'
 import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Schema } from 'effect'
-import { probeInputs } from './probe-arbitrary.js'
-
-const THRESHOLD = 10
+import { probeInputs } from './probe-arbitrary.schema.js'
 
 const TraceSuite = Suite.make({ it, layer })
 
@@ -14,28 +12,31 @@ const Probe = Span.declare({
   name: 'probe.shrink',
   attrs: Schema.Struct({ 'probe.value': Schema.Finite }),
 })
+const DrawSpan = Span.declare({
+  id: 'probe.draw',
+  name: 'probe.draw',
+  attrs: Schema.Struct({ 'probe.draw': Schema.Finite }),
+})
 
-const ProbeTaxonomy = Taxonomy.make('probe-shrink').pipe(Taxonomy.add(Probe))
+const ProbeTaxonomy = Taxonomy.make('probe-shrink').pipe(Taxonomy.add(Probe), Taxonomy.add(DrawSpan))
 
-const duplicateAtOrAboveThreshold = Stimulus.make({
+const oneProbePerDraw = Stimulus.make({
   name: 'probe.shrink',
-  run: ({ input }: { readonly input: number }) =>
+  run: ({ input }: { readonly input: ReadonlyArray<number> }) =>
     Effect.gen(function*() {
-      yield* Span.start(Probe, { 'probe.value': input })(Effect.void)
-      return yield* (input >= THRESHOLD ? Span.start(Probe, { 'probe.value': input })(Effect.void) : Effect.void)
+      yield* Span.start(DrawSpan, { 'probe.draw': input.length })(Effect.void)
+      yield* Effect.forEach(input, (value) => Span.start(Probe, { 'probe.value': value })(Effect.void), {
+        discard: true,
+      })
     }),
 })
 
 const atMostOneProbe = Contract.of(ProbeTaxonomy)
-  .stimulate(duplicateAtOrAboveThreshold)
-  .holds(Rel.unique(Probe))
+  .stimulate(oneProbePerDraw)
+  .holds(Rel.any(Rel.absent(Probe), Rel.unique(Probe)))
 
-// Deliberately failing: inputs at or above the threshold emit a second probe span, so
-// uniqueness breaks and the generated case shrinks the counterexample to the threshold.
-// The real file system backs the failure dump, so exactly one dump lands on disk for
-// the one shrunk input that is re-checked.
 TraceSuite('prop shrink failure fixture')
-  .withScenarioLayer(Layer.merge(InMemory.layer(), NodeFileSystem.layer))
+  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), NodeFileSystem.layer))
   .body(({ Case }) => {
-    Case.prop('a generated input at or above the threshold duplicates the probe', atMostOneProbe, probeInputs)
+    Case.prop('a generated draw with several probes breaks uniqueness', atMostOneProbe, probeInputs)
   })

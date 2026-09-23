@@ -36,7 +36,7 @@ export const spanRecord = (recorded: RecordedSpan): Graph.SpanRecord => ({
   errorType: null,
   startMillis: 0,
   durationMillis: 4,
-  attributes: new Map(Object.entries(recorded.attributes)),
+  attributes: recorded.attributes,
   events: [],
   links: [],
 })

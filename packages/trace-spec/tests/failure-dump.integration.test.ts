@@ -51,7 +51,7 @@ const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 Feature('A failed trace contract')
-  .withScenarioLayer(Layer.merge(InMemory.layer(), memoryTraceFileSystem))
+  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), memoryTraceFileSystem))
   .body(({ scenario }) => {
     scenario(
       'A charge recorded outside its settlement parent is written down',

@@ -1,134 +1,81 @@
-import { Cause, type Context, Effect, Exit, type FileSystem, Option, Schema } from 'effect'
-import * as fc from 'fast-check'
+import { Effect, Layer, Option, Schema } from 'effect'
+import type * as Scope from 'effect/Scope'
+import type { TestContext } from 'vitest'
 import * as Contract from './Contract.js'
-import type { ContractDecodeError } from './ContractDecodeError.schema.js'
-import type { EmptyObservationError } from './EmptyObservationError.schema.js'
-import type { Observation } from './Observation.service.js'
-import { StimulusFailure } from './StimulusFailure.schema.js'
-import * as TaskAnnounce from './TaskAnnounce.js'
-import { TraceDisparityError } from './TraceDisparityError.schema.js'
-import { Hold } from './Verdict.schema.js'
-
-type PropFailure = ContractDecodeError | EmptyObservationError | TraceDisparityError | StimulusFailure
-
-/** Parity with differential-spec's supervisor default run budget. */
-const RUN_BUDGET = 100
-
-const isDisparity = Schema.is(TraceDisparityError)
+import { Break, Hold } from './Verdict.schema.js'
+import type { Verdict } from './Verdict.schema.js'
 
 const isHold = Schema.is(Hold)
+const isBreak = Schema.is(Break)
 
-const disparityOf = <E>(cause: Cause.Cause<E>): Option.Option<TraceDisparityError> =>
-  Option.filter(Cause.findErrorOption(cause), isDisparity)
+const annotate = (context: TestContext | undefined, message: string): Effect.Effect<void> =>
+  Option.match(Option.flatMap(Option.fromNullishOr(context), (task) => Option.fromNullishOr(task.annotate)), {
+    onNone: () => Effect.void,
+    onSome: (record) => Effect.promise(() => Promise.resolve(record(message, 'info'))),
+  })
 
-const drawHolds = <Input, Output, E, R>(
-  contract: Contract.Contract<Input, Output, E, R>,
-  context: Context.Context<R | Observation | FileSystem.FileSystem>,
-): (input: Input) => Promise<boolean> =>
-(input) =>
-  Effect.runPromiseExitWith(context)(Contract.trace(contract, input)).then((exit) =>
-    Exit.match(exit, {
-      onSuccess: (traced) => isHold(traced.verdict),
-      onFailure: () => false,
-    })
+const dumpMessageOf = (verdict: Verdict, dumpPath: string | null): Option.Option<string> =>
+  Option.map(
+    Option.flatMap(Option.liftPredicate(verdict, isBreak), () => Option.fromNullishOr(dumpPath)),
+    (path) => `trace contract failed; observed graph dumped to ${path}`,
   )
 
-const attempt = <Input, Output, E, R>(
-  contract: Contract.Contract<Input, Output, E, R>,
-  arbitrary: fc.Arbitrary<Input>,
-  context: Context.Context<R | Observation | FileSystem.FileSystem>,
-): Promise<fc.RunDetails<[Input]>> =>
-  fc.check(fc.asyncProperty(arbitrary, drawHolds(contract, context)), { numRuns: RUN_BUDGET })
-
-const counterexampleInput = <Input>(details: fc.RunDetails<[Input]>): Input | undefined =>
-  details.counterexample === null ? undefined : details.counterexample[0]
-
-const interruptedFailure = <Input>(stimulus: string, details: fc.RunDetails<[Input]>): StimulusFailure =>
-  new StimulusFailure({
-    stimulus,
-    detail: `the generated property was interrupted after ${details.numRuns} runs without a counterexample`,
+const announce = (
+  context: TestContext | undefined,
+  verdict: Verdict,
+  dumpPath: string | null,
+): Effect.Effect<void> =>
+  Option.match(dumpMessageOf(verdict, dumpPath), {
+    onNone: () => Effect.void,
+    onSome: (message) => annotate(context, message),
   })
 
-const notFound = <Input>(
-  stimulus: string,
-  details: fc.RunDetails<[Input]>,
-): Effect.Effect<void, StimulusFailure> =>
-  details.interrupted ? Effect.fail(interruptedFailure(stimulus, details)) : Effect.void
-
-const unreproduced = <Input>(
-  stimulus: string,
+/**
+ * The generated-case predicate for one case: a factory that runs the contract's cell with
+ * the dump named after the case — so every failing draw overwrites one file and the last
+ * failing draw is the shrunk counterexample the runner reports — and answers the verdict as
+ * the boolean: `true` while the relation held, `false` on a break, falsifying the property.
+ * Only infrastructure refusals — a failing behaviour, an undecodable span, an empty
+ * observation — stay on the error channel. The scenario layer is built fresh per draw, so
+ * each draw owns its observation window.
+ */
+export function predicate<Input, Output, E, Provided, Required>(
+  title: string,
+  contract: Contract.Contract<Input, Output, E, Provided>,
+  scenario: Layer.Layer<Contract.CellServices<Provided>, never, Required>,
+): (
   input: Input,
-): Effect.Effect<never, StimulusFailure> =>
-  Effect.fail(
-    new StimulusFailure({
-      stimulus,
-      detail: `the shrunk input ${JSON.stringify(input)} did not reproduce a relation break`,
-    }),
-  )
+  context: TestContext | undefined,
+) => Effect.Effect<boolean, Contract.CellFailure<E>, Scope.Scope | Required> {
+  const checked = (input: Input, context: TestContext | undefined) =>
+    Contract.cell(contract, { dumpName: title }).run(input).pipe(
+      Effect.tap((judgment) => announce(context, judgment.verdict, judgment.dumpPath)),
+      Effect.map((judgment) => isHold(judgment.verdict)),
+      Effect.provide(Layer.fresh(scenario)),
+    )
 
-const reproducedFailure = <Input>(
-  stimulus: string,
-  input: Input,
-  disparity: TraceDisparityError,
-): Effect.Effect<never, PropFailure, FileSystem.FileSystem> =>
-  Effect.gen(function*() {
-    yield* TaskAnnounce.announceCounterexample(input)
-    yield* TaskAnnounce.announceDump(disparity)
-    return yield* disparity
-  })
-
-const shrunkFailure = <Input, Output, E, R>(
-  contract: Contract.Contract<Input, Output, E, R>,
-  input: Input,
-): Effect.Effect<never, PropFailure, R | Observation | FileSystem.FileSystem> =>
-  Effect.gen(function*() {
-    const exit = yield* Effect.exit(Contract.check(contract, input))
-    return yield* Exit.match(exit, {
-      onSuccess: () => unreproduced(contract.stimulus.name, input),
-      onFailure: (cause) =>
-        Option.match(disparityOf(cause), {
-          onNone: () => unreproduced(contract.stimulus.name, input),
-          onSome: (disparity) => reproducedFailure(contract.stimulus.name, input, disparity),
-        }),
-    })
-  })
-
-const conclude = <Input, Output, E, R>(
-  contract: Contract.Contract<Input, Output, E, R>,
-  details: fc.RunDetails<[Input]>,
-): Effect.Effect<void, PropFailure, R | Observation | FileSystem.FileSystem> => {
-  const input = counterexampleInput(details)
-  return input === undefined ? notFound(contract.stimulus.name, details) : shrunkFailure(contract, input)
+  return (input, context) => checked(input, context)
 }
 
-export const body = <Input, Output, E, R>(
-  contract: Contract.Contract<Input, Output, E, R>,
-  arbitrary: fc.Arbitrary<Input>,
-): Effect.Effect<void, PropFailure, R | Observation | FileSystem.FileSystem> =>
-  Effect.gen(function*() {
-    const context = yield* Effect.context<R | Observation | FileSystem.FileSystem>()
-    const details = yield* Effect.promise(() => attempt(contract, arbitrary, context))
-    return yield* conclude(contract, details)
-  })
-
 if (import.meta.vitest !== void 0) {
-  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
+  // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
   const { it } = await import('@effect/vitest')
 
   it.prop(
-    '∀p_DisparityOf_=TheFailedDisparity',
-    [Schema.NullOr(Schema.String)],
-    ([dumpPath]) =>
-      Effect.sync(() => {
-        const error = new TraceDisparityError({ relationId: 'r', traceId: 't', breaks: [], dumpPath })
-        return Option.contains(disparityOf(Cause.fail(error)), error)
-      }),
+    '∀e_BreakWithDump_∈Messages',
+    [Break, Schema.String],
+    ([verdict, path]) => Option.exists(dumpMessageOf(verdict, path), (message) => message.includes(path)),
   )
 
   it.prop(
-    '∀d_DisparityOf_=NoneForForeignFailures',
-    [Schema.String],
-    ([detail]) =>
-      Effect.sync(() => Option.isNone(disparityOf(Cause.fail(new StimulusFailure({ stimulus: 's', detail }))))),
+    '∀h_Hold_⊥Messages',
+    [Hold, Schema.String],
+    ([verdict, path]) => Option.isNone(dumpMessageOf(verdict, path)),
+  )
+
+  it.prop(
+    '∀b_BreakWithoutDump_⊥Messages',
+    [Break],
+    ([verdict]) => Option.isNone(dumpMessageOf(verdict, null)),
   )
 }

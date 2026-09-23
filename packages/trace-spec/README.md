@@ -36,9 +36,11 @@ const paymentUnderCheckout = Contract.of(checkout)
 
 `Contract.of(taxonomy)` takes the identity first; `Contract.stimulate` and `Contract.holds` are `dual` combinators on Pipeable stages, so the same builder composes in a pipe — `Contract.of(checkout).pipe(Contract.stimulate(placeOrder), Contract.holds(relation))` — and the stage types refuse an out-of-order builder.
 
-## Observe, then judge
+## Run the contract
 
-`Contract.trace(contract, input)` stimulates the behaviour, collects the finished spans of its trace, decodes them against the taxonomy, and evaluates the relation. It answers with the run, the decoded graph, and the verdict, and needs no file system. `Contract.check(contract, input)` adds the judgement: on a break it writes the decoded graph under `artifacts/traces/` and fails with the disparity, so exactly one dump is written per failing run.
+`Contract.cell(contract)` turns a composed spec into a cell over `Contract.Judgment` — the run, the verdict, and the dump path. Its stages are a fixed sandwich: `read` stimulates the behaviour under its minted trace and collects that trace's spans, `decode` builds the span graph purely (`Graph.decode` answers `Result<TraceGraph, Contract.ContractDecodeError>`), `decide` evaluates the relation, `encode` renders the evidence, and `write` persists it on a break. Behaviour failures stay on the cell's error channel; infrastructure refusals — `Contract.ContractDecodeError` or `Observation.EmptyObservationError` — are typed outcomes, never breaks.
+
+`Contract.check(contract, input)` is the test edge over that cell: on a break it writes the decoded graph under `artifacts/traces/` and fails with the disparity, so exactly one dump is written per failing run. Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`, and `Graph.descendants`.
 
 | Outcome                                       | Failure                             | Meaning                                                                                 |
 | --------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
@@ -55,7 +57,7 @@ import { InMemory, Observation, Suite } from '@systemfsoftware/trace-spec'
 import { Layer } from 'effect'
 
 const TraceSuite = Suite.make({ it, layer })
-const harness = Layer.mergeAll(InMemory.layer(), NodeFileSystem.layer, CheckoutDoubles)
+const harness = Layer.mergeAll(InMemory.layer(InMemory.make()), NodeFileSystem.layer, CheckoutDoubles)
 
 TraceSuite('checkout.place_order')
   .withScenarioLayer(harness)
@@ -68,11 +70,11 @@ TraceSuite('checkout.place_order')
 
 `.withLayer(shared)` registers the suite over a layer built once for the whole suite; the shared layer then carries the observation harness, and `.withScenarioLayer(scenario)` can follow it for what each case needs fresh.
 
-`Case.prop(title, contract, arbitrary)` runs the contract over inputs drawn from a fast-check arbitrary. Every draw runs through `Contract.trace` — observation only, no dump; the first failing input is shrunk to a minimal one and re-run once through `Contract.check`, so the failing case writes exactly one dump. When a case fails with a `Contract.TraceDisparityError`, the test carries a Vitest annotation naming the dump under `artifacts/traces/`, so the decoded graph is found from the failing test.
+`Case.prop(title, contract, schema)` runs the contract over inputs drawn from the Schema's derived arbitrary through `it.effect.prop` on the suite's runner, so shrinking is the runner's own: a failing draw fails the property and the runner reports the smallest failing input. The dump is named after the case title, so every failing draw overwrites one file and the surviving dump is the reported counterexample's evidence. When a case fails with a `Contract.TraceDisparityError`, the test carries a Vitest annotation naming that dump, so the decoded graph is found from the failing test.
 
 ## Observe in memory
 
-`InMemory.layer()` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observation.Observation` for reading a trace back. `InMemory.layer({ serviceName: 'my-service' })` names the exported resource. Each acquisition of the layer owns its exporter and tracer provider and shuts the provider down on release, so a case provided the layer as its scenario layer sees only its own spans. The driver is the only module that touches the OpenTelemetry SDK; the `Observation` contract itself imports nothing from it. The export happens outside any test-clock boundary.
+`InMemory.make(options?)` builds a cold spec — `InMemory.make()` or `InMemory.make({ serviceName: 'my-service' })` to name the exported resource. `InMemory.layer(spec)` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observation.Observation` for reading a trace back. `InMemory.scoped(spec)` acquires the hot handle directly; each acquisition owns its exporter and tracer provider in private slots and shuts the provider down on release, so two acquisitions never see each other's spans. The driver is the only module that touches the OpenTelemetry SDK; the `Observation` contract itself imports nothing from it. The export happens outside any test-clock boundary.
 
 ## Relations
 

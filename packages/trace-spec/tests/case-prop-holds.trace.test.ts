@@ -2,12 +2,12 @@ import { it, layer } from '@effect/vitest'
 import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
-import { probeInputs } from './__fixtures__/probe-arbitrary.js'
+import { singleProbeInputs } from './__fixtures__/probe-arbitrary.schema.js'
 
 const TraceSuite = Suite.make({ it, layer })
 
 const harness = Layer.merge(
-  InMemory.layer(),
+  InMemory.layer(InMemory.make()),
   Layer.succeed(
     FileSystem.FileSystem,
     FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
@@ -32,5 +32,5 @@ const uniqueProbe = Contract.of(ProbeTaxonomy).stimulate(emitExactlyOne).holds(R
 TraceSuite('case prop')
   .withScenarioLayer(harness)
   .body(({ Case }) => {
-    Case.prop('every generated input emits exactly one probe span', uniqueProbe, probeInputs)
+    Case.prop('every generated input emits exactly one probe span', uniqueProbe, singleProbeInputs)
   })

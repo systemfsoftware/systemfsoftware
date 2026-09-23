@@ -111,7 +111,7 @@ export const settlementLayers = (options: {
     inventoryStoreLayer([stockPartition()]),
     creditLedgerLayer(options.creditLimits),
     reservationLogLayer(options.commitOutcomes),
-    InMemory.layer(),
+    InMemory.layer(InMemory.make()),
     recordingFileSystem,
   )
 

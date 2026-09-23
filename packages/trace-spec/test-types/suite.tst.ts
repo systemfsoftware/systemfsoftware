@@ -1,19 +1,25 @@
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Contract, Observation, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
-import { Context, Effect, type FileSystem, type Layer, Schema } from 'effect'
-import type * as fc from 'fast-check'
+import { Context, Effect, type FileSystem, type Layer, Schema as S } from 'effect'
 import { describe, expect, it } from 'tstyche'
 
-class Inventory extends Context.Service<Inventory, { readonly count: Effect.Effect<number> }>()('test/Inventory') {}
+class Inventory extends Context.Service<Inventory, { readonly count: Effect.Effect<number, InventoryFailure> }>()(
+  'test/Inventory',
+) {}
+
+class InventoryFailure extends S.TaggedError<InventoryFailure>()('InventoryFailure', {
+  reason: S.String,
+}) {}
 
 declare const bindings: Parameters<typeof Suite.make>[0]
 declare const harness: Layer.Layer<Observation.Observation | FileSystem.FileSystem>
 declare const harnessWithInventory: Layer.Layer<Observation.Observation | FileSystem.FileSystem | Inventory>
 declare const fileSystemOnly: Layer.Layer<FileSystem.FileSystem>
 declare const inventoryWithHarness: Layer.Layer<Inventory | Observation.Observation | FileSystem.FileSystem>
-declare const generatedInputs: fc.Arbitrary<string>
+declare const generatedInputs: S.Schema<string>
 
-const Settle = Span.declare({ id: 'settle', name: 'settle', attrs: Schema.Struct({ 'app.order.id': Schema.String }) })
+const Settle = Span.declare({ id: 'settle', name: 'settle', attrs: S.Struct({ 'app.order.id': S.String }) })
 const taxonomy = Taxonomy.make('t').pipe(Taxonomy.add(Settle))
 
 const settle = Stimulus.make({ name: 'settle', run: ({ input }: { readonly input: string }) => Effect.succeed(input) })
@@ -21,7 +27,13 @@ const settle = Stimulus.make({ name: 'settle', run: ({ input }: { readonly input
 const selfContained = Contract.of(taxonomy).stimulate(settle).holds(Rel.exists(Settle))
 
 const needsInventory = Contract.of(taxonomy)
-  .stimulate(Stimulus.make({ name: 'count', run: () => Effect.flatMap(Inventory, (inventory) => inventory.count) }))
+  .stimulate(
+    Stimulus.make({
+      name: 'count',
+      run: ({ input }: { readonly input: string }) =>
+        Effect.flatMap(Inventory, (inventory) => Effect.as(inventory.count, input)),
+    }),
+  )
   .holds(Rel.exists(Settle))
 
 describe('Contract stages', () => {
@@ -39,31 +51,51 @@ describe('Contract stages', () => {
     expect(Contract.holds(Rel.exists(Settle))).type.not.toBeCallableWith(declared)
   })
 
-  it('check and trace are refused until a relation was declared', () => {
+  it('cell and check are refused until a relation was declared', () => {
     const complete = Contract.of(taxonomy).stimulate(settle).holds(Rel.exists(Settle))
     const stimulated = Contract.of(taxonomy).stimulate(settle)
+    expect(Contract.cell).type.toBeCallableWith(complete)
     expect(Contract.check).type.toBeCallableWith(complete, 'order-1')
     expect(Contract.check('order-1')).type.toBeCallableWith(complete)
+    expect(Contract.cell).type.not.toBeCallableWith(stimulated)
     expect(Contract.check('order-1')).type.not.toBeCallableWith(stimulated)
-    expect(Contract.trace('order-1')).type.not.toBeCallableWith(stimulated)
   })
 
-  it('trace observes without the file system while check fails with the disparity', () => {
-    const complete = Contract.of(taxonomy).stimulate(settle).holds(Rel.exists(Settle))
-    expect(Contract.trace(complete, 'order-1')).type.toBe<
-      Effect.Effect<
-        Contract.Traced<string, string>,
+  it('the contract check is a cell over the judgment with all four channels pinned', () => {
+    expect(Contract.cell(selfContained)).type.toBe<
+      Cell.Cell<
+        string,
+        Contract.Judgment<string, string>,
         Contract.ContractDecodeError | Observation.EmptyObservationError,
-        Observation.Observation
-      >
-    >()
-    expect(Contract.check(complete, 'order-1')).type.toBe<
-      Effect.Effect<
-        Contract.Traced<string, string>,
-        Contract.ContractDecodeError | Observation.EmptyObservationError | Contract.TraceDisparityError,
         Observation.Observation | FileSystem.FileSystem
       >
     >()
+    expect(Contract.check(selfContained, 'order-1')).type.toBe<
+      Effect.Effect<
+        Contract.Judgment<string, string>,
+        Contract.CheckFailure<never>,
+        Observation.Observation | FileSystem.FileSystem
+      >
+    >()
+    expect(Contract.check(selfContained, 'order-1', { dumpName: 'case' })).type.toBe<
+      Effect.Effect<
+        Contract.Judgment<string, string>,
+        Contract.CheckFailure<never>,
+        Observation.Observation | FileSystem.FileSystem
+      >
+    >()
+  })
+
+  it('check carries the behaviour failure on the error channel and never erases it', () => {
+    const checked = needsInventory.pipe(Contract.check('order-1'))
+    expect(checked).type.toBe<
+      Effect.Effect<
+        Contract.Judgment<string, string>,
+        Contract.CheckFailure<InventoryFailure>,
+        Contract.CellServices<Inventory>
+      >
+    >()
+    expect(checked).type.not.toBe<Effect.Effect<Contract.Judgment<string, string>, never, never>>()
   })
 })
 
@@ -104,7 +136,7 @@ describe('Suite.make', () => {
     })
   })
 
-  it('accepts a prop case over a generated arbitrary and refuses a bare example value', () => {
+  it('accepts a prop case over a generated schema and refuses a bare example value', () => {
     Suite.make(bindings)('s').withScenarioLayer(harnessWithInventory).body(({ Case }) => {
       expect(Case.prop).type.toBeCallableWith('counts', needsInventory, generatedInputs)
       expect(Case.prop).type.not.toBeCallableWith('counts', needsInventory, 'order-1')

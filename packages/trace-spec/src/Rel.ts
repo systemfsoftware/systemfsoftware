@@ -1,8 +1,8 @@
 /// <reference types="vitest/importMeta" />
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
-import { Effect, Equal, Match, Option, Schema } from 'effect'
+import { Effect, Equal, Match, Option, Result, Schema } from 'effect'
 import type { GraphNode, SpanRecord, Status, TraceGraph } from './Graph.js'
-import { decode } from './Graph.js'
+import { byId, children, decode, descendants } from './Graph.js'
 import { Break, Hold, Verdict } from './Verdict.schema.js'
 
 export { Break, Hold, Verdict }
@@ -28,7 +28,7 @@ const relation = (parts: Parts): Relation =>
     softenable: parts.softenable,
   })
 
-const matchedNodes = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> => graph.byId(spec)
+const matchedNodes = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> => byId(graph, spec)
 
 const inspectedOf = (nodes: ReadonlyArray<GraphNode>): ReadonlyArray<string> => nodes.map((node) => node.spanId)
 
@@ -63,7 +63,7 @@ const declared = (declaration: Declaration): Relation =>
     soft: false,
     softenable: declaration.softenable,
     evaluate: (graph) => {
-      const inspected = declaration.spans.flatMap((span) => inspectedOf(graph.byId(span)))
+      const inspected = declaration.spans.flatMap((span) => inspectedOf(byId(graph, span)))
       return verdictOf({
         id: declaration.id,
         inspected,
@@ -113,10 +113,10 @@ export const unique = <S extends Span.Span>(spec: S): Relation =>
   })
 
 const childIdsOf = (graph: TraceGraph, parents: ReadonlyArray<GraphNode>): ReadonlySet<string> =>
-  new Set(parents.flatMap((parent) => graph.children(parent)).map((node) => node.spanId))
+  new Set(parents.flatMap((parent) => children(graph, parent)).map((node) => node.spanId))
 
 const descendantIdsOf = (graph: TraceGraph, parents: ReadonlyArray<GraphNode>): ReadonlySet<string> =>
-  new Set(parents.flatMap((parent) => graph.descendants(parent)).map((node) => node.spanId))
+  new Set(parents.flatMap((parent) => descendants(graph, parent)).map((node) => node.spanId))
 
 const startsAtOrAfter = (earlier: GraphNode, later: GraphNode): boolean => later.startMillis >= earlier.startMillis
 
@@ -433,8 +433,8 @@ if (import.meta.vitest !== void 0) {
     errorType: null,
     startMillis: node.startMillis,
     durationMillis: node.durationMillis,
-    attributes: new Map([[ORDER_ATTR, node.id]]),
-    events: node.events.map((item) => ({ name: item, attributes: new Map<string, Span.AttributeValue>() })),
+    attributes: { [ORDER_ATTR]: node.id },
+    events: node.events.map((item) => ({ name: item, attributes: {} })),
     links: [],
   })
 
@@ -444,7 +444,11 @@ if (import.meta.vitest !== void 0) {
     ...spec.ships.map((node: ShipSpec) => recordOf(Ship.name, node, node.parentId)),
   ]
 
-  const graphOf = (spec: Spec): TraceGraph => Effect.runSync(decode(TRACE_ID, recordsOf(spec), TraceTaxonomy))
+  const graphOf = (spec: Spec): Effect.Effect<TraceGraph> =>
+    Result.match(decode(TRACE_ID, recordsOf(spec), TraceTaxonomy), {
+      onFailure: Effect.die,
+      onSuccess: Effect.succeed,
+    })
 
   const settleIdsOf = (spec: Spec): ReadonlySet<string> => new Set(spec.settles.map((node) => node.id))
 
@@ -463,8 +467,11 @@ if (import.meta.vitest !== void 0) {
     return spec.ships.some((ship) => ship.parentId !== null && linked.has(ship.parentId))
   }
 
-  const holdsLike = (relation: Relation, spec: Spec, expected: boolean): boolean =>
-    isHold(relation(graphOf(spec))) === expected
+  const holdsLike = (relation: Relation, spec: Spec, expected: boolean): Effect.Effect<boolean> =>
+    Effect.map(graphOf(spec), (graph) => isHold(relation(graph)) === expected)
+
+  const verdictLike = (relation: Relation, spec: Spec): Effect.Effect<Verdict> =>
+    Effect.map(graphOf(spec), (graph) => relation(graph))
 
   const allFixture = (spec: Spec): Relation =>
     all(exists(Settle), unique(Charge), soft(status(Charge, 'error')), soft(durationLessThan(Charge, spec.bound)))
@@ -494,15 +501,17 @@ if (import.meta.vitest !== void 0) {
   const reportsSoft = (verdict: Verdict, expected: ReadonlyArray<string>): boolean =>
     expected.length === 0 ? isHold(verdict) : namesBreak(verdict, expected)
 
-  const allBehaves = (spec: Spec): boolean => {
-    const verdict = allFixture(spec)(graphOf(spec))
-    const hard = expectedHardBreaks(spec)
-    return hard.length > 0 ? verdict.conjunct === hard[0] : reportsSoft(verdict, expectedSoftBreaks(spec))
-  }
+  const allBehaves = (spec: Spec): Effect.Effect<boolean> =>
+    Effect.map(verdictLike(allFixture(spec), spec), (verdict) => {
+      const hard = expectedHardBreaks(spec)
+      return hard.length > 0 ? verdict.conjunct === hard[0] : reportsSoft(verdict, expectedSoftBreaks(spec))
+    })
 
-  const softeningPreserves = (spec: Spec): boolean =>
-    isHold(soft(unique(Charge))(graphOf(spec))) ===
-      isHold(unique(Charge)(graphOf(spec))) && soft(exists(Settle)).soft === false
+  const softeningPreserves = (spec: Spec): Effect.Effect<boolean> =>
+    Effect.map(
+      Effect.all([verdictLike(soft(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
+      ([softened, plain]) => isHold(softened) === isHold(plain) && soft(exists(Settle)).soft === false,
+    )
 
   const placedShipIds = (spec: Spec): ReadonlySet<string> => {
     const linked = linkedChargeIds(spec)
@@ -528,47 +537,68 @@ if (import.meta.vitest !== void 0) {
     Taxonomy.forbid(Charge, { unless: 'allocate' }),
   )
 
-  const forbidHonoursPath = (spec: Spec): boolean =>
-    holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'hold' }), spec, spec.charges.length === 0) &&
-    holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'allocate' }), spec, true)
+  const forbidHonoursPath = (spec: Spec): Effect.Effect<boolean> =>
+    Effect.map(
+      Effect.all([
+        holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'hold' }), spec, spec.charges.length === 0),
+        holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'allocate' }), spec, true),
+      ]),
+      ([offPath, onPath]) => offPath && onPath,
+    )
 
-  it.prop('∀g_Exists_=Nonempty', [GraphSpec], ([spec]) => {
-    const graph = graphOf(spec)
-    return matchedNodes(graph, Settle).length === spec.settles.length &&
-      holdsLike(exists(Settle), spec, spec.settles.length > 0)
-  })
+  it.effect.prop(
+    '∀g_Exists_=Nonempty',
+    [GraphSpec],
+    ([spec]) =>
+      Effect.map(
+        Effect.all([graphOf(spec), holdsLike(exists(Settle), spec, spec.settles.length > 0)]),
+        ([graph, holds]) => byId(graph, Settle).length === spec.settles.length && holds,
+      ),
+  )
 
-  it.prop('∀g_Absent_=¬Nonempty', [GraphSpec], ([spec]) => holdsLike(absent(Settle), spec, spec.settles.length === 0))
+  it.effect.prop(
+    '∀g_Absent_=¬Nonempty',
+    [GraphSpec],
+    ([spec]) => holdsLike(absent(Settle), spec, spec.settles.length === 0),
+  )
 
-  it.prop('∀g_Unique_=Singleton', [GraphSpec], ([spec]) => holdsLike(unique(Settle), spec, spec.settles.length === 1))
+  it.effect.prop(
+    '∀g_Unique_=Singleton',
+    [GraphSpec],
+    ([spec]) => holdsLike(unique(Settle), spec, spec.settles.length === 1),
+  )
 
-  it.prop('∀g_Child_=ParentEdge', [GraphSpec], ([spec]) => holdsLike(child(Settle, Charge), spec, expectedChild(spec)))
+  it.effect.prop(
+    '∀g_Child_=ParentEdge',
+    [GraphSpec],
+    ([spec]) => holdsLike(child(Settle, Charge), spec, expectedChild(spec)),
+  )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Descendant_=AncestorWalk',
     [GraphSpec],
     ([spec]) => holdsLike(descendant(Settle, Ship), spec, expectedDescendant(spec)),
   )
 
-  it.prop('∀g_All_→FirstHardBreak', [GraphSpec], ([spec]) => allBehaves(spec))
+  it.effect.prop('∀g_All_→FirstHardBreak', [GraphSpec], ([spec]) => allBehaves(spec))
 
-  it.prop('∀g_Soft_=HoldsAlike', [GraphSpec], ([spec]) => softeningPreserves(spec))
+  it.effect.prop('∀g_Soft_=HoldsAlike', [GraphSpec], ([spec]) => softeningPreserves(spec))
 
-  it.prop(
+  it.effect.prop(
     '∀g_Placement_=EveryChildPlaced',
     [GraphSpec],
     ([spec]) =>
       holdsLike(placementOf({ relation: 'child', parent: Settle, child: Charge }), spec, everyChargePlaced(spec)),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Placement_=EveryDescendantPlaced',
     [GraphSpec],
     ([spec]) =>
       holdsLike(placementOf({ relation: 'descendant', parent: Settle, child: Ship }), spec, everyShipPlaced(spec)),
   )
 
-  it.prop('∀g_Forbid_=AbsentOffPath', [GraphSpec], ([spec]) => forbidHonoursPath(spec))
+  it.effect.prop('∀g_Forbid_=AbsentOffPath', [GraphSpec], ([spec]) => forbidHonoursPath(spec))
 
   const alwaysHolds = (): boolean => true
 
@@ -582,7 +612,7 @@ if (import.meta.vitest !== void 0) {
     spec.charges.length > 0 &&
     spec.charges.every((charge) => spec.settles.some((settle) => charge.startMillis >= settle.startMillis))
 
-  it.prop(
+  it.effect.prop(
     '∀g_Forall_=EveryNodePredicate',
     [GraphSpec],
     ([spec]) =>
@@ -593,25 +623,29 @@ if (import.meta.vitest !== void 0) {
       ),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Forall_→NonVacuous',
     [GraphSpec],
-    ([spec]) => isBreak(forall(Charge, alwaysHolds, 'unused detail')(graphOf({ ...spec, charges: [] }))),
+    ([spec]) =>
+      Effect.map(
+        graphOf({ ...spec, charges: [] }),
+        (graph) => isBreak(forall(Charge, alwaysHolds, 'unused detail')(graph)),
+      ),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Event_=EveryNodeCarries',
     [GraphSpec],
     ([spec]) => holdsLike(event(Charge, spec.event), spec, expectedEvent(spec)),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Order_=AfterSomeBefore',
     [GraphSpec],
     ([spec]) => holdsLike(order(Settle, Charge), spec, expectedOrder(spec)),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Any_=AtLeastOneHolds',
     [GraphSpec],
     ([spec]) =>
@@ -622,34 +656,49 @@ if (import.meta.vitest !== void 0) {
 
   const anyExpected = (spec: Spec): boolean => spec.settles.length > 0 || spec.charges.length === 1
 
-  const anyBehaves = (spec: Spec): boolean => {
-    const verdict = anyFixture()(graphOf(spec))
-    return anyExpected(spec) ? isHold(verdict) : namesBreak(verdict, [exists(Settle).id, unique(Charge).id])
-  }
+  const anyBehaves = (spec: Spec): Effect.Effect<boolean> =>
+    Effect.map(
+      verdictLike(anyFixture(), spec),
+      (verdict) => anyExpected(spec) ? isHold(verdict) : namesBreak(verdict, [exists(Settle).id, unique(Charge).id]),
+    )
 
-  it.prop('∀g_Any_→NamesEveryConjunct', [GraphSpec], ([spec]) => anyBehaves(spec))
+  it.effect.prop('∀g_Any_→NamesEveryConjunct', [GraphSpec], ([spec]) => anyBehaves(spec))
 
-  it.prop(
+  it.effect.prop(
     '∀g_Any_=ConjunctAgreement',
     [GraphSpec],
-    ([spec]) => isHold(any(unique(Charge))(graphOf(spec))) === isHold(unique(Charge)(graphOf(spec))),
+    ([spec]) =>
+      Effect.map(
+        Effect.all([verdictLike(any(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
+        ([disjunct, plain]) => isHold(disjunct) === isHold(plain),
+      ),
   )
 
-  it.prop(
+  it.effect.prop(
     '∀g_Not_=Negation',
     [GraphSpec],
-    ([spec]) => isHold(not(unique(Charge))(graphOf(spec))) === !isHold(unique(Charge)(graphOf(spec))),
+    ([spec]) =>
+      Effect.map(
+        Effect.all([verdictLike(not(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
+        ([negated, plain]) => isHold(negated) === !isHold(plain),
+      ),
   )
 
-  it.prop('∀g_Not_→NamesInnerOnHold', [GraphSpec], ([spec]) => {
+  it.effect.prop('∀g_Not_→NamesInnerOnHold', [GraphSpec], ([spec]) => {
     const inner = unique(Charge)
-    const verdict = not(inner)(graphOf(spec))
-    return isHold(inner(graphOf(spec))) ? namesBreak(verdict, [inner.id]) : isHold(verdict)
+    return Effect.map(
+      Effect.all([verdictLike(not(inner), spec), verdictLike(inner, spec)]),
+      ([verdict, innerVerdict]) => isHold(innerVerdict) ? namesBreak(verdict, [inner.id]) : isHold(verdict),
+    )
   })
 
-  it.prop(
+  it.effect.prop(
     '∀g_NotNot_=Relation',
     [GraphSpec],
-    ([spec]) => isHold(not(not(unique(Charge)))(graphOf(spec))) === isHold(unique(Charge)(graphOf(spec))),
+    ([spec]) =>
+      Effect.map(
+        Effect.all([verdictLike(not(not(unique(Charge))), spec), verdictLike(unique(Charge), spec)]),
+        ([doublyNegated, plain]) => isHold(doublyNegated) === isHold(plain),
+      ),
   )
 }

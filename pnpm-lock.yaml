@@ -2144,15 +2144,15 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 'catalog:'
         version: 1.43.0
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../effect-cell-types
       '@systemfsoftware/effect-spec-runtime':
         specifier: workspace:^
         version: link:../effect-spec-runtime
       '@systemfsoftware/trace-taxonomy':
         specifier: workspace:^
         version: link:../trace-taxonomy
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'

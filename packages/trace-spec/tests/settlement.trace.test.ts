@@ -11,7 +11,7 @@ const discardingFileSystem = Layer.succeed(
   FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
 )
 
-const harness = Layer.merge(InMemory.layer(), discardingFileSystem)
+const harness = Layer.merge(InMemory.layer(InMemory.make()), discardingFileSystem)
 
 type Order = { readonly orderId: string; readonly charge: boolean }
 

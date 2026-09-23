@@ -52,7 +52,7 @@ const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 Feature('Settling an order under a contract that names the charge')
-  .withScenarioLayer(Layer.merge(InMemory.layer(), recordingFileSystem))
+  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), recordingFileSystem))
   .liveClock()
   .body(({ scenario }) => {
     scenario(
@@ -68,7 +68,7 @@ Feature('Settling an order under a contract that names the charge')
         ),
         Then('the settlement is accepted and its charge is on the same trace')((s) => {
           expect(s.checked.run.output).toBe('settled:order-11')
-          expect(s.checked.graph.byId(Charge)).toHaveLength(1)
+          expect(Schema.is(Rel.Hold)(s.checked.verdict)).toBe(true)
         }),
       ),
     )

@@ -12,12 +12,16 @@ const DUMP_DIRECTORY = 'artifacts/traces'
 interface TaskView {
   readonly tasks?: ReadonlyArray<TaskView>
   readonly type?: string
-  readonly result?: { readonly state?: string; readonly errors?: ReadonlyArray<{ readonly name?: string }> }
+  readonly result?: {
+    readonly state?: string
+    readonly errors?: ReadonlyArray<{ readonly name?: string; readonly message?: string }>
+  }
 }
 
 interface Observed {
   readonly annotations: ReadonlyArray<string>
   readonly errorNames: ReadonlyArray<string>
+  readonly errorMessages: ReadonlyArray<string>
   readonly failedTests: number
   readonly dumps: number
 }
@@ -25,9 +29,16 @@ interface Observed {
 const failureList = (task: TaskView): ReadonlyArray<string> =>
   (task.result?.errors ?? []).map((error) => error.name ?? '')
 
+const failureMessages = (task: TaskView): ReadonlyArray<string> =>
+  (task.result?.errors ?? []).map((error) => error.message ?? '')
+
 const failuresOf = (
   task: TaskView,
 ): ReadonlyArray<string> => [...failureList(task), ...(task.tasks ?? []).flatMap(failuresOf)]
+
+const messagesOf = (
+  task: TaskView,
+): ReadonlyArray<string> => [...failureMessages(task), ...(task.tasks ?? []).flatMap(messagesOf)]
 
 const isFailedTest = (task: TaskView): boolean => task.type === 'test' && task.result?.state === 'fail'
 
@@ -36,6 +47,7 @@ const failedCount = (task: TaskView): number =>
 
 const observed = (files: ReadonlyArray<RunnerTestFile>): Omit<Observed, 'annotations' | 'dumps'> => ({
   errorNames: files.flatMap(failuresOf),
+  errorMessages: files.flatMap(messagesOf),
   failedTests: files.reduce((sum, file) => sum + failedCount(file), 0),
 })
 
@@ -114,16 +126,16 @@ Feature('Reporting where a broken trace spec leaves its evidence')
           () => runFixtureCountingDumps('prop-shrink-failure.fixture.ts'),
         ),
         Then('the failing case names its smallest failing input')((s) => {
-          expect(s.outcome.annotations.some((message) => message.includes('shrunk counterexample input: 10'))).toBe(
-            true,
-          )
+          expect(s.outcome.errorMessages.join('\n')).toContain('Property falsified')
+          expect(s.outcome.errorMessages.join('\n')).toContain('Shrunk input: [')
+          expect(s.outcome.dumps).toBe(1)
+          expect(s.outcome.annotations.join('\n')).toContain('artifacts/traces/')
         }),
         And('the failing run wrote its evidence exactly once')((s) => {
           expect(s.outcome.dumps).toBe(1)
         }),
-        And('the failing case failed on the disparity itself')((s) => {
+        And('the failing case failed on the falsified draw itself')((s) => {
           expect(s.outcome.failedTests).toBe(1)
-          expect(s.outcome.errorNames.filter((name) => name.includes('TraceDisparityError'))).toHaveLength(1)
         }),
       ),
     )

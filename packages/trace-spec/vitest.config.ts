@@ -10,6 +10,5 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     includeSource: ['src/**/*.ts'],
     passWithNoTests: false,
-    setupFiles: ['./vitest.setup.ts'],
   },
 })

@@ -48,9 +48,9 @@
     "@opentelemetry/resources": "catalog:",
     "@opentelemetry/sdk-trace-base": "catalog:",
     "@opentelemetry/semantic-conventions": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
-    "@systemfsoftware/trace-taxonomy": "workspace:^",
-    "fast-check": "catalog:"
+    "@systemfsoftware/trace-taxonomy": "workspace:^"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

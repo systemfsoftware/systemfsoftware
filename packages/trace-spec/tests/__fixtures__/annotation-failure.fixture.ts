@@ -22,7 +22,7 @@ const chargeMustFollow = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 TraceSuite('annotation failure fixture')
-  .withScenarioLayer(Layer.merge(InMemory.layer(), discardingFileSystem))
+  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), discardingFileSystem))
   .body(({ Case }) => {
     Case('a settlement without its charge breaks the relation', chargeMustFollow, 'order-9')
   })

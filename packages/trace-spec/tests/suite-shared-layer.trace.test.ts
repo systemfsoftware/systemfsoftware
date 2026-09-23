@@ -1,3 +1,4 @@
+import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
 import { it, layer } from '@effect/vitest'
 import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
@@ -10,92 +11,106 @@ const discardingFileSystem = Layer.succeed(
   FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
 )
 
-const harness = Layer.merge(InMemory.layer(), discardingFileSystem)
+const harness = Layer.merge(InMemory.layer(InMemory.make()), discardingFileSystem)
 
-class SharedBuild extends Context.Service<SharedBuild, { readonly built: number }>()('trace-spec/test/SharedBuild') {}
-class ScenarioBuild extends Context.Service<ScenarioBuild, { readonly built: number }>()(
-  'trace-spec/test/ScenarioBuild',
-) {}
+class Lifecycle
+  extends Context.Service<Lifecycle, { readonly peek: Effect.Effect<number>; readonly next: Effect.Effect<number> }>()(
+    'trace-spec/test/Lifecycle',
+  )
+{}
+class Lens extends Context.Service<Lens, { readonly build: number }>()('trace-spec/test/Lens') {}
 
-const sharedBuildsA = Ref.makeUnsafe(0)
-const scenarioBuildsA = Ref.makeUnsafe(0)
-const sharedBuildsB = Ref.makeUnsafe(0)
-
-const sharedLayerA = Layer.effect(
-  SharedBuild,
-  Effect.map(Ref.updateAndGet(sharedBuildsA, (n) => n + 1), (built) => ({ built })),
+const sharedLayer = Layer.effect(
+  Lifecycle,
+  Effect.gen(function*() {
+    const count = yield* Ref.make(0)
+    return { peek: Ref.get(count), next: Ref.updateAndGet(count, (current) => current + 1) }
+  }),
 )
 
-const scenarioLayerA = Layer.merge(
-  Layer.effect(
-    ScenarioBuild,
-    Effect.map(Ref.updateAndGet(scenarioBuildsA, (n) => n + 1), (built) => ({ built })),
-  ),
-  harness,
+const scenarioLayer: Layer.Layer<Lens, never, Lifecycle | OtelTracer.OtelTracer> = Layer.effect(
+  Lens,
+  Effect.map(Effect.flatMap(Lifecycle, (lifecycle) => lifecycle.next), (build) => ({ build })),
 )
 
-const sharedLayerB = Layer.effect(
-  SharedBuild,
-  Effect.map(Ref.updateAndGet(sharedBuildsB, (n) => n + 1), (built) => ({ built })),
-)
-
-const Probe = Span.declare({
-  id: 'probe.layers',
-  name: 'probe.layers',
-  attrs: Schema.Struct({ 'shared.build': Schema.Finite, 'scenario.build': Schema.Finite }),
+const LensSpan = Span.declare({
+  id: 'lens.build',
+  name: 'lens.build',
+  attrs: Schema.Struct({ 'lens.build': Schema.Finite }),
+})
+const LifecycleSpan = Span.declare({
+  id: 'lifecycle.build',
+  name: 'lifecycle.build',
+  attrs: Schema.Struct({ 'lifecycle.build': Schema.Finite }),
 })
 
-const ProbeTaxonomy = Taxonomy.make('probe-layers').pipe(Taxonomy.add(Probe))
+const ProbeTaxonomy = Taxonomy.make('probe-layers').pipe(Taxonomy.add(LensSpan), Taxonomy.add(LifecycleSpan))
 
-const SharedProbe = Span.declare({
-  id: 'probe.shared',
-  name: 'probe.shared',
-  attrs: Schema.Struct({ 'shared.build': Schema.Finite }),
+const lensStimulus = Stimulus.make({
+  name: 'lens.build',
+  run: ({ input }: { readonly input: undefined }) =>
+    Effect.flatMap(Lens, (lens) => Span.start(LensSpan, { 'lens.build': lens.build })(Effect.succeed(input))),
 })
 
-const SharedTaxonomy = Taxonomy.make('probe-shared').pipe(Taxonomy.add(SharedProbe))
-
-const probeStimulus = Stimulus.make({
-  name: 'probe.layers',
-  run: () =>
-    Effect.gen(function*() {
-      const shared = yield* SharedBuild
-      const scenario = yield* ScenarioBuild
-      return yield* Span.start(Probe, { 'shared.build': shared.built, 'scenario.build': scenario.built })(Effect.void)
-    }),
+const lifecycleStimulus = Stimulus.make({
+  name: 'lifecycle.build',
+  run: ({ input }: { readonly input: undefined }) =>
+    Effect.flatMap(
+      Lifecycle,
+      (lifecycle) =>
+        Effect.flatMap(lifecycle.next, (build) =>
+          Span.start(LifecycleSpan, { 'lifecycle.build': build })(Effect.succeed(input))),
+    ),
 })
 
-const sharedProbeStimulus = Stimulus.make({
-  name: 'probe.shared',
-  run: () =>
-    Effect.gen(function*() {
-      const shared = yield* SharedBuild
-      return yield* Span.start(SharedProbe, { 'shared.build': shared.built })(Effect.void)
-    }),
-})
+const lensContract = (build: number) =>
+  Contract.of(ProbeTaxonomy).stimulate(lensStimulus).holds(Rel.attrs(LensSpan, { 'lens.build': build }))
 
-const probeContract = (shared: number, scenario: number) =>
+const lifecycleContract = (build: number) =>
   Contract.of(ProbeTaxonomy)
-    .stimulate(probeStimulus)
-    .holds(Rel.attrs(Probe, { 'shared.build': shared, 'scenario.build': scenario }))
-
-const sharedOnlyContract = (shared: number) =>
-  Contract.of(SharedTaxonomy).stimulate(sharedProbeStimulus).holds(Rel.attrs(SharedProbe, { 'shared.build': shared }))
+    .stimulate(lifecycleStimulus)
+    .holds(Rel.attrs(LifecycleSpan, { 'lifecycle.build': build }))
 
 TraceSuite('suite layers')
-  .withLayer(Layer.merge(sharedLayerA, harness))
-  .withScenarioLayer(scenarioLayerA)
+  .withLayer(Layer.merge(sharedLayer, harness))
+  .withScenarioLayer(Layer.merge(scenarioLayer, harness))
   .body(({ Case }) => {
-    Case('the first case meets the first scenario build', probeContract(1, 1), undefined)
-    Case('the second case meets the second scenario build on the same shared build', probeContract(1, 2), undefined)
+    Case('the first case sees the first scenario build', lensContract(1), undefined)
+    Case('the second case sees the second scenario build on the same shared lifecycle', lensContract(2), undefined)
   })
 
 TraceSuite('suite shared layer alone')
-  .withLayer(Layer.merge(sharedLayerB, harness))
+  .withLayer(Layer.merge(sharedLayer, harness))
   .body(({ Case }) => {
     Case(
       'the suite-wide layer carries the harness for a body without a scenario layer',
-      sharedOnlyContract(1),
+      lifecycleContract(1),
       undefined,
     )
   })
+
+const sharedProbeRuntime = harness.pipe(
+  Layer.provideMerge(sharedLayer),
+  Layer.provide(harness),
+)
+
+const lensProbeRuntime = Layer.merge(scenarioLayer, harness).pipe(
+  Layer.provideMerge(sharedLayer),
+  Layer.provide(harness),
+)
+
+it.effect('Should_Fail_When_UnbuiltLifecycleBuild', () =>
+  lensContract(99).pipe(
+    Contract.check<undefined>(undefined),
+    Effect.flip,
+    Effect.flatMap((failure) => Schema.is(Contract.TraceDisparityError)(failure) ? Effect.void : Effect.die(failure)),
+    Effect.asVoid,
+    Effect.provide(lensProbeRuntime),
+  ))
+
+it.effect('Should_Hold_When_NextLifecycleBuild', () =>
+  lifecycleContract(1).pipe(
+    Contract.check<undefined>(undefined),
+    Effect.asVoid,
+    Effect.provide(sharedProbeRuntime),
+  ))

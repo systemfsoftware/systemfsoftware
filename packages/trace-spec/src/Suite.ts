@@ -1,8 +1,9 @@
+import type { Vitest } from '@effect/vitest'
 import { Suite as Runtime } from '@systemfsoftware/effect-spec-runtime'
-import { Cause, Effect, type FileSystem, type Layer, Schema } from 'effect'
+import { Cause, Effect, type FileSystem, Layer, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
-import type * as fc from 'fast-check'
+import type * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as Contract from './Contract.js'
 import { ContractDecodeError } from './ContractDecodeError.schema.js'
 import { EmptyObservationError } from './EmptyObservationError.schema.js'
@@ -21,6 +22,8 @@ export type CaseFailure = ContractDecodeError | EmptyObservationError | TraceDis
 
 export type Harness = Observation | FileSystem.FileSystem
 
+export type ArbitraryInput<Input> = Schema.Schema<Input> | Arbitrary.Arbitrary<Input>
+
 export interface CaseRegistrar<Provided> {
   <Input, Output, E>(
     name: string,
@@ -30,7 +33,7 @@ export interface CaseRegistrar<Provided> {
   prop: <Input, Output, E>(
     name: string,
     contract: Contract.Contract<Input, Output, E, Provided>,
-    arbitrary: fc.Arbitrary<Input>,
+    arbitrary: ArbitraryInput<Input>,
   ) => void
 }
 
@@ -51,7 +54,7 @@ export interface Declared extends Pipeable {
 export interface Shared<SharedProvided> extends Pipeable {
   readonly [TypeId]: typeof TypeId
   readonly withScenarioLayer: <Provided>(
-    scenario: Layer.Layer<Provided | Harness>,
+    scenario: Layer.Layer<Provided | Harness, never, SharedProvided>,
   ) => Opened<Provided | SharedProvided>
   readonly body: (use: (tools: CaseTools<SharedProvided>) => void) => void
 }
@@ -59,9 +62,7 @@ export interface Shared<SharedProvided> extends Pipeable {
 const isCheckFailure = Schema.is(Schema.Union([ContractDecodeError, EmptyObservationError, TraceDisparityError]))
 
 const caseFailureOf = (stimulus: string) => <E>(failure: E | CaseFailure): CaseFailure =>
-  isCheckFailure(failure)
-    ? failure
-    : new StimulusFailure({ stimulus, detail: Cause.pretty(Cause.fail(failure)) })
+  isCheckFailure(failure) ? failure : new StimulusFailure({ stimulus, detail: Cause.pretty(Cause.fail(failure)) })
 
 const rethrowAfter = (
   annotation: Effect.Effect<void>,
@@ -81,12 +82,29 @@ const caseBody = <Input, Output, E, Provided>(
     Effect.mapError(caseFailureOf(contract.stimulus.name)),
   )
 
-const caseTools = <Provided>(
+const caseTools = <Provided, ScenarioRequired>(
   register: Runtime.RegisterFn<void, CaseFailure, Provided | Harness>,
+  propIt: Vitest.MethodsNonLive<ScenarioRequired>,
+  scenario: Layer.Layer<Contract.CellServices<Provided>, never, ScenarioRequired>,
 ): CaseTools<Provided | Harness> => {
   const Case: CaseRegistrar<Provided | Harness> = (name, contract, input) =>
     register(name, caseBody(contract, input), 'run')
-  Case.prop = (name, contract, arbitrary) => register(name, Prop.body(contract, arbitrary), 'run')
+  Case.prop = <Input, Output, E>(
+    name: string,
+    contract: Contract.Contract<Input, Output, E, Provided | Harness>,
+    arbitrary: ArbitraryInput<Input>,
+  ) => {
+    propIt.effect.prop(
+      name,
+      [arbitrary],
+      (values, context) =>
+        Prop.predicate<Input, Output, E, Provided | Harness, ScenarioRequired>(
+          name,
+          contract,
+          scenario,
+        )(values[0], context),
+    )
+  }
   return { Case }
 }
 
@@ -102,7 +120,8 @@ const openScenario = <ROut>(
       bindings,
       config(name),
       scenario,
-      (register: Runtime.RegisterFn<void, CaseFailure, ROut | Harness>) => use(caseTools(register)),
+      (register: Runtime.RegisterFn<void, CaseFailure, ROut | Harness>, propIt: Vitest.MethodsNonLive<never>) =>
+        use(caseTools<ROut | Harness, never>(register, propIt, scenario)),
     ),
 })
 
@@ -110,7 +129,7 @@ const openSharedScenario = <SharedProvided, Provided>(
   bindings: Runtime.Bindings,
   name: string,
   shared: Layer.Layer<SharedProvided | Harness>,
-  scenario: Layer.Layer<Provided | Harness>,
+  scenario: Layer.Layer<Provided | Harness, never, SharedProvided>,
 ): Opened<Provided | SharedProvided> => ({
   body: (use) =>
     Runtime.openSharedCase(
@@ -118,8 +137,15 @@ const openSharedScenario = <SharedProvided, Provided>(
       config(name),
       { layer: shared, excludeTestServices: false },
       scenario,
-      (register: Runtime.RegisterFn<void, CaseFailure, Provided | SharedProvided | Harness>) =>
-        use(caseTools(register)),
+      (
+        register: Runtime.RegisterFn<void, CaseFailure, Provided | SharedProvided | Harness>,
+        propIt: Vitest.MethodsNonLive<SharedProvided>,
+      ) =>
+        use(caseTools<Provided | SharedProvided | Harness, SharedProvided>(
+          register,
+          propIt,
+          scenario.pipe(Layer.provideMerge(shared)),
+        )),
     ),
 })
 
@@ -134,7 +160,10 @@ const openShared = <SharedProvided>(
       bindings,
       config(name),
       { layer: shared, excludeTestServices: false },
-      (register: Runtime.RegisterFn<void, CaseFailure, SharedProvided | Harness>) => use(caseTools(register)),
+      (
+        register: Runtime.RegisterFn<void, CaseFailure, SharedProvided | Harness>,
+        propIt: Vitest.MethodsNonLive<SharedProvided>,
+      ) => use(caseTools<SharedProvided | Harness, never>(register, propIt, shared)),
     ),
   withScenarioLayer: (scenario) => openSharedScenario(bindings, name, shared, scenario),
   ...Prototype,
