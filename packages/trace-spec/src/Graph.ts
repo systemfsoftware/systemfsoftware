@@ -2,9 +2,9 @@
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Match, Result, Schema, type SchemaIssue } from 'effect'
 import { ContractDecodeError } from './ContractDecodeError.schema.js'
-import type { Attributes, GraphNode, SpanRecord, TraceGraph } from './graph.schema.js'
+import type { Attributes, GraphNode, SpanRecord, TraceGraph } from './TraceGraph.schema.js'
 
-export * from './graph.schema.js'
+export * from './TraceGraph.schema.js'
 
 export const byId = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> =>
   graph.nodes.filter((node) => node.name === spec.name)

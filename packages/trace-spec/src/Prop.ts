@@ -42,13 +42,13 @@ const announce = (
 export function predicate<Input, Output, E, Provided, Required>(
   title: string,
   contract: Contract.Contract<Input, Output, E, Provided>,
-  scenario: Layer.Layer<Contract.CellServices<Provided>, never, Required>,
+  scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
 ): (
   input: Input,
   context: TestContext | undefined,
-) => Effect.Effect<boolean, Contract.CellFailure<E>, Scope.Scope | Required> {
+) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required> {
   const checked = (input: Input, context: TestContext | undefined) =>
-    Contract.cell(contract, { dumpName: title }).run(input).pipe(
+    Contract.judge(contract, input, { dumpName: title }).pipe(
       Effect.tap((judgment) => announce(context, judgment.verdict, judgment.dumpPath)),
       Effect.map((judgment) => isHold(judgment.verdict)),
       Effect.provide(Layer.fresh(scenario)),

@@ -2,6 +2,6 @@
 "@systemfsoftware/trace-spec": minor
 ---
 
-`Contract.of(taxonomy).stimulate(stimulus).holds(relation)` now runs as a cell: `Contract.cell(contract)` composes read, decode, decide, encode, and write; `Contract.check(contract, input)` is the test edge that fails with `Contract.TraceDisparityError` and annotates the dump path. `Graph.decode` is pure, answering `Result<TraceGraph, ContractDecodeError>`, with standalone `byId`, `children`, and `descendants`.
+New package: hold a behaviour to the trace it produced. `Contract.of(taxonomy).stimulate(stimulus).holds(relation)` composes a spec; `Contract.judge(contract, input)` runs the behaviour under a trace id it mints, decodes the finished trace against the taxonomy, and answers the verdict with the dump path of a break; `Contract.check` fails a break with `Contract.TraceDisparityError`. `Graph.decode` is pure, answering `Result<TraceGraph, ContractDecodeError>`.
 
-`InMemory.make(options?)` is a cold spec; `InMemory.layer(spec)` provides `Observation | OtelTracer.OtelTracer`, and separate `InMemory.scoped(spec)` acquisitions observe independent traces. `Case.prop` registers through `it.effect.prop` with native shrinking: failing draws overwrite one dump named after the case, and the reported counterexample is the last failing draw.
+`ObservationWindow.make(serviceName)` is the in-memory observation resource: `.scoped` acquires a window handle read with `ObservationWindow.collect`, and `.layer` provides `Observation | OtelTracer.OtelTracer`, one window per acquisition. `Suite.make({ it, layer })` registers a `Case` per input or a `Case.prop` per Schema, shrinking through `it.effect.prop` to one dump of the minimal failing input.

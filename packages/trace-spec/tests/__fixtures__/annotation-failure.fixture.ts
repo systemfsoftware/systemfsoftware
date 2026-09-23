@@ -1,5 +1,5 @@
 import { it, layer } from '@effect/vitest'
-import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from './fulfillment-trace.schema.js'
@@ -22,7 +22,7 @@ const chargeMustFollow = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 TraceSuite('annotation failure fixture')
-  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), discardingFileSystem))
+  .withScenarioLayer(Layer.merge(ObservationWindow.make('trace-spec').layer, discardingFileSystem))
   .body(({ Case }) => {
     Case('a settlement without its charge breaks the relation', chargeMustFollow, 'order-9')
   })

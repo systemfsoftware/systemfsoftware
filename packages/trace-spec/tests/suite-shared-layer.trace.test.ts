@@ -1,6 +1,6 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
 import { it, layer } from '@effect/vitest'
-import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, FileSystem, Layer, Ref, Schema } from 'effect'
 
@@ -11,7 +11,7 @@ const discardingFileSystem = Layer.succeed(
   FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
 )
 
-const harness = Layer.merge(InMemory.layer(InMemory.make()), discardingFileSystem)
+const harness = Layer.merge(ObservationWindow.make('trace-spec').layer, discardingFileSystem)
 
 class Lifecycle
   extends Context.Service<Lifecycle, { readonly peek: Effect.Effect<number>; readonly next: Effect.Effect<number> }>()(

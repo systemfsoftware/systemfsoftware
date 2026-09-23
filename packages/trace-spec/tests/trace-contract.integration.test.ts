@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Contract, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
@@ -52,7 +52,7 @@ const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 Feature('Settling an order under a contract that names the charge')
-  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), recordingFileSystem))
+  .withScenarioLayer(Layer.merge(ObservationWindow.make('trace-spec').layer, recordingFileSystem))
   .liveClock()
   .body(({ scenario }) => {
     scenario(

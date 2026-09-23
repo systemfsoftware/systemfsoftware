@@ -1,5 +1,5 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Contract, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
@@ -51,7 +51,7 @@ const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
   .holds(Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge)))
 
 Feature('A failed trace contract')
-  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), memoryTraceFileSystem))
+  .withScenarioLayer(Layer.merge(ObservationWindow.make('trace-spec').layer, memoryTraceFileSystem))
   .body(({ scenario }) => {
     scenario(
       'A charge recorded outside its settlement parent is written down',

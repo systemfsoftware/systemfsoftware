@@ -1,5 +1,5 @@
 import { it, layer } from '@effect/vitest'
-import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { singleProbeInputs } from './__fixtures__/probe-arbitrary.schema.js'
@@ -7,7 +7,7 @@ import { singleProbeInputs } from './__fixtures__/probe-arbitrary.schema.js'
 const TraceSuite = Suite.make({ it, layer })
 
 const harness = Layer.merge(
-  InMemory.layer(InMemory.make()),
+  ObservationWindow.make('trace-spec').layer,
   Layer.succeed(
     FileSystem.FileSystem,
     FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),

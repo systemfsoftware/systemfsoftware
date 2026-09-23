@@ -10,7 +10,7 @@ In a system with queues, workers, and background consumers, a `200` is not the o
 pnpm add @systemfsoftware/trace-spec @systemfsoftware/trace-taxonomy effect
 ```
 
-The package exports six capability namespaces — `Contract`, `Graph`, `Observation`, `Rel`, `Stimulus`, `Suite` — plus one driver, `InMemory`. Errors and verdicts belong to the capability that raises them: `Contract.ContractDecodeError`, `Contract.TraceDisparityError`, `Observation.EmptyObservationError`, `Suite.StimulusFailure`, and `Rel.Hold`/`Rel.Break`/`Rel.Verdict`.
+The package exports seven namespaces — `Contract`, `Graph`, `Observation`, `ObservationWindow`, `Rel`, `Stimulus`, `Suite`. Errors and verdicts belong to the capability that raises them: `Contract.ContractDecodeError`, `Contract.TraceDisparityError`, `Observation.EmptyObservationError`, `Suite.StimulusFailure`, and `Rel.Hold`/`Rel.Break`/`Rel.Verdict`.
 
 ## Write a contract
 
@@ -18,7 +18,7 @@ A stimulus is the behaviour under test made callable: `stimulus(input)` runs it 
 
 ```ts
 import { Contract, Rel, Stimulus } from '@systemfsoftware/trace-spec'
-import { checkout, PaymentCapture, PlaceOrder } from './checkout.span.js'
+import { checkout, PaymentCapture, PlaceOrder } from './checkout.schema.js'
 
 const placeOrder = Stimulus.make({
   name: 'checkout.place',
@@ -38,9 +38,9 @@ const paymentUnderCheckout = Contract.of(checkout)
 
 ## Run the contract
 
-`Contract.cell(contract)` turns a composed spec into a cell over `Contract.Judgment` — the run, the verdict, and the dump path. Its stages are a fixed sandwich: `read` stimulates the behaviour under its minted trace and collects that trace's spans, `decode` builds the span graph purely (`Graph.decode` answers `Result<TraceGraph, Contract.ContractDecodeError>`), `decide` evaluates the relation, `encode` renders the evidence, and `write` persists it on a break. Behaviour failures stay on the cell's error channel; infrastructure refusals — `Contract.ContractDecodeError` or `Observation.EmptyObservationError` — are typed outcomes, never breaks.
+`Contract.judge(contract, input)` stimulates the behaviour under its minted trace, collects that trace's spans, decodes them against the taxonomy (`Graph.decode` answers `Result<TraceGraph, Contract.ContractDecodeError>`), applies the relation, and on a break writes the decoded graph under `artifacts/traces/`. It answers a `Contract.Judgment` — the run, the verdict, and the dump path — so a break is a value, not a failure. Behaviour failures and infrastructure refusals (`Contract.ContractDecodeError`, `Observation.EmptyObservationError`) stay on the error channel.
 
-`Contract.check(contract, input)` is the test edge over that cell: on a break it writes the decoded graph under `artifacts/traces/` and fails with the disparity, so exactly one dump is written per failing run. Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`, and `Graph.descendants`.
+`Contract.check(contract, input)` is the test edge over `judge`: a break fails with `Contract.TraceDisparityError`. Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`, and `Graph.descendants`.
 
 | Outcome                                       | Failure                             | Meaning                                                                                 |
 | --------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
@@ -53,11 +53,11 @@ const paymentUnderCheckout = Contract.of(checkout)
 ```ts
 import { NodeFileSystem } from '@effect/platform-node'
 import { it, layer } from '@effect/vitest'
-import { InMemory, Observation, Suite } from '@systemfsoftware/trace-spec'
+import { Observation, ObservationWindow, Suite } from '@systemfsoftware/trace-spec'
 import { Layer } from 'effect'
 
 const TraceSuite = Suite.make({ it, layer })
-const harness = Layer.mergeAll(InMemory.layer(InMemory.make()), NodeFileSystem.layer, CheckoutDoubles)
+const harness = Layer.mergeAll(ObservationWindow.make('checkout').layer, NodeFileSystem.layer, CheckoutDoubles)
 
 TraceSuite('checkout.place_order')
   .withScenarioLayer(harness)
@@ -74,7 +74,7 @@ TraceSuite('checkout.place_order')
 
 ## Observe in memory
 
-`InMemory.make(options?)` builds a cold spec — `InMemory.make()` or `InMemory.make({ serviceName: 'my-service' })` to name the exported resource. `InMemory.layer(spec)` installs the Effect tracer backed by an OpenTelemetry in-memory exporter with a simple span processor and an always-on sampler, and provides `Observation.Observation` for reading a trace back. `InMemory.scoped(spec)` acquires the hot handle directly; each acquisition owns its exporter and tracer provider in private slots and shuts the provider down on release, so two acquisitions never see each other's spans. The driver is the only module that touches the OpenTelemetry SDK; the `Observation` contract itself imports nothing from it. The export happens outside any test-clock boundary.
+`ObservationWindow.make(serviceName)` is the cold resource; the service name is required. `.scoped` acquires an `ObservationWindow` handle for one scope — an OpenTelemetry in-memory exporter behind a simple span processor and an always-on sampler, shut down when the scope closes — and `ObservationWindow.collect(window, traceId)` reads one trace back. `.layer` binds a window as `Observation.Observation` plus the Effect tracer, one window per layer build, so two acquisitions never see each other's spans. Only the handle module imports the OpenTelemetry SDK. The export happens outside any test-clock boundary.
 
 ## Relations
 

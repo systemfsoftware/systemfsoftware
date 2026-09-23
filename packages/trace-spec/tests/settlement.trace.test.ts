@@ -1,5 +1,5 @@
 import { it, layer } from '@effect/vitest'
-import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
@@ -11,7 +11,7 @@ const discardingFileSystem = Layer.succeed(
   FileSystem.makeNoop({ makeDirectory: () => Effect.void, writeFileString: () => Effect.void }),
 )
 
-const harness = Layer.merge(InMemory.layer(InMemory.make()), discardingFileSystem)
+const harness = Layer.merge(ObservationWindow.make('trace-spec').layer, discardingFileSystem)
 
 type Order = { readonly orderId: string; readonly charge: boolean }
 

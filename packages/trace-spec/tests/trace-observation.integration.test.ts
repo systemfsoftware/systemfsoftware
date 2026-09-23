@@ -1,5 +1,5 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Graph, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Graph, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Result, Schema } from 'effect'
 import { expect } from 'vitest'
@@ -26,7 +26,7 @@ const observedGraph = (traceId: string) =>
   })
 
 Feature('Holding a settlement to the trace it produced')
-  .withScenarioLayer(InMemory.layer(InMemory.make()))
+  .withScenarioLayer(ObservationWindow.make('trace-spec').layer)
   .liveClock()
   .body(({ scenario }) => {
     scenario(
@@ -93,7 +93,7 @@ Feature('Holding a settlement to the trace it produced')
         Given('a settlement was served under its own observation window')('window', () =>
           Effect.scoped(
             Effect.gen(function*() {
-              const window = yield* Layer.build(InMemory.layer(InMemory.make()))
+              const window = yield* Layer.build(ObservationWindow.make('trace-spec').layer)
               const run = yield* settlement({ orderId: 'order-3', total: 3 }).pipe(Effect.provide(window))
               const spans = yield* Effect.flatMap(
                 Observation.Observation,
@@ -105,7 +105,7 @@ Feature('Holding a settlement to the trace it produced')
           )),
         When('the same trace is asked for at a separate window')('reread', (s) =>
           Effect.scoped(
-            Effect.flatMap(Layer.build(InMemory.layer(InMemory.make())), (window) =>
+            Effect.flatMap(Layer.build(ObservationWindow.make('trace-spec').layer), (window) =>
               Effect.flatMap(Observation.Observation, (observation) =>
                 observation.collect(s.window.run.traceId)).pipe(
                   Effect.provide(window),

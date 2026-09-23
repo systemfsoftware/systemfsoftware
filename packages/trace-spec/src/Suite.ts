@@ -85,7 +85,7 @@ const caseBody = <Input, Output, E, Provided>(
 const caseTools = <Provided, ScenarioRequired>(
   register: Runtime.RegisterFn<void, CaseFailure, Provided | Harness>,
   propIt: Vitest.MethodsNonLive<ScenarioRequired>,
-  scenario: Layer.Layer<Contract.CellServices<Provided>, never, ScenarioRequired>,
+  scenario: Layer.Layer<Contract.Services<Provided>, never, ScenarioRequired>,
 ): CaseTools<Provided | Harness> => {
   const Case: CaseRegistrar<Provided | Harness> = (name, contract, input) =>
     register(name, caseBody(contract, input), 'run')

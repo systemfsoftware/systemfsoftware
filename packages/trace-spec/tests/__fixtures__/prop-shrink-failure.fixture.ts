@@ -1,6 +1,6 @@
 import { NodeFileSystem } from '@effect/platform-node'
 import { it, layer } from '@effect/vitest'
-import { Contract, InMemory, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
+import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Schema } from 'effect'
 import { probeInputs } from './probe-arbitrary.schema.js'
@@ -36,7 +36,7 @@ const atMostOneProbe = Contract.of(ProbeTaxonomy)
   .holds(Rel.any(Rel.absent(Probe), Rel.unique(Probe)))
 
 TraceSuite('prop shrink failure fixture')
-  .withScenarioLayer(Layer.merge(InMemory.layer(InMemory.make()), NodeFileSystem.layer))
+  .withScenarioLayer(Layer.merge(ObservationWindow.make('trace-spec').layer, NodeFileSystem.layer))
   .body(({ Case }) => {
     Case.prop('a generated draw with several probes breaks uniqueness', atMostOneProbe, probeInputs)
   })

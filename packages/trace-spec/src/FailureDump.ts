@@ -1,7 +1,7 @@
 import type { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Option, Schema } from 'effect'
 import * as PlatformError from 'effect/PlatformError'
-import type { SpanRecord } from './graph.schema.js'
+import type { SpanRecord } from './TraceGraph.schema.js'
 import { Break, type Verdict } from './Verdict.schema.js'
 
 export interface Observed {

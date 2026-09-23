@@ -1,13 +1,11 @@
-import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import type { Taxonomy } from '@systemfsoftware/trace-taxonomy'
-import { Effect, FileSystem, Match, Option, Predicate, Result } from 'effect'
+import { Effect, FileSystem, Match, Option, Predicate } from 'effect'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import { ContractDecodeError } from './ContractDecodeError.schema.js'
 import { EmptyObservationError } from './EmptyObservationError.schema.js'
 import * as FailureDump from './FailureDump.js'
 import * as Graph from './Graph.js'
-import { holdTraceContract, TraceGraphCommand } from './hold-trace-contract.workflow.js'
 import { Observation } from './Observation.service.js'
 import type * as Rel from './Rel.js'
 import type { Run, Stimulus } from './Stimulus.js'
@@ -95,167 +93,103 @@ export const holds: {
   <Input, Output, E, R>(self: Stimulated<Input, Output, E, R>, relation: Rel.Relation): Contract<Input, Output, E, R>
 } = dual(2, holdsDual)
 
-/**
- * What the observation window recorded for one run: the input, the run, and the finished
- * spans of the trace the contract minted.
- */
-export interface Reading<Input, Output> {
-  readonly input: Input
-  readonly run: Run<Input, Output>
-  readonly spans: ReadonlyArray<Graph.SpanRecord>
-}
-
-/**
- * The cell's answer: the run it judged, the verdict the relation reached, and where the
- * dump was written when the verdict broke.
- */
 export interface Judgment<Input, Output> {
   readonly run: Run<Input, Output>
   readonly verdict: Verdict
   readonly dumpPath: string | null
 }
 
-export interface CellOptions {
-  /**
-   * Names the dump file after this instead of the trace id, so repeated runs overwrite one
-   * file and the last write is the reported evidence.
-   */
+export interface CheckOptions {
   readonly dumpName?: string | undefined
 }
 
-export type CellFailure<E> = E | ContractDecodeError | EmptyObservationError
+export type JudgeFailure<E> = E | ContractDecodeError | EmptyObservationError
 
-export type CellServices<R> = R | Observation | FileSystem.FileSystem
+export type CheckFailure<E> = JudgeFailure<E> | TraceDisparityError
 
-export type TraceCell<Input, Output, E, R> = Cell.Cell<
-  Input,
-  Judgment<Input, Output>,
-  CellFailure<E>,
-  CellServices<R>
->
-
-export type CheckFailure<E> = CellFailure<E> | TraceDisparityError
-
-const OPERATION = 'trace.contract.check'
+export type Services<R> = R | Observation | FileSystem.FileSystem
 
 const isContract = (value: unknown): value is Contract<never, never, never, never> =>
   Predicate.hasProperty(value, TypeId)
 
-const readOf =
-  <Input, Output, E, R>(stimulus: Stimulus<Input, Output, E, R>) =>
-  (input: Input): Effect.Effect<Reading<Input, Output>, E | EmptyObservationError, Observation | R> =>
-    Effect.gen(function*() {
-      const observation = yield* Observation
-      const run = yield* stimulus(input)
-      const spans = yield* observation.collect(run.traceId)
-      return { input, run, spans }
-    })
-
-const decodeOf =
-  <Input, Output, E, R>(self: Contract<Input, Output, E, R>) =>
-  (reading: Reading<Input, Output>): Result.Result<TraceGraphCommand, ContractDecodeError> =>
-    Result.map(
-      Graph.decode(reading.run.traceId, reading.spans, self.taxonomy),
-      (graph) => new TraceGraphCommand({ traceId: graph.traceId, nodes: graph.nodes }),
-    )
-
-interface Encoded {
-  readonly verdict: Verdict
-  readonly report: Option.Option<string>
-}
-
-const encodedOf = (verdict: Verdict): Encoded => ({ verdict, report: FailureDump.report(verdict) })
-
-const encodeOf = Sandwich.pure(
-  (outcome: Result.Result<Verdict, never>): Result.Result<Encoded, never> => Result.map(outcome, encodedOf),
-)
-
-const observedOf = <Input, Output>(reading: Reading<Input, Output>): FailureDump.Observed => ({
-  traceId: reading.run.traceId,
-  spans: reading.spans,
-})
-
-const judgmentOf = <Input, Output>(
-  reading: Reading<Input, Output>,
+const dumpOf = (
+  observed: FailureDump.Observed,
   verdict: Verdict,
-  dumpPath: string | null,
-): Judgment<Input, Output> => ({ run: reading.run, verdict, dumpPath })
+  options: CheckOptions | undefined,
+): Effect.Effect<string | null, never, FileSystem.FileSystem> =>
+  Option.match(FailureDump.report(verdict), {
+    onNone: () => Effect.succeed(null),
+    onSome: (report) =>
+      Effect.map(
+        Effect.option(FailureDump.write({ ...observed, conjunct: verdict.conjunct, report, name: options?.dumpName })),
+        Option.getOrNull,
+      ),
+  })
 
-const assemble = <Input, Output, E, R>(
+const judgeDual = <Input, Output, E, R>(
   self: Contract<Input, Output, E, R>,
-  options: CellOptions | undefined,
-): TraceCell<Input, Output, E, R> => {
-  const write = (
-    encoded: Encoded,
-    reading: Reading<Input, Output>,
-  ): Effect.Effect<Judgment<Input, Output>, never, FileSystem.FileSystem> =>
-    Option.match(encoded.report, {
-      onNone: () => Effect.succeed(judgmentOf(reading, encoded.verdict, null)),
-      onSome: (report) =>
-        Effect.map(
-          Effect.option(
-            FailureDump.write({
-              ...observedOf(reading),
-              conjunct: encoded.verdict.conjunct,
-              report,
-              name: options?.dumpName,
-            }),
-          ),
-          (dumpPath) => judgmentOf(reading, encoded.verdict, Option.getOrNull(dumpPath)),
-        ),
-    })
-  return Sandwich.named(OPERATION)(readOf(self.stimulus))
-    .decode(Sandwich.pure(decodeOf(self)))
-    .decide(holdTraceContract(self.relation))
-    .encode(encodeOf)
-    .write(write)
-}
+  input: Input,
+  options?: CheckOptions,
+): Effect.Effect<Judgment<Input, Output>, JudgeFailure<E>, Services<R>> =>
+  Effect.gen(function*() {
+    const observation = yield* Observation
+    const run = yield* self.stimulus(input)
+    const spans = yield* observation.collect(run.traceId)
+    const graph = yield* Effect.fromResult(Graph.decode(run.traceId, spans, self.taxonomy))
+    const verdict = self.relation(graph)
+    const dumpPath = yield* dumpOf({ traceId: run.traceId, spans }, verdict, options)
+    return { run, verdict, dumpPath }
+  })
 
-const cellDual = <Input, Output, E, R>(
-  self: Contract<Input, Output, E, R>,
-  options?: CellOptions,
-): TraceCell<Input, Output, E, R> => assemble(self, options)
+export const judge: {
+  <Input>(
+    input: Input,
+    options?: CheckOptions,
+  ): <Output, E, R>(
+    self: Contract<Input, Output, E, R>,
+  ) => Effect.Effect<Judgment<Input, Output>, JudgeFailure<E>, Services<R>>
+  <Input, Output, E, R>(
+    self: Contract<Input, Output, E, R>,
+    input: Input,
+    options?: CheckOptions,
+  ): Effect.Effect<Judgment<Input, Output>, JudgeFailure<E>, Services<R>>
+} = dual((args: IArguments) => isContract(args[0]), judgeDual)
 
-export const cell: {
-  (options?: CellOptions): <Input, Output, E, R>(self: Contract<Input, Output, E, R>) => TraceCell<Input, Output, E, R>
-  <Input, Output, E, R>(self: Contract<Input, Output, E, R>, options?: CellOptions): TraceCell<Input, Output, E, R>
-} = dual((args: IArguments) => isContract(args[0]), cellDual)
+const refuseBreak = <Input, Output>(
+  relationId: string,
+  judgment: Judgment<Input, Output>,
+): Effect.Effect<Judgment<Input, Output>, TraceDisparityError> =>
+  Match.value(judgment.verdict).pipe(
+    Match.tag('Break', (breach) =>
+      Effect.fail(
+        TraceDisparityError.make({
+          relationId,
+          traceId: judgment.run.traceId,
+          breaks: [breach],
+          dumpPath: judgment.dumpPath,
+        }),
+      )),
+    Match.tag('Hold', () => Effect.succeed(judgment)),
+    Match.exhaustive,
+  )
 
 const checkDual = <Input, Output, E, R>(
   self: Contract<Input, Output, E, R>,
   input: Input,
-  options?: CellOptions,
-): Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, CellServices<R>> =>
-  Effect.flatMap(assemble(self, options).run(input), (judgment) =>
-    Match.value(judgment.verdict).pipe(
-      Match.tag(
-        'Break',
-        (breach) =>
-          Effect.fail(
-            TraceDisparityError.make({
-              relationId: self.relation.id,
-              traceId: judgment.run.traceId,
-              breaks: [breach],
-              dumpPath: judgment.dumpPath,
-            }),
-          ),
-      ),
-      Match.tag('Hold', () => Effect.succeed(judgment)),
-      Match.exhaustive,
-    ))
+  options?: CheckOptions,
+): Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, Services<R>> =>
+  Effect.flatMap(judgeDual(self, input, options), (judgment) => refuseBreak(self.relation.id, judgment))
 
 export const check: {
   <Input>(
     input: Input,
-    options?: CellOptions,
-  ): <Output, E, R>(self: Contract<Input, Output, E, R>) => Effect.Effect<
-    Judgment<Input, Output>,
-    CheckFailure<E>,
-    CellServices<R>
-  >
+    options?: CheckOptions,
+  ): <Output, E, R>(
+    self: Contract<Input, Output, E, R>,
+  ) => Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, Services<R>>
   <Input, Output, E, R>(
     self: Contract<Input, Output, E, R>,
     input: Input,
-    options?: CellOptions,
-  ): Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, CellServices<R>>
+    options?: CheckOptions,
+  ): Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, Services<R>>
 } = dual((args: IArguments) => isContract(args[0]), checkDual)

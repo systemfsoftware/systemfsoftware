@@ -1,4 +1,3 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Contract, Observation, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, type FileSystem, type Layer, Schema as S } from 'effect'
@@ -51,20 +50,27 @@ describe('Contract stages', () => {
     expect(Contract.holds(Rel.exists(Settle))).type.not.toBeCallableWith(declared)
   })
 
-  it('cell and check are refused until a relation was declared', () => {
+  it('judge and check are refused until a relation was declared', () => {
     const complete = Contract.of(taxonomy).stimulate(settle).holds(Rel.exists(Settle))
     const stimulated = Contract.of(taxonomy).stimulate(settle)
-    expect(Contract.cell).type.toBeCallableWith(complete)
+    expect(Contract.judge).type.toBeCallableWith(complete, 'order-1')
+    expect(Contract.judge).type.not.toBeCallableWith(stimulated, 'order-1')
     expect(Contract.check).type.toBeCallableWith(complete, 'order-1')
+    expect(Contract.check).type.not.toBeCallableWith(stimulated, 'order-1')
     expect(Contract.check('order-1')).type.toBeCallableWith(complete)
-    expect(Contract.cell).type.not.toBeCallableWith(stimulated)
     expect(Contract.check('order-1')).type.not.toBeCallableWith(stimulated)
   })
 
-  it('the contract check is a cell over the judgment with all four channels pinned', () => {
-    expect(Contract.cell(selfContained)).type.toBe<
-      Cell.Cell<
-        string,
+  it('judge answers the verdict on the success channel and check refuses a break on the error channel', () => {
+    expect(Contract.judge(selfContained, 'order-1')).type.toBe<
+      Effect.Effect<
+        Contract.Judgment<string, string>,
+        Contract.ContractDecodeError | Observation.EmptyObservationError,
+        Observation.Observation | FileSystem.FileSystem
+      >
+    >()
+    expect(selfContained.pipe(Contract.judge('order-1', { dumpName: 'case' }))).type.toBe<
+      Effect.Effect<
         Contract.Judgment<string, string>,
         Contract.ContractDecodeError | Observation.EmptyObservationError,
         Observation.Observation | FileSystem.FileSystem
@@ -73,14 +79,7 @@ describe('Contract stages', () => {
     expect(Contract.check(selfContained, 'order-1')).type.toBe<
       Effect.Effect<
         Contract.Judgment<string, string>,
-        Contract.CheckFailure<never>,
-        Observation.Observation | FileSystem.FileSystem
-      >
-    >()
-    expect(Contract.check(selfContained, 'order-1', { dumpName: 'case' })).type.toBe<
-      Effect.Effect<
-        Contract.Judgment<string, string>,
-        Contract.CheckFailure<never>,
+        Contract.ContractDecodeError | Observation.EmptyObservationError | Contract.TraceDisparityError,
         Observation.Observation | FileSystem.FileSystem
       >
     >()
@@ -92,7 +91,7 @@ describe('Contract stages', () => {
       Effect.Effect<
         Contract.Judgment<string, string>,
         Contract.CheckFailure<InventoryFailure>,
-        Contract.CellServices<Inventory>
+        Inventory | Observation.Observation | FileSystem.FileSystem
       >
     >()
     expect(checked).type.not.toBe<Effect.Effect<Contract.Judgment<string, string>, never, never>>()
