@@ -36,7 +36,7 @@ export class AnnounceRun extends Schema.TaggedClass<AnnounceRun>()('AnnounceRun'
   config: ExtractorConfig,
   options: ExtractorRunOptions,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 type VerbositySignal = 'diagnostics' | 'verbose' | 'cliQuiet' | 'configQuiet'

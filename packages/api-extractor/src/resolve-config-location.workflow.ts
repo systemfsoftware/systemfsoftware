@@ -7,7 +7,7 @@ export class ConfigSearch extends Schema.TaggedClass<ConfigSearch>()('ConfigSear
   startFolder: Schema.String,
   foundPath: Schema.optional(Schema.String),
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/api-extractor/ConfigLocationDecision')

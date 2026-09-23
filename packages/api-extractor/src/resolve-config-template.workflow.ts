@@ -7,7 +7,7 @@ export class ConfigTarget extends Schema.TaggedClass<ConfigTarget>()('ConfigTarg
   targetPath: Schema.String,
   occupied: Schema.Boolean,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/api-extractor/ConfigTemplateDecision')

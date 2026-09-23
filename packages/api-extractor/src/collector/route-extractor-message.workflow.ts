@@ -38,7 +38,7 @@ export class RouteExtractorMessage extends Schema.TaggedClass<RouteExtractorMess
   rules: MessageReportingRules,
   reportEnabled: Schema.Boolean,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 /** The message is consumed by the API report and never reaches the console. */

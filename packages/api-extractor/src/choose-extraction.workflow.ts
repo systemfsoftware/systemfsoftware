@@ -96,7 +96,7 @@ export class DecideExtraction extends Schema.TaggedClass<DecideExtraction>()('De
   }),
   reports: Schema.Array(ReportEvidence),
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 export class ExtractionPassed extends Schema.TaggedClass<ExtractionPassed>()('ExtractionPassed', {

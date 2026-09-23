@@ -32,7 +32,7 @@ const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | Pl
 class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
 
 // @public (undocumented)
-const cli: Command.Command<"api-extractor", {}, {}, UserError, FileSystem_3 | Path_2 | MessageWriter | TypeScriptCompiler | Terminal>;
+const cli: Command.Command<"api-extractor", {}, {}, UserError, MessageWriter | TypeScriptCompiler | FileSystem_3 | Path_2 | Terminal>;
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileNotFound_base" needs to be exported by the entry point index.d.ts
 //

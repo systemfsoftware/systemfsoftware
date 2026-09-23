@@ -36,7 +36,7 @@ export class MergeConfig extends Schema.TaggedClass<MergeConfig>()('MergeConfig'
   base: Schema.Record(Schema.String, Schema.Json),
   derived: Schema.Record(Schema.String, Schema.Json),
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const RecurseTag = { _tag: 'Recurse' } as const
