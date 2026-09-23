@@ -4,7 +4,7 @@ import { Schema as S } from 'effect'
 export const FulfillmentSettle = Span.declare({
   id: 'inventory.fulfillment.settle',
   name: 'inventory.fulfillment.settle',
-  attrs: S.Struct({ orderId: S.String }),
+  attrs: S.Struct({ 'app.order.id': S.String }),
 })
 
 export const ReservationCommit = Span.declare({

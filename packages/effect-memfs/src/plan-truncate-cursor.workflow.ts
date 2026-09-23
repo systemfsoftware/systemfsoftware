@@ -25,7 +25,7 @@ export class PlanTruncateCursor extends Schema.TaggedClass<PlanTruncateCursor>()
   position: Schema.BigInt,
   length: Schema.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 class CursorBeyondEnd extends Schema.TaggedClass<CursorBeyondEnd>()('CursorBeyondEnd', {}) {}
