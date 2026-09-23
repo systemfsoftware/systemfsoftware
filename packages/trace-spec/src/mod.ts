@@ -1,4 +1,5 @@
 export * as Contract from './Contract.js'
+export * as TempoTraceStore from './drivers/tempo-trace-store.js'
 export * as Graph from './Graph.js'
 export * as ObservationWindow from './observation-window.resource.js'
 export * as Observation from './Observation.service.js'
