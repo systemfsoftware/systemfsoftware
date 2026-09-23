@@ -10,6 +10,24 @@ interface TsCompilationOutput {
   readonly hasExportSymbol: boolean
 }
 
+const libDirectory = Ts.sys.getExecutingFilePath().replace(/[/\\][^/\\]+$/, '')
+
+const libSourceFiles = new Map<string, Ts.SourceFile>()
+
+const libSourceFileOf = (
+  fileName: string,
+  languageVersion: Ts.ScriptTarget | Ts.CreateSourceFileOptions,
+): Ts.SourceFile | undefined => {
+  const key = `${JSON.stringify(languageVersion)}\0${fileName}`
+  const cached = libSourceFiles.get(key)
+  if (cached !== undefined) return cached
+  const content = Ts.sys.readFile(fileName) ?? Ts.sys.readFile(`${libDirectory}/${fileName}`)
+  if (content === undefined) return undefined
+  const sourceFile = Ts.createSourceFile(fileName, content, languageVersion, true)
+  libSourceFiles.set(key, sourceFile)
+  return sourceFile
+}
+
 const compileTsVirtual = (
   pair: CompilerTargetPair,
   identifierName: string,
@@ -33,8 +51,6 @@ const compileTsVirtual = (
     '/virtual/index.ts': indexContent,
   }
 
-  const libDirectory = Ts.sys.getExecutingFilePath().replace(/[/\\][^/\\]+$/, '')
-
   const host: Ts.ParseConfigHost = {
     useCaseSensitiveFileNames: true,
     readDirectory: () => ['/virtual/index.ts'],
@@ -53,8 +69,10 @@ const compileTsVirtual = (
 
   const compilerHost: Ts.CompilerHost = {
     getSourceFile: (fileName, languageVersion) => {
-      const content = host.readFile(fileName) ?? Ts.sys.readFile(fileName)
-      return content === undefined ? undefined : Ts.createSourceFile(fileName, content, languageVersion, true)
+      const content = files[fileName]
+      return content === undefined
+        ? libSourceFileOf(fileName, languageVersion)
+        : Ts.createSourceFile(fileName, content, languageVersion, true)
     },
     getDefaultLibFileName: (options) => Ts.getDefaultLibFileName(options),
     getDefaultLibLocation: () => libDirectory,

@@ -73,7 +73,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         }),
         Then('nothing outside the report draft folder changed')((s) => {
           expect(
-            changedEntries(s.observed.before, s.observed.after).filter((entry) => !entry.startsWith('temp/')),
+            changedEntries(s.observed.before, s.observed.after).filter((entry) => entry.split('/')[0] !== 'temp'),
           ).toEqual([])
         }),
         Then('the report draft carries the declaration the report promises')((s) => {

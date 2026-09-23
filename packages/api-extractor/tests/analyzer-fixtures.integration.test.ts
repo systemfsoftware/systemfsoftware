@@ -27,7 +27,7 @@ const reviewAnalyzerPackage = () =>
     Effect.gen(function*() {
       const path = yield* Path.Path
       const run = yield* reviewProject(projectRoot, path.join(projectRoot, 'api-extractor.json'))
-      const committedReport = yield* readFixtureFile(analyzerPackage, analyzerReportPath)
+      const committedReport = yield* readFixtureFile(analyzerPackage, 'expected/analyzer-fixture.api.md')
       return { run, committedReport } satisfies AnalyzerReview
     }))
 

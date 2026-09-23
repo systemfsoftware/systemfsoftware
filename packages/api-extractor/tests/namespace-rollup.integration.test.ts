@@ -21,14 +21,14 @@ interface RollupReview {
   readonly committed: string
 }
 
-const reviewRollup = (fixture: string, rollupPath: string) =>
+const reviewRollup = (fixture: string, bundleName: string) =>
   withFixtureProject(fixture, ({ projectRoot }) =>
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem
       const path = yield* Path.Path
       const run = yield* reviewProject(projectRoot, path.join(projectRoot, 'api-extractor.json'))
-      const emitted = yield* fs.readFileString(path.join(projectRoot, rollupPath))
-      const committed = yield* readFixtureFile(fixture, rollupPath)
+      const emitted = yield* fs.readFileString(path.join(projectRoot, 'dist', bundleName))
+      const committed = yield* readFixtureFile(fixture, `expected/${bundleName}`)
       return { run, emitted, committed } satisfies RollupReview
     }))
 
@@ -65,7 +65,7 @@ Feature('Bundling a package\u2019s declarations with namespace exports')
       Gherkin.Do.pipe(
         Given('a package whose entry point re-exports a namespace that refers back to the entry point')(
           'review',
-          () => reviewRollup('rollup/ae3', 'dist/ae3.d.ts'),
+          () => reviewRollup('rollup/ae3', 'ae3.d.ts'),
         ),
         Then('the review passes without errors')((s) => {
           expect(s.review.run.run.outcome).toMatchObject({
@@ -97,7 +97,7 @@ Feature('Bundling a package\u2019s declarations with namespace exports')
       Gherkin.Do.pipe(
         Given('a package whose entry point re-exports a namespace that itself re-exports a namespace')(
           'review',
-          () => reviewRollup('rollup/nested', 'dist/nested.d.ts'),
+          () => reviewRollup('rollup/nested', 'nested.d.ts'),
         ),
         Then('the review passes without errors')((s) => {
           expect(s.review.run.run.outcome).toMatchObject({
@@ -121,7 +121,7 @@ Feature('Bundling a package\u2019s declarations with namespace exports')
       Gherkin.Do.pipe(
         Given('a package whose entry point re-exports a namespace that re-exports a whole module')(
           'review',
-          () => reviewRollup('rollup/star', 'dist/star.d.ts'),
+          () => reviewRollup('rollup/star', 'star.d.ts'),
         ),
         Then('the review passes without errors')((s) => {
           expect(s.review.run.run.outcome).toMatchObject({

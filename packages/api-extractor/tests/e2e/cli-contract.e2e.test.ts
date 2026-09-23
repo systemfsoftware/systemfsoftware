@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { cpSync, existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const packageRoot = resolve(import.meta.dirname, '../..')
@@ -43,8 +44,12 @@ describe('CLI journeys (e2e)', () => {
   })
 
   describe('J2: quiet exit contract', () => {
-    const fixtureDir = resolve(packageRoot, 'tests/__fixtures__/extractor-flow/simple-pkg')
-    const driftedFixtureDir = resolve(packageRoot, 'tests/__fixtures__/extractor-flow/simple-pkg-drifted')
+    const fixturesDir = resolve(packageRoot, 'tests/__fixtures__/extractor-flow')
+    const isolatedCopyOf = (fixture: string): string => {
+      const projectDir = resolve(mkdtempSync(join(tmpdir(), 'api-extractor-e2e-')), fixture)
+      cpSync(resolve(fixturesDir, fixture), projectDir, { recursive: true })
+      return projectDir
+    }
 
     it.skipIf(!isCliReady)(
       'runs on a clean fixture under --quiet with empty stdout and exit 0',
@@ -53,7 +58,7 @@ describe('CLI journeys (e2e)', () => {
           process.execPath,
           [distCliPath, 'run', '--local', '--quiet'],
           {
-            cwd: fixtureDir,
+            cwd: isolatedCopyOf('simple-pkg'),
             encoding: 'utf8',
             timeout: 15_000,
           },
@@ -70,7 +75,7 @@ describe('CLI journeys (e2e)', () => {
           process.execPath,
           [distCliPath, 'run', '--quiet'],
           {
-            cwd: driftedFixtureDir,
+            cwd: isolatedCopyOf('simple-pkg-drifted'),
             encoding: 'utf8',
             timeout: 15_000,
           },
