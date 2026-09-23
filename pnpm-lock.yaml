@@ -45,9 +45,6 @@ catalogs:
     '@oxc-project/types':
       specifier: ^0.150.0
       version: 0.150.0
-    '@std/jsonc':
-      specifier: jsr:^1.0.2
-      version: 1.0.2
     '@storybook/addon-vitest':
       specifier: ^10.6.0
       version: 10.6.0
@@ -201,9 +198,6 @@ importers:
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.45.0
-      '@std/jsonc':
-        specifier: 'catalog:'
-        version: '@jsr/std__jsonc@1.0.2'
       '@systemfsoftware/oxlint-config-rule-authoring':
         specifier: workspace:^
         version: link:packages/oxlint-presets/oxlint-config-rule-authoring
@@ -213,18 +207,12 @@ importers:
       concurrently:
         specifier: ^10
         version: 10.0.5
-      estree-walker:
-        specifier: ^3
-        version: 3.0.3
       husky:
         specifier: ^9.1.7
         version: 9.1.7
       lint-staged:
         specifier: ^17
         version: 17.5.1
-      oxc-parser:
-        specifier: 'catalog:'
-        version: 0.150.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.82.0(oxlint-tsgolint@7.0.2001)
@@ -3090,18 +3078,6 @@ packages:
     engines: {node: '>=10.0'}
     peerDependencies:
       tslib: '2'
-
-  '@jsr/std__bytes@1.0.6':
-    resolution: {integrity: sha512-St6yKggjFGhxS52IFLJWvkchRFbAKg2Xh8UxA4S1EGz7GJ2Ui+ssDDldj/w2c8vCxvl6qgR0HaYbKeFJNqujmA==, tarball: https://npm.jsr.io/~/11/@jsr/std__bytes/1.0.6.tgz}
-
-  '@jsr/std__json@1.1.0':
-    resolution: {integrity: sha512-a9Eylh7ox33tFn5RxhESnvI4akpefQP5Qn+ePz3Ih4IJ/EPA8p0SKq0aztRfN1sGDhfyWMPWwlUcwNxONt+Ncg==, tarball: https://npm.jsr.io/~/11/@jsr/std__json/1.1.0.tgz}
-
-  '@jsr/std__jsonc@1.0.2':
-    resolution: {integrity: sha512-Lva9lY0UPvvgmS8INUHU8Tqijq2SPfdlnSAvofOYUBiB6ALPxo0rTMznRlY5Wt30nMW+rhMTha1x5RGpMBKUoQ==, tarball: https://npm.jsr.io/~/11/@jsr/std__jsonc/1.0.2.tgz}
-
-  '@jsr/std__streams@1.1.2':
-    resolution: {integrity: sha512-TNg+Mr/vE2Wg+JDdZpVj9umEyzcmSAOtcp0ildlyVCjHy0/fJ2BJZgO8PQXA/SwJOchvKLaMafZzfFkm9PO13A==, tarball: https://npm.jsr.io/~/11/@jsr/std__streams/1.1.2.tgz}
 
   '@microsandbox/types@0.7.2':
     resolution: {integrity: sha512-K02/NyT4VaC14fXUlC6cC3qBYHMzfkhTEibOzJMh7P99wlbA+SxungRpZqPAm4tOzmClZEoBlC8es52Y7ipUtQ==}
@@ -7976,20 +7952,6 @@ snapshots:
       '@jsonjoy.com/buffers': 17.67.0(tslib@2.8.1)
       '@jsonjoy.com/codegen': 17.67.0(tslib@2.8.1)
       tslib: 2.8.1
-
-  '@jsr/std__bytes@1.0.6': {}
-
-  '@jsr/std__json@1.1.0':
-    dependencies:
-      '@jsr/std__streams': 1.1.2
-
-  '@jsr/std__jsonc@1.0.2':
-    dependencies:
-      '@jsr/std__json': 1.1.0
-
-  '@jsr/std__streams@1.1.2':
-    dependencies:
-      '@jsr/std__bytes': 1.0.6
 
   '@microsandbox/types@0.7.2': {}
 
