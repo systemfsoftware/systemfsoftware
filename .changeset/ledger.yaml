@@ -1126,6 +1126,10 @@
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
     - bumpy-pans-post
+"@systemfsoftware/oxlint-config-recommended@2.0.1":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - chilly-grapes-count
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -2712,3 +2716,7 @@
   dir: packages/toolchain/tsconfig
   intents:
     - wacky-cooks-cheer
+"@systemfsoftware/tsconfig@2.0.1":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - chilly-grapes-count
