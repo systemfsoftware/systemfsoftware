@@ -206,6 +206,19 @@ export type HandlerRecord<
   Out = unknown,
 > = Handlers<Decision, Error, Raw, Out, Out, Out>
 
+export interface HandlerForNoVariant {
+  readonly __CELL_HANDLER_NAMES_NO_VARIANT__:
+    'this handler key names no decision, error, or CommandRejected tag the write can receive'
+}
+
+/**
+ * The keys of a handler record that answer no variant. A handler for a tag that can never
+ * arrive is dead code that reads like a live branch, so each such key is refused by name.
+ */
+export type ExcessHandlers<H, Decision extends DecisionSchema, Error extends DecisionSchema> = {
+  readonly [Key in Exclude<keyof H, TagsOf<EncodedVariants<Decision, Error>>>]: HandlerForNoVariant
+}
+
 /** Every handler's returned effect, unioned across the record. */
 type HandlerOutput<H> = {
   readonly [Tag in keyof H]: H[Tag] extends (value: never, command: never) => infer Out ? Out : never
@@ -237,7 +250,7 @@ export interface DecidedChain<
 > {
   readonly 'sentence: must write after decide': true
   write<H extends HandlerRecord<Decision, Error, Raw>>(
-    handlers: H,
+    handlers: H & ExcessHandlers<H, Decision, Error>,
   ): WrittenFrom<I, RE, RR, Decision, H>
 }
 
@@ -417,7 +430,7 @@ export const named = <N extends string>(
     ): [Raw] extends [Command['Encoded']] ? DecidedChain<I, Raw, RE, RR, Decision, Error> : ReadNotEncoded => {
       const schemas: WorkflowSchemas<Command, Decision, Error> = workflow[WorkflowSchemasKey]
       const write = <H extends HandlerRecord<Decision, Error, Raw>>(
-        handlers: H,
+        handlers: H & ExcessHandlers<H, Decision, Error>,
       ): WrittenFrom<I, RE, RR, Decision, H> => {
         type A = Effect.Success<HandlerOutput<H>>
         type WE = Effect.Error<HandlerOutput<H>>

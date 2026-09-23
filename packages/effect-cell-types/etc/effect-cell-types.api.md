@@ -11,7 +11,7 @@ export namespace Cell {
 
 // @public (undocumented)
 export namespace Sandwich {
-    export { Cell, CommandRejected, DEFAULT_DURATION_BOUNDARIES, DecidedChain, HandlerRecord, Handlers, NamedCellOptions, Phases, ReadChain, ReadNotEncoded, ValidOperationName, WrittenCell, WrittenFrom, named };
+    export { Cell, CommandRejected, DEFAULT_DURATION_BOUNDARIES, DecidedChain, ExcessHandlers, HandlerForNoVariant, HandlerRecord, Handlers, NamedCellOptions, Phases, ReadChain, ReadNotEncoded, ValidOperationName, WrittenCell, WrittenFrom, named };
 }
 
 // @public (undocumented)

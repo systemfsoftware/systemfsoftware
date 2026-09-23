@@ -115,7 +115,7 @@ Effect.runPromise(Effect.scoped(program)).then(console.log)
 
 A quantity of `1.5` never reaches the decision. It fails the command schema, so the `CommandRejected` handler runs with the schema's message, `Expected an integer at ["requested"]`.
 
-Delete any one handler from `.write({ ... })` and the file no longer compiles.
+Delete any one handler from `.write({ ... })` and the file no longer compiles. Add a handler for a tag the decision can never produce and it no longer compiles either.
 
 ## How a run works
 
@@ -178,6 +178,7 @@ The compiler refuses a decision that breaks these rules. Each refusal names the 
 | a brand value that is not a lowercase, dotted OpenTelemetry key  | `InvalidInstrumentationValue`                 |
 | a `read` whose result cannot be the command's `Encoded` form     | `ReadNotEncoded` or a type mismatch           |
 | a `write` missing a handler, or a handler typed on the class     | a missing property or parameter mismatch      |
+| a `write` with a handler for a tag no outcome carries            | `HandlerForNoVariant` on that key             |
 
 ## Services
 

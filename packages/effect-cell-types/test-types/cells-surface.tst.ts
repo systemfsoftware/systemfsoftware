@@ -194,6 +194,15 @@ describe('the handler record the write holds exhaustive', () => {
     })
   })
 
+  it('Should_RefuseTheWrite_When_AHandlerKeyNamesNoVariant', () => {
+    const decided = Sandwich.named('cell.surface')(readTagged).decide(acceptTaggedCommand)
+    expect<typeof decided.write>().type.toBeCallableWith(answerTagged)
+    expect<typeof decided.write>().type.not.toBeCallableWith({
+      ...answerTagged,
+      DecisionThree: () => Effect.succeed(4),
+    })
+  })
+
   it('Should_RefuseAHandler_When_ItsParameterIsTheDomainType', () => {
     const decided = Sandwich.named('cell.surface')(readTagged).decide(acceptTaggedCommand)
     expect<typeof decided.write>().type.not.toBeCallableWith({

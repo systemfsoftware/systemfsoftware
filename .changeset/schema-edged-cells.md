@@ -6,5 +6,5 @@ Cells now decode and encode through the workflow's schemas, and `write` must han
 
 - Replace `Workflow.total` and `Workflow.andThen` with `Workflow.make({ command, decision, error, decide })`, using `error: Schema.Never` when the decision cannot fail. A `decision` may also be a list of events: `Schema.Array(Schema.Union([...]))`.
 - Remove `.decode(...)`, `.encode(...)` and `Sandwich.pure`. The chain is `Sandwich.named(name)(read).decide(workflow).write(handlers)`, and `read` returns the command's encoded form.
-- Pass `write` one handler per decision tag, one per error tag, and one for `CommandRejected`.
+- Pass `write` one handler per decision tag, one per error tag, and one for `CommandRejected`. A handler for a tag no outcome carries is a compile error (`HandlerForNoVariant`).
 - Replace `Cell.provide(layer)` with `Cell.provideContext(context)`, building the context once.
