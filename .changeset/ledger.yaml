@@ -286,6 +286,10 @@
   intents:
     - modern-ends-know
     - workflow-brand-forced
+"@systemfsoftware/effect-cell-types@10.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - otel-instrumentation-map
 "@systemfsoftware/effect-cell-types@2.0.0":
   dir: packages/effect-cell-types
   intents:
@@ -461,6 +465,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-daemon-spec@4.0.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - daemon-restart-span-key
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -519,6 +527,10 @@
   dir: packages/effect-gherkin-spec
   intents:
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-gherkin-spec@4.2.3":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - gherkin-registrar-extraction
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -584,6 +596,10 @@
   dir: packages/effect-microsandbox
   intents:
     - moody-pens-carry
+"@systemfsoftware/effect-microsandbox@1.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - microsandbox-otel-span-keys
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:
@@ -809,6 +825,10 @@
   dir: packages/effect-schema-vite
   intents:
     - stryker-version-bump
+"@systemfsoftware/effect-spec-runtime@0.0.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - effect-spec-runtime
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -1029,6 +1049,11 @@
     - ban-unknown-except-generic-default
     - eliminate-bare-classes-and-enforce-ban-classes
     - modular-oxlint-ecosystem
+"@systemfsoftware/oxlint-config-recommended@1.1.1":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - ban-raw-span-name-emit
+    - trace-test-requires-taxonomy
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -1462,6 +1487,11 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
   intents:
     - require-integration-environment-layer
+"@systemfsoftware/oxlint-plugin-test-discipline@3.8.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - ban-raw-span-name-emit
+    - trace-test-requires-taxonomy
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
@@ -2554,6 +2584,14 @@
   dir: packages/stryker-js/stryker-test-contribution
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/trace-spec@0.0.0":
+  dir: packages/trace-spec
+  intents:
+    - trace-spec
+"@systemfsoftware/trace-taxonomy@0.0.0":
+  dir: packages/trace-taxonomy
+  intents:
+    - declared-span-taxonomy
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
