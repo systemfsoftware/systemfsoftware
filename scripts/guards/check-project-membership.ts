@@ -4,6 +4,9 @@ import { parse } from '@std/yaml'
 
 const WS = 'pnpm-workspace.yaml'
 const TS_CONFIG = 'tsconfig.json'
+const MANIFEST = 'package.json'
+const DENO_JSON = 'deno.json'
+const DENO_JSONC = 'deno.jsonc'
 const TSC = join(Deno.cwd(), 'node_modules/.bin/tsc')
 
 const dec = new TextDecoder()
@@ -54,7 +57,7 @@ const workspaceGlobs = async (wsPath: string): Promise<readonly string[]> => {
   })
 }
 
-const packagesWithTsconfig = async (root: string): Promise<readonly string[]> => {
+const workspacePackages = async (root: string): Promise<readonly string[]> => {
   const dirs = new Set<string>()
   for (const glob of await workspaceGlobs(join(root, WS))) {
     const prefix = join(root, glob.slice(0, -2))
@@ -62,10 +65,55 @@ const packagesWithTsconfig = async (root: string): Promise<readonly string[]> =>
     for await (const entry of Deno.readDir(prefix)) {
       if (!entry.isDirectory) continue
       const dir = join(prefix, entry.name)
-      if (await exists(join(dir, TS_CONFIG))) dirs.add(dir)
+      if (await exists(join(dir, MANIFEST))) dirs.add(dir)
     }
   }
   return [...dirs].sort()
+}
+
+const hasDenoConfig = async (dir: string, cache: Map<string, boolean>): Promise<boolean> => {
+  const known = cache.get(dir)
+  if (known !== undefined) return known
+  const found = (await exists(join(dir, DENO_JSON))) || (await exists(join(dir, DENO_JSONC)))
+  cache.set(dir, found)
+  return found
+}
+
+const denoOwned = async (pkgDir: string, file: string, cache: Map<string, boolean>): Promise<boolean> => {
+  for (let dir = dirname(file); dir.startsWith(pkgDir); dir = dirname(dir)) {
+    if (await hasDenoConfig(dir, cache)) return true
+    if (dir === pkgDir) break
+  }
+  return false
+}
+
+const packageViolations = async (
+  root: string,
+  dir: string,
+  tracked: readonly string[],
+): Promise<{ readonly checked: number; readonly exempt: number; readonly violations: readonly string[] }> => {
+  const label = relative(root, dir)
+  const denoCache = new Map<string, boolean>()
+  const checked: string[] = []
+  let exempt = 0
+  for (const file of tracked) {
+    if (await denoOwned(dir, file, denoCache)) exempt++
+    else checked.push(file)
+  }
+  if (!(await exists(join(dir, TS_CONFIG)))) {
+    return {
+      checked: checked.length,
+      exempt,
+      violations: checked.map((file) =>
+        `${label}: ${relative(root, file)} in no project (package has no tsconfig.json)`
+      ),
+    }
+  }
+  return {
+    checked: checked.length,
+    exempt,
+    violations: membershipViolations(root, label, checked, await readProjects(root, dir)),
+  }
 }
 
 const isSource = (path: string): boolean =>
@@ -172,15 +220,19 @@ const membershipViolations = (
 
 const main = async (): Promise<number> => {
   const root = Deno.cwd()
-  const dirs = await packagesWithTsconfig(root)
-  if (dirs.length === 0) throw new Error('no workspace package carries a tsconfig.json — refusing the empty verdict')
+  const dirs = await workspacePackages(root)
+  if (dirs.length === 0) {
+    throw new Error('no workspace package matched the workspace globs — refusing the empty verdict')
+  }
 
   const violations: string[] = []
-  let tracked = 0
+  let checked = 0
+  let exempt = 0
   for (const dir of dirs) {
-    const files = await trackedSources(root, dir)
-    tracked += files.length
-    violations.push(...membershipViolations(root, relative(root, dir), files, await readProjects(root, dir)))
+    const judged = await packageViolations(root, dir, await trackedSources(root, dir))
+    checked += judged.checked
+    exempt += judged.exempt
+    violations.push(...judged.violations)
   }
 
   if (violations.length > 0) {
@@ -200,7 +252,7 @@ const main = async (): Promise<number> => {
   }
 
   console.log(
-    `project membership: ${tracked} tracked TypeScript file(s) across ${dirs.length} package(s) each belong to exactly one project`,
+    `project membership: ${checked} tracked TypeScript file(s) across ${dirs.length} package(s) each belong to exactly one project (${exempt} Deno-owned file(s) exempt)`,
   )
   return 0
 }
@@ -224,6 +276,20 @@ const walkSources = async (dir: string): Promise<readonly string[]> => {
 }
 
 const TS = 'export const x = 1\n'
+
+const MANIFESTS = Object.fromEntries(
+  [
+    'claimed-twice',
+    'clean',
+    'deno-side',
+    'harness-claimed',
+    'harness-loose',
+    'no-tsconfig-deno',
+    'no-tsconfig-empty',
+    'no-tsconfig-src',
+    'unclaimed',
+  ].map((dir) => [`pkgs/${dir}/package.json`, `{"name": "@fixture/${dir}"}\n`]),
+)
 
 const CLEAN = {
   'pkgs/clean/tsconfig.json': '{"include": ["src"]}\n',
@@ -255,6 +321,17 @@ const HARNESS_LOOSE = {
   'pkgs/harness-loose/vitest.config.ts': TS,
   'pkgs/harness-loose/scripts/other.ts': TS,
 }
+const NO_TSCONFIG_SRC = { 'pkgs/no-tsconfig-src/src/quiet-build.ts': TS }
+const NO_TSCONFIG_DENO = {
+  'pkgs/no-tsconfig-deno/scripts/deno.jsonc': '{}\n',
+  'pkgs/no-tsconfig-deno/scripts/checks/type-check.ts': TS,
+}
+const DENO_OWNED_IN_TSCONFIG_PKG = {
+  'pkgs/deno-side/tsconfig.json': '{"include": ["src"]}\n',
+  'pkgs/deno-side/src/index.ts': TS,
+  'pkgs/deno-side/scripts/deno.jsonc': '{}\n',
+  'pkgs/deno-side/scripts/check.ts': TS,
+}
 
 const selftest = async (): Promise<number> => {
   const failures: string[] = []
@@ -264,19 +341,34 @@ const selftest = async (): Promise<number> => {
     await plant(wsRoot, {
       'pnpm-workspace.yaml': "packages:\n  - 'pkgs/*'\n",
       'pkgs/no-tsconfig/package.json': '{"name": "no-tsconfig"}\n',
+      'pkgs/no-tsconfig-empty/README.md': '# nothing\n',
+      ...MANIFESTS,
       ...CLEAN,
       ...UNCLAIMED,
       ...CLAIMED_TWICE,
       ...HARNESS_CLAIMED,
       ...HARNESS_LOOSE,
+      ...NO_TSCONFIG_SRC,
+      ...NO_TSCONFIG_DENO,
+      ...DENO_OWNED_IN_TSCONFIG_PKG,
     })
 
     const fixturePackages = [
       {
-        label: 'member enumeration matches the globs and the tsconfig presence',
+        label: 'member enumeration matches the globs',
         dir: null,
-        expect: ['pkgs/claimed-twice', 'pkgs/clean', 'pkgs/harness-claimed', 'pkgs/harness-loose', 'pkgs/unclaimed']
-          .map((dir) => join(wsRoot, dir)),
+        expect: [
+          'pkgs/claimed-twice',
+          'pkgs/clean',
+          'pkgs/deno-side',
+          'pkgs/harness-claimed',
+          'pkgs/harness-loose',
+          'pkgs/no-tsconfig',
+          'pkgs/no-tsconfig-deno',
+          'pkgs/no-tsconfig-empty',
+          'pkgs/no-tsconfig-src',
+          'pkgs/unclaimed',
+        ].map((dir) => join(wsRoot, dir)),
       },
       { label: 'a clean fixture passes', dir: 'pkgs/clean', expect: [] },
       {
@@ -301,19 +393,43 @@ const selftest = async (): Promise<number> => {
         dir: 'pkgs/harness-loose',
         expect: ['pkgs/harness-loose: pkgs/harness-loose/vitest.config.ts in no project'],
       },
+      {
+        label: 'a no-tsconfig package with source is named for the missing tsconfig.json',
+        dir: 'pkgs/no-tsconfig-src',
+        expect: [
+          'pkgs/no-tsconfig-src: pkgs/no-tsconfig-src/src/quiet-build.ts in no project (package has no tsconfig.json)',
+        ],
+      },
+      {
+        label: 'a no-tsconfig package whose files are Deno-owned passes',
+        dir: 'pkgs/no-tsconfig-deno',
+        expect: [],
+      },
+      {
+        label: 'a no-tsconfig package with no TypeScript passes',
+        dir: 'pkgs/no-tsconfig',
+        expect: [],
+      },
+      {
+        label: 'a Deno-owned file inside a package with a tsconfig.json is exempt',
+        dir: 'pkgs/deno-side',
+        expect: [],
+      },
     ] as const
     for (const { label, dir, expect } of fixturePackages) {
       if (dir === null) {
-        const got = await packagesWithTsconfig(wsRoot)
+        const got = await workspacePackages(wsRoot)
         if (JSON.stringify(got) !== JSON.stringify(expect)) {
           failures.push(`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`)
         }
         continue
       }
       const pkgDir = join(wsRoot, dir)
-      const got = membershipViolations(wsRoot, dir, await walkSources(pkgDir), await readProjects(wsRoot, pkgDir))
-      if (JSON.stringify(got) !== JSON.stringify(expect)) {
-        failures.push(`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`)
+      const judged = await packageViolations(wsRoot, pkgDir, await walkSources(pkgDir))
+      if (JSON.stringify(judged.violations) !== JSON.stringify(expect)) {
+        failures.push(
+          `  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(judged.violations)}`,
+        )
       }
     }
 
