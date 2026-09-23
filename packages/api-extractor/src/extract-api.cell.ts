@@ -52,6 +52,7 @@ import {
   isExtractorError,
 } from './errors/index.js'
 import type { ExtractionRequest } from './extraction-request.js'
+import type { ReportRenderFailure } from './generators/declaration-span-plan.js'
 import { DtsRollupKind } from './generators/dts-rollup-generator.js'
 import type { RenderedApiReport } from './generators/index.js'
 import { convertNewlines, renderApiReport, renderDtsRollup } from './generators/index.js'
@@ -423,17 +424,28 @@ interface ReportFold {
 
 const initialFold: ReportFold = { handled: HashSet.empty(), renders: [] }
 
-const decodeOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
-  renderRollupsOf(snapshot)
-  const fold: ReportFold = Arr.reduce(
-    snapshot.reports,
-    initialFold,
-    (accumulator, plan) => {
-      const render = renderApiReport(snapshot.analysis, plan.variant, accumulator.handled)
-      Snapshot.locateMessages(snapshot.analysis, snapshot.sourceMapIndex)
-      return { handled: render.consumed, renders: Arr.append(accumulator.renders, render) }
-    },
+const reportRefusalOf = (failure: ReportRenderFailure): ExtractorError =>
+  Match.value(failure).pipe(
+    Match.tag('UnsupportedStarExportError', (refusal) => refusal),
+    Match.orElse((defect) => {
+      throw defect
+    }),
   )
+
+const renderApiReportsOf = (snapshot: ExtractionSnapshot): Result.Result<ReportFold, ExtractorError> => {
+  const initial: Result.Result<ReportFold, ExtractorError> = Result.succeed(initialFold)
+  return Arr.reduce(snapshot.reports, initial, (accumulator, plan) =>
+    Result.flatMap(accumulator, (fold) =>
+      Result.map(
+        Result.mapError(renderApiReport(snapshot.analysis, plan.variant, fold.handled), reportRefusalOf),
+        (render) => {
+          Snapshot.locateMessages(snapshot.analysis, snapshot.sourceMapIndex)
+          return { handled: render.consumed, renders: Arr.append(fold.renders, render) }
+        },
+      )))
+}
+
+const decideExtractionOf = (snapshot: ExtractionSnapshot, fold: ReportFold): DecideExtraction => {
   Snapshot.markHandled(snapshot.analysis, fold.handled)
   const log = Snapshot.messageLog(snapshot.analysis)
   const reports = Arr.map(Arr.zip(snapshot.reports, fold.renders), ([plan, render]) =>
@@ -457,10 +469,15 @@ const decodeOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
   })
 }
 
+const decodeOf = (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> => {
+  renderRollupsOf(snapshot)
+  return Result.map(renderApiReportsOf(snapshot), (fold) => decideExtractionOf(snapshot, fold))
+}
+
 const decodeSnapshot = Sandwich.pure(
   (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> => {
     try {
-      return Result.succeed(decodeOf(snapshot))
+      return decodeOf(snapshot)
     } catch (cause) {
       return decodeRefusalOf(cause)
     }
