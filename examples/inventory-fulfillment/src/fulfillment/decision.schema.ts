@@ -117,3 +117,7 @@ export class OptimisticConflict extends S.TaggedError<OptimisticConflict>()('Opt
 
 export const FulfillmentError = S.Union([InsufficientStock, CreditLimitExceeded, Unauthorized, Forbidden])
 export type FulfillmentError = S.Schema.Type<typeof FulfillmentError>
+
+/** The settlement refusals the fulfillment cell answers with. */
+export const FulfillmentRefusal = S.Union([InsufficientStock, CreditLimitExceeded])
+export type FulfillmentRefusal = S.Schema.Type<typeof FulfillmentRefusal>
