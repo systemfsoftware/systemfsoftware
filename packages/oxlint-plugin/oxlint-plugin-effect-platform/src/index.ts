@@ -1,4 +1,4 @@
-import type { OxlintOverride } from 'oxlint'
+import type { OxlintConfig, OxlintOverride } from 'oxlint'
 import { entrypointInterpretsOnce } from './rules/entrypoint-interprets-once.js'
 import { entrypointNoExports } from './rules/entrypoint-no-exports.js'
 import { entrypointNoPromiseWrapper } from './rules/entrypoint-no-promise-wrapper.js'
@@ -7,13 +7,22 @@ import { noLoggingInCatch } from './rules/no-logging-in-catch.js'
 import { noNativeMapInEffect } from './rules/no-native-map-in-effect.js'
 import { noNativeSetInEffect } from './rules/no-native-set-in-effect.js'
 import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-import.js'
+import { noUnportedTimeSource } from './rules/no-unported-time-source.js'
 import { runtimeConstructionPlacement } from './rules/runtime-construction-placement.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-platform'
 
 const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
-const recommendedRules = {
+/** The files that own the process timers, clocks, and randomness the rest of production source must reach through them. */
+const PLATFORM_PORTS = [
+  'packages/atom/effect-atom/src/internal/HostTimer.ts',
+  'packages/effect-schema-law/src/recursion-laws.ts',
+  // W3C trace/span IDs must stay globally unique across processes — trace-spec reads traces back from a shared remote store, so they cannot come from a seeded kernel Random.
+  'packages/trace-spec/src/Stimulus.ts',
+]
+
+const recommendedRules: NonNullable<OxlintConfig['rules']> = {
   [rule('entrypoint-interprets-once')]: 'error',
   [rule('entrypoint-no-exports')]: 'error',
   [rule('entrypoint-not-imported')]: 'error',
@@ -23,6 +32,7 @@ const recommendedRules = {
   [rule('no-native-map-in-effect')]: 'error',
   [rule('no-native-set-in-effect')]: 'error',
   [rule('no-new-worker-with-wasm-import')]: 'error',
+  [rule('no-unported-time-source')]: ['error', { ports: [...PLATFORM_PORTS] }],
 } as const
 
 export const noNodeBuiltinImports: NonNullable<OxlintOverride['rules']>['no-restricted-imports'] = [
@@ -76,6 +86,7 @@ export default {
     'no-native-map-in-effect': noNativeMapInEffect,
     'no-native-set-in-effect': noNativeSetInEffect,
     'no-new-worker-with-wasm-import': noNewWorkerWithWasmImport,
+    'no-unported-time-source': noUnportedTimeSource,
   },
   configs: {
     recommended: {
