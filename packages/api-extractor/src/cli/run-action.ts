@@ -8,20 +8,16 @@ import type { PlatformError } from 'effect/PlatformError'
 import * as Schema from 'effect/Schema'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
 
+import { type ExtractionDecision, ExtractionPassed } from '../choose-extraction.workflow.js'
 import type { CliFlags } from '../collector/verbosity.schema.js'
 import type { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
-import {
-  cell as extractorCell,
-  ConfigFileNotFound,
-  type ExtractionDecision,
-  ExtractionPassed,
-  type ExtractorError,
-  type ExtractorRunInput,
-  type ExtractorRunOptions,
-  MessageWriter,
-} from '../Extractor/mod.js'
+import { ConfigFileNotFound } from '../errors/config.schema.js'
+import type { ExtractorError } from '../errors/extractor-error.schema.js'
+import type { ExtractorRunInput, ExtractorRunOptions } from '../extraction-request.js'
 import { locateConfig } from '../locate-config.cell.js'
 import { LocateConfig } from '../locate-config.schema.js'
+import { MessageWriter } from '../message-writer.service.js'
+import { cell as extractorCell } from '../run-extractor.js'
 
 export interface ParsedRunFlags {
   readonly config: Option.Option<string>
@@ -81,7 +77,8 @@ const refusalOf = (failure: ConfigFileNotFound | ExtractorError | PlatformError)
       new CliError.UserError({
         cause,
         userMessage: `Extraction failed: ${cause.message}`,
-      })),
+      })
+    ),
   )
 
 const outcomeMessageOf = (errorCount: number): string =>

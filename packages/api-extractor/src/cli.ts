@@ -4,18 +4,10 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { Command } from 'effect/unstable/cli'
 
-import { initCommand } from './cli/init-action.js'
-import { runCommand } from './cli/run-action.js'
+import { cli } from './cli/command.js'
 import { messageWriterLayer } from './drivers/console-message-writer.js'
 import { layer as typescriptCompilerLayer } from './drivers/typescript-compiler.js'
 import { extractorVersion } from './version.js'
-
-export const cli = Command.make('api-extractor').pipe(
-  Command.withDescription(
-    'Analyze exported TypeScript declarations, emit .api.md reports, and generate .d.ts rollups',
-  ),
-  Command.withSubcommands([runCommand, initCommand]),
-)
 
 const cliLayers = Layer.mergeAll(
   NodeServices.layer,

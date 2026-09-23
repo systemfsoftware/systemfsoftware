@@ -18,3 +18,9 @@ export { type ConsoleMessageWriterOptions, layer, type TextWritable } from '../d
 export { MessageWriter } from '../message-writer.service.js'
 
 export { extractorVersion as version } from '../version.js'
+
+/**
+ * The command line the published `api-extractor` bin runs. Exported side-effect
+ * free so the bin edge in `src/cli.ts` stays the only place that launches it.
+ */
+export { cli } from '../cli/command.js'

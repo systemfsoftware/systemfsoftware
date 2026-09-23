@@ -10,7 +10,9 @@
         "name": "@effect/language-service"
       }
     ],
-    "types": []
+    "types": [
+      "node"
+    ]
   },
   "include": [
     "src",

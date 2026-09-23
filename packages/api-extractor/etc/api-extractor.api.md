@@ -5,15 +5,20 @@
 ```ts
 
 import { Cell } from '@systemfsoftware/effect-cell-types';
+import { Command } from 'effect/unstable/cli';
 import { Context } from 'effect';
 import * as Effect from 'effect/Effect';
 import * as FileSystem_2 from 'effect/FileSystem';
+import { FileSystem as FileSystem_3 } from 'effect/FileSystem';
 import * as Layer from 'effect/Layer';
 import * as Path from 'effect/Path';
+import { Path as Path_2 } from 'effect/Path';
 import { PlatformError } from 'effect/PlatformError';
 import * as Schema$1 from 'effect/Schema';
 import { Schema } from 'effect';
+import { Terminal } from 'effect/Terminal';
 import * as Ts from 'typescript';
+import { UserError } from 'effect/unstable/cli/CliError';
 import { YieldableError } from 'effect/Cause';
 
 // Warning: (ae-forgotten-export) The symbol "TypeScriptCompiler" needs to be exported by the entry point index.d.ts
@@ -25,6 +30,9 @@ const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | Pl
 //
 // @public (undocumented)
 class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
+
+// @public (undocumented)
+const cli: Command.Command<"api-extractor", {}, {}, UserError, FileSystem_3 | Path_2 | MessageWriter | TypeScriptCompiler | Terminal>;
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileNotFound_base" needs to be exported by the entry point index.d.ts
 //
@@ -86,29 +94,30 @@ interface ExtractionRequest {
 
 declare namespace Extractor {
     export {
-        ExtractionPassed,
-        ExtractionFailed,
-        cell,
-        run,
-        layer,
-        CircularConfigExtendsError,
         ConfigFileNotFound,
         ConfigJsonSyntaxError,
         ConfigSchemaValidationError,
+        UnresolvedTokenError,
+        CircularConfigExtendsError,
+        ExtractionPassed,
+        ExtractionFailed,
+        UnsupportedSyntaxError,
+        UnsupportedStarExportError,
+        TsConfigReadError,
+        TsCompilerLoadError,
+        ExtractorError,
+        MessageWriter,
+        cell,
+        run,
+        layer,
+        cli,
         ConsoleMessageWriterOptions,
         ExtractionDecision,
         ExtractionRequest,
-        ExtractorError,
         ExtractorRunInput,
         ExtractorRunOptions,
-        MessageWriter,
         ReportOutcome,
         TextWritable,
-        TsCompilerLoadError,
-        TsConfigReadError,
-        UnresolvedTokenError,
-        UnsupportedStarExportError,
-        UnsupportedSyntaxError,
         extractorVersion as version
     }
 }
