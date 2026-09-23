@@ -10,7 +10,7 @@ import * as semver from 'semver'
 
 import { type INodePackageJson, PackageJsonLookup } from './package-json-lookup.js'
 
-import { ConsoleMessageId, type MessageLog } from '../collector/message-log.js'
+import { ConsoleMessageId, type MessageSink } from '../collector/message-log.js'
 
 /*
  * Represents analyzed information for a package.json file.
@@ -210,7 +210,7 @@ function _resolveTsdocMetadataPathFromPackageJson(
     packageFolder,
     // This non-null assertion is safe because the last entry in TSDOC_METADATA_RESOLUTION_FUNCTIONS
     // returns a non-undefined value.
-    tsdocMetadataRelativePath!,
+    tsdocMetadataRelativePath,
   )
   return tsdocMetadataPath
 }
@@ -232,16 +232,16 @@ export class PackageMetadataManager extends Pipeable.Class {
   public static tsdocMetadataFilename: string = TSDOC_METADATA_FILENAME
 
   readonly #packageJsonLookup: PackageJsonLookup
-  readonly #messageLog: MessageLog
+  readonly #messageSink: MessageSink
   readonly #packageMetadataByPackageJsonPath: Map<string, PackageMetadata> = new Map<
     string,
     PackageMetadata
   >()
 
-  public constructor(packageJsonLookup: PackageJsonLookup, messageLog: MessageLog) {
+  public constructor(packageJsonLookup: PackageJsonLookup, messageSink: MessageSink) {
     super()
     this.#packageJsonLookup = packageJsonLookup
-    this.#messageLog = messageLog
+    this.#messageSink = messageSink
   }
 
   /*
@@ -286,7 +286,7 @@ export class PackageMetadataManager extends Pipeable.Class {
       )
 
       if (ts.sys.fileExists(tsdocMetadataPath)) {
-        this.#messageLog.addConsoleMessage(
+        this.#messageSink.addConsoleMessage(
           ConsoleMessageId.FoundTSDocMetadata,
           'verbose',
           'Found metadata in ' + tsdocMetadataPath,

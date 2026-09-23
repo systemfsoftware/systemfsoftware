@@ -1,289 +1,172 @@
-import * as Pipeable from 'effect/Pipeable'
+import { HashMap, Option } from 'effect'
+import * as Arr from 'effect/Array'
+import * as Match from 'effect/Match'
+import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
-// Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
-// See LICENSE in the project root for license information.
-
-import { type MappingItem, type Position, type RawSourceMap, SourceMapConsumer } from 'source-map'
-import * as ts from 'typescript'
+import { type MappingItem, type RawSourceMap, SourceMapConsumer } from 'source-map'
 import { dirname, resolve } from '../analyzer/path-helpers.js'
-import { invariant } from '../utils/invariant.js'
 import { type SourceMapJson, SourceMapJsonFromString } from './source-map.schema.js'
 
-const rawSourceMapOf = (decoded: SourceMapJson): RawSourceMap => {
-  const rawSourceMap: RawSourceMap = {
-    version: String(decoded.version),
-    sources: [...(decoded.sources ?? [])],
-    names: [...(decoded.names ?? [])],
-    mappings: decoded.mappings,
-  }
-  if (decoded.file !== undefined) {
-    rawSourceMap.file = decoded.file
-  }
-  if (decoded.sourceRoot !== undefined) {
-    rawSourceMap.sourceRoot = decoded.sourceRoot
-  }
-  return rawSourceMap
+export interface MessagePosition {
+  readonly sourceFilePath: string
+  readonly line: number
+  readonly column: number
 }
 
-interface ISourceMap {
-  sourceMapConsumer: SourceMapConsumer
-
-  // SourceMapConsumer.originalPositionFor() is useless because the mapping contains numerous gaps,
-  // and the API provides no way to find the nearest match.  So instead we extract all the mapping items
-  // and search them using _findNearestMappingItem().
-  mappingItems: MappingItem[]
+export interface SourceMapIndex {
+  readonly mapTextByDtsPath: HashMap.HashMap<string, string>
+  readonly originalTextByPath: HashMap.HashMap<string, string>
 }
 
-const NO_SOURCE_MAP: unique symbol = Symbol('NO_SOURCE_MAP')
-type SourceMapCacheEntry = ISourceMap | typeof NO_SOURCE_MAP
-
-interface IOriginalFileInfo {
-  // Whether the .ts file exists
-  fileExists: boolean
-
-  // This is used to check whether the guessed position is out of bounds.
-  // Since column/line numbers are 1-based, the 0th item in this array is unused.
-  maxColumnForLine: number[]
+interface Point {
+  readonly line: number
+  readonly column: number
 }
 
-export interface ISourceLocation {
-  /*
-   * The absolute path to the source file.
-   */
-  sourceFilePath: string
+const definedOf = <A>(value: A | undefined): Option.Option<A> => Option.fromNullishOr(value)
 
-  /*
-   * The line number in the source file. The first line number is 1.
-   */
-  sourceFileLine: number
+const sourcesOf = (decoded: SourceMapJson): ReadonlyArray<string> =>
+  Option.getOrElse(definedOf(decoded.sources), () => [])
 
-  /*
-   * The column number in the source file. The first column number is 1.
-   */
-  sourceFileColumn: number
+const namesOf = (decoded: SourceMapJson): ReadonlyArray<string> => Option.getOrElse(definedOf(decoded.names), () => [])
+
+const withFile = (file: string | undefined): Partial<RawSourceMap> =>
+  Option.match(definedOf(file), {
+    onNone: () => ({}),
+    onSome: (defined) => ({ file: defined }),
+  })
+
+const withSourceRoot = (sourceRoot: string | undefined): Partial<RawSourceMap> =>
+  Option.match(definedOf(sourceRoot), {
+    onNone: () => ({}),
+    onSome: (defined) => ({ sourceRoot: defined }),
+  })
+
+const rawSourceMapOf = (decoded: SourceMapJson): RawSourceMap => ({
+  version: String(decoded.version),
+  sources: [...sourcesOf(decoded)],
+  names: [...namesOf(decoded)],
+  mappings: decoded.mappings,
+  ...withFile(decoded.file),
+  ...withSourceRoot(decoded.sourceRoot),
+})
+
+const decodeMap = (mapText: string): Option.Option<SourceMapJson> =>
+  Result.match(Schema.decodeResult(SourceMapJsonFromString)(mapText), {
+    onFailure: () => Option.none(),
+    onSuccess: (decoded) => Option.some(decoded),
+  })
+
+export const sourcePathsOf = (mapText: string): ReadonlyArray<string> =>
+  Option.match(decodeMap(mapText), {
+    onNone: () => [],
+    onSome: (decoded) => sourcesOf(decoded),
+  })
+
+const mappingItemsOf = (consumer: SourceMapConsumer): readonly MappingItem[] => {
+  const MappingItems: MappingItem[] = []
+  consumer.eachMapping(
+    (mappingItem) => {
+      MappingItems.push({
+        ...mappingItem,
+        generatedColumn: mappingItem.generatedColumn + 1,
+        originalColumn: mappingItem.originalColumn + 1,
+      })
+    },
+    undefined,
+    SourceMapConsumer.GENERATED_ORDER,
+  )
+  return MappingItems
 }
 
-export interface IGetSourceLocationOptions {
-  /*
-   * The source file to get the source location from.
-   */
-  sourceFile: ts.SourceFile
+const pointOf = (item: MappingItem): Point => ({ line: item.generatedLine, column: item.generatedColumn })
 
-  /*
-   * The position within the source file to get the source location from.
-   */
-  pos: number
+const pointOrder: Order.Order<Point> = Order.combine(
+  Order.mapInput(Order.Number, (point: Point) => point.line),
+  Order.mapInput(Order.Number, (point: Point) => point.column),
+)
 
-  /*
-   * If `false` or not provided, then we attempt to follow source maps in order to resolve the
-   * location to the original `.ts` file. If resolution isn't possible for some reason, we fall
-   * back to the `.d.ts` location.
-   *
-   * If `true`, then we don't bother following source maps, and the location refers to the `.d.ts`
-   * location.
-   */
-  useDtsLocation?: boolean
-}
+const belowTarget = -1
+const atTarget = 0
+const aboveTarget = 1
 
-export class SourceMapper extends Pipeable.Class {
-  // Map from .d.ts file path --> ISourceMap if a source map was found, or NO_SOURCE_MAP if not found
-  #sourceMapByFilePath: Map<string, SourceMapCacheEntry> = new Map()
-
-  // Cache the ts.sys.fileExists() result for mapped .ts files
-  #originalFileInfoByPath: Map<string, IOriginalFileInfo> = new Map<string, IOriginalFileInfo>()
-
-  /*
-   * Given a `.d.ts` source file and a specific position within the file, return the corresponding
-   * `ISourceLocation`.
-   */
-  public getSourceLocation(options: IGetSourceLocationOptions): ISourceLocation {
-    const lineAndCharacter: ts.LineAndCharacter = options.sourceFile.getLineAndCharacterOfPosition(
-      options.pos,
+const nearestMapping = (items: readonly MappingItem[], target: Point): Option.Option<MappingItem> => {
+  const search = (start: number, end: number): number =>
+    Match.value(start > end).pipe(
+      Match.when(true, () => end),
+      Match.orElse(() => {
+        const middle = start + Math.floor((end - start) / 2)
+        return Option.match(Arr.get(items, middle), {
+          onNone: () => end,
+          onSome: (item) =>
+            Match.value(pointOrder(pointOf(item), target)).pipe(
+              Match.when(belowTarget, () => search(middle + 1, end)),
+              Match.when(atTarget, () => middle),
+              Match.when(aboveTarget, () => search(start, middle - 1)),
+              Match.exhaustive,
+            ),
+        })
+      }),
     )
-    const sourceLocation: ISourceLocation = {
-      sourceFilePath: options.sourceFile.fileName,
-      sourceFileLine: lineAndCharacter.line + 1,
-      sourceFileColumn: lineAndCharacter.character + 1,
-    }
-
-    if (options.useDtsLocation) {
-      return sourceLocation
-    }
-
-    const mappedSourceLocation: ISourceLocation | undefined = this.#getMappedSourceLocation(sourceLocation)
-    return mappedSourceLocation || sourceLocation
-  }
-
-  #getMappedSourceLocation(sourceLocation: ISourceLocation): ISourceLocation | undefined {
-    const { sourceFilePath, sourceFileLine, sourceFileColumn } = sourceLocation
-
-    if (!ts.sys.fileExists(sourceFilePath)) {
-      // Sanity check
-      throw invariant('The referenced path was not found: ' + sourceFilePath)
-    }
-
-    const sourceMap: ISourceMap | undefined = this.#getSourceMap(sourceFilePath)
-    if (!sourceMap) return
-
-    const nearestMappingItem: MappingItem | undefined = _findNearestMappingItem(sourceMap.mappingItems, {
-      line: sourceFileLine,
-      column: sourceFileColumn,
-    })
-
-    if (!nearestMappingItem) return
-
-    const mappedFilePath: string = resolve(dirname(sourceFilePath), nearestMappingItem.source)
-
-    // Does the mapped filename exist?  Use a cache to remember the answer.
-    let originalFileInfo: IOriginalFileInfo | undefined = this.#originalFileInfoByPath.get(mappedFilePath)
-    if (originalFileInfo === undefined) {
-      originalFileInfo = {
-        fileExists: ts.sys.fileExists(mappedFilePath),
-        maxColumnForLine: [],
-      }
-
-      if (originalFileInfo.fileExists) {
-        // Read the file and measure the length of each line
-        originalFileInfo.maxColumnForLine = (ts.sys.readFile(mappedFilePath) ?? '')
-          .split('\n')
-          .map((x: string) => x.length + 1) // +1 since columns are 1-based
-        originalFileInfo.maxColumnForLine.unshift(0) // Extra item since lines are 1-based
-      }
-
-      this.#originalFileInfoByPath.set(mappedFilePath, originalFileInfo)
-    }
-
-    // Don't translate coordinates to a file that doesn't exist
-    if (!originalFileInfo.fileExists) return
-
-    // The nearestMappingItem anchor may be above/left of the real position, due to gaps in the mapping.  Calculate
-    // the delta and apply it to the original position.
-    const guessedPosition: Position = {
-      line: nearestMappingItem.originalLine + sourceFileLine - nearestMappingItem.generatedLine,
-      column: nearestMappingItem.originalColumn + sourceFileColumn - nearestMappingItem.generatedColumn,
-    }
-
-    // Verify that the result is not out of bounds, in cause our heuristic failed
-    if (
-      guessedPosition.line >= 1 &&
-      guessedPosition.line < originalFileInfo.maxColumnForLine.length &&
-      guessedPosition.column >= 1 &&
-      guessedPosition.column <= (originalFileInfo.maxColumnForLine[guessedPosition.line] ?? 0)
-    ) {
-      return {
-        sourceFilePath: mappedFilePath,
-        sourceFileLine: guessedPosition.line,
-        sourceFileColumn: guessedPosition.column,
-      }
-    } else {
-      // The guessed position was out of bounds, so use the nearestMappingItem position instead.
-      return {
-        sourceFilePath: mappedFilePath,
-        sourceFileLine: nearestMappingItem.originalLine,
-        sourceFileColumn: nearestMappingItem.originalColumn,
-      }
-    }
-  }
-
-  #getSourceMap(sourceFilePath: string): ISourceMap | undefined {
-    let sourceMap: SourceMapCacheEntry | undefined = this.#sourceMapByFilePath.get(sourceFilePath)
-
-    if (sourceMap === undefined) {
-      // Normalize the path and redo the lookup
-      const normalizedPath: string = ts.sys.realpath ? ts.sys.realpath(sourceFilePath) : sourceFilePath
-
-      sourceMap = this.#sourceMapByFilePath.get(normalizedPath)
-      if (sourceMap !== undefined) {
-        // Copy the result from the normalized to the non-normalized key
-        this.#sourceMapByFilePath.set(sourceFilePath, sourceMap)
-      } else {
-        // Given "folder/file.d.ts", check for a corresponding "folder/file.d.ts.map"
-        const sourceMapPath: string = normalizedPath + '.map'
-        if (ts.sys.fileExists(sourceMapPath)) {
-          // Load up the source map
-          const sourceMapContent: string = ts.sys.readFile(sourceMapPath) ?? ''
-          const decoded = Schema.decodeResult(SourceMapJsonFromString)(sourceMapContent)
-          if (Result.isFailure(decoded)) {
-            throw invariant(`Malformed source map at ${sourceMapPath}: ${decoded.failure.message}`)
-          }
-          const rawSourceMap: RawSourceMap = rawSourceMapOf(decoded.success)
-
-          const sourceMapConsumer: SourceMapConsumer = new SourceMapConsumer(rawSourceMap)
-          const mappingItems: MappingItem[] = []
-
-          // Extract the list of mapping items
-          sourceMapConsumer.eachMapping(
-            (mappingItem: MappingItem) => {
-              mappingItems.push({
-                ...mappingItem,
-                // The "source-map" package inexplicably uses 1-based line numbers but 0-based column numbers.
-                // Fix that up proactively so we don't have to deal with it later.
-                generatedColumn: mappingItem.generatedColumn + 1,
-                originalColumn: mappingItem.originalColumn + 1,
-              })
-            },
-            this,
-            SourceMapConsumer.GENERATED_ORDER,
-          )
-
-          sourceMap = { sourceMapConsumer, mappingItems }
-        } else {
-          // No source map for this filename
-          sourceMap = NO_SOURCE_MAP
-        }
-
-        this.#sourceMapByFilePath.set(normalizedPath, sourceMap)
-        if (sourceFilePath !== normalizedPath) {
-          // Add both keys to the map
-          this.#sourceMapByFilePath.set(sourceFilePath, sourceMap)
-        }
-      }
-    }
-
-    return sourceMap === NO_SOURCE_MAP ? undefined : sourceMap
-  }
+  return Arr.get(items, search(0, items.length - 1))
 }
 
-// The `mappingItems` array is sorted by generatedLine/generatedColumn (GENERATED_ORDER).
-// The _findNearestMappingItem() lookup is a simple binary search that returns the previous item
-// if there is no exact match.
-function _findNearestMappingItem(mappingItems: MappingItem[], position: Position): MappingItem | undefined {
-  if (mappingItems.length === 0) {
-    return undefined
+const maxColumnOf = (maxColumnForLine: readonly number[], line: number): number =>
+  Option.getOrElse(Arr.get(maxColumnForLine, line), () => 0)
+
+const maxColumnForLineOf = (text: string): readonly number[] =>
+  Arr.prepend(Arr.map(text.split('\n'), (line) => line.length + 1), 0)
+
+const lineInRange = (maxColumnForLine: readonly number[], position: Point): boolean =>
+  position.line >= 1 && position.line < maxColumnForLine.length
+
+const columnInRange = (maxColumnForLine: readonly number[], position: Point): boolean =>
+  position.column >= 1 && position.column <= maxColumnOf(maxColumnForLine, position.line)
+
+const inBounds = (maxColumnForLine: readonly number[], position: Point): boolean =>
+  lineInRange(maxColumnForLine, position) && columnInRange(maxColumnForLine, position)
+
+const translatedOf = (
+  raw: MessagePosition,
+  nearest: MappingItem,
+  originalText: string,
+  mappedFilePath: string,
+): MessagePosition => {
+  const maxColumnForLine = maxColumnForLineOf(originalText)
+  const guessed = {
+    line: nearest.originalLine + raw.line - nearest.generatedLine,
+    column: nearest.originalColumn + raw.column - nearest.generatedColumn,
   }
-
-  let startIndex: number = 0
-  let endIndex: number = mappingItems.length - 1
-
-  while (startIndex <= endIndex) {
-    const middleIndex: number = startIndex + Math.floor((endIndex - startIndex) / 2)
-    const middleItem = mappingItems[middleIndex]
-    if (middleItem === undefined) {
-      break
-    }
-
-    const diff: number = _compareMappingItem(middleItem, position)
-
-    if (diff < 0) {
-      startIndex = middleIndex + 1
-    } else if (diff > 0) {
-      endIndex = middleIndex - 1
-    } else {
-      // Exact match
-      return middleItem
-    }
-  }
-
-  // If we didn't find an exact match, then endIndex < startIndex.
-  // Take endIndex because it's the smaller value.
-  return mappingItems[endIndex]
+  return Match.value(inBounds(maxColumnForLine, guessed)).pipe(
+    Match.when(
+      true,
+      (): MessagePosition => ({ sourceFilePath: mappedFilePath, line: guessed.line, column: guessed.column }),
+    ),
+    Match.when(false, (): MessagePosition => ({
+      sourceFilePath: mappedFilePath,
+      line: nearest.originalLine,
+      column: nearest.originalColumn,
+    })),
+    Match.exhaustive,
+  )
 }
 
-function _compareMappingItem(mappingItem: MappingItem, position: Position): number {
-  const diff: number = mappingItem.generatedLine - position.line
-  if (diff !== 0) {
-    return diff
-  }
-  return mappingItem.generatedColumn - position.column
-}
+const mappedTo = (raw: MessagePosition, nearest: MappingItem): string =>
+  resolve(dirname(raw.sourceFilePath), nearest.source)
+
+export const locate = (index: SourceMapIndex, raw: MessagePosition): Option.Option<MessagePosition> =>
+  Option.flatMap(
+    HashMap.get(index.mapTextByDtsPath, raw.sourceFilePath),
+    (mapText) =>
+      Option.flatMap(decodeMap(mapText), (decoded) =>
+        Option.flatMap(
+          nearestMapping(
+            mappingItemsOf(new SourceMapConsumer(rawSourceMapOf(decoded))),
+            { line: raw.line, column: raw.column },
+          ),
+          (nearest) =>
+            Option.flatMap(HashMap.get(index.originalTextByPath, mappedTo(raw, nearest)), (originalText) =>
+              Option.some(translatedOf(raw, nearest, originalText, mappedTo(raw, nearest)))),
+        )),
+  )

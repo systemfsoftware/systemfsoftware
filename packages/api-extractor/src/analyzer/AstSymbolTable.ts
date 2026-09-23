@@ -11,7 +11,7 @@ import { InternalInvariantError, UnsupportedSyntaxError } from '../errors/index.
 import { invariant } from '../utils/invariant.js'
 import type { PackageJsonLookup } from './package-json-lookup.js'
 
-import type { MessageLog } from '../collector/message-log.js'
+import type { MessageSink } from '../collector/message-log.js'
 import { AstDeclaration } from './AstDeclaration.js'
 import type { AstEntity } from './AstEntity.js'
 import type { AstModule, IAstModuleExportInfo } from './AstModule.js'
@@ -69,7 +69,7 @@ export interface IFetchAstSymbolOptions {
 export class AstSymbolTable extends Pipeable.Class {
   readonly #program: ts.Program
   readonly #typeChecker: ts.TypeChecker
-  readonly #messageLog: MessageLog
+  readonly #messageSink: MessageSink
   readonly #globalVariableAnalyzer: IGlobalVariableAnalyzer
   readonly #packageMetadataManager: PackageMetadataManager
   readonly #exportAnalyzer: ExportAnalyzer
@@ -104,14 +104,14 @@ export class AstSymbolTable extends Pipeable.Class {
     typeChecker: ts.TypeChecker,
     packageJsonLookup: PackageJsonLookup,
     bundledPackageNames: ReadonlySet<string>,
-    messageLog: MessageLog,
+    messageSink: MessageSink,
   ) {
     super()
     this.#program = program
     this.#typeChecker = typeChecker
-    this.#messageLog = messageLog
+    this.#messageSink = messageSink
     this.#globalVariableAnalyzer = TypeScriptInternals.getGlobalVariableAnalyzer(program)
-    this.#packageMetadataManager = new PackageMetadataManager(packageJsonLookup, messageLog)
+    this.#packageMetadataManager = new PackageMetadataManager(packageJsonLookup, messageSink)
 
     this.#exportAnalyzer = new ExportAnalyzer(this.#program, this.#typeChecker, bundledPackageNames, {
       analyze: this.analyze.bind(this),
@@ -405,10 +405,10 @@ export class AstSymbolTable extends Pipeable.Class {
                   // that include interesting global variables in their API, but API Extractor doesn't support
                   // that yet; it would be a feature request.)
 
-                  if (this.#messageLog.diagnostics) {
+                  if (this.#messageSink.diagnostics) {
                     if (!this.#alreadyWarnedGlobalNames.has(identifierNode.text)) {
                       this.#alreadyWarnedGlobalNames.add(identifierNode.text)
-                      this.#messageLog.addDiagnostic(
+                      this.#messageSink.addDiagnostic(
                         `Ignoring reference to global variable "${identifierNode.text}"` +
                           ` in ` +
                           SourceFileLocationFormatter.formatDeclaration(identifierNode),

@@ -1,5 +1,6 @@
 import type * as tsdoc from '@microsoft/tsdoc'
 import * as Data from 'effect/Data'
+import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -19,7 +20,9 @@ import { Collector, type ICollectorOptions } from './Collector.js'
 import type { CollectorEntity } from './CollectorEntity.js'
 import type { DeclarationMetadata } from './DeclarationMetadata.js'
 import type { ExtractorMessageId } from './extractor-message-id.js'
+import type { ExtractorMessageProperties, MessageLog } from './message-log.js'
 import type { ReportMessageSource } from './message-router.js'
+import type { SourceMapIndex } from './SourceMapper.js'
 import type { SymbolMetadata } from './SymbolMetadata.js'
 import type { WorkingPackage } from './WorkingPackage.js'
 
@@ -114,6 +117,14 @@ export const starExportedExternalModulePaths = (snapshot: AnalysisSnapshot): Rea
 
 export const reportMessages = (snapshot: AnalysisSnapshot): ReportMessageSource => collector(snapshot).reportMessages
 
+export const messageLog = (snapshot: AnalysisSnapshot): MessageLog => collector(snapshot).messageLog
+
+export const locateMessages = (snapshot: AnalysisSnapshot, index: SourceMapIndex): void =>
+  collector(snapshot).locateMessages(index)
+
+export const markHandled = (snapshot: AnalysisSnapshot, handled: HashSet.HashSet<number>): void =>
+  collector(snapshot).markHandled(handled)
+
 export const fetchApiItemMetadata = (
   snapshot: AnalysisSnapshot,
   astDeclaration: AstDeclaration,
@@ -162,7 +173,7 @@ export const addAnalyzerIssue = (
   messageId: ExtractorMessageId,
   messageText: string,
   astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
-  properties?: Readonly<Record<string, string | number | boolean>>,
+  properties?: ExtractorMessageProperties,
 ): void => {
   collector(snapshot).addAnalyzerIssue(messageId, messageText, astDeclarationOrSymbol, properties)
 }

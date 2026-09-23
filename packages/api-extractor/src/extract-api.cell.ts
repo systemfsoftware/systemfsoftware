@@ -3,12 +3,15 @@ import { formatPatch, structuredPatch } from 'diff'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 
+import { dirname, resolve } from './analyzer/path-helpers.js'
 import { convertToLf } from './analyzer/text.js'
 import {
   BaselineAbsent,
@@ -33,7 +36,7 @@ import {
   type ReportMessageSource,
 } from './collector/message-router.js'
 import { type LogLevel, MessageRuleError } from './collector/message-router.schema.js'
-import { SourceMapper } from './collector/SourceMapper.js'
+import { type SourceMapIndex, sourcePathsOf } from './collector/SourceMapper.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
 import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
 import type { CompilerState, CompilerStateOptions } from './compiler/typescript-program.js'
@@ -50,6 +53,7 @@ import {
 } from './errors/index.js'
 import type { ExtractionRequest } from './extraction-request.js'
 import { DtsRollupKind } from './generators/dts-rollup-generator.js'
+import type { RenderedApiReport } from './generators/index.js'
 import { convertNewlines, renderApiReport, renderDtsRollup } from './generators/index.js'
 import { MessageWriter } from './message-writer.service.js'
 import { type EmitLineStep, type EnsureDirectoryStep, type WriteFileStep } from './write-plan.schema.js'
@@ -110,6 +114,7 @@ export interface ExtractionSnapshot {
   readonly reports: readonly ReportPlan[]
   readonly rollups: readonly RollupTarget[]
   readonly renderedRollups: RollupRenders
+  readonly sourceMapIndex: SourceMapIndex
 }
 
 interface AnalysisInputs {
@@ -117,7 +122,6 @@ interface AnalysisInputs {
   readonly compilerState: CompilerState
   readonly messageLog: MessageLog
   readonly reportMessages: ReportMessageSource
-  readonly sourceMapper: SourceMapper
 }
 
 type WriteStep = EmitLineStep | EnsureDirectoryStep | WriteFileStep
@@ -147,7 +151,6 @@ const analysisOf = (inputs: AnalysisInputs): Snapshot.AnalysisSnapshot => {
     extractorConfig: inputs.config,
     messageLog: inputs.messageLog,
     reportMessages: inputs.reportMessages,
-    sourceMapper: inputs.sourceMapper,
   })
   Snapshot.analyze(snapshot)
   DocCommentEnhancer.analyze(snapshot)
@@ -180,14 +183,10 @@ const configIssueOf = (config: ExtractorConfig) => (cause: MessageRuleError): Co
     cause: cause.cause,
   })
 
-const messageViewOf = (
-  config: ExtractorConfig,
-  log: MessageLog,
-): Effect.Effect<MessageView, ConfigSchemaValidationError> =>
+const messageViewOf = (config: ExtractorConfig): Effect.Effect<MessageView, ConfigSchemaValidationError> =>
   Effect.mapError(
     Effect.fromResult(
       makeMessageView({
-        log,
         messagesConfig: config.messages,
         reportEnabled: config.apiReport.enabled,
         workingPackageFolder: config.projectFolder,
@@ -304,6 +303,73 @@ const reportPlanOf = (fs: FileSystem.FileSystem, paths: ReportPaths): Effect.Eff
     return { ...paths, baseline, folder }
   })
 
+const messagePathsOf = (log: MessageLog): readonly string[] =>
+  Arr.filterMap(MessageLog.candidates(log), (candidate) =>
+    Match.value(candidate.message.category).pipe(
+      Match.when('Compiler', () => Result.failVoid),
+      Match.orElse(() => Result.fromOption(Option.fromNullishOr(candidate.message.sourceFilePath), () => undefined)),
+    ))
+
+const optionalTextOf = (
+  fs: FileSystem.FileSystem,
+  filePath: string,
+): Effect.Effect<Option.Option<string>, PlatformError> =>
+  Effect.flatMap(fs.exists(filePath), (present) =>
+    Match.value(present).pipe(
+      Match.when(true, () => Effect.asSome(fs.readFileString(filePath))),
+      Match.when(false, () => Effect.succeedNone),
+      Match.exhaustive,
+    ))
+
+interface IndexEntry {
+  readonly mapText: readonly [string, string]
+  readonly sourceTexts: ReadonlyArray<readonly [string, string]>
+}
+
+const originalTextsOf = (
+  fs: FileSystem.FileSystem,
+  dtsPath: string,
+  mapText: string,
+): Effect.Effect<ReadonlyArray<readonly [string, string]>, PlatformError> =>
+  Effect.map(
+    Effect.forEach(sourcePathsOf(mapText), (source) => {
+      const originalPath = resolve(dirname(dtsPath), source)
+      return Effect.map(optionalTextOf(fs, originalPath), (content): Option.Option<readonly [string, string]> =>
+        Option.map(content, (text) => [originalPath, text]))
+    }),
+    (located) =>
+      Arr.filterMap(located, (pair) => Result.fromOption(pair, () => undefined)),
+  )
+
+const indexEntryOf = (
+  fs: FileSystem.FileSystem,
+  dtsPath: string,
+): Effect.Effect<Option.Option<IndexEntry>, PlatformError> =>
+  Effect.flatMap(optionalTextOf(fs, `${dtsPath}.map`), (mapText) =>
+    Option.match(mapText, {
+      onNone: () => Effect.succeedNone,
+      onSome: (text) =>
+        Effect.map(originalTextsOf(fs, dtsPath, text), (sourceTexts): Option.Option<IndexEntry> =>
+          Option.some({ mapText: [dtsPath, text], sourceTexts })),
+    }))
+
+const readSourceMapIndex = (
+  log: MessageLog,
+): Effect.Effect<SourceMapIndex, PlatformError, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const entries = yield* Effect.forEach(
+      Arr.dedupe(messagePathsOf(log)),
+      (dtsPath) => indexEntryOf(fs, dtsPath),
+      { concurrency: 'unbounded' },
+    )
+    const present = Arr.filterMap(entries, (entry) => Result.fromOption(entry, () => undefined))
+    return {
+      mapTextByDtsPath: HashMap.fromIterable(Arr.map(present, (entry) => entry.mapText)),
+      originalTextByPath: HashMap.fromIterable(Arr.flatMap(present, (entry) => entry.sourceTexts)),
+    }
+  })
+
 const readAnalysis = (
   request: ExtractionRequest,
 ): Effect.Effect<
@@ -315,9 +381,8 @@ const readAnalysis = (
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const config = request.config
-    const sourceMapper = new SourceMapper()
-    const messageLog = new MessageLog({ sourceMapper, diagnostics: request.verbosity === 'diagnostics' })
-    const view = yield* messageViewOf(config, messageLog)
+    const messageLog = MessageLog.make({ diagnostics: request.verbosity === 'diagnostics' })
+    const view = yield* messageViewOf(config)
     const compiler = yield* TypeScriptCompiler
     const compilerState = yield* loadCompilerState(compiler, compilerOptionsOf(request))
     const analysis = yield* collectorOf({
@@ -325,8 +390,9 @@ const readAnalysis = (
       compilerState,
       messageLog,
       reportMessages: view,
-      sourceMapper,
     })
+    const sourceMapIndex = yield* readSourceMapIndex(Snapshot.messageLog(analysis))
+    Snapshot.locateMessages(analysis, sourceMapIndex)
     return {
       request,
       analysis,
@@ -335,6 +401,7 @@ const readAnalysis = (
       reports: yield* Effect.forEach(reportPlansOf(config, path), (paths) => reportPlanOf(fs, paths)),
       rollups: rollupTargetsOf(config, path),
       renderedRollups: makeRollupRenders(),
+      sourceMapIndex,
     }
   })
 
@@ -349,25 +416,42 @@ const renderRollupsOf = (snapshot: ExtractionSnapshot): void => {
   })
 }
 
+interface ReportFold {
+  readonly handled: HashSet.HashSet<number>
+  readonly renders: ReadonlyArray<RenderedApiReport>
+}
+
+const initialFold: ReportFold = { handled: HashSet.empty(), renders: [] }
+
 const decodeOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
   renderRollupsOf(snapshot)
-  const reports = snapshot.reports.map((plan) =>
+  const fold: ReportFold = Arr.reduce(
+    snapshot.reports,
+    initialFold,
+    (accumulator, plan) => {
+      const render = renderApiReport(snapshot.analysis, plan.variant, accumulator.handled)
+      Snapshot.locateMessages(snapshot.analysis, snapshot.sourceMapIndex)
+      return { handled: render.consumed, renders: Arr.append(accumulator.renders, render) }
+    },
+  )
+  Snapshot.markHandled(snapshot.analysis, fold.handled)
+  const log = Snapshot.messageLog(snapshot.analysis)
+  const reports = Arr.map(Arr.zip(snapshot.reports, fold.renders), ([plan, render]) =>
     new ReportEvidence({
       variant: plan.variant,
       reportFileName: plan.reportFileName,
       reportPath: plan.reportPath,
       reportTempPath: plan.reportTempPath,
-      generatedText: renderApiReport(snapshot.analysis, plan.variant),
+      generatedText: render.text,
       baseline: plan.baseline,
       folder: plan.folder,
-    })
-  )
+    }))
   return new DecideExtraction({
     localBuild: snapshot.request.options.localBuild === true,
     printApiReportDiff: snapshot.request.options.printApiReportDiff === true,
     residue: {
-      errors: snapshot.view.errorCount(),
-      warnings: snapshot.view.warningCount(),
+      errors: snapshot.view.errorCount(log, fold.handled),
+      warnings: snapshot.view.warningCount(log, fold.handled),
     },
     reports,
   })
@@ -436,8 +520,13 @@ const preambleSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] => [
   emitLine('info', `Analysis will use the bundled TypeScript version ${snapshot.compilerVersion}`),
 ]
 
-const analysisConsoleSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] =>
-  snapshot.view.consoleLines().map((line) => emitLine(line.level, line.text))
+const analysisConsoleSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] => {
+  const log = Snapshot.messageLog(snapshot.analysis)
+  return Arr.map(
+    snapshot.view.consoleLines(log, log.handled),
+    (line) => emitLine(line.level, line.text),
+  )
+}
 
 const rollupSteps = (snapshot: ExtractionSnapshot, newlineKind: NewlineKind): readonly WriteStep[] =>
   snapshot.renderedRollups.all().flatMap((render) => [
@@ -523,8 +612,13 @@ const outcomeStepsOf = (
     Match.exhaustive,
   )
 
-const residueSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] =>
-  snapshot.view.residue().map((line) => emitLine(line.level, line.text))
+const residueSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] => {
+  const log = Snapshot.messageLog(snapshot.analysis)
+  return Arr.map(
+    snapshot.view.residue(log, log.handled),
+    (line) => emitLine(line.level, line.text),
+  )
+}
 
 const footerSteps = (decision: ExtractionDecision): readonly WriteStep[] =>
   Match.value(decision).pipe(

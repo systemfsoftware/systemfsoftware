@@ -1,3 +1,6 @@
+import * as HashSet from 'effect/HashSet'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import { type INodePackageJson, PackageJsonLookup } from '../analyzer/package-json-lookup.js'
 import { AedocDefinitions } from '../model/index.js'
@@ -5,6 +8,19 @@ import { invariant } from '../utils/invariant.js'
 import { PackageName } from './package-name.js'
 
 const hasDtsFileExtension = (filePath: string): boolean => /\.d(\.[^./\\]+)?\.(c|m)?ts$/i.test(filePath)
+
+const astDeclarationOf = (source: AstDeclaration | AstSymbol | undefined): Option.Option<AstDeclaration> =>
+  Option.match(Option.fromNullishOr(source), {
+    onNone: () => Option.none(),
+    onSome: (candidate) =>
+      Match.value(candidate).pipe(
+        Match.when((target): target is AstDeclaration => target instanceof AstDeclaration, (astDeclaration) =>
+          Option.some(astDeclaration)),
+        Match.orElse((astSymbol) =>
+          Option.fromNullishOr(astSymbol.astDeclarations[0])
+        ),
+      ),
+  })
 // Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
 // See LICENSE in the project root for license information.
 
@@ -15,7 +31,7 @@ import * as tsdoc from '@microsoft/tsdoc'
 import { ReleaseTag } from '../model/index.js'
 import { sortBy, sortSet } from './sort.js'
 
-import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
+import { AstDeclaration } from '../analyzer/AstDeclaration.js'
 import type { AstEntity } from '../analyzer/AstEntity.js'
 import { AstImport } from '../analyzer/AstImport.js'
 import type { AstModule, IAstModuleExportInfo } from '../analyzer/AstModule.js'
@@ -32,10 +48,11 @@ import { ApiItemMetadata, type IApiItemMetadataOptions } from './ApiItemMetadata
 import { CollectorEntity } from './CollectorEntity.js'
 import { type DeclarationMetadata, InternalDeclarationMetadata } from './DeclarationMetadata.js'
 import { ExtractorMessageId } from './extractor-message-id.js'
-import type { ExtractorMessageProperties, MessageLog } from './message-log.js'
+import { type ExtractorMessageProperties, MessageLog } from './message-log.js'
 import type { ReportMessageSource } from './message-router.js'
+import { type LogLevel } from './message-router.schema.js'
 import { PackageDocComment } from './package-doc-comment.js'
-import type { SourceMapper } from './SourceMapper.js'
+import type { SourceMapIndex } from './SourceMapper.js'
 import { SymbolMetadata } from './SymbolMetadata.js'
 import { WorkingPackage } from './WorkingPackage.js'
 
@@ -58,8 +75,6 @@ export interface ICollectorOptions {
   reportMessages: ReportMessageSource
 
   extractorConfig: ExtractorConfig
-
-  sourceMapper: SourceMapper
 }
 
 /*
@@ -77,13 +92,11 @@ export class Collector extends Pipeable.Class {
 
   public readonly packageJsonLookup: PackageJsonLookup
   public readonly reportMessages: ReportMessageSource
-  public readonly messageLog: MessageLog
+  public messageLog: MessageLog
 
   public readonly workingPackage: WorkingPackage
 
   public readonly extractorConfig: ExtractorConfig
-
-  public readonly sourceMapper: SourceMapper
 
   /*
    * The `ExtractorConfig.bundledPackages` names in a set.
@@ -117,10 +130,9 @@ export class Collector extends Pipeable.Class {
     super()
     this.packageJsonLookup = new PackageJsonLookup()
 
-    const { program, extractorConfig, sourceMapper, messageLog, reportMessages } = options
+    const { program, extractorConfig, messageLog, reportMessages } = options
     this.#program = program
     this.extractorConfig = extractorConfig
-    this.sourceMapper = sourceMapper
 
     const entryPointSourceFile: ts.SourceFile | undefined = program.getSourceFile(
       this.extractorConfig.mainEntryPointFilePath,
@@ -167,28 +179,37 @@ export class Collector extends Pipeable.Class {
       this.typeChecker,
       this.packageJsonLookup,
       this.bundledPackageNames,
-      this.messageLog,
+      this,
     )
     this.astReferenceResolver = new AstReferenceResolver(this)
 
     this.#cachedOverloadIndexesByDeclaration = new Map<AstDeclaration, number>()
   }
 
+  public get diagnostics(): boolean {
+    return this.messageLog.diagnostics
+  }
+
   public addAnalyzerIssue(
     messageId: ExtractorMessageId,
     messageText: string,
     astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
-    properties?: Readonly<Record<string, string | number | boolean>>,
+    properties?: ExtractorMessageProperties,
   ): void {
-    if (astDeclarationOrSymbol === undefined) {
-      return
-    }
-    this.messageLog.addAnalyzerIssue(
-      messageId,
-      messageText,
-      astDeclarationOrSymbol,
-      properties as ExtractorMessageProperties | undefined,
-    )
+    Option.match(astDeclarationOf(astDeclarationOrSymbol), {
+      onNone: () => undefined,
+      onSome: (astDeclaration) => {
+        this.messageLog = MessageLog.addAnalyzerIssue(
+          this.messageLog,
+          messageId,
+          messageText,
+          astDeclaration.declaration.getSourceFile(),
+          astDeclaration.declaration.getStart(),
+          Option.some(TypeScriptInternals.getNodeId(astDeclaration.declaration)),
+          properties,
+        )
+      },
+    })
   }
 
   public addAnalyzerIssueForPosition(
@@ -200,7 +221,7 @@ export class Collector extends Pipeable.Class {
     if (sourceFile === undefined) {
       return
     }
-    this.messageLog.addAnalyzerIssueForPosition(messageId, messageText, sourceFile, pos)
+    this.messageLog = MessageLog.addAnalyzerIssueForPosition(this.messageLog, messageId, messageText, sourceFile, pos)
   }
 
   public addTsdocMessages(
@@ -208,11 +229,43 @@ export class Collector extends Pipeable.Class {
     sourceFile: ts.SourceFile,
     astDeclaration?: AstDeclaration,
   ): void {
-    this.messageLog.addTsdocMessages(parserContext, sourceFile, astDeclaration)
+    this.messageLog = MessageLog.addTsdocMessages(
+      this.messageLog,
+      parserContext,
+      sourceFile,
+      Option.map(
+        Option.fromNullishOr(astDeclaration),
+        (declaration) => TypeScriptInternals.getNodeId(declaration.declaration),
+      ),
+    )
   }
 
   public addCompilerDiagnostic(diagnostic: ts.Diagnostic): void {
-    this.messageLog.addCompilerDiagnostic(diagnostic)
+    this.messageLog = MessageLog.addCompilerDiagnostic(this.messageLog, diagnostic)
+  }
+
+  public addConsoleMessage(messageId: string, level: LogLevel, text: string): void {
+    this.messageLog = MessageLog.addConsoleMessage(this.messageLog, messageId, level, text)
+  }
+
+  public addDiagnostic(text: string): void {
+    this.messageLog = MessageLog.addDiagnostic(this.messageLog, text)
+  }
+
+  public addDiagnosticHeader(title: string): void {
+    this.messageLog = MessageLog.addDiagnosticHeader(this.messageLog, title)
+  }
+
+  public addDiagnosticFooter(): void {
+    this.messageLog = MessageLog.addDiagnosticFooter(this.messageLog)
+  }
+
+  public locateMessages(index: SourceMapIndex): void {
+    this.messageLog = MessageLog.locate(this.messageLog, index)
+  }
+
+  public markHandled(handled: HashSet.HashSet<number>): void {
+    this.messageLog = MessageLog.withHandled(this.messageLog, handled)
   }
 
   /*a
@@ -267,17 +320,17 @@ export class Collector extends Pipeable.Class {
     const sourceFiles: readonly ts.SourceFile[] = this.program.getSourceFiles()
 
     if (this.messageLog.diagnostics) {
-      this.messageLog.addDiagnosticHeader('Root filenames')
+      this.addDiagnosticHeader('Root filenames')
       for (const fileName of this.program.getRootFileNames()) {
-        this.messageLog.addDiagnostic(fileName)
+        this.addDiagnostic(fileName)
       }
-      this.messageLog.addDiagnosticFooter()
+      this.addDiagnosticFooter()
 
-      this.messageLog.addDiagnosticHeader('Files analyzed by compiler')
+      this.addDiagnosticHeader('Files analyzed by compiler')
       for (const sourceFile of sourceFiles) {
-        this.messageLog.addDiagnostic(sourceFile.fileName)
+        this.addDiagnostic(sourceFile.fileName)
       }
-      this.messageLog.addDiagnosticFooter()
+      this.addDiagnosticFooter()
     }
 
     // We can throw this error earlier in CompilerState.ts, but intentionally wait until after we've logged the
@@ -318,7 +371,7 @@ export class Collector extends Pipeable.Class {
 
       this.addTsdocMessages(this.workingPackage.tsdocParserContext, entryPointSourceFile)
 
-      this.workingPackage.tsdocComment = this.workingPackage.tsdocParserContext!.docComment
+      this.workingPackage.tsdocComment = this.workingPackage.tsdocParserContext.docComment
     }
 
     const { exportedLocalEntities, starExportedExternalModules, visitedAstModules }: IAstModuleExportInfo = this
@@ -412,7 +465,7 @@ export class Collector extends Pipeable.Class {
     if (astSymbol.symbolMetadata === undefined) {
       this.#fetchSymbolMetadata(astSymbol)
     }
-    return astSymbol.symbolMetadata as SymbolMetadata
+    return astSymbol.symbolMetadata
   }
 
   public fetchDeclarationMetadata(astDeclaration: AstDeclaration): DeclarationMetadata {
@@ -420,7 +473,7 @@ export class Collector extends Pipeable.Class {
       // Fetching the SymbolMetadata always constructs the DeclarationMetadata
       this.#fetchSymbolMetadata(astDeclaration.astSymbol)
     }
-    return astDeclaration.declarationMetadata as DeclarationMetadata
+    return astDeclaration.declarationMetadata
   }
 
   public fetchApiItemMetadata(astDeclaration: AstDeclaration): ApiItemMetadata {
@@ -428,7 +481,7 @@ export class Collector extends Pipeable.Class {
       // Fetching the SymbolMetadata always constructs the ApiItemMetadata
       this.#fetchSymbolMetadata(astDeclaration.astSymbol)
     }
-    return astDeclaration.apiItemMetadata as ApiItemMetadata
+    return astDeclaration.apiItemMetadata
   }
 
   public tryFetchMetadataForAstEntity(astEntity: AstEntity): SymbolMetadata | undefined {
@@ -698,7 +751,7 @@ export class Collector extends Pipeable.Class {
 
     for (const astDeclaration of astSymbol.astDeclarations) {
       // We know we solved this above
-      const apiItemMetadata: ApiItemMetadata = astDeclaration.apiItemMetadata as ApiItemMetadata
+      const apiItemMetadata: ApiItemMetadata = astDeclaration.apiItemMetadata
 
       const effectiveReleaseTag: ReleaseTag = apiItemMetadata.effectiveReleaseTag
 
@@ -984,7 +1037,7 @@ export class Collector extends Pipeable.Class {
       const statement: ts.VariableStatement | undefined = TypeScriptHelpers.findFirstParent(
         declaration,
         ts.SyntaxKind.VariableStatement,
-      ) as ts.VariableStatement | undefined
+      )
       if (statement !== undefined) {
         // For a compound declaration, fall back to looking for C instead of A
         if (statement.declarationList.declarations.length === 1) {

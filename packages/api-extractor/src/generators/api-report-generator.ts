@@ -1,3 +1,5 @@
+import * as Arr from 'effect/Array'
+import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
@@ -31,6 +33,39 @@ interface IContext {
   readonly snapshot: Snapshot.AnalysisSnapshot
   readonly reportVariant: ApiReportVariant
   readonly alreadyProcessedSignatures: Set<Span>
+  readonly handled: HashSet.HashSet<number>
+  readonly consumed: Set<number>
+}
+
+const effectiveHandled = (context: IContext): HashSet.HashSet<number> =>
+  HashSet.union(context.handled, HashSet.fromIterable(context.consumed))
+
+const recordSelected = (context: IContext, selected: readonly { readonly index: number }[]): void => {
+  Arr.forEach(selected, (candidate) => {
+    context.consumed.add(candidate.index)
+  })
+}
+
+const associatedMessagesOf = (
+  context: IContext,
+  astDeclaration: Snapshot.AstDeclaration,
+): readonly ExtractorMessage[] => {
+  const selected = Snapshot.reportMessages(context.snapshot).associatedReportMessages(
+    Snapshot.messageLog(context.snapshot),
+    astDeclaration,
+    effectiveHandled(context),
+  )
+  recordSelected(context, selected)
+  return Arr.map(selected, (candidate) => candidate.message)
+}
+
+const unassociatedMessagesOf = (context: IContext): readonly ExtractorMessage[] => {
+  const selected = Snapshot.reportMessages(context.snapshot).unassociatedReportMessages(
+    Snapshot.messageLog(context.snapshot),
+    effectiveHandled(context),
+  )
+  recordSelected(context, selected)
+  return Arr.map(selected, (candidate) => candidate.message)
 }
 
 const _trimSpacesRegExp: RegExp = / +$/gm
@@ -150,7 +185,7 @@ const emitSymbolDeclarations = (
   exportsToEmit: Map<string, { readonly associatedMessages: ExtractorMessage[] }>,
 ): void => {
   for (const astDeclaration of Snapshot.astDeclarations(snapshot, astEntity)) {
-    const fetchedMessages = Snapshot.reportMessages(snapshot).associatedReportMessages(astDeclaration)
+    const fetchedMessages = associatedMessagesOf(context, astDeclaration)
 
     const messagesToReport: ExtractorMessage[] = []
     for (const message of fetchedMessages) {
@@ -262,7 +297,8 @@ export class ApiReportGenerator extends Pipeable.Class {
   public static generateReviewFileContent(
     snapshot: Snapshot.AnalysisSnapshot,
     reportVariant: ApiReportVariant,
-  ): string {
+    handled: HashSet.HashSet<number>,
+  ): { readonly text: string; readonly consumed: HashSet.HashSet<number> } {
     const writer = new IndentedWriter()
     writer.trimLeadingSpaces = true
 
@@ -274,6 +310,8 @@ export class ApiReportGenerator extends Pipeable.Class {
       snapshot,
       reportVariant,
       alreadyProcessedSignatures: new Set(),
+      handled,
+      consumed: new Set(),
     }
 
     for (const entity of Snapshot.entities(snapshot)) {
@@ -282,7 +320,7 @@ export class ApiReportGenerator extends Pipeable.Class {
 
     DtsEmitHelpers.emitStarExports(writer, snapshot)
 
-    const unassociatedMessages = Snapshot.reportMessages(snapshot).unassociatedReportMessages()
+    const unassociatedMessages = unassociatedMessagesOf(context)
     if (unassociatedMessages.length > 0) {
       writer.ensureSkippedLine()
       _writeLineAsComments(writer, 'Warnings were encountered during analysis:')
@@ -303,7 +341,10 @@ export class ApiReportGenerator extends Pipeable.Class {
     writer.ensureSkippedLine()
     writer.writeLine('```')
 
-    return writer.toString().replace(_trimSpacesRegExp, '')
+    return {
+      text: writer.toString().replace(_trimSpacesRegExp, ''),
+      consumed: HashSet.union(handled, HashSet.fromIterable(context.consumed)),
+    }
   }
 }
 
@@ -455,7 +496,7 @@ function _modifySpan(
           }
 
           if (!nextInsideTypeLiteral) {
-            const messagesToReport = Snapshot.reportMessages(snapshot).associatedReportMessages(childAstDeclaration)
+            const messagesToReport = associatedMessagesOf(context, childAstDeclaration)
             const aedocSynopsis = _getAedocSynopsis(snapshot, childAstDeclaration, messagesToReport)
             child.modification.prefix = aedocSynopsis + child.modification.prefix
           }

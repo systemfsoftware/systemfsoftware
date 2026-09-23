@@ -1,14 +1,15 @@
 import * as Arr from 'effect/Array'
+import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 
 import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
+import { getNodeId } from '../analyzer/TypeScriptInternals.js'
 import type { MessageLogLevel, MessageReportingTable, MessagesConfig } from '../config/config-file.schema.js'
 import { allExtractorMessageIds } from './extractor-message-id.js'
-import type { ExtractorMessage, MessageLog } from './message-log.js'
-import { type ReportCandidate, selectReportMessages } from './message-log.js'
+import { ExtractorMessage, type MessageCandidate, MessageLog } from './message-log.js'
 import { type ExtractorMessageCategory, LogLevel, MessageRuleError } from './message-router.schema.js'
 import {
   type MessageReportingRules,
@@ -26,23 +27,29 @@ export interface ConsoleLine {
 
 /**
  * The report-bound messages one report variant may consume. Consumption is
- * recorded on the messages themselves, so a second variant never sees what an
- * earlier variant already rendered.
+ * recorded as a set of chunk indices carried between variant renders, so a
+ * second variant never sees what an earlier variant already rendered.
  */
 export interface ReportMessageSource {
-  readonly associatedReportMessages: (astDeclaration: AstDeclaration) => readonly ExtractorMessage[]
-  readonly unassociatedReportMessages: () => readonly ExtractorMessage[]
+  readonly associatedReportMessages: (
+    log: MessageLog,
+    astDeclaration: AstDeclaration,
+    handled: HashSet.HashSet<number>,
+  ) => readonly MessageCandidate[]
+  readonly unassociatedReportMessages: (
+    log: MessageLog,
+    handled: HashSet.HashSet<number>,
+  ) => readonly MessageCandidate[]
 }
 
 export interface MessageView extends ReportMessageSource {
-  readonly consoleLines: () => readonly ConsoleLine[]
-  readonly residue: () => readonly ConsoleLine[]
-  readonly errorCount: () => number
-  readonly warningCount: () => number
+  readonly consoleLines: (log: MessageLog, handled: HashSet.HashSet<number>) => readonly ConsoleLine[]
+  readonly residue: (log: MessageLog, handled: HashSet.HashSet<number>) => readonly ConsoleLine[]
+  readonly errorCount: (log: MessageLog, handled: HashSet.HashSet<number>) => number
+  readonly warningCount: (log: MessageLog, handled: HashSet.HashSet<number>) => number
 }
 
 export interface MessageViewRequest {
-  readonly log: MessageLog
   readonly messagesConfig: MessagesConfig | undefined
   readonly reportEnabled: boolean
   readonly workingPackageFolder: string | undefined
@@ -70,18 +77,28 @@ const levelMatrix: Readonly<Record<LogLevel, (verbosity: Verbosity) => boolean>>
 
 export const admits = (verbosity: Verbosity, level: LogLevel): boolean => levelMatrix[level](verbosity)
 
-/**
- * The output order for report-bound and residue messages: by source file, then
- * line, then message id. A message without a source file or line sorts with the
- * empty string and line zero, which is where upstream's comparator placed it.
- * Wave 2 moves this onto the `ExtractorMessage` data module.
- */
-export const ExtractorMessageOrder: Order.Order<ExtractorMessage> = Order.combine(
-  Order.mapInput(Order.String, (message: ExtractorMessage) => message.sourceFilePath ?? ''),
-  Order.combine(
-    Order.mapInput(Order.Number, (message: ExtractorMessage) => message.sourceFileLine ?? 0),
-    Order.mapInput(Order.String, (message: ExtractorMessage) => message.messageId),
-  ),
+export interface ReportCandidate extends MessageCandidate {
+  readonly decision: RoutingDecision
+  readonly consumed: boolean
+}
+
+const isRoutedToReport = (decision: RoutingDecision): boolean =>
+  Match.value(decision).pipe(
+    Match.tag('RoutedToReport', () => true),
+    Match.tag('RoutedToConsole', () => false),
+    Match.tag('RoutedSuppressed', () => false),
+    Match.exhaustive,
+  )
+
+export const selectReportMessages = (candidates: readonly ReportCandidate[]): readonly MessageCandidate[] =>
+  Arr.map(
+    Arr.filter(candidates, (candidate) => !candidate.consumed && isRoutedToReport(candidate.decision)),
+    (candidate) => ({ index: candidate.index, message: candidate.message }),
+  )
+
+const candidateOrder: Order.Order<MessageCandidate> = Order.mapInput(
+  ExtractorMessage.Order,
+  (candidate: MessageCandidate) => candidate.message,
 )
 
 interface RuleSection {
@@ -124,18 +141,21 @@ const validateExtractorMessageId = (messageId: string): Result.Result<void, Mess
             ` an invalid entry "${messageId}".  The name should begin with the "ae-" prefix.`,
         }),
       )),
-    Match.when(true, (): Result.Result<void, MessageRuleError> =>
-      Match.value(allExtractorMessageIds.has(messageId)).pipe(
-        Match.when(true, (): Result.Result<void, MessageRuleError> => Result.void),
-        Match.when(false, (): Result.Result<void, MessageRuleError> =>
-          Result.fail(
-            new MessageRuleError({
-              message: `Error in API Extractor config: The messages.extractorMessageReporting table contains` +
-                ` an unrecognized identifier "${messageId}".  Is it spelled correctly?`,
-            }),
-          )),
-        Match.exhaustive,
-      )),
+    Match.when(
+      true,
+      (): Result.Result<void, MessageRuleError> =>
+        Match.value(allExtractorMessageIds.has(messageId)).pipe(
+          Match.when(true, (): Result.Result<void, MessageRuleError> => Result.void),
+          Match.when(false, (): Result.Result<void, MessageRuleError> =>
+            Result.fail(
+              new MessageRuleError({
+                message: `Error in API Extractor config: The messages.extractorMessageReporting table contains` +
+                  ` an unrecognized identifier "${messageId}".  Is it spelled correctly?`,
+              }),
+            )),
+          Match.exhaustive,
+        ),
+    ),
     Match.exhaustive,
   )
 
@@ -206,7 +226,8 @@ const applyRuleEntry = (
           Result.map(section.validate(messageId), () => ({
             ...table,
             byMessageId: { ...table.byMessageId, [messageId]: reportingRule },
-          }))),
+          }))
+        ),
       )
     },
   })
@@ -261,7 +282,8 @@ const commandOf = (
         messageId: message.messageId,
         rules,
         reportEnabled,
-      })),
+      })
+    ),
   )
 
 const consoleLevelOf = (decision: RoutingDecision): Option.Option<LogLevel> =>
@@ -276,32 +298,35 @@ const messageViewOf = (request: MessageViewRequest, rules: MessageReportingRules
   const decisionOf = (message: ExtractorMessage): RoutingDecision =>
     Result.merge(routeExtractorMessage(commandOf(message, rules, request.reportEnabled)))
 
-  const consumedLevelOf = (message: ExtractorMessage): LogLevel =>
-    Match.value(message.handled).pipe(
+  const reportCandidateOf = (handled: HashSet.HashSet<number>) => (candidate: MessageCandidate): ReportCandidate => ({
+    index: candidate.index,
+    message: candidate.message,
+    decision: decisionOf(candidate.message),
+    consumed: HashSet.has(handled, candidate.index),
+  })
+
+  const selectedOf =
+    (handled: HashSet.HashSet<number>) => (candidates: readonly MessageCandidate[]): readonly MessageCandidate[] =>
+      Arr.sort(selectReportMessages(Arr.map(candidates, reportCandidateOf(handled))), candidateOrder)
+
+  const consumedLevelOf = (handled: HashSet.HashSet<number>) => (candidate: MessageCandidate): LogLevel =>
+    Match.value(HashSet.has(handled, candidate.index)).pipe(
       Match.when(true, (): LogLevel => 'none'),
-      Match.when(false, (): LogLevel => Option.getOrElse(consoleLevelOf(decisionOf(message)), () => 'none')),
+      Match.when(false, (): LogLevel => Option.getOrElse(consoleLevelOf(decisionOf(candidate.message)), () => 'none')),
       Match.exhaustive,
     )
 
-  const analysisLevelOf = (message: ExtractorMessage): LogLevel =>
-    Match.value(message.category).pipe(
-      Match.when('console', () => message.logLevel),
-      Match.when('Compiler', () => consumedLevelOf(message)),
-      Match.when('Extractor', () => consumedLevelOf(message)),
-      Match.when('TSDoc', () => consumedLevelOf(message)),
+  const analysisLevelOf = (handled: HashSet.HashSet<number>) => (candidate: MessageCandidate): LogLevel =>
+    Match.value(candidate.message.category).pipe(
+      Match.when('console', () => candidate.message.logLevel),
+      Match.when('Compiler', () => consumedLevelOf(handled)(candidate)),
+      Match.when('Extractor', () => consumedLevelOf(handled)(candidate)),
+      Match.when('TSDoc', () => consumedLevelOf(handled)(candidate)),
       Match.exhaustive,
     )
 
-  const candidatesOf = (messages: readonly ExtractorMessage[]): readonly ReportCandidate[] =>
-    messages.map((message) => ({ message, decision: decisionOf(message), consumed: message.handled }))
-
-  const consumed = (selected: readonly ExtractorMessage[]): readonly ExtractorMessage[] => {
-    const sorted = Arr.sort(selected, ExtractorMessageOrder)
-    Arr.forEach(sorted, (message) => message.markHandled())
-    return sorted
-  }
-
-  const isUnemittedConsole = (message: ExtractorMessage): boolean => message.category === 'console' && !message.handled
+  const isUnemittedConsole = (handled: HashSet.HashSet<number>) => (candidate: MessageCandidate): boolean =>
+    candidate.message.category === 'console' && !HashSet.has(handled, candidate.index)
 
   const consoleLineOf = (message: ExtractorMessage): ConsoleLine => ({
     level: message.logLevel,
@@ -314,23 +339,33 @@ const messageViewOf = (request: MessageViewRequest, rules: MessageReportingRules
       onSome: (level) => [{ level, text: message.formatMessageWithLocation(request.workingPackageFolder) }],
     })
 
-  const pendingNonConsole = (): readonly ExtractorMessage[] =>
+  const pendingNonConsole = (log: MessageLog, handled: HashSet.HashSet<number>): readonly ExtractorMessage[] =>
     Arr.sort(
-      request.log.messages().filter((message) => message.category !== 'console' && !message.handled),
-      ExtractorMessageOrder,
+      Arr.map(
+        Arr.filter(
+          MessageLog.candidates(log),
+          (candidate) => candidate.message.category !== 'console' && !HashSet.has(handled, candidate.index),
+        ),
+        (candidate) => candidate.message,
+      ),
+      ExtractorMessage.Order,
     )
 
-  const countOfLevel = (level: LogLevel): number =>
-    request.log.messages().filter((message) => analysisLevelOf(message) === level).length
+  const countOfLevel = (log: MessageLog, handled: HashSet.HashSet<number>, level: LogLevel): number =>
+    Arr.filter(MessageLog.candidates(log), (candidate) => analysisLevelOf(handled)(candidate) === level).length
 
   return {
-    associatedReportMessages: (astDeclaration) =>
-      consumed(selectReportMessages(candidatesOf(request.log.associatedMessagesOf(astDeclaration)))),
-    unassociatedReportMessages: () => consumed(selectReportMessages(candidatesOf(request.log.messages()))),
-    consoleLines: () => request.log.messages().filter(isUnemittedConsole).map(consoleLineOf),
-    residue: () => pendingNonConsole().flatMap(levelLineOf),
-    errorCount: () => countOfLevel('error'),
-    warningCount: () => countOfLevel('warning'),
+    associatedReportMessages: (log, astDeclaration, handled) =>
+      selectedOf(handled)(MessageLog.associatedCandidates(log, getNodeId(astDeclaration.declaration))),
+    unassociatedReportMessages: (log, handled) => selectedOf(handled)(MessageLog.candidates(log)),
+    consoleLines: (log, handled) =>
+      Arr.map(
+        Arr.filter(MessageLog.candidates(log), isUnemittedConsole(handled)),
+        (candidate) => consoleLineOf(candidate.message),
+      ),
+    residue: (log, handled) => Arr.flatMap(pendingNonConsole(log, handled), levelLineOf),
+    errorCount: (log, handled) => countOfLevel(log, handled, 'error'),
+    warningCount: (log, handled) => countOfLevel(log, handled, 'warning'),
   }
 }
 

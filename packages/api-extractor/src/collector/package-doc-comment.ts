@@ -33,7 +33,7 @@ export class PackageDocComment extends Pipeable.Class {
           const commentBody = sourceFile.text.substring(commentRange.pos, commentRange.end)
 
           if (/@packageDocumentation/i.test(commentBody)) {
-            collector.messageLog.addConsoleMessage(
+            collector.addConsoleMessage(
               ConsoleMessageId.Preamble,
               'warning',
               'The @packageDocumentation comment must appear at the top of entry point *.d.ts file',
