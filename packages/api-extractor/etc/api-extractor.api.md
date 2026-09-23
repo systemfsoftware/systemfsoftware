@@ -9,14 +9,12 @@ import { Command } from 'effect/unstable/cli';
 import { Context } from 'effect';
 import * as Effect from 'effect/Effect';
 import * as FileSystem_2 from 'effect/FileSystem';
-import { FileSystem as FileSystem_3 } from 'effect/FileSystem';
 import * as Layer from 'effect/Layer';
 import * as Path from 'effect/Path';
-import { Path as Path_2 } from 'effect/Path';
 import { PlatformError } from 'effect/PlatformError';
 import * as Schema$1 from 'effect/Schema';
 import { Schema } from 'effect';
-import { Terminal } from 'effect/Terminal';
+import * as Terminal from 'effect/Terminal';
 import * as Ts from 'typescript';
 import { UserError } from 'effect/unstable/cli/CliError';
 import { YieldableError } from 'effect/Cause';
@@ -31,8 +29,11 @@ const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | Pl
 // @public (undocumented)
 class CircularConfigExtendsError extends CircularConfigExtendsError_base {}
 
+// Warning: (ae-forgotten-export) The symbol "NoFlags" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "CliServices" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-const cli: Command.Command<"api-extractor", {}, {}, UserError, MessageWriter | TypeScriptCompiler | FileSystem_3 | Path_2 | Terminal>;
+const cli: Command.Command<'api-extractor', NoFlags, NoFlags, UserError, CliServices>;
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileNotFound_base" needs to be exported by the entry point index.d.ts
 //
