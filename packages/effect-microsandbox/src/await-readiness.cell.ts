@@ -1,11 +1,9 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer, Match } from 'effect'
-import type { Sandbox } from 'microsandbox'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { SandboxBootError, WaitTimeoutError } from './MicroVMError.schema.js'
 import type { WaitStrategy } from './MicroVMSpec.schema.js'
-import type { SandboxPlan } from './render-sandbox-plan.schema.js'
 import { ResolveWaitStrategy, resolveWaitStrategy } from './resolve-wait-strategy.workflow.js'
 
 const WAIT_TIMEOUT_MS = 30_000
@@ -62,20 +60,18 @@ const awaitReadinessForStrategy = (
   })
 
 /**
- * The read snapshot the write handlers receive: the encoded `ResolveWaitStrategy` command the
- * library decodes, plus the acquired VM the write phase needs (the port bindings of the plan
- * and the live sandbox handle). The command schema cannot carry a live handle, so the read
- * carries it beside the command it returned.
+ * What the cell's `read` returns, and so what every write handler receives and what the cell
+ * answers with: the encoded `ResolveWaitStrategy` command the library decodes for the decision,
+ * joined to the acquired VM it was read from. The VM carries the live sandbox handle, which no
+ * schema can encode, and the next step in `bootMicroVM` needs that same VM, so the cell's input
+ * passes through whole rather than being split into a command and a service.
  */
-type AwaitReadinessSnapshot = (typeof ResolveWaitStrategy)['Encoded'] & {
-  readonly plan: SandboxPlan
-  readonly sandbox: Sandbox
-}
+export type AwaitReadinessRead = (typeof ResolveWaitStrategy)['Encoded'] & AcquiredVM
 
-const readReadinessSnapshot = (vm: AcquiredVM): Effect.Effect<AwaitReadinessSnapshot> =>
-  Effect.succeed({ _tag: 'ResolveWaitStrategy', spec: vm.spec, plan: vm.plan, sandbox: vm.sandbox })
+const readReadiness = (vm: AcquiredVM): Effect.Effect<AwaitReadinessRead> =>
+  Effect.succeed({ ...vm, _tag: 'ResolveWaitStrategy' })
 
-export const awaitReadiness = Sandwich.named('await_readiness')(readReadinessSnapshot)
+export const awaitReadiness = Sandwich.named('await_readiness')(readReadiness)
   .decide(resolveWaitStrategy)
   .write({
     WaitRequired: (required, snapshot) => Effect.as(awaitReadinessForStrategy(snapshot, required.strategy), snapshot),
