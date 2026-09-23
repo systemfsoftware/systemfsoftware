@@ -1,19 +1,16 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 
-import { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import type { AstEntity } from '../analyzer/AstEntity.js'
-import { AstImport } from '../analyzer/AstImport.js'
-import { AstNamespaceImport } from '../analyzer/AstNamespaceImport.js'
-import { AstSymbol } from '../analyzer/AstSymbol.js'
 import { IndentedWriter } from '../analyzer/indented-writer.js'
 import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
 import { Span } from '../analyzer/Span.js'
 import * as SyntaxHelpers from '../analyzer/SyntaxHelpers.js'
 import { convertToLf } from '../analyzer/text.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
+import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
-import { Collector } from '../collector/Collector.js'
 import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import { ExtractorMessage } from '../collector/message-log.js'
@@ -23,8 +20,15 @@ import { ReleaseTag } from '../model/index.js'
 import { invariant } from '../utils/invariant.js'
 import { DtsEmitHelpers } from './dts-emit-helpers.js'
 
+const requireSome = <A>(option: Option.Option<A>, message: string): A => {
+  if (Option.isNone(option)) {
+    throw invariant(message)
+  }
+  return option.value
+}
+
 interface IContext {
-  readonly collector: Collector
+  readonly snapshot: Snapshot.AnalysisSnapshot
   readonly reportVariant: ApiReportVariant
   readonly alreadyProcessedSignatures: Set<Span>
 }
@@ -51,29 +55,36 @@ const writeReportHeader = (writer: IndentedWriter, packageName: string, reportVa
   writer.writeLine('```ts\n')
 }
 
-const writeTripleSlashDirectives = (writer: IndentedWriter, collector: Collector): void => {
-  for (const typeDirectiveReference of Array.from(collector.dtsTypeReferenceDirectives).sort()) {
+const writeTripleSlashDirectives = (writer: IndentedWriter, snapshot: Snapshot.AnalysisSnapshot): void => {
+  for (const typeDirectiveReference of Array.from(Snapshot.dtsTypeReferenceDirectives(snapshot)).sort()) {
     writer.writeLine(`/// <reference types="${typeDirectiveReference}" />`)
   }
-  for (const libDirectiveReference of Array.from(collector.dtsLibReferenceDirectives).sort()) {
+  for (const libDirectiveReference of Array.from(Snapshot.dtsLibReferenceDirectives(snapshot)).sort()) {
     writer.writeLine(`/// <reference lib="${libDirectiveReference}" />`)
   }
   writer.ensureSkippedLine()
 }
 
-const writeImports = (writer: IndentedWriter, collector: Collector): void => {
-  for (const entity of collector.entities) {
-    if (entity.astEntity instanceof AstImport) {
-      DtsEmitHelpers.emitImport(writer, entity, entity.astEntity)
-    }
+const writeImports = (writer: IndentedWriter, snapshot: Snapshot.AnalysisSnapshot): void => {
+  for (const entity of Snapshot.entities(snapshot)) {
+    const astEntity = Snapshot.astEntityOf(entity)
+    Match.value(Snapshot.refOf(astEntity)).pipe(
+      Match.tag('AstImportRef', () =>
+        DtsEmitHelpers.emitImport(
+          writer,
+          entity,
+          requireSome(Snapshot.astImportOf(astEntity), 'Missing AstImport for an AstImportRef'),
+        )),
+      Match.orElse(() => undefined),
+    )
   }
   writer.ensureSkippedLine()
 }
 
 const emitNamespaceExportClauses = (
   writer: IndentedWriter,
-  collector: Collector,
-  exportedLocalEntities: ReadonlyMap<string, AstEntity>,
+  snapshot: Snapshot.AnalysisSnapshot,
+  exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
   namespaceName: string,
 ): void => {
   writer.increaseIndent()
@@ -82,10 +93,10 @@ const emitNamespaceExportClauses = (
 
   const exportClauses: string[] = []
   for (const [exportedName, astEntity] of exportedLocalEntities) {
-    const collectorEntity = collector.tryGetCollectorEntity(astEntity)
-    if (collectorEntity === undefined) {
-      throw invariant(`Cannot find collector entity for ${namespaceName}.${astEntity.localName}`)
-    }
+    const collectorEntity = requireSome(
+      Snapshot.tryGetCollectorEntity(snapshot, astEntity),
+      `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(snapshot, astEntity)}`,
+    )
 
     const nameForEmit = collectorEntity.nameForEmit ?? ''
     if (nameForEmit === exportedName) {
@@ -107,11 +118,11 @@ const emitNamespaceExportClauses = (
 
 const emitNamespaceEntity = (
   writer: IndentedWriter,
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
-  astEntity: AstNamespaceImport,
+  astEntity: Snapshot.AstNamespaceImport,
 ): void => {
-  const astModuleExportInfo = astEntity.fetchAstModuleExportInfo(collector)
+  const astModuleExportInfo = Snapshot.fetchAstModuleExportInfo(snapshot, astEntity)
 
   if (entity.nameForEmit === undefined || entity.nameForEmit.length === 0) {
     throw invariant('referencedEntry.nameForEmit is undefined')
@@ -120,26 +131,26 @@ const emitNamespaceEntity = (
   if (astModuleExportInfo.starExportedExternalModules.size > 0) {
     throw new UnsupportedStarExportError({
       namespaceName: entity.nameForEmit,
-      moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(astEntity.declaration),
+      moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(Snapshot.declaration(snapshot, astEntity)),
     })
   }
 
   writer.ensureSkippedLine()
   writer.writeLine(`declare namespace ${entity.nameForEmit} {`)
-  emitNamespaceExportClauses(writer, collector, astModuleExportInfo.exportedLocalEntities, entity.nameForEmit)
+  emitNamespaceExportClauses(writer, snapshot, astModuleExportInfo.exportedLocalEntities, entity.nameForEmit)
 }
 
 const emitSymbolDeclarations = (
   writer: IndentedWriter,
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
-  astEntity: AstSymbol,
+  astEntity: Snapshot.AstSymbol,
   reportVariant: ApiReportVariant,
   context: IContext,
   exportsToEmit: Map<string, { readonly associatedMessages: ExtractorMessage[] }>,
 ): void => {
-  for (const astDeclaration of astEntity.astDeclarations) {
-    const fetchedMessages = collector.reportMessages.associatedReportMessages(astDeclaration)
+  for (const astDeclaration of Snapshot.astDeclarations(snapshot, astEntity)) {
+    const fetchedMessages = Snapshot.reportMessages(snapshot).associatedReportMessages(astDeclaration)
 
     const messagesToReport: ExtractorMessage[] = []
     for (const message of fetchedMessages) {
@@ -152,16 +163,16 @@ const emitSymbolDeclarations = (
       messagesToReport.push(message)
     }
 
-    if (_shouldIncludeDeclaration(collector, astDeclaration, reportVariant)) {
+    if (_shouldIncludeDeclaration(snapshot, astDeclaration, reportVariant)) {
       writer.ensureSkippedLine()
-      writer.write(_getAedocSynopsis(collector, astDeclaration, messagesToReport))
+      writer.write(_getAedocSynopsis(snapshot, astDeclaration, messagesToReport))
 
-      const span = new Span(astDeclaration.declaration)
-      const apiItemMetadata = collector.fetchApiItemMetadata(astDeclaration)
+      const span = new Span(Snapshot.declaration(snapshot, astDeclaration))
+      const apiItemMetadata = Snapshot.fetchApiItemMetadata(snapshot, astDeclaration)
       if (apiItemMetadata.isPreapproved) {
         _modifySpanForPreapproved(span)
       } else {
-        _modifySpan(span, entity, astDeclaration, false, context)
+        _modifySpan(snapshot, span, entity, astDeclaration, false, context)
       }
 
       span.writeModifiedText(writer)
@@ -172,20 +183,22 @@ const emitSymbolDeclarations = (
 
 const emitEntity = (
   writer: IndentedWriter,
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
   reportVariant: ApiReportVariant,
   context: IContext,
 ): void => {
-  const astEntity = entity.astEntity
-  const symbolMetadata = collector.tryFetchMetadataForAstEntity(astEntity)
-  const maxEffectiveReleaseTag = symbolMetadata?.maxEffectiveReleaseTag ?? ReleaseTag.None
+  const astEntity = Snapshot.astEntityOf(entity)
+  const maxEffectiveReleaseTag = Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, astEntity), {
+    onNone: () => ReleaseTag.None,
+    onSome: (symbolMetadata) => symbolMetadata.maxEffectiveReleaseTag,
+  })
 
   if (!_shouldIncludeReleaseTag(maxEffectiveReleaseTag, reportVariant)) {
     return
   }
 
-  const includeForgotten = collector.extractorConfig.apiReport.includeForgottenExports ?? false
+  const includeForgotten = Snapshot.extractorConfig(snapshot).apiReport.includeForgottenExports ?? false
   if (!entity.consumable && !includeForgotten) {
     return
   }
@@ -200,13 +213,29 @@ const emitEntity = (
     }
   }
 
-  if (astEntity instanceof AstSymbol) {
-    emitSymbolDeclarations(writer, collector, entity, astEntity, reportVariant, context, exportsToEmit)
-  }
-
-  if (astEntity instanceof AstNamespaceImport) {
-    emitNamespaceEntity(writer, collector, entity, astEntity)
-  }
+  Match.value(Snapshot.refOf(astEntity)).pipe(
+    Match.tag('AstSymbolRef', () =>
+      emitSymbolDeclarations(
+        writer,
+        snapshot,
+        entity,
+        requireSome(Snapshot.astSymbolOf(astEntity), 'Missing AstSymbol for an AstSymbolRef'),
+        reportVariant,
+        context,
+        exportsToEmit,
+      )),
+    Match.tag('AstNamespaceImportRef', () =>
+      emitNamespaceEntity(
+        writer,
+        snapshot,
+        entity,
+        requireSome(
+          Snapshot.astNamespaceImportOf(astEntity),
+          'Missing AstNamespaceImport for an AstNamespaceImportRef',
+        ),
+      )),
+    Match.orElse(() => undefined),
+  )
 
   for (const exportToEmit of exportsToEmit.values()) {
     if (exportToEmit.associatedMessages.length > 0) {
@@ -230,27 +259,30 @@ export class ApiReportGenerator extends Pipeable.Class {
     return normalizedActual === normalizedExpected
   }
 
-  public static generateReviewFileContent(collector: Collector, reportVariant: ApiReportVariant): string {
+  public static generateReviewFileContent(
+    snapshot: Snapshot.AnalysisSnapshot,
+    reportVariant: ApiReportVariant,
+  ): string {
     const writer = new IndentedWriter()
     writer.trimLeadingSpaces = true
 
-    writeReportHeader(writer, collector.workingPackage.name, reportVariant)
-    writeTripleSlashDirectives(writer, collector)
-    writeImports(writer, collector)
+    writeReportHeader(writer, Snapshot.workingPackage(snapshot).name, reportVariant)
+    writeTripleSlashDirectives(writer, snapshot)
+    writeImports(writer, snapshot)
 
     const context: IContext = {
-      collector,
+      snapshot,
       reportVariant,
       alreadyProcessedSignatures: new Set(),
     }
 
-    for (const entity of collector.entities) {
-      emitEntity(writer, collector, entity, reportVariant, context)
+    for (const entity of Snapshot.entities(snapshot)) {
+      emitEntity(writer, snapshot, entity, reportVariant, context)
     }
 
-    DtsEmitHelpers.emitStarExports(writer, collector)
+    DtsEmitHelpers.emitStarExports(writer, snapshot)
 
-    const unassociatedMessages = collector.reportMessages.unassociatedReportMessages()
+    const unassociatedMessages = Snapshot.reportMessages(snapshot).unassociatedReportMessages()
     if (unassociatedMessages.length > 0) {
       writer.ensureSkippedLine()
       _writeLineAsComments(writer, 'Warnings were encountered during analysis:')
@@ -258,12 +290,12 @@ export class ApiReportGenerator extends Pipeable.Class {
       for (const message of unassociatedMessages) {
         _writeLineAsComments(
           writer,
-          message.formatMessageWithLocation(collector.workingPackage.packageFolder),
+          message.formatMessageWithLocation(Snapshot.workingPackage(snapshot).packageFolder),
         )
       }
     }
 
-    if (collector.workingPackage.tsdocComment === undefined) {
+    if (Snapshot.workingPackage(snapshot).tsdocComment === undefined) {
       writer.ensureSkippedLine()
       _writeLineAsComments(writer, '(No @packageDocumentation comment for this package)')
     }
@@ -327,24 +359,26 @@ const handleParameter = (span: Span, context: IContext): void => {
   }
 }
 
-const handleIdentifier = (span: Span, collector: Collector): void => {
+const handleIdentifier = (span: Span, snapshot: Snapshot.AnalysisSnapshot): void => {
   if (!ts.isIdentifier(span.node)) {
     return
   }
-  const referencedEntity = collector.tryGetEntityForNode(span.node)
-  if (referencedEntity !== undefined) {
-    if (referencedEntity.nameForEmit === undefined || referencedEntity.nameForEmit.length === 0) {
-      throw invariant('referencedEntry.nameForEmit is undefined')
-    }
-    span.modification.prefix = referencedEntity.nameForEmit
-  }
+  Option.match(Snapshot.tryGetEntityForNode(snapshot, span.node), {
+    onNone: () => undefined,
+    onSome: (referencedEntity) => {
+      if (referencedEntity.nameForEmit === undefined || referencedEntity.nameForEmit.length === 0) {
+        throw invariant('referencedEntry.nameForEmit is undefined')
+      }
+      span.modification.prefix = referencedEntity.nameForEmit
+    },
+  })
 }
 
 const handleSyntaxList = (span: Span): boolean => {
   if (span.parent === undefined) {
     return false
   }
-  return AstDeclaration.isSupportedSyntaxKind(span.parent.kind) || span.parent.kind === ts.SyntaxKind.ModuleBlock
+  return Snapshot.isSupportedDeclarationKind(span.parent.kind) || span.parent.kind === ts.SyntaxKind.ModuleBlock
 }
 
 const isKeywordNeedingModifiers = (kind: ts.SyntaxKind): boolean =>
@@ -357,15 +391,16 @@ const isKeywordNeedingModifiers = (kind: ts.SyntaxKind): boolean =>
   kind === ts.SyntaxKind.FunctionKeyword
 
 function _modifySpan(
+  snapshot: Snapshot.AnalysisSnapshot,
   span: Span,
   entity: CollectorEntity,
-  astDeclaration: AstDeclaration,
+  astDeclaration: Snapshot.AstDeclaration,
   insideTypeLiteral: boolean,
   context: IContext,
 ): void {
-  const { collector, reportVariant } = context
+  const { reportVariant } = context
 
-  if (!_shouldIncludeDeclaration(collector, astDeclaration, reportVariant)) {
+  if (!_shouldIncludeDeclaration(snapshot, astDeclaration, reportVariant)) {
     span.modification.skipAll()
     return
   }
@@ -390,62 +425,59 @@ function _modifySpan(
   } else if (span.kind === ts.SyntaxKind.Parameter) {
     handleParameter(span, context)
   } else if (span.kind === ts.SyntaxKind.Identifier) {
-    handleIdentifier(span, collector)
+    handleIdentifier(span, snapshot)
   } else if (span.kind === ts.SyntaxKind.TypeLiteral) {
     nextInsideTypeLiteral = true
   } else if (span.kind === ts.SyntaxKind.ImportType) {
     DtsEmitHelpers.modifyImportTypeSpan(
-      collector,
+      snapshot,
       span,
       astDeclaration,
       (childSpan, childAstDeclaration) => {
-        _modifySpan(childSpan, entity, childAstDeclaration, nextInsideTypeLiteral, context)
+        _modifySpan(snapshot, childSpan, entity, childAstDeclaration, nextInsideTypeLiteral, context)
       },
     )
   }
 
   if (recurseChildren) {
     for (const child of span.children) {
-      let childAstDeclaration: AstDeclaration = astDeclaration
+      let childAstDeclaration: Snapshot.AstDeclaration = astDeclaration
 
-      if (AstDeclaration.isSupportedSyntaxKind(child.kind)) {
-        childAstDeclaration = collector.astSymbolTable.getChildAstDeclarationByNode(
-          child.node,
-          astDeclaration,
-        )
+      if (Snapshot.isSupportedDeclarationKind(child.kind)) {
+        childAstDeclaration = Snapshot.childDeclarationByNode(snapshot, child.node, astDeclaration)
 
-        if (_shouldIncludeDeclaration(collector, childAstDeclaration, reportVariant)) {
+        if (_shouldIncludeDeclaration(snapshot, childAstDeclaration, reportVariant)) {
           if (sortChildren) {
             span.modification.sortChildren = true
-            child.modification.sortKey = Collector.getSortKeyIgnoringUnderscore(
-              childAstDeclaration.astSymbol.localName,
+            child.modification.sortKey = Snapshot.sortKeyIgnoringUnderscore(
+              Snapshot.localName(snapshot, childAstDeclaration),
             )
           }
 
           if (!nextInsideTypeLiteral) {
-            const messagesToReport = collector.reportMessages.associatedReportMessages(childAstDeclaration)
-            const aedocSynopsis = _getAedocSynopsis(collector, childAstDeclaration, messagesToReport)
+            const messagesToReport = Snapshot.reportMessages(snapshot).associatedReportMessages(childAstDeclaration)
+            const aedocSynopsis = _getAedocSynopsis(snapshot, childAstDeclaration, messagesToReport)
             child.modification.prefix = aedocSynopsis + child.modification.prefix
           }
         }
       }
 
-      _modifySpan(child, entity, childAstDeclaration, nextInsideTypeLiteral, context)
+      _modifySpan(snapshot, child, entity, childAstDeclaration, nextInsideTypeLiteral, context)
     }
   }
 }
 
 function _shouldIncludeDeclaration(
-  collector: Collector,
-  astDeclaration: AstDeclaration,
+  snapshot: Snapshot.AnalysisSnapshot,
+  astDeclaration: Snapshot.AstDeclaration,
   reportVariant: ApiReportVariant,
 ): boolean {
   // eslint-disable-next-line no-bitwise
-  if ((astDeclaration.modifierFlags & ts.ModifierFlags.Private) !== 0) {
+  if ((Snapshot.modifierFlags(snapshot, astDeclaration) & ts.ModifierFlags.Private) !== 0) {
     return false
   }
 
-  const apiItemMetadata = collector.fetchApiItemMetadata(astDeclaration)
+  const apiItemMetadata = Snapshot.fetchApiItemMetadata(snapshot, astDeclaration)
   return _shouldIncludeReleaseTag(apiItemMetadata.effectiveReleaseTag, reportVariant)
 }
 
@@ -527,13 +559,13 @@ const collectCustomTags = (
 }
 
 function _getAedocSynopsis(
-  collector: Collector,
-  astDeclaration: AstDeclaration,
+  snapshot: Snapshot.AnalysisSnapshot,
+  astDeclaration: Snapshot.AstDeclaration,
   messagesToReport: readonly ExtractorMessage[] = [],
 ): string {
   const writer = new IndentedWriter()
 
-  if (collector.isAncillaryDeclaration(astDeclaration)) {
+  if (Snapshot.isAncillaryDeclaration(snapshot, astDeclaration)) {
     return ''
   }
 
@@ -542,13 +574,13 @@ function _getAedocSynopsis(
   }
 
   const footerParts: string[] = []
-  const apiItemMetadata = collector.fetchApiItemMetadata(astDeclaration)
+  const apiItemMetadata = Snapshot.fetchApiItemMetadata(snapshot, astDeclaration)
 
   if (!apiItemMetadata.releaseTagSameAsParent && apiItemMetadata.effectiveReleaseTag !== ReleaseTag.None) {
     footerParts.push(ReleaseTag.getTagName(apiItemMetadata.effectiveReleaseTag))
   }
 
-  const configTags = collector.extractorConfig.apiReport.tagsToReport ?? {}
+  const configTags = Snapshot.extractorConfig(snapshot).apiReport.tagsToReport ?? {}
   const tagsToReport = {
     ...DEFAULT_TAGS_TO_REPORT,
     ...configTags,
@@ -572,9 +604,10 @@ function _getAedocSynopsis(
 
   if (apiItemMetadata.undocumented) {
     footerParts.push('(undocumented)')
-    collector.addAnalyzerIssue(
+    Snapshot.addAnalyzerIssue(
+      snapshot,
       ExtractorMessageId.Undocumented,
-      `Missing documentation for "${astDeclaration.astSymbol.localName}".`,
+      `Missing documentation for "${Snapshot.localName(snapshot, astDeclaration)}".`,
       astDeclaration,
     )
   }

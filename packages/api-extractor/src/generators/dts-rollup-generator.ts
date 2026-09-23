@@ -1,21 +1,17 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 
-import { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import type { AstEntity } from '../analyzer/AstEntity.js'
-import { AstImport, AstImportKind } from '../analyzer/AstImport.js'
-import { AstNamespaceImport } from '../analyzer/AstNamespaceImport.js'
-import { AstSymbol } from '../analyzer/AstSymbol.js'
 import { IndentedWriter } from '../analyzer/indented-writer.js'
 import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
 import { IndentDocCommentScope, Span, type SpanModification } from '../analyzer/Span.js'
 import * as SyntaxHelpers from '../analyzer/SyntaxHelpers.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
+import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
-import type { Collector } from '../collector/Collector.js'
 import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import type { DeclarationMetadata } from '../collector/DeclarationMetadata.js'
-import type { SymbolMetadata } from '../collector/SymbolMetadata.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
 import { invariant } from '../utils/invariant.js'
@@ -27,6 +23,13 @@ import {
   type NamespaceMemberKind,
   planNamespaceAliases,
 } from './namespace-aliaser.js'
+
+const requireSome = <A>(option: Option.Option<A>, message: string): A => {
+  if (Option.isNone(option)) {
+    throw invariant(message)
+  }
+  return option.value
+}
 
 export enum DtsRollupKind {
   InternalRelease = 0,
@@ -57,37 +60,44 @@ const shouldIncludeReleaseTag = (releaseTag: ReleaseTag, dtsKind: DtsRollupKind)
   }
 }
 
-const classifyNamespaceMember = (astEntity: AstEntity): NamespaceMemberKind => {
-  if (astEntity instanceof AstNamespaceImport) {
-    return 'namespace'
-  }
-  if (astEntity instanceof AstImport) {
-    if (
-      astEntity.importKind === AstImportKind.StarImport ||
-      astEntity.importKind === AstImportKind.EqualsImport ||
-      astEntity.importKind === AstImportKind.ImportType
-    ) {
-      return 'namespace'
-    }
-    return astEntity.isTypeOnlyEverywhere ? 'type' : 'value'
-  }
-  if (astEntity instanceof AstSymbol) {
-    const flags = astEntity.followedSymbol.flags
-    // eslint-disable-next-line no-bitwise
-    if ((flags & ts.SymbolFlags.Namespace) !== 0) {
-      return 'namespace'
-    }
-    // eslint-disable-next-line no-bitwise
-    const hasValue = (flags & ts.SymbolFlags.Value) !== 0
-    // eslint-disable-next-line no-bitwise
-    const hasType = (flags & ts.SymbolFlags.Type) !== 0
-    if (hasValue && hasType) {
-      return 'both'
-    }
-    return hasType ? 'type' : 'value'
-  }
-  return 'value'
-}
+const classifyNamespaceMember = (
+  snapshot: Snapshot.AnalysisSnapshot,
+  astEntity: Snapshot.AstEntity,
+): NamespaceMemberKind =>
+  Match.value(Snapshot.refOf(astEntity)).pipe(
+    Match.tag('AstNamespaceImportRef', (): NamespaceMemberKind => 'namespace'),
+    Match.tag('AstImportRef', (): NamespaceMemberKind => {
+      const astImport = requireSome(Snapshot.astImportOf(astEntity), 'Missing AstImport for an AstImportRef')
+      if (
+        astImport.importKind === Snapshot.AstImportKind.StarImport ||
+        astImport.importKind === Snapshot.AstImportKind.EqualsImport ||
+        astImport.importKind === Snapshot.AstImportKind.ImportType
+      ) {
+        return 'namespace'
+      }
+      return astImport.isTypeOnlyEverywhere ? 'type' : 'value'
+    }),
+    Match.tag('AstSymbolRef', (): NamespaceMemberKind => {
+      const flags = Snapshot.symbolFlags(
+        snapshot,
+        requireSome(Snapshot.astSymbolOf(astEntity), 'Missing AstSymbol for an AstSymbolRef'),
+      )
+      // eslint-disable-next-line no-bitwise
+      if ((flags & ts.SymbolFlags.Namespace) !== 0) {
+        return 'namespace'
+      }
+      // eslint-disable-next-line no-bitwise
+      const hasValue = (flags & ts.SymbolFlags.Value) !== 0
+      // eslint-disable-next-line no-bitwise
+      const hasType = (flags & ts.SymbolFlags.Type) !== 0
+      if (hasValue && hasType) {
+        return 'both'
+      }
+      return hasType ? 'type' : 'value'
+    }),
+    Match.tag('AstNamespaceExportRef', (): NamespaceMemberKind => 'value'),
+    Match.exhaustive,
+  )
 
 const isKeywordNeedingModifiers = (kind: ts.SyntaxKind): boolean =>
   kind === ts.SyntaxKind.InterfaceKeyword ||
@@ -98,9 +108,14 @@ const isKeywordNeedingModifiers = (kind: ts.SyntaxKind): boolean =>
   kind === ts.SyntaxKind.TypeKeyword ||
   kind === ts.SyntaxKind.FunctionKeyword
 
-const handleKeywordModifiers = (span: Span, entity: CollectorEntity, astDeclaration: AstDeclaration): void => {
+const handleKeywordModifiers = (
+  span: Span,
+  entity: CollectorEntity,
+  snapshot: Snapshot.AnalysisSnapshot,
+  astDeclaration: Snapshot.AstDeclaration,
+): void => {
   let replacedModifiers: string = ''
-  if (!astDeclaration.parent) {
+  if (Option.isNone(Snapshot.parentAstDeclaration(snapshot, astDeclaration))) {
     replacedModifiers += 'declare '
   }
   if (entity.shouldInlineExport) {
@@ -115,10 +130,10 @@ const handleKeywordModifiers = (span: Span, entity: CollectorEntity, astDeclarat
 }
 
 const handleVariableDeclaration = (
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   span: Span,
   entity: CollectorEntity,
-  astDeclaration: AstDeclaration,
+  astDeclaration: Snapshot.AstDeclaration,
 ): void => {
   if (span.parent !== undefined) {
     return
@@ -140,7 +155,7 @@ const handleVariableDeclaration = (
     span.modification.prefix = 'export ' + span.modification.prefix
   }
 
-  const declarationMetadata: DeclarationMetadata = collector.fetchDeclarationMetadata(astDeclaration)
+  const declarationMetadata: DeclarationMetadata = Snapshot.fetchDeclarationMetadata(snapshot, astDeclaration)
   if (declarationMetadata.tsdocParserContext !== undefined) {
     let originalComment: string = declarationMetadata.tsdocParserContext.sourceRange.toString()
     if (!/\r?\n\s*$/.test(originalComment)) {
@@ -151,26 +166,28 @@ const handleVariableDeclaration = (
   }
 }
 
-const handleIdentifier = (collector: Collector, span: Span): void => {
+const handleIdentifier = (snapshot: Snapshot.AnalysisSnapshot, span: Span): void => {
   if (!ts.isIdentifier(span.node)) {
     return
   }
-  const referencedEntity = collector.tryGetEntityForNode(span.node)
-  if (referencedEntity !== undefined) {
-    if (referencedEntity.nameForEmit === undefined || referencedEntity.nameForEmit.length === 0) {
-      throw invariant('referencedEntry.nameForEmit is undefined')
-    }
-    span.modification.prefix = referencedEntity.nameForEmit
-  }
+  Option.match(Snapshot.tryGetEntityForNode(snapshot, span.node), {
+    onNone: () => undefined,
+    onSome: (referencedEntity) => {
+      if (referencedEntity.nameForEmit === undefined || referencedEntity.nameForEmit.length === 0) {
+        throw invariant('referencedEntry.nameForEmit is undefined')
+      }
+      span.modification.prefix = referencedEntity.nameForEmit
+    },
+  })
 }
 
 const trimChildSpan = (
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   child: Span,
-  childAstDeclaration: AstDeclaration,
+  childAstDeclaration: Snapshot.AstDeclaration,
   dtsKind: DtsRollupKind,
 ): boolean => {
-  const releaseTag = collector.fetchApiItemMetadata(childAstDeclaration).effectiveReleaseTag
+  const releaseTag = Snapshot.fetchApiItemMetadata(snapshot, childAstDeclaration).effectiveReleaseTag
   if (shouldIncludeReleaseTag(releaseTag, dtsKind)) {
     return false
   }
@@ -183,10 +200,10 @@ const trimChildSpan = (
   }
 
   const modification: SpanModification = nodeToTrim.modification
-  const name: string = childAstDeclaration.astSymbol.localName
+  const name: string = Snapshot.localName(snapshot, childAstDeclaration)
   modification.omitChildren = true
 
-  if (collector.extractorConfig.dtsRollup.omitTrimmingComments !== true) {
+  if (Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true) {
     modification.prefix = `/* Excluded from this release type: ${name} */`
   } else {
     modification.prefix = ''
@@ -211,10 +228,10 @@ const trimChildSpan = (
 }
 
 const modifySpan = (
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   span: Span,
   entity: CollectorEntity,
-  astDeclaration: AstDeclaration,
+  astDeclaration: Snapshot.AstDeclaration,
   dtsKind: DtsRollupKind,
 ): void => {
   let recurseChildren = true
@@ -231,18 +248,18 @@ const modifySpan = (
   } else if (span.kind === ts.SyntaxKind.DefaultKeyword || span.kind === ts.SyntaxKind.DeclareKeyword) {
     span.modification.skipAll()
   } else if (isKeywordNeedingModifiers(span.kind)) {
-    handleKeywordModifiers(span, entity, astDeclaration)
+    handleKeywordModifiers(span, entity, snapshot, astDeclaration)
   } else if (span.kind === ts.SyntaxKind.VariableDeclaration) {
-    handleVariableDeclaration(collector, span, entity, astDeclaration)
+    handleVariableDeclaration(snapshot, span, entity, astDeclaration)
   } else if (span.kind === ts.SyntaxKind.Identifier) {
-    handleIdentifier(collector, span)
+    handleIdentifier(snapshot, span)
   } else if (span.kind === ts.SyntaxKind.ImportType) {
     DtsEmitHelpers.modifyImportTypeSpan(
-      collector,
+      snapshot,
       span,
       astDeclaration,
       (childSpan, childAstDeclaration) => {
-        modifySpan(collector, childSpan, entity, childAstDeclaration, dtsKind)
+        modifySpan(snapshot, childSpan, entity, childAstDeclaration, dtsKind)
       },
     )
   }
@@ -252,31 +269,28 @@ const modifySpan = (
   }
 
   for (const child of span.children) {
-    let childAstDeclaration: AstDeclaration = astDeclaration
+    let childAstDeclaration: Snapshot.AstDeclaration = astDeclaration
     let trimmed = false
-    if (AstDeclaration.isSupportedSyntaxKind(child.kind)) {
-      childAstDeclaration = collector.astSymbolTable.getChildAstDeclarationByNode(
-        child.node,
-        astDeclaration,
-      )
-      trimmed = trimChildSpan(collector, child, childAstDeclaration, dtsKind)
+    if (Snapshot.isSupportedDeclarationKind(child.kind)) {
+      childAstDeclaration = Snapshot.childDeclarationByNode(snapshot, child.node, astDeclaration)
+      trimmed = trimChildSpan(snapshot, child, childAstDeclaration, dtsKind)
     }
 
     if (!trimmed) {
-      modifySpan(collector, child, entity, childAstDeclaration, dtsKind)
+      modifySpan(snapshot, child, entity, childAstDeclaration, dtsKind)
     }
   }
 }
 
 const emitNamespaceBlock = (
   writer: IndentedWriter,
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
-  astEntity: AstNamespaceImport,
+  astEntity: Snapshot.AstNamespaceImport,
   reservedNames: Set<string>,
   dtsKind: DtsRollupKind,
 ): void => {
-  const astModuleExportInfo = astEntity.fetchAstModuleExportInfo(collector)
+  const astModuleExportInfo = Snapshot.fetchAstModuleExportInfo(snapshot, astEntity)
   const namespaceName = entity.nameForEmit
 
   if (namespaceName === undefined || namespaceName.length === 0) {
@@ -286,32 +300,34 @@ const emitNamespaceBlock = (
   if (astModuleExportInfo.starExportedExternalModules.size > 0) {
     throw new UnsupportedStarExportError({
       namespaceName,
-      moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(astEntity.declaration),
+      moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(Snapshot.declaration(snapshot, astEntity)),
     })
   }
 
   const members: NamespaceMember[] = []
   for (const [exportedName, exportedEntity] of astModuleExportInfo.exportedLocalEntities) {
-    const memberEntity = collector.tryGetCollectorEntity(exportedEntity)
-    if (memberEntity === undefined) {
-      throw invariant(`Cannot find collector entity for ${namespaceName}.${exportedEntity.localName}`)
-    }
+    const memberEntity = requireSome(
+      Snapshot.tryGetCollectorEntity(snapshot, exportedEntity),
+      `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(snapshot, exportedEntity)}`,
+    )
 
-    const exportedMetadata: SymbolMetadata | undefined = collector.tryFetchMetadataForAstEntity(exportedEntity)
-    const exportedMaxReleaseTag: ReleaseTag = exportedMetadata?.maxEffectiveReleaseTag ?? ReleaseTag.None
+    const exportedMaxReleaseTag = Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, exportedEntity), {
+      onNone: () => ReleaseTag.None,
+      onSome: (exportedMetadata) => exportedMetadata.maxEffectiveReleaseTag,
+    })
     if (!shouldIncludeReleaseTag(exportedMaxReleaseTag, dtsKind)) {
       continue
     }
 
     const targetName = memberEntity.nameForEmit
     if (targetName === undefined || targetName.length === 0) {
-      throw invariant(`referencedEntry.nameForEmit is undefined for ${exportedEntity.localName}`)
+      throw invariant(`referencedEntry.nameForEmit is undefined for ${Snapshot.localName(snapshot, exportedEntity)}`)
     }
 
     members.push({
       memberName: exportedName,
       targetName,
-      kind: classifyNamespaceMember(exportedEntity),
+      kind: classifyNamespaceMember(snapshot, exportedEntity),
     })
   }
 
@@ -347,9 +363,9 @@ const emitNamespaceBlock = (
   writer.writeLine('}')
 }
 
-const collectInitialReservedNames = (collector: Collector): Set<string> => {
+const collectInitialReservedNames = (snapshot: Snapshot.AnalysisSnapshot): Set<string> => {
   const reserved = new Set<string>()
-  for (const entity of collector.entities) {
+  for (const entity of Snapshot.entities(snapshot)) {
     if (entity.nameForEmit !== undefined && entity.nameForEmit.length > 0) {
       reserved.add(entity.nameForEmit)
     }
@@ -361,69 +377,92 @@ const collectInitialReservedNames = (collector: Collector): Set<string> => {
 }
 
 const generateTypingsFileContent = (
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   writer: IndentedWriter,
   dtsKind: DtsRollupKind,
 ): void => {
-  if (collector.workingPackage.tsdocParserContext !== undefined) {
+  const workingPackage = Snapshot.workingPackage(snapshot)
+  if (workingPackage.tsdocParserContext !== undefined) {
     writer.trimLeadingSpaces = false
-    writer.writeLine(collector.workingPackage.tsdocParserContext.sourceRange.toString())
+    writer.writeLine(workingPackage.tsdocParserContext.sourceRange.toString())
     writer.trimLeadingSpaces = true
     writer.ensureSkippedLine()
   }
 
-  for (const typeDirective of collector.dtsTypeReferenceDirectives) {
+  for (const typeDirective of Snapshot.dtsTypeReferenceDirectives(snapshot)) {
     writer.writeLine(`/// <reference types="${typeDirective}" />`)
   }
-  for (const libDirective of collector.dtsLibReferenceDirectives) {
+  for (const libDirective of Snapshot.dtsLibReferenceDirectives(snapshot)) {
     writer.writeLine(`/// <reference lib="${libDirective}" />`)
   }
   writer.ensureSkippedLine()
 
-  for (const entity of collector.entities) {
-    if (entity.astEntity instanceof AstImport) {
-      DtsEmitHelpers.emitImport(writer, entity, entity.astEntity)
-    }
+  for (const entity of Snapshot.entities(snapshot)) {
+    const astEntity = Snapshot.astEntityOf(entity)
+    Match.value(Snapshot.refOf(astEntity)).pipe(
+      Match.tag('AstImportRef', () =>
+        DtsEmitHelpers.emitImport(
+          writer,
+          entity,
+          requireSome(Snapshot.astImportOf(astEntity), 'Missing AstImport for an AstImportRef'),
+        )),
+      Match.orElse(() => undefined),
+    )
   }
   writer.ensureSkippedLine()
 
-  const reservedNames = collectInitialReservedNames(collector)
+  const reservedNames = collectInitialReservedNames(snapshot)
 
-  for (const entity of collector.entities) {
-    const astEntity = entity.astEntity
-    const symbolMetadata = collector.tryFetchMetadataForAstEntity(astEntity)
-    const maxReleaseTag = symbolMetadata?.maxEffectiveReleaseTag ?? ReleaseTag.None
+  for (const entity of Snapshot.entities(snapshot)) {
+    const astEntity = Snapshot.astEntityOf(entity)
+    const maxReleaseTag = Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, astEntity), {
+      onNone: () => ReleaseTag.None,
+      onSome: (symbolMetadata) => symbolMetadata.maxEffectiveReleaseTag,
+    })
 
     if (!shouldIncludeReleaseTag(maxReleaseTag, dtsKind)) {
-      if (collector.extractorConfig.dtsRollup.omitTrimmingComments !== true) {
+      if (Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true) {
         writer.ensureSkippedLine()
         writer.writeLine(`/* Excluded from this release type: ${entity.nameForEmit} */`)
       }
       continue
     }
 
-    if (astEntity instanceof AstSymbol) {
-      for (const astDeclaration of astEntity.astDeclarations) {
-        const apiItemMetadata: ApiItemMetadata = collector.fetchApiItemMetadata(astDeclaration)
-        if (!shouldIncludeReleaseTag(apiItemMetadata.effectiveReleaseTag, dtsKind)) {
-          if (collector.extractorConfig.dtsRollup.omitTrimmingComments !== true) {
-            writer.ensureSkippedLine()
-            writer.writeLine(`/* Excluded declaration from this release type: ${entity.nameForEmit} */`)
+    Match.value(Snapshot.refOf(astEntity)).pipe(
+      Match.tag('AstSymbolRef', () => {
+        const astSymbol = requireSome(Snapshot.astSymbolOf(astEntity), 'Missing AstSymbol for an AstSymbolRef')
+        for (const astDeclaration of Snapshot.astDeclarations(snapshot, astSymbol)) {
+          const apiItemMetadata: ApiItemMetadata = Snapshot.fetchApiItemMetadata(snapshot, astDeclaration)
+          if (!shouldIncludeReleaseTag(apiItemMetadata.effectiveReleaseTag, dtsKind)) {
+            if (Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true) {
+              writer.ensureSkippedLine()
+              writer.writeLine(`/* Excluded declaration from this release type: ${entity.nameForEmit} */`)
+            }
+            continue
           }
-          continue
+
+          const span = new Span(Snapshot.declaration(snapshot, astDeclaration))
+          modifySpan(snapshot, span, entity, astDeclaration, dtsKind)
+          writer.ensureSkippedLine()
+          span.writeModifiedText(writer)
+          writer.ensureNewLine()
         }
-
-        const span = new Span(astDeclaration.declaration)
-        modifySpan(collector, span, entity, astDeclaration, dtsKind)
-        writer.ensureSkippedLine()
-        span.writeModifiedText(writer)
-        writer.ensureNewLine()
-      }
-    }
-
-    if (astEntity instanceof AstNamespaceImport) {
-      emitNamespaceBlock(writer, collector, entity, astEntity, reservedNames, dtsKind)
-    }
+      }),
+      Match.tag('AstNamespaceImportRef', () => {
+        emitNamespaceBlock(
+          writer,
+          snapshot,
+          entity,
+          requireSome(
+            Snapshot.astNamespaceImportOf(astEntity),
+            'Missing AstNamespaceImport for an AstNamespaceImportRef',
+          ),
+          reservedNames,
+          dtsKind,
+        )
+      }),
+      Match.orElse(() => undefined),
+    )
 
     if (!entity.shouldInlineExport) {
       for (const exportName of entity.exportNames) {
@@ -434,7 +473,7 @@ const generateTypingsFileContent = (
     writer.ensureSkippedLine()
   }
 
-  DtsEmitHelpers.emitStarExports(writer, collector)
+  DtsEmitHelpers.emitStarExports(writer, snapshot)
 
   writer.ensureSkippedLine()
   writer.writeLine('export { }')
@@ -442,12 +481,12 @@ const generateTypingsFileContent = (
 
 export class DtsRollupGenerator extends Pipeable.Class {
   public static generateTypingsFileContent(
-    collector: Collector,
+    snapshot: Snapshot.AnalysisSnapshot,
     dtsKind: DtsRollupKind,
   ): string {
     const writer = new IndentedWriter()
     writer.trimLeadingSpaces = true
-    generateTypingsFileContent(collector, writer, dtsKind)
+    generateTypingsFileContent(snapshot, writer, dtsKind)
     return writer.getText()
   }
 }

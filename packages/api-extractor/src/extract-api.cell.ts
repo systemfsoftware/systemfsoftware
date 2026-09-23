@@ -23,7 +23,7 @@ import {
   ReportEvidence,
   type ReportOutcome,
 } from './choose-extraction.workflow.js'
-import { Collector } from './collector/Collector.js'
+import * as Snapshot from './collector/analysis-snapshot.js'
 import { MessageLog } from './collector/message-log.js'
 import {
   admits,
@@ -35,9 +35,9 @@ import {
 import { type LogLevel, MessageRuleError } from './collector/message-router.schema.js'
 import { SourceMapper } from './collector/SourceMapper.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
+import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
 import type { CompilerState, CompilerStateOptions } from './compiler/typescript-program.js'
 import { loadCompilerState } from './compiler/typescript-program.js'
-import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
 import type { ApiReportVariant, NewlineKind } from './config/config-file.schema.js'
 import type { ExtractorConfig, ExtractorReportConfig } from './config/extractor-config.js'
 import { DocCommentEnhancer } from './enhancers/DocCommentEnhancer.js'
@@ -102,9 +102,9 @@ interface RollupTarget {
   readonly directoryPath: string
 }
 
-export interface AnalysisSnapshot {
+export interface ExtractionSnapshot {
   readonly request: ExtractionRequest
-  readonly collector: Collector
+  readonly analysis: Snapshot.AnalysisSnapshot
   readonly view: MessageView
   readonly compilerVersion: string
   readonly reports: readonly ReportPlan[]
@@ -141,21 +141,21 @@ const decodeRefusalOf = <C>(cause: C): Result.Result<never, ExtractorError> => {
   throw new InternalInvariantError({ message: 'Report rendering failed', cause })
 }
 
-const analysisOf = (inputs: AnalysisInputs): Collector => {
-  const collector = new Collector({
+const analysisOf = (inputs: AnalysisInputs): Snapshot.AnalysisSnapshot => {
+  const snapshot = Snapshot.make({
     program: inputs.compilerState.program,
     extractorConfig: inputs.config,
     messageLog: inputs.messageLog,
     reportMessages: inputs.reportMessages,
     sourceMapper: inputs.sourceMapper,
   })
-  collector.analyze()
-  DocCommentEnhancer.analyze(collector)
-  ValidationEnhancer.analyze(collector)
-  return collector
+  Snapshot.analyze(snapshot)
+  DocCommentEnhancer.analyze(snapshot)
+  ValidationEnhancer.analyze(snapshot)
+  return snapshot
 }
 
-const collectorOf = (inputs: AnalysisInputs): Effect.Effect<Collector, ExtractorError> =>
+const collectorOf = (inputs: AnalysisInputs): Effect.Effect<Snapshot.AnalysisSnapshot, ExtractorError> =>
   Effect.try({
     try: () => analysisOf(inputs),
     catch: (cause) => analysisRefusalOf(cause),
@@ -307,7 +307,7 @@ const reportPlanOf = (fs: FileSystem.FileSystem, paths: ReportPaths): Effect.Eff
 const readAnalysis = (
   request: ExtractionRequest,
 ): Effect.Effect<
-  AnalysisSnapshot,
+  ExtractionSnapshot,
   ExtractorError | PlatformError,
   FileSystem.FileSystem | Path.Path | TypeScriptCompiler
 > =>
@@ -320,7 +320,7 @@ const readAnalysis = (
     const view = yield* messageViewOf(config, messageLog)
     const compiler = yield* TypeScriptCompiler
     const compilerState = yield* loadCompilerState(compiler, compilerOptionsOf(request))
-    const collector = yield* collectorOf({
+    const analysis = yield* collectorOf({
       config,
       compilerState,
       messageLog,
@@ -329,7 +329,7 @@ const readAnalysis = (
     })
     return {
       request,
-      collector,
+      analysis,
       view,
       compilerVersion: compilerState.compiler.version,
       reports: yield* Effect.forEach(reportPlansOf(config, path), (paths) => reportPlanOf(fs, paths)),
@@ -338,18 +338,18 @@ const readAnalysis = (
     }
   })
 
-const renderRollupsOf = (snapshot: AnalysisSnapshot): void => {
+const renderRollupsOf = (snapshot: ExtractionSnapshot): void => {
   snapshot.rollups.forEach((target) => {
     snapshot.renderedRollups.record({
       kind: target.kind,
       filePath: target.filePath,
       directoryPath: target.directoryPath,
-      content: renderDtsRollup(snapshot.collector, target.kind),
+      content: renderDtsRollup(snapshot.analysis, target.kind),
     })
   })
 }
 
-const decodeOf = (snapshot: AnalysisSnapshot): DecideExtraction => {
+const decodeOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
   renderRollupsOf(snapshot)
   const reports = snapshot.reports.map((plan) =>
     new ReportEvidence({
@@ -357,7 +357,7 @@ const decodeOf = (snapshot: AnalysisSnapshot): DecideExtraction => {
       reportFileName: plan.reportFileName,
       reportPath: plan.reportPath,
       reportTempPath: plan.reportTempPath,
-      generatedText: renderApiReport(snapshot.collector, plan.variant),
+      generatedText: renderApiReport(snapshot.analysis, plan.variant),
       baseline: plan.baseline,
       folder: plan.folder,
     })
@@ -374,7 +374,7 @@ const decodeOf = (snapshot: AnalysisSnapshot): DecideExtraction => {
 }
 
 const decodeSnapshot = Sandwich.pure(
-  (snapshot: AnalysisSnapshot): Result.Result<DecideExtraction, ExtractorError> => {
+  (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> => {
     try {
       return Result.succeed(decodeOf(snapshot))
     } catch (cause) {
@@ -389,7 +389,7 @@ const ensureDirectory = (directoryPath: string): WriteStep => ({ _tag: 'EnsureDi
 
 const writeFile = (filePath: string, content: string): WriteStep => ({ _tag: 'WriteFile', filePath, content })
 
-const showsDiff = (snapshot: AnalysisSnapshot): boolean =>
+const showsDiff = (snapshot: ExtractionSnapshot): boolean =>
   snapshot.request.options.printApiReportDiff === true || admits(snapshot.request.verbosity, 'verbose')
 
 const diffLevelOf = (printApiReportDiff: boolean): LogLevel =>
@@ -400,7 +400,7 @@ const diffLevelOf = (printApiReportDiff: boolean): LogLevel =>
   )
 
 const diffStepOf = (
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
   plan: ReportPlan,
   baselineContent: string,
   generatedText: string,
@@ -418,7 +418,7 @@ const diffStepOf = (
 }
 
 const diffStepsOf = (
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
   plan: ReportPlan,
   generatedText: string,
 ): readonly WriteStep[] => {
@@ -432,14 +432,14 @@ const diffStepsOf = (
   )
 }
 
-const preambleSteps = (snapshot: AnalysisSnapshot): readonly WriteStep[] => [
+const preambleSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] => [
   emitLine('info', `Analysis will use the bundled TypeScript version ${snapshot.compilerVersion}`),
 ]
 
-const analysisConsoleSteps = (snapshot: AnalysisSnapshot): readonly WriteStep[] =>
+const analysisConsoleSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] =>
   snapshot.view.consoleLines().map((line) => emitLine(line.level, line.text))
 
-const rollupSteps = (snapshot: AnalysisSnapshot, newlineKind: NewlineKind): readonly WriteStep[] =>
+const rollupSteps = (snapshot: ExtractionSnapshot, newlineKind: NewlineKind): readonly WriteStep[] =>
   snapshot.renderedRollups.all().flatMap((render) => [
     emitLine('verbose', `Writing declaration rollup: ${render.filePath}`),
     ensureDirectory(render.directoryPath),
@@ -457,7 +457,7 @@ const writingStepsOf = (
 ]
 
 const updateStepsOf = (
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
   plan: ReportPlan,
   generatedText: string,
 ): readonly WriteStep[] => [
@@ -468,7 +468,7 @@ const updateStepsOf = (
 ]
 
 const driftStepsOf = (
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
   plan: ReportPlan,
   generatedText: string,
 ): readonly WriteStep[] => [
@@ -482,7 +482,7 @@ const driftStepsOf = (
 ]
 
 const outcomeStepsOf = (
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
   plan: ReportPlan,
   outcome: ReportOutcome,
 ): readonly WriteStep[] =>
@@ -523,7 +523,7 @@ const outcomeStepsOf = (
     Match.exhaustive,
   )
 
-const residueSteps = (snapshot: AnalysisSnapshot): readonly WriteStep[] =>
+const residueSteps = (snapshot: ExtractionSnapshot): readonly WriteStep[] =>
   snapshot.view.residue().map((line) => emitLine(line.level, line.text))
 
 const footerSteps = (decision: ExtractionDecision): readonly WriteStep[] =>
@@ -534,7 +534,7 @@ const footerSteps = (decision: ExtractionDecision): readonly WriteStep[] =>
   )
 
 const reportStepsOf = (
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
   outcomes: readonly ReportOutcome[],
 ): readonly WriteStep[] =>
   Arr.zip(snapshot.reports, outcomes).flatMap(([plan, outcome]) => [
@@ -550,7 +550,7 @@ const isAdmittedStep = (verbosity: Verbosity) => (step: WriteStep): boolean =>
     Match.exhaustive,
   )
 
-const writePlanOf = (snapshot: AnalysisSnapshot, decision: ExtractionDecision): WritePlan => ({
+const writePlanOf = (snapshot: ExtractionSnapshot, decision: ExtractionDecision): WritePlan => ({
   decision,
   steps: [
     ...preambleSteps(snapshot),
@@ -576,7 +576,7 @@ const executeStep = (
 
 const writeOutcome = (
   outcome: Result.Result<ExtractionDecision, never>,
-  snapshot: AnalysisSnapshot,
+  snapshot: ExtractionSnapshot,
 ): Effect.Effect<ExtractionDecision, PlatformError, FileSystem.FileSystem | MessageWriter> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem

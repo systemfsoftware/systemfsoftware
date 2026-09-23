@@ -420,7 +420,7 @@ export class ExportAnalyzer extends Pipeable.Class {
           break
         }
 
-        const currentAlias: ts.Symbol = TypeScriptInternals.getImmediateAliasedSymbol(
+        const currentAlias: ts.Symbol | undefined = TypeScriptInternals.getImmediateAliasedSymbol(
           current,
           this.#typeChecker,
         )
@@ -505,7 +505,7 @@ export class ExportAnalyzer extends Pipeable.Class {
       }
 
       const followedSymbolNode: ts.Node | ts.ImportTypeNode | undefined = followedSymbol.declarations &&
-        (followedSymbol.declarations[0] as ts.Node | undefined)
+        (followedSymbol.declarations[0])
 
       if (followedSymbolNode && followedSymbolNode.kind === ts.SyntaxKind.ImportType) {
         return this.fetchReferencedAstEntityFromImportTypeNode(

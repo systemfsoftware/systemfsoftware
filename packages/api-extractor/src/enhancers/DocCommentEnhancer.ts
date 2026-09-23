@@ -1,4 +1,7 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
+import * as Result from 'effect/Result'
 // Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
 // See LICENSE in the project root for license information.
 
@@ -7,53 +10,67 @@ import * as ts from 'typescript'
 import * as tsdoc from '@microsoft/tsdoc'
 import { ReleaseTag } from '../model/index.js'
 
-import type { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import { ResolverFailure } from '../analyzer/AstReferenceResolver.js'
-import { AstSymbol } from '../analyzer/AstSymbol.js'
+import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
-import type { Collector } from '../collector/Collector.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import { VisitorState } from '../collector/VisitorState.js'
+import { invariant } from '../utils/invariant.js'
+
+const requireSome = <A>(option: Option.Option<A>, message: string): A => {
+  if (Option.isNone(option)) {
+    throw invariant(message)
+  }
+  return option.value
+}
 
 export class DocCommentEnhancer extends Pipeable.Class {
-  readonly #collector: Collector
+  readonly #snapshot: Snapshot.AnalysisSnapshot
 
-  public constructor(collector: Collector) {
+  public constructor(snapshot: Snapshot.AnalysisSnapshot) {
     super()
-    this.#collector = collector
+    this.#snapshot = snapshot
   }
 
-  public static analyze(collector: Collector): void {
-    const docCommentEnhancer: DocCommentEnhancer = new DocCommentEnhancer(collector)
+  public static analyze(snapshot: Snapshot.AnalysisSnapshot): void {
+    const docCommentEnhancer: DocCommentEnhancer = new DocCommentEnhancer(snapshot)
     docCommentEnhancer.analyze()
   }
 
   public analyze(): void {
-    for (const entity of this.#collector.entities) {
-      if (entity.astEntity instanceof AstSymbol) {
-        if (
-          entity.consumable ||
-          this.#collector.extractorConfig.apiReport.includeForgottenExports ||
-          this.#collector.extractorConfig.docModel.includeForgottenExports
-        ) {
-          entity.astEntity.forEachDeclarationRecursive((astDeclaration: AstDeclaration) => {
-            this.#analyzeApiItem(astDeclaration)
-          })
-        }
-      }
+    for (const entity of Snapshot.entities(this.#snapshot)) {
+      const astEntity = Snapshot.astEntityOf(entity)
+      Match.value(Snapshot.refOf(astEntity)).pipe(
+        Match.tag('AstSymbolRef', () => {
+          if (
+            entity.consumable ||
+            Snapshot.extractorConfig(this.#snapshot).apiReport.includeForgottenExports ||
+            Snapshot.extractorConfig(this.#snapshot).docModel.includeForgottenExports
+          ) {
+            Snapshot.forEachDeclarationRecursive(
+              this.#snapshot,
+              requireSome(Snapshot.astSymbolOf(astEntity), 'Missing AstSymbol for an AstSymbolRef'),
+              (astDeclaration) => {
+                this.#analyzeApiItem(astDeclaration)
+              },
+            )
+          }
+        }),
+        Match.orElse(() => undefined),
+      )
     }
   }
 
-  #analyzeApiItem(astDeclaration: AstDeclaration): void {
-    const metadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(astDeclaration)
+  #analyzeApiItem(astDeclaration: Snapshot.AstDeclaration): void {
+    const metadata: ApiItemMetadata = Snapshot.fetchApiItemMetadata(this.#snapshot, astDeclaration)
     if (metadata.docCommentEnhancerVisitorState === VisitorState.Visited) {
       return
     }
 
     if (metadata.docCommentEnhancerVisitorState === VisitorState.Visiting) {
-      this.#collector.addAnalyzerIssue(
+      Snapshot.addAnalyzerIssue(
+        this.#snapshot,
         ExtractorMessageId.CyclicInheritDoc,
-        `The @inheritDoc tag for "${astDeclaration.astSymbol.localName}" refers to its own declaration`,
+        `The @inheritDoc tag for "${Snapshot.localName(this.#snapshot, astDeclaration)}" refers to its own declaration`,
         astDeclaration,
       )
       return
@@ -71,17 +88,20 @@ export class DocCommentEnhancer extends Pipeable.Class {
     metadata.docCommentEnhancerVisitorState = VisitorState.Visited
   }
 
-  #analyzeNeedsDocumentation(astDeclaration: AstDeclaration, metadata: ApiItemMetadata): void {
-    if (astDeclaration.declaration.kind === ts.SyntaxKind.Constructor) {
+  #analyzeNeedsDocumentation(astDeclaration: Snapshot.AstDeclaration, metadata: ApiItemMetadata): void {
+    if (Snapshot.declaration(this.#snapshot, astDeclaration).kind === ts.SyntaxKind.Constructor) {
       // Constructors always do pretty much the same thing, so it's annoying to require people to write
       // descriptions for them.  Instead, if the constructor lacks a TSDoc summary, then API Extractor
       // will auto-generate one.
       metadata.undocumented = false
 
       // The class that contains this constructor
-      const classDeclaration: AstDeclaration = astDeclaration.parent!
+      const classDeclaration: Snapshot.AstDeclaration = requireSome(
+        Snapshot.parentAstDeclaration(this.#snapshot, astDeclaration),
+        'Constructor declarations are expected to have a parent declaration',
+      )
 
-      const configuration: tsdoc.TSDocConfiguration = this.#collector.tsdocConfiguration
+      const configuration: tsdoc.TSDocConfiguration = Snapshot.tsdocConfiguration(this.#snapshot)
 
       if (!metadata.tsdocComment) {
         metadata.tsdocComment = new tsdoc.DocComment({ configuration })
@@ -92,16 +112,16 @@ export class DocCommentEnhancer extends Pipeable.Class {
           new tsdoc.DocPlainText({ configuration, text: 'Constructs a new instance of the ' }),
           new tsdoc.DocCodeSpan({
             configuration,
-            code: classDeclaration.astSymbol.localName,
+            code: Snapshot.localName(this.#snapshot, classDeclaration),
           }),
           new tsdoc.DocPlainText({ configuration, text: ' class' }),
         ])
       }
 
-      const apiItemMetadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(astDeclaration)
+      const apiItemMetadata: ApiItemMetadata = Snapshot.fetchApiItemMetadata(this.#snapshot, astDeclaration)
       if (apiItemMetadata.effectiveReleaseTag === ReleaseTag.Internal) {
         // If the constructor is marked as internal, then add a boilerplate notice for the containing class
-        const classMetadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(classDeclaration)
+        const classMetadata: ApiItemMetadata = Snapshot.fetchApiItemMetadata(this.#snapshot, classDeclaration)
 
         if (!classMetadata.tsdocComment) {
           classMetadata.tsdocComment = new tsdoc.DocComment({ configuration })
@@ -126,7 +146,7 @@ export class DocCommentEnhancer extends Pipeable.Class {
             }),
             new tsdoc.DocCodeSpan({
               configuration,
-              code: classDeclaration.astSymbol.localName,
+              code: Snapshot.localName(this.#snapshot, classDeclaration),
             }),
             new tsdoc.DocPlainText({ configuration, text: ' class.' }),
           ]),
@@ -173,30 +193,31 @@ export class DocCommentEnhancer extends Pipeable.Class {
     }
   }
 
-  #checkForBrokenLinks(astDeclaration: AstDeclaration, metadata: ApiItemMetadata): void {
+  #checkForBrokenLinks(astDeclaration: Snapshot.AstDeclaration, metadata: ApiItemMetadata): void {
     if (!metadata.tsdocComment) {
       return
     }
     this.#checkForBrokenLinksRecursive(astDeclaration, metadata.tsdocComment)
   }
 
-  #checkForBrokenLinksRecursive(astDeclaration: AstDeclaration, node: tsdoc.DocNode): void {
+  #checkForBrokenLinksRecursive(astDeclaration: Snapshot.AstDeclaration, node: tsdoc.DocNode): void {
     if (node instanceof tsdoc.DocLinkTag) {
       if (node.codeDestination) {
         // Is it referring to the working package?  If not, we don't do any link validation, because
         // AstReferenceResolver doesn't support it yet (but ModelReferenceResolver does of course).
         // Tracked by:  https://github.com/microsoft/rushstack/issues/1195
         if (this.#refersToDeclarationInWorkingPackage(node.codeDestination)) {
-          const referencedAstDeclaration: AstDeclaration | ResolverFailure = this.#collector.astReferenceResolver
-            .resolve(node.codeDestination)
-
-          if (referencedAstDeclaration instanceof ResolverFailure) {
-            this.#collector.addAnalyzerIssue(
-              ExtractorMessageId.UnresolvedLink,
-              'The @link reference could not be resolved: ' + referencedAstDeclaration.reason,
-              astDeclaration,
-            )
-          }
+          Result.match(Snapshot.resolveReference(this.#snapshot, node.codeDestination), {
+            onFailure: (reason) => {
+              Snapshot.addAnalyzerIssue(
+                this.#snapshot,
+                ExtractorMessageId.UnresolvedLink,
+                'The @link reference could not be resolved: ' + reason,
+                astDeclaration,
+              )
+            },
+            onSuccess: () => undefined,
+          })
         }
       }
     }
@@ -209,12 +230,13 @@ export class DocCommentEnhancer extends Pipeable.Class {
    * Follow an `{@inheritDoc ___}` reference and copy the content that we find in the referenced comment.
    */
   #applyInheritDoc(
-    astDeclaration: AstDeclaration,
+    astDeclaration: Snapshot.AstDeclaration,
     docComment: tsdoc.DocComment,
     inheritDocTag: tsdoc.DocInheritDocTag,
   ): void {
     if (!inheritDocTag.declarationReference) {
-      this.#collector.addAnalyzerIssue(
+      Snapshot.addAnalyzerIssue(
+        this.#snapshot,
         ExtractorMessageId.UnresolvedInheritDocBase,
         'The @inheritDoc tag needs a TSDoc declaration reference; signature matching is not supported yet',
         astDeclaration,
@@ -229,26 +251,28 @@ export class DocCommentEnhancer extends Pipeable.Class {
       return
     }
 
-    const referencedAstDeclaration: AstDeclaration | ResolverFailure = this.#collector.astReferenceResolver.resolve(
-      inheritDocTag.declarationReference,
-    )
+    Result.match(Snapshot.resolveReference(this.#snapshot, inheritDocTag.declarationReference), {
+      onFailure: (reason) => {
+        Snapshot.addAnalyzerIssue(
+          this.#snapshot,
+          ExtractorMessageId.UnresolvedInheritDocReference,
+          'The @inheritDoc reference could not be resolved: ' + reason,
+          astDeclaration,
+        )
+      },
+      onSuccess: (referencedAstDeclaration) => {
+        this.#analyzeApiItem(referencedAstDeclaration)
 
-    if (referencedAstDeclaration instanceof ResolverFailure) {
-      this.#collector.addAnalyzerIssue(
-        ExtractorMessageId.UnresolvedInheritDocReference,
-        'The @inheritDoc reference could not be resolved: ' + referencedAstDeclaration.reason,
-        astDeclaration,
-      )
-      return
-    }
+        const referencedMetadata: ApiItemMetadata = Snapshot.fetchApiItemMetadata(
+          this.#snapshot,
+          referencedAstDeclaration,
+        )
 
-    this.#analyzeApiItem(referencedAstDeclaration)
-
-    const referencedMetadata: ApiItemMetadata = this.#collector.fetchApiItemMetadata(referencedAstDeclaration)
-
-    if (referencedMetadata.tsdocComment) {
-      this.#copyInheritedDocs(docComment, referencedMetadata.tsdocComment)
-    }
+        if (referencedMetadata.tsdocComment) {
+          this.#copyInheritedDocs(docComment, referencedMetadata.tsdocComment)
+        }
+      },
+    })
   }
 
   /*
@@ -278,7 +302,7 @@ export class DocCommentEnhancer extends Pipeable.Class {
   ): boolean {
     return (
       declarationReference?.packageName === undefined ||
-      declarationReference.packageName === this.#collector.workingPackage.name
+      declarationReference.packageName === Snapshot.workingPackage(this.#snapshot).name
     )
   }
 }

@@ -1,21 +1,28 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 
-import { AstDeclaration } from '../analyzer/AstDeclaration.js'
-import { AstImport, AstImportKind } from '../analyzer/AstImport.js'
 import type { IndentedWriter } from '../analyzer/indented-writer.js'
 import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
 import type { Span } from '../analyzer/Span.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
-import type { Collector } from '../collector/Collector.js'
+import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import { invariant } from '../utils/invariant.js'
 
+const requireSome = <A>(option: Option.Option<A>, message: string): A => {
+  if (Option.isNone(option)) {
+    throw invariant(message)
+  }
+  return option.value
+}
+
 type ImportEmitter = (
   writer: IndentedWriter,
   entity: CollectorEntity,
-  astImport: AstImport,
+  astImport: Snapshot.AstImport,
   prefix: string,
 ) => void
 
@@ -53,12 +60,12 @@ const emitImportType: ImportEmitter = (writer, entity, astImport, prefix) => {
   writer.writeLine(`${prefix} { ${spec} } from '${astImport.modulePath}';`)
 }
 
-const importEmitters: Readonly<Record<AstImportKind, ImportEmitter>> = {
-  [AstImportKind.DefaultImport]: emitDefaultImport,
-  [AstImportKind.NamedImport]: emitNamedImport,
-  [AstImportKind.StarImport]: emitStarImport,
-  [AstImportKind.EqualsImport]: emitEqualsImport,
-  [AstImportKind.ImportType]: emitImportType,
+const importEmitters: Readonly<Record<Snapshot.AstImportKind, ImportEmitter>> = {
+  [Snapshot.AstImportKind.DefaultImport]: emitDefaultImport,
+  [Snapshot.AstImportKind.NamedImport]: emitNamedImport,
+  [Snapshot.AstImportKind.StarImport]: emitStarImport,
+  [Snapshot.AstImportKind.EqualsImport]: emitEqualsImport,
+  [Snapshot.AstImportKind.ImportType]: emitImportType,
 }
 
 const formatNamedExport = (exportName: string, name: string): string => {
@@ -82,19 +89,19 @@ const extractTypeArgumentSpans = (span: Span, node: ts.ImportTypeNode): Span[] =
 }
 
 const formatTypeArgumentsText = (
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   span: Span,
-  astDeclaration: AstDeclaration,
+  astDeclaration: Snapshot.AstDeclaration,
   node: ts.ImportTypeNode,
-  modifyNestedSpan: (childSpan: Span, childAstDeclaration: AstDeclaration) => void,
+  modifyNestedSpan: (childSpan: Span, childAstDeclaration: Snapshot.AstDeclaration) => void,
 ): string => {
   if (node.typeArguments === undefined || node.typeArguments.length === 0) {
     return ''
   }
   const typeArgumentsSpans = extractTypeArgumentSpans(span, node)
   for (const childSpan of typeArgumentsSpans) {
-    const childDecl = AstDeclaration.isSupportedSyntaxKind(childSpan.kind)
-      ? collector.astSymbolTable.getChildAstDeclarationByNode(childSpan.node, astDeclaration)
+    const childDecl = Snapshot.isSupportedDeclarationKind(childSpan.kind)
+      ? Snapshot.childDeclarationByNode(snapshot, childSpan.node, astDeclaration)
       : astDeclaration
     modifyNestedSpan(childSpan, childDecl)
   }
@@ -108,42 +115,57 @@ const resolveNestedQualifiersText = (node: ts.ImportTypeNode): string => {
   return dotIndex >= 0 ? qualifiersText.substring(dotIndex) : ''
 }
 
+const nestedImportQualifiers = (
+  snapshot: Snapshot.AnalysisSnapshot,
+  entity: CollectorEntity,
+  node: ts.ImportTypeNode,
+): string => {
+  const astEntity = Snapshot.astEntityOf(entity)
+  return Match.value(Snapshot.refOf(astEntity)).pipe(
+    Match.tag('AstImportRef', () => {
+      const astImport = requireSome(Snapshot.astImportOf(astEntity), 'Missing AstImport for an AstImportRef')
+      return astImport.importKind === Snapshot.AstImportKind.ImportType && astImport.exportName.length > 0
+        ? resolveNestedQualifiersText(node)
+        : ''
+    }),
+    Match.orElse(() => ''),
+  )
+}
+
 const buildImportTypeReplacement = (
+  snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
   node: ts.ImportTypeNode,
   typeArgsText: string,
   separatorAfter: string,
 ): string => {
   const name = entity.nameForEmit ?? ''
-  const isNestedImportType = entity.astEntity instanceof AstImport &&
-    entity.astEntity.importKind === AstImportKind.ImportType &&
-    entity.astEntity.exportName.length > 0
-  const nestedQualifiers = isNestedImportType ? resolveNestedQualifiersText(node) : ''
+  const nestedQualifiers = nestedImportQualifiers(snapshot, entity, node)
   return `${name}${nestedQualifiers}${typeArgsText}${separatorAfter}`
 }
 
 const handleResolvedImportType = (
-  collector: Collector,
+  snapshot: Snapshot.AnalysisSnapshot,
   span: Span,
-  astDeclaration: AstDeclaration,
+  astDeclaration: Snapshot.AstDeclaration,
   node: ts.ImportTypeNode,
   referencedEntity: CollectorEntity,
-  modifyNestedSpan: (childSpan: Span, childAstDeclaration: AstDeclaration) => void,
+  modifyNestedSpan: (childSpan: Span, childAstDeclaration: Snapshot.AstDeclaration) => void,
 ): void => {
   if (referencedEntity.nameForEmit === undefined || referencedEntity.nameForEmit.length === 0) {
     throw invariant('referencedEntry.nameForEmit is undefined')
   }
-  const typeArgsText = formatTypeArgumentsText(collector, span, astDeclaration, node, modifyNestedSpan)
+  const typeArgsText = formatTypeArgumentsText(snapshot, span, astDeclaration, node, modifyNestedSpan)
   const separatorMatch = /(\s*)$/.exec(span.getText())
   const separatorAfter = separatorMatch?.[1] ?? ''
-  const replacement = buildImportTypeReplacement(referencedEntity, node, typeArgsText, separatorAfter)
+  const replacement = buildImportTypeReplacement(snapshot, referencedEntity, node, typeArgsText, separatorAfter)
   span.modification.skipAll()
   span.modification.prefix = replacement
 }
 
 const handleUnresolvedImportType = (
-  collector: Collector,
-  astDeclaration: AstDeclaration,
+  snapshot: Snapshot.AnalysisSnapshot,
+  astDeclaration: Snapshot.AstDeclaration,
   node: ts.ImportTypeNode,
 ): void => {
   if (!ts.isLiteralTypeNode(node.argument) || !ts.isStringLiteral(node.argument.literal)) {
@@ -151,7 +173,8 @@ const handleUnresolvedImportType = (
   }
   const modulePath = node.argument.literal.text
   if (modulePath.startsWith('.')) {
-    collector.addAnalyzerIssue(
+    Snapshot.addAnalyzerIssue(
+      snapshot,
       ExtractorMessageId.UnresolvedImportPath,
       `The inline import path "${modulePath}" could not be resolved, so it would be emitted unchanged` +
         ` into the .d.ts rollup, where it does not resolve to anything. Import the symbol at the top` +
@@ -240,7 +263,7 @@ export class DtsEmitHelpers extends Pipeable.Class {
   public static emitImport(
     writer: IndentedWriter,
     collectorEntity: CollectorEntity,
-    astImport: AstImport,
+    astImport: Snapshot.AstImport,
   ): void {
     const importPrefix = astImport.isTypeOnlyEverywhere ? 'import type' : 'import'
     const emitter = importEmitters[astImport.importKind]
@@ -255,31 +278,31 @@ export class DtsEmitHelpers extends Pipeable.Class {
     writer.writeLine(formatNamedExport(exportName, collectorEntity.nameForEmit ?? ''))
   }
 
-  public static emitStarExports(writer: IndentedWriter, collector: Collector): void {
-    if (collector.starExportedExternalModulePaths.length === 0) {
+  public static emitStarExports(writer: IndentedWriter, snapshot: Snapshot.AnalysisSnapshot): void {
+    if (Snapshot.starExportedExternalModulePaths(snapshot).length === 0) {
       return
     }
     writer.writeLine()
-    for (const starExportedExternalModulePath of collector.starExportedExternalModulePaths) {
+    for (const starExportedExternalModulePath of Snapshot.starExportedExternalModulePaths(snapshot)) {
       writer.writeLine(`export * from "${starExportedExternalModulePath}";`)
     }
   }
 
   public static modifyImportTypeSpan(
-    collector: Collector,
+    snapshot: Snapshot.AnalysisSnapshot,
     span: Span,
-    astDeclaration: AstDeclaration,
-    modifyNestedSpan: (childSpan: Span, childAstDeclaration: AstDeclaration) => void,
+    astDeclaration: Snapshot.AstDeclaration,
+    modifyNestedSpan: (childSpan: Span, childAstDeclaration: Snapshot.AstDeclaration) => void,
   ): void {
     if (!ts.isImportTypeNode(span.node)) {
       return
     }
-    const referencedEntity = collector.tryGetEntityForNode(span.node)
-    if (referencedEntity !== undefined) {
-      handleResolvedImportType(collector, span, astDeclaration, span.node, referencedEntity, modifyNestedSpan)
-    } else {
-      handleUnresolvedImportType(collector, astDeclaration, span.node)
-    }
+    const node: ts.ImportTypeNode = span.node
+    Option.match(Snapshot.tryGetEntityForNode(snapshot, node), {
+      onSome: (referencedEntity) =>
+        handleResolvedImportType(snapshot, span, astDeclaration, node, referencedEntity, modifyNestedSpan),
+      onNone: () => handleUnresolvedImportType(snapshot, astDeclaration, node),
+    })
   }
 
   public static isExportKeywordInNamespaceExportDeclaration(node: ts.Node): boolean {

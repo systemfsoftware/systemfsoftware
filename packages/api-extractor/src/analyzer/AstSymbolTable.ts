@@ -643,10 +643,16 @@ export class AstSymbolTable extends Pipeable.Class {
           )
 
           if (arbitraryParentDeclaration) {
-            const parentSymbol: ts.Symbol = TypeScriptHelpers.getSymbolForDeclaration(
+            const parentSymbol: ts.Symbol | undefined = TypeScriptHelpers.getSymbolForDeclaration(
               arbitraryParentDeclaration as ts.Declaration,
               this.#typeChecker,
             )
+            if (!parentSymbol) {
+              throw invariant(
+                'Unable to determine semantic information for declaration:\n' +
+                  SourceFileLocationFormatter.formatDeclaration(arbitraryParentDeclaration),
+              )
+            }
 
             parentAstSymbol = this.#fetchAstSymbol({
               followedSymbol: parentSymbol,

@@ -1,5 +1,5 @@
 import { convertToLf } from '../analyzer/text.js'
-import type { Collector } from '../collector/Collector.js'
+import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { ApiReportVariant, NewlineKind } from '../config/config-file.schema.js'
 import { ApiReportGenerator } from './api-report-generator.js'
 import { DtsRollupGenerator, DtsRollupKind } from './dts-rollup-generator.js'
@@ -17,8 +17,8 @@ export const convertNewlines = (text: string, newlineKind: NewlineKind): string 
   return lfText
 }
 
-export const renderApiReport = (collector: Collector, variant: ApiReportVariant): string =>
-  ApiReportGenerator.generateReviewFileContent(collector, variant)
+export const renderApiReport = (snapshot: Snapshot.AnalysisSnapshot, variant: ApiReportVariant): string =>
+  ApiReportGenerator.generateReviewFileContent(snapshot, variant)
 
-export const renderDtsRollup = (collector: Collector, kind: DtsRollupKind): string =>
-  DtsRollupGenerator.generateTypingsFileContent(collector, kind)
+export const renderDtsRollup = (snapshot: Snapshot.AnalysisSnapshot, kind: DtsRollupKind): string =>
+  DtsRollupGenerator.generateTypingsFileContent(snapshot, kind)
