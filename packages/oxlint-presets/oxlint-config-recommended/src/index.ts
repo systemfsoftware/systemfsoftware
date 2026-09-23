@@ -113,30 +113,28 @@ export default recommendedConfig
 
 const effectPlugins: NonNullable<OxlintConfig['plugins']> = ['effecttsgo']
 const effectJsPlugins: NonNullable<OxlintConfig['jsPlugins']> = [effectPlatformJsPlugin]
-const effectRules: NonNullable<OxlintConfig['rules']> = {
+const effectPlatformRules: NonNullable<OxlintConfig['rules']> = {
   ...effectPlatform.configs.recommended.rules,
 }
 
 const sourceOverride = (rules: OxlintConfig['rules']): NonNullable<OxlintConfig['overrides']> => [
   {
     files: ['**/src/**'],
-    rules: { ...rules },
+    rules: { ...effectPlatformRules, ...rules },
   },
 ]
 
 const entryOverride = (rules: OxlintConfig['rules']): NonNullable<OxlintConfig['overrides']> => [
   {
     files: [...entryFilePatterns],
-    rules: { ...rules },
+    rules: { ...effectPlatformRules, ...rules },
   },
 ]
 
-// Library role: shipped src/ carries the full library set; entry files carry the entry set.
 export const effect: OxlintConfig = {
-  extends: [recommendedConfig],
   plugins: effectPlugins,
   jsPlugins: effectJsPlugins,
-  rules: effectRules,
+  options: { typeAware: true },
   overrides: [
     ...sourceOverride(libraryRules),
     ...entryOverride(entryRules),
@@ -144,12 +142,10 @@ export const effect: OxlintConfig = {
   ],
 }
 
-// Composition role: every file is a composition point, so both overrides carry the entry set.
 export const effectComposition: OxlintConfig = {
-  extends: [recommendedConfig],
   plugins: effectPlugins,
   jsPlugins: effectJsPlugins,
-  rules: effectRules,
+  options: { typeAware: true },
   overrides: [
     ...sourceOverride(entryRules),
     ...entryOverride(entryRules),
