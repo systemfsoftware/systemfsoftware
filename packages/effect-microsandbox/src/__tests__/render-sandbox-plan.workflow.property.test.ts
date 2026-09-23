@@ -2,13 +2,13 @@ import { it } from '@effect/vitest'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
-import { GuestPort, MicroVMSpec } from '../MicroVMSpec.schema.js'
+import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec } from '../MicroVMSpec.schema.js'
 import {
   PlanRefused,
   PlanSandbox,
   type PortBinding,
   renderSandboxPlan,
-  type SandboxPlan,
+  SandboxPlan,
   type SandboxPlanDecision,
 } from '../render-sandbox-plan.workflow.js'
 
@@ -134,3 +134,120 @@ it.prop('∀plan_Configuration_=Conserved', [successCase], ([command]) =>
       envKeys.every((k) => plan.envs[k] === command.spec.env[k]),
     ])
   }))
+
+const jobFields = (
+  job: JobSpec,
+  overrides: { readonly hostAccess: boolean | undefined; readonly workdir: string | undefined },
+): JobSpec =>
+  new JobSpec({
+    image: job.image,
+    env: job.env,
+    mounts: job.mounts,
+    memoryMb: job.memoryMb,
+    vCPUs: job.vCPUs,
+    cmd: job.cmd,
+    workdir: overrides.workdir,
+    hostAccess: overrides.hostAccess,
+  })
+
+const jobCase = (hostAccess: boolean | undefined, workdir: Arbitrary.Arbitrary<string | undefined>) =>
+  Arbitrary.map(
+    Arbitrary.all([
+      Arbitrary.schema(JobSpec),
+      workdir,
+      Arbitrary.schema(Schema.Int),
+      Arbitrary.schema(Schema.String),
+    ]),
+    ([job, workdir, pid, suffix]): PlanSandbox =>
+      new PlanSandbox({
+        spec: jobFields(job, { hostAccess, workdir }),
+        bindings: [],
+        name: `sandbox-${pid}-${suffix}`,
+      }),
+  )
+
+const absentWorkdir: Arbitrary.Arbitrary<string | undefined> = Arbitrary.schema(Schema.Undefined)
+const anyWorkdir: Arbitrary.Arbitrary<string | undefined> = Arbitrary.schema(Schema.String)
+
+const noOptInCase = jobCase(undefined, absentWorkdir)
+const hostAccessTrueCase = jobCase(true, anyWorkdir)
+const hostAccessFalseCase = jobCase(false, anyWorkdir)
+const workdirCase = jobCase(undefined, anyWorkdir)
+
+const serviceCase = Arbitrary.map(
+  Arbitrary.all([
+    Arbitrary.schema(ServiceSpec),
+    loopbackBindings,
+    Arbitrary.schema(Schema.Int),
+    Arbitrary.schema(Schema.String),
+  ]),
+  ([service, bindings, pid, suffix]): PlanSandbox =>
+    new PlanSandbox({ spec: service, bindings, name: `sandbox-${pid}-${suffix}` }),
+)
+
+const preChangeServiceArm = (
+  name: string,
+  service: ServiceSpec,
+  bindings: ReadonlyArray<PortBinding>,
+): SandboxPlan => ({
+  name,
+  image: service.image,
+  envs: { ...service.env },
+  cpus: service.vCPUs,
+  memoryMiB: service.memoryMb,
+  workdir: undefined,
+  cmd: undefined,
+  mounts: service.mounts.map((mount) => ({ guest: mount.guest, host: mount.host })),
+  portBindings: bindings.map((binding) => ({ ...binding })),
+})
+
+it.prop(
+  '∀noOptIn_Render_=NoProfiles',
+  [noOptInCase],
+  ([command]) => planLaw(command, (plan) => holds([plan.networkProfiles === undefined, plan.workdir === undefined])),
+)
+
+it.prop(
+  '∀hostAccessTrue_Render_=HostAndPublicProfiles',
+  [hostAccessTrueCase],
+  ([command]) =>
+    planLaw(command, (plan) =>
+      Option.match(Option.fromNullishOr(plan.networkProfiles), {
+        onNone: () => false,
+        onSome: (profiles) => holds([profiles.includes('public'), profiles.includes('host')]),
+      })),
+)
+
+it.prop(
+  '∀hostAccessFalse_Render_=NoProfiles',
+  [hostAccessFalseCase],
+  ([command]) => planLaw(command, (plan) => plan.networkProfiles === undefined),
+)
+
+it.prop(
+  '∀workdir_Render_=Workdir',
+  [workdirCase],
+  ([command]) =>
+    planLaw(command, (plan) =>
+      Match.value(command.spec).pipe(
+        Match.tag('Job', (job) => plan.workdir === job.workdir),
+        Match.tag('Service', () => false),
+        Match.exhaustive,
+      )),
+)
+
+it.prop(
+  '∀serviceSpec_Render_=PreChangeServiceArm',
+  [serviceCase],
+  ([command]) =>
+    planLaw(command, (plan) =>
+      Match.value(command.spec).pipe(
+        Match.tag('Service', (service) =>
+          holds([
+            Schema.toEquivalence(SandboxPlan)(plan, preChangeServiceArm(command.name, service, command.bindings)),
+            !('networkProfiles' in plan),
+          ])),
+        Match.tag('Job', () => false),
+        Match.exhaustive,
+      )),
+)

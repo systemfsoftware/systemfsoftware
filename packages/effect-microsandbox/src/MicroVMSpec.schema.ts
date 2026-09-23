@@ -64,6 +64,7 @@ export class JobSpec extends Schema.TaggedClass<JobSpec>()('Job', {
   ...BaseSpec.fields,
   cmd: Schema.NonEmptyArray(Schema.String),
   workdir: Schema.optional(Schema.String),
+  hostAccess: Schema.optional(Schema.Boolean),
 }) {}
 
 export const MicroVMSpec = Schema.Union([ServiceSpec, JobSpec])
