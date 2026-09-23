@@ -5,24 +5,19 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.app.tsbuildinfo",
     "customConditions": [
       "@systemfsoftware/source"
     ],
     "emitDeclarationOnly": true,
-    "outDir": "node_modules/.cache/tsc/test",
-    "types": [
-      "node"
-    ]
+    "outDir": "node_modules/.cache/tsc/app"
   },
   "include": [
-    "src/**/__tests__",
+    "src"
+  ],
+  "exclude": [
+    "src/**/__tests__/**",
     "src/**/*.test.ts",
     "src/**/*.spec.ts"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.app.json"
-    }
   ]
 }

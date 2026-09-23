@@ -10,10 +10,7 @@
       "@systemfsoftware/source"
     ],
     "emitDeclarationOnly": true,
-    "outDir": "node_modules/.cache/tsc/test",
-    "types": [
-      "node"
-    ]
+    "outDir": "node_modules/.cache/tsc/test"
   },
   "include": [
     "src/**/__tests__",
