@@ -1,3 +1,5 @@
+import { Function } from 'effect'
+
 /**
  * The two POSIX path operations this package used to reach into a compiler for.
  *
@@ -26,13 +28,19 @@ const joinNormalized = (base: string, relative: string): string => {
   return ensureTrailingDirectorySeparator(base.replaceAll('\\', '/')) + normalized
 }
 
-export const combinePaths = (base: string, relative: string): string => {
+export const combinePaths: {
+  (relative: string): (base: string) => string
+  (base: string, relative: string): string
+} = Function.dual(2, (base: string, relative: string): string => {
   if (relative.length === 0) return base
   return joinNormalized(base, relative)
-}
+})
 
 /** Anchor a package-relative path under an absolute base, leaving an already-absolute path alone. */
-export const posixJoin = (base: string, relative: string): string => {
+export const posixJoin: {
+  (relative: string): (base: string) => string
+  (base: string, relative: string): string
+} = Function.dual(2, (base: string, relative: string): string => {
   if (relative.startsWith('/')) return relative
   return `${base}/${relative}`
-}
+})

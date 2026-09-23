@@ -5,7 +5,10 @@
 ```ts
 
 // @public
-export function createPackage(files: Record<string, string | Uint8Array>, packageName?: string, packageVersion?: string): Package;
+export const createPackage: {
+    (packageName?: string, packageVersion?: string): (files: Record<string, string | Uint8Array>) => Package;
+    (files: Record<string, string | Uint8Array>, packageName?: string, packageVersion?: string): Package;
+};
 
 // @public (undocumented)
 export function createPackageFromTarballData(tarball: Uint8Array): Package;
@@ -14,7 +17,10 @@ export function createPackageFromTarballData(tarball: Uint8Array): Package;
 export type DirectoryJSON = Record<string, string | Uint8Array | null>;
 
 // @public (undocumented)
-export function makePackage(files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string): Package;
+export const makePackage: {
+    (packageName: string, packageVersion: string, resolvedUrl?: string): (files: Record<string, string | Uint8Array>) => Package;
+    (files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string): Package;
+};
 
 // @public (undocumented)
 export interface Package {
@@ -46,17 +52,26 @@ export interface Package {
 
 // @public (undocumented)
 export const Package: {
-    make: typeof makePackage;
+    make: {
+        (packageName: string, packageVersion: string, resolvedUrl?: string): (files: Record<string, string | Uint8Array>) => Package;
+        (files: Record<string, string | Uint8Array>, packageName: string, packageVersion: string, resolvedUrl?: string): Package;
+    };
 };
 
 // @public
 export function packPackage(pkg: Package): Uint8Array;
 
 // @public
-export function packTree(files: Record<string, string | Uint8Array>, packageName: string): Uint8Array;
+export const packTree: {
+    (packageName: string): (files: Record<string, string | Uint8Array>) => Uint8Array;
+    (files: Record<string, string | Uint8Array>, packageName: string): Uint8Array;
+};
 
 // @public
-export function toDirectoryJSON(files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON;
+export const toDirectoryJSON: {
+    (packageName?: string): (files: Record<string, string | Uint8Array>) => DirectoryJSON;
+    (files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON;
+};
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,6 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { it } from '@effect/vitest'
-import { Effect, Schema as S, SchemaAST } from 'effect'
+import { Effect, Function, Schema as S, SchemaAST } from 'effect'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 
 const SAMPLE_DRAWS = 2000
@@ -323,32 +323,39 @@ const registerDeepShareLaw = (label: string, arbitrary: Arbitrary.Arbitrary<unkn
   )
 }
 
-export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void => {
-  const root = schema.ast
-  const union = rootCycleUnion(root)
-  if (union === undefined) return
-  const budget = budgetOf(root)
-  assertDerivationHook(label, root, budget)
-  const arbitrary = Arbitrary.schema(schema)
-  const members = union.types.map(memberSchemaOf)
-  const maxDepth = maxDepthOfBudget(budget)
+export const recursionLaws: {
+  (label: string): <A, I>(schema: S.Codec<A, I>) => void
+  <A, I>(label: string, schema: S.Codec<A, I>): void
+} = Function.dual(
+  2,
+  <A, I>(label: string, schema: S.Codec<A, I>): void => {
+    const root = schema.ast
+    const union = rootCycleUnion(root)
+    if (union === undefined) return
+    const budget = budgetOf(root)
+    assertDerivationHook(label, root, budget)
+    const arbitrary = Arbitrary.schema(schema)
+    const members = union.types.map(memberSchemaOf)
+    const maxDepth = maxDepthOfBudget(budget)
 
-  it.prop(
-    `∀x_${label}Nesting_≤MaxDepth1`,
-    [arbitrary],
-    ([value]) => maxNestingDepthOf(value) <= maxDepth + 1,
-    lawOptions(maxDepth),
-  )
+    it.prop(
+      `∀x_${label}Nesting_≤MaxDepth1`,
+      [arbitrary],
+      ([value]) => maxNestingDepthOf(value) <= maxDepth + 1,
+      lawOptions(maxDepth),
+    )
 
-  registerDeepShareLaw(label, arbitrary, maxDepth)
+    registerDeepShareLaw(label, arbitrary, maxDepth)
 
-  it.effect.prop(
-    `∀s_${label}Variants_⊇Declared`,
-    [S.Int],
-    ([seed]) => sampledAt(arbitrary, seed, maxDepth).pipe(Effect.map((sample) => coversEveryVariant(sample, members))),
-    lawOptions(maxDepth),
-  )
-}
+    it.effect.prop(
+      `∀s_${label}Variants_⊇Declared`,
+      [S.Int],
+      ([seed]) =>
+        sampledAt(arbitrary, seed, maxDepth).pipe(Effect.map((sample) => coversEveryVariant(sample, members))),
+      lawOptions(maxDepth),
+    )
+  },
+)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')

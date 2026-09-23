@@ -1,5 +1,19 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Cause, Clock, Effect, Exit, Fiber, Match, Metric, Option, Ref, Result, Schedule } from 'effect'
+import {
+  Array as Arr,
+  Cause,
+  Clock,
+  Effect,
+  Exit,
+  Fiber,
+  Function,
+  Match,
+  Metric,
+  Option,
+  Ref,
+  Result,
+  Schedule,
+} from 'effect'
 import { type Scope } from 'effect'
 import { WorkerTypeId } from '../Brands.js'
 import type { SupervisorHealth } from '../DaemonHealth.schema.js'
@@ -527,19 +541,32 @@ const bootChild = <E, R>(
   })
 
 /** @internal */
-export const supervisor = <E, R>(
-  s: Supervisor<E, R, LockConfig>,
-  reporter: DaemonReporter['Service'],
-  binding: LockBinding,
-): Effect.Effect<SupervisorHealth, never, R | Scope.Scope> =>
-  Effect.gen(function*() {
-    const booted = yield* Effect.forEach(s.children, (child) => bootChild<E, R>(child, reporter))
-    const health = yield* allocateSupervisorHealth(
-      s.name,
-      booted.map((b) => b.health),
-    )
-    const body = buildSupervisorBody(s, health, booted, reporter).pipe(Effect.orDie)
-    const locked = withLockByMode(body, binding)
-    yield* Effect.forkScoped(locked.pipe(Effect.orDie), { startImmediately: true })
-    return health
-  })
+export const supervisor: {
+  <E, R>(
+    reporter: DaemonReporter['Service'],
+    binding: LockBinding,
+  ): (s: Supervisor<E, R, LockConfig>) => Effect.Effect<SupervisorHealth, never, R | Scope.Scope>
+  <E, R>(
+    s: Supervisor<E, R, LockConfig>,
+    reporter: DaemonReporter['Service'],
+    binding: LockBinding,
+  ): Effect.Effect<SupervisorHealth, never, R | Scope.Scope>
+} = Function.dual(
+  3,
+  <E, R>(
+    s: Supervisor<E, R, LockConfig>,
+    reporter: DaemonReporter['Service'],
+    binding: LockBinding,
+  ): Effect.Effect<SupervisorHealth, never, R | Scope.Scope> =>
+    Effect.gen(function*() {
+      const booted = yield* Effect.forEach(s.children, (child) => bootChild<E, R>(child, reporter))
+      const health = yield* allocateSupervisorHealth(
+        s.name,
+        booted.map((b) => b.health),
+      )
+      const body = buildSupervisorBody(s, health, booted, reporter).pipe(Effect.orDie)
+      const locked = withLockByMode(body, binding)
+      yield* Effect.forkScoped(locked.pipe(Effect.orDie), { startImmediately: true })
+      return health
+    }),
+)

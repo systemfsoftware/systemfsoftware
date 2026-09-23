@@ -1,3 +1,4 @@
+import { Function } from 'effect'
 import { gzipSync } from 'fflate'
 import type { Package } from './Package.js'
 
@@ -62,18 +63,21 @@ function requirePrefixedPath(key: string, prefix: string, packageName: string): 
  * Reading a file through `Package` caches its decoded text, so packing a tree
  * that carries binary bodies straight from the map avoids that conversion.
  */
-export function packTree(
-  files: Record<string, string | Uint8Array>,
-  packageName: string,
-): Uint8Array {
-  const prefix = `/node_modules/${packageName}/`
-  const entries: TarEntry[] = []
-  for (const [key, content] of Object.entries(files)) {
-    const relative = requirePrefixedPath(key, prefix, packageName).slice(prefix.length)
-    entries.push({ name: `package/${relative}`, data: encodeDefinedContent(content) })
-  }
-  return packEntries(entries)
-}
+export const packTree: {
+  (packageName: string): (files: Record<string, string | Uint8Array>) => Uint8Array
+  (files: Record<string, string | Uint8Array>, packageName: string): Uint8Array
+} = Function.dual(
+  2,
+  (files: Record<string, string | Uint8Array>, packageName: string): Uint8Array => {
+    const prefix = `/node_modules/${packageName}/`
+    const entries: TarEntry[] = []
+    for (const [key, content] of Object.entries(files)) {
+      const relative = requirePrefixedPath(key, prefix, packageName).slice(prefix.length)
+      entries.push({ name: `package/${relative}`, data: encodeDefinedContent(content) })
+    }
+    return packEntries(entries)
+  },
+)
 
 function compareGreater(left: string, right: string): number {
   if (left > right) return 1

@@ -30,7 +30,10 @@ export class BoundedIntensity extends BoundedIntensity_base {
 }
 
 // @public (undocumented)
-export const cappedBackoff: (base: Duration.Input, cap: Duration.Input) => Schedule.Schedule<Duration.Duration>;
+export const cappedBackoff: {
+    (cap: Duration.Input): (base: Duration.Input) => Schedule.Schedule<Duration.Duration>;
+    (base: Duration.Input, cap: Duration.Input): Schedule.Schedule<Duration.Duration>;
+};
 
 // @public (undocumented)
 export type Child<E, R> = Worker_2<E, R> | Supervisor<E, R>;
@@ -465,7 +468,10 @@ export class UnboundedIntensity extends UnboundedIntensity_base {
 }
 
 // @public
-export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions, lock: LeaderLock['Service']): Effect.Effect<A | void, E | LeaderLockAcquireError, R>;
+export const withLeaderLock: {
+    <A, E, R>(options: LeaderLockOptions, lock: LeaderLock['Service']): (self: Effect.Effect<A, E, R>) => Effect.Effect<A | void, E | LeaderLockAcquireError, R>;
+    <A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions, lock: LeaderLock['Service']): Effect.Effect<A | void, E | LeaderLockAcquireError, R>;
+};
 
 // @public
 export const worker: {
@@ -505,8 +511,8 @@ export type WorkerTypeId = typeof WorkerTypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:314:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:323:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:320:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:329:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

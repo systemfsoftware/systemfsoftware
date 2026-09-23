@@ -1,3 +1,4 @@
+import { Function } from 'effect'
 import { ensureTrailingDirectorySeparator, posixJoin } from './Path.js'
 import { extractTarball } from './Tarball.js'
 declare const Buffer: {
@@ -96,42 +97,57 @@ function decodeStoredFile(
   return content
 }
 
-export function makePackage(
-  files: Record<string, string | Uint8Array>,
-  packageName: string,
-  packageVersion: string,
-  resolvedUrl?: string,
-): Package {
-  const pkg: Package = {
-    [TypeId]: TypeId,
-    packageName,
-    packageVersion,
-    resolvedUrl,
-    tryReadBytes(p: string) {
-      return PackageProto.tryReadBytes.call(this, p)
-    },
-    tryReadFile(p: string) {
-      return PackageProto.tryReadFile.call(this, p)
-    },
-    readFile(p: string) {
-      return PackageProto.readFile.call(this, p)
-    },
-    fileExists(p: string) {
-      return PackageProto.fileExists.call(this, p)
-    },
-    directoryExists(p: string) {
-      return PackageProto.directoryExists.call(this, p)
-    },
-    listFiles(dir?: string) {
-      return PackageProto.listFiles.call(this, dir)
-    },
-    withOverlay(other: Package) {
-      return PackageProto.withOverlay.call(this, other)
-    },
-  }
-  filesMap.set(pkg, { ...files })
-  return pkg
-}
+export const makePackage: {
+  (
+    packageName: string,
+    packageVersion: string,
+    resolvedUrl?: string,
+  ): (files: Record<string, string | Uint8Array>) => Package
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName: string,
+    packageVersion: string,
+    resolvedUrl?: string,
+  ): Package
+} = Function.dual(
+  (args: IArguments) => typeof args[0] === 'object',
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName: string,
+    packageVersion: string,
+    resolvedUrl?: string,
+  ): Package => {
+    const pkg: Package = {
+      [TypeId]: TypeId,
+      packageName,
+      packageVersion,
+      resolvedUrl,
+      tryReadBytes(p: string) {
+        return PackageProto.tryReadBytes.call(this, p)
+      },
+      tryReadFile(p: string) {
+        return PackageProto.tryReadFile.call(this, p)
+      },
+      readFile(p: string) {
+        return PackageProto.readFile.call(this, p)
+      },
+      fileExists(p: string) {
+        return PackageProto.fileExists.call(this, p)
+      },
+      directoryExists(p: string) {
+        return PackageProto.directoryExists.call(this, p)
+      },
+      listFiles(dir?: string) {
+        return PackageProto.listFiles.call(this, dir)
+      },
+      withOverlay(other: Package) {
+        return PackageProto.withOverlay.call(this, other)
+      },
+    }
+    filesMap.set(pkg, { ...files })
+    return pkg
+  },
+)
 
 export const Package = {
   make: makePackage,
@@ -231,19 +247,32 @@ function packageWithJson(
  *   `packageName`/`packageVersion` as given, and the file tree's
  *   `package.json` text is left as authored.
  */
-export function createPackage(
-  files: Record<string, string | Uint8Array>,
-  packageName?: string,
-  packageVersion?: string,
-): Package {
-  const name = defaultPackageName(packageName)
-  return packageWithJson(
-    collectPackageFiles(files, name),
-    name,
-    defaultPackageVersion(packageVersion),
-    `/node_modules/${name}/`,
-  )
-}
+export const createPackage: {
+  (
+    packageName?: string,
+    packageVersion?: string,
+  ): (files: Record<string, string | Uint8Array>) => Package
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName?: string,
+    packageVersion?: string,
+  ): Package
+} = Function.dual(
+  (args: IArguments) => typeof args[0] === 'object',
+  (
+    files: Record<string, string | Uint8Array>,
+    packageName?: string,
+    packageVersion?: string,
+  ): Package => {
+    const name = defaultPackageName(packageName)
+    return packageWithJson(
+      collectPackageFiles(files, name),
+      name,
+      defaultPackageVersion(packageVersion),
+      `/node_modules/${name}/`,
+    )
+  },
+)
 
 export type DirectoryJSON = Record<string, string | Uint8Array | null>
 
@@ -275,12 +304,14 @@ function directoryValue(content: string | Uint8Array): string | Uint8Array {
  * Core does not depend on `@systemfsoftware/effect-memfs` — this returns a
  * plain record that is structurally compatible with `Contents`.
  */
-export function toDirectoryJSON(
-  files: Record<string, string | Uint8Array>,
-  packageName?: string,
-): DirectoryJSON {
-  return collectDirectoryJSON(files, defaultPackageName(packageName))
-}
+export const toDirectoryJSON: {
+  (packageName?: string): (files: Record<string, string | Uint8Array>) => DirectoryJSON
+  (files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON
+} = Function.dual(
+  (args: IArguments) => typeof args[0] === 'object',
+  (files: Record<string, string | Uint8Array>, packageName?: string): DirectoryJSON =>
+    collectDirectoryJSON(files, defaultPackageName(packageName)),
+)
 
 export function createPackageFromTarballData(tarball: Uint8Array): Package {
   const { files, packageName, packageVersion } = extractTarball(tarball)
