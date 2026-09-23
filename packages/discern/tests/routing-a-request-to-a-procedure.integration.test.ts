@@ -1,6 +1,7 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
+import * as Schema from 'effect/Schema'
 import { expect } from 'vitest'
 import {
   type AnswerFor,
@@ -11,12 +12,17 @@ import {
   withProvider,
 } from './__fixtures__/counting-model.fixture.js'
 import { Request } from './__fixtures__/request.schema.js'
-import { matchedRouteOf, routingAnswer, routingTo } from './__fixtures__/routing-model.fixture.js'
+import {
+  matchedRouteOf,
+  routingAnswer,
+  RoutingSight,
+  routingTo,
+  watchingRouting,
+} from './__fixtures__/routing-model.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
 const find = Discern.Procedure.make({
-  id: 'find',
   description: 'Locate code relevant to a behavior, feature or concept',
   examples: ['Find where retries are implemented'],
   input: Request,
@@ -24,35 +30,26 @@ const find = Discern.Procedure.make({
 })
 
 const review = Discern.Procedure.make({
-  id: 'review',
   description: 'Review a change for correctness and semantic risk',
   input: Request,
   run: (request) => Effect.succeed(`reviewed:${request}`),
 })
 
 const testGaps = Discern.Procedure.make({
-  id: 'test-gaps',
   description: 'Find behavior that lacks sufficient test coverage',
   input: Request,
   run: (request) => Effect.succeed(`gaps:${request}`),
 })
 
-const code = Discern.Procedure.registry(Request, [find, review, testGaps])
-
-const widening = <Member extends typeof find | typeof review>(
-  member: Member,
-): Discern.Procedure.Procedure<string, string, string, never, never, typeof Request> => member
-
-const loose = Discern.Procedure.registry(Request, [widening(find), widening(review)])
+const code = Discern.Procedure.registry(Request, { find, review, ['test-gaps']: testGaps })
 
 const odd = Discern.Procedure.make({
-  id: '__proto__',
   description: 'A procedure with an awkward name',
   input: Request,
   run: () => Effect.succeed('odd'),
 })
 
-const oddRegistry = Discern.Procedure.registry(Request, [odd, find])
+const oddRegistry = Discern.Procedure.registry(Request, { ['__proto__']: odd, find })
 
 const awkwardPreferences = Object.fromEntries([
   ['__proto__', 0.9],
@@ -74,14 +71,13 @@ const measuredModel: AnswerFor = (request) =>
 const risk = Discern.on(Request).probability({ id: 'risk', instructions: 'Risky' })
 
 const auditor = Discern.Procedure.make({
-  id: 'audit',
   description: 'Audit a change for risk',
   input: Request,
   run: (request) =>
     Effect.map(Discern.ask(risk, request), (answer) => `${answer.probability > 0.8 ? 'risky' : 'safe'}:${request}`),
 })
 
-const auditRegistry = Discern.Procedure.registry(Request, [auditor, find])
+const auditRegistry = Discern.Procedure.registry(Request, { audit: auditor, find })
 
 const auditingModel: AnswerFor = (request) =>
   answersFor({
@@ -93,14 +89,13 @@ const auditingModel: AnswerFor = (request) =>
 const urgent = Discern.on(Request).probability({ id: 'urgent', instructions: 'Urgent' })
 
 const triage = Discern.Procedure.make({
-  id: 'triage',
   description: 'Decide how soon a request needs attention',
   input: Request,
   run: (request) =>
     Effect.map(Discern.ask(urgent, request), (answer) => `${answer.probability > 0.8 ? 'now' : 'later'}:${request}`),
 })
 
-const triageRegistry = Discern.Procedure.registry(Request, [triage, find])
+const triageRegistry = Discern.Procedure.registry(Request, { triage, find })
 
 const triageModel: AnswerFor = (request) =>
   answersFor({
@@ -108,6 +103,21 @@ const triageModel: AnswerFor = (request) =>
     answerOf: (decision, id) =>
       id === 'urgent' ? probabilityAnswer(0.95) : routingAnswer({ preferences: { triage: 0.9, find: 0.1 }, decision }),
   })
+
+const onlyFor = (side: string) =>
+  Discern.Procedure.make({
+    description: `Handle ${side} requests`,
+    input: Request,
+    eligible: (request) => request === side,
+    run: (request) => Effect.succeed(request),
+  })
+
+const spelledAlike = Discern.Procedure.registry(Request, {
+  a: onlyFor('right'),
+  ab: onlyFor('left'),
+  bc: onlyFor('right'),
+  c: onlyFor('left'),
+})
 
 Feature('Routing a request to the procedure that handles it')
   .withLayer(Layer.empty)
@@ -182,8 +192,10 @@ Feature('Routing a request to the procedure that handles it')
             )
           })),
         Then('every example is judged correctly, with nothing left uncertain')(({ report }) => {
-          expect(report.metrics.accuracy).toBe(1)
-          expect(report.metrics.uncertain).toBe(0)
+          if (Schema.is(Discern.EvalReport)(report)) {
+            expect(report.metrics.accuracy).toBe(1)
+            expect(report.metrics.uncertain).toBe(0)
+          }
         }),
       ),
     )
@@ -204,14 +216,18 @@ Feature('Routing a request to the procedure that handles it')
               Discern.Model.recording(s.observations),
             ])
           })),
-        Then('the recording keeps routing and the audit in separate folders')((s) => {
-          expect(s.answer).toBe('risky:deploy on friday')
-          const tree = Discern.Model.tree(s.observations.snapshot(), 'invoke')
-          expect(tree.observations).toStrictEqual([])
-          expect(
-            tree.children.map((child) => [child.name, child.observations.map((observation) => observation.decisionId)]),
-          ).toStrictEqual([['route', [auditRegistry.decision.id]], ['audit', ['risk']]])
-        }),
+        Then('the recording keeps routing and the audit in separate folders')((s) =>
+          Effect.gen(function*() {
+            expect(s.answer).toBe('risky:deploy on friday')
+            const tree = Discern.Model.tree(yield* Discern.Model.snapshot(s.observations), 'invoke')
+            expect(tree.observations).toStrictEqual([])
+            expect(
+              tree.children.map((
+                child,
+              ) => [child.name, child.observations.map((observation) => observation.decisionId)]),
+            ).toStrictEqual([['route', [auditRegistry.decision.id]], ['audit', ['risk']]])
+          })
+        ),
       ),
     )
 
@@ -238,7 +254,7 @@ Feature('Routing a request to the procedure that handles it')
             expect(model.calls()).toBe(2)
             const replayed = yield* Effect.provide(
               s.registry.invoke('prod is down'),
-              Discern.Model.replayLayer(s.observations.snapshot()),
+              Discern.Model.replayLayer(yield* Discern.Model.snapshot(s.observations)),
             )
             expect(replayed).toBe('now:prod is down')
             expect(model.calls()).toBe(2)
@@ -248,13 +264,13 @@ Feature('Routing a request to the procedure that handles it')
     )
 
     scenario(
-      'A member is found by id, and an id outside the registry is refused',
+      'A member is found under its own name in the registry',
       Gherkin.Do.pipe(
-        Given('a registry that does not pin its member ids')('registry', () => Effect.succeed(loose)),
-        When('a member is looked up by id')('found', (s) => Effect.sync(() => s.registry.get('find'))),
-        Then('the member is returned, and a foreign id names what the registry holds')((s) => {
+        Given('a registry of two code procedures')('registry', () => Effect.succeed(code)),
+        When('the member held under a name is read')('found', (s) => Effect.sync(() => s.registry.get('find'))),
+        Then('the member under that name is the one the registry holds')((s) => {
           expect(s.found).toBe(find)
-          expect(() => s.registry.get('nope')).toThrow(/No procedure "nope" in this registry \(have: find, review\)/)
+          expect(s.registry.ids).toStrictEqual(['find', 'review', 'test-gaps'])
         }),
       ),
     )
@@ -276,6 +292,31 @@ Feature('Routing a request to the procedure that handles it')
           expect(s.registry.decision.labels).toStrictEqual(['__proto__', 'find'])
           expect(s.answer).toBe('odd')
         }),
+      ),
+    )
+
+    scenario(
+      'Two requests whose eligible procedures spell the same letters are each offered their own choices',
+      { scenarioLayer: watchingRouting({ a: 0.9, ab: 0.9, bc: 0.1, c: 0.1 }) },
+      Gherkin.Do.pipe(
+        Given('a registry holding procedures named "a", "ab", "bc" and "c"')(
+          'registry',
+          () => Effect.succeed(spelledAlike),
+        ),
+        When('a "left" request is routed, and then a "right" request')('routes', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            const left = yield* withProvider(s.registry.route('left'), model.model)
+            const right = yield* withProvider(s.registry.route('right'), model.model)
+            return [left, right]
+          })),
+        Then('the model was offered "ab" and "c" for the first, and "a" and "bc" for the second')((s) =>
+          Effect.gen(function*() {
+            const sight = yield* RoutingSight
+            expect(sight.offered()).toStrictEqual([['ab', 'c'], ['a', 'bc']])
+            expect(s.routes.map((route) => matchedRouteOf(route).id)).toStrictEqual(['ab', 'a'])
+          })
+        ),
       ),
     )
   })

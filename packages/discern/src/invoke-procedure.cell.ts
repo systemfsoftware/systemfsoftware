@@ -1,14 +1,19 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Effect, Option, Order, Ordering, Result } from 'effect'
+import { Array as Arr, Effect, Match, Option, Order, Ordering, Result } from 'effect'
 import { dual } from 'effect/Function'
-import * as AiError from 'effect/unstable/ai/AiError'
+import type * as AiError from 'effect/unstable/ai/AiError'
+import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import { CurrentDepth, MaxDepth } from './procedure-depth.service.js'
 import { type FallbackInvocation, handlerEffectOf, type InvokeOptions } from './procedure.resource.js'
-import { DepthExceededError, NoEligibleProcedureError, RoutingUncertainError } from './ProcedureError.schema.js'
+import {
+  DepthExceededError,
+  NoEligibleProcedureError,
+  ProcedureCommandRejectedError,
+  RoutingUncertainError,
+} from './ProcedureError.schema.js'
 import { region } from './region.service.js'
 import type { RouteCandidate, RouteOptions } from './Route.schema.js'
 import {
-  type EligibilityOutcome,
   ManyEligible,
   NoEligible,
   OneEligible,
@@ -24,27 +29,42 @@ export interface RoutingAnswer {
   readonly probabilities: Record<string, number>
 }
 
-/** How the routing decision is asked for one request: narrowed to the eligible candidates. */
-export type AskRouting<Projected, R> = (
-  candidates: ReadonlyArray<string>,
+/**
+ * How the routing decision is asked for one request: narrowed to the eligible
+ * candidates. The ask travels through the registry's routing decision, so it
+ * can also refuse with that decision's own typed failures.
+ */
+export type AskRouting<Projected, R, Ids extends string = string> = (
+  candidates: ReadonlyArray<Ids>,
   input: Projected,
-) => Effect.Effect<RoutingAnswer, AiError.AiError, R>
+) => Effect.Effect<RoutingAnswer, AiError.AiError | DecisionIdCollisionError, R>
 
-/** What the routing shell needs from the registry to route one request. */
-export interface RoutingView<Input, Projected, R> {
-  /** Every member id, so the none-eligible reason names what was considered. */
-  readonly membership: ReadonlyArray<string>
-  /** The ids of the members whose eligibility holds for this input. */
-  readonly eligibleIds: (input: Input) => ReadonlyArray<string>
+/**
+ * What the routing shell needs from the registry to route one request.
+ *
+ * The ids are the registry's own keys at their narrowest, so the member the
+ * routing picks can be handed to `runMember` without a lookup that could miss.
+ */
+export interface RoutingView<Input, Projected, R, Ids extends string = string> {
+  /** Every member key, so the none-eligible reason names what was considered. */
+  readonly membership: ReadonlyArray<Ids>
+  /** The keys of the members whose eligibility holds for this input. */
+  readonly eligibleIds: (input: Input) => ReadonlyArray<Ids>
   readonly select: (input: Input) => Projected
-  readonly askRouting: AskRouting<Projected, R>
+  readonly askRouting: AskRouting<Projected, R, Ids>
 }
 
-export interface InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>
-  extends RoutingView<Input, Projected, R>
-{
-  /** Run one member by id. Reaching it with an id outside the registry is a defect. */
-  readonly runMember: (id: string, input: Input) => Effect.Effect<Value, Failure, Requirements>
+export interface InvokeProcedureOptions<
+  Input,
+  Projected,
+  Value,
+  Failure,
+  Requirements,
+  R,
+  Ids extends string = string,
+> extends RoutingView<Input, Projected, R, Ids> {
+  /** Run one member by its registry key. The key comes from eligibility, so it is always held. */
+  readonly runMember: (id: Ids, input: Input) => Effect.Effect<Value, Failure, Requirements>
 }
 
 /** One invocation of a registry: the request and how its caller handles uncertainty. */
@@ -53,16 +73,24 @@ export interface InvokeRequest<Input> {
   readonly options: InvokeOptions<Input>
 }
 
-/** What the read phase hands the routing decision: the encoded command plus the live request. */
-export type InvokeRead<Input> = (typeof SelectRoute)['Encoded'] & InvokeRequest<Input>
+/**
+ * What the read phase hands the routing decision: the encoded command plus the
+ * live request, and the ranked candidates with their ids still held at the
+ * registry's own keys — the member the decision runs is read off this ranking
+ * by position, never looked up again.
+ */
+export type InvokeRead<Input, Ids extends string = string> = (typeof SelectRoute)['Encoded'] & {
+  readonly ranking: ReadonlyArray<RouteCandidate<Ids>>
+} & InvokeRequest<Input>
 
 interface Thresholds {
   readonly minProbability: number
   readonly minMargin: number
 }
 
-interface RouteQuestion {
-  readonly eligibility: EligibilityOutcome
+interface RouteQuestion<Ids extends string> {
+  readonly eligibility: (typeof SelectRoute)['Encoded']['eligibility']
+  readonly ranking: ReadonlyArray<RouteCandidate<Ids>>
   readonly thresholds: Thresholds
 }
 
@@ -80,46 +108,86 @@ const thresholdsOf = (routing: RouteOptions | undefined): Thresholds =>
     }),
   })
 
-const questionOf = (eligibility: EligibilityOutcome, thresholds: Thresholds): RouteQuestion => ({
-  eligibility,
-  thresholds,
-})
-
 const byDescendingProbability: Order.Order<RouteCandidate> = Order.make<RouteCandidate>((self, that) =>
   Ordering.reverse(Order.Number(self.probability, that.probability))
 )
 
-const rankedOf = (
-  candidates: ReadonlyArray<string>,
-  probabilities: Record<string, number>,
-): ReadonlyArray<RouteCandidate> =>
-  Arr.sort(
-    Arr.map(candidates, (id) => ({ id, probability: probabilities[id] ?? 0 })),
-    byDescendingProbability,
+/**
+ * Slot one candidate into a ranking that already holds at least two, keeping
+ * the ranking ordered by descending probability. The ranking is built this way
+ * — element by element into a tuple that is two long by construction — so no
+ * stage of routing ever holds a ranking that could be short.
+ */
+const insertByDescendingProbability = <Ids extends string>(
+  ranked: readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>],
+  candidate: RouteCandidate<Ids>,
+): readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>] => {
+  const [leader, runnerUp, ...others] = ranked
+  return Match.value(candidate.probability > leader.probability).pipe(
+    Match.when(true, () => [candidate, ...Arr.sort([leader, runnerUp, ...others], byDescendingProbability)] as const),
+    Match.when(
+      false,
+      () =>
+        Match.value(candidate.probability > runnerUp.probability).pipe(
+          Match.when(true, () => [leader, candidate, runnerUp, ...others] as const),
+          Match.when(
+            false,
+            () => [leader, runnerUp, ...Arr.sort([...others, candidate], byDescendingProbability)] as const,
+          ),
+          Match.exhaustive,
+        ),
+    ),
+    Match.exhaustive,
   )
+}
 
-const leadingPairOf = (
-  ranked: ReadonlyArray<RouteCandidate>,
-): Option.Option<readonly [RouteCandidate, RouteCandidate]> =>
-  Option.flatMap(
-    Arr.head(ranked),
-    (leader) =>
-      Option.map(Arr.head(Arr.drop(ranked, 1)), (runnerUp): readonly [RouteCandidate, RouteCandidate] => [
-        leader,
-        runnerUp,
-      ]),
-  )
-
-const rankedQuestion = (
-  candidates: ReadonlyArray<string>,
+const rankedTupleOf = <Ids extends string>(
+  candidates: readonly [Ids, Ids, ...Array<Ids>],
   probabilities: Record<string, number>,
+): readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>] => {
+  const [first, second, ...rest] = candidates
+  const score = (id: Ids): RouteCandidate<Ids> => ({ id, probability: probabilities[id] ?? 0 })
+  const initial: readonly [RouteCandidate<Ids>, RouteCandidate<Ids>, ...Array<RouteCandidate<Ids>>] = Match.value(
+    score(first).probability >= score(second).probability,
+  ).pipe(
+    Match.when(true, () => [score(first), score(second)] as const),
+    Match.when(false, () => [score(second), score(first)] as const),
+    Match.exhaustive,
+  )
+  return Arr.reduce(rest, initial, (ranked, id) => insertByDescendingProbability(ranked, score(id)))
+}
+
+const prepareRouting = <Input, Projected, R, Ids extends string>(
+  view: RoutingView<Input, Projected, R, Ids>,
+  input: Input,
   thresholds: Thresholds,
-): Effect.Effect<RouteQuestion> => {
-  const ranked = rankedOf(candidates, probabilities)
-  return Option.match(leadingPairOf(ranked), {
-    onNone: () => Effect.die(new Error('routing ranked fewer than two candidates for two or more eligible procedures')),
-    onSome: ([leader, runnerUp]) =>
-      Effect.succeed(questionOf(new ManyEligible({ leader, runnerUp, ranked }), thresholds)),
+): Effect.Effect<RouteQuestion<Ids>, AiError.AiError | DecisionIdCollisionError, R> => {
+  const candidates = view.eligibleIds(input)
+  return Arr.match(candidates, {
+    onEmpty: () =>
+      Effect.succeed({ eligibility: new NoEligible({ membership: view.membership }), ranking: [], thresholds }),
+    onNonEmpty: ([first, ...rest]) =>
+      Arr.match(rest, {
+        onEmpty: () =>
+          Effect.succeed({
+            eligibility: new OneEligible({ candidate: { id: first, probability: 1 } }),
+            ranking: [{ id: first, probability: 1 }],
+            thresholds,
+          }),
+        onNonEmpty: ([second, ...more]) =>
+          Effect.map(
+            region('route')(view.askRouting(candidates, view.select(input))),
+            (answer) => {
+              const ranking = rankedTupleOf([first, second, ...more], answer.probabilities)
+              const [leader, runnerUp] = ranking
+              return {
+                eligibility: new ManyEligible({ leader, runnerUp, ranked: ranking }),
+                ranking,
+                thresholds,
+              }
+            },
+          ),
+      }),
   })
 }
 
@@ -129,32 +197,12 @@ const routeDecisionOf = (command: SelectRoute): Route =>
     onSuccess: (decision) => decision,
   })
 
-const prepareRouting = <Input, Projected, R>(
-  view: RoutingView<Input, Projected, R>,
-  input: Input,
-  thresholds: Thresholds,
-): Effect.Effect<RouteQuestion, AiError.AiError, R> => {
-  const candidates = view.eligibleIds(input)
-  return Option.match(Arr.head(candidates), {
-    onNone: () => Effect.succeed(questionOf(new NoEligible({ membership: view.membership }), thresholds)),
-    onSome: (first) =>
-      Option.match(Arr.head(Arr.drop(candidates, 1)), {
-        onNone: () =>
-          Effect.succeed(questionOf(new OneEligible({ candidate: { id: first, probability: 1 } }), thresholds)),
-        onSome: () =>
-          Effect.flatMap(
-            region('route')(view.askRouting(candidates, view.select(input))),
-            (answer) => rankedQuestion(candidates, answer.probabilities, thresholds),
-          ),
-      }),
-  })
-}
-
 /**
  * The imperative shell of one registry invocation: the read enforces the depth
  * limit, applies eligibility, asks the routing decision only when more than one
- * member is eligible, and ranks the distribution; the handlers run the chosen
- * procedure at depth+1 inside a `route` region or refuse.
+ * member is eligible, and ranks the distribution into a tuple that is at least
+ * two long; the handlers run the chosen member at depth+1 inside a `route`
+ * region or refuse.
  *
  * Without an `onUncertain` handler, an unroutable request fails with
  * {@link RoutingUncertainError} rather than guessing. The chain is built per
@@ -163,28 +211,30 @@ const prepareRouting = <Input, Projected, R>(
  * with every other invocation.
  */
 export const invokeProcedure: {
-  <Input, Projected, Value, Failure, Requirements, R>(
-    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+  <Input, Projected, Value, Failure, Requirements, R, Ids extends string = string>(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R, Ids>,
   ): (
     request: InvokeRequest<Input>,
   ) => Effect.Effect<
     { readonly route: Route; readonly value: Value },
     | Failure
     | AiError.AiError
-    | AiError.InvalidRequestError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError
     | RoutingUncertainError,
     R | Requirements
   >
-  <Input, Projected, Value, Failure, Requirements, R>(
-    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+  <Input, Projected, Value, Failure, Requirements, R, Ids extends string = string>(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R, Ids>,
     request: InvokeRequest<Input>,
   ): Effect.Effect<
     { readonly route: Route; readonly value: Value },
     | Failure
     | AiError.AiError
-    | AiError.InvalidRequestError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError
     | RoutingUncertainError,
@@ -192,20 +242,31 @@ export const invokeProcedure: {
   >
 } = dual(
   2,
-  <Input, Projected, Value, Failure, Requirements, R>(
-    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+  <
+    Input,
+    Projected,
+    Value,
+    Failure,
+    Requirements,
+    R,
+    Ids extends string = string,
+  >(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R, Ids>,
     request: InvokeRequest<Input>,
   ): Effect.Effect<
     { readonly route: Route; readonly value: Value },
     | Failure
     | AiError.AiError
-    | AiError.InvalidRequestError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError
     | RoutingUncertainError,
     R | Requirements
   > => {
-    const readInvoke = (invocation: InvokeRequest<Input>) =>
+    const readInvoke = (
+      invocation: InvokeRequest<Input>,
+    ) =>
       Effect.gen(function*() {
         const limit = yield* MaxDepth.useSync((value) => value)
         const depth = yield* CurrentDepth.useSync((value) => value)
@@ -217,6 +278,7 @@ export const invokeProcedure: {
           (question) => ({
             _tag: 'SelectRoute' as const,
             eligibility: question.eligibility,
+            ranking: question.ranking,
             minProbability: question.thresholds.minProbability,
             minMargin: question.thresholds.minMargin,
             input: invocation.input,
@@ -225,19 +287,41 @@ export const invokeProcedure: {
         )
       })
 
+    const runChosen = (
+      id: Ids,
+      input: Input,
+      matched: (typeof RouteMatched)['Encoded'],
+    ): Effect.Effect<
+      { readonly route: Route; readonly value: Value },
+      Failure | NoEligibleProcedureError,
+      Requirements
+    > =>
+      Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
+        Effect.map(
+          Effect.provideService(options.runMember(id, input), CurrentDepth, depth + 1),
+          (value) => ({ route: new RouteMatched(matched), value }),
+        ))
+
     return Sandwich.named('discern.procedure.invoke')(readInvoke)
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
-          Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
-            Effect.map(
-              Effect.provideService(options.runMember(matched.id, read.input), CurrentDepth, depth + 1),
-              (value) => ({ route: new RouteMatched(matched), value }),
-            )),
+          Arr.match(read.ranking, {
+            onEmpty: () =>
+              Effect.fail(new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' })),
+            onNonEmpty: ([leader]) => runChosen(leader.id, read.input, matched),
+          }),
         RouteUncertain: (uncertain) =>
           Effect.fail(new RoutingUncertainError({ reason: uncertain.reason, ranked: uncertain.ranked })),
         RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
-        CommandRejected: (rejected) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
+        CommandRejected: (rejected) =>
+          Effect.fail(
+            new ProcedureCommandRejectedError({
+              membership: options.membership,
+              issue: rejected.issue,
+              cause: rejected,
+            }),
+          ),
       })
       .run(request)
   },
@@ -256,11 +340,12 @@ export const invokeProcedureWithFallback: {
     Failure,
     Requirements,
     R,
+    Ids extends string,
     FallbackValue,
     FallbackError = never,
     FallbackServices = never,
   >(
-    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R, Ids>,
   ): (
     request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
   ) => Effect.Effect<
@@ -268,7 +353,8 @@ export const invokeProcedureWithFallback: {
     | Failure
     | FallbackError
     | AiError.AiError
-    | AiError.InvalidRequestError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError,
     R | Requirements | FallbackServices
@@ -280,18 +366,20 @@ export const invokeProcedureWithFallback: {
     Failure,
     Requirements,
     R,
+    Ids extends string,
     FallbackValue,
     FallbackError = never,
     FallbackServices = never,
   >(
-    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R, Ids>,
     request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
   ): Effect.Effect<
     { readonly route: Route; readonly value: Value | FallbackValue },
     | Failure
     | FallbackError
     | AiError.AiError
-    | AiError.InvalidRequestError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError,
     R | Requirements | FallbackServices
@@ -305,18 +393,20 @@ export const invokeProcedureWithFallback: {
     Failure,
     Requirements,
     R,
+    Ids extends string,
     FallbackValue,
     FallbackError = never,
     FallbackServices = never,
   >(
-    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R, Ids>,
     request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
   ): Effect.Effect<
     { readonly route: Route; readonly value: Value | FallbackValue },
     | Failure
     | FallbackError
     | AiError.AiError
-    | AiError.InvalidRequestError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError,
     R | Requirements | FallbackServices
@@ -335,6 +425,7 @@ export const invokeProcedureWithFallback: {
           (question) => ({
             _tag: 'SelectRoute' as const,
             eligibility: question.eligibility,
+            ranking: question.ranking,
             minProbability: question.thresholds.minProbability,
             minMargin: question.thresholds.minMargin,
             input: invocation.input,
@@ -343,22 +434,44 @@ export const invokeProcedureWithFallback: {
         )
       })
 
+    const runChosen = (
+      id: Ids,
+      input: Input,
+      matched: (typeof RouteMatched)['Encoded'],
+    ): Effect.Effect<
+      { readonly route: Route; readonly value: Value },
+      Failure | NoEligibleProcedureError,
+      Requirements
+    > =>
+      Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
+        Effect.map(
+          Effect.provideService(options.runMember(id, input), CurrentDepth, depth + 1),
+          (value) => ({ route: new RouteMatched(matched), value }),
+        ))
+
     return Sandwich.named('discern.procedure.invoke')(readInvoke)
       .decide(selectRoute)
       .write({
         RouteMatched: (matched, read) =>
-          Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
-            Effect.map(
-              Effect.provideService(options.runMember(matched.id, read.input), CurrentDepth, depth + 1),
-              (value) => ({ route: new RouteMatched(matched), value }),
-            )),
+          Arr.match(read.ranking, {
+            onEmpty: () =>
+              Effect.fail(new NoEligibleProcedureError({ reason: 'no procedure is eligible for this input' })),
+            onNonEmpty: ([leader]) => runChosen(leader.id, read.input, matched),
+          }),
         RouteUncertain: (uncertain, read) =>
           Effect.map(handlerEffectOf(read.options.onUncertain(read.input, uncertain)), (value) => ({
             route: new RouteUncertain(uncertain),
             value,
           })),
         RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
-        CommandRejected: (rejected) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
+        CommandRejected: (rejected) =>
+          Effect.fail(
+            new ProcedureCommandRejectedError({
+              membership: options.membership,
+              issue: rejected.issue,
+              cause: rejected,
+            }),
+          ),
       })
       .run(request)
   },
@@ -370,22 +483,24 @@ export const invokeProcedureWithFallback: {
  * answered without running any procedure.
  */
 export const prepareRoute: {
-  <Input, Projected, R>(
+  <Input, Projected, R, Ids extends string = string>(
     input: Input,
     routing: RouteOptions | undefined,
-  ): (view: RoutingView<Input, Projected, R>) => Effect.Effect<Route, AiError.AiError, R>
-  <Input, Projected, R>(
-    view: RoutingView<Input, Projected, R>,
+  ): (
+    view: RoutingView<Input, Projected, R, Ids>,
+  ) => Effect.Effect<Route, AiError.AiError | DecisionIdCollisionError, R>
+  <Input, Projected, R, Ids extends string = string>(
+    view: RoutingView<Input, Projected, R, Ids>,
     input: Input,
     routing: RouteOptions | undefined,
-  ): Effect.Effect<Route, AiError.AiError, R>
+  ): Effect.Effect<Route, AiError.AiError | DecisionIdCollisionError, R>
 } = dual(
   3,
-  <Input, Projected, R>(
-    view: RoutingView<Input, Projected, R>,
+  <Input, Projected, R, Ids extends string = string>(
+    view: RoutingView<Input, Projected, R, Ids>,
     input: Input,
     routing: RouteOptions | undefined,
-  ): Effect.Effect<Route, AiError.AiError, R> => {
+  ): Effect.Effect<Route, AiError.AiError | DecisionIdCollisionError, R> => {
     const thresholds = thresholdsOf(routing)
     return Effect.map(prepareRouting(view, input, thresholds), (question) =>
       routeDecisionOf(

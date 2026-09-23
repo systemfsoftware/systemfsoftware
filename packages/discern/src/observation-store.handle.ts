@@ -1,4 +1,6 @@
-import { Effect, Match, Option, Result, Schema } from 'effect'
+import { Match, Option, Predicate, Result, Schema } from 'effect'
+import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as MutableRef from 'effect/MutableRef'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import {
@@ -15,16 +17,10 @@ export type TypeId = typeof TypeId
 
 export interface ObservationStore extends Pipeable {
   readonly [TypeId]: typeof TypeId
-  readonly get: (address: string) => Observation | undefined
-  readonly set: (address: string, observation: Observation) => void
+  readonly observations: MutableRef.MutableRef<ReadonlyMap<string, Observation>>
 }
 
-export interface MemoryStore extends ObservationStore {
-  readonly snapshot: () => Observations
-  readonly load: (snapshot: Schema.Json) => Effect.Effect<void, ObservationSnapshotRefused>
-  readonly size: () => number
-  readonly clear: () => void
-}
+export const isObservationStore = (u: unknown): u is ObservationStore => Predicate.hasProperty(u, TypeId)
 
 const declaredVersionOf = (snapshot: Schema.Json): number | undefined =>
   Option.getOrUndefined(
@@ -51,36 +47,54 @@ const decodeSnapshot = (snapshot: Schema.Json): Effect.Effect<Observations, Obse
     onFailure: (issue) => Effect.fail(refusalOf(snapshot, issue.message)),
   })
 
-const entriesOf = (initial: Observations | undefined): ReadonlyArray<readonly [string, Observation]> =>
-  initial === undefined ? [] : Object.entries(initial.entries)
+const entriesOf = (initial: Observations | undefined): ReadonlyMap<string, Observation> =>
+  new Map(initial === undefined ? [] : Object.entries(initial.entries))
 
-/**
- * An in-memory store that can also be snapshotted and reloaded.
- *
- * Use `set` to merge one observation; `load` replaces the contents, so a
- * snapshot round-trips exactly.
- */
-export const store = (initial?: Observations): MemoryStore => {
-  const values = MutableRef.make(new Map<string, Observation>(entriesOf(initial)))
-  return {
-    [TypeId]: TypeId,
-    get: (address) => values.current.get(address),
-    set: (address, observation) => {
-      values.current.set(address, observation)
-    },
-    snapshot: () => new Observations({ version: 2, entries: Object.fromEntries(values.current) }),
-    load: (snapshot) =>
-      Effect.flatMap(decodeSnapshot(snapshot), (decoded) =>
-        Effect.sync(() => {
-          values.current.clear()
-          for (const [address, observation] of Object.entries(decoded.entries)) {
-            values.current.set(address, observation)
-          }
-        })),
-    size: () => values.current.size,
-    clear: () => {
-      values.current.clear()
-    },
-    ...Prototype,
-  }
-}
+export const store = (initial?: Observations): ObservationStore => ({
+  [TypeId]: TypeId,
+  observations: MutableRef.make(entriesOf(initial)),
+  ...Prototype,
+})
+
+export const get: {
+  (address: string): (self: ObservationStore) => Effect.Effect<Option.Option<Observation>>
+  (self: ObservationStore, address: string): Effect.Effect<Option.Option<Observation>>
+} = dual(
+  2,
+  (self: ObservationStore, address: string): Effect.Effect<Option.Option<Observation>> =>
+    Effect.sync(() => Option.fromUndefinedOr(MutableRef.get(self.observations).get(address))),
+)
+
+export const set: {
+  (address: string, observation: Observation): (self: ObservationStore) => Effect.Effect<void>
+  (self: ObservationStore, address: string, observation: Observation): Effect.Effect<void>
+} = dual(
+  (args) => isObservationStore(args[0]),
+  (self: ObservationStore, address: string, observation: Observation): Effect.Effect<void> =>
+    Effect.sync(() => {
+      MutableRef.update(self.observations, (values) => new Map(values).set(address, observation))
+    }),
+)
+
+export const snapshot = (self: ObservationStore): Effect.Effect<Observations> =>
+  Effect.sync(() => new Observations({ version: 2, entries: Object.fromEntries(MutableRef.get(self.observations)) }))
+
+export const load: {
+  (snapshot: Schema.Json): (self: ObservationStore) => Effect.Effect<void, ObservationSnapshotRefused>
+  (self: ObservationStore, snapshot: Schema.Json): Effect.Effect<void, ObservationSnapshotRefused>
+} = dual(
+  2,
+  (self: ObservationStore, snapshot: Schema.Json): Effect.Effect<void, ObservationSnapshotRefused> =>
+    Effect.flatMap(decodeSnapshot(snapshot), (decoded) =>
+      Effect.sync(() => {
+        MutableRef.set(self.observations, new Map(Object.entries(decoded.entries)))
+      })),
+)
+
+export const size = (self: ObservationStore): Effect.Effect<number> =>
+  Effect.sync(() => MutableRef.get(self.observations).size)
+
+export const clear = (self: ObservationStore): Effect.Effect<void> =>
+  Effect.sync(() => {
+    MutableRef.set(self.observations, new Map())
+  })

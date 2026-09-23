@@ -6,10 +6,30 @@
 export * as Model from '../Model/mod.js'
 export * as Procedure from '../Procedure/mod.js'
 
-export { ask, classify, decision, on, probability, rate } from '../decision.resource.js'
+export {
+  above,
+  ask,
+  atLeast,
+  atMost,
+  band,
+  below,
+  between,
+  classify,
+  decision,
+  is,
+  margin,
+  not,
+  on,
+  oneOf,
+  probability,
+  rate,
+  where,
+  whereResult,
+} from '../decision.resource.js'
 export type {
   Answer,
   AnyDecision,
+  BandOptions,
   ClassifyDecision,
   ClassifyOptions,
   ClassifyThresholds,
@@ -24,17 +44,14 @@ export type {
 export {
   and,
   deterministic,
+  evaluate,
   matched,
   missed,
-  not,
   or,
-  predicate,
+  preview,
   reasonOf,
-  refine,
-  refineResult,
   statusIs,
   statusOf,
-  structural,
   uncertain,
 } from '../pattern.resource.js'
 export type {
@@ -44,8 +61,9 @@ export type {
   LeafOptions,
   NodeCore,
   Pattern,
+  PatternEvaluator,
+  PatternRefusal,
   Preview,
-  Top,
   UncertainContext,
 } from '../pattern.resource.js'
 
@@ -57,23 +75,25 @@ export {
   match,
   onUncertain,
   orElse,
-  otherwise,
-  runWithTrace,
   type,
   value,
   when,
 } from '../matcher.resource.js'
 export type { ClassificationMatcher, FinishedMatcher, Matcher, MatcherFlavor } from '../matcher.resource.js'
 
-export type { Policy, PolicyRun } from '../run-policy.cell.js'
+export { runWithTrace } from '../run-policy.cell.js'
+export type { Policy, PolicyRun, PolicyTraced } from '../run-policy.cell.js'
 
 export { Eval } from '../measure-pattern.cell.js'
-export type { CalibrateOptions, EvalExample, SweepOptions, SweepResult } from '../measure-pattern.cell.js'
+export type { CalibrateOptions, EvalExample, MeasureError, SweepOptions, SweepResult } from '../measure-pattern.cell.js'
 
 export {
   DecisionIdCollisionError,
   ExhaustiveMatchError,
   InvalidThresholdError,
+  MeasureCommandRejected,
+  MeasureInputRefused,
+  PolicyCommandRejected,
   UncertainMatchError,
 } from '../DiscernError.schema.js'
 export { EvalMetrics, EvalRecord, EvalReport } from '../EvalReport.schema.js'

@@ -13,9 +13,15 @@ import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { observe } from './decision.resource.js'
+import {
+  DecisionIdCollisionError,
+  InvalidThresholdError,
+  MeasureCommandRejected,
+  MeasureInputRefused,
+} from './DiscernError.schema.js'
 import { EvalMetrics, EvalRecord, EvalReport } from './EvalReport.schema.js'
-import type { Answers, Pattern, Preview } from './pattern.resource.js'
-import { statusOf } from './pattern.resource.js'
+import type { Answers, Pattern, PatternRefusal, Preview } from './pattern.resource.js'
+import { evaluate, preview, statusOf } from './pattern.resource.js'
 import { ScoreEvalRecord, scoreEvalRecord } from './score-eval-record.workflow.js'
 import type { EvalScore } from './score-eval-record.workflow.js'
 import type { PatternResult } from './Verdict.schema.js'
@@ -33,6 +39,14 @@ export interface SweepResult<Value> {
   readonly report: EvalReport
 }
 
+/** Everything that can refuse one measurement: the model, the batch build, the pattern, or the example itself. */
+export type MeasureError =
+  | AiError.AiError
+  | DecisionIdCollisionError
+  | InvalidThresholdError
+  | MeasureCommandRejected
+  | MeasureInputRefused
+
 // -------------------------------------------------------------------------------------------------
 // The measure case: what one sandwich run evaluates
 // -------------------------------------------------------------------------------------------------
@@ -41,10 +55,11 @@ interface MeasureCase<S extends Schema.Constraint> {
   readonly preview: Preview
   readonly expected: boolean
   readonly inputJson: Result.Result<Schema.Json, Schema.SchemaError>
+  readonly refusals: ReadonlyArray<PatternRefusal>
   readonly evaluate: (answers: Answers) => PatternResult
   readonly observe: () => Effect.Effect<
     Answers,
-    AiError.AiError,
+    AiError.AiError | DecisionIdCollisionError,
     DecisionModel.DecisionModel | S['EncodingServices']
   >
 }
@@ -60,19 +75,27 @@ type MeasureRead = (typeof ScoreEvalRecord)['Encoded'] & {
 
 const readMeasure = <S extends Schema.Constraint>(
   measure: MeasureCase<S>,
-): Effect.Effect<MeasureRead, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> =>
-  Result.match(measure.inputJson, {
-    onFailure: (issue) => Effect.die(issue),
-    onSuccess: (json) =>
-      Effect.map(measure.observe(), (answers) => {
-        const result = resolvedOrEvaluated(measure, answers)
-        const status = statusOf(result)
-        return {
-          _tag: 'ScoreEvalRecord',
-          expected: measure.expected,
-          status,
-          record: new EvalRecord({ input: json, expected: measure.expected, status }),
-        }
+): Effect.Effect<
+  MeasureRead,
+  Exclude<MeasureError, MeasureCommandRejected>,
+  DecisionModel.DecisionModel | S['EncodingServices']
+> =>
+  Option.match(Arr.head(measure.refusals), {
+    onSome: (refusal) => Effect.fail(new InvalidThresholdError(refusal)),
+    onNone: () =>
+      Result.match(measure.inputJson, {
+        onFailure: (issue) => Effect.fail(new MeasureInputRefused({ expected: measure.expected, cause: issue })),
+        onSuccess: (json) =>
+          Effect.map(measure.observe(), (answers) => {
+            const result = resolvedOrEvaluated(measure, answers)
+            const status = statusOf(result)
+            return {
+              _tag: 'ScoreEvalRecord',
+              expected: measure.expected,
+              status,
+              record: new EvalRecord({ input: json, expected: measure.expected, status }),
+            }
+          }),
       }),
   })
 
@@ -84,7 +107,7 @@ const measureOf = <S extends Schema.Constraint>(
   measure: MeasureCase<S>,
 ): Effect.Effect<
   EvalRecord,
-  AiError.AiError,
+  MeasureError,
   DecisionModel.DecisionModel | S['EncodingServices']
 > =>
   Sandwich.named('discern.eval.measure')((input: MeasureCase<S>) => readMeasure(input))
@@ -95,7 +118,8 @@ const measureOf = <S extends Schema.Constraint>(
       TrueNegative: recordOf,
       FalseNegative: recordOf,
       Abstained: recordOf,
-      CommandRejected: (rejected, _read) => Effect.die(rejected),
+      CommandRejected: (rejected, read) =>
+        Effect.fail(new MeasureCommandRejected({ record: read.record, cause: rejected })),
     })
     .run(measure)
 
@@ -179,13 +203,14 @@ const measureCaseOf = <S extends Schema.Constraint>(
   pattern: Pattern<S['Type']>,
   example: EvalExample<S['Type']>,
 ): MeasureCase<S> => {
-  const preview = pattern.preview(example.input)
+  const deterministic = preview(pattern, example.input)
   return {
-    preview,
+    preview: deterministic,
     expected: example.expected,
     inputJson: Schema.encodeUnknownResult(Schema.Json)(example.input),
-    evaluate: (answers) => pattern.evaluate(example.input, answers),
-    observe: () => observe(schema, preview.decisions, example.input),
+    refusals: pattern.refusals,
+    evaluate: (answers) => evaluate(pattern, example.input, answers),
+    observe: () => observe(schema, deterministic.decisions, example.input),
   }
 }
 
@@ -194,21 +219,19 @@ export const run: {
   <S extends Schema.Constraint>(
     pattern: Pattern<S['Type']>,
     examples: ReadonlyArray<EvalExample<S['Type']>>,
-  ): (
-    schema: S,
-  ) => Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+  ): (schema: S) => Effect.Effect<EvalReport, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']>
   <S extends Schema.Constraint>(
     schema: S,
     pattern: Pattern<S['Type']>,
     examples: ReadonlyArray<EvalExample<S['Type']>>,
-  ): Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+  ): Effect.Effect<EvalReport, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']>
 } = dual(
   3,
   <S extends Schema.Constraint>(
     schema: S,
     pattern: Pattern<S['Type']>,
     examples: ReadonlyArray<EvalExample<S['Type']>>,
-  ): Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> =>
+  ): Effect.Effect<EvalReport, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
     Effect.map(
       Effect.forEach(examples, (example) => measureOf(measureCaseOf(schema, pattern, example))),
       (records) => new EvalReport({ metrics: metricsOf(records), records }),
@@ -223,25 +246,63 @@ export interface SweepOptions<S extends Schema.Constraint, V> {
   readonly examples: ReadonlyArray<EvalExample<S['Type']>>
 }
 
+/** One example joined to the observation batch cached for it. */
+interface AnsweredExample<S extends Schema.Constraint, I> {
+  readonly example: EvalExample<I>
+  readonly answers: Effect.Effect<
+    Answers,
+    AiError.AiError | DecisionIdCollisionError,
+    DecisionModel.DecisionModel | S['EncodingServices']
+  >
+}
+
 const measureSweepCaseOf = <S extends Schema.Constraint, V>(
-  options: SweepOptions<S, V>,
   candidate: { readonly value: V; readonly pattern: Pattern<S['Type']> },
-  cachedAnswers: ReadonlyArray<
-    Effect.Effect<Answers, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
-  >,
-  example: EvalExample<S['Type']>,
-  exampleIndex: number,
+  answered: AnsweredExample<S, S['Type']>,
 ): MeasureCase<S> => {
-  const preview = candidate.pattern.preview(example.input)
-  const answers = Option.getOrThrow(Arr.get(cachedAnswers, exampleIndex))
+  const deterministic = preview(candidate.pattern, answered.example.input)
   return {
-    preview,
-    expected: example.expected,
-    inputJson: Schema.encodeUnknownResult(Schema.Json)(example.input),
-    evaluate: (observed) => candidate.pattern.evaluate(example.input, observed),
-    observe: () => answers,
+    preview: deterministic,
+    expected: answered.example.expected,
+    inputJson: Schema.encodeUnknownResult(Schema.Json)(answered.example.input),
+    refusals: candidate.pattern.refusals,
+    evaluate: (observed) => evaluate(candidate.pattern, answered.example.input, observed),
+    observe: () => answered.answers,
   }
 }
+
+const candidatesOf = <S extends Schema.Constraint, V>(
+  options: SweepOptions<S, V>,
+): ReadonlyArray<{ readonly value: V; readonly pattern: Pattern<S['Type']> }> =>
+  Arr.map(options.values, (value) => ({ value, pattern: options.pattern(value) }))
+
+const answeredExamplesOf = <S extends Schema.Constraint, V>(
+  options: SweepOptions<S, V>,
+  candidates: ReadonlyArray<{ readonly value: V; readonly pattern: Pattern<S['Type']> }>,
+): Effect.Effect<
+  ReadonlyArray<AnsweredExample<S, S['Type']>>,
+  MeasureError,
+  DecisionModel.DecisionModel | S['EncodingServices']
+> =>
+  Effect.forEach(options.examples, (example) =>
+    Effect.map(
+      Effect.cached(observe(
+        options.schema,
+        Arr.flatMap(candidates, (candidate) => preview(candidate.pattern, example.input).decisions),
+        example.input,
+      )),
+      (answers) => ({ example, answers }),
+    ))
+
+const scoreCandidate =
+  <S extends Schema.Constraint>(answeredExamples: ReadonlyArray<AnsweredExample<S, S['Type']>>) =>
+  <V>(
+    candidate: { readonly value: V; readonly pattern: Pattern<S['Type']> },
+  ): Effect.Effect<SweepResult<V>, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
+    Effect.map(
+      Effect.forEach(answeredExamples, (answered) => measureOf(measureSweepCaseOf(candidate, answered))),
+      (records) => ({ value: candidate.value, report: new EvalReport({ metrics: metricsOf(records), records }) }),
+    )
 
 /**
  * Sweep a parameterized pattern. All candidate patterns share one semantic
@@ -250,28 +311,11 @@ const measureSweepCaseOf = <S extends Schema.Constraint, V>(
  */
 export const sweep = <S extends Schema.Constraint, V>(
   options: SweepOptions<S, V>,
-): Effect.Effect<
-  ReadonlyArray<SweepResult<V>>,
-  AiError.AiError,
-  DecisionModel.DecisionModel | S['EncodingServices']
-> =>
+): Effect.Effect<ReadonlyArray<SweepResult<V>>, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
   Effect.gen(function*() {
-    const candidates = Arr.map(options.values, (value) => ({ value, pattern: options.pattern(value) }))
-    const cachedAnswers = yield* Effect.forEach(options.examples, (example) =>
-      Effect.cached(observe(
-        options.schema,
-        Arr.flatMap(candidates, (candidate) => candidate.pattern.preview(example.input).decisions),
-        example.input,
-      )))
-    return yield* Effect.forEach(candidates, (candidate) =>
-      Effect.map(
-        Effect.forEach(
-          options.examples,
-          (example, exampleIndex) =>
-            measureOf(measureSweepCaseOf(options, candidate, cachedAnswers, example, exampleIndex)),
-        ),
-        (records) => ({ value: candidate.value, report: new EvalReport({ metrics: metricsOf(records), records }) }),
-      ))
+    const candidates = candidatesOf(options)
+    const answeredExamples = yield* answeredExamplesOf(options, candidates)
+    return yield* Effect.forEach(candidates, scoreCandidate(answeredExamples))
   })
 
 type MetricName = 'f1' | 'accuracy' | 'selectiveAccuracy' | 'coverage'
@@ -285,6 +329,13 @@ const metricOrderOf = <V>(metric: MetricName): Order.Order<SweepResult<V>> =>
 const bestOrderOf = <V>(metric: 'f1' | 'accuracy' | 'selectiveAccuracy'): Order.Order<SweepResult<V>> =>
   Order.combine(metricOrderOf<V>(metric), metricOrderOf<V>('coverage'))
 
+/** Prefer the higher metric; ties keep the earlier candidate, as a stable ranking would. */
+const betterOf = <V>(
+  metric: 'f1' | 'accuracy' | 'selectiveAccuracy',
+  best: SweepResult<V>,
+  next: SweepResult<V>,
+): SweepResult<V> => Order.min(bestOrderOf<V>(metric))(best, next)
+
 /** Options for calibrating: a sweep over at least one candidate value. */
 export interface CalibrateOptions<S extends Schema.Constraint, V> extends Omit<SweepOptions<S, V>, 'values'> {
   readonly values: readonly [V, ...Array<V>]
@@ -296,13 +347,19 @@ export const calibrate = <S extends Schema.Constraint, V>(
   options: CalibrateOptions<S, V>,
 ): Effect.Effect<
   { readonly best: SweepResult<V>; readonly results: ReadonlyArray<SweepResult<V>> },
-  AiError.AiError,
+  MeasureError,
   DecisionModel.DecisionModel | S['EncodingServices']
 > =>
-  Effect.map(sweep(options), (results) => ({
-    best: Option.getOrThrow(Arr.head(Arr.sort(results, bestOrderOf<V>(options.metric ?? 'f1')))),
-    results,
-  }))
+  Effect.gen(function*() {
+    const candidates = candidatesOf(options)
+    const answeredExamples = yield* answeredExamplesOf(options, candidates)
+    const score = scoreCandidate(answeredExamples)
+    const [firstValue, ...restValues] = options.values
+    const first = yield* score<V>({ value: firstValue, pattern: options.pattern(firstValue) })
+    const rest = yield* Effect.forEach(restValues, (value: V) => score<V>({ value, pattern: options.pattern(value) }))
+    const results: ReadonlyArray<SweepResult<V>> = [first, ...rest]
+    return { best: Arr.reduce(rest, first, (best, next) => betterOf(options.metric ?? 'f1', best, next)), results }
+  })
 
 /** The evaluation entry point: run one pattern, sweep thresholds, or calibrate. */
 export const Eval = {

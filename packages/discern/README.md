@@ -78,6 +78,8 @@ console.log(verdict) // block: rename User.id to User.key
 
 A deterministic pattern that already settles an `and` keeps the model out of the call entirely.
 
+Every method has a standalone twin for `pipe`: `impact.is('breaking')` and `impact.pipe(Discern.is('breaking'))` build the same pattern, as do `desk.invoke(input)` and `desk.pipe(Discern.Procedure.invoke(input))`.
+
 ### Exhaustive match
 
 `Discern.match` dispatches on a classification. `Discern.exhaustive` does not compile until every label has a case:
@@ -121,8 +123,9 @@ await Effect.runPromise(
     Effect.provide(Discern.Model.layer(cautious, [Discern.Model.recording(store)])),
   ),
 )
+const recorded = await Effect.runPromise(Discern.Model.snapshot(store))
 const replayed = await Effect.runPromise(
-  review('rename User.id to User.key').pipe(Effect.provide(Discern.Model.replayLayer(store.snapshot()))),
+  review('rename User.id to User.key').pipe(Effect.provide(Discern.Model.replayLayer(recorded))),
 )
 console.log(replayed) // block: rename User.id to User.key
 ```
@@ -135,12 +138,12 @@ const spend = Discern.Model.budget({ calls: 10 })
 const metered = Discern.Model.layer(cautious, [Discern.Model.caching(cache), Discern.Model.budgeted(spend)])
 await Effect.runPromise(review('drop Node 18').pipe(Effect.provide(metered)))
 await Effect.runPromise(review('drop Node 18').pipe(Effect.provide(metered)))
-console.log(spend.spent()) // { decisions: 2, calls: 1 }
+console.log(await Effect.runPromise(Discern.Model.spent(spend))) // { decisions: 2, calls: 1 }
 ```
 
 Answers are keyed by the question's content and the input's structure. Rewording instructions or reordering criteria is a new question; reordering an input object's keys is not.
 
-A recording is plain data: encode `store.snapshot()` with the `Discern.Model.Observations` schema to save it, decode it to load it. `Discern.Model.intercept(interceptors)` applies the same decorators to a `DecisionModel` layer you already have, such as `TypeSafeDecisionModel.layer({ model: 'jev-latest' })` from `@effect/ai-typesafe` or the OpenRouter layer from `@effect/ai-openrouter`.
+Stores and budgets are handles: `Discern.Model.snapshot`, `load`, `get`, `set`, `size`, `clear`, `spent` and `reset` are Effects over them. A recording is plain data: encode the `snapshot` with the `Discern.Model.Observations` schema to save it, and `load` it back. `Discern.Model.intercept(interceptors)` applies the same decorators to a `DecisionModel` layer you already have, such as `TypeSafeDecisionModel.layer({ model: 'jev-latest' })` from `@effect/ai-typesafe` or the OpenRouter layer from `@effect/ai-openrouter`.
 
 ### Evaluate thresholds
 
@@ -148,23 +151,21 @@ A recording is plain data: encode `store.snapshot()` with the `Discern.Model.Obs
 
 ### Route between procedures
 
-`Discern.Procedure` routes a request to one of several named procedures with a single classification:
+`Discern.Procedure` routes a request to one of several named procedures with a single classification. The registry takes its members as a record, and each key is that member's id:
 
 ```ts
 const Ticket = Schema.String
 const refunds = Discern.Procedure.make({
-  id: 'refunds',
   description: 'Refund duplicate or wrong charges',
   input: Ticket,
   run: (ticket) => Effect.succeed(`refund opened for: ${ticket}`),
 })
 const incidents = Discern.Procedure.make({
-  id: 'incidents',
   description: 'Outages and production errors',
   input: Ticket,
   run: () => Effect.succeed('incident opened'),
 })
-const desk = Discern.Procedure.registry(Ticket, [refunds, incidents])
+const desk = Discern.Procedure.registry(Ticket, { refunds, incidents })
 
 const router = standIn(() => ({
   _tag: 'Classify',

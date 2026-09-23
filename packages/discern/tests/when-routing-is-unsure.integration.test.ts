@@ -9,27 +9,24 @@ import { matchedRouteOf, routingTo, uncertainRouteOf } from './__fixtures__/rout
 const Feature = makeFeature({ it, layer })
 
 const find = Discern.Procedure.make({
-  id: 'find',
   description: 'Locate code relevant to a behavior, feature or concept',
   input: Request,
   run: (request) => Effect.succeed(`found:${request}`),
 })
 
 const review = Discern.Procedure.make({
-  id: 'review',
   description: 'Review a change for correctness and semantic risk',
   input: Request,
   run: (request) => Effect.succeed(`reviewed:${request}`),
 })
 
 const testGaps = Discern.Procedure.make({
-  id: 'test-gaps',
   description: 'Find behavior that lacks sufficient test coverage',
   input: Request,
   run: (request) => Effect.succeed(`gaps:${request}`),
 })
 
-const code = Discern.Procedure.registry(Request, [find, review, testGaps])
+const code = Discern.Procedure.registry(Request, { find, review, ['test-gaps']: testGaps })
 
 Feature('Owning up when a request cannot be routed confidently')
   .withLayer(Layer.empty)

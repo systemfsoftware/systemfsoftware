@@ -76,23 +76,6 @@ Feature('Keeping routing evidence well formed')
     )
 
     scenario(
-      'An unknown-procedure refusal without the membership list is not evidence',
-      Gherkin.Do.pipe(
-        Given('an unknown-procedure refusal that omits what the registry holds')(
-          'payload',
-          () => Effect.succeed({ _tag: 'UnknownProcedureError', id: 'nope' }),
-        ),
-        When('the refusal is read back')(
-          'outcome',
-          (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.UnknownProcedureError)(s.payload)),
-        ),
-        Then('the membership-less refusal is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
-        }),
-      ),
-    )
-
-    scenario(
       'A depth refusal without its ceiling is not evidence',
       Gherkin.Do.pipe(
         Given('a depth refusal that reports the depth but no ceiling')(
@@ -104,23 +87,6 @@ Feature('Keeping routing evidence well formed')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.DepthExceededError)(s.payload)),
         ),
         Then('the ceiling-less refusal is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
-        }),
-      ),
-    )
-
-    scenario(
-      'A duplicate-id refusal without the doubled id is not evidence',
-      Gherkin.Do.pipe(
-        Given('a duplicate-id refusal that names no id')(
-          'payload',
-          () => Effect.succeed({ _tag: 'DuplicateProcedureIdError' }),
-        ),
-        When('the refusal is read back')(
-          'outcome',
-          (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.DuplicateProcedureIdError)(s.payload)),
-        ),
-        Then('the id-less refusal is refused')(({ outcome }) => {
           expect(Result.isFailure(outcome)).toBe(true)
         }),
       ),

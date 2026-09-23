@@ -37,7 +37,7 @@ tags:
 
 ## Deciding criterion
 
-`REPO-O1` states the test directly: a member under `packages/` is owned outright, is not treated as a fork of an upstream, and does not defer to one. That is exactly the wanted relationship — upstream is a reference for reading, never an authority to merge from — and it is the relationship every existing fork here already has (`stryker-js`, `arethetypeswrong`, `effect-atom`, `effect-memfs`). `REPO-S3` reads the other way for the rejected candidate: a `repos/` subtree is defined by the edits it forbids.
+`REPO-O1` states the test directly: a member under `packages/` is owned outright, is not treated as a fork of an upstream, and does not defer to one. That is exactly the wanted relationship: the package is sovereign, upstream carries no weight for its API, tests or behaviour, and it is never a merge source. It is also the relationship every existing fork here already has (`stryker-js`, `arethetypeswrong`, `effect-atom`, `effect-memfs`). `REPO-S3` reads the other way for the rejected candidate: a `repos/` subtree is defined by the edits it forbids.
 
 Provenance stays legible in both directions: the package description and README carry a `forked from doeixd/discern` clause, and `packages/discern/AGENTS.md` carries the pinned commit.
 

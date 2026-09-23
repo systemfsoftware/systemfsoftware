@@ -15,14 +15,12 @@ import {
 const Feature = makeFeature({ it, layer })
 
 const inspect = Discern.Procedure.make({
-  id: 'inspect',
   description: 'Look at what a ticket is about',
   input: ReleaseTicket,
   run: (request) => Effect.succeed(`inspected:${request.ask}`),
 })
 
 const deploy = Discern.Procedure.make({
-  id: 'deploy',
   description: 'Release the change described by a ticket',
   input: ReleaseTicket,
   eligible: (request) => request.environment !== 'local',
@@ -30,35 +28,33 @@ const deploy = Discern.Procedure.make({
 })
 
 const escalate = Discern.Procedure.make({
-  id: 'escalate',
   description: 'Hand the ticket to a human',
   input: ReleaseTicket,
   run: () => Effect.succeed('escalated'),
 })
 
 const rollback = Discern.Procedure.make({
-  id: 'rollback',
   description: 'Undo the last release',
   input: ReleaseTicket,
   eligible: (request) => request.environment !== 'local',
   run: () => Effect.succeed('rolled-back'),
 })
 
-const projected = Discern.Procedure.registry(ReleaseTicket, [inspect, deploy, rollback], {
+const projected = Discern.Procedure.registry(ReleaseTicket, { inspect, deploy, rollback }, {
   routeBy: { schema: Schema.String, select: (request) => request.ask },
 })
 
-const whole = Discern.Procedure.registry(ReleaseTicket, [inspect, deploy, rollback])
+const whole = Discern.Procedure.registry(ReleaseTicket, { inspect, deploy, rollback })
 
-const offering = Discern.Procedure.registry(ReleaseTicket, [inspect, deploy, rollback, escalate], {
+const offering = Discern.Procedure.registry(ReleaseTicket, { inspect, deploy, rollback, escalate }, {
   routeBy: { schema: Schema.String, select: (request) => request.ask },
 })
 
-const releases = Discern.Procedure.registry(ReleaseTicket, [deploy, rollback], {
+const releases = Discern.Procedure.registry(ReleaseTicket, { deploy, rollback }, {
   routeBy: { schema: Schema.String, select: (request) => request.ask },
 })
 
-const onlyInspect = Discern.Procedure.registry(ReleaseTicket, [deploy, inspect], {
+const onlyInspect = Discern.Procedure.registry(ReleaseTicket, { deploy, inspect }, {
   routeBy: { schema: Schema.String, select: (request) => request.ask },
 })
 

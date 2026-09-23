@@ -44,5 +44,16 @@ export const replayObservations = Sandwich.named('discern.model.replay')(readRep
         usage: response.usage,
       })),
     RecordingMissing: (refusal, _read) => Effect.fail(refusal),
-    CommandRejected: (rejected, _read) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
+    CommandRejected: (rejected, read) =>
+      Effect.fail(
+        AiError.make({
+          module: 'Discern',
+          method: 'replaying',
+          reason: new AiError.InvalidRequestError({
+            description:
+              `Discern refused a replay with onMissing "${read.onMissing}" for ${read.hitIds.length} recorded and ${read.missing.length} missing decisions: ` +
+              rejected.issue,
+          }),
+        }),
+      ),
   })

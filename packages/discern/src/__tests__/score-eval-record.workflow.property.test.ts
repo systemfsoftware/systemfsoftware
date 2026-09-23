@@ -5,7 +5,10 @@ import { type EvalScore, ScoreEvalRecord, scoreEvalRecord } from '../score-eval-
 import { PatternStatus } from '../Verdict.schema.js'
 
 const cellOf = (expected: boolean, status: PatternStatus): EvalScore =>
-  Result.getOrThrow(scoreEvalRecord(new ScoreEvalRecord({ expected, status })))
+  Result.match(scoreEvalRecord(new ScoreEvalRecord({ expected, status })), {
+    onFailure: (missing: never) => missing,
+    onSuccess: (cell) => cell,
+  })
 
 const cellNameOf = (decision: EvalScore): string =>
   Match.value(decision).pipe(

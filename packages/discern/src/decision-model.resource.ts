@@ -12,7 +12,7 @@ import type { BudgetExhausted } from './admit-budget-charge.workflow.js'
 import { chargeBudgetCall } from './budget-provider.cell.js'
 import type { Budget } from './budget.handle.js'
 import { cacheObservations } from './cache-provider.cell.js'
-import { type ObservationStore, store } from './observation-store.handle.js'
+import { get, isObservationStore, type ObservationStore, set, store } from './observation-store.handle.js'
 import { Observation, Observations, ProviderAnswer } from './Observation.schema.js'
 import { CurrentRegion } from './region.service.js'
 import { replayObservations } from './replay-provider.cell.js'
@@ -26,7 +26,6 @@ export const DiscernMethod = {
   budgeted: 'budgeted',
   refusing: 'refusing',
 } as const
-
 const DISCERN_MODULE = 'Discern'
 
 const discernFailure = (method: string, reason: AiError.AiErrorReason): AiError.AiError =>
@@ -48,10 +47,6 @@ const replayMissFailure = (refusal: (typeof RecordingMissing)['Encoded']): AiErr
 
 const cacheFailure = (refusal: (typeof RecordingMissing)['Encoded']): AiError.AiError =>
   discernFailure(DiscernMethod.caching, new AiError.InvalidRequestError({ description: refusal.detail }))
-
-const commandRejectedFailure = (reason: AiError.AiErrorReason): AiError.AiError =>
-  discernFailure(DiscernMethod.refusing, reason)
-
 const limitEntryOf = (key: 'maxDecisions' | 'maxCalls', limit: number | undefined): Record<string, number> =>
   Option.match(Option.fromUndefinedOr(limit), {
     onNone: () => ({}),
@@ -181,19 +176,24 @@ const placementsOf = (
   decisions: Readonly<Record<string, Decision.Any>>,
   state: Schema.Json,
   lookup: ObservationStore | undefined,
-): ReadonlyArray<Placement> =>
-  Object.entries(decisions).map(([id, decision]) => {
-    const address = observationAddress(decision, state)
-    return { id, decision, recorded: lookup?.get(address) }
-  })
+): Effect.Effect<ReadonlyArray<Placement>> =>
+  lookup === undefined
+    ? Effect.succeed(
+      Object.entries(decisions).map(([id, decision]): Placement => ({ id, decision, recorded: undefined })),
+    )
+    : Effect.forEach(Object.entries(decisions), ([id, decision]) =>
+      Effect.map(get(lookup, observationAddress(decision, state)), (recorded): Placement => ({
+        id,
+        decision,
+        recorded: Option.getOrUndefined(recorded),
+      })))
 
 const splitObservations = (
   decisions: Readonly<Record<string, Decision.Any>>,
   state: Schema.Json,
   lookup: ObservationStore | undefined,
-): ObservationSplit => {
-  const placements = placementsOf(decisions, state, lookup)
-  return {
+): Effect.Effect<ObservationSplit> =>
+  Effect.map(placementsOf(decisions, state, lookup), (placements): ObservationSplit => ({
     hits: Object.fromEntries(
       placements.filter(isRecorded).map((placement): readonly [string, ProviderAnswer] => [
         placement.id,
@@ -205,8 +205,7 @@ const splitObservations = (
         .filter((placement) => !isRecorded(placement))
         .map((placement): readonly [string, Decision.Any] => [placement.id, placement.decision]),
     ),
-  }
-}
+  }))
 
 const observationOf = (
   decisionId: string,
@@ -228,12 +227,17 @@ const recordAnswers = (
   state: Schema.Json,
   answers: Readonly<Record<string, ProviderAnswer>>,
   regionPath: ReadonlyArray<string>,
-): void =>
-  Object.entries(answers).forEach(([id, answer]) => {
-    const decision = decisions[id]
-    if (decision === undefined) return
-    into.set(observationAddress(decision, state), observationOf(id, decision, regionPath, answer))
-  })
+): Effect.Effect<void> =>
+  Effect.forEach(
+    Object.entries(answers),
+    ([id, answer]) => {
+      const decision = decisions[id]
+      return decision === undefined
+        ? Effect.void
+        : set(into, observationAddress(decision, state), observationOf(id, decision, regionPath, answer))
+    },
+    { discard: true },
+  )
 
 /**
  * A `DecisionModel` decorator. Interceptors are listed outermost-first, so in
@@ -253,20 +257,16 @@ export const provider = (decide: Provider['decide']): Provider => ({ decide })
 const asStore = (source: Observations | ObservationStore): ObservationStore =>
   'entries' in source ? store(source) : source
 
-/**
- * Record every answer the model gives, keyed by content address. A plain
- * decorator: it has no outcome branch, so it only filters the answer record the
- * model returned.
- */
 export const recording = (into: ObservationStore): Interceptor => (inner) =>
   provider((options) =>
     Effect.flatMap(
       CurrentRegion.useSync((path) => path),
       (regionPath) =>
-        Effect.map(inner.decide(options), (response) => {
-          recordAnswers(into, options.decisions, options.state, response.answers, regionPath)
-          return response
-        }),
+        Effect.flatMap(inner.decide(options), (response) =>
+          Effect.as(
+            recordAnswers(into, options.decisions, options.state, response.answers, regionPath),
+            response,
+          )),
     )
   )
 
@@ -295,25 +295,21 @@ export const replaying: {
   (options?: ReplayOptions): (source: Observations | ObservationStore) => Interceptor
   (source: Observations | ObservationStore, options?: ReplayOptions): Interceptor
 } = dual(
-  (args: IArguments) => 'entries' in args[0] || 'get' in args[0],
+  (args: IArguments) => 'entries' in args[0] || isObservationStore(args[0]),
   (source: Observations | ObservationStore, options?: ReplayOptions): Interceptor => {
     const lookup = asStore(source)
     const onMissing = onMissingOf(options)
     return (inner) =>
       provider((request) =>
-        replayObservations
-          .run({
-            options: request,
-            inner,
-            split: splitObservations(request.decisions, request.state, lookup),
-            onMissing,
-          })
-          .pipe(
-            Effect.catchTags({
-              RecordingMissing: (refusal) => Effect.fail(replayMissFailure(refusal)),
-              InvalidRequestError: (reason) => commandRejectedFailure(reason).pipe(Effect.fail),
-            }),
-          )
+        Effect.flatMap(
+          splitObservations(request.decisions, request.state, lookup),
+          (split) =>
+            replayObservations
+              .run({ options: request, inner, split, onMissing })
+              .pipe(
+                Effect.catchTag('RecordingMissing', (refusal) => Effect.fail(replayMissFailure(refusal))),
+              ),
+        )
       )
   },
 )
@@ -325,19 +321,20 @@ export const replaying: {
  */
 export const caching = (into: ObservationStore): Interceptor => (inner) =>
   provider((request) =>
-    cacheObservations
-      .run({
-        options: request,
-        inner,
-        split: splitObservations(request.decisions, request.state, into),
-        record: (answers, regionPath) => recordAnswers(into, request.decisions, request.state, answers, regionPath),
-      })
-      .pipe(
-        Effect.catchTags({
-          RecordingMissing: (refusal) => Effect.fail(cacheFailure(refusal)),
-          InvalidRequestError: (reason) => commandRejectedFailure(reason).pipe(Effect.fail),
-        }),
-      )
+    Effect.flatMap(
+      splitObservations(request.decisions, request.state, into),
+      (split) =>
+        cacheObservations
+          .run({
+            options: request,
+            inner,
+            split,
+            record: (answers, regionPath) => recordAnswers(into, request.decisions, request.state, answers, regionPath),
+          })
+          .pipe(
+            Effect.catchTag('RecordingMissing', (refusal) => Effect.fail(cacheFailure(refusal))),
+          ),
+    )
   )
 
 /**
@@ -347,10 +344,7 @@ export const caching = (into: ObservationStore): Interceptor => (inner) =>
 export const budgeted = (limit: Budget): Interceptor => (inner) =>
   provider((request) =>
     chargeBudgetCall.run({ options: request, inner, budget: limit }).pipe(
-      Effect.catchTags({
-        BudgetExhausted: (refusal) => Effect.fail(budgetExceededFailure(refusal)),
-        InvalidRequestError: (reason) => commandRejectedFailure(reason).pipe(Effect.fail),
-      }),
+      Effect.catchTag('BudgetExhausted', (refusal) => Effect.fail(budgetExceededFailure(refusal))),
     )
   )
 

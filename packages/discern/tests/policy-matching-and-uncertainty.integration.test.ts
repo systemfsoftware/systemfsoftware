@@ -1,6 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Array as Arr, Cause, Effect, Exit, Match, Schema } from 'effect'
+import { Array as Arr, Effect, Match, Schema } from 'effect'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import { expect } from 'vitest'
 import {
@@ -110,9 +110,23 @@ const collidingAfter = Change.probability({ id: 'risk', instructions: 'Something
 
 const isUncertainRefusal = Schema.is(Discern.UncertainMatchError)
 
-const refusalOf = (failure: AiError.AiError | Discern.UncertainMatchError): Discern.UncertainMatchError | undefined =>
-  isUncertainRefusal(failure) ? failure : undefined
-
+const refusalOf = (
+  failure:
+    | AiError.AiError
+    | Discern.DecisionIdCollisionError
+    | Discern.InvalidThresholdError
+    | Discern.PolicyCommandRejected
+    | Discern.UncertainMatchError,
+): Discern.UncertainMatchError | undefined => (isUncertainRefusal(failure) ? failure : undefined)
+const crossedBounds = changeImpact.is('breaking', { match: 0.8, miss: 0.9 })
+const crossedPolicy = Discern.type(Schema.String).pipe(
+  Discern.when(crossedBounds, () => 'block'),
+  Discern.orElse(() => 'ship'),
+)
+const collidingPolicy = Discern.type(Schema.String).pipe(
+  Discern.when(Discern.and(collidingBefore.above(0.8), collidingAfter.above(0.8)), () => 'block'),
+  Discern.orElse(() => 'ship'),
+)
 Feature('Reviewing changes with semantic policies')
   .withScenarioLayer(answering(probabilityEverywhere(0.99)))
   .body(({ scenario }) => {
@@ -266,18 +280,43 @@ Feature('Reviewing changes with semantic policies')
     scenario(
       'Two questions sharing one id but describing different things cannot coexist',
       Gherkin.Do.pipe(
-        Given('a question bank where two entries share one id')('none', () => Effect.void),
-        When('a policy combines both into one condition')(
-          'outcome',
-          () => Effect.exit(Effect.sync(() => Discern.and(collidingBefore.above(0.8), collidingAfter.above(0.8)))),
+        Given('a policy whose condition asks the same id two different things')(
+          'policy',
+          () => Effect.succeed(collidingPolicy),
         ),
-        Then('the condition is refused, naming the shared id')(({ outcome }) => {
-          expect(
-            Exit.match(outcome, {
-              onSuccess: () => undefined,
-              onFailure: (cause) => Cause.squash(cause),
-            }),
-          ).toMatchObject({ _tag: 'DecisionIdCollisionError', decisionId: 'risk' })
+        When('a change is judged')('outcome', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            return yield* Effect.flip(withProvider(s.policy('change'), model.model))
+          })),
+        Then('the run is refused, naming the shared id')(({ outcome }) => {
+          expect(outcome).toMatchObject({ _tag: 'DecisionIdCollisionError', decisionId: 'risk' })
+        }),
+      ),
+    )
+
+    scenario(
+      'A reviewer whose miss bound sits past the match bound cannot judge',
+      Gherkin.Do.pipe(
+        Given('a policy whose question treats a miss as stricter than a match')(
+          'policy',
+          () => Effect.succeed(crossedPolicy),
+        ),
+        When('a change is judged')('outcome', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            const outcome = yield* Effect.flip(withProvider(s.policy('change'), model.model))
+            const asked = model.calls()
+            return { outcome, asked }
+          })),
+        Then('the run is refused, naming the crossed bounds, and the model is never asked')(({ outcome }) => {
+          expect(outcome.outcome).toMatchObject({
+            _tag: 'InvalidThresholdError',
+            threshold: 'miss',
+            value: 0.9,
+            limit: 0.8,
+          })
+          expect(outcome.asked).toBe(0)
         }),
       ),
     )

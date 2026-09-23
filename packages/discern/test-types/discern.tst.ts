@@ -1,5 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import * as Effect from 'effect/Effect'
+import { pipe } from 'effect/Function'
 import * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -152,6 +153,20 @@ describe('the finished reusable matcher', () => {
   it('Should_AcceptTheInput_When_TheTraceIsRequested', () => {
     expect(matcher.runWithTrace).type.toBeCallableWith('change')
   })
+
+  it('Should_TraceTheSameRun_When_TheStandaloneRunWithTraceIsUsedInEitherDirection', () => {
+    expect(Discern.runWithTrace(matcher, 'change')).type.toBe<
+      Discern.PolicyTraced<string | number | boolean, never, never, typeof Schema.String>
+    >()
+    expect(pipe(matcher, Discern.runWithTrace('change'))).type.toBe<
+      Discern.PolicyTraced<string | number | boolean, never, never, typeof Schema.String>
+    >()
+  })
+
+  it('Should_RejectAnInputOfAnotherType_When_TheStandaloneRunWithTraceIsCalled', () => {
+    expect(Discern.runWithTrace).type.toBeCallableWith(matcher, 'change')
+    expect(Discern.runWithTrace).type.not.toBeCallableWith(matcher, 42)
+  })
 })
 
 describe('the exhaustive classification match', () => {
@@ -175,7 +190,15 @@ describe('the exhaustive classification match', () => {
 describe('the immediate value match', () => {
   it('Should_YieldAnEffect_When_TheValueFlavorIsFinished', () => {
     expect(immediate).type.toBe<
-      Effect.Effect<string, AiError.AiError | Discern.UncertainMatchError, DecisionModel.DecisionModel>
+      Effect.Effect<
+        string,
+        | AiError.AiError
+        | Discern.DecisionIdCollisionError
+        | Discern.InvalidThresholdError
+        | Discern.PolicyCommandRejected
+        | Discern.UncertainMatchError,
+        DecisionModel.DecisionModel
+      >
     >()
   })
 })
@@ -248,15 +271,66 @@ describe('the DecisionModel middleware', () => {
     ])
   })
 
-  it('Should_AcceptASnapshotOrALiveStore_When_AReplayLayerIsBuilt', () => {
-    expect(Discern.Model.replayLayer).type.toBeCallableWith(observations.snapshot())
+  it('Should_AcceptALiveStore_When_AReplayLayerIsBuilt', () => {
     expect(Discern.Model.replayLayer).type.toBeCallableWith(observations)
+  })
+
+  it('Should_RejectAnUnawaitedSnapshot_When_AReplayLayerIsBuilt', () => {
+    expect(Discern.Model.replayLayer).type.not.toBeCallableWith(Discern.Model.snapshot(observations))
   })
 
   it('Should_DropDecisionModelFromR_When_APolicyRunsOnAReplayLayer', () => {
     expect(Effect.provide(matcher('change'), Discern.Model.replayLayer(observations))).type.toBe<
-      Effect.Effect<string | number | boolean, AiError.AiError | Discern.UncertainMatchError, never>
+      Effect.Effect<
+        string | number | boolean,
+        | AiError.AiError
+        | Discern.DecisionIdCollisionError
+        | Discern.InvalidThresholdError
+        | Discern.PolicyCommandRejected
+        | Discern.UncertainMatchError,
+        never
+      >
     >()
+  })
+})
+
+describe('the dual counterpart every decision kind exposes', () => {
+  it('Should_BuildTheSamePattern_When_AClassifyDualIsUsedInEitherDirection', () => {
+    expect(impact.pipe(Discern.is('breaking'))).type.toBe<Discern.Pattern<string>>()
+    expect(Discern.is(impact, 'breaking', { match: 0.8 })).type.toBe<Discern.Pattern<string>>()
+  })
+
+  it('Should_RejectAnUnknownLabel_When_TheClassifyDualIsCalled', () => {
+    expect(Discern.is).type.not.toBeCallableWith(impact, 'critical')
+  })
+
+  it('Should_BuildTheSamePattern_When_AProbabilityDualIsUsedInEitherDirection', () => {
+    expect(risky.pipe(Discern.above(0.8))).type.toBe<Discern.Pattern<string>>()
+    expect(Discern.above(risky, 0.8, { missBelow: 0.5 })).type.toBe<Discern.Pattern<string>>()
+  })
+
+  it('Should_RejectAWordThreshold_When_TheProbabilityDualIsCalled', () => {
+    expect(Discern.above).type.not.toBeCallableWith(risky, 'high')
+  })
+
+  it('Should_BuildTheSamePattern_When_ARateDualIsUsedInEitherDirection', () => {
+    expect(severe.pipe(Discern.atLeast('medium'))).type.toBe<Discern.Pattern<string>>()
+    expect(Discern.atLeast(severe, 'medium')).type.toBe<Discern.Pattern<string>>()
+  })
+
+  it('Should_RejectAnUnknownLevel_When_TheRateDualIsCalled', () => {
+    expect(Discern.atLeast).type.not.toBeCallableWith(severe, 'critical')
+  })
+
+  it('Should_InterpretANode_When_WhereAndWhereResultAreUsed', () => {
+    expect(Discern.where(scopedImpact, (answer) => answer.label === 'none')).type.toBe<Discern.Pattern<string>>()
+    expect(scopedImpact.pipe(Discern.whereResult(() => Discern.matched()))).type.toBe<Discern.Pattern<string>>()
+  })
+
+  it('Should_ReadAPattern_When_EvaluateAndPreviewAreCalled', () => {
+    const question = Discern.and(impact.is('breaking'), risky.above(0.8))
+    expect(Discern.preview(question, 'change')).type.toBe<Discern.Preview>()
+    expect(Discern.evaluate(question, 'change', {})).type.toBe<Discern.PatternResult>()
   })
 })
 

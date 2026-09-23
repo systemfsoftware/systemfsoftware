@@ -16,18 +16,9 @@ import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
 import type * as Decision from 'effect/unstable/ai/Decision'
 import { hash } from './decision-model.resource.js'
-import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import type { PatternAst } from './PatternAst.schema.js'
 import { PatternMatched, PatternMissed, PatternUncertain } from './Verdict.schema.js'
 import type { PatternResult, PatternStatus } from './Verdict.schema.js'
-
-/**
- * The input type an input-agnostic node or pattern accepts. The typing
- * protocol's sanctioned top type: `unknown` appears only as this alias's
- * generic default, so an unscoped constructor can fill an input slot without
- * writing `unknown`.
- */
-export type Top<Input = unknown> = Input
 
 /** The validated answers one observation batch returned, keyed by decision id. */
 export type Answers = Readonly<Record<string, Decision.Answer<Decision.Any>>>
@@ -56,7 +47,7 @@ export interface DecisionNode<
   in Input = unknown,
   D extends Decision.Any = Decision.Any,
   S extends Schema.Constraint | undefined = undefined,
-> extends NodeCore {
+> extends NodeCore, Pipeable {
   readonly decision: D
   readonly schema: S
   /** A binary custom interpretation. Prefer `whereResult` when uncertainty matters. */
@@ -74,16 +65,49 @@ export interface Preview {
   readonly decisions: ReadonlyArray<NodeCore>
 }
 
+/** The bounds a caller crossed when naming thresholds, carried to the run that evaluates the leaf. */
+export interface PatternRefusal {
+  readonly threshold: string
+  readonly value: number
+  readonly limit: number
+  readonly message: string
+}
+
 /** A composable, three-valued predicate over one input. */
 export interface Pattern<in Input = never> extends Pipeable {
   readonly [PatternTypeId]: typeof PatternTypeId
+  readonly [PatternEvaluatorTypeId]: PatternEvaluator<Input>
   readonly id: string
   readonly decisions: ReadonlyArray<NodeCore>
   readonly ast: PatternAst
+  /** Thresholds a caller crossed building this pattern; the run refuses instead of judging. */
+  readonly refusals: ReadonlyArray<PatternRefusal>
+}
+
+/** The evaluation closures a pattern carries; reached only through {@link evaluate} and {@link preview}. */
+export interface PatternEvaluator<in Input = never> {
   readonly evaluate: (input: Input, answers: Answers) => PatternResult
   readonly preview: (input: Input) => Preview
 }
 
+/** Resolve one pattern for one input against already-observed answers. */
+export const evaluate: {
+  <Input>(input: Input, answers: Answers): (self: Pattern<Input>) => PatternResult
+  <Input>(self: Pattern<Input>, input: Input, answers: Answers): PatternResult
+} = dual(
+  3,
+  <Input>(self: Pattern<Input>, input: Input, answers: Answers): PatternResult =>
+    self[PatternEvaluatorTypeId].evaluate(input, answers),
+)
+
+/** Resolve what the deterministic structure of one pattern already settles for one input. */
+export const preview: {
+  <Input>(input: Input): (self: Pattern<Input>) => Preview
+  <Input>(self: Pattern<Input>, input: Input): Preview
+} = dual(
+  2,
+  <Input>(self: Pattern<Input>, input: Input): Preview => self[PatternEvaluatorTypeId].preview(input),
+)
 /** What a case handler may return: a bare value or an Effect producing one. */
 export type HandlerResult<Value, Err, Req> = Value | Effect.Effect<Value, Err, Req>
 
@@ -94,6 +118,8 @@ export interface UncertainContext {
 }
 
 const PatternTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Pattern')
+
+const PatternEvaluatorTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Pattern/evaluator')
 
 // -------------------------------------------------------------------------------------------------
 // Verdict constructors
@@ -169,10 +195,6 @@ const settledOn = (parts: ReadonlyArray<Preview>, status: PatternStatus): Option
 const unanimousOn = (parts: ReadonlyArray<Preview>, status: PatternStatus): boolean =>
   Arr.every(parts, (part) => statusIs(part.resolved, status))
 
-/** How a composition resolves when one settlement dominates the composition. */
-const settledKindOf = (settled: Option.Option<PatternResult>): 'settled' | 'open' =>
-  Option.isSome(settled) ? 'settled' : 'open'
-
 /** How a composition resolves when unanimity decides it. */
 const unanimousKindOf = (unanimous: boolean): 'unanimous' | 'open' => (unanimous ? 'unanimous' : 'open')
 
@@ -183,18 +205,16 @@ const composedPreview = <Input>(
   unanimous: PatternStatus,
   unanimousVerdict: PatternResult,
 ): Preview => {
-  const parts = Arr.map(patterns, (pattern) => pattern.preview(input))
-  const settled = settledOn(parts, dominant)
-  return Match.value(settledKindOf(settled)).pipe(
-    Match.when('settled', () => settled.pipe(Option.getOrThrow, settledPreview)),
-    Match.when('open', () =>
+  const parts = Arr.map(patterns, (pattern) => preview(pattern, input))
+  return Option.match(settledOn(parts, dominant), {
+    onNone: () =>
       Match.value(unanimousKindOf(unanimousOn(parts, unanimous))).pipe(
         Match.when('unanimous', () => settledPreview(unanimousVerdict)),
         Match.when('open', () => openPreview(distinctNodes(Arr.flatMap(parts, undecidedOf)))),
         Match.exhaustive,
-      )),
-    Match.exhaustive,
-  )
+      ),
+    onSome: (resolved) => settledPreview(resolved),
+  })
 }
 
 const andPreview = <Input>(patterns: ReadonlyArray<Pattern<Input>>, input: Input): Preview =>
@@ -211,58 +231,68 @@ const makePattern = <Input>(parts: {
   readonly id: string
   readonly decisions: ReadonlyArray<NodeCore>
   readonly ast: PatternAst
+  readonly refusals: ReadonlyArray<PatternRefusal>
   readonly evaluate: (input: Input, answers: Answers) => PatternResult
   readonly preview: (input: Input) => Preview
 }): Pattern<Input> => ({
   [PatternTypeId]: PatternTypeId,
-  ...parts,
+  [PatternEvaluatorTypeId]: { evaluate: parts.evaluate, preview: parts.preview },
+  id: parts.id,
+  decisions: parts.decisions,
+  ast: parts.ast,
+  refusals: parts.refusals,
   ...Prototype,
 })
 
 export interface SemanticLeafOptions {
+  readonly node: NodeCore
   readonly id: string
   readonly description: string | undefined
   readonly resolve: (answers: Answers) => PatternResult
+  readonly refusals?: ReadonlyArray<PatternRefusal> | undefined
 }
 
-/**
- * A semantic leaf over one decision node, resolved by decoding the batch entry
- * through the node's own answer check. `resolve` receives the node's validated
- * answer; a missing or undecodable entry never reaches it.
- */
-export const semanticLeaf: {
-  <Input>(options: SemanticLeafOptions): (node: NodeCore) => Pattern<Input>
-  <Input>(node: NodeCore, options: SemanticLeafOptions): Pattern<Input>
-} = dual(
-  2,
-  <Input>(node: NodeCore, options: SemanticLeafOptions): Pattern<Input> =>
-    makePattern({
-      id: options.id,
-      decisions: [node],
-      ast: { kind: 'Semantic', id: options.id, decisionId: node.id, description: options.description },
-      evaluate: (_input, answers) => options.resolve(answers),
-      preview: () => openPreview([node]),
-    }),
-)
+export const semanticLeaf = <Input>(options: SemanticLeafOptions): Pattern<Input> =>
+  makePattern({
+    id: options.id,
+    decisions: [options.node],
+    ast: { kind: 'Semantic', id: options.id, decisionId: options.node.id, description: options.description },
+    refusals: options.refusals ?? [],
+    evaluate: (_input, answers) => options.resolve(answers),
+    preview: () => openPreview([options.node]),
+  })
 
-const keepDistinct = (previous: NodeCore, node: NodeCore): NodeCore =>
-  previous.fingerprint === node.fingerprint ? previous : collide(node.id)
-
-const keepOne = (previous: NodeCore | undefined, node: NodeCore): NodeCore =>
-  previous === undefined ? node : keepDistinct(previous, node)
-
-const collide = (decisionId: string): never => {
-  throw new DecisionIdCollisionError({ decisionId })
-}
+const keepFirst = (previous: NodeCore | undefined, node: NodeCore): NodeCore => previous === undefined ? node : previous
 
 /**
- * Collapse decision nodes that share an id, refusing a differing definition:
- * one decision id must mean one definition, or the recorded observations of
- * the two would be indistinguishable.
+ * Collapse decision nodes that repeat exactly (same id and fingerprint), and
+ * keep everything else — including a repeated id whose definitions differ, so
+ * the observation batch that is built from these nodes can refuse the
+ * collision by id (`decisionsOf` in decision.resource.ts). One decision id
+ * must mean one definition, or the recorded observations of the two would be
+ * indistinguishable.
  */
 export const distinctNodes = (nodes: ReadonlyArray<NodeCore>): ReadonlyArray<NodeCore> => {
+  const seen = new Set<string>()
+  const kept: Array<NodeCore> = []
+  const keepNew = (node: NodeCore): void => {
+    const identity = `${node.id}\u0000${node.fingerprint}`
+    if (seen.has(identity)) return
+    seen.add(identity)
+    kept.push(node)
+  }
+  nodes.forEach(keepNew)
+  return kept
+}
+
+/**
+ * Collapse decision nodes that share an id, keeping the first of every id.
+ * Used where the observation record is built so a repeated definition is
+ * refused with the colliding id instead of silently winning.
+ */
+export const distinctFirstById = (nodes: ReadonlyArray<NodeCore>): ReadonlyArray<NodeCore> => {
   const byId = new Map<string, NodeCore>()
-  for (const node of nodes) byId.set(node.id, keepOne(byId.get(node.id), node))
+  for (const node of nodes) byId.set(node.id, keepFirst(byId.get(node.id), node))
   return [...byId.values()]
 }
 
@@ -299,42 +329,56 @@ const negate = (result: PatternResult): PatternResult =>
     Match.when('Uncertain', () => result),
     Match.exhaustive,
   )
-
 /** Kleene-style three-valued AND: `Miss` dominates; otherwise `Uncertain` dominates. */
-export const and = <Input>(...patterns: ReadonlyArray<Pattern<Input>>): Pattern<Input> =>
+export const and = <Input>(...patterns: ReadonlyArray<Pattern<Input>>): Pattern<Input> => andAll(patterns)
+
+/** Kleene-style three-valued AND over an explicit pattern list: `Miss` dominates; otherwise `Uncertain` dominates. */
+export const andAll = <Input>(patterns: ReadonlyArray<Pattern<Input>>): Pattern<Input> =>
   makePattern({
     id: `and_${hash(Arr.map(patterns, (pattern) => pattern.id))}`,
     decisions: distinctDecisions(patterns),
     ast: { kind: 'And', patterns: Arr.map(patterns, (pattern) => pattern.ast) },
-    evaluate: (input, answers) => andResult(Arr.map(patterns, (pattern) => pattern.evaluate(input, answers))),
+    refusals: Arr.flatMap(patterns, (pattern) => pattern.refusals),
+    evaluate: (input, answers) => andResult(Arr.map(patterns, (pattern) => evaluate(pattern, input, answers))),
     preview: (input) => andPreview(patterns, input),
   })
 
 /** Kleene-style three-valued OR: `Match` dominates; otherwise `Uncertain` dominates. */
-export const or = <Input>(...patterns: ReadonlyArray<Pattern<Input>>): Pattern<Input> =>
+export const or = <Input>(...patterns: ReadonlyArray<Pattern<Input>>): Pattern<Input> => orAll(patterns)
+
+/** Kleene-style three-valued OR over an explicit pattern list: `Match` dominates; otherwise `Uncertain` dominates. */
+export const orAll = <Input>(patterns: ReadonlyArray<Pattern<Input>>): Pattern<Input> =>
   makePattern({
     id: `or_${hash(Arr.map(patterns, (pattern) => pattern.id))}`,
     decisions: distinctDecisions(patterns),
     ast: { kind: 'Or', patterns: Arr.map(patterns, (pattern) => pattern.ast) },
-    evaluate: (input, answers) => orResult(Arr.map(patterns, (pattern) => pattern.evaluate(input, answers))),
+    refusals: Arr.flatMap(patterns, (pattern) => pattern.refusals),
+    evaluate: (input, answers) => orResult(Arr.map(patterns, (pattern) => evaluate(pattern, input, answers))),
     preview: (input) => orPreview(patterns, input),
   })
 
 const notPreview = <Input>(self: Pattern<Input>, input: Input): Preview => {
-  const inner = self.preview(input)
+  const inner = preview(self, input)
   return Option.match(Option.fromNullishOr(inner.resolved), {
     onNone: () => inner,
     onSome: (resolved) => settledPreview(negate(resolved)),
   })
 }
 
-/** Negation preserves `Uncertain` and swaps `Match` and `Miss`. */
-export const not = <Input>(self: Pattern<Input>): Pattern<Input> =>
+/**
+ * Negation preserves `Uncertain` and swaps `Match` and `Miss`.
+ *
+ * The public `not` lives in decision.resource.ts, where the classification
+ * reading of `not(node, label)` is decided beside the node's own answer
+ * check; this is its pattern half.
+ */
+export const notPattern = <Input>(self: Pattern<Input>): Pattern<Input> =>
   makePattern({
     id: `not_${self.id}`,
     decisions: self.decisions,
     ast: { kind: 'Not', pattern: self.ast },
-    evaluate: (input, answers) => negate(self.evaluate(input, answers)),
+    refusals: self.refusals,
+    evaluate: (input, answers) => negate(evaluate(self, input, answers)),
     preview: (input) => notPreview(self, input),
   })
 
@@ -361,44 +405,9 @@ export const deterministic: {
       id,
       decisions: [],
       ast: { kind: 'Deterministic', id, description: opts.description },
+      refusals: [],
       evaluate: (input) => (guard(input) ? matched() : missed()),
       preview: (input) => settledPreview(guard(input) ? matched() : missed()),
     })
   },
 )
-
-/** Aliases that read naturally next to Effect `Predicate` and `Match` terminology. */
-export const predicate = deterministic
-export const structural = deterministic
-
-// -------------------------------------------------------------------------------------------------
-// Direct refinements
-// -------------------------------------------------------------------------------------------------
-
-/** Build a binary semantic refinement directly from a decision node. */
-export const refine: {
-  <Input, D extends Decision.Any, S extends Schema.Constraint | undefined>(
-    self: DecisionNode<Input, D, S>,
-    predicate: (answer: Decision.Answer<D>) => boolean,
-  ): Pattern<Input>
-  <D extends Decision.Any>(
-    predicate: (answer: Decision.Answer<D>) => boolean,
-  ): <Input, S extends Schema.Constraint | undefined>(self: DecisionNode<Input, D, S>) => Pattern<Input>
-} = dual(2, <Input, D extends Decision.Any, S extends Schema.Constraint | undefined>(
-  self: DecisionNode<Input, D, S>,
-  predicate: (answer: Decision.Answer<D>) => boolean,
-): Pattern<Input> => self.where(predicate))
-
-/** Build a tri-state semantic refinement directly from a decision node. */
-export const refineResult: {
-  <Input, D extends Decision.Any, S extends Schema.Constraint | undefined>(
-    self: DecisionNode<Input, D, S>,
-    resolve: (answer: Decision.Answer<D>) => PatternResult,
-  ): Pattern<Input>
-  <D extends Decision.Any>(
-    resolve: (answer: Decision.Answer<D>) => PatternResult,
-  ): <Input, S extends Schema.Constraint | undefined>(self: DecisionNode<Input, D, S>) => Pattern<Input>
-} = dual(2, <Input, D extends Decision.Any, S extends Schema.Constraint | undefined>(
-  self: DecisionNode<Input, D, S>,
-  resolve: (answer: Decision.Answer<D>) => PatternResult,
-): Pattern<Input> => self.whereResult(resolve))

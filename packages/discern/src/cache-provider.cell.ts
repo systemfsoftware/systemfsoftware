@@ -15,7 +15,7 @@ export interface CacheRequest {
   readonly record: (
     answers: Readonly<Record<string, ProviderAnswer>>,
     regionPath: ReadonlyArray<string>,
-  ) => void
+  ) => Effect.Effect<void>
 }
 
 export type CacheRead = (typeof SelectObservationSource)['Encoded'] & {
@@ -23,7 +23,10 @@ export type CacheRead = (typeof SelectObservationSource)['Encoded'] & {
   readonly missingDecisions: Readonly<Record<string, Decision.Any>>
   readonly state: DecisionModel.ProviderOptions['state']
   readonly inner: Provider
-  readonly record: (answers: Readonly<Record<string, ProviderAnswer>>, regionPath: ReadonlyArray<string>) => void
+  readonly record: (
+    answers: Readonly<Record<string, ProviderAnswer>>,
+    regionPath: ReadonlyArray<string>,
+  ) => Effect.Effect<void>
 }
 
 const readCache = (request: CacheRequest): Effect.Effect<CacheRead> =>
@@ -43,13 +46,14 @@ const askAndRecord = (read: CacheRead): Effect.Effect<DecisionModel.ProviderResp
   Effect.flatMap(
     CurrentRegion.useSync((path) => path),
     (regionPath) =>
-      Effect.map(read.inner.decide({ state: read.state, decisions: read.missingDecisions }), (response) => {
-        read.record(response.answers, regionPath)
-        return {
-          answers: { ...read.hits, ...response.answers },
-          usage: response.usage,
-        }
-      }),
+      Effect.flatMap(
+        read.inner.decide({ state: read.state, decisions: read.missingDecisions }),
+        (response) =>
+          Effect.map(read.record(response.answers, regionPath), () => ({
+            answers: { ...read.hits, ...response.answers },
+            usage: response.usage,
+          })),
+      ),
   )
 
 export const cacheObservations = Sandwich.named('discern.model.cache')(readCache)
@@ -59,5 +63,16 @@ export const cacheObservations = Sandwich.named('discern.model.cache')(readCache
       Effect.succeed({ answers: read.hits, usage: { inputTokens: undefined, outputTokens: undefined } }),
     AskForMissing: (_asked, read) => askAndRecord(read),
     RecordingMissing: (refusal, _read) => Effect.fail(refusal),
-    CommandRejected: (rejected, _read) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
+    CommandRejected: (rejected, read) =>
+      Effect.fail(
+        AiError.make({
+          module: 'Discern',
+          method: 'caching',
+          reason: new AiError.InvalidRequestError({
+            description:
+              `Discern refused a cache lookup for ${read.hitIds.length} recorded and ${read.missing.length} missing decisions: ` +
+              rejected.issue,
+          }),
+        }),
+      ),
   })

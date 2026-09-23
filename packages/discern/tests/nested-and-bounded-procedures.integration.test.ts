@@ -18,41 +18,38 @@ const Feature = makeFeature({ it, layer })
 
 type RoutingFailure =
   | AiError.AiError
-  | AiError.InvalidRequestError
+  | Discern.DecisionIdCollisionError
+  | Discern.Procedure.ProcedureCommandRejectedError
   | Discern.Procedure.RoutingUncertainError
   | Discern.Procedure.NoEligibleProcedureError
   | Discern.Procedure.DepthExceededError
 
 const find = Discern.Procedure.make({
-  id: 'find',
   description: 'Locate code relevant to a behavior, feature or concept',
   input: Request,
   run: (request) => Effect.succeed(`found:${request}`),
 })
 
 const review = Discern.Procedure.make({
-  id: 'review',
   description: 'Review a change for correctness and semantic risk',
   input: Request,
   run: (request) => Effect.succeed(`reviewed:${request}`),
 })
 
 const lint = Discern.Procedure.make({
-  id: 'lint',
   description: 'Check style and formatting',
   input: Request,
   run: () => Effect.succeed('linted'),
 })
 
-const codeGroup = Discern.Procedure.registry(Request, [find, review], { id: 'code-route' })
+const codeGroup = Discern.Procedure.registry(Request, { find, review }, { id: 'code-route' })
 
 const code = Discern.Procedure.fromRegistry({
-  id: 'code',
   description: 'Anything about reading or reviewing source code',
   registry: codeGroup,
 })
 
-const top = Discern.Procedure.registry(Request, [code, lint], { id: 'top-route' })
+const top = Discern.Procedure.registry(Request, { code, lint }, { id: 'top-route' })
 
 const nestedModel: AnswerFor = (request) => {
   const asked = Object.keys(request.decisions).at(0) ?? ''
@@ -71,7 +68,6 @@ const backToRegistry = MutableRef.make<
 >(undefined)
 
 const loop = Discern.Procedure.make({
-  id: 'loop',
   description: 'Routes straight back to the registry it belongs to',
   input: Request,
   run: (request) =>
@@ -81,14 +77,20 @@ const loop = Discern.Procedure.make({
     }),
 })
 
-const loopRegistry = Discern.Procedure.registry(Request, [loop, find])
+const loopRegistry = Discern.Procedure.registry(Request, { loop, find })
 
 const invokeSelf = (request: string): Effect.Effect<string, RoutingFailure, DecisionModel.DecisionModel> =>
   loopRegistry.invoke(request)
 
 MutableRef.set(backToRegistry, invokeSelf)
 
-const inner = Discern.Procedure.registry(Request, [find, review], { id: 'inner' })
+const inner = Discern.Procedure.registry(Request, { find, review }, { id: 'inner' })
+
+const solo = Discern.Procedure.make({
+  description: 'The only procedure on offer',
+  input: Request,
+  run: (request) => Effect.succeed(`found:${request}`),
+})
 
 Feature('Nesting registries and bounding how deep routing may recurse')
   .withLayer(Layer.empty)
@@ -111,7 +113,7 @@ Feature('Nesting registries and bounding how deep routing may recurse')
             const model = yield* CountingModel
             expect(s.answer).toBe('reviewed:is this diff safe')
             expect(model.asked()).toStrictEqual([['top-route'], ['code-route']])
-            const tree = Discern.Model.tree(s.observations.snapshot(), 'top')
+            const tree = Discern.Model.tree(yield* Discern.Model.snapshot(s.observations), 'top')
             expect(tree.children.map((child) => child.name)).toStrictEqual(['route', 'code'])
             expect(tree.children.at(1)?.children.map((child) => child.name)).toStrictEqual(['route'])
           })
@@ -164,21 +166,14 @@ Feature('Nesting registries and bounding how deep routing may recurse')
     )
 
     scenario(
-      'Registries that would be meaningless are refused at construction',
+      'A registry too small to route between is refused at construction',
       Gherkin.Do.pipe(
-        When('a registry is built from procedures sharing one id')(
+        When('a registry is asked to carry a single procedure')(
           'refusal',
-          () => Effect.succeed(refusalOf(() => Discern.Procedure.registry(Request, [find, find]))),
+          () => Effect.succeed(refusalOf(() => Discern.Procedure.registry(Request, { solo }))),
         ),
-        When('a registry is asked to carry a single procedure')('singleRefusal', () =>
-          Effect.succeed(
-            refusalOf(() => {
-              Reflect.apply(Discern.Procedure.registry, undefined, [Request, [find]])
-            }),
-          )),
-        Then('both builds are refused, each naming what went wrong')((s) => {
-          expect(s.refusal.message).toContain('Duplicate procedure id "find"')
-          expect(s.singleRefusal.message).toContain('at least two labels')
+        Then('the build is refused, naming what went wrong')((s) => {
+          expect(s.refusal.message).toContain('at least two labels')
         }),
       ),
     )

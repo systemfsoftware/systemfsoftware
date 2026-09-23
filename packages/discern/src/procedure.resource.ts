@@ -3,7 +3,6 @@ import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
 import type { HandlerResult } from './pattern.resource.js'
-import { region } from './region.service.js'
 import type { RouteOptions } from './Route.schema.js'
 import { isEffectOf } from './run-policy.cell.js'
 import type { RouteUncertain } from './select-route.workflow.js'
@@ -12,15 +11,16 @@ const ProcedureTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Proc
 type ProcedureTypeId = typeof ProcedureTypeId
 
 /**
- * A named, typed, semantically routable Effect program.
+ * A typed, semantically routable Effect program.
  *
  * A procedure is a named entry point with a described purpose and a typed
  * input; a registry chooses between several of them from one request. The
  * description is the text a registry routes on, and {@link Procedure.examples}
- * sharpen it when the description alone is too coarse.
+ * sharpen it when the description alone is too coarse. The name lives with the
+ * registry that holds it, as the record's key, so a procedure and its id can
+ * never disagree.
  */
 export interface Procedure<
-  Id extends string,
   Input,
   Output,
   Error,
@@ -28,7 +28,6 @@ export interface Procedure<
   InputSchema extends Schema.Constraint,
 > extends Pipeable {
   readonly [ProcedureTypeId]: ProcedureTypeId
-  readonly id: Id
   readonly description: string
   readonly examples: ReadonlyArray<string>
   readonly input: InputSchema
@@ -36,11 +35,23 @@ export interface Procedure<
   readonly run: (input: Input) => Effect.Effect<Output, Error, Requirements>
 }
 
-export type Any = Procedure<string, never, Top, Top, Top, Schema.Constraint>
+export type AnyProcedure<
+  Input = never,
+  Output = unknown,
+  Failure = unknown,
+  Requirements = unknown,
+  InputSchema extends Schema.Constraint = Schema.Constraint,
+> = Procedure<Input, Output, Failure, Requirements, InputSchema>
 
-type Top<A = unknown> = A
+export type HomogeneousProcedure<
+  Input,
+  InputSchema extends Schema.Constraint,
+  Output = unknown,
+  Failure = unknown,
+  Requirements = unknown,
+> = Procedure<Input, Output, Failure, Requirements, InputSchema>
 
-export type IdOf<C> = C extends { readonly id: infer Id extends string } ? Id : never
+export type Any = AnyProcedure
 
 type RunOf<C> = C extends { readonly run: (...args: never[]) => infer Run } ? Run : never
 
@@ -54,30 +65,27 @@ export const examplesOrNone = (examples: ReadonlyArray<string> | undefined): Rea
 const eligibleOrAlways = <Input>(eligible: ((input: Input) => boolean) | undefined): (input: Input) => boolean =>
   eligible === undefined ? () => true : eligible
 
-export const make = <const Id extends string, S extends Schema.Constraint, Out, Err, Req>(options: {
-  readonly id: Id
+export const make = <S extends Schema.Constraint, Out, Err, Req>(options: {
   readonly description: string
   readonly examples?: ReadonlyArray<string>
   readonly input: S
   readonly eligible?: (input: S['Type']) => boolean
   readonly run: (input: S['Type']) => Effect.Effect<Out, Err, Req>
-}): Procedure<Id, S['Type'], Out, Err, Req, S> => ({
+}): Procedure<S['Type'], Out, Err, Req, S> => ({
   [ProcedureTypeId]: ProcedureTypeId,
-  id: options.id,
   description: options.description,
   examples: examplesOrNone(options.examples),
   input: options.input,
   eligible: eligibleOrAlways(options.eligible),
-  run: (input) => region(options.id)(Effect.suspend(() => options.run(input))),
+  run: (input) => Effect.suspend(() => options.run(input)),
   ...Prototype,
 })
 
-export const fromEffect = <const Id extends string, S extends Schema.Constraint, Out, Err, Req>(options: {
-  readonly id: Id
+export const fromEffect = <S extends Schema.Constraint, Out, Err, Req>(options: {
   readonly description: string
   readonly input: S
   readonly run: (input: S['Type']) => Effect.Effect<Out, Err, Req>
-}): Procedure<Id, S['Type'], Out, Err, Req, S> => make(options)
+}): Procedure<S['Type'], Out, Err, Req, S> => make(options)
 
 export interface InvokeOptions<
   Input,

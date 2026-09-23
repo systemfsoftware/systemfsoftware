@@ -9,11 +9,17 @@
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Option, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as Decision from 'effect/unstable/ai/Decision'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { observe } from './decision.resource.js'
-import { UncertainMatchError } from './DiscernError.schema.js'
+import {
+  DecisionIdCollisionError,
+  InvalidThresholdError,
+  PolicyCommandRejected,
+  UncertainMatchError,
+} from './DiscernError.schema.js'
 import {
   CaseTrace,
   CompiledPlan,
@@ -23,8 +29,16 @@ import {
   Trace,
 } from './Inspection.schema.js'
 import type { TraceSelection } from './Inspection.schema.js'
-import type { Answers, HandlerResult, NodeCore, Pattern, Preview, UncertainContext } from './pattern.resource.js'
-import { distinctNodes, reasonOf, statusIs, statusOf } from './pattern.resource.js'
+import type {
+  Answers,
+  HandlerResult,
+  NodeCore,
+  Pattern,
+  PatternRefusal,
+  Preview,
+  UncertainContext,
+} from './pattern.resource.js'
+import { distinctNodes, evaluate, preview, reasonOf, statusIs, statusOf } from './pattern.resource.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
 import type { CaseVerdict } from './select-case.workflow.js'
 import type { PatternResult } from './Verdict.schema.js'
@@ -75,17 +89,26 @@ const asEffect = <A, Err, Req>(value: A | Effect.Effect<A, Err, Req>): Effect.Ef
 const undecidedOf = (preview: Preview): ReadonlyArray<NodeCore> =>
   preview.resolved === undefined ? preview.decisions : []
 
+/** The cases up to and including the first deterministically matching one. */
+const prefixCasesOf = <Input, Out, Err, Req>(
+  cases: ReadonlyArray<PolicyCase<Input, Out, Err, Req>>,
+  input: Input,
+): ReadonlyArray<PolicyCase<Input, Out, Err, Req>> =>
+  Option.match(
+    Arr.findFirstIndex(cases, (item) => statusIs(preview(item.pattern, input).resolved, 'Match')),
+    { onSome: (index) => Arr.take(cases, index + 1), onNone: () => cases },
+  )
+
+/** The first crossed threshold a case in the prefix carries, if any. */
+const refusalOfCases = <Input, Out, Err, Req>(
+  cases: ReadonlyArray<PolicyCase<Input, Out, Err, Req>>,
+): Option.Option<PatternRefusal> => Arr.head(Arr.flatMap(cases, (item) => item.pattern.refusals))
+
 /** The case previews up to and including the first deterministically matching one. */
 const prefixPreviewsOf = <Input, Out, Err, Req>(
   cases: ReadonlyArray<PolicyCase<Input, Out, Err, Req>>,
   input: Input,
-): ReadonlyArray<Preview> => {
-  const parts = Arr.map(cases, (item) => item.pattern.preview(input))
-  return Option.match(Arr.findFirstIndex(parts, (part) => statusIs(part.resolved, 'Match')), {
-    onSome: (index) => Arr.take(parts, index + 1),
-    onNone: () => parts,
-  })
-}
+): ReadonlyArray<Preview> => Arr.map(prefixCasesOf(cases, input), (item) => preview(item.pattern, input))
 
 /** The decisions the ordered walk still needs for this input, deduplicated. */
 const neededNodesOf = <Input, Out, Err, Req>(
@@ -99,8 +122,8 @@ const caseResultOf = <Input, Out, Err, Req>(
   answers: Answers,
 ): PatternResult =>
   Option.getOrElse(
-    Option.fromNullishOr(item.pattern.preview(input).resolved),
-    () => item.pattern.evaluate(input, answers),
+    Option.fromNullishOr(preview(item.pattern, input).resolved),
+    () => evaluate(item.pattern, input, answers),
   )
 
 const isDecisive = <Input, Out, Err, Req>(
@@ -140,13 +163,39 @@ const evaluatedPrefixOf = <Input, Out, Err, Req>(
     onSome: (index) => evaluatedOf(Arr.take(cases, index + 1), input, answers),
   })
 
-const jsonAnswerOf = (
-  id: string,
-  answer: Decision.Answer<Decision.Any>,
-): readonly [string, Schema.Json] => [id, Option.getOrThrow(Schema.decodeUnknownOption(Schema.Json)(answer))]
+const jsonConfidenceOf = (confidence: number | undefined): Record<string, Schema.Json> =>
+  confidence === undefined ? {} : { confidence }
+
+const classifyAnswerJsonOf = (answer: Decision.Answer<Decision.Classify<string>>): Schema.Json => ({
+  label: answer.label,
+  probabilities: { ...answer.probabilities },
+  ...jsonConfidenceOf(answer.confidence),
+})
+
+const rateAnswerJsonOf = (answer: Decision.Answer<Decision.Rate<string>>): Schema.Json => ({
+  label: answer.label,
+  rating: answer.rating,
+  probabilities: { ...answer.probabilities },
+  ...jsonConfidenceOf(answer.confidence),
+})
+
+const rateOrClassifyJsonOf = (
+  answer: Decision.Answer<Decision.Classify<string>> | Decision.Answer<Decision.Rate<string>>,
+): Schema.Json => 'rating' in answer ? rateAnswerJsonOf(answer) : classifyAnswerJsonOf(answer)
+
+/**
+ * The traceable form of one validated answer. Every answer a provider returns
+ * is validated to one of the three answer shapes before `observe` answers, so
+ * the Json record is rebuilt field by field instead of re-decoding data whose
+ * shape the provider contract already proves.
+ */
+const jsonAnswerOf = (answer: Decision.Answer<Decision.Any>): Schema.Json => {
+  if ('probability' in answer) return { probability: answer.probability }
+  return rateOrClassifyJsonOf(answer)
+}
 
 const jsonAnswersOf = (answers: Answers): Readonly<Record<string, Schema.Json>> =>
-  Object.fromEntries(Arr.map(Object.entries(answers), (entry) => jsonAnswerOf(entry[0], entry[1])))
+  Object.fromEntries(Arr.map(Object.entries(answers), (entry) => [entry[0], jsonAnswerOf(entry[1])]))
 
 /** What the write handlers receive: the encoded command plus the live closures. */
 type PolicyRead<Input, Out, Err, Req> = (typeof SelectCase)['Encoded'] & {
@@ -163,22 +212,26 @@ const readOf = <Input, S extends Schema.Constraint, Out, Err, Req>(spec: PolicyS
   input: Input,
 ): Effect.Effect<
   PolicyRead<Input, Out, Err, Req>,
-  AiError.AiError,
+  AiError.AiError | DecisionIdCollisionError | InvalidThresholdError,
   DecisionModel.DecisionModel | S['EncodingServices']
 > =>
-  Effect.flatMap(observe(spec.schema, neededNodesOf(spec.cases, input), input), (answers) => {
-    const evaluated = evaluatedPrefixOf(spec.cases, input, answers)
-    return Effect.succeed({
-      _tag: 'SelectCase',
-      cases: Arr.map(evaluated, (entry) => entry.verdict),
-      hasUncertainHandler: spec.uncertainHandler !== undefined,
-      input,
-      plan: spec.plan,
-      jsonAnswers: jsonAnswersOf(answers),
-      evaluated,
-      uncertainHandler: spec.uncertainHandler,
-      fallback: spec.fallback,
-    })
+  Option.match(refusalOfCases(prefixCasesOf(spec.cases, input)), {
+    onSome: (refusal) => Effect.fail(new InvalidThresholdError(refusal)),
+    onNone: () =>
+      Effect.flatMap(observe(spec.schema, neededNodesOf(spec.cases, input), input), (answers) => {
+        const evaluated = evaluatedPrefixOf(spec.cases, input, answers)
+        return Effect.succeed({
+          _tag: 'SelectCase',
+          cases: Arr.map(evaluated, (entry) => entry.verdict),
+          hasUncertainHandler: spec.uncertainHandler !== undefined,
+          input,
+          plan: spec.plan,
+          jsonAnswers: jsonAnswersOf(answers),
+          evaluated,
+          uncertainHandler: spec.uncertainHandler,
+          fallback: spec.fallback,
+        })
+      }),
   })
 
 // -------------------------------------------------------------------------------------------------
@@ -198,9 +251,11 @@ const traceOf = <Input, Out, Err, Req>(read: PolicyRead<Input, Out, Err, Req>, s
     selected,
   })
 
-/** The decisive case is always the last of the evaluated prefix the read sent. */
-const decisiveOf = <Input, Out, Err, Req>(read: PolicyRead<Input, Out, Err, Req>): Evaluated<Input, Out, Err, Req> =>
-  Option.getOrThrow(Arr.last(read.evaluated))
+/** The decisive case is the one non-Miss entry of the evaluated prefix, the same rule the workflow decided by. */
+const decisiveOf = <Input, Out, Err, Req>(
+  read: PolicyRead<Input, Out, Err, Req>,
+): Option.Option<Evaluated<Input, Out, Err, Req>> =>
+  Arr.findFirst(read.evaluated, (entry) => statusOf(entry.result) !== 'Miss')
 
 // -------------------------------------------------------------------------------------------------
 // Policy
@@ -224,17 +279,29 @@ export interface Policy<
   readonly [PolicyTypeId]: typeof PolicyTypeId
   (input: Input): Effect.Effect<
     Out,
-    Err | AiError.AiError | UncertainMatchError,
+    | Err
+    | AiError.AiError
+    | DecisionIdCollisionError
+    | InvalidThresholdError
+    | PolicyCommandRejected
+    | UncertainMatchError,
     Req | DecisionModel.DecisionModel | S['EncodingServices']
   >
   readonly plan: CompiledPlan
-  /** Run, and additionally report which cases were evaluated and how each resolved. */
-  readonly runWithTrace: (input: Input) => Effect.Effect<
-    PolicyRun<Out>,
-    Err | AiError.AiError | UncertainMatchError,
-    Req | DecisionModel.DecisionModel | S['EncodingServices']
-  >
+  readonly runWithTrace: (input: Input) => PolicyTraced<Out, Err, Req, S>
 }
+
+/** What running a policy with a trace answers: the value and its trace, or why the run refused. */
+export type PolicyTraced<Out, Err, Req, S extends Schema.Constraint> = Effect.Effect<
+  PolicyRun<Out>,
+  | Err
+  | AiError.AiError
+  | DecisionIdCollisionError
+  | InvalidThresholdError
+  | PolicyCommandRejected
+  | UncertainMatchError,
+  Req | DecisionModel.DecisionModel | S['EncodingServices']
+>
 
 /** Compile a matcher's structural view into the callable policy sandwich. */
 export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
@@ -244,10 +311,14 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
     .decide(selectCase)
     .write({
       CaseSelected: (selected, read) =>
-        Effect.map(asEffect(decisiveOf(read).item.run(read.input)), (value) => ({
-          value,
-          trace: traceOf(read, new SelectedCase({ id: selected.caseId })),
-        })),
+        Option.match(decisiveOf(read), {
+          onNone: () => Effect.fail(new UncertainMatchError({ caseId: selected.caseId })),
+          onSome: (won) =>
+            Effect.map(asEffect(won.item.run(read.input)), (value) => ({
+              value,
+              trace: traceOf(read, new SelectedCase({ id: selected.caseId })),
+            })),
+        }),
       FallbackSelected: (_selected, read) =>
         Effect.map(asEffect(read.fallback(read.input)), (value) => ({
           value,
@@ -256,30 +327,58 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
       UncertainHandled: (selected, read) =>
         Option.match(Option.fromNullishOr(read.uncertainHandler), {
           onNone: () =>
-            Effect.fail(
-              new UncertainMatchError({ caseId: selected.caseId, reason: decisiveOf(read).verdict.reason }),
-            ),
+            Option.match(decisiveOf(read), {
+              onNone: () => new UncertainMatchError({ caseId: selected.caseId }),
+              onSome: (won) => new UncertainMatchError({ caseId: selected.caseId, reason: won.verdict.reason }),
+            }),
           onSome: (handler) =>
-            Effect.map(
-              asEffect(handler(read.input, { caseId: selected.caseId, result: decisiveOf(read).result })),
-              (value) => ({
-                value,
-                trace: traceOf(read, new SelectedUncertain({ id: selected.caseId })),
-              }),
-            ),
+            Option.match(decisiveOf(read), {
+              onNone: () => Effect.fail(new UncertainMatchError({ caseId: selected.caseId })),
+              onSome: (won) =>
+                Effect.map(
+                  asEffect(handler(read.input, { caseId: selected.caseId, result: won.result })),
+                  (value) => ({
+                    value,
+                    trace: traceOf(read, new SelectedUncertain({ id: selected.caseId })),
+                  }),
+                ),
+            }),
         }),
       UncertainUnhandled: (refusal, _read) =>
         Effect.fail(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),
-      CommandRejected: (rejected, _read) => Effect.die(rejected),
+      CommandRejected: (rejected, read) =>
+        Effect.fail(
+          new PolicyCommandRejected({
+            caseIds: Arr.map(read.evaluated, (entry) => entry.verdict.caseId),
+            cause: rejected,
+          }),
+        ),
     })
 
-  const runWithTrace = (input: Input) => cell.run(input)
-  const run = (input: Input) => Effect.map(runWithTrace(input), (finished) => finished.value)
+  const traced = (input: Input) => cell.run(input)
+  const run = (input: Input) => Effect.map(traced(input), (finished) => finished.value)
   const props: Pick<Policy<Input, Out, Err, Req, S>, typeof PolicyTypeId | 'plan' | 'runWithTrace'> = {
     [PolicyTypeId]: PolicyTypeId,
     plan: spec.plan,
-    runWithTrace: (input: Input) => runWithTrace(input),
+    runWithTrace: (input: Input) => traced(input),
   }
   const policy: Policy<Input, Out, Err, Req, S> = Object.assign((input: Input) => run(input), props)
   return policy
 }
+
+/** Run a policy and report which cases were evaluated and how each resolved: `policy.runWithTrace(input)` for `pipe`. */
+export const runWithTrace: {
+  <Input>(input: Input): <Out, Err, Req, S extends Schema.Constraint>(
+    self: Policy<Input, Out, Err, Req, S>,
+  ) => PolicyTraced<Out, Err, Req, S>
+  <Input, Out, Err, Req, S extends Schema.Constraint>(
+    self: Policy<Input, Out, Err, Req, S>,
+    input: Input,
+  ): PolicyTraced<Out, Err, Req, S>
+} = dual(
+  2,
+  <Input, Out, Err, Req, S extends Schema.Constraint>(
+    self: Policy<Input, Out, Err, Req, S>,
+    input: Input,
+  ): PolicyTraced<Out, Err, Req, S> => self.runWithTrace(input),
+)

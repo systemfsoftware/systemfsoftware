@@ -37,22 +37,22 @@ export class RoutingUncertainError extends Schema.TaggedError<RoutingUncertainEr
   }
 }
 
-export class DuplicateProcedureIdError extends Schema.TaggedError<DuplicateProcedureIdError>()(
-  'DuplicateProcedureIdError',
+/**
+ * The read did not carry a command this registry's routing could decode.
+ *
+ * The refusal names the registry's membership — what the request *was* offered
+ * to — and keeps the rejection as `cause`, the same context-carrying shape
+ * every other infrastructure refusal in the package takes.
+ */
+export class ProcedureCommandRejectedError extends Schema.TaggedError<ProcedureCommandRejectedError>()(
+  'ProcedureCommandRejectedError',
   {
-    id: Schema.String,
+    membership: Schema.Array(Schema.String),
+    issue: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
   },
 ) {
   override get message(): string {
-    return `Duplicate procedure id "${this.id}" in registry`
-  }
-}
-
-export class UnknownProcedureError extends Schema.TaggedError<UnknownProcedureError>()('UnknownProcedureError', {
-  id: Schema.String,
-  known: Schema.Array(Schema.String),
-}) {
-  override get message(): string {
-    return `No procedure "${this.id}" in this registry (have: ${this.known.join(', ')})`
+    return `Routing rejected the command for a registry of ${this.membership.join(', ')}: ${this.issue}`
   }
 }

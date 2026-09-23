@@ -83,11 +83,12 @@ Feature('Recording what the model said and replaying it later')
         Then('the same change replays from the recording, handler work and all')((s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(s.store.snapshot()))
+            const taken = yield* Discern.Model.snapshot(s.store)
+            const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
             expect(replayed).toBe('block:x')
             expect(model.calls()).toBe(1)
             expect(s.counter.count()).toBe(2)
-            expect(s.store.size()).toBe(1)
+            expect(yield* Discern.Model.size(s.store)).toBe(1)
           })
         ),
       ),
@@ -105,21 +106,26 @@ Feature('Recording what the model said and replaying it later')
           })),
         When('the recording travels through plain data into a fresh store')('fresh', (s) =>
           Effect.flatMap(
-            Schema.encodeEffect(Discern.Model.Observations)(s.store.snapshot()),
-            (plainData) =>
+            Discern.Model.snapshot(s.store),
+            (taken) =>
               Effect.flatMap(
-                Schema.encodeUnknownEffect(Schema.Json)(plainData),
-                (json) =>
-                  Effect.map(
-                    Schema.decodeUnknownEffect(Discern.Model.Observations)(json),
-                    (reloaded) => Discern.Model.store(reloaded),
+                Schema.encodeEffect(Discern.Model.Observations)(taken),
+                (plainData) =>
+                  Effect.flatMap(
+                    Schema.encodeUnknownEffect(Schema.Json)(plainData),
+                    (json) =>
+                      Effect.map(
+                        Schema.decodeUnknownEffect(Discern.Model.Observations)(json),
+                        (reloaded) => Discern.Model.store(reloaded),
+                      ),
                   ),
               ),
           )),
         Then('the fresh store replays the change without the model')((s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(s.fresh.snapshot()))
+            const taken = yield* Discern.Model.snapshot(s.fresh)
+            const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
             expect(replayed).toBe('block')
             expect(model.calls()).toBe(1)
           })
@@ -142,10 +148,11 @@ Feature('Recording what the model said and replaying it later')
           })),
         Then('the recorded run replays, and the reworded policy refuses to use it')((s) =>
           Effect.gen(function*() {
-            const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(s.store.snapshot()))
+            const taken = yield* Discern.Model.snapshot(s.store)
+            const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
             expect(replayed).toBe('block')
             const reworded = yield* Effect.flip(
-              Effect.provide(policyOn(afterRewording)('x'), Discern.Model.replayLayer(s.store.snapshot())),
+              Effect.provide(policyOn(afterRewording)('x'), Discern.Model.replayLayer(taken)),
             )
             expect(Discern.Model.isReplayMiss(reworded)).toBe(true)
           })
@@ -177,13 +184,10 @@ Feature('Recording what the model said and replaying it later')
           Effect.gen(function*() {
             expect(s.verdicts.riskyFile).toBe('block')
             expect(s.verdicts.safeFile).toBe('ship')
-            expect(s.store.size()).toBe(2)
-            expect(yield* Effect.provide(s.policy('risky.ts'), Discern.Model.replayLayer(s.store.snapshot()))).toBe(
-              'block',
-            )
-            expect(yield* Effect.provide(s.policy('safe.ts'), Discern.Model.replayLayer(s.store.snapshot()))).toBe(
-              'ship',
-            )
+            expect(yield* Discern.Model.size(s.store)).toBe(2)
+            const taken = yield* Discern.Model.snapshot(s.store)
+            expect(yield* Effect.provide(s.policy('risky.ts'), Discern.Model.replayLayer(taken))).toBe('block')
+            expect(yield* Effect.provide(s.policy('safe.ts'), Discern.Model.replayLayer(taken))).toBe('ship')
           })
         ),
       ),
@@ -204,8 +208,9 @@ Feature('Recording what the model said and replaying it later')
           })),
         Then('a full replay of the two-question policy is refused')((s) =>
           Effect.gen(function*() {
+            const taken = yield* Discern.Model.snapshot(s.store)
             const missing = yield* Effect.flip(
-              Effect.provide(s.policies.both('x'), Discern.Model.replayLayer(s.store.snapshot())),
+              Effect.provide(s.policies.both('x'), Discern.Model.replayLayer(taken)),
             )
             expect(Discern.Model.isReplayMiss(missing)).toBe(true)
           })
@@ -260,11 +265,15 @@ Feature('Recording what the model said and replaying it later')
               yield* withProvider(s.policies.first('x'), model.model, [Discern.Model.recording(first)])
               yield* withProvider(s.policies.second('x'), model.model, [Discern.Model.recording(second)])
               yield* Effect.flatMap(
-                Schema.encodeEffect(Discern.Model.Observations)(second.snapshot()),
-                (plainData) =>
+                Discern.Model.snapshot(second),
+                (taken) =>
                   Effect.flatMap(
-                    Schema.encodeUnknownEffect(Schema.Json)(plainData),
-                    (json) => first.load(json),
+                    Schema.encodeEffect(Discern.Model.Observations)(taken),
+                    (plainData) =>
+                      Effect.flatMap(
+                        Schema.encodeUnknownEffect(Schema.Json)(plainData),
+                        (json) => Discern.Model.load(first, json),
+                      ),
                   ),
               )
               return { first, second }
@@ -272,13 +281,13 @@ Feature('Recording what the model said and replaying it later')
         ),
         Then('the store holds only what was loaded into it')((s) =>
           Effect.gen(function*() {
-            expect(s.stores.first.size()).toBe(1)
+            expect(yield* Discern.Model.size(s.stores.first)).toBe(1)
+            const taken = yield* Discern.Model.snapshot(s.stores.first)
             const absent = yield* Effect.flip(
-              Effect.provide(s.policies.first('x'), Discern.Model.replayLayer(s.stores.first.snapshot())),
+              Effect.provide(s.policies.first('x'), Discern.Model.replayLayer(taken)),
             )
             expect(Discern.Model.isReplayMiss(absent)).toBe(true)
-            expect(yield* Effect.provide(s.policies.second('x'), Discern.Model.replayLayer(s.stores.first.snapshot())))
-              .toBe('hit')
+            expect(yield* Effect.provide(s.policies.second('x'), Discern.Model.replayLayer(taken))).toBe('hit')
           })
         ),
       ),
@@ -290,7 +299,7 @@ Feature('Recording what the model said and replaying it later')
         Given('a fresh store')('store', () => Effect.succeed(Discern.Model.store())),
         When('a snapshot claiming a version no store writes is loaded')(
           'refused',
-          (s) => Effect.flip(s.store.load({ version: 99, entries: {} })),
+          (s) => Effect.flip(Discern.Model.load(s.store, { version: 99, entries: {} })),
         ),
         Then('the store blames the foreign format version')(({ refused }) => {
           expect(
@@ -364,7 +373,7 @@ Feature('Recording what the model said and replaying it later')
         Given('a fresh store that only accepts readable entries')('store', () => Effect.succeed(Discern.Model.store())),
         When('a snapshot of the right version with unreadable entries is loaded')(
           'refused',
-          (s) => Effect.flip(s.store.load({ version: 2, entries: { oops: { broken: true } } })),
+          (s) => Effect.flip(Discern.Model.load(s.store, { version: 2, entries: { oops: { broken: true } } })),
         ),
         Then('the store blames the entries, not the format version')(({ refused }) => {
           expect(

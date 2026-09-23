@@ -13,7 +13,6 @@ import {
   tally,
   withProvider,
 } from './__fixtures__/counting-model.fixture.js'
-import { Ticket } from './__fixtures__/ticket.schema.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -77,12 +76,14 @@ const shipIfSafe = (decision: Discern.ClassifyDecision<string, 'safe' | 'breakin
     Discern.orElse(() => 'no'),
   )
 
-const ticketBusiness = Discern.on(Ticket).probability({ id: 'busy', instructions: 'How busy is this ticket' })
-
-const businessPolicy = Discern.type(Ticket).pipe(
-  Discern.when(ticketBusiness.above(0.8), () => 'yes'),
-  Discern.orElse(() => 'no'),
-)
+const ticketFactsPolicy = () => {
+  const Ticket = Schema.Struct({ a: Schema.Finite, b: Schema.Finite })
+  const ticketBusiness = Discern.on(Ticket).probability({ id: 'busy', instructions: 'How busy is this ticket' })
+  return Discern.type(Ticket).pipe(
+    Discern.when(ticketBusiness.above(0.8), () => 'yes'),
+    Discern.orElse(() => 'no'),
+  )
+}
 
 Feature('Reusing answers without paying twice')
   .withScenarioLayer(answering(probabilityEverywhere(0.95)))
@@ -168,13 +169,15 @@ Feature('Reusing answers without paying twice')
             ]))
             return { first, second, third }
           })),
-        Then('the first two pass, the third is refused, and the spend is reported')((s) => {
-          expect(s.outcomes.first).toBe('block')
-          expect(s.outcomes.second).toBe('block')
-          expect(s.outcomes.third).toBeDefined()
-          expect(Discern.Model.isBudgetExceeded(s.outcomes.third)).toBe(true)
-          expect(s.spend.spent()).toStrictEqual({ decisions: 2, calls: 2 })
-        }),
+        Then('the first two pass, the third is refused, and the spend is reported')((s) =>
+          Effect.gen(function*() {
+            expect(s.outcomes.first).toBe('block')
+            expect(s.outcomes.second).toBe('block')
+            expect(s.outcomes.third).toBeDefined()
+            expect(Discern.Model.isBudgetExceeded(s.outcomes.third)).toBe(true)
+            expect(yield* Discern.Model.spent(s.spend)).toStrictEqual({ decisions: 2, calls: 2 })
+          })
+        ),
       ),
     )
 
@@ -198,11 +201,13 @@ Feature('Reusing answers without paying twice')
               return { firstRun, secondRun }
             }),
         ),
-        Then('only the first review drew from the allowance')((s) => {
-          expect(s.verdicts.firstRun).toBe('block')
-          expect(s.verdicts.secondRun).toBe('block')
-          expect(s.spend.spent()).toStrictEqual({ decisions: 1, calls: 1 })
-        }),
+        Then('only the first review drew from the allowance')((s) =>
+          Effect.gen(function*() {
+            expect(s.verdicts.firstRun).toBe('block')
+            expect(s.verdicts.secondRun).toBe('block')
+            expect(yield* Discern.Model.spent(s.spend)).toStrictEqual({ decisions: 1, calls: 1 })
+          })
+        ),
       ),
     )
 
@@ -225,8 +230,9 @@ Feature('Reusing answers without paying twice')
             const model = yield* CountingModel
             expect(s.verdict).toBe('risky/later')
             expect(model.calls()).toBe(2)
-            expect(s.store.size()).toBe(2)
-            const replayed = yield* Effect.provide(s.program('x'), Discern.Model.replayLayer(s.store.snapshot()))
+            expect(yield* Discern.Model.size(s.store)).toBe(2)
+            const taken = yield* Discern.Model.snapshot(s.store)
+            const replayed = yield* Effect.provide(s.program('x'), Discern.Model.replayLayer(taken))
             expect(replayed).toBe('risky/later')
             expect(model.calls()).toBe(2)
           })
@@ -272,7 +278,7 @@ Feature('Reusing answers without paying twice')
     scenario(
       'The same facts in a different order are the same question to the cache',
       Gherkin.Do.pipe(
-        Given('a policy over a set of facts about one ticket')('policy', () => Effect.succeed(businessPolicy)),
+        Given('a policy over a set of facts about one ticket')('policy', () => Effect.succeed(ticketFactsPolicy())),
         Given('a cache over one store')('cache', () => Effect.succeed(Discern.Model.store())),
         When('the facts arrive in two different orders')('verdicts', (s) =>
           Effect.gen(function*() {
