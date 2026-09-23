@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as ts from 'typescript'
@@ -9,6 +10,7 @@ export interface SpanTree {
   readonly id: NodeId
   readonly node: ts.Node
   readonly kind: ts.SyntaxKind
+  readonly parentId: Option.Option<NodeId>
   readonly startIndex: number
   readonly endIndex: number
   readonly prefix: string
@@ -94,14 +96,19 @@ const withSeparators = (text: string, children: ReadonlyArray<SpanTree>): Readon
         ),
     }))
 
-const buildOf = (text: string, node: ts.Node): SpanTree => {
-  const children = withSeparators(text, Arr.map(childNodesOf(node), (childNode) => buildOf(text, childNode)))
+const buildOf = (text: string, node: ts.Node, parentId: Option.Option<NodeId>): SpanTree => {
+  const id = getNodeId(node)
+  const children = withSeparators(
+    text,
+    Arr.map(childNodesOf(node), (childNode) => buildOf(text, childNode, Option.some(id))),
+  )
   const startIndex = Arr.reduce(children, startIndexOf(node), (smallest, child) => Math.min(smallest, child.startIndex))
   const endIndex = Arr.reduce(children, node.end, (largest, child) => Math.max(largest, child.endIndex))
   return {
-    id: getNodeId(node),
+    id,
     node,
     kind: node.kind,
+    parentId,
     startIndex,
     endIndex,
     prefix: prefixOf(text, startIndex, endIndex, children),
@@ -111,7 +118,7 @@ const buildOf = (text: string, node: ts.Node): SpanTree => {
   }
 }
 
-export const build = (node: ts.Node): SpanTree => buildOf(node.getSourceFile().text, node)
+export const build = (node: ts.Node): SpanTree => buildOf(node.getSourceFile().text, node, Option.none())
 
 export const lastInnerSeparator = (tree: SpanTree): string =>
   Match.value(tree.separator.length > 0).pipe(
@@ -128,3 +135,31 @@ export const originalText = (tree: SpanTree): string =>
   `${tree.prefix}${Arr.join(Arr.map(tree.children, originalText), '')}${tree.suffix}${tree.separator}`
 
 export const preordered = (tree: SpanTree): ReadonlyArray<SpanTree> => [tree, ...tree.children.flatMap(preordered)]
+
+export const index = (tree: SpanTree): HashMap.HashMap<NodeId, SpanTree> =>
+  Arr.reduce(preordered(tree), HashMap.empty<NodeId, SpanTree>(), (ids, span) => HashMap.set(ids, span.id, span))
+
+export const parentOf = (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>): Option.Option<SpanTree> =>
+  Option.flatMap(tree.parentId, (parentId) => HashMap.get(ids, parentId))
+
+export const nextSiblingOf = (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>): Option.Option<SpanTree> =>
+  Option.flatMap(parentOf(tree, ids), (parent) =>
+    Option.flatMap(
+      Arr.findFirstIndex(parent.children, (child) => child.id === tree.id),
+      (position) => Arr.get(parent.children, position + 1),
+    ))
+
+export const findFirstParent = (
+  tree: SpanTree,
+  ids: HashMap.HashMap<NodeId, SpanTree>,
+  guard: (node: ts.Node) => boolean,
+): Option.Option<SpanTree> =>
+  Match.value(guard(tree.node)).pipe(
+    Match.when(true, () => Option.some(tree)),
+    Match.when(false, () =>
+      Option.match(parentOf(tree, ids), {
+        onNone: () => Option.none(),
+        onSome: (parent) => findFirstParent(parent, ids, guard),
+      })),
+    Match.exhaustive,
+  )

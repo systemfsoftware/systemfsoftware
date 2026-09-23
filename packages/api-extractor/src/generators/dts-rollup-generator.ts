@@ -1,35 +1,38 @@
+import { HashMap, HashSet, Option, Result } from 'effect'
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
-import * as Option from 'effect/Option'
-import * as Pipeable from 'effect/Pipeable'
 import * as ts from 'typescript'
 
-import { IndentedWriter } from '../analyzer/indented-writer.js'
 import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
-import { IndentDocCommentScope, Span, type SpanModification } from '../analyzer/Span.js'
 import * as SyntaxHelpers from '../analyzer/SyntaxHelpers.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
+import type { NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
-import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
 import type { CollectorEntity } from '../collector/CollectorEntity.js'
-import type { DeclarationMetadata } from '../collector/DeclarationMetadata.js'
 import { UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
-import { invariant } from '../utils/invariant.js'
-import { DtsEmitHelpers } from './dts-emit-helpers.js'
+import {
+  emitNamedExport,
+  emitStarExports,
+  internalInvariantOf,
+  isExportKeywordInNamespaceExportDeclaration,
+  planImportTypeSpan,
+  type RenderFailure,
+  writeImports,
+} from './dts-emit-helpers.js'
 import {
   formatAliasDeclarations,
   formatAliasExportClause,
+  type NamespaceAlias,
   type NamespaceMember,
   type NamespaceMemberKind,
   planNamespaceAliases,
 } from './namespace-aliaser.js'
-
-const requireSome = <A>(option: Option.Option<A>, message: string): A => {
-  if (Option.isNone(option)) {
-    throw invariant(message)
-  }
-  return option.value
-}
+import * as RenderSpan from './render-span.js'
+import * as SpanPlan from './span-plan.js'
+import * as SpanTreeModule from './span-tree.js'
+import type { SpanTree } from './span-tree.js'
+import * as TextWriter from './text-writer.js'
 
 export enum DtsRollupKind {
   InternalRelease = 0,
@@ -38,455 +41,820 @@ export enum DtsRollupKind {
   PublicRelease = 3,
 }
 
-const shouldIncludeReleaseTag = (releaseTag: ReleaseTag, dtsKind: DtsRollupKind): boolean => {
-  switch (dtsKind) {
-    case DtsRollupKind.InternalRelease:
-      return true
-    case DtsRollupKind.AlphaRelease:
-      return (
-        releaseTag === ReleaseTag.Alpha ||
-        releaseTag === ReleaseTag.Beta ||
-        releaseTag === ReleaseTag.Public ||
-        releaseTag === ReleaseTag.None
-      )
-    case DtsRollupKind.BetaRelease:
-      return (
-        releaseTag === ReleaseTag.Beta ||
-        releaseTag === ReleaseTag.Public ||
-        releaseTag === ReleaseTag.None
-      )
-    case DtsRollupKind.PublicRelease:
-      return releaseTag === ReleaseTag.Public || releaseTag === ReleaseTag.None
-  }
+const ADMITTED_RELEASE_TAGS: Readonly<Record<DtsRollupKind, ReadonlyArray<ReleaseTag> | undefined>> = {
+  [DtsRollupKind.InternalRelease]: undefined,
+  [DtsRollupKind.AlphaRelease]: [ReleaseTag.Alpha, ReleaseTag.Beta, ReleaseTag.Public, ReleaseTag.None],
+  [DtsRollupKind.BetaRelease]: [ReleaseTag.Beta, ReleaseTag.Public, ReleaseTag.None],
+  [DtsRollupKind.PublicRelease]: [ReleaseTag.Public, ReleaseTag.None],
 }
+
+const shouldIncludeReleaseTag = (releaseTag: ReleaseTag, dtsKind: DtsRollupKind): boolean =>
+  Option.match(Option.fromNullishOr(ADMITTED_RELEASE_TAGS[dtsKind]), {
+    onNone: () => true,
+    onSome: (admitted) => Arr.some(admitted, (candidate) => candidate === releaseTag),
+  })
+
+const isNamespaceImportKind = (astImport: Snapshot.AstImport): boolean =>
+  Arr.some(
+    [Snapshot.AstImportKind.StarImport, Snapshot.AstImportKind.EqualsImport, Snapshot.AstImportKind.ImportType],
+    (kind) => kind === astImport.importKind,
+  )
 
 const classifyNamespaceMember = (
   snapshot: Snapshot.AnalysisSnapshot,
   astEntity: Snapshot.AstEntity,
-): NamespaceMemberKind =>
+): Result.Result<NamespaceMemberKind, RenderFailure> =>
   Match.value(Snapshot.refOf(astEntity)).pipe(
-    Match.tag('AstNamespaceImportRef', (): NamespaceMemberKind => 'namespace'),
-    Match.tag('AstImportRef', (): NamespaceMemberKind => {
-      const astImport = requireSome(Snapshot.astImportOf(astEntity), 'Missing AstImport for an AstImportRef')
-      if (
-        astImport.importKind === Snapshot.AstImportKind.StarImport ||
-        astImport.importKind === Snapshot.AstImportKind.EqualsImport ||
-        astImport.importKind === Snapshot.AstImportKind.ImportType
-      ) {
-        return 'namespace'
-      }
-      return astImport.isTypeOnlyEverywhere ? 'type' : 'value'
-    }),
-    Match.tag('AstSymbolRef', (): NamespaceMemberKind => {
-      const flags = Snapshot.symbolFlags(
-        snapshot,
-        requireSome(Snapshot.astSymbolOf(astEntity), 'Missing AstSymbol for an AstSymbolRef'),
-      )
-      // eslint-disable-next-line no-bitwise
-      if ((flags & ts.SymbolFlags.Namespace) !== 0) {
-        return 'namespace'
-      }
-      // eslint-disable-next-line no-bitwise
-      const hasValue = (flags & ts.SymbolFlags.Value) !== 0
-      // eslint-disable-next-line no-bitwise
-      const hasType = (flags & ts.SymbolFlags.Type) !== 0
-      if (hasValue && hasType) {
-        return 'both'
-      }
-      return hasType ? 'type' : 'value'
-    }),
-    Match.tag('AstNamespaceExportRef', (): NamespaceMemberKind => 'value'),
+    Match.tag('AstNamespaceImportRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
+      Result.succeed('namespace')),
+    Match.tag('AstImportRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
+      Option.match(Snapshot.astImportOf(astEntity), {
+        onNone: () =>
+          internalInvariantOf('Missing AstImport for an AstImportRef'),
+        onSome: (astImport) =>
+          Match.value(isNamespaceImportKind(astImport)).pipe(
+            Match.when(true, (): Result.Result<NamespaceMemberKind, RenderFailure> =>
+              Result.succeed('namespace')),
+            Match.when(false, (): Result.Result<NamespaceMemberKind, RenderFailure> =>
+              Result.succeed(isTypeOnlyMemberKindOf(astImport.isTypeOnlyEverywhere))),
+            Match.exhaustive,
+          ),
+      })),
+    Match.tag('AstSymbolRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
+      Option.match(Snapshot.astSymbolOf(astEntity), {
+        onNone: () =>
+          internalInvariantOf('Missing AstSymbol for an AstSymbolRef'),
+        onSome: (astSymbol) =>
+          Result.succeed(symbolMemberKindOf(Snapshot.symbolFlags(snapshot, astSymbol))),
+      })),
+    Match.tag('AstNamespaceExportRef', (): Result.Result<NamespaceMemberKind, RenderFailure> =>
+      Result.succeed('value')),
     Match.exhaustive,
   )
 
+const isTypeOnlyMemberKindOf = (isTypeOnlyEverywhere: boolean): NamespaceMemberKind =>
+  Match.value(isTypeOnlyEverywhere).pipe(
+    Match.when(true, (): NamespaceMemberKind => 'type'),
+    Match.when(false, (): NamespaceMemberKind => 'value'),
+    Match.exhaustive,
+  )
+
+const typeMemberKindOf = (flags: ts.SymbolFlags): NamespaceMemberKind =>
+  Match.value((flags & ts.SymbolFlags.Type) !== 0).pipe(
+    Match.when(true, (): NamespaceMemberKind => 'type'),
+    Match.when(false, (): NamespaceMemberKind => 'value'),
+    Match.exhaustive,
+  )
+
+const valueMemberKindOf = (flags: ts.SymbolFlags): NamespaceMemberKind =>
+  Match.value((flags & ts.SymbolFlags.Value) !== 0).pipe(
+    Match.when(true, (): NamespaceMemberKind => valueAndTypeMemberKindOf(flags)),
+    Match.when(false, (): NamespaceMemberKind => typeMemberKindOf(flags)),
+    Match.exhaustive,
+  )
+
+const valueAndTypeMemberKindOf = (flags: ts.SymbolFlags): NamespaceMemberKind =>
+  Match.value((flags & ts.SymbolFlags.Type) !== 0).pipe(
+    Match.when(true, (): NamespaceMemberKind => 'both'),
+    Match.when(false, (): NamespaceMemberKind => 'value'),
+    Match.exhaustive,
+  )
+
+const symbolMemberKindOf = (flags: ts.SymbolFlags): NamespaceMemberKind =>
+  Match.value((flags & ts.SymbolFlags.Namespace) !== 0).pipe(
+    Match.when(true, (): NamespaceMemberKind => 'namespace'),
+    Match.when(false, (): NamespaceMemberKind => valueMemberKindOf(flags)),
+    Match.exhaustive,
+  )
+
+const KEYWORD_MODIFIER_KINDS: ReadonlyArray<ts.SyntaxKind> = [
+  ts.SyntaxKind.InterfaceKeyword,
+  ts.SyntaxKind.ClassKeyword,
+  ts.SyntaxKind.EnumKeyword,
+  ts.SyntaxKind.NamespaceKeyword,
+  ts.SyntaxKind.ModuleKeyword,
+  ts.SyntaxKind.TypeKeyword,
+  ts.SyntaxKind.FunctionKeyword,
+]
+
 const isKeywordNeedingModifiers = (kind: ts.SyntaxKind): boolean =>
-  kind === ts.SyntaxKind.InterfaceKeyword ||
-  kind === ts.SyntaxKind.ClassKeyword ||
-  kind === ts.SyntaxKind.EnumKeyword ||
-  kind === ts.SyntaxKind.NamespaceKeyword ||
-  kind === ts.SyntaxKind.ModuleKeyword ||
-  kind === ts.SyntaxKind.TypeKeyword ||
-  kind === ts.SyntaxKind.FunctionKeyword
+  Arr.some(KEYWORD_MODIFIER_KINDS, (candidate) => candidate === kind)
+
+interface RollupPlanState {
+  readonly snapshot: Snapshot.AnalysisSnapshot
+  readonly entity: CollectorEntity
+  readonly dtsKind: DtsRollupKind
+  readonly ids: HashMap.HashMap<NodeId, SpanTree>
+  readonly plan: SpanPlan.SpanPlan
+}
+
+interface RollupEmitState {
+  readonly writer: TextWriter.TextWriter
+  readonly reservedNames: HashSet.HashSet<string>
+}
+
+interface PlannedRollupSpan {
+  readonly state: RollupPlanState
+  readonly recurseChildren: boolean
+}
+
+interface TrimmedSpan {
+  readonly state: RollupPlanState
+  readonly trimmed: boolean
+}
+
+interface RollupChildWalk {
+  readonly state: RollupPlanState
+  readonly previous: Option.Option<SpanTree>
+}
 
 const handleKeywordModifiers = (
-  span: Span,
-  entity: CollectorEntity,
-  snapshot: Snapshot.AnalysisSnapshot,
+  state: RollupPlanState,
+  tree: SpanTree,
+  previousSibling: Option.Option<SpanTree>,
   astDeclaration: Snapshot.AstDeclaration,
-): void => {
-  let replacedModifiers: string = ''
-  if (Option.isNone(Snapshot.parentAstDeclaration(snapshot, astDeclaration))) {
-    replacedModifiers += 'declare '
-  }
-  if (entity.shouldInlineExport) {
-    replacedModifiers = 'export ' + replacedModifiers
-  }
-  const previousSpan = span.previousSibling
-  if (previousSpan !== undefined && previousSpan.kind === ts.SyntaxKind.SyntaxList) {
-    previousSpan.modification.prefix = replacedModifiers + previousSpan.modification.prefix
-  } else {
-    span.modification.prefix = replacedModifiers + span.modification.prefix
-  }
-}
-
-const handleVariableDeclaration = (
-  snapshot: Snapshot.AnalysisSnapshot,
-  span: Span,
-  entity: CollectorEntity,
-  astDeclaration: Snapshot.AstDeclaration,
-): void => {
-  if (span.parent !== undefined) {
-    return
-  }
-  const list = TypeScriptHelpers.matchAncestor<ts.VariableDeclarationList>(span.node, [
-    ts.SyntaxKind.VariableDeclarationList,
-    ts.SyntaxKind.VariableDeclaration,
-  ])
-  if (list === undefined) {
-    throw invariant('Unsupported variable declaration')
-  }
-  const sourceFile = list.getSourceFile()
-  const firstDeclStart = list.declarations[0]?.getStart() ?? list.getStart()
-  const listPrefix = sourceFile.text.substring(list.getStart(), firstDeclStart)
-  span.modification.prefix = 'declare ' + listPrefix + span.modification.prefix
-  span.modification.suffix = ';'
-
-  if (entity.shouldInlineExport) {
-    span.modification.prefix = 'export ' + span.modification.prefix
-  }
-
-  const declarationMetadata: DeclarationMetadata = Snapshot.fetchDeclarationMetadata(snapshot, astDeclaration)
-  if (declarationMetadata.tsdocParserContext !== undefined) {
-    let originalComment: string = declarationMetadata.tsdocParserContext.sourceRange.toString()
-    if (!/\r?\n\s*$/.test(originalComment)) {
-      originalComment += '\n'
-    }
-    span.modification.indentDocComment = IndentDocCommentScope.PrefixOnly
-    span.modification.prefix = originalComment + span.modification.prefix
-  }
-}
-
-const handleIdentifier = (snapshot: Snapshot.AnalysisSnapshot, span: Span): void => {
-  if (!ts.isIdentifier(span.node)) {
-    return
-  }
-  Option.match(Snapshot.tryGetEntityForNode(snapshot, span.node), {
-    onNone: () => undefined,
-    onSome: (referencedEntity) => {
-      if (referencedEntity.nameForEmit === undefined || referencedEntity.nameForEmit.length === 0) {
-        throw invariant('referencedEntry.nameForEmit is undefined')
-      }
-      span.modification.prefix = referencedEntity.nameForEmit
-    },
+): RollupPlanState => {
+  const declaredPrefix = Match.value(Option.isNone(Snapshot.parentAstDeclaration(state.snapshot, astDeclaration))).pipe(
+    Match.when(true, () => 'declare '),
+    Match.when(false, () => ''),
+    Match.exhaustive,
+  )
+  const replacedModifiers = Match.value(state.entity.shouldInlineExport).pipe(
+    Match.when(true, () => `export ${declaredPrefix}`),
+    Match.when(false, () => declaredPrefix),
+    Match.exhaustive,
+  )
+  return Option.match(previousSibling, {
+    onSome: (previous) =>
+      Match.value(previous.kind === ts.SyntaxKind.SyntaxList).pipe(
+        Match.when(true, () => ({ ...state, plan: SpanPlan.prependPrefix(state.plan, previous, replacedModifiers) })),
+        Match.when(false, () => ({ ...state, plan: SpanPlan.prependPrefix(state.plan, tree, replacedModifiers) })),
+        Match.exhaustive,
+      ),
+    onNone: () => ({ ...state, plan: SpanPlan.prependPrefix(state.plan, tree, replacedModifiers) }),
   })
 }
 
-const trimChildSpan = (
-  snapshot: Snapshot.AnalysisSnapshot,
-  child: Span,
-  childAstDeclaration: Snapshot.AstDeclaration,
-  dtsKind: DtsRollupKind,
-): boolean => {
-  const releaseTag = Snapshot.fetchApiItemMetadata(snapshot, childAstDeclaration).effectiveReleaseTag
-  if (shouldIncludeReleaseTag(releaseTag, dtsKind)) {
-    return false
+const variableDeclarationPlanOf = (
+  state: RollupPlanState,
+  tree: SpanTree,
+  list: ts.VariableDeclarationList,
+  astDeclaration: Snapshot.AstDeclaration,
+): RollupPlanState => {
+  const firstDeclarationStart = Option.getOrElse(
+    Option.map(Arr.head(list.declarations), (declaration) => declaration.getStart()),
+    () => list.getStart(),
+  )
+  const listPrefix = list.getSourceFile().text.substring(list.getStart(), firstDeclarationStart)
+  const withListPrefix = {
+    ...state,
+    plan: SpanPlan.prependPrefix(SpanPlan.withSuffix(state.plan, tree, ';'), tree, `declare ${listPrefix}`),
   }
-  let nodeToTrim: Span = child
-  if (child.kind === ts.SyntaxKind.VariableDeclaration) {
-    const variableStatement = child.findFirstParent(ts.SyntaxKind.VariableStatement)
-    if (variableStatement !== undefined) {
-      nodeToTrim = variableStatement
-    }
-  }
-
-  const modification: SpanModification = nodeToTrim.modification
-  const name: string = Snapshot.localName(snapshot, childAstDeclaration)
-  modification.omitChildren = true
-
-  if (Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true) {
-    modification.prefix = `/* Excluded from this release type: ${name} */`
-  } else {
-    modification.prefix = ''
-  }
-  modification.suffix = ''
-
-  if (nodeToTrim.children.length > 0) {
-    modification.suffix = nodeToTrim.children[nodeToTrim.children.length - 1]?.separator ?? ''
-  }
-
-  if (nodeToTrim.nextSibling?.kind === ts.SyntaxKind.CommaToken) {
-    modification.suffix += nodeToTrim.nextSibling.separator
-    nodeToTrim.nextSibling.modification.skipAll()
-  }
-
-  if (modification.suffix.trim().length === 0 && modification.prefix.trim().length === 0) {
-    modification.suffix = ''
-    modification.prefix = ''
-  }
-
-  return true
+  const withExport = Match.value(state.entity.shouldInlineExport).pipe(
+    Match.when(true, () => ({ ...withListPrefix, plan: SpanPlan.prependPrefix(withListPrefix.plan, tree, 'export ') })),
+    Match.when(false, () => withListPrefix),
+    Match.exhaustive,
+  )
+  return Option.match(
+    Option.fromNullishOr(Snapshot.fetchDeclarationMetadata(state.snapshot, astDeclaration).tsdocParserContext),
+    {
+      onNone: () => withExport,
+      onSome: (parserContext) => {
+        const commentText = parserContext.sourceRange.toString()
+        const originalComment = Match.value(/\r?\n\s*$/.test(commentText)).pipe(
+          Match.when(true, () => commentText),
+          Match.when(false, () => `${commentText}\n`),
+          Match.exhaustive,
+        )
+        return {
+          ...withExport,
+          plan: SpanPlan.prependPrefix(
+            SpanPlan.withIndentDocComment(withExport.plan, tree, 'prefixOnly'),
+            tree,
+            originalComment,
+          ),
+        }
+      },
+    },
+  )
 }
 
-const modifySpan = (
+const handleVariableDeclaration = (
+  state: RollupPlanState,
+  tree: SpanTree,
+  parent: Option.Option<SpanTree>,
+  astDeclaration: Snapshot.AstDeclaration,
+): Result.Result<RollupPlanState, RenderFailure> =>
+  Option.match(parent, {
+    onSome: () => Result.succeed(state),
+    onNone: () =>
+      Option.match(
+        Option.fromUndefinedOr(
+          TypeScriptHelpers.matchAncestor<ts.VariableDeclarationList>(tree.node, [
+            ts.SyntaxKind.VariableDeclarationList,
+            ts.SyntaxKind.VariableDeclaration,
+          ]),
+        ),
+        {
+          onNone: () => internalInvariantOf('Unsupported variable declaration'),
+          onSome: (list) => Result.succeed(variableDeclarationPlanOf(state, tree, list, astDeclaration)),
+        },
+      ),
+  })
+
+const handleIdentifier = (state: RollupPlanState, tree: SpanTree): Result.Result<RollupPlanState, RenderFailure> =>
+  Match.value(tree.node).pipe(
+    Match.when(ts.isIdentifier, (identifier) =>
+      Option.match(Snapshot.tryGetEntityForNode(state.snapshot, identifier), {
+        onNone: () => Result.succeed(state),
+        onSome: (referencedEntity) =>
+          Option.match(Option.filter(Option.fromNullishOr(referencedEntity.nameForEmit), (name) => name.length > 0), {
+            onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
+            onSome: (nameForEmit) =>
+              Result.succeed({ ...state, plan: SpanPlan.withPrefix(state.plan, tree, nameForEmit) }),
+          }),
+      })),
+    Match.orElse(() => Result.succeed(state)),
+  )
+
+const plannedImportTypeOf = (
+  state: RollupPlanState,
+  tree: SpanTree,
+  astDeclaration: Snapshot.AstDeclaration,
+): Result.Result<RollupPlanState, RenderFailure> =>
+  Result.map(
+    planImportTypeSpan({
+      state,
+      snapshot: state.snapshot,
+      tree,
+      astDeclaration,
+      planNestedSpan: (currentState, span, nestedPreviousSibling, nestedDeclaration) =>
+        planSpanOf(currentState, span, Option.some(tree), nestedPreviousSibling, nestedDeclaration),
+    }),
+    (planned) => ({ ...planned.state, plan: planned.plan }),
+  )
+
+const packageDocumentationRegex = /(?:\s|\*)@packageDocumentation(?:\s|\*)/gi
+
+const plannedSpanKindOf = (
+  state: RollupPlanState,
+  tree: SpanTree,
+  parent: Option.Option<SpanTree>,
+  previousSibling: Option.Option<SpanTree>,
+  astDeclaration: Snapshot.AstDeclaration,
+): Result.Result<PlannedRollupSpan, RenderFailure> =>
+  Match.value(tree.kind).pipe(
+    Match.when(ts.SyntaxKind.JSDocComment, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.succeed({
+        state: Match.value(Option.fromNullishOr(SpanTreeModule.originalText(tree).match(packageDocumentationRegex)))
+          .pipe(
+            Match.when(Option.isSome, () => ({ ...state, plan: SpanPlan.skipAll(state.plan, tree) })),
+            Match.when(Option.isNone, () => state),
+            Match.exhaustive,
+          ),
+        recurseChildren: false,
+      })),
+    Match.when(ts.SyntaxKind.ExportKeyword, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.succeed({
+        state: Match.value(isExportKeywordInNamespaceExportDeclaration(tree.node)).pipe(
+          Match.when(true, () => state),
+          Match.when(false, () => ({ ...state, plan: SpanPlan.skipAll(state.plan, tree) })),
+          Match.exhaustive,
+        ),
+        recurseChildren: true,
+      })),
+    Match.when(ts.SyntaxKind.DefaultKeyword, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.succeed({ state: { ...state, plan: SpanPlan.skipAll(state.plan, tree) }, recurseChildren: true })),
+    Match.when(ts.SyntaxKind.DeclareKeyword, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.succeed({ state: { ...state, plan: SpanPlan.skipAll(state.plan, tree) }, recurseChildren: true })),
+    Match.when(ts.SyntaxKind.VariableDeclaration, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.map(handleVariableDeclaration(state, tree, parent, astDeclaration), (plannedState) => ({
+        state: plannedState,
+        recurseChildren: true,
+      }))),
+    Match.when(ts.SyntaxKind.Identifier, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.map(handleIdentifier(state, tree), (plannedState) => ({
+        state: plannedState,
+        recurseChildren: true,
+      }))),
+    Match.when(ts.SyntaxKind.ImportType, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Result.map(plannedImportTypeOf(state, tree, astDeclaration), (plannedState) => ({
+        state: plannedState,
+        recurseChildren: true,
+      }))),
+    Match.orElse((): Result.Result<PlannedRollupSpan, RenderFailure> =>
+      Match.value(isKeywordNeedingModifiers(tree.kind)).pipe(
+        Match.when(true, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+          Result.succeed({
+            state: handleKeywordModifiers(state, tree, previousSibling, astDeclaration),
+            recurseChildren: true,
+          })),
+        Match.when(false, (): Result.Result<PlannedRollupSpan, RenderFailure> =>
+          Result.succeed({ state, recurseChildren: true })),
+        Match.exhaustive,
+      )
+    ),
+  )
+
+const plannedSpanChildrenOf = (
+  planned: PlannedRollupSpan,
+  tree: SpanTree,
+  astDeclaration: Snapshot.AstDeclaration,
+): Result.Result<RollupPlanState, RenderFailure> =>
+  Match.value(planned.recurseChildren).pipe(
+    Match.when(false, (): Result.Result<RollupPlanState, RenderFailure> => Result.succeed(planned.state)),
+    Match.when(true, () => {
+      const initial: Result.Result<RollupChildWalk, RenderFailure> = Result.succeed({
+        state: planned.state,
+        previous: Option.none(),
+      })
+      return Result.map(
+        Arr.reduce(tree.children, initial, (accumulated, child) =>
+          Result.flatMap(accumulated, (walk) =>
+            plannedChildOf(walk, tree, child, astDeclaration))),
+        (walk) =>
+          walk.state,
+      )
+    }),
+    Match.exhaustive,
+  )
+
+const planSpanOf = (
+  state: RollupPlanState,
+  tree: SpanTree,
+  parent: Option.Option<SpanTree>,
+  previousSibling: Option.Option<SpanTree>,
+  astDeclaration: Snapshot.AstDeclaration,
+): Result.Result<RollupPlanState, RenderFailure> =>
+  Result.flatMap(
+    plannedSpanKindOf(state, tree, parent, previousSibling, astDeclaration),
+    (planned) => plannedSpanChildrenOf(planned, tree, astDeclaration),
+  )
+
+const trimmedSpanOf = (
+  state: RollupPlanState,
+  child: SpanTree,
+  childAstDeclaration: Snapshot.AstDeclaration,
+): TrimmedSpan => {
+  const nodeToTrim = Match.value(child.kind === ts.SyntaxKind.VariableDeclaration).pipe(
+    Match.when(true, () =>
+      Option.getOrElse(
+        SpanTreeModule.findFirstParent(
+          child,
+          state.ids,
+          (node) => node.kind === ts.SyntaxKind.VariableStatement,
+        ),
+        () => child,
+      )),
+    Match.when(false, () => child),
+    Match.exhaustive,
+  )
+  const name = Snapshot.localName(state.snapshot, childAstDeclaration)
+  const trimmingPrefix = Match.value(Snapshot.extractorConfig(state.snapshot).dtsRollup.omitTrimmingComments !== true)
+    .pipe(
+      Match.when(true, () => `/* Excluded from this release type: ${name} */`),
+      Match.when(false, () => ''),
+      Match.exhaustive,
+    )
+  const lastChildSeparator = Match.value(nodeToTrim.children.length > 0).pipe(
+    Match.when(
+      true,
+      () => Option.getOrElse(Option.map(Arr.last(nodeToTrim.children), (lastChild) => lastChild.separator), () => ''),
+    ),
+    Match.when(false, () => ''),
+    Match.exhaustive,
+  )
+  const commaSibling = Option.filter(
+    SpanTreeModule.nextSiblingOf(nodeToTrim, state.ids),
+    (sibling) => sibling.kind === ts.SyntaxKind.CommaToken,
+  )
+  const suffix = `${lastChildSeparator}${
+    Option.getOrElse(Option.map(commaSibling, (sibling) => sibling.separator), () => '')
+  }`
+  const withTrim = SpanPlan.withSuffix(
+    SpanPlan.withPrefix(SpanPlan.omitChildren(state.plan, nodeToTrim), nodeToTrim, trimmingPrefix),
+    nodeToTrim,
+    suffix,
+  )
+  const withSkippedComma = Option.match(commaSibling, {
+    onNone: () => withTrim,
+    onSome: (sibling) => SpanPlan.skipAll(withTrim, sibling),
+  })
+  const normalized = Match.value(suffix.trim().length === 0 && trimmingPrefix.trim().length === 0).pipe(
+    Match.when(true, () => SpanPlan.withSuffix(SpanPlan.withPrefix(withSkippedComma, nodeToTrim, ''), nodeToTrim, '')),
+    Match.when(false, () => withSkippedComma),
+    Match.exhaustive,
+  )
+  return { state: { ...state, plan: normalized }, trimmed: true }
+}
+
+const trimChildSpan = (
+  state: RollupPlanState,
+  child: SpanTree,
+  childAstDeclaration: Snapshot.AstDeclaration,
+): Result.Result<TrimmedSpan, RenderFailure> =>
+  Match.value(
+    shouldIncludeReleaseTag(
+      Snapshot.fetchApiItemMetadata(state.snapshot, childAstDeclaration).effectiveReleaseTag,
+      state.dtsKind,
+    ),
+  ).pipe(
+    Match.when(true, (): Result.Result<TrimmedSpan, RenderFailure> => Result.succeed({ state, trimmed: false })),
+    Match.when(false, (): Result.Result<TrimmedSpan, RenderFailure> =>
+      Result.succeed(trimmedSpanOf(state, child, childAstDeclaration))),
+    Match.exhaustive,
+  )
+
+const plannedChildOf = (
+  walk: RollupChildWalk,
+  tree: SpanTree,
+  child: SpanTree,
+  astDeclaration: Snapshot.AstDeclaration,
+): Result.Result<RollupChildWalk, RenderFailure> =>
+  Match.value(Snapshot.isSupportedDeclarationKind(child.kind)).pipe(
+    Match.when(true, (): Result.Result<RollupChildWalk, RenderFailure> => {
+      const childDeclaration = Snapshot.childDeclarationByNode(walk.state.snapshot, child.node, astDeclaration)
+      return Result.flatMap(trimChildSpan(walk.state, child, childDeclaration), (trimmed) =>
+        Match.value(trimmed.trimmed).pipe(
+          Match.when(true, (): Result.Result<RollupChildWalk, RenderFailure> =>
+            Result.succeed({ state: trimmed.state, previous: Option.some(child) })),
+          Match.when(false, (): Result.Result<RollupChildWalk, RenderFailure> =>
+            Result.map(
+              planSpanOf(trimmed.state, child, Option.some(tree), walk.previous, childDeclaration),
+              (state) => ({ state, previous: Option.some(child) }),
+            )),
+          Match.exhaustive,
+        ))
+    }),
+    Match.when(false, (): Result.Result<RollupChildWalk, RenderFailure> =>
+      Result.map(
+        planSpanOf(walk.state, child, Option.some(tree), walk.previous, astDeclaration),
+        (state) => ({ state, previous: Option.some(child) }),
+      )),
+    Match.exhaustive,
+  )
+
+const maxEffectiveReleaseTagOf = (snapshot: Snapshot.AnalysisSnapshot, astEntity: Snapshot.AstEntity): ReleaseTag =>
+  Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, astEntity), {
+    onNone: () => ReleaseTag.None,
+    onSome: (symbolMetadata) => symbolMetadata.maxEffectiveReleaseTag,
+  })
+
+const excludedEntityOf = (
+  state: RollupEmitState,
+  entity: CollectorEntity,
   snapshot: Snapshot.AnalysisSnapshot,
-  span: Span,
+): RollupEmitState =>
+  Match.value(Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
+    Match.when(true, () => ({
+      ...state,
+      writer: TextWriter.writeLine(
+        TextWriter.ensureSkippedLine(state.writer),
+        `/* Excluded from this release type: ${entity.nameForEmit} */`,
+      ),
+    })),
+    Match.when(false, () => state),
+    Match.exhaustive,
+  )
+
+const excludedDeclarationOf = (
+  state: RollupEmitState,
+  entity: CollectorEntity,
+  snapshot: Snapshot.AnalysisSnapshot,
+): RollupEmitState =>
+  Match.value(Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true).pipe(
+    Match.when(true, () => ({
+      ...state,
+      writer: TextWriter.writeLine(
+        TextWriter.ensureSkippedLine(state.writer),
+        `/* Excluded declaration from this release type: ${entity.nameForEmit} */`,
+      ),
+    })),
+    Match.when(false, () => state),
+    Match.exhaustive,
+  )
+
+const emitDeclarationOf = (
+  state: RollupEmitState,
+  snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
   astDeclaration: Snapshot.AstDeclaration,
   dtsKind: DtsRollupKind,
-): void => {
-  let recurseChildren = true
+): Result.Result<RollupEmitState, RenderFailure> =>
+  Match.value(
+    shouldIncludeReleaseTag(Snapshot.fetchApiItemMetadata(snapshot, astDeclaration).effectiveReleaseTag, dtsKind),
+  ).pipe(
+    Match.when(false, (): Result.Result<RollupEmitState, RenderFailure> =>
+      Result.succeed(excludedDeclarationOf(state, entity, snapshot))),
+    Match.when(true, (): Result.Result<RollupEmitState, RenderFailure> => {
+      const tree = SpanTreeModule.build(Snapshot.declaration(snapshot, astDeclaration))
+      return Result.map(
+        planSpanOf(
+          { snapshot, entity, dtsKind, ids: SpanTreeModule.index(tree), plan: SpanPlan.empty },
+          tree,
+          Option.none(),
+          Option.none(),
+          astDeclaration,
+        ),
+        (planned) => ({
+          ...state,
+          writer: TextWriter.ensureNewLine(
+            RenderSpan.writeSpan(tree, planned.plan, TextWriter.ensureSkippedLine(state.writer)),
+          ),
+        }),
+      )
+    }),
+    Match.exhaustive,
+  )
 
-  if (span.kind === ts.SyntaxKind.JSDocComment) {
-    if (span.node.getText().match(/(?:\s|\*)@packageDocumentation(?:\s|\*)/gi)) {
-      span.modification.skipAll()
-    }
-    recurseChildren = false
-  } else if (span.kind === ts.SyntaxKind.ExportKeyword) {
-    if (!DtsEmitHelpers.isExportKeywordInNamespaceExportDeclaration(span.node)) {
-      span.modification.skipAll()
-    }
-  } else if (span.kind === ts.SyntaxKind.DefaultKeyword || span.kind === ts.SyntaxKind.DeclareKeyword) {
-    span.modification.skipAll()
-  } else if (isKeywordNeedingModifiers(span.kind)) {
-    handleKeywordModifiers(span, entity, snapshot, astDeclaration)
-  } else if (span.kind === ts.SyntaxKind.VariableDeclaration) {
-    handleVariableDeclaration(snapshot, span, entity, astDeclaration)
-  } else if (span.kind === ts.SyntaxKind.Identifier) {
-    handleIdentifier(snapshot, span)
-  } else if (span.kind === ts.SyntaxKind.ImportType) {
-    DtsEmitHelpers.modifyImportTypeSpan(
-      snapshot,
-      span,
-      astDeclaration,
-      (childSpan, childAstDeclaration) => {
-        modifySpan(snapshot, childSpan, entity, childAstDeclaration, dtsKind)
-      },
-    )
+const plannedNamespaceMemberOf = (
+  snapshot: Snapshot.AnalysisSnapshot,
+  namespaceName: string,
+  exportedName: string,
+  exportedEntity: Snapshot.AstEntity,
+  dtsKind: DtsRollupKind,
+): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
+  Option.match(Snapshot.tryGetCollectorEntity(snapshot, exportedEntity), {
+    onNone: () =>
+      internalInvariantOf(
+        `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(snapshot, exportedEntity)}`,
+      ),
+    onSome: (memberEntity) =>
+      Match.value(shouldIncludeReleaseTag(maxEffectiveReleaseTagOf(snapshot, exportedEntity), dtsKind)).pipe(
+        Match.when(
+          false,
+          (): Result.Result<Option.Option<NamespaceMember>, RenderFailure> => Result.succeed(Option.none()),
+        ),
+        Match.when(
+          true,
+          (): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
+            Result.flatMap(classifyNamespaceMember(snapshot, exportedEntity), (kind) =>
+              Option.match(
+                Option.filter(Option.fromNullishOr(memberEntity.nameForEmit), (name) => name.length > 0),
+                {
+                  onNone: (): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
+                    internalInvariantOf(
+                      `referencedEntry.nameForEmit is undefined for ${Snapshot.localName(snapshot, exportedEntity)}`,
+                    ),
+                  onSome: (targetName): Result.Result<Option.Option<NamespaceMember>, RenderFailure> =>
+                    Result.succeed(Option.some({ memberName: exportedName, targetName, kind })),
+                },
+              )),
+        ),
+        Match.exhaustive,
+      ),
+  })
+
+const plannedMembersOf = (
+  snapshot: Snapshot.AnalysisSnapshot,
+  exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
+  namespaceName: string,
+  dtsKind: DtsRollupKind,
+): Result.Result<ReadonlyArray<NamespaceMember>, RenderFailure> => {
+  const initial: Result.Result<ReadonlyArray<NamespaceMember>, RenderFailure> = Result.succeed([])
+  return Arr.reduce(
+    Arr.fromIterable(exportedLocalEntities),
+    initial,
+    (accumulated, [exportedName, exportedEntity]) =>
+      Result.flatMap(accumulated, (members) =>
+        Result.map(
+          plannedNamespaceMemberOf(snapshot, namespaceName, exportedName, exportedEntity, dtsKind),
+          (member) =>
+            Option.match(member, {
+              onNone: () => members,
+              onSome: (planned) => Arr.append(members, planned),
+            }),
+        )),
+  )
+}
+
+const aliasedStateOf = (
+  state: RollupEmitState,
+  namespaceName: string,
+  members: ReadonlyArray<NamespaceMember>,
+): { readonly state: RollupEmitState; readonly aliases: ReadonlyArray<NamespaceAlias> } => {
+  const aliases = planNamespaceAliases(namespaceName, members, state.reservedNames)
+  return {
+    state: {
+      ...state,
+      reservedNames: Arr.reduce(
+        aliases,
+        state.reservedNames,
+        (reserved, alias) => HashSet.add(reserved, alias.aliasName),
+      ),
+    },
+    aliases,
   }
+}
 
-  if (!recurseChildren) {
-    return
-  }
-
-  for (const child of span.children) {
-    let childAstDeclaration: Snapshot.AstDeclaration = astDeclaration
-    let trimmed = false
-    if (Snapshot.isSupportedDeclarationKind(child.kind)) {
-      childAstDeclaration = Snapshot.childDeclarationByNode(snapshot, child.node, astDeclaration)
-      trimmed = trimChildSpan(snapshot, child, childAstDeclaration, dtsKind)
-    }
-
-    if (!trimmed) {
-      modifySpan(snapshot, child, entity, childAstDeclaration, dtsKind)
-    }
+const namespaceWriterOf = (
+  state: RollupEmitState,
+  entity: CollectorEntity,
+  namespaceName: string,
+  aliases: ReadonlyArray<NamespaceAlias>,
+): RollupEmitState => {
+  const afterDeclarations = Arr.reduce(
+    aliases,
+    TextWriter.ensureSkippedLine(state.writer),
+    (writer, alias) =>
+      Arr.reduce(
+        formatAliasDeclarations(alias),
+        writer,
+        (current, declaration) => TextWriter.writeLine(current, declaration),
+      ),
+  )
+  const afterGap = TextWriter.ensureSkippedLine(afterDeclarations)
+  const afterInlineExport = Match.value(entity.shouldInlineExport).pipe(
+    Match.when(true, () => TextWriter.write(afterGap, 'export ')),
+    Match.when(false, () => afterGap),
+    Match.exhaustive,
+  )
+  const afterHeader = TextWriter.writeLine(afterInlineExport, `declare namespace ${namespaceName} {`)
+  const afterOpen = TextWriter.writeLine(TextWriter.increaseIndent(afterHeader), 'export {')
+  const afterClauses = TextWriter.writeLine(
+    TextWriter.increaseIndent(afterOpen),
+    Arr.join(
+      Arr.map(
+        aliases,
+        (alias) => formatAliasExportClause(alias, (name) => SyntaxHelpers.isSafeUnquotedMemberIdentifier(name)),
+      ),
+      ',\n',
+    ),
+  )
+  return {
+    ...state,
+    writer: TextWriter.writeLine(
+      TextWriter.decreaseIndent(TextWriter.writeLine(TextWriter.decreaseIndent(afterClauses), '}')),
+      '}',
+    ),
   }
 }
 
 const emitNamespaceBlock = (
-  writer: IndentedWriter,
+  state: RollupEmitState,
   snapshot: Snapshot.AnalysisSnapshot,
   entity: CollectorEntity,
   astEntity: Snapshot.AstNamespaceImport,
-  reservedNames: Set<string>,
   dtsKind: DtsRollupKind,
-): void => {
-  const astModuleExportInfo = Snapshot.fetchAstModuleExportInfo(snapshot, astEntity)
-  const namespaceName = entity.nameForEmit
+): Result.Result<RollupEmitState, RenderFailure> =>
+  Option.match(Option.filter(Option.fromNullishOr(entity.nameForEmit), (name) => name.length > 0), {
+    onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
+    onSome: (namespaceName) =>
+      Match.value(Snapshot.fetchAstModuleExportInfo(snapshot, astEntity)).pipe(
+        Match.when(
+          (astModuleExportInfo) => astModuleExportInfo.starExportedExternalModules.size > 0,
+          (): Result.Result<RollupEmitState, RenderFailure> =>
+            Result.fail(
+              new UnsupportedStarExportError({
+                namespaceName,
+                moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(
+                  Snapshot.declaration(snapshot, astEntity),
+                ),
+              }),
+            ),
+        ),
+        Match.orElse((astModuleExportInfo) =>
+          Result.flatMap(
+            plannedMembersOf(snapshot, astModuleExportInfo.exportedLocalEntities, namespaceName, dtsKind),
+            (members) => {
+              const aliased = aliasedStateOf(state, namespaceName, members)
+              return Result.succeed(namespaceWriterOf(aliased.state, entity, namespaceName, aliased.aliases))
+            },
+          )
+        ),
+      ),
+  })
 
-  if (namespaceName === undefined || namespaceName.length === 0) {
-    throw invariant('referencedEntry.nameForEmit is undefined')
-  }
-
-  if (astModuleExportInfo.starExportedExternalModules.size > 0) {
-    throw new UnsupportedStarExportError({
-      namespaceName,
-      moduleSpecifier: SourceFileLocationFormatter.formatDeclaration(Snapshot.declaration(snapshot, astEntity)),
-    })
-  }
-
-  const members: NamespaceMember[] = []
-  for (const [exportedName, exportedEntity] of astModuleExportInfo.exportedLocalEntities) {
-    const memberEntity = requireSome(
-      Snapshot.tryGetCollectorEntity(snapshot, exportedEntity),
-      `Cannot find collector entity for ${namespaceName}.${Snapshot.localName(snapshot, exportedEntity)}`,
-    )
-
-    const exportedMaxReleaseTag = Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, exportedEntity), {
-      onNone: () => ReleaseTag.None,
-      onSome: (exportedMetadata) => exportedMetadata.maxEffectiveReleaseTag,
-    })
-    if (!shouldIncludeReleaseTag(exportedMaxReleaseTag, dtsKind)) {
-      continue
-    }
-
-    const targetName = memberEntity.nameForEmit
-    if (targetName === undefined || targetName.length === 0) {
-      throw invariant(`referencedEntry.nameForEmit is undefined for ${Snapshot.localName(snapshot, exportedEntity)}`)
-    }
-
-    members.push({
-      memberName: exportedName,
-      targetName,
-      kind: classifyNamespaceMember(snapshot, exportedEntity),
-    })
-  }
-
-  const aliases = planNamespaceAliases(namespaceName, members, reservedNames)
-  for (const alias of aliases) {
-    reservedNames.add(alias.aliasName)
-  }
-
-  writer.ensureSkippedLine()
-  for (const alias of aliases) {
-    for (const decl of formatAliasDeclarations(alias)) {
-      writer.writeLine(decl)
-    }
-  }
-
-  writer.ensureSkippedLine()
-  if (entity.shouldInlineExport) {
-    writer.write('export ')
-  }
-  writer.writeLine(`declare namespace ${namespaceName} {`)
-  writer.increaseIndent()
-  writer.writeLine('export {')
-  writer.increaseIndent()
-
-  const exportClauses = aliases.map((alias) =>
-    formatAliasExportClause(alias, (name) => SyntaxHelpers.isSafeUnquotedMemberIdentifier(name))
-  )
-  writer.writeLine(exportClauses.join(',\n'))
-
-  writer.decreaseIndent()
-  writer.writeLine('}')
-  writer.decreaseIndent()
-  writer.writeLine('}')
-}
-
-const collectInitialReservedNames = (snapshot: Snapshot.AnalysisSnapshot): Set<string> => {
-  const reserved = new Set<string>()
-  for (const entity of Snapshot.entities(snapshot)) {
-    if (entity.nameForEmit !== undefined && entity.nameForEmit.length > 0) {
-      reserved.add(entity.nameForEmit)
-    }
-    for (const exportName of entity.exportNames) {
-      reserved.add(exportName)
-    }
-  }
-  return reserved
-}
-
-const generateTypingsFileContent = (
+const emitIncludedEntityOf = (
+  state: RollupEmitState,
+  entity: CollectorEntity,
   snapshot: Snapshot.AnalysisSnapshot,
-  writer: IndentedWriter,
   dtsKind: DtsRollupKind,
-): void => {
-  const workingPackage = Snapshot.workingPackage(snapshot)
-  if (workingPackage.tsdocParserContext !== undefined) {
-    writer.trimLeadingSpaces = false
-    writer.writeLine(workingPackage.tsdocParserContext.sourceRange.toString())
-    writer.trimLeadingSpaces = true
-    writer.ensureSkippedLine()
-  }
+): Result.Result<RollupEmitState, RenderFailure> =>
+  Match.value(Snapshot.refOf(Snapshot.astEntityOf(entity))).pipe(
+    Match.tag('AstSymbolRef', (): Result.Result<RollupEmitState, RenderFailure> =>
+      Option.match(Snapshot.astSymbolOf(Snapshot.astEntityOf(entity)), {
+        onNone: () =>
+          internalInvariantOf('Missing AstSymbol for an AstSymbolRef'),
+        onSome: (astSymbol) => {
+          const initial: Result.Result<RollupEmitState, RenderFailure> = Result.succeed(state)
+          return Arr.reduce(
+            Snapshot.astDeclarations(snapshot, astSymbol),
+            initial,
+            (accumulated, astDeclaration) =>
+              Result.flatMap(accumulated, (current) =>
+                emitDeclarationOf(current, snapshot, entity, astDeclaration, dtsKind)),
+          )
+        },
+      })),
+    Match.tag('AstNamespaceImportRef', (): Result.Result<RollupEmitState, RenderFailure> =>
+      Option.match(Snapshot.astNamespaceImportOf(Snapshot.astEntityOf(entity)), {
+        onNone: () =>
+          internalInvariantOf('Missing AstNamespaceImport for an AstNamespaceImportRef'),
+        onSome: (astNamespaceImport) =>
+          emitNamespaceBlock(state, snapshot, entity, astNamespaceImport, dtsKind),
+      })),
+    Match.orElse((): Result.Result<RollupEmitState, RenderFailure> =>
+      Result.succeed(state)
+    ),
+  )
 
-  for (const typeDirective of Snapshot.dtsTypeReferenceDirectives(snapshot)) {
-    writer.writeLine(`/// <reference types="${typeDirective}" />`)
-  }
-  for (const libDirective of Snapshot.dtsLibReferenceDirectives(snapshot)) {
-    writer.writeLine(`/// <reference lib="${libDirective}" />`)
-  }
-  writer.ensureSkippedLine()
+const entitySuffixOf = (state: RollupEmitState, entity: CollectorEntity): RollupEmitState =>
+  Match.value(entity.shouldInlineExport).pipe(
+    Match.when(true, () => ({ ...state, writer: TextWriter.ensureSkippedLine(state.writer) })),
+    Match.when(false, () => ({
+      ...state,
+      writer: TextWriter.ensureSkippedLine(
+        Arr.reduce(
+          entity.exportNames,
+          state.writer,
+          (writer, exportName) => emitNamedExport(writer, exportName, entity),
+        ),
+      ),
+    })),
+    Match.exhaustive,
+  )
 
-  for (const entity of Snapshot.entities(snapshot)) {
-    const astEntity = Snapshot.astEntityOf(entity)
-    Match.value(Snapshot.refOf(astEntity)).pipe(
-      Match.tag('AstImportRef', () =>
-        DtsEmitHelpers.emitImport(
-          writer,
-          entity,
-          requireSome(Snapshot.astImportOf(astEntity), 'Missing AstImport for an AstImportRef'),
-        )),
-      Match.orElse(() => undefined),
-    )
-  }
-  writer.ensureSkippedLine()
+const emitRollupEntity = (
+  state: RollupEmitState,
+  entity: CollectorEntity,
+  snapshot: Snapshot.AnalysisSnapshot,
+  dtsKind: DtsRollupKind,
+): Result.Result<RollupEmitState, RenderFailure> =>
+  Match.value(shouldIncludeReleaseTag(maxEffectiveReleaseTagOf(snapshot, Snapshot.astEntityOf(entity)), dtsKind)).pipe(
+    Match.when(
+      false,
+      (): Result.Result<RollupEmitState, RenderFailure> => Result.succeed(excludedEntityOf(state, entity, snapshot)),
+    ),
+    Match.when(
+      true,
+      (): Result.Result<RollupEmitState, RenderFailure> =>
+        Result.map(
+          emitIncludedEntityOf(state, entity, snapshot, dtsKind),
+          (emitted) => entitySuffixOf(emitted, entity),
+        ),
+    ),
+    Match.exhaustive,
+  )
 
-  const reservedNames = collectInitialReservedNames(snapshot)
+const reservedNamesOf = (snapshot: Snapshot.AnalysisSnapshot): HashSet.HashSet<string> =>
+  Arr.reduce(Snapshot.entities(snapshot), HashSet.empty<string>(), (reserved, entity) =>
+    Arr.reduce(
+      entity.exportNames,
+      Match.value(Option.filter(Option.fromNullishOr(entity.nameForEmit), (name) => name.length > 0)).pipe(
+        Match.when(Option.isSome, (name) => HashSet.add(reserved, name.value)),
+        Match.when(Option.isNone, () => reserved),
+        Match.exhaustive,
+      ),
+      (current, exportName) => HashSet.add(current, exportName),
+    ))
 
-  for (const entity of Snapshot.entities(snapshot)) {
-    const astEntity = Snapshot.astEntityOf(entity)
-    const maxReleaseTag = Option.match(Snapshot.tryFetchMetadataForAstEntity(snapshot, astEntity), {
-      onNone: () => ReleaseTag.None,
-      onSome: (symbolMetadata) => symbolMetadata.maxEffectiveReleaseTag,
-    })
-
-    if (!shouldIncludeReleaseTag(maxReleaseTag, dtsKind)) {
-      if (Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true) {
-        writer.ensureSkippedLine()
-        writer.writeLine(`/* Excluded from this release type: ${entity.nameForEmit} */`)
-      }
-      continue
-    }
-
-    Match.value(Snapshot.refOf(astEntity)).pipe(
-      Match.tag('AstSymbolRef', () => {
-        const astSymbol = requireSome(Snapshot.astSymbolOf(astEntity), 'Missing AstSymbol for an AstSymbolRef')
-        for (const astDeclaration of Snapshot.astDeclarations(snapshot, astSymbol)) {
-          const apiItemMetadata: ApiItemMetadata = Snapshot.fetchApiItemMetadata(snapshot, astDeclaration)
-          if (!shouldIncludeReleaseTag(apiItemMetadata.effectiveReleaseTag, dtsKind)) {
-            if (Snapshot.extractorConfig(snapshot).dtsRollup.omitTrimmingComments !== true) {
-              writer.ensureSkippedLine()
-              writer.writeLine(`/* Excluded declaration from this release type: ${entity.nameForEmit} */`)
-            }
-            continue
-          }
-
-          const span = new Span(Snapshot.declaration(snapshot, astDeclaration))
-          modifySpan(snapshot, span, entity, astDeclaration, dtsKind)
-          writer.ensureSkippedLine()
-          span.writeModifiedText(writer)
-          writer.ensureNewLine()
-        }
-      }),
-      Match.tag('AstNamespaceImportRef', () => {
-        emitNamespaceBlock(
-          writer,
-          snapshot,
-          entity,
-          requireSome(
-            Snapshot.astNamespaceImportOf(astEntity),
-            'Missing AstNamespaceImport for an AstNamespaceImportRef',
-          ),
-          reservedNames,
-          dtsKind,
-        )
-      }),
-      Match.orElse(() => undefined),
-    )
-
-    if (!entity.shouldInlineExport) {
-      for (const exportName of entity.exportNames) {
-        DtsEmitHelpers.emitNamedExport(writer, exportName, entity)
-      }
-    }
-
-    writer.ensureSkippedLine()
-  }
-
-  DtsEmitHelpers.emitStarExports(writer, snapshot)
-
-  writer.ensureSkippedLine()
-  writer.writeLine('export { }')
+export interface RenderedDtsRollup {
+  readonly text: string
 }
 
-export class DtsRollupGenerator extends Pipeable.Class {
-  public static generateTypingsFileContent(
-    snapshot: Snapshot.AnalysisSnapshot,
-    dtsKind: DtsRollupKind,
-  ): string {
-    const writer = new IndentedWriter()
-    writer.trimLeadingSpaces = true
-    generateTypingsFileContent(snapshot, writer, dtsKind)
-    return writer.getText()
-  }
+export const generateTypingsFileContent = (
+  snapshot: Snapshot.AnalysisSnapshot,
+  dtsKind: DtsRollupKind,
+): Result.Result<RenderedDtsRollup, RenderFailure> => {
+  const initialWriter = TextWriter.make({ trimLeadingSpaces: true })
+  const afterPackageComment = Option.match(
+    Option.fromNullishOr(Snapshot.workingPackage(snapshot).tsdocParserContext),
+    {
+      onNone: () => initialWriter,
+      onSome: (parserContext) =>
+        TextWriter.ensureSkippedLine({
+          ...TextWriter.writeLine({ ...initialWriter, trimLeadingSpaces: false }, parserContext.sourceRange.toString()),
+          trimLeadingSpaces: true,
+        }),
+    },
+  )
+  const withDirectives = TextWriter.ensureSkippedLine(
+    Arr.reduce(
+      Snapshot.dtsLibReferenceDirectives(snapshot),
+      Arr.reduce(
+        Snapshot.dtsTypeReferenceDirectives(snapshot),
+        afterPackageComment,
+        (writer, typeDirective) => TextWriter.writeLine(writer, `/// <reference types="${typeDirective}" />`),
+      ),
+      (writer, libDirective) => TextWriter.writeLine(writer, `/// <reference lib="${libDirective}" />`),
+    ),
+  )
+  const initial: Result.Result<RollupEmitState, RenderFailure> = Result.flatMap(
+    writeImports(withDirectives, snapshot),
+    (afterImports) => Result.succeed({ writer: afterImports, reservedNames: reservedNamesOf(snapshot) }),
+  )
+  return Result.map(
+    Arr.reduce(
+      Snapshot.entities(snapshot),
+      initial,
+      (accumulated, entity) =>
+        Result.flatMap(accumulated, (current) => emitRollupEntity(current, entity, snapshot, dtsKind)),
+    ),
+    (state) => ({
+      text: TextWriter.getText(
+        TextWriter.writeLine(TextWriter.ensureSkippedLine(emitStarExports(state.writer, snapshot)), 'export { }'),
+      ),
+    }),
+  )
 }

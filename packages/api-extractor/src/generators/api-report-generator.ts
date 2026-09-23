@@ -2,7 +2,6 @@ import { HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
-import * as ts from 'typescript'
 
 import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
 import * as SyntaxHelpers from '../analyzer/SyntaxHelpers.js'
@@ -17,15 +16,21 @@ import {
   associatedMessagesOf,
   type ExportToEmit,
   getAedocSynopsis,
-  internalInvariantOf,
   planDeclarationSpan,
   planForPreapproved,
   type PlanState,
-  type ReportRenderFailure,
   shouldIncludeDeclaration,
   unassociatedMessagesOf,
   writeLineAsComments,
 } from './declaration-span-plan.js'
+import {
+  emitStarExports,
+  entityNameOf,
+  formatNamedExport,
+  internalInvariantOf,
+  type RenderFailure,
+  writeImports,
+} from './dts-emit-helpers.js'
 import * as RenderSpan from './render-span.js'
 import * as SpanPlan from './span-plan.js'
 import * as SpanTreeModule from './span-tree.js'
@@ -101,93 +106,6 @@ const writeTripleSlashDirectives = (
   return TextWriter.ensureSkippedLine(withLibDirectives)
 }
 
-const entityNameOf = (entity: CollectorEntity): string => entity.nameForEmit ?? ''
-
-const defaultImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string => {
-  const name = entityNameOf(entity)
-  return Match.value(name === astImport.exportName).pipe(
-    Match.when(true, () => `${prefix} ${astImport.exportName} from '${astImport.modulePath}';`),
-    Match.when(false, () => `${prefix} { default as ${name} } from '${astImport.modulePath}';`),
-    Match.exhaustive,
-  )
-}
-
-const namedImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string => {
-  const name = entityNameOf(entity)
-  return Match.value(name === astImport.exportName).pipe(
-    Match.when(true, () => `${prefix} { ${astImport.exportName} } from '${astImport.modulePath}';`),
-    Match.when(false, () => `${prefix} { ${astImport.exportName} as ${name} } from '${astImport.modulePath}';`),
-    Match.exhaustive,
-  )
-}
-
-const starImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string =>
-  `${prefix} * as ${entityNameOf(entity)} from '${astImport.modulePath}';`
-
-const equalsImportLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string =>
-  `${prefix} ${entityNameOf(entity)} = require('${astImport.modulePath}');`
-
-const importTypeLineOf = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport): string =>
-  Match.value(astImport.exportName.length === 0).pipe(
-    Match.when(true, () => `${prefix} * as ${entityNameOf(entity)} from '${astImport.modulePath}';`),
-    Match.when(false, () => {
-      const topExportName = Option.getOrElse(Arr.head(astImport.exportName.split('.')), () => '')
-      const name = entityNameOf(entity)
-      return Match.value(name === topExportName).pipe(
-        Match.when(true, () => `${prefix} { ${topExportName} } from '${astImport.modulePath}';`),
-        Match.when(false, () => `${prefix} { ${topExportName} as ${name} } from '${astImport.modulePath}';`),
-        Match.exhaustive,
-      )
-    }),
-    Match.exhaustive,
-  )
-
-type ImportLineBuilder = (prefix: string, entity: CollectorEntity, astImport: Snapshot.AstImport) => string
-
-const importLineBuilders: Readonly<Record<Snapshot.AstImportKind, ImportLineBuilder>> = {
-  [Snapshot.AstImportKind.DefaultImport]: defaultImportLineOf,
-  [Snapshot.AstImportKind.NamedImport]: namedImportLineOf,
-  [Snapshot.AstImportKind.StarImport]: starImportLineOf,
-  [Snapshot.AstImportKind.EqualsImport]: equalsImportLineOf,
-  [Snapshot.AstImportKind.ImportType]: importTypeLineOf,
-}
-
-const importPrefixOf = (astImport: Snapshot.AstImport): string =>
-  Match.value(astImport.isTypeOnlyEverywhere).pipe(
-    Match.when(true, () => 'import type'),
-    Match.when(false, () => 'import'),
-    Match.exhaustive,
-  )
-
-const emitImportLine = (
-  writer: TextWriter.TextWriter,
-  entity: CollectorEntity,
-  astImport: Snapshot.AstImport,
-): TextWriter.TextWriter =>
-  TextWriter.writeLine(writer, importLineBuilders[astImport.importKind](importPrefixOf(astImport), entity, astImport))
-
-const writeImports = (
-  writer: TextWriter.TextWriter,
-  snapshot: Snapshot.AnalysisSnapshot,
-): Result.Result<TextWriter.TextWriter, ReportRenderFailure> => {
-  const initial: Result.Result<TextWriter.TextWriter, ReportRenderFailure> = Result.succeed(writer)
-  const afterImports = Arr.reduce(
-    Snapshot.entities(snapshot),
-    initial,
-    (accumulated, entity) =>
-      Result.flatMap(accumulated, (current) =>
-        Match.value(Snapshot.refOf(Snapshot.astEntityOf(entity))).pipe(
-          Match.tag('AstImportRef', () =>
-            Option.match(Snapshot.astImportOf(Snapshot.astEntityOf(entity)), {
-              onNone: () => internalInvariantOf('Missing AstImport for an AstImportRef'),
-              onSome: (astImport) => Result.succeed(emitImportLine(current, entity, astImport)),
-            })),
-          Match.orElse((): Result.Result<TextWriter.TextWriter, ReportRenderFailure> => Result.succeed(current)),
-        )),
-  )
-  return Result.map(afterImports, (current) => TextWriter.ensureSkippedLine(current))
-}
-
 const clauseLineOf = (exportedName: string, collectorEntity: CollectorEntity): string => {
   const nameForEmit = entityNameOf(collectorEntity)
   return Match.value(nameForEmit === exportedName).pipe(
@@ -209,7 +127,7 @@ const exportClauseOf = (
   exportedName: string,
   exportedEntity: Snapshot.AstEntity,
   namespaceName: string,
-): Result.Result<string, ReportRenderFailure> =>
+): Result.Result<string, RenderFailure> =>
   Option.match(Snapshot.tryGetCollectorEntity(emit.planState.snapshot, exportedEntity), {
     onNone: () =>
       internalInvariantOf(
@@ -224,8 +142,8 @@ const exportClauseLinesOf = (
   emit: EntityEmit,
   exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
   namespaceName: string,
-): Result.Result<ReadonlyArray<string>, ReportRenderFailure> => {
-  const initial: Result.Result<ReadonlyArray<string>, ReportRenderFailure> = Result.succeed([])
+): Result.Result<ReadonlyArray<string>, RenderFailure> => {
+  const initial: Result.Result<ReadonlyArray<string>, RenderFailure> = Result.succeed([])
   return Arr.reduce(
     Arr.fromIterable(exportedLocalEntities),
     initial,
@@ -243,7 +161,7 @@ const emitNamespaceExportClauses = (
   emit: EntityEmit,
   exportedLocalEntities: ReadonlyMap<string, Snapshot.AstEntity>,
   namespaceName: string,
-): Result.Result<EntityEmit, ReportRenderFailure> =>
+): Result.Result<EntityEmit, RenderFailure> =>
   Result.map(exportClauseLinesOf(emit, exportedLocalEntities, namespaceName), (clauseLines) => {
     const level1 = TextWriter.increaseIndent(emit.writer)
     const afterOpen = TextWriter.writeLine(level1, 'export {')
@@ -258,13 +176,13 @@ const emitNamespaceEntity = (
   emit: EntityEmit,
   entity: CollectorEntity,
   astEntity: Snapshot.AstNamespaceImport,
-): Result.Result<EntityEmit, ReportRenderFailure> => {
+): Result.Result<EntityEmit, RenderFailure> => {
   const astModuleExportInfo = Snapshot.fetchAstModuleExportInfo(emit.planState.snapshot, astEntity)
   return Option.match(Option.filter(Option.fromNullishOr(entity.nameForEmit), (name) => name.length > 0), {
     onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
     onSome: (namespaceName) =>
       Match.value(astModuleExportInfo.starExportedExternalModules.size > 0).pipe(
-        Match.when(true, (): Result.Result<EntityEmit, ReportRenderFailure> =>
+        Match.when(true, (): Result.Result<EntityEmit, RenderFailure> =>
           Result.fail(
             new UnsupportedStarExportError({
               namespaceName,
@@ -322,8 +240,8 @@ const partitionAssociatedMessages = (
 const emitSymbolDeclarations = (
   emit: EntityEmit,
   astSymbol: Snapshot.AstSymbol,
-): Result.Result<EntityEmit, ReportRenderFailure> => {
-  const initial: Result.Result<EntityEmit, ReportRenderFailure> = Result.succeed(emit)
+): Result.Result<EntityEmit, RenderFailure> => {
+  const initial: Result.Result<EntityEmit, RenderFailure> = Result.succeed(emit)
   return Arr.reduce(
     Snapshot.astDeclarations(emit.planState.snapshot, astSymbol),
     initial,
@@ -335,7 +253,7 @@ const emitSymbolDeclarations = (
 const emitSymbolDeclaration = (
   emit: EntityEmit,
   astDeclaration: Snapshot.AstDeclaration,
-): Result.Result<EntityEmit, ReportRenderFailure> => {
+): Result.Result<EntityEmit, RenderFailure> => {
   const selected = associatedMessagesOf(emit.planState, astDeclaration)
   const partitioned = partitionAssociatedMessages(selected.messages, emit.planState.exportsToEmit)
   const withEntries: EntityEmit = {
@@ -343,7 +261,7 @@ const emitSymbolDeclaration = (
     planState: { ...emit.planState, consumed: selected.consumed, exportsToEmit: partitioned.entries },
   }
   return Match.value(shouldIncludeDeclaration(withEntries.planState, astDeclaration)).pipe(
-    Match.when(false, (): Result.Result<EntityEmit, ReportRenderFailure> => Result.succeed(withEntries)),
+    Match.when(false, (): Result.Result<EntityEmit, RenderFailure> => Result.succeed(withEntries)),
     Match.when(true, () => emitIncludedDeclaration(withEntries, astDeclaration, partitioned.standalone)),
     Match.exhaustive,
   )
@@ -353,7 +271,7 @@ const emitIncludedDeclaration = (
   emit: EntityEmit,
   astDeclaration: Snapshot.AstDeclaration,
   standalone: ReadonlyArray<ExtractorMessage>,
-): Result.Result<EntityEmit, ReportRenderFailure> => {
+): Result.Result<EntityEmit, RenderFailure> => {
   const tree = SpanTreeModule.build(Snapshot.declaration(emit.planState.snapshot, astDeclaration))
   const afterSynopsis = TextWriter.write(
     TextWriter.ensureSkippedLine(emit.writer),
@@ -369,11 +287,11 @@ const plannedDeclarationOf = (
   planState: PlanState,
   tree: SpanTreeModule.SpanTree,
   astDeclaration: Snapshot.AstDeclaration,
-): Result.Result<PlanState, ReportRenderFailure> =>
+): Result.Result<PlanState, RenderFailure> =>
   Match.value(Snapshot.fetchApiItemMetadata(planState.snapshot, astDeclaration).isPreapproved).pipe(
     Match.when(
       true,
-      (): Result.Result<PlanState, ReportRenderFailure> =>
+      (): Result.Result<PlanState, RenderFailure> =>
         Result.succeed({ ...planState, plan: planForPreapproved(planState.plan, tree) }),
     ),
     Match.when(false, () => planDeclarationSpan(planState, tree, Option.none(), Option.none(), astDeclaration, false)),
@@ -383,7 +301,7 @@ const plannedDeclarationOf = (
 const emitEntityDeclarations = (
   emit: EntityEmit,
   entity: CollectorEntity,
-): Result.Result<EntityEmit, ReportRenderFailure> => {
+): Result.Result<EntityEmit, RenderFailure> => {
   const astEntity = Snapshot.astEntityOf(entity)
   return Match.value(Snapshot.refOf(astEntity)).pipe(
     Match.tag('AstSymbolRef', () =>
@@ -396,7 +314,7 @@ const emitEntityDeclarations = (
         onNone: () => internalInvariantOf('Missing AstNamespaceImport for an AstNamespaceImportRef'),
         onSome: (astNamespaceImport) => emitNamespaceEntity(emit, entity, astNamespaceImport),
       })),
-    Match.orElse((): Result.Result<EntityEmit, ReportRenderFailure> => Result.succeed(emit)),
+    Match.orElse((): Result.Result<EntityEmit, RenderFailure> => Result.succeed(emit)),
   )
 }
 
@@ -415,16 +333,16 @@ const includeForgottenExportsOf = (report: ReportState): boolean =>
 const emitReleaseEligibleEntity = (
   report: ReportState,
   entity: CollectorEntity,
-): Result.Result<ReportState, ReportRenderFailure> =>
+): Result.Result<ReportState, RenderFailure> =>
   Match.value(entity.consumable || includeForgottenExportsOf(report)).pipe(
-    Match.when(false, (): Result.Result<ReportState, ReportRenderFailure> => Result.succeed(report)),
+    Match.when(false, (): Result.Result<ReportState, RenderFailure> => Result.succeed(report)),
     Match.when(true, () => emitConsumableEntity(report, entity)),
     Match.exhaustive,
   )
 
-const emitEntity = (report: ReportState, entity: CollectorEntity): Result.Result<ReportState, ReportRenderFailure> =>
+const emitEntity = (report: ReportState, entity: CollectorEntity): Result.Result<ReportState, RenderFailure> =>
   Match.value(shouldIncludeReleaseTagOf(maxEffectiveReleaseTagOf(report, entity), report.reportVariant)).pipe(
-    Match.when(false, (): Result.Result<ReportState, ReportRenderFailure> => Result.succeed(report)),
+    Match.when(false, (): Result.Result<ReportState, RenderFailure> => Result.succeed(report)),
     Match.when(true, () => emitReleaseEligibleEntity(report, entity)),
     Match.exhaustive,
   )
@@ -453,8 +371,8 @@ const entriesOf = (entity: CollectorEntity): ReadonlyArray<ExportToEmit> =>
 const emitConsumableEntity = (
   report: ReportState,
   entity: CollectorEntity,
-): Result.Result<ReportState, ReportRenderFailure> => {
-  const initial: Result.Result<EntityEmit, ReportRenderFailure> = Result.succeed({
+): Result.Result<ReportState, RenderFailure> => {
+  const initial: Result.Result<EntityEmit, RenderFailure> = Result.succeed({
     writer: report.writer,
     planState: {
       ...report,
@@ -477,18 +395,6 @@ const writeWarningComments = (
     messages,
     writer,
     (current, message) => writeLineAsComments(current, `Warning: ${message.formatMessageWithoutLocation()}`),
-  )
-
-const formatNamedExport = (exportName: string, name: string): string =>
-  Match.value(exportName === ts.InternalSymbolName.Default).pipe(
-    Match.when(true, () => `export default ${name};`),
-    Match.when(false, () =>
-      Match.value(name === exportName).pipe(
-        Match.when(true, () => `export { ${exportName} }`),
-        Match.when(false, () => `export { ${name} as ${exportName} }`),
-        Match.exhaustive,
-      )),
-    Match.exhaustive,
   )
 
 const writeExportClause = (
@@ -519,18 +425,6 @@ const writeEntityExports = (emit: EntityEmit, entity: CollectorEntity): ReportSt
     processedSignatures: emit.planState.processedSignatures,
   }
 }
-
-const emitStarExports = (writer: TextWriter.TextWriter, snapshot: Snapshot.AnalysisSnapshot): TextWriter.TextWriter =>
-  Match.value(Snapshot.starExportedExternalModulePaths(snapshot)).pipe(
-    Match.when((modulePaths) => modulePaths.length === 0, () => writer),
-    Match.orElse((modulePaths) =>
-      Arr.reduce(
-        modulePaths,
-        TextWriter.writeLine(writer),
-        (current, modulePath) => TextWriter.writeLine(current, `export * from "${modulePath}";`),
-      )
-    ),
-  )
 
 const writeUnassociatedWarnings = (
   writer: TextWriter.TextWriter,
@@ -592,14 +486,14 @@ export const generateReviewFileContent = (
   snapshot: Snapshot.AnalysisSnapshot,
   reportVariant: ApiReportVariant,
   handled: HashSet.HashSet<number>,
-): Result.Result<RenderedApiReport, ReportRenderFailure> => {
+): Result.Result<RenderedApiReport, RenderFailure> => {
   const header = writeReportHeader(
     TextWriter.make({ trimLeadingSpaces: true }),
     Snapshot.workingPackage(snapshot).name,
     reportVariant,
   )
   return Result.flatMap(writeImports(writeTripleSlashDirectives(header, snapshot), snapshot), (writer) => {
-    const initial: Result.Result<ReportState, ReportRenderFailure> = Result.succeed({
+    const initial: Result.Result<ReportState, RenderFailure> = Result.succeed({
       writer,
       snapshot,
       reportVariant,

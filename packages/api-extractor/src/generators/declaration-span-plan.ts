@@ -3,30 +3,29 @@ import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
-import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
 import { convertToLf } from '../analyzer/text.js'
 import * as TypeScriptHelpers from '../analyzer/TypeScriptHelpers.js'
-import { getNodeId, type NodeId } from '../analyzer/TypeScriptInternals.js'
+import { type NodeId } from '../analyzer/TypeScriptInternals.js'
 import * as Snapshot from '../collector/analysis-snapshot.js'
 import type { ApiItemMetadata } from '../collector/ApiItemMetadata.js'
 import type { CollectorEntity } from '../collector/CollectorEntity.js'
 import { ExtractorMessageId } from '../collector/extractor-message-id.js'
 import type { ExtractorMessage } from '../collector/message-log.js'
 import type { ApiReportVariant } from '../config/config-file.schema.js'
-import { InternalInvariantError, UnsupportedStarExportError } from '../errors/index.js'
 import { ReleaseTag } from '../model/index.js'
-import { DtsEmitHelpers } from './dts-emit-helpers.js'
-import * as RenderSpan from './render-span.js'
+import {
+  internalInvariantOf,
+  isExportKeywordInNamespaceExportDeclaration,
+  planImportTypeSpan,
+  type RenderFailure,
+  syntheticParameterNames,
+} from './dts-emit-helpers.js'
 import * as SpanPlan from './span-plan.js'
 import type { SpanTree } from './span-tree.js'
 import * as SpanTreeModule from './span-tree.js'
 import * as TextWriter from './text-writer.js'
 
-/** The typed failures `generateReviewFileContent` can return: refusals the CLI reports, and defects it crashes on. */
-export type ReportRenderFailure = UnsupportedStarExportError | InternalInvariantError
-
-export const internalInvariantOf = (message: string): Result.Result<never, ReportRenderFailure> =>
-  Result.fail(new InternalInvariantError({ message }))
+export type { RenderFailure }
 
 export interface ExportToEmit {
   readonly exportName: string
@@ -354,63 +353,6 @@ const nestedDeclarationOf = (
     Match.exhaustive,
   )
 
-const bindingPatternNameOf = (name: ts.Node): boolean =>
-  Match.value(name.kind).pipe(
-    Match.when(ts.SyntaxKind.ObjectBindingPattern, () => true),
-    Match.when(ts.SyntaxKind.ArrayBindingPattern, () => true),
-    Match.orElse(() => false),
-  )
-
-const candidateSyntheticName = (counter: number): string =>
-  Match.value(counter <= 1).pipe(
-    Match.when(true, () => 'input'),
-    Match.when(false, () => `input${counter}`),
-    Match.exhaustive,
-  )
-
-const syntheticNameOf = (alreadyUsed: ReadonlyArray<string>, counter: number): string =>
-  Match.value(Arr.contains(alreadyUsed, candidateSyntheticName(counter))).pipe(
-    Match.when(true, () => syntheticNameOf(alreadyUsed, counter + 1)),
-    Match.when(false, () => candidateSyntheticName(counter)),
-    Match.exhaustive,
-  )
-
-interface SyntheticWalk {
-  readonly names: HashMap.HashMap<NodeId, string>
-  readonly used: ReadonlyArray<string>
-}
-
-const syntheticWalkOf = (walk: SyntheticWalk, parameter: ts.ParameterDeclaration): SyntheticWalk =>
-  Match.value(bindingPatternNameOf(parameter.name)).pipe(
-    Match.when(true, () => {
-      const syntheticName = syntheticNameOf(walk.used, 1)
-      return {
-        names: HashMap.set(walk.names, getNodeId(parameter.name), syntheticName),
-        used: Arr.append(walk.used, syntheticName),
-      }
-    }),
-    Match.when(false, () => walk),
-    Match.exhaustive,
-  )
-
-const bindingParametersOf = (
-  parameters: ReadonlyArray<ts.ParameterDeclaration>,
-): ReadonlyArray<ts.ParameterDeclaration> =>
-  Option.match(Arr.findFirstIndex(parameters, bindingPatternNameOf), {
-    onNone: (): ReadonlyArray<ts.ParameterDeclaration> => [],
-    onSome: (firstBinding) => Arr.drop(parameters, firstBinding),
-  })
-
-const isPlainIdentifierName = (name: ts.BindingName): name is ts.Identifier =>
-  !ts.isObjectBindingPattern(name) && !ts.isArrayBindingPattern(name)
-
-const usedParameterNamesOf = (parameters: ReadonlyArray<ts.ParameterDeclaration>): ReadonlyArray<string> =>
-  Arr.filterMap(parameters, (parameter) =>
-    Result.fromOption(
-      Option.map(Option.filter(Option.some(parameter.name), isPlainIdentifierName), (name) => name.text.trim()),
-      () => 'unused',
-    ))
-
 const applySyntheticNames = (
   state: PlanState,
   signatureTree: SpanTree,
@@ -427,12 +369,7 @@ const applySyntheticNames = (
   )
 
 const normalizeParameterNames = (state: PlanState, signatureTree: SpanTree): PlanState => {
-  const parameters = Arr.filter(Arr.fromIterable(signatureTree.node.getChildren()), ts.isParameter)
-  const names = Arr.reduce(
-    bindingParametersOf(parameters),
-    { names: HashMap.empty<NodeId, string>(), used: usedParameterNamesOf(parameters) } satisfies SyntheticWalk,
-    syntheticWalkOf,
-  ).names
+  const names = syntheticParameterNames(Arr.fromIterable(signatureTree.node.getChildren()))
   return Match.value(HashMap.size(names) > 0).pipe(
     Match.when(true, () => applySyntheticNames(state, signatureTree, names)),
     Match.when(false, () => state),
@@ -456,7 +393,7 @@ const handleParameter = (state: PlanState, parent: Option.Option<SpanTree>): Pla
   })
 
 const handleExportKeyword = (state: PlanState, tree: SpanTree): PlanState =>
-  Match.value(DtsEmitHelpers.isExportKeywordInNamespaceExportDeclaration(tree.node)).pipe(
+  Match.value(isExportKeywordInNamespaceExportDeclaration(tree.node)).pipe(
     Match.when(true, () => state),
     Match.when(false, () => ({ ...state, plan: SpanPlan.skipAll(state.plan, tree) })),
     Match.exhaustive,
@@ -490,13 +427,13 @@ const identifierPrefixOf = (
   state: PlanState,
   tree: SpanTree,
   referencedEntity: CollectorEntity,
-): Result.Result<PlanState, ReportRenderFailure> =>
+): Result.Result<PlanState, RenderFailure> =>
   Option.match(Option.filter(Option.fromNullishOr(referencedEntity.nameForEmit), (name) => name.length > 0), {
     onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
     onSome: (nameForEmit) => Result.succeed({ ...state, plan: SpanPlan.withPrefix(state.plan, tree, nameForEmit) }),
   })
 
-const handleIdentifier = (state: PlanState, tree: SpanTree): Result.Result<PlanState, ReportRenderFailure> =>
+const handleIdentifier = (state: PlanState, tree: SpanTree): Result.Result<PlanState, RenderFailure> =>
   Match.value(tree.node).pipe(
     Match.when(ts.isIdentifier, (identifier) =>
       Option.match(Snapshot.tryGetEntityForNode(state.snapshot, identifier), {
@@ -531,7 +468,7 @@ const handleVariableDeclaration = (
   state: PlanState,
   tree: SpanTree,
   parent: Option.Option<SpanTree>,
-): Result.Result<PlanState, ReportRenderFailure> =>
+): Result.Result<PlanState, RenderFailure> =>
   Option.match(parent, {
     onSome: () => Result.succeed(state),
     onNone: () =>
@@ -549,208 +486,29 @@ const handleVariableDeclaration = (
       ),
   })
 
-const relativeImportPathOf = (node: ts.ImportTypeNode): Option.Option<string> =>
-  Option.some(node.argument).pipe(
-    Option.filter(ts.isLiteralTypeNode),
-    Option.map((literalTypeNode) => literalTypeNode.literal),
-    Option.filter(ts.isStringLiteral),
-    Option.map((literal) => literal.text),
-    Option.filter((modulePath) => modulePath.startsWith('.')),
-  )
-
-const handleUnresolvedImportType = (
-  state: PlanState,
-  astDeclaration: Snapshot.AstDeclaration,
-  node: ts.ImportTypeNode,
-): PlanState =>
-  Option.match(relativeImportPathOf(node), {
-    onNone: () => state,
-    onSome: (modulePath) => {
-      Snapshot.addAnalyzerIssue(
-        state.snapshot,
-        ExtractorMessageId.UnresolvedImportPath,
-        `The inline import path "${modulePath}" could not be resolved, so it would be emitted unchanged` +
-          ` into the .d.ts rollup, where it does not resolve to anything. Import the symbol at the top` +
-          ` of the file instead of using an inline import() type.`,
-        astDeclaration,
-      )
-      return state
-    },
-  })
-
-const resolveNestedQualifiersText = (node: ts.ImportTypeNode): string =>
-  Option.match(Option.fromUndefinedOr(node.qualifier), {
-    onNone: () => '',
-    onSome: (qualifier) => {
-      const qualifiersText = qualifier.getText()
-      const dotIndex = qualifiersText.indexOf('.')
-      return Match.value(dotIndex >= 0).pipe(
-        Match.when(true, () => qualifiersText.substring(dotIndex)),
-        Match.when(false, () => ''),
-        Match.exhaustive,
-      )
-    },
-  })
-
-const nestedImportQualifiersOf = (
-  snapshot: Snapshot.AnalysisSnapshot,
-  entity: CollectorEntity,
-  node: ts.ImportTypeNode,
-): Result.Result<string, ReportRenderFailure> =>
-  Option.match(Snapshot.astImportOf(Snapshot.astEntityOf(entity)), {
-    onNone: () => internalInvariantOf('Missing AstImport for an AstImportRef'),
-    onSome: (astImport) =>
-      Result.succeed(
-        Match.value(astImport.importKind === Snapshot.AstImportKind.ImportType && astImport.exportName.length > 0).pipe(
-          Match.when(true, () => resolveNestedQualifiersText(node)),
-          Match.when(false, () => ''),
-          Match.exhaustive,
-        ),
-      ),
-  })
-
-const typeArgumentBoundsOf = (tree: SpanTree): Option.Option<readonly [number, number]> =>
-  Option.match(Arr.findFirstIndex(tree.children, (child) => child.kind === ts.SyntaxKind.LessThanToken), {
-    onNone: () => Option.none(),
-    onSome: (lessThan) =>
-      Option.match(Arr.findFirstIndex(tree.children, (child) => child.kind === ts.SyntaxKind.GreaterThanToken), {
-        onNone: () => Option.none(),
-        onSome: (greaterThan) =>
-          Match.value(greaterThan > lessThan).pipe(
-            Match.when(true, () => Option.some([lessThan, greaterThan] as const)),
-            Match.when(false, () => Option.none()),
-            Match.exhaustive,
-          ),
-      }),
-  })
-
-const extractTypeArgumentSpans = (tree: SpanTree): Option.Option<ReadonlyArray<SpanTree>> =>
-  Option.map(typeArgumentBoundsOf(tree), ([from, to]) => Arr.fromIterable(tree.children.slice(from + 1, to)))
-
-const separatorAfterOf = (tree: SpanTree): string =>
-  Option.match(Option.fromNullishOr(/(\s*)$/.exec(SpanTreeModule.originalText(tree))), {
-    onNone: () => '',
-    onSome: (separatorMatch) => Option.getOrElse(Option.fromUndefinedOr(separatorMatch[1]), () => ''),
-  })
-
-interface TypeArgumentsText {
-  readonly state: PlanState
-  readonly text: string
-}
-
-interface NestedWalk {
-  readonly state: PlanState
-  readonly previous: Option.Option<SpanTree>
-}
-
-const plannedNestedOf = (
-  walk: NestedWalk,
-  parent: SpanTree,
-  span: SpanTree,
-  astDeclaration: Snapshot.AstDeclaration,
-  insideTypeLiteral: boolean,
-): Result.Result<NestedWalk, ReportRenderFailure> =>
-  Result.map(
-    planDeclarationSpan(
-      walk.state,
-      span,
-      Option.some(parent),
-      walk.previous,
-      nestedDeclarationOf(walk.state, span, astDeclaration),
-      insideTypeLiteral,
-    ),
-    (plannedState) => ({ state: plannedState, previous: Option.some(span) }),
-  )
-
-const planNestedSpans = (
-  state: PlanState,
-  parent: SpanTree,
-  typeArgumentSpans: ReadonlyArray<SpanTree>,
-  astDeclaration: Snapshot.AstDeclaration,
-  insideTypeLiteral: boolean,
-): Result.Result<PlanState, ReportRenderFailure> => {
-  const initial: Result.Result<NestedWalk, ReportRenderFailure> = Result.succeed({
-    state,
-    previous: Option.none(),
-  })
-  return Result.map(
-    Arr.reduce(
-      typeArgumentSpans,
-      initial,
-      (accumulated, span) =>
-        Result.flatMap(accumulated, (walk) => plannedNestedOf(walk, parent, span, astDeclaration, insideTypeLiteral)),
-    ),
-    (walk) => walk.state,
-  )
-}
-
-const formatTypeArgumentsText = (
-  state: PlanState,
-  tree: SpanTree,
-  node: ts.ImportTypeNode,
-  astDeclaration: Snapshot.AstDeclaration,
-  insideTypeLiteral: boolean,
-): Result.Result<TypeArgumentsText, ReportRenderFailure> =>
-  Option.match(Option.filter(Option.fromUndefinedOr(node.typeArguments), (typeArguments) => typeArguments.length > 0), {
-    onNone: () => Result.succeed({ state, text: '' }),
-    onSome: () =>
-      Option.match(extractTypeArgumentSpans(tree), {
-        onNone: () =>
-          internalInvariantOf(
-            `Invalid type arguments: ${node.getText()}\n${SourceFileLocationFormatter.formatDeclaration(node)}`,
-          ),
-        onSome: (typeArgumentSpans) =>
-          Result.map(
-            planNestedSpans(state, tree, typeArgumentSpans, astDeclaration, insideTypeLiteral),
-            (planned) => ({
-              state: planned,
-              text: `<${
-                Arr.join(Arr.map(typeArgumentSpans, (span) => RenderSpan.renderText(span, planned.plan)), ', ')
-              }>`,
-            }),
-          ),
-      }),
-  })
-
-const handleResolvedImportType = (
-  state: PlanState,
-  tree: SpanTree,
-  node: ts.ImportTypeNode,
-  astDeclaration: Snapshot.AstDeclaration,
-  referencedEntity: CollectorEntity,
-  insideTypeLiteral: boolean,
-): Result.Result<PlanState, ReportRenderFailure> =>
-  Option.match(Option.filter(Option.fromNullishOr(referencedEntity.nameForEmit), (name) => name.length > 0), {
-    onNone: () => internalInvariantOf('referencedEntry.nameForEmit is undefined'),
-    onSome: (nameForEmit) =>
-      Result.flatMap(
-        formatTypeArgumentsText(state, tree, node, astDeclaration, insideTypeLiteral),
-        ({ state: planned, text: typeArgumentsText }) =>
-          Result.map(nestedImportQualifiersOf(planned.snapshot, referencedEntity, node), (nestedQualifiers) => ({
-            ...planned,
-            plan: SpanPlan.withPrefix(
-              SpanPlan.skipAll(planned.plan, tree),
-              tree,
-              `${nameForEmit}${nestedQualifiers}${typeArgumentsText}${separatorAfterOf(tree)}`,
-            ),
-          })),
-      ),
-  })
-
 const handleImportType = (
   state: PlanState,
   tree: SpanTree,
   astDeclaration: Snapshot.AstDeclaration,
   insideTypeLiteral: boolean,
-): Result.Result<PlanState, ReportRenderFailure> =>
-  Match.value(tree.node).pipe(
-    Match.when(ts.isImportTypeNode, (node) =>
-      Option.match(Snapshot.tryGetEntityForNode(state.snapshot, node), {
-        onNone: () => Result.succeed(handleUnresolvedImportType(state, astDeclaration, node)),
-        onSome: (referencedEntity) =>
-          handleResolvedImportType(state, tree, node, astDeclaration, referencedEntity, insideTypeLiteral),
-      })),
-    Match.orElse(() => Result.succeed(state)),
+): Result.Result<PlanState, RenderFailure> =>
+  Result.map(
+    planImportTypeSpan({
+      state,
+      snapshot: state.snapshot,
+      tree,
+      astDeclaration,
+      planNestedSpan: (currentState, span, previousSibling, nestedDeclaration) =>
+        planDeclarationSpan(
+          currentState,
+          span,
+          Option.some(tree),
+          previousSibling,
+          nestedDeclaration,
+          insideTypeLiteral,
+        ),
+    }),
+    (planned) => ({ ...planned.state, plan: planned.plan }),
   )
 
 interface PlannedSpan {
@@ -767,74 +525,74 @@ const plannedSpanOf = (
   previousSibling: Option.Option<SpanTree>,
   insideTypeLiteral: boolean,
   astDeclaration: Snapshot.AstDeclaration,
-): Result.Result<PlannedSpan, ReportRenderFailure> =>
+): Result.Result<PlannedSpan, RenderFailure> =>
   Match.value(tree.kind).pipe(
-    Match.when(ts.SyntaxKind.JSDocComment, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.JSDocComment, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({
         state: { ...state, plan: SpanPlan.skipAll(state.plan, tree) },
         recurseChildren: false,
         sortChildren: false,
         insideTypeLiteral,
       })),
-    Match.when(ts.SyntaxKind.ExportKeyword, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.ExportKeyword, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({
         state: handleExportKeyword(state, tree),
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       })),
-    Match.when(ts.SyntaxKind.DefaultKeyword, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.DefaultKeyword, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({
         state: { ...state, plan: SpanPlan.skipAll(state.plan, tree) },
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       })),
-    Match.when(ts.SyntaxKind.DeclareKeyword, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.DeclareKeyword, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({
         state: { ...state, plan: SpanPlan.skipAll(state.plan, tree) },
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       })),
-    Match.when(ts.SyntaxKind.SyntaxList, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.SyntaxList, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({
         state,
         recurseChildren: true,
         sortChildren: sortChildrenFor(parent),
         insideTypeLiteral,
       })),
-    Match.when(ts.SyntaxKind.VariableDeclaration, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.VariableDeclaration, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.map(handleVariableDeclaration(state, tree, parent), (plannedState) => ({
         state: plannedState,
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       }))),
-    Match.when(ts.SyntaxKind.Parameter, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.Parameter, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({
         state: handleParameter(state, parent),
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       })),
-    Match.when(ts.SyntaxKind.TypeLiteral, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.TypeLiteral, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.succeed({ state, recurseChildren: true, sortChildren: false, insideTypeLiteral: true })),
-    Match.when(ts.SyntaxKind.Identifier, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.Identifier, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.map(handleIdentifier(state, tree), (plannedState) => ({
         state: plannedState,
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       }))),
-    Match.when(ts.SyntaxKind.ImportType, (): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.when(ts.SyntaxKind.ImportType, (): Result.Result<PlannedSpan, RenderFailure> =>
       Result.map(handleImportType(state, tree, astDeclaration, insideTypeLiteral), (plannedState) => ({
         state: plannedState,
         recurseChildren: true,
         sortChildren: false,
         insideTypeLiteral,
       }))),
-    Match.orElse((): Result.Result<PlannedSpan, ReportRenderFailure> =>
+    Match.orElse((): Result.Result<PlannedSpan, RenderFailure> =>
       Match.value(keywordModifiersOf(tree.kind)).pipe(
         Match.when(true, () =>
           Result.succeed({
@@ -869,18 +627,18 @@ const plannedChildOf = (
   astDeclaration: Snapshot.AstDeclaration,
   insideTypeLiteral: boolean,
   sortChildren: boolean,
-): Result.Result<ChildWalk, ReportRenderFailure> => {
+): Result.Result<ChildWalk, RenderFailure> => {
   const childAstDeclaration = nestedDeclarationOf(walk.state, child, astDeclaration)
   const afterChildPrefix = Match.value(Snapshot.isSupportedDeclarationKind(child.kind)).pipe(
     Match.when(true, () =>
       Match.value(shouldIncludeDeclaration(walk.state, childAstDeclaration)).pipe(
         Match.when(true, () =>
           planIncludedChild(walk.state, tree, child, childAstDeclaration, insideTypeLiteral, sortChildren)),
-        Match.when(false, (): Result.Result<PlanState, ReportRenderFailure> =>
+        Match.when(false, (): Result.Result<PlanState, RenderFailure> =>
           Result.succeed(walk.state)),
         Match.exhaustive,
       )),
-    Match.when(false, (): Result.Result<PlanState, ReportRenderFailure> => Result.succeed(walk.state)),
+    Match.when(false, (): Result.Result<PlanState, RenderFailure> => Result.succeed(walk.state)),
     Match.exhaustive,
   )
   return Result.flatMap(afterChildPrefix, (plannedState) =>
@@ -904,15 +662,15 @@ const planIncludedChild = (
   childAstDeclaration: Snapshot.AstDeclaration,
   insideTypeLiteral: boolean,
   sortChildren: boolean,
-): Result.Result<PlanState, ReportRenderFailure> => {
+): Result.Result<PlanState, RenderFailure> => {
   const afterSortKeys = Match.value(sortChildren).pipe(
     Match.when(true, () => planSortKeys(state, tree, child, childAstDeclaration)),
-    Match.when(false, (): Result.Result<PlanState, ReportRenderFailure> => Result.succeed(state)),
+    Match.when(false, (): Result.Result<PlanState, RenderFailure> => Result.succeed(state)),
     Match.exhaustive,
   )
   return Result.flatMap(afterSortKeys, (plannedState) =>
     Match.value(insideTypeLiteral).pipe(
-      Match.when(true, (): Result.Result<PlanState, ReportRenderFailure> => Result.succeed(plannedState)),
+      Match.when(true, (): Result.Result<PlanState, RenderFailure> => Result.succeed(plannedState)),
       Match.when(false, () => planAedocPrefix(plannedState, child, childAstDeclaration)),
       Match.exhaustive,
     ))
@@ -923,7 +681,7 @@ const planSortKeys = (
   tree: SpanTree,
   child: SpanTree,
   childAstDeclaration: Snapshot.AstDeclaration,
-): Result.Result<PlanState, ReportRenderFailure> => {
+): Result.Result<PlanState, RenderFailure> => {
   const sortKey = Snapshot.sortKeyIgnoringUnderscore(Snapshot.localName(state.snapshot, childAstDeclaration))
   return Result.succeed({
     ...state,
@@ -935,7 +693,7 @@ const planAedocPrefix = (
   state: PlanState,
   child: SpanTree,
   childAstDeclaration: Snapshot.AstDeclaration,
-): Result.Result<PlanState, ReportRenderFailure> => {
+): Result.Result<PlanState, RenderFailure> => {
   const selected = associatedMessagesOf(state, childAstDeclaration)
   const aedocSynopsis = getAedocSynopsis(state.snapshot, childAstDeclaration, selected.messages)
   return Result.succeed({
@@ -992,7 +750,7 @@ export const planDeclarationSpan = (
   previousSibling: Option.Option<SpanTree>,
   astDeclaration: Snapshot.AstDeclaration,
   insideTypeLiteral: boolean,
-): Result.Result<PlanState, ReportRenderFailure> =>
+): Result.Result<PlanState, RenderFailure> =>
   Match.value(shouldIncludeDeclaration(state, astDeclaration)).pipe(
     Match.when(false, () => Result.succeed({ ...state, plan: SpanPlan.skipAll(state.plan, tree) })),
     Match.when(true, () => planIncludedSpan(state, tree, parent, previousSibling, insideTypeLiteral, astDeclaration)),
@@ -1006,16 +764,16 @@ const planIncludedSpan = (
   previousSibling: Option.Option<SpanTree>,
   insideTypeLiteral: boolean,
   astDeclaration: Snapshot.AstDeclaration,
-): Result.Result<PlanState, ReportRenderFailure> =>
+): Result.Result<PlanState, RenderFailure> =>
   Result.flatMap(
     plannedSpanOf(state, tree, parent, previousSibling, insideTypeLiteral, astDeclaration),
     (planned) => {
-      const initial: Result.Result<ChildWalk, ReportRenderFailure> = Result.succeed({
+      const initial: Result.Result<ChildWalk, RenderFailure> = Result.succeed({
         state: planned.state,
         previous: Option.none(),
       })
       return Match.value(planned.recurseChildren).pipe(
-        Match.when(false, (): Result.Result<PlanState, ReportRenderFailure> => Result.succeed(planned.state)),
+        Match.when(false, (): Result.Result<PlanState, RenderFailure> => Result.succeed(planned.state)),
         Match.when(true, () =>
           Result.map(
             Arr.reduce(tree.children, initial, (accumulated, child) =>

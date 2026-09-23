@@ -10,7 +10,6 @@ import type { ApiItemMetadata as ApiItemMetadataBase } from '../collector/ApiIte
 import type { DeclarationMetadata as DeclarationMetadataBase } from '../collector/DeclarationMetadata.js'
 import type { AstEntity } from './AstEntity.js'
 import type { AstSymbol } from './AstSymbol.js'
-import { Span } from './Span.js'
 
 /*
  * Constructor options for AstDeclaration
@@ -167,15 +166,6 @@ export class AstDeclaration extends Pipeable.Class {
     }
 
     return result
-  }
-
-  /*
-   * Returns a diagnostic dump using Span.getDump(), which reports the detailed
-   * compiler structure.
-   */
-  public getSpanDump(indent: string = ''): string {
-    const span: Span = new Span(this.declaration)
-    return span.getDump(indent)
   }
 
   /*

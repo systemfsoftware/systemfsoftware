@@ -52,9 +52,8 @@ import {
   isExtractorError,
 } from './errors/index.js'
 import type { ExtractionRequest } from './extraction-request.js'
-import type { ReportRenderFailure } from './generators/declaration-span-plan.js'
 import { DtsRollupKind } from './generators/dts-rollup-generator.js'
-import type { RenderedApiReport } from './generators/index.js'
+import type { RenderedApiReport, RenderFailure } from './generators/index.js'
 import { convertNewlines, renderApiReport, renderDtsRollup } from './generators/index.js'
 import { MessageWriter } from './message-writer.service.js'
 import { type EmitLineStep, type EnsureDirectoryStep, type WriteFileStep } from './write-plan.schema.js'
@@ -406,15 +405,21 @@ const readAnalysis = (
     }
   })
 
-const renderRollupsOf = (snapshot: ExtractionSnapshot): void => {
-  snapshot.rollups.forEach((target) => {
-    snapshot.renderedRollups.record({
-      kind: target.kind,
-      filePath: target.filePath,
-      directoryPath: target.directoryPath,
-      content: renderDtsRollup(snapshot.analysis, target.kind),
-    })
-  })
+const renderRollupsOf = (snapshot: ExtractionSnapshot): Result.Result<void, ExtractorError> => {
+  const initial: Result.Result<void, ExtractorError> = Result.succeed(undefined)
+  return Arr.reduce(snapshot.rollups, initial, (accumulator, target) =>
+    Result.flatMap(accumulator, () =>
+      Result.map(
+        Result.mapError(renderDtsRollup(snapshot.analysis, target.kind), reportRefusalOf),
+        (render) => {
+          snapshot.renderedRollups.record({
+            kind: target.kind,
+            filePath: target.filePath,
+            directoryPath: target.directoryPath,
+            content: render.text,
+          })
+        },
+      )))
 }
 
 interface ReportFold {
@@ -424,7 +429,7 @@ interface ReportFold {
 
 const initialFold: ReportFold = { handled: HashSet.empty(), renders: [] }
 
-const reportRefusalOf = (failure: ReportRenderFailure): ExtractorError =>
+const reportRefusalOf = (failure: RenderFailure): ExtractorError =>
   Match.value(failure).pipe(
     Match.tag('UnsupportedStarExportError', (refusal) => refusal),
     Match.orElse((defect) => {
@@ -469,10 +474,11 @@ const decideExtractionOf = (snapshot: ExtractionSnapshot, fold: ReportFold): Dec
   })
 }
 
-const decodeOf = (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> => {
-  renderRollupsOf(snapshot)
-  return Result.map(renderApiReportsOf(snapshot), (fold) => decideExtractionOf(snapshot, fold))
-}
+const decodeOf = (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> =>
+  Result.flatMap(
+    renderRollupsOf(snapshot),
+    () => Result.map(renderApiReportsOf(snapshot), (fold) => decideExtractionOf(snapshot, fold)),
+  )
 
 const decodeSnapshot = Sandwich.pure(
   (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, ExtractorError> => {

@@ -84,4 +84,7 @@ export const sortChildren = (plan: SpanPlan, tree: SpanTree): SpanPlan =>
 export const withSortKey = (plan: SpanPlan, tree: SpanTree, sortKey: string): SpanPlan =>
   updated(plan, tree, (modification) => ({ ...modification, sortKey: Option.some(sortKey) }))
 
+export const withIndentDocComment = (plan: SpanPlan, tree: SpanTree, scope: IndentDocCommentScope): SpanPlan =>
+  updated(plan, tree, (modification) => ({ ...modification, indentDocComment: scope }))
+
 export const sortKeyOf = (plan: SpanPlan, tree: SpanTree): Option.Option<string> => modificationOf(plan, tree).sortKey
