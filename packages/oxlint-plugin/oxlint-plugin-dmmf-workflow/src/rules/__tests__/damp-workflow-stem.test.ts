@@ -248,7 +248,8 @@ ruleTester.run('damp-workflow-stem', dampWorkflowStem, {
     },
     {
       name: 'Should_ReportMismatch_When_TheOnlyExportIsAnonymous',
-      code: `${IMPORT}\nexport default Workflow.make((input: number) => input)`,
+      code:
+        `${IMPORT}\nexport default Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: workflow('prepare-run'),
       errors: [anonymousError('prepare-run.workflow.ts')],
     },

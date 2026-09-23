@@ -226,7 +226,7 @@ export const makeBodyPurity = defineRule({
         node: boundary.makeCall,
         messageId: 'unresolvableMakeArgument',
         data: {
-          name: 'the argument of this Workflow.make call',
+          name: 'the decide property of this Workflow.make call',
           expected: UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED,
           actual: UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL,
           fix: UNRESOLVABLE_MAKE_ARGUMENT_FIX,
@@ -277,7 +277,7 @@ export const makeBodyPurity = defineRule({
         for (const boundary of boundaries) {
           const body = boundary.resolvedBody
           if (body === null) {
-            if (boundary.takesDeciderBody) reportUnresolvableArgument(boundary)
+            reportUnresolvableArgument(boundary)
             continue
           }
           for (const report of classifyBodyReferences(body, context)) {

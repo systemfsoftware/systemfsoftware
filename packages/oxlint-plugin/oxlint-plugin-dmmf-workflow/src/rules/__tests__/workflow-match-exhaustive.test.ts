@@ -16,37 +16,44 @@ const ruleTester = new RuleTester({
 })
 
 /**
- * The fixture spine: every dispatch under test lives inside a `Workflow.make`
- * body, the boundary the rule now keys on. Suffix fixtures are gone; scope
- * cases prove the complement stays silent.
+ * The fixture spine: every dispatch under test lives inside the `decide` property
+ * of a `Workflow.make` options object, the boundary the rule keys on. Suffix
+ * fixtures are gone; scope cases prove the complement stays silent.
  */
 const MAKE_IMPORTS = `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+`
+
+const SCHEMA_CLASSES = `class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 `
 
 const inMakeBody = (body: string): string =>
-  `${MAKE_IMPORTS}export const decision = Workflow.make((input: unknown): Result.Result<string, never> => ${body})`
+  `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+export const decision = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: unknown): Result.Result<string, never> => ${body},
+})`
 
 /**
- * The two-argument spine: the command schema class occupies slot 0 and the
- * decider slot 1. Every fixture built here proves the boundary is still found
- * after the decider moved — a locator that resolves only slot 0 finds a class,
- * yields no body, and this rule goes silently dark.
+ * The options object read by name: `decide` written before `command` proves the
+ * slots are properties, not positions — a locator pinned to an argument slot or a
+ * property order finds nothing and this rule goes silently dark.
  */
-const inTwoArgMakeBody = (body: string): string =>
-  `${MAKE_IMPORTS}import * as S from 'effect/Schema'
-
-class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
-
-export const decision = Workflow.make(Cmd, (input: Cmd): Result.Result<string, never> => ${body})`
-
-const inTwoArgTotalBody = (body: string): string =>
-  `${MAKE_IMPORTS}import * as S from 'effect/Schema'
-
-class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
-
-export const decision = Workflow.total(Cmd, (input: Cmd): Result.Result<string, never> => ${body})`
+const inReorderedOptionsBody = (body: string): string =>
+  `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+export const decision = Workflow.make({
+  decide: (input: Cmd): Result.Result<string, never> => ${body},
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+})`
 
 const NORELSE_ON_CLOSED = {
   name: 'Match.orElse',
@@ -88,23 +95,23 @@ export { result }`,
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 
-const Workflow = { make: (f: unknown) => f }
-Workflow.make((input: unknown) =>
+const Workflow = { make: (options: unknown) => options }
+Workflow.make({ command: input, decide: (input: unknown) =>
   Match.value(input).pipe(
     Match.tag('A', () => a),
     Match.orElse(() => b)
-  ))`,
+  ) })`,
     },
     {
       name: 'Should_Ignore_When_FileImportsAnotherModuleWorkflow',
       code: `import { Workflow } from 'some-other-package'
 import * as Match from 'effect/Match'
 
-Workflow.make((input: unknown) =>
+Workflow.make({ command: input, decide: (input: unknown) =>
   Match.value(input).pipe(
     Match.tag('A', () => a),
     Match.orElse(() => b)
-  ))`,
+  ) })`,
     },
     {
       name: 'Should_Pass_When_OpenBooleanRecordUsesOrElse',
@@ -232,10 +239,8 @@ Workflow.make((input: unknown) =>
     },
     {
       name: 'Should_Pass_When_AFollowedModuleScopeBodyDispatchesExhaustively',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
 const decide = (input: unknown): Result.Result<string, never> =>
   Match.value(input).pipe(
     Match.tag('A', () => Result.succeed('a')),
@@ -243,7 +248,20 @@ const decide = (input: unknown): Result.Result<string, never> =>
     Match.exhaustive,
   )
 
-export const decision = Workflow.make(decide)`,
+export const decision = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
+    },
+    {
+      name: 'Should_Pass_When_AShorthandDecideDispatchesExhaustively',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const decide = (input: unknown): Result.Result<string, never> =>
+  Match.value(input).pipe(
+    Match.tag('A', () => Result.succeed('a')),
+    Match.tag('B', () => Result.succeed('b')),
+    Match.exhaustive,
+  )
+
+export const decision = Workflow.make({ decide, command: Cmd, decision: Decision, error: S.Never })`,
     },
     {
       name: 'Should_Pass_When_AFixtureInATestFileUsesOrElseOnATagChain',
@@ -254,11 +272,20 @@ export const decision = Workflow.make(decide)`,
       filename: 'interpreter.integration.test.ts',
     },
     {
-      name: 'Should_Pass_When_TwoArgumentTagChainEndsWithExhaustive',
-      code: inTwoArgMakeBody(`Match.value(input).pipe(
-        Match.tag('A', () => Result.succeed('a')),
-        Match.exhaustive
-      )`),
+      name: 'Should_Pass_When_AComputedMakeDispatchesExhaustively',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+export const decision = Workflow['make']({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: unknown): Result.Result<string, never> =>
+    Match.value(input).pipe(
+      Match.tag('A', () => Result.succeed('a')),
+      Match.tag('B', () => Result.succeed('b')),
+      Match.exhaustive,
+    ),
+})`,
       filename: 'cancel-order.workflow.ts',
     },
   ],
@@ -273,10 +300,11 @@ export const decision = Workflow.make(decide)`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
-      // The dark-boundary control: if the locator resolves only argument 0 it
-      // finds the class, produces no body, and this violation goes unreported.
-      name: 'Should_ReportOrElse_When_TheDeciderIsTheSecondArgument',
-      code: inTwoArgMakeBody(`Match.value(input).pipe(
+      // The dark-boundary control: if the locator resolves only an argument slot it
+      // finds nothing inside the options object, produces no body, and this
+      // violation goes unreported.
+      name: 'Should_ReportOrElse_When_TheDecidePropertyIsWrittenBeforeTheCommand',
+      code: inReorderedOptionsBody(`Match.value(input).pipe(
         Match.tag('A', () => a),
         Match.tag('B', () => b),
         Match.orElse(() => fallback)
@@ -284,13 +312,11 @@ export const decision = Workflow.make(decide)`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
-      // Slot 1 reached by name, not inline: `followIdentifier` must run on the
-      // argument that resolves to a function, not stop at the class in slot 0.
-      name: 'Should_ReportOrElse_When_TheSecondArgumentIsAModuleScopeReference',
-      code: `${MAKE_IMPORTS}import * as S from 'effect/Schema'
-
-class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
-
+      // The decision reached by name, not inline: the property value identifier must
+      // be followed to its module-scope declaration, not left unresolved.
+      name: 'Should_ReportOrElse_When_TheDecidePropertyReferencesAModuleScopeFunction',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
 const decide = (input: Cmd): Result.Result<string, never> =>
   Match.value(input).pipe(
     Match.tag('A', () => a),
@@ -298,16 +324,41 @@ const decide = (input: Cmd): Result.Result<string, never> =>
     Match.orElse(() => fallback)
   )
 
-export const decision = Workflow.make(Cmd, decide)`,
+export const decision = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
-      name: 'Should_ReportOrElse_When_ATotalDecisionBodyEndsWithOrElse',
-      code: inTwoArgTotalBody(`Match.value(input).pipe(
-        Match.tag('A', () => a),
-        Match.tag('B', () => b),
-        Match.orElse(() => fallback)
-      )`),
+      // Shorthand property, same obligation: `{ decide }` binds like `decide: decide`.
+      name: 'Should_ReportOrElse_When_TheShorthandDecideEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+const decide = (input: Cmd): Result.Result<string, never> =>
+  Match.value(input).pipe(
+    Match.tag('A', () => a),
+    Match.tag('B', () => b),
+    Match.orElse(() => fallback)
+  )
+
+export const decision = Workflow.make({ decide, command: Cmd, decision: Decision, error: S.Never })`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // The callee is judged by origin, so the computed `Workflow['make']` spelling
+      // is the same boundary and its decide body is judged like any other.
+      name: 'Should_ReportOrElse_When_AComputedMakeEndsWithOrElse',
+      code: `${MAKE_IMPORTS}
+${SCHEMA_CLASSES}
+export const decision = Workflow['make']({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (input: Cmd): Result.Result<string, never> =>
+    Match.value(input).pipe(
+      Match.tag('A', () => a),
+      Match.tag('B', () => b),
+      Match.orElse(() => fallback)
+    ),
+})`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {
