@@ -1,16 +1,13 @@
-import { NodeHttpServer } from '@effect/platform-node'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { Graph } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
-import { Context, Effect, Layer, Result } from 'effect'
-import * as FetchHttpClient from 'effect/unstable/http/FetchHttpClient'
+import { Context, Effect, Layer } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import * as HttpServer from 'effect/unstable/http/HttpServer'
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
-import * as NetAddress from 'effect/unstable/net/NetAddress'
 import { expect } from 'vitest'
+import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 import {
   expectedSpanRecords,
   TEMPO_CHILD_SPAN_ID_WIRE,
@@ -29,10 +26,6 @@ import {
  */
 
 type Reply = (request: HttpServerRequest) => HttpServerResponse.HttpServerResponse
-
-class Loopback extends Context.Service<Loopback, { readonly baseUrl: string }>()(
-  '@systemfsoftware/trace-spec/tests/tempo-trace-store.integration.test/Loopback',
-) {}
 
 const jsonAnswer = (body: string): Reply => () => HttpServerResponse.text(body, { contentType: 'application/json' })
 
@@ -75,29 +68,7 @@ const replyFor = (request: HttpServerRequest): HttpServerResponse.HttpServerResp
   return (reply ?? refusedAnswer(404))(request)
 }
 
-const baseUrlOf = (address: NetAddress.InetAddress): string => {
-  const url = Result.getOrThrow(NetAddress.toUrl(address))
-  if (NetAddress.isUnspecified(address.address)) {
-    url.hostname = NetAddress.formatIp(NetAddress.ipv4Loopback)
-  }
-  return url.origin
-}
-
-const loopbackTag = Layer.effect(
-  Loopback,
-  Effect.gen(function*() {
-    const server = yield* HttpServer.HttpServer
-    yield* server.serve(Effect.map(HttpServerRequest, replyFor))
-    if (NetAddress.isUnixPathAddress(server.address)) {
-      return yield* Effect.die(new Error('the loopback store listened on a unix socket'))
-    }
-    return { baseUrl: baseUrlOf(server.address) }
-  }),
-)
-
-const LoopbackLive = Layer.orDie(
-  Layer.provideMerge(loopbackTag, Layer.mergeAll(NodeHttpServer.layerTest, FetchHttpClient.layer)),
-)
+const LoopbackLive = loopbackStore(Effect.succeed(Effect.map(HttpServerRequest, replyFor)))
 
 const givenStoreAnswering = (what: string) =>
   Given(`a store that ${what}`)('baseUrl', () => Effect.map(Loopback, (loopback) => loopback.baseUrl))

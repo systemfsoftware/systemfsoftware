@@ -89,8 +89,6 @@ const MillisFromNanos = Schema.String.pipe(
   ),
 )
 
-const orNull = <T>(value: T | undefined): T | null => value ?? null
-
 const unsetParent = (parent: string): boolean => parent === '' || /^0+$/.test(parent)
 
 const heldParent = (parent: string): string | null => (unsetParent(parent) ? null : parent)
@@ -109,15 +107,14 @@ const STATUS_BY_CODE: Record<StatusCode, TraceGraph.Status> = {
 
 const statusOf = (status: WireStatus | undefined): TraceGraph.Status => STATUS_BY_CODE[codeOf(status ?? EMPTY_STATUS)]
 
-const stringValueOf = (value: WireAnyValue): TraceGraph.AttributeValue | null => orNull(value.stringValue)
+const stringValueOf = (value: WireAnyValue): TraceGraph.AttributeValue | null => value.stringValue ?? null
 
 const numberOf = (value: WireAnyValue): TraceGraph.AttributeValue | null =>
-  orNull(value.doubleValue) ?? intToNumber(value.intValue)
+  value.doubleValue ?? intToNumber(value.intValue)
 
 const intToNumber = (text: string | undefined): number | null => (text === undefined ? null : Number(text))
 
-const boolOrNumberOf = (value: WireAnyValue): TraceGraph.AttributeValue | null =>
-  orNull(value.boolValue) ?? numberOf(value)
+const boolOrNumberOf = (value: WireAnyValue): TraceGraph.AttributeValue | null => value.boolValue ?? numberOf(value)
 
 const scalarOf = (value: WireAnyValue): TraceGraph.AttributeValue | null =>
   stringValueOf(value) ?? boolOrNumberOf(value)

@@ -1,17 +1,14 @@
-import { NodeHttpServer } from '@effect/platform-node'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, Rel, RemoteObservation, Stimulus, TempoTraceStore } from '@systemfsoftware/trace-spec'
-import { Context, Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
-import * as FetchHttpClient from 'effect/unstable/http/FetchHttpClient'
+import { Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
 import type { HttpClientError } from 'effect/unstable/http/HttpClientError'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import * as HttpServer from 'effect/unstable/http/HttpServer'
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
-import * as NetAddress from 'effect/unstable/net/NetAddress'
 import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
+import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 
 /**
  * One loopback server plays both the system under test and the trace store.
@@ -54,14 +51,6 @@ interface StoreState {
   readonly rows: Ref.Ref<HashMap.HashMap<string, ReadonlyArray<Row>>>
   readonly modes: Ref.Ref<HashMap.HashMap<string, Serving>>
 }
-
-interface LoopbackApi {
-  readonly baseUrl: string
-}
-
-class Loopback extends Context.Service<Loopback, LoopbackApi>()(
-  '@systemfsoftware/trace-spec/tests/remote-trace-contract.integration.test/Loopback',
-) {}
 
 interface Traceparent {
   readonly traceId: string
@@ -222,35 +211,16 @@ const answerFor = (
     ? settleAnswer(request, state)
     : traceAnswer(request, state)
 
-// ---------------------------------------------------------------------------
-// Loopback lifecycle: a fresh server per scenario, reached over an ordinary fetch client.
-// ---------------------------------------------------------------------------
+const serveFrom = (state: StoreState) => Effect.flatMap(HttpServerRequest, (request) => answerFor(request, state))
 
-const baseUrlOf = (address: NetAddress.InetAddress): string => {
-  const url = Result.getOrThrow(NetAddress.toUrl(address))
-  if (NetAddress.isUnspecified(address.address)) {
-    url.hostname = NetAddress.formatIp(NetAddress.ipv4Loopback)
-  }
-  return url.origin
-}
-
-const loopbackTag = Layer.effect(
-  Loopback,
-  Effect.gen(function*() {
-    const server = yield* HttpServer.HttpServer
-    const rows = yield* Ref.make<HashMap.HashMap<string, ReadonlyArray<Row>>>(HashMap.empty())
-    const modes = yield* Ref.make<HashMap.HashMap<string, Serving>>(HashMap.empty())
-    const state: StoreState = { rows, modes }
-    yield* server.serve(Effect.flatMap(HttpServerRequest, (request) => answerFor(request, state)))
-    if (NetAddress.isUnixPathAddress(server.address)) {
-      return yield* Effect.die(new Error('the loopback store listened on a unix socket'))
-    }
-    return { baseUrl: baseUrlOf(server.address) }
-  }),
-)
-
-const LoopbackLive = Layer.orDie(
-  Layer.provideMerge(loopbackTag, Layer.mergeAll(NodeHttpServer.layerTest, FetchHttpClient.layer)),
+const LoopbackLive = loopbackStore(
+  Effect.map(
+    Effect.all({
+      rows: Ref.make<HashMap.HashMap<string, ReadonlyArray<Row>>>(HashMap.empty()),
+      modes: Ref.make<HashMap.HashMap<string, Serving>>(HashMap.empty()),
+    }),
+    serveFrom,
+  ),
 )
 
 // ---------------------------------------------------------------------------
