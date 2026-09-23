@@ -87,7 +87,9 @@ const writeProbe = (
   verdict: Result.Result<VirtualizationVerdict, never>,
   command: AssessVirtualization,
 ): Effect.Effect<void, VirtualizationUnsupportedError> =>
-  Match.value(Result.getOrThrow(verdict)).pipe(
+  verdict.pipe(
+    Result.getOrThrow,
+    Match.value,
     Match.tag('VirtualizationRefused', (refused) =>
       Effect.andThen(
         Effect.logDebug(`[effect-microsandbox] virtualization topology: ${refused.topology}`),

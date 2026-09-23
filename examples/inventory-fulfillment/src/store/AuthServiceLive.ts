@@ -2,6 +2,7 @@ import { type Auth, betterAuth, type BetterAuthOptions } from 'better-auth'
 import { type DB, drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Effect } from 'effect'
+import { dual } from 'effect/Function'
 import { PgRuntime } from './PgRuntime.js'
 import { account, session, user, verification } from './schema.tables.js'
 
@@ -14,7 +15,10 @@ const options = (database: DB, secret: string): BetterAuthOptions => ({
   secret,
 })
 
-export const makeAuth = (database: DB, secret: string): Auth => betterAuth(options(database, secret))
+export const makeAuth: {
+  (secret: string): (database: DB) => Auth
+  (database: DB, secret: string): Auth
+} = dual(2, (database: DB, secret: string): Auth => betterAuth(options(database, secret)))
 
 export const make = Effect.gen(function*() {
   const runtime = yield* PgRuntime

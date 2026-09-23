@@ -141,7 +141,9 @@ const readPlanCommand = (spec: MicroVMSpec) =>
   })
 
 const writeBoot = (outcome: Result.Result<SandboxPlanDecision, never>, command: PlanSandbox) =>
-  Match.value(Result.getOrThrow(outcome)).pipe(
+  outcome.pipe(
+    Result.getOrThrow,
+    Match.value,
     Match.tag('PlanRefused', (refused) =>
       Effect.fail(
         new LoopbackViolationError({

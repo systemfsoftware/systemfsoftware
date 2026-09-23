@@ -23,11 +23,17 @@ export interface TargetOptions {
 
 const DEFAULTS = { timeoutMs: 30_000, pollMs: 250 } as const
 
-export const target = (bindings: ReadonlyArray<PortBinding>, options: TargetOptions = {}): ProbeTarget => ({
-  ...DEFAULTS,
-  ...options,
-  bindings,
-})
+export const target: {
+  (options?: TargetOptions): (bindings: ReadonlyArray<PortBinding>) => ProbeTarget
+  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTarget
+} = dual(
+  (args) => Array.isArray(args[0]),
+  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTarget => ({
+    ...DEFAULTS,
+    ...options,
+    bindings,
+  }),
+)
 
 export const awaitCondition: {
   (

@@ -50,4 +50,4 @@ export const dynamicScenarioEnvironment = (
 export const scenarioEnvironment: ScenarioEnvironment = dynamicScenarioEnvironment(BASELINE_LOG_LINES)
 
 export const unreadableLogEnvironment = (error: Readiness.LogSourceError): ScenarioEnvironment =>
-  environmentOf(unreadableLogSource(error))
+  error.pipe(unreadableLogSource, environmentOf)

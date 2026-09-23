@@ -29,8 +29,8 @@ describe('Span.start(FulfillmentSettle)', () => {
   })
 
   it('start preserves the wrapped outcome and its channels', () => {
-    expect(settleWith('order-1')(Effect.succeed(7))).type.toBe<Effect.Effect<number, never, never>>()
-    expect(settleWith('order-1')(Effect.fail('boom'))).type.toBe<Effect.Effect<never, string, never>>()
+    expect(Effect.succeed(7).pipe(settleWith('order-1'))).type.toBe<Effect.Effect<number, never, never>>()
+    expect(Effect.fail('boom').pipe(settleWith('order-1'))).type.toBe<Effect.Effect<never, string, never>>()
   })
 })
 

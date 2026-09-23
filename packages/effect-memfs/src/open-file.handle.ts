@@ -280,13 +280,11 @@ export const truncate: {
       catch: failureOf('truncate'),
     }).pipe(
       Effect.flatMap(() =>
-        Ref.update(
-          self[CursorId],
-          (position) =>
-            clampedTo(
-              Result.getOrThrow(planTruncateCursor(new PlanTruncateCursor({ position, length: lengthOrZero(length) }))),
-            ),
-        )
+        Ref.update(self[CursorId], (position) =>
+          planTruncateCursor(new PlanTruncateCursor({ position, length: lengthOrZero(length) })).pipe(
+            Result.getOrThrow,
+            clampedTo,
+          ))
       ),
     ),
 )
@@ -294,20 +292,23 @@ export const truncate: {
 export const close = (self: OpenFile): Effect.Effect<void, Error.PlatformError> =>
   Effect.tryPromise({ try: () => self[DriverId].close(), catch: failureOf('close') })
 
-export const file = (
-  self: OpenFile,
-  info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>,
-): FileSystem.File => ({
-  [FileSystem.FileTypeId]: FileSystem.FileTypeId,
-  stat: info,
-  sync: sync(self),
-  seek: (offset, from) => seek(self, offset, from),
-  read: (buffer) => read(self, buffer),
-  readAlloc: (size) => readAlloc(self, size),
-  truncate: (length) => truncate(self, length),
-  write: (buffer) => write(self, buffer),
-  writeAll: (buffer) => writeAll(self, buffer),
-})
+export const file: {
+  (info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): (self: OpenFile) => FileSystem.File
+  (self: OpenFile, info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): FileSystem.File
+} = dual(
+  (args) => isOpenFile(args[0]),
+  (self: OpenFile, info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): FileSystem.File => ({
+    [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+    stat: info,
+    sync: sync(self),
+    seek: (offset, from) => seek(self, offset, from),
+    read: (buffer) => read(self, buffer),
+    readAlloc: (size) => readAlloc(self, size),
+    truncate: (length) => truncate(self, length),
+    write: (buffer) => write(self, buffer),
+    writeAll: (buffer) => writeAll(self, buffer),
+  }),
+)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
@@ -373,7 +374,10 @@ if (import.meta.vitest !== void 0) {
   )
 
   const sliceFor = (requested: number, bytesRead: number): Option.Option<Uint8Array> =>
-    sliceOf(new Uint8Array(requested))(Result.getOrThrow(planReadSlice(new ReadSlice({ bytesRead, requested }))))
+    planReadSlice(new ReadSlice({ bytesRead, requested })).pipe(
+      Result.getOrThrow,
+      sliceOf(new Uint8Array(requested)),
+    )
 
   it.prop(
     '∀nr_Slice_≡MinReadRequested',

@@ -3,6 +3,7 @@ import { Option, Predicate } from 'effect'
 import * as Arr from 'effect/Array'
 import * as ByteSize from 'effect/ByteSize'
 import type * as FileSystem from 'effect/FileSystem'
+import { dual } from 'effect/Function'
 import * as Error from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 import { ShapeRefusal } from './MemoryFileSystemError.schema.js'
@@ -35,13 +36,18 @@ const directoryOf = (cwd: string): string => cwd.endsWith('/') ? cwd : `${cwd}/`
 
 const absoluteOf = (cwd: string, path: string): string => path.startsWith('/') ? path : directoryOf(cwd) + path
 
-export const byteBodiesOf = (
-  cwd: string,
-  contents: Contents,
-): ReadonlyArray<readonly [path: string, bytes: Uint8Array]> =>
-  Object.entries(contents).flatMap(([path, body]) =>
-    body instanceof Uint8Array ? [[absoluteOf(cwd, path), body] as const] : []
-  )
+type ByteBodies = ReadonlyArray<readonly [path: string, bytes: Uint8Array]>
+
+export const byteBodiesOf: {
+  (contents: Contents): (cwd: string) => ByteBodies
+  (cwd: string, contents: Contents): ByteBodies
+} = dual(
+  2,
+  (cwd: string, contents: Contents): ByteBodies =>
+    Object.entries(contents).flatMap(([path, body]) =>
+      body instanceof Uint8Array ? [[absoluteOf(cwd, path), body] as const] : []
+    ),
+)
 
 const stringFieldOf = <E = unknown>(error: E, property: string): string => {
   if (!Predicate.hasProperty(error, property)) {

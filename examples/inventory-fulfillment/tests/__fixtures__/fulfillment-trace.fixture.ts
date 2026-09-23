@@ -1,6 +1,7 @@
 import { CreditLedger, Fulfillment, Inventory, ReservationLog } from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Array as Arr, Effect, FileSystem, Layer, Option, Result, Schema as S } from 'effect'
+import { dual } from 'effect/Function'
 
 const SKU = 'sku-porcelain-mug'
 const WAREHOUSE = 'warehouse-north'
@@ -35,17 +36,23 @@ export const stockPartition = (): Inventory.Schema.WarehouseStockPartition =>
     }),
   )
 
-export const settlementRequest = (orderId: string, customerId: string): SettlementRequest => ({
-  order: Result.getOrThrow(
-    S.decodeResult(Fulfillment.Order.Order)({
-      orderId,
-      customerId,
-      lines: [{ sku: SKU, quantity: ORDERED_QUANTITY }],
-    }),
-  ),
-  kits: [],
-  fraudRisk: Result.getOrThrow(S.decodeResult(Fulfillment.Credit.FraudRiskScore)(FRAUD_RISK)),
-})
+export const settlementRequest: {
+  (customerId: string): (orderId: string) => SettlementRequest
+  (orderId: string, customerId: string): SettlementRequest
+} = dual(
+  2,
+  (orderId: string, customerId: string): SettlementRequest => ({
+    order: Result.getOrThrow(
+      S.decodeResult(Fulfillment.Order.Order)({
+        orderId,
+        customerId,
+        lines: [{ sku: SKU, quantity: ORDERED_QUANTITY }],
+      }),
+    ),
+    kits: [],
+    fraudRisk: Result.getOrThrow(S.decodeResult(Fulfillment.Credit.FraudRiskScore)(FRAUD_RISK)),
+  }),
+)
 
 const partitionOffering = (
   partition: Inventory.Schema.WarehouseStockPartition,

@@ -1,6 +1,6 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Layer, Match } from 'effect'
+import { type Context, Effect, Match } from 'effect'
 import * as Result from 'effect/Result'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { SandboxBootError, WaitTimeoutError } from './MicroVMError.schema.js'
@@ -31,30 +31,28 @@ const conditionOf = (strategy: WaitStrategy): Readiness.Condition =>
     Match.exhaustive,
   )
 
-const logSourceOf = (sandbox: AcquiredVM['sandbox']): Layer.Layer<Readiness.LogSource> =>
-  Layer.succeed(Readiness.LogSource, {
-    entries: Effect.map(
-      Effect.tryPromise({
-        try: () => sandbox.logs(),
-        catch: (cause) => new Readiness.LogSourceError({ source: sandbox.name, cause }),
-      }),
-      (entries) => entries.map((entry) => entry.text()),
-    ),
-  })
+const logSourceOf = (sandbox: AcquiredVM['sandbox']): Context.Service.Shape<typeof Readiness.LogSource> => ({
+  entries: Effect.map(
+    Effect.tryPromise({
+      try: () => sandbox.logs(),
+      catch: (cause) => new Readiness.LogSourceError({ source: sandbox.name, cause }),
+    }),
+    (entries) => entries.map((entry) => entry.text()),
+  ),
+})
 
 const awaitReadinessForStrategy = (
   vm: AcquiredVM,
   strategy: WaitStrategy,
-): Effect.Effect<void, WaitTimeoutError | SandboxBootError> =>
+): Effect.Effect<void, WaitTimeoutError | SandboxBootError, Readiness.HostProber> =>
   Effect.gen(function*() {
     const target = Readiness.target(vm.plan.portBindings, {
       timeoutMs: WAIT_TIMEOUT_MS,
       pollMs: WAIT_POLL_MS,
     })
     const condition = conditionOf(strategy)
-    const env = Layer.merge(Readiness.NodeHostProber, logSourceOf(vm.sandbox))
     const verdict = yield* Readiness.awaitCondition(target, condition).pipe(
-      Effect.provide(env),
+      Effect.provideService(Readiness.LogSource, logSourceOf(vm.sandbox)),
       Effect.mapError((cause) => new SandboxBootError({ sandboxName: vm.sandbox.name, cause })),
     )
     return yield* Match.value(verdict).pipe(

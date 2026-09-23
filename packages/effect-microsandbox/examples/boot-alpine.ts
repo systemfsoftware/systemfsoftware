@@ -1,12 +1,12 @@
 import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Deferred, Effect, Fiber, Match, Ref } from 'effect'
+import { Readiness } from '@systemfsoftware/effect-readiness'
+import { Crypto, Deferred, Effect, Fiber, Layer, Match, Ref } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { Buffer } from 'node:buffer'
-import { randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 
 const sandboxPrefix = 'effect-microsandbox-'
@@ -20,7 +20,10 @@ const recordGone = (name: string): Effect.Effect<boolean> =>
 const alpine = MicroVM.spec('alpine:3.20').withExposedPorts([8080])
 const portless = MicroVM.spec('alpine:3.20')
 
-const randomToken = (): string => randomBytes(16).toString('hex')
+const randomToken: Effect.Effect<string, never, Crypto.Crypto> = Effect.map(
+  Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomBytes(16))),
+  (bytes) => Buffer.from(bytes).toString('hex'),
+)
 
 /**
  * Byte-exact expectation for `yes "$SEED" | head -c <size>`: busybox `yes` writes
@@ -206,7 +209,7 @@ const payloadSize = 2 * 1024 * 1024
 const j5 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J5: job stdout payload, host-random seed, byte-exact')
-    const seed = randomToken()
+    const seed = yield* randomToken
     const completion = yield* MicroVM.job('alpine:3.20', ['sh', '-c', `yes "$SEED" | head -c ${payloadSize}`])
       .withEnv({ SEED: seed })
       .run
@@ -219,7 +222,7 @@ const j5 = Effect.scoped(
 const j6 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J6: job stderr payload with exit 42')
-    const seed = randomToken()
+    const seed = yield* randomToken
     const completion = yield* MicroVM.job('alpine:3.20', [
       'sh',
       '-c',
@@ -236,7 +239,8 @@ const j6 = Effect.scoped(
 const j7 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J7: one-shot host resource, replay cannot reproduce the token')
-    const body = `${randomToken()}\n`
+    const token = yield* randomToken
+    const body = `${token}\n`
     const listener = yield* openListener((_request, response, server) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body, () => {
@@ -259,7 +263,8 @@ const j7 = Effect.scoped(
 const j8 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J8: host-opted fetch equals stdout with exit 0')
-    const body = `${randomToken()}\n`
+    const token = yield* randomToken
+    const body = `${token}\n`
     const listener = yield* openListener((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body)
@@ -276,7 +281,8 @@ const j8 = Effect.scoped(
 const j9 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J9: identical argv without opt-in stays off the host')
-    const body = `${randomToken()}\n`
+    const token = yield* randomToken
+    const body = `${token}\n`
     const listener = yield* openListener((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body)
@@ -355,4 +361,4 @@ const main = Effect.gen(
   },
 )
 
-NodeRuntime.runMain(Effect.provide(main, nodeServicesLayer))
+NodeRuntime.runMain(Effect.provide(main, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber)))
