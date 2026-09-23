@@ -1,10 +1,5 @@
 ## 4.0.0
 
-### Major Changes
-
-- The restart decision span now carries its strategy under the OpenTelemetry key `daemon.restart.strategy` instead of the bare field name `strategy`. Update anything that reads the old key; no exported signature changes.
-
 ### Patch Changes
 
-- Updated dependencies:
-  - @systemfsoftware/effect-cell-types@10.0.0
+- A supervisor whose restart decision cannot read its own restart command now logs the error and cools down, the same as when its restart budget runs out. It used to die and take its children down with it.

@@ -58,7 +58,7 @@ catalog:
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
   "@types/scheduler": ^0.28.0
-  jsdom: ^30.0.1
+  jsdom: ^30.1.0
   react: ^19.3.0
   react-dom: ^19.3.0
   react-error-boundary: ^6.1.5
@@ -105,5 +105,3 @@ packages:
   - packages/toolchain/*
   - omp/plugins/*
   - examples/*
-config:
-  confirm-modules-purge: false

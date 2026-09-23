@@ -34,7 +34,7 @@
           default = dprint;
         });
 
-      # pnpm is deliberately absent: `packageManager` pins pnpm@11.21.0 and
+      # pnpm is deliberately absent: `packageManager` pins pnpm@12.6.0 and
       # corepack is the one thing allowed to resolve it. A second pnpm on PATH
       # would answer `pnpm install` with a version the lockfile never saw.
       devShells = forEachSystem (pkgs: {

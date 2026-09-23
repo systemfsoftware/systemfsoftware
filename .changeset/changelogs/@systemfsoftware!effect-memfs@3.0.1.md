@@ -2,5 +2,4 @@
 
 ### Patch Changes
 
-- Updated dependencies:
-  - @systemfsoftware/effect-cell-types@10.0.0
+- Built on the new `@systemfsoftware/effect-cell-types` cell edges. Public APIs and behavior are unchanged.

@@ -2,4 +2,9 @@
 
 ### Major Changes
 
-- `Workflow.InstrumentationBrand` now declares a map from command fields to OpenTelemetry attribute keys (`{ orderId: 'app.order.id' }`) instead of a field list. The parent span carries the mapped keys, and the run's outcome rides `app.<operation>.decision` or `app.<operation>.failure` instead of the bare `decision` and `failure` tags. A map value that is not a lowercase dot-separated key is refused at compile time alongside a key that is not a schema field. `Workflow.SpanAttributes<typeof Command>` derives the declared attribute record from the map, so a span declaration can pin its schema against the command's own instrumentation. Declare the map with `as const`: a list-shaped declaration stops compiling, and every declared span key changes to its mapped form.
+- Cells now decode and encode through the workflow's schemas, and `write` must handle every outcome, including input that fails the command schema.
+
+  - Replace `Workflow.total` and `Workflow.andThen` with `Workflow.make({ command, decision, error, decide })`, using `error: Schema.Never` when the decision cannot fail. A `decision` may also be a list of events: `Schema.Array(Schema.Union([...]))`.
+  - Remove `.decode(...)`, `.encode(...)` and `Sandwich.pure`. The chain is `Sandwich.named(name)(read).decide(workflow).write(handlers)`, and `read` returns the command's encoded form.
+  - Pass `write` one handler per decision tag, one per error tag, and one for `CommandRejected`. A handler for a tag no outcome carries is a compile error (`HandlerForNoVariant`).
+  - Replace `Cell.provide(layer)` with `Cell.provideContext(context)`, building the context once.

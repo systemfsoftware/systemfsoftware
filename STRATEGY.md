@@ -1,6 +1,6 @@
 ---
 name: systemfsoftware
-last_updated: 2026-09-06
+last_updated: 2026-09-23
 ---
 
 # systemfsoftware Strategy
@@ -14,9 +14,10 @@ never claimed by process.
 
 ## Positioning
 
-Any code that needs to be fixed but can regress without the compiler or a lint gate failing
-is an automatic F. Every doctrine rule ships as a mechanism that re-fires — compiler, linter,
-mutator — never as prose the model must recall.
+Any code that needs to be fixed but can regress without the compiler, an Oxlint rule, or a mutation
+test failing is an automatic F. Every doctrine rule ships as an executable mechanism that re-fires
+deterministically — compiler types, AST plugins, property laws, or non-autoregressive decision models —
+never as prose instructions or conversational opinions a model must recall.
 
 ## Users
 
@@ -27,10 +28,13 @@ humans write intent, machines write and verify code.
 ## Boundaries
 
 - No non-Effect TypeScript ports. Effect-TS or die.
-- No LLM-as-judge review products. Gates are mechanisms, not model opinions.
+- No LLM-as-judge review products. Gates are deterministic mechanisms, not model opinions: AST linters,
+  type checks, and ~35ms non-autoregressive forward passes (Jev DecisionModel) with tri-state thresholding
+  (Match $\ge 0.80$, Miss $\le 0.50$, Uncertain $0.50-0.80$), never conversational prompts, chat reviews, or
+  uncalibrated text-streaming opinions.
 
 _Resist a change when:_ it trades the mechanism for reach or judgment — wider adoption without
-a gate, or a model's opinion in place of a command that fails.
+a gate, or a model's conversational opinion in place of an executable command that fails.
 
 ## Key metrics
 
@@ -44,27 +48,37 @@ counts were rejected as vanity. -->
 
 ### Cell architecture
 
-The type surface that makes illegal programs unrepresentable — sandwich order and service
-requirements carried by the compiler.
+The type surface and 5-phase sandwich runtime that makes illegal programs unrepresentable — schema-derived
+decode/encode edges, pure CC=1 workflows, and single-site context provisioning.
 
 _Why it serves the approach:_ the compiler is the strongest gate; a defect the type system
 refuses can never regress silently.
 
-### The gate fleet
+### Deterministic AST & schema gates
 
-Lint rules, schema laws and refutation, mutation gating — machinery catching every defect
-class the compiler can't.
+Oxlint static plugins, bidirectional schema roundtrip laws, recursion depth budgets, and Stryker mutation
+analysis — automated machinery catching defect classes compiler types alone cannot observe.
 
 _Why it serves the approach:_ the "automatic F" rule operationalized — every advisory doctrine
-row becomes a command that fails.
+row becomes a command that fails in local checks and CI.
 
-### The flagship proof
+### System One decision gates (Jev)
 
-The stryker-js engine and CLI held to the doctrine end-to-end, plus the packaging discipline
-(generated exports, attw, api-extractor rollups) that makes the stack adoptable by strangers.
+Non-autoregressive forward-pass decision models integrated via Effect v4's `Decision` and `DecisionModel`
+primitives (`effect/unstable/ai/Decision`) for questions AST linting cannot decide (semantic breaking changes,
+regression triage) using calibrated three-valued logic.
 
-_Why it serves the approach:_ a real product surviving these rules is the credibility — and
-the mutator that grades the rest.
+_Why it serves the approach:_ provides fast (~35ms), reproducible, unprompted classification without
+sliding into ungrounded conversational LLM reviews.
+
+### Flagship proofs & reference architectures
+
+The Stryker CLI mutation engine, modular Oxlint plugin/preset packages, and the end-to-end e-commerce
+fulfillment reference stack (`examples/inventory-fulfillment`), held to the doctrine with strict packaging
+discipline (attw, api-extractor rollups).
+
+_Why it serves the approach:_ real, production-grade applications and developer tools surviving these rules
+provide tangible credibility and prevent the architecture from degenerating into ivory-tower formalism.
 
 ## Brand
 

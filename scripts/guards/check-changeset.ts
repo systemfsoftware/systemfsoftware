@@ -215,16 +215,41 @@ const dryRun = async (cwd: string, pinnedVersion: string): Promise<DryRun> => {
 }
 
 /**
+ * `pnpm-lock.yaml` is a two-document YAML stream: the leading document is the
+ * *env lockfile* (config dependencies and the `packageManager` /
+ * `devEngines` bootstrap deps), the rest is the project lockfile. This parser
+ * therefore reads the main document, not the file's first `importers:` block
+ * — pnpm's own reader makes the same cut, at the first `\n---\n` separator
+ * after a leading `---\n` (pnpm/crates/lockfile/src/yaml_documents.rs,
+ * `extract_main_document`), and a file with no leading `---\n` is the main
+ * document already. A leading document with no separator (an env-only file)
+ * leaves no main document, which fails the version assertion below rather
+ * than being read as lockfile content.
+ */
+const mainLockfileDocument = (content: string): string => {
+  const normalized = content.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n')
+  if (!normalized.startsWith('---\n')) return normalized
+  const rest = normalized.slice('---\n'.length)
+  const separator = rest.indexOf('\n---\n')
+  return separator === -1 ? '' : rest.slice(separator + '\n---\n'.length)
+}
+
+/**
  * The lockfile is the engine-of-record: the resolved turbo version it names is
  * the version `pnpm install --frozen-lockfile` puts in node_modules, and the
  * selftest recomputes this exact value from these exact bytes. A pnpm major
  * bump that changes the schema breaks the assertion here before it can
- * silently redirect the verdict.
+ * silently redirect the verdict: pnpm 11 wrote a single document, pnpm 12
+ * writes the env document ahead of it, and both declare
+ * `lockfileVersion: '9.0'` — so the version string alone no longer identifies
+ * the document the entries live in.
  */
-const lockfileIsV9 = (lockfile: string): boolean => /^lockfileVersion:\s*['"]?9\.0['"]?\s*$/m.test(lockfile)
+const lockfileIsV9 = (lockfile: string): boolean =>
+  /^lockfileVersion:\s*['"]?9\.0['"]?\s*$/m.test(mainLockfileDocument(lockfile))
 
 const lockfileTurboEntry = (lockfile: string): { specifier: string; version: string } | null => {
-  const importers = lockfile.slice(lockfile.indexOf('\nimporters:'))
+  const main = mainLockfileDocument(lockfile)
+  const importers = main.slice(main.indexOf('\nimporters:'))
   if (importers.length === 0) return null
   const rootStart = importers.indexOf('\n  .:')
   if (rootStart === -1) return null
@@ -511,6 +536,41 @@ importers:
       turbo:
         specifier: ^2.10.5
         version: 2.10.5
+`
+
+/**
+ * The pnpm 12 stream shape: the env document (config dependencies and the
+ * pinned package manager) ahead of the project document. The env document
+ * declares its own `importers` block and the same `lockfileVersion`, so the
+ * turbo entry exists only in the document after the separator.
+ */
+const FIXTURE_V9_WITH_ENV = `---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.6.0
+        version: 12.6.0
+
+packages:
+
+  pnpm@12.6.0:
+    resolution: {integrity: sha512-x}
+
+---
+${FIXTURE_V9}`
+
+const FIXTURE_ENV_ONLY = `---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
 `
 
 const DRY_FIXTURE = JSON.stringify({
@@ -826,10 +886,20 @@ const selftest = async (): Promise<number> => {
 
   const checks: readonly [string, boolean][] = [
     ['lockfileVersion 9.0 recognized', lockfileIsV9(FIXTURE_V9)],
+    ['lockfileVersion 9.0 recognized through a pnpm 12 stream', lockfileIsV9(FIXTURE_V9_WITH_ENV)],
     ['lockfileVersion 8.0 rejected', !lockfileIsV9("lockfileVersion: '8.0'\n")],
     [
       'turbo entry parsed from the live importer structure',
       JSON.stringify(lockfileTurboEntry(FIXTURE_V9)) === JSON.stringify({ specifier: '^2.10.5', version: '2.10.5' }),
+    ],
+    [
+      'turbo entry parsed from the main document, not the env document',
+      JSON.stringify(lockfileTurboEntry(FIXTURE_V9_WITH_ENV)) ===
+        JSON.stringify({ specifier: '^2.10.5', version: '2.10.5' }),
+    ],
+    [
+      'an env-only stream fails closed',
+      expectsThrow(() => assertTurboPin(FIXTURE_ENV_ONLY, JSON.stringify({ version: '2.10.5' }), 'selftest-env-only')),
     ],
     [
       'no turbo entry in a non-root importer',
