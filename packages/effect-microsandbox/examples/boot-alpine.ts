@@ -379,4 +379,4 @@ const main = Effect.gen(
   },
 )
 
-NodeRuntime.runMain(Effect.provide(main, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber)))
+NodeRuntime.runMain(Effect.provide(main, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber.layer)))
