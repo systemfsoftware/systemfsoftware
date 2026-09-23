@@ -1,5 +1,6 @@
 /// <reference types="vitest/importMeta" />
 import { Array as Arr, Clock, Context, Duration, Effect, Layer, Match, Option, Ref, Result } from 'effect'
+import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import {
   type Collector,
@@ -265,14 +266,19 @@ const collector = <R>(source: TraceSource<R>, options: Options, context: Context
  * the source requires (`Scope.Scope` is supplied by the layer machinery, as
  * every Effect layer constructor scopes it away).
  */
-export const layer = <R>(
-  source: TraceSource<R>,
-  options: Options,
-): Layer.Layer<Observation, never, Exclude<R, Scope.Scope>> =>
-  Layer.effectContext(
-    Effect.map(Effect.andThen(requirePositive(options), Effect.context<R>()), (context) =>
-      Context.make(Observation, collector(source, options, context))),
-  )
+export const layer: {
+  (options: Options): <R>(source: TraceSource<R>) => Layer.Layer<Observation, never, Exclude<R, Scope.Scope>>
+  <R>(source: TraceSource<R>, options: Options): Layer.Layer<Observation, never, Exclude<R, Scope.Scope>>
+} = dual(
+  2,
+  <R>(source: TraceSource<R>, options: Options): Layer.Layer<Observation, never, Exclude<R, Scope.Scope>> =>
+    Layer.effectContext(
+      Effect.map(
+        Effect.andThen(requirePositive(options), Effect.context<R>()),
+        (context) => Context.make(Observation, collector(source, options, context)),
+      ),
+    ),
+)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic imports: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
