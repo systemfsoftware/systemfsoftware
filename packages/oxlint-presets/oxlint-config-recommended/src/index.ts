@@ -23,6 +23,7 @@ export const jsPlugins: readonly string[] = [
   ...dmmfJsPlugins,
   ...cellJsPlugins,
   import.meta.resolve('@systemfsoftware/oxlint-plugin-test-discipline'),
+  effectPlatformJsPlugin,
 ]
 
 export const plugins: NonNullable<OxlintConfig['plugins']> = [
@@ -34,6 +35,7 @@ export const plugins: NonNullable<OxlintConfig['plugins']> = [
   'node',
   'oxc',
   'promise',
+  'effecttsgo',
 ]
 
 export const options: NonNullable<OxlintConfig['options']> = {
@@ -53,18 +55,10 @@ const testFilePatterns = [
 
 const entryFilePatterns = [...testFilePatterns, '**/test-types/**', '**/examples/**'] as const
 
-// The promoted tsgo preset carries node-builtin-import; the entry roles omit it, so the promoted
-// entry is dropped here rather than re-declared.
-const { 'effecttsgo/node-builtin-import': _platformChoiceIsAnEntryDecision, ...entryPromoted } = {
+const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...promoteWarnToError(tsgoCorrectness.rules),
   ...promoteWarnToError(tsgoRecommended.rules),
-}
-
-// Entry set: every Effect rule the entry roles carry. Two rules are absent here rather than set to
-// off, because both name a composition decision the entry point is allowed to make: providing a
-// Layer, and choosing the runtime's platform — whose own API needs the Node factory.
-const entryRules: NonNullable<OxlintConfig['rules']> = {
-  ...entryPromoted,
+  ...effectPlatform.configs.recommended.rules,
   'effecttsgo/global-date-in-effect': 'error',
   'effecttsgo/global-timers-in-effect': 'error',
   'effecttsgo/new-promise': 'error',
@@ -75,14 +69,14 @@ const entryRules: NonNullable<OxlintConfig['rules']> = {
   'effecttsgo/any-unknown-in-error-context': 'error',
   'effecttsgo/global-date': 'error',
   'effecttsgo/global-timers': 'error',
-}
-
-// Library set: the entry set plus the two rules that pin those decisions to the entry point —
-// shipped library code provides no Layer and reaches no Node builtin on its own.
-const libraryRules: NonNullable<OxlintConfig['rules']> = {
-  ...entryRules,
   'effecttsgo/node-builtin-import': 'error',
   'effecttsgo/strict-effect-provide': 'error',
+}
+
+const entryRules: NonNullable<OxlintConfig['rules']> = {
+  ...libraryRules,
+  'effecttsgo/node-builtin-import': 'off',
+  'effecttsgo/strict-effect-provide': 'off',
 }
 
 const observerOverrides: NonNullable<OxlintConfig['overrides']> = [
@@ -106,49 +100,12 @@ const recommendedConfig: OxlintConfig = {
   options: { ...options },
   categories: { correctness: 'error' },
   ignorePatterns: [...ignorePatterns],
-  overrides: [...observerOverrides],
+  overrides: [
+    ...observerOverrides,
+    { files: ['**/src/**'], rules: libraryRules },
+    { files: [...entryFilePatterns], rules: entryRules },
+    ...effectPlatform.configs.recommended.overrides,
+  ],
 }
 
 export default recommendedConfig
-
-const effectPlugins: NonNullable<OxlintConfig['plugins']> = ['effecttsgo']
-const effectJsPlugins: NonNullable<OxlintConfig['jsPlugins']> = [effectPlatformJsPlugin]
-const effectPlatformRules: NonNullable<OxlintConfig['rules']> = {
-  ...effectPlatform.configs.recommended.rules,
-}
-
-const sourceOverride = (rules: OxlintConfig['rules']): NonNullable<OxlintConfig['overrides']> => [
-  {
-    files: ['**/src/**'],
-    rules: { ...effectPlatformRules, ...rules },
-  },
-]
-
-const entryOverride = (rules: OxlintConfig['rules']): NonNullable<OxlintConfig['overrides']> => [
-  {
-    files: [...entryFilePatterns],
-    rules: { ...effectPlatformRules, ...rules },
-  },
-]
-
-export const effect: OxlintConfig = {
-  plugins: effectPlugins,
-  jsPlugins: effectJsPlugins,
-  options: { typeAware: true },
-  overrides: [
-    ...sourceOverride(libraryRules),
-    ...entryOverride(entryRules),
-    ...effectPlatform.configs.recommended.overrides,
-  ],
-}
-
-export const effectComposition: OxlintConfig = {
-  plugins: effectPlugins,
-  jsPlugins: effectJsPlugins,
-  options: { typeAware: true },
-  overrides: [
-    ...sourceOverride(entryRules),
-    ...entryOverride(entryRules),
-    ...effectPlatform.configs.recommended.overrides,
-  ],
-}

@@ -1038,9 +1038,6 @@ importers:
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-dmmf
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -1096,9 +1093,6 @@ importers:
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-dmmf
-      '@systemfsoftware/oxlint-config-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-recommended
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -1256,9 +1250,6 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../effect-schema-vite
-      '@systemfsoftware/oxlint-config-dmmf':
-        specifier: workspace:^
-        version: link:../oxlint-presets/oxlint-config-dmmf
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended
