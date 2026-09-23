@@ -4,8 +4,8 @@
 
 ```ts
 
-// @public (undocumented)
-export const RECURSION_BUDGET_VIRTUAL_ID: 'virtual:effect-schema-recursion-budget';
+// @public
+export const RECURSION_BUDGET_RUNTIME_SPECIFIER: '@systemfsoftware/effect-schema-recursion-budget/runtime';
 
 // @public (undocumented)
 export interface RecursionBudgetPlugin {
@@ -13,8 +13,6 @@ export interface RecursionBudgetPlugin {
     readonly enforce: 'pre';
     // (undocumented)
     readonly name: string;
-    // (undocumented)
-    readonly resolveId: (source: string) => string | null;
     // (undocumented)
     readonly transform: (code: string, id: string) => string | undefined;
 }

@@ -31,7 +31,12 @@
       "types": "./dist/effect-schema-recursion-budget.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./runtime": {
+      "@systemfsoftware/source": "./src/recursion-budget-runtime.ts",
+      "types": "./dist/recursion-budget-runtime.d.ts",
+      "default": "./dist/recursion-budget-runtime.mjs"
+    }
   },
   "scripts": {
     "clean": "rimraf dist",
@@ -40,8 +45,8 @@
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run",
-    "api:update": "api-extractor run --local"
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.runtime.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.runtime.json"
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
@@ -53,6 +58,7 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -74,7 +80,11 @@
         "types": "./dist/effect-schema-recursion-budget.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./package.json": "./package.json"
+      "./package.json": "./package.json",
+      "./runtime": {
+        "types": "./dist/recursion-budget-runtime.d.ts",
+        "default": "./dist/recursion-budget-runtime.mjs"
+      }
     },
     "provenance": true
   }

@@ -1,11 +1,14 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { existsSync } from 'node:fs'
 import { expect } from 'vitest'
 
-import { RECURSION_BUDGET_VIRTUAL_ID, recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
+import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
+import { budgetToArbitrary } from '@systemfsoftware/effect-schema-recursion-budget/runtime'
+import { Chain } from './__fixtures__/chain.schema.js'
 
 const Feature = makeFeature({ it, layer })
+
+const RUNTIME_SPECIFIER = '@systemfsoftware/effect-schema-recursion-budget/runtime'
 
 const MODULE_ID = '/repo/pkg/src/expr.schema.ts'
 
@@ -38,14 +41,23 @@ export const UnionBudget = S.Union([S.String]).annotate({
 const processed = (source: string, moduleId: string = MODULE_ID): string | undefined =>
   recursionBudgetTransform().transform(source, moduleId)
 
-const loadFailureOf = async (specifier: string): Promise<string> => {
-  try {
-    await import(specifier)
-    return 'loaded'
-  } catch (error) {
-    return error instanceof Error ? error.message : 'a non-error value was thrown'
-  }
+const injectedSpecifierOf = (code: string | undefined): string => {
+  const match = /__esRecursionBudget \} from '([^']+)'/.exec(code ?? '')
+  if (match?.[1] === undefined) throw new Error('the processed module carries no runtime import')
+  return match[1]
 }
+
+const loadFailureOf = (specifier: string): Effect.Effect<string> =>
+  Effect.match(
+    Effect.tryPromise({
+      try: () => import(specifier),
+      catch: (error) => (error instanceof Error ? error.message : 'a non-error value was thrown'),
+    }),
+    {
+      onFailure: (message) => message,
+      onSuccess: () => 'loaded',
+    },
+  )
 
 Feature('Declaring a generation budget on a recursive schema').body(({ scenario }) => {
   scenario(
@@ -62,7 +74,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
         )
       }),
       Then('the hook arrives from the recursion-budget runtime module')((s) => {
-        expect(s.code).toContain(`from '${RECURSION_BUDGET_VIRTUAL_ID}'`)
+        expect(s.code).toContain(`from '${RUNTIME_SPECIFIER}'`)
       }),
     ),
   )
@@ -107,28 +119,25 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
         expect(s.code?.startsWith('/// <reference types="vitest/import-meta" />')).toBe(true)
       }),
       Then('the runtime import is inserted below it')((s) => {
-        expect(s.code?.split('\n')[1]).toContain(RECURSION_BUDGET_VIRTUAL_ID)
+        expect(s.code?.split('\n')[1]).toContain(RUNTIME_SPECIFIER)
       }),
     ),
   )
 
   scenario(
-    'The hook import resolves to the runtime module the package ships',
+    'A consumer pipeline resolves the imported runtime module',
     Gherkin.Do.pipe(
-      Given('the schema-laws pipeline asking for its runtime module')(
-        'plugin',
-        () => Effect.succeed(recursionBudgetTransform()),
+      Given('a schema module that declares a generation budget at its recursion point')(
+        'source',
+        () => Effect.succeed(ANNOTATED),
       ),
-      When('it resolves the recursion-budget runtime specifier')(
-        'resolved',
-        (s) => Effect.sync(() => s.plugin.resolveId(RECURSION_BUDGET_VIRTUAL_ID)),
-      ),
-      Then('a runtime module on disk answers that specifier')((s) => {
-        expect(s.resolved).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
-        expect(s.resolved === null ? false : existsSync(s.resolved)).toBe(true)
+      When('the schema-laws pipeline processes that module')('code', (s) => Effect.sync(() => processed(s.source))),
+      Then('the generated hook is imported from the runtime module the package ships')((s) => {
+        expect(injectedSpecifierOf(s.code)).toBe(RUNTIME_SPECIFIER)
       }),
-      Then('an unrelated specifier is left to the rest of the pipeline')((s) => {
-        expect(s.plugin.resolveId('effect')).toBeNull()
+      Then('the runtime module the import names ships with the package')(() => {
+        const hook = budgetToArbitrary(() => Chain, { maxDepth: 3, depthSize: 'small' })
+        expect(hook()).toBeDefined()
       }),
     ),
   )
@@ -140,7 +149,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
         'fixture',
         () => Effect.succeed('./__fixtures__/bad-budget.schema.js'),
       ),
-      When('that module is loaded')('failure', (s) => Effect.promise(() => loadFailureOf(s.fixture))),
+      When('that module is loaded')('failure', (s) => loadFailureOf(s.fixture)),
       Then('the load fails naming the recursion budget')((s) => {
         expect(s.failure).toContain('recursionBudget: expected')
       }),

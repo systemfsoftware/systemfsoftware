@@ -1,6 +1,10 @@
 import { findExportedSchemas, type FoundSchema, quote } from '@systemfsoftware/effect-schema-discovery'
-import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
+import {
+  RECURSION_BUDGET_RUNTIME_SPECIFIER,
+  recursionBudgetTransform,
+} from '@systemfsoftware/effect-schema-recursion-budget'
 import { dirname, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { Plugin, ResolvedConfig } from 'vite'
 
 /** @since 0.1.0 */
@@ -127,7 +131,10 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     name: '@systemfsoftware/schema-laws',
     enforce: 'pre',
 
-    resolveId: budgets.resolveId,
+    resolveId(source: string): string | null {
+      if (source !== RECURSION_BUDGET_RUNTIME_SPECIFIER) return null
+      return fileURLToPath(import.meta.resolve(RECURSION_BUDGET_RUNTIME_SPECIFIER))
+    },
 
     configResolved(c) {
       config = c
