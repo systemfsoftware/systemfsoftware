@@ -57,5 +57,4 @@ export class LotAllocation extends S.Class<LotAllocation>('LotAllocation')({
   lotId: LotId,
   sku: SkuId,
   quantity: Quantity,
-  version: Version,
 }) {}

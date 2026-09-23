@@ -89,7 +89,6 @@ const competingSettlementOf = (
             lotId: 'lot-1',
             sku: SKU,
             quantity: 1,
-            version: 1,
           }),
         ),
       ],

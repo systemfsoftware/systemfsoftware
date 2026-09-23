@@ -14,7 +14,6 @@ const allocationRowOf = (row: ReservationRow) => ({
   lotId: row.lotId,
   sku: row.sku,
   quantity: row.quantity,
-  version: row.version,
 })
 
 const reservationRecord = (

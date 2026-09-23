@@ -31,7 +31,6 @@ const ReservationRow = S.Struct({
   lotId: LotId,
   sku: SkuId,
   quantity: S.Int.pipe(S.check(S.isGreaterThan(0))),
-  version: Version,
 })
 
 const CreditAccountRow = S.Struct({
