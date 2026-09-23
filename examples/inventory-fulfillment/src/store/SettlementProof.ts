@@ -45,7 +45,7 @@ const reservedAllocations = (events: readonly InventoryReservationEvents[]): rea
   Arr.flatten(Arr.getSomes(Arr.map(events, (event) =>
     Match.value(event).pipe(
       Match.tag('StockReserved', (reserved) => Option.some(reserved.allocations)),
-      Match.tag('BackorderRecorded', 'ReservationRolledBack', () => Option.none<readonly LotAllocation[]>()),
+      Match.tag('BackorderRecorded', () => Option.none<readonly LotAllocation[]>()),
       Match.exhaustive,
     ))))
 

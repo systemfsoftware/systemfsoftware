@@ -322,7 +322,7 @@ const settle = (decision: SettleDecisionEncoded, read: SettlementRead) =>
       Effect.flatMap((outcome) =>
         Match.value(outcome).pipe(
           Match.when('Conflict', () => Effect.fail(new OptimisticConflict({}))),
-          Match.when('Committed', () => Effect.asVoid(recordCharge(read, command.charge))),
+          Match.when('Committed', () => recordCharge(read, command.charge)),
           Match.exhaustive,
         )
       ),
