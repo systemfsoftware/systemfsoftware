@@ -8,7 +8,7 @@ import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { Buffer } from 'node:buffer'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { EscapeHatchDefect, HostListenerError, SandboxListingError } from './smoke-failures.schema.js'
+import { EscapeHatchDefect, HostListenerError, SandboxListingError } from './smoke-failures.schema.ts'
 
 const sandboxPrefix = 'effect-microsandbox-'
 

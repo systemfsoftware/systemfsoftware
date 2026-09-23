@@ -8,6 +8,7 @@
     "composite": true,
     "noEmit": false,
     "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true,
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
     "outDir": "node_modules/.cache/tsc/test",
     "customConditions": [
