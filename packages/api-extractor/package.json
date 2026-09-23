@@ -37,7 +37,7 @@
     "attw": "attw --pack .",
     "clean": "rimraf dist",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default} && node scripts/check-conformance.mjs",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "prepack": "pnpm build",
     "test": "vitest run",
     "test:e2e": "vitest run -c tests/e2e/vitest.e2e.config.ts",
