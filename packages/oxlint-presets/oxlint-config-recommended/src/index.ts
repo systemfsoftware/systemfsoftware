@@ -53,11 +53,18 @@ const testFilePatterns = [
 
 const entryFilePatterns = [...testFilePatterns, '**/test-types/**', '**/examples/**'] as const
 
-// Entry set: every Effect rule the entry roles carry. Provision is a composition decision,
-// so strict-effect-provide is absent here rather than set to off.
-const entryRules: NonNullable<OxlintConfig['rules']> = {
+// The promoted tsgo preset carries node-builtin-import; the entry roles omit it, so the promoted
+// entry is dropped here rather than re-declared.
+const { 'effecttsgo/node-builtin-import': _platformChoiceIsAnEntryDecision, ...entryPromoted } = {
   ...promoteWarnToError(tsgoCorrectness.rules),
   ...promoteWarnToError(tsgoRecommended.rules),
+}
+
+// Entry set: every Effect rule the entry roles carry. Two rules are absent here rather than set to
+// off, because both name a composition decision the entry point is allowed to make: providing a
+// Layer, and choosing the runtime's platform — whose own API needs the Node factory.
+const entryRules: NonNullable<OxlintConfig['rules']> = {
+  ...entryPromoted,
   'effecttsgo/global-date-in-effect': 'error',
   'effecttsgo/global-timers-in-effect': 'error',
   'effecttsgo/new-promise': 'error',
@@ -65,16 +72,16 @@ const entryRules: NonNullable<OxlintConfig['rules']> = {
   'effecttsgo/missing-pipeable-signature': 'error',
   'effecttsgo/missed-pipeable-opportunity': 'error',
   'effecttsgo/process-env': 'error',
-  'effecttsgo/node-builtin-import': 'error',
   'effecttsgo/any-unknown-in-error-context': 'error',
   'effecttsgo/global-date': 'error',
   'effecttsgo/global-timers': 'error',
 }
 
-// Library set: the entry set plus strict-effect-provide, because shipped library code
-// never provides a Layer — that is the caller's composition decision.
+// Library set: the entry set plus the two rules that pin those decisions to the entry point —
+// shipped library code provides no Layer and reaches no Node builtin on its own.
 const libraryRules: NonNullable<OxlintConfig['rules']> = {
   ...entryRules,
+  'effecttsgo/node-builtin-import': 'error',
   'effecttsgo/strict-effect-provide': 'error',
 }
 

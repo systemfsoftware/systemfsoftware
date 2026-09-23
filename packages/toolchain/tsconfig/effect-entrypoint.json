@@ -1,8 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   // Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,
-  // and composition packages that wire layers together. strictEffectProvide is the one rule
-  // absent here, because providing a Layer is the job of these files.
+  // and composition packages that wire layers together. strictEffectProvide and nodeBuiltinImport
+  // are the two rules absent here, because providing a Layer and choosing the runtime's platform
+  // are the jobs of these files.
   "compilerOptions": {
     "plugins": [
       {
@@ -113,8 +114,6 @@
           "missedPipeableOpportunity": "error",
           // Configuration is injected; process.env is read only where the program's configuration is built.
           "processEnv": "error",
-          // Node builtins are reached through their Effect-native counterparts.
-          "nodeBuiltinImport": "error",
           // Failures carry typed errors, never any or unknown.
           "anyUnknownInErrorContext": "error"
         }
