@@ -1,9 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   // Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,
-  // and composition packages that wire layers together. strictEffectProvide and nodeBuiltinImport
-  // are the two rules absent here, because providing a Layer and choosing the runtime's platform
-  // are the jobs of these files.
+  // and composition packages that wire layers together. nodeBuiltinImport is the one rule absent
+  // here, because choosing the runtime's platform is the job of these files.
   "compilerOptions": {
     "plugins": [
       {
