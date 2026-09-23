@@ -70,13 +70,11 @@ const libraryRules: NonNullable<OxlintConfig['rules']> = {
   'effecttsgo/global-date': 'error',
   'effecttsgo/global-timers': 'error',
   'effecttsgo/node-builtin-import': 'error',
-  'effecttsgo/strict-effect-provide': 'error',
 }
 
 const entryRules: NonNullable<OxlintConfig['rules']> = {
   ...libraryRules,
   'effecttsgo/node-builtin-import': 'off',
-  'effecttsgo/strict-effect-provide': 'off',
 }
 
 const observerOverrides: NonNullable<OxlintConfig['overrides']> = [
