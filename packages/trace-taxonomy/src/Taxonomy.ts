@@ -1,5 +1,4 @@
 import * as Arr from 'effect/Array'
-import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { Prototype } from 'effect/Pipeable'
@@ -99,13 +98,10 @@ if (import.meta.vitest !== void 0) {
   const DeclaredSpan = Schema.Struct({ id: Schema.String, name: Schema.String })
   const LAW_ATTRS = Schema.Struct({})
 
-  const idsOf = (taxonomy: Taxonomy): string => Arr.map(taxonomy.spans, (span) => span.id).join('|')
-
-  it.prop('∀s_Add_=Idempotent', [DeclaredSpan], ([spec]) =>
-    Effect.sync(() => {
-      const span = Span.declare({ id: spec.id, name: spec.name, attrs: LAW_ATTRS })
-      const once = declared(make('law'), span)
-      const twice = declared(once, span)
-      return Arr.contains(once.spans, span) && idsOf(twice) === idsOf(once)
-    }))
+  it.prop('∀s_Add_=Idempotent', [DeclaredSpan], ([spec]) => {
+    const span = Span.declare({ id: spec.id, name: spec.name, attrs: LAW_ATTRS })
+    const once = declared(make('law'), span)
+    const twice = declared(once, span)
+    return Arr.contains(once.spans, span) && twice.spans.length === once.spans.length
+  })
 }

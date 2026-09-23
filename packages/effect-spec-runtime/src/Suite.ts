@@ -69,10 +69,10 @@ const layeredRegister = <B, E, RShared, RFresh, RFreshReq extends RShared | Scop
 export const open = <B, E, C>(
   bindings: Bindings,
   config: Config,
-  use: (register: RegisterFn<B, E, never>) => C,
+  use: (register: RegisterFn<B, E, never>, propIt: Vitest.MethodsNonLive<never>) => C,
 ): void => {
   Register.invokeDescribe(config.describe, config.name, config.options, () => {
-    use(unlayeredRegister<B, E, never, never>(bindings.it, config, Layer.empty))
+    use(unlayeredRegister<B, E, never, never>(bindings.it, config, Layer.empty), bindings.it)
   })
 }
 
@@ -80,11 +80,11 @@ export const openShared = <B, E, RShared, C>(
   bindings: Bindings,
   config: Config,
   shared: Shared<RShared>,
-  use: (register: RegisterFn<B, E, RShared>) => C,
+  use: (register: RegisterFn<B, E, RShared>, propIt: Vitest.MethodsNonLive<RShared>) => C,
 ): void => {
   Register.invokeDescribe(config.describe, config.name, config.options, () => {
     bindings.layer(shared.layer, layerSetupOptions(shared.excludeTestServices, config.liveClock))((scopedIt) => {
-      use(layeredRegister<B, E, RShared, never, never>(scopedIt, Layer.empty))
+      use(layeredRegister<B, E, RShared, never, never>(scopedIt, Layer.empty), scopedIt)
     })
   })
 }
@@ -93,10 +93,10 @@ export const openCase = <B, E, RFresh, RFreshReq extends Scope.Scope, C>(
   bindings: Bindings,
   config: Config,
   caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
-  use: (register: RegisterFn<B, E, RFresh | RFreshReq>) => C,
+  use: (register: RegisterFn<B, E, RFresh | RFreshReq>, propIt: Vitest.MethodsNonLive<never>) => C,
 ): void => {
   Register.invokeDescribe(config.describe, config.name, config.options, () => {
-    use(unlayeredRegister<B, E, RFresh, RFreshReq>(bindings.it, config, caseLayer))
+    use(unlayeredRegister<B, E, RFresh, RFreshReq>(bindings.it, config, caseLayer), bindings.it)
   })
 }
 
@@ -105,11 +105,11 @@ export const openSharedCase = <B, E, RShared, RFresh, RFreshReq extends RShared 
   config: Config,
   shared: Shared<RShared>,
   caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
-  use: (register: RegisterFn<B, E, RShared | RFresh | RFreshReq>) => C,
+  use: (register: RegisterFn<B, E, RShared | RFresh | RFreshReq>, propIt: Vitest.MethodsNonLive<RShared>) => C,
 ): void => {
   Register.invokeDescribe(config.describe, config.name, config.options, () => {
     bindings.layer(shared.layer, layerSetupOptions(shared.excludeTestServices, config.liveClock))((scopedIt) => {
-      use(layeredRegister<B, E, RShared, RFresh, RFreshReq>(scopedIt, caseLayer))
+      use(layeredRegister<B, E, RShared, RFresh, RFreshReq>(scopedIt, caseLayer), scopedIt)
     })
   })
 }
@@ -122,9 +122,7 @@ if (import.meta.vitest !== void 0) {
     '∀x_LayerSetupOptions_=OrWithLive',
     [Schema.Boolean],
     ([exclude]) =>
-      Effect.sync(() =>
-        layerSetupOptions(exclude, true).excludeTestServices === true &&
-        layerSetupOptions(exclude, false).excludeTestServices === exclude
-      ),
+      layerSetupOptions(exclude, true).excludeTestServices === true &&
+      layerSetupOptions(exclude, false).excludeTestServices === exclude,
   )
 }

@@ -68,14 +68,14 @@ if (import.meta.vitest !== void 0) {
 
   const Checkout = declare({ id: CHECKOUT, name: CHECKOUT, attrs: CheckoutAttrs })
 
-  it.prop('∀a_Start_=Declared', [CheckoutAttrs], ([attrs]) =>
+  it.effect.prop('∀a_Start_=Declared', [CheckoutAttrs], ([attrs]) =>
     Effect.gen(function*() {
       const span = yield* started(Effect.currentSpan, Checkout, attrs)
       return span.name === CHECKOUT &&
         Object.entries(attrs).every(([key, value]) => span.attributes.get(key) === value)
     }))
 
-  it.prop('∀a_Start_=Identity', [CheckoutAttrs], ([attrs]) =>
+  it.effect.prop('∀a_Start_=Identity', [CheckoutAttrs], ([attrs]) =>
     Effect.gen(function*() {
       const succeeded = yield* started(Effect.succeed(42), Checkout, attrs)
       const failed = yield* Effect.flip(started(Effect.fail('boom'), Checkout, attrs))

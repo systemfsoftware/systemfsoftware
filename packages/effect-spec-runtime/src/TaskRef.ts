@@ -47,12 +47,12 @@ if (import.meta.vitest !== void 0) {
   it.prop(
     '∀o_ReadTaskContext_=Identity',
     [Labelled],
-    ([record]) => Effect.sync(() => readTaskContext(record) === record),
+    ([record]) => readTaskContext(record) === record,
   )
 
   it.prop(
     '∀p_ReadTaskContext_=Null',
     [Schema.String],
-    ([primitive]) => Effect.sync(() => readTaskContext(primitive) === null),
+    ([primitive]) => readTaskContext(primitive) === null,
   )
 }
