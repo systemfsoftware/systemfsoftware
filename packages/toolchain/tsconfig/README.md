@@ -22,3 +22,12 @@ Axes:
 - **`app` / `library` / `library-monorepo`** — emit shape (`declaration`, `composite`, `declarationMap`).
 
 See the `exports` map in `package.json` for the full matrix.
+
+## Effect presets
+
+Two Effect Language Service presets attach a package's Effect policy by role. Both carry the complete plugin block (a rule a role does not carry is omitted, never set `off`), and both list every diagnostic explicitly so nothing inherits an upstream default severity.
+
+- **`@systemfsoftware/tsconfig/effect`** — the library role: shipped `src/` of Effect library packages. Full set, including `strictEffectProvide`: library code never provides a Layer; provision belongs at the entry point.
+- **`@systemfsoftware/tsconfig/effect/entrypoint`** — the entry role: test files, runnable examples, and composition packages. Identical to `effect` minus `strictEffectProvide`, because those files are the composition points where providing a Layer is the job.
+
+The two diagnostic maps differ by exactly that one rule. Attach the library preset from `tsconfig.app.json`, the entrypoint preset from `tsconfig.test.json` (and composition packages' app projects).

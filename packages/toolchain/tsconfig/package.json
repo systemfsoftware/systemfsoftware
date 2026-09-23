@@ -9,12 +9,14 @@
     "tsc",
     "bundler",
     "node.json",
-    "effect.json"
+    "effect.json",
+    "effect-entrypoint.json"
   ],
   "exports": {
     "./package.json": "./package.json",
     "./node": "./node.json",
     "./effect": "./effect.json",
+    "./effect/entrypoint": "./effect-entrypoint.json",
     "./tsc": "./tsc/dom/app.json",
     "./tsc/dom": "./tsc/dom/app.json",
     "./tsc/dom/app": "./tsc/dom/app.json",

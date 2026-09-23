@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  // Effect Language Service policy (@effect/tsgo) for shipped library code. Every diagnostic
-  // the plugin ships is listed explicitly: a rule missing here would fall back to its upstream
-  // default severity instead of ours.
+  // Effect Language Service policy (@effect/tsgo) for entry points: tests, runnable examples,
+  // and composition packages that wire layers together. strictEffectProvide is the one rule
+  // absent here, because providing a Layer is the job of these files.
   "compilerOptions": {
     "plugins": [
       {
@@ -29,7 +29,7 @@
           "schemaUnionOfLiterals": "error",
           "unknownInEffectCatch": "error",
 
-          // Library code reads no clock, randomness, environment, network, or console; the runner supplies those.
+          // Even where a real read is allowed, inside a generator it goes through Effect's services.
           "asyncFunction": "error",
           "cryptoRandomUUID": "error",
           "cryptoRandomUUIDInEffect": "error",
@@ -46,7 +46,7 @@
           "processEnvInEffect": "error",
           "tryCatchInEffectGen": "error",
 
-          // Effects are lazy descriptions, run once at the edge; nothing here starts work by itself.
+          // Effects are lazy descriptions, run once at the edge.
           "effectFnIife": "error",
           "effectGenUsesAdapter": "error",
           "floatingEffect": "error",
@@ -111,9 +111,7 @@
           "missingPipeableSignature": "error",
           // Nested call chains are written as .pipe.
           "missedPipeableOpportunity": "error",
-          // A Layer is provided at the entry point, never inside library code.
-          "strictEffectProvide": "error",
-          // Configuration is injected, never read from process.env.
+          // Configuration is injected; process.env is read only where the program's configuration is built.
           "processEnv": "error",
           // Node builtins are reached through their Effect-native counterparts.
           "nodeBuiltinImport": "error",
