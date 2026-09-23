@@ -25,14 +25,9 @@
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.mjs"
-    },
-    "./procedure": {
-      "@systemfsoftware/source": "./src/procedure.ts",
-      "types": "./dist/procedure.d.ts",
-      "default": "./dist/procedure.mjs"
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/mod.d.ts",
+      "default": "./dist/mod.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -44,15 +39,22 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "attw": "attw --pack .",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.procedure.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.procedure.json"
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
@@ -60,6 +62,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
+    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
@@ -73,12 +76,8 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.mjs"
-      },
-      "./procedure": {
-        "types": "./dist/procedure.d.ts",
-        "default": "./dist/procedure.mjs"
+        "types": "./dist/mod.d.ts",
+        "default": "./dist/mod.mjs"
       },
       "./package.json": "./package.json"
     },
