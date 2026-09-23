@@ -105,5 +105,3 @@ packages:
   - packages/toolchain/*
   - omp/plugins/*
   - examples/*
-config:
-  confirm-modules-purge: false
