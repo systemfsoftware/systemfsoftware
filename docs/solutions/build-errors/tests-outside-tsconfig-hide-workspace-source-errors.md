@@ -56,7 +56,8 @@ Code smell to grep for: `"include": ["src"]` in a package that has a `tests/` di
 
 ## Prevention
 
-- Any package whose `tests/` import a workspace package by its published name keeps `tests` in `tsconfig.json#include`. Delete the dependency's `dist/` and run the consumer's `typecheck` and `lint`. Both must pass.
+- The standing check is the `dev-conditions` test lane in `pnpm test:scripts` (inside `gate:tasks`): it enumerates every workspace member and fails when a first-party file imports a workspace package by its published name while no tsconfig covering that file resolves `@systemfsoftware/source`. Runtime-loaded config and setup files are exempt — Node loads them without a condition, so they resolve `dist/` by design and the `^build` edge supplies it.
+- Any package whose `tests/` (or `test-types/`) import a workspace package by its published name keeps that directory in `tsconfig.json#include`. Delete the dependency's `dist/` and run the consumer's `typecheck` and `lint`. Both must pass.
 - Provider source used through the source condition refers to no ambient global that a consumer with `types: []` lacks. Prefer `Uint8Array` and web-standard APIs over Node globals.
 
 ## Related Issues
