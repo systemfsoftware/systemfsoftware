@@ -199,6 +199,26 @@ Feature('Reading a finished trace back from a remote store')
     )
 
     scenario(
+      'A store that stops answering in the middle of a read is reported when the wait is up',
+      Gherkin.Do.pipe(
+        Given('a remote store that serves the checkout span once and then never answers again')(
+          'stalled',
+          () =>
+            storeOf(
+              (read) => (read === 0 ? Effect.succeed([checkout]) : Effect.never),
+              { interval: Duration.millis(20), settle: Duration.millis(100), timeout: Duration.millis(200) },
+            ),
+        ),
+        When('the finished trace is read back')('reading', (s) => readBack(s.stalled.script, s.stalled.options)),
+        Then('the reader reports the trace as unfinished with the one span it saw, after asking twice')((s) => {
+          expect(reportsUnfinished(s.reading)).toBe(true)
+          expect(countedSpans(s.reading)).toBe(1)
+          expect(s.reading.served).toBe(2)
+        }),
+      ),
+    )
+
+    scenario(
       'A trace still growing between reads spaced wider than the quiet window is not taken as finished',
       Gherkin.Do.pipe(
         Given('a remote store that serves one more span on every read, read less often than its quiet window')(

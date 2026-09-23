@@ -196,28 +196,44 @@ const poll = <R>(
 ): Effect.Effect<ReadonlyArray<SpanRecord>, ObservationFailure, R> =>
   Effect.gen(function*() {
     const settlement = yield* Ref.get(watch.settlement)
-    const verdict = deadlineVerdict(settlement, yield* elapsedFor(watch), watch.windows)
-    return yield* Option.match(verdict, {
-      onNone: () => readOnce(source, traceId, options, watch),
+    const elapsedMillis = yield* elapsedFor(watch)
+    return yield* Option.match(deadlineVerdict(settlement, elapsedMillis, watch.windows), {
+      onNone: () => readOnce(source, traceId, options, watch, watch.windows.timeoutMillis - elapsedMillis),
       onSome: (reached) => answer(reached, settlement, traceId, watch.windows),
     })
   })
+
+const overdue = (traceId: string, watch: Watch): Effect.Effect<ReadonlyArray<SpanRecord>, ObservationFailure> =>
+  Effect.flatMap(
+    Ref.get(watch.settlement),
+    (settlement) => answer(Result.fail(lateRefusal(settlement)), settlement, traceId, watch.windows),
+  )
 
 const readOnce = <R>(
   source: TraceSource<R>,
   traceId: string,
   options: Options,
   watch: Watch,
+  remainingMillis: number,
 ): Effect.Effect<ReadonlyArray<SpanRecord>, ObservationFailure, R> =>
-  Effect.flatMap(
-    source(traceId),
-    (read) =>
-      Effect.flatMap(advanceAt(watch, read), (advance) =>
-        Option.match(advance.verdict, {
-          onNone: () => keepPolling(source, traceId, options, watch, advance),
-          onSome: (verdict) => answer(verdict, advance.settlement, traceId, watch.windows),
-        })),
-  )
+  Effect.flatMap(Effect.timeoutOption(source(traceId), remainingMillis), (answered) =>
+    Option.match(answered, {
+      onNone: () => overdue(traceId, watch),
+      onSome: (read) => judgeRead(source, traceId, options, watch, read),
+    }))
+
+const judgeRead = <R>(
+  source: TraceSource<R>,
+  traceId: string,
+  options: Options,
+  watch: Watch,
+  read: ReadonlyArray<SpanRecord>,
+): Effect.Effect<ReadonlyArray<SpanRecord>, ObservationFailure, R> =>
+  Effect.flatMap(advanceAt(watch, read), (advance) =>
+    Option.match(advance.verdict, {
+      onNone: () => keepPolling(source, traceId, options, watch, advance),
+      onSome: (verdict) => answer(verdict, advance.settlement, traceId, watch.windows),
+    }))
 
 const keepPolling = <R>(
   source: TraceSource<R>,
@@ -316,12 +332,12 @@ if (import.meta.vitest !== void 0) {
     return sameIds(quietAfter(seen, WINDOWS.settleMillis, WINDOWS).settlement.spans, seen.settlement.spans)
   }
 
-  const narrowerReadKeepsEveryId = (read: ReadonlyArray<SpanRecord>): boolean => {
-    const seen = seenAfter(read)
-    return holdsEveryId(
-      settleStep(seen.settlement, Arr.take(read, 1), WINDOWS.settleMillis, WINDOWS).settlement.spans,
-      read,
-    )
+  const laterReadKeepsEveryEarlierId = (
+    earlier: ReadonlyArray<SpanRecord>,
+    later: ReadonlyArray<SpanRecord>,
+  ): boolean => {
+    const union = settleStep(seenAfter(earlier).settlement, later, WINDOWS.settleMillis, WINDOWS).settlement.spans
+    return holdsEveryId(union, earlier) && holdsEveryId(union, later)
   }
 
   const firstRecordOfEachIdSurvives = (read: ReadonlyArray<SpanRecord>): boolean =>
@@ -344,7 +360,11 @@ if (import.meta.vitest !== void 0) {
 
   it.prop('∀r_SettleReplay_≡FirstUnion', [Reads], ([read]) => replayAddsNothing(read))
 
-  it.prop('∀r_SettleShrink_⊇Read', [Reads], ([read]) => narrowerReadKeepsEveryId(read))
+  it.prop(
+    '∀r_SettleShrink_⊇EveryRead',
+    [Reads, Reads],
+    ([earlier, later]) => laterReadKeepsEveryEarlierId(earlier, later),
+  )
 
   it.prop('∀r_SettleFirstRecord_=FirstSeen', [Reads], ([read]) => firstRecordOfEachIdSurvives(read))
 
