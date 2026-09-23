@@ -1,5 +1,7 @@
+import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { StepError } from './StepError.schema.js'
+import * as SuiteScope from './SuiteScope.js'
 
 export interface PollOptions {
   /**
@@ -67,19 +69,9 @@ export const SoftFailuresRef: Context.Reference<SoftFailuresContext> = Context.R
     defaultValue: makeFreshSoftContext,
   },
 )
-export interface VitestTaskContext<Ann = unknown> {
-  readonly annotate?: ((message: string, type?: string) => Promise<void> | void) | undefined
-  readonly task?: {
-    readonly annotations?: readonly Ann[] | undefined
-  } | undefined
-}
+export type VitestTaskContext<Ann = unknown> = TaskRef.VitestTaskContext<Ann>
 
-export const VitestTaskRef: Context.Reference<VitestTaskContext | null> = Context.Reference<VitestTaskContext | null>(
-  '@systemfsoftware/effect-gherkin-spec/VitestTask',
-  {
-    defaultValue: () => null,
-  },
-)
+export const VitestTaskRef = TaskRef.VitestTaskRef
 
 const dispatchAnnotate = (
   annotate: ((msg: string, type?: string) => Promise<void> | void) | undefined,
@@ -496,32 +488,23 @@ const emptyScope: GherkinScope<InitialStage> = {
 }
 
 type Top<T = unknown> = T
-export type ScopeMap = Readonly<Record<string, Effect.Effect<Top, never, never>>>
+export type ScopeMap = SuiteScope.ScopeMap
 
-export type ScopeServices<S extends ScopeMap> = {
-  readonly [K in keyof S]: S[K] extends Effect.Effect<infer A, never, infer _R> ? A : never
-}
+export type ScopeServices<S extends ScopeMap> = SuiteScope.ScopeServices<S>
 
-export type ScopeIdentifiers<S extends ScopeMap> = {
-  [K in keyof S]: S[K] extends Effect.Effect<infer _A, never, infer R> ? R : never
-}[keyof S]
+export type ScopeIdentifiers<S extends ScopeMap> = SuiteScope.ScopeIdentifiers<S>
 
 function makeScope<S extends ScopeMap>(
   map: S,
 ): GherkinEffect<ScopeServices<S> & GivenStage, never, ScopeIdentifiers<S>>
 function makeScope<S extends ScopeMap>(
   map: S,
-): Effect.Effect<GherkinScope<Record<string, Top> & GivenStage>, never, never> {
-  return Effect.gen(function*() {
-    const out: Record<string, Top> = {
-      ...stageGiven,
-      [GherkinScopeTypeId]: GherkinScopeTypeId,
-    }
-    for (const [key, tag] of Object.entries(map)) {
-      out[key] = yield* tag
-    }
-    return { ...out, ...stageGiven, [GherkinScopeTypeId]: GherkinScopeTypeId }
-  })
+): Effect.Effect<GherkinScope<Record<string, Top> & GivenStage>, never, ScopeIdentifiers<S>> {
+  return Effect.map(SuiteScope.resolve(map), (services) => ({
+    ...services,
+    ...stageGiven,
+    [GherkinScopeTypeId]: GherkinScopeTypeId,
+  }))
 }
 
 export const Gherkin = {

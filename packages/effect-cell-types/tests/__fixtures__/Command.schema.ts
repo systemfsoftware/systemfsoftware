@@ -17,14 +17,14 @@ import * as S from 'effect/Schema'
 export class TaggedCmd extends S.TaggedClass<TaggedCmd>()('TaggedCmd', {
   value: S.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['value'] as const
+  static readonly [Workflow.InstrumentationBrand] = { value: 'tests.command.value' } as const
 }
 
 /** An untagged `Schema.Class`, which the constraint must accept on equal terms. */
 export class UntaggedCmd extends S.Class<UntaggedCmd>('UntaggedCmd')({
   value: S.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['value'] as const
+  static readonly [Workflow.InstrumentationBrand] = { value: 'tests.command.value' } as const
 }
 
 /** A schema class missing the static instrumentation stamp — refused by Workflow.make. */
@@ -32,11 +32,17 @@ export class UnstampedCmd extends S.Class<UnstampedCmd>('UnstampedCmd')({
   value: S.Int,
 }) {}
 
-/** A schema class whose instrumentation lists a key that is not a field — refused by Workflow.make. */
+/** A schema class whose instrumentation names a key that is not a field — refused by Workflow.make. */
 export class BadKeyCmd extends S.Class<BadKeyCmd>('BadKeyCmd')({
   value: S.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['nope'] as const
+  static readonly [Workflow.InstrumentationBrand] = { nope: 'tests.command.nope' } as const
+}
+
+export class BadValueCmd extends S.Class<BadValueCmd>('BadValueCmd')({
+  value: S.Int,
+}) {
+  static readonly [Workflow.InstrumentationBrand] = { value: 'tests.command.Value' } as const
 }
 
 /** A schema but not a class — no `identifier`, no `extend`, so it is refused. */

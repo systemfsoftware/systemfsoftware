@@ -1,3 +1,4 @@
+import { banRawSpanNameEmit } from './rules/ban-raw-span-name-emit.js'
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
@@ -22,6 +23,7 @@ import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
 import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
 import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures.js'
 import { testsImportPublicApi } from './rules/tests-import-public-api.js'
+import { traceTestRequiresTaxonomy } from './rules/trace-test-requires-taxonomy.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-discipline'
 
@@ -52,6 +54,8 @@ const recommendedRules = {
   [rule('tests-import-public-api')]: 'error',
   [rule('differential-test-requires-harness')]: 'error',
   [rule('no-pseudo-gherkin-unit-tests')]: 'error',
+  [rule('ban-raw-span-name-emit')]: 'error',
+  [rule('trace-test-requires-taxonomy')]: 'error',
 } as const
 
 export default {
@@ -83,6 +87,8 @@ export default {
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,
     'differential-test-requires-harness': differentialTestRequiresHarness,
+    'ban-raw-span-name-emit': banRawSpanNameEmit,
+    'trace-test-requires-taxonomy': traceTestRequiresTaxonomy,
   },
   configs: {
     recommended: {

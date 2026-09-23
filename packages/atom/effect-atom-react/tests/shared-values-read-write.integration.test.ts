@@ -86,7 +86,7 @@ Feature('Reading and changing shared values from on-screen widgets')
           })),
         When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('the seeded value is already on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
           })
         ),
@@ -127,7 +127,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             })
           })),
         Then('the widget shows the recomputed reading')(() =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
           })
         ),
@@ -199,7 +199,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             })
           })),
         Then('the view shows the new value and the rest of the record is untouched')((s) =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('name')).toHaveTextContent('grace').then(() => {
               expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
             })
@@ -276,7 +276,7 @@ Feature('Reading and changing shared values from on-screen widgets')
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the transformed value is on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
           })
         ),
@@ -308,7 +308,7 @@ Feature('Reading and changing shared values from on-screen widgets')
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the failure is on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
           })
         ),
@@ -349,7 +349,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             }),
         ),
         When('the page settles after the saved data is committed')('settled', () =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
           })),
         Then('the newer saved value is what ends up on screen')(() => Effect.succeed(true)),

@@ -35,7 +35,7 @@ export class DriverWatchEvent extends Schema.TaggedClass<DriverWatchEvent>()('Dr
   filename: Schema.String,
   exists: Schema.Boolean,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 class WatchCreateOutcome extends Schema.TaggedClass<WatchCreateOutcome>()('WatchCreateOutcome', {}) {}

@@ -42,7 +42,7 @@ Feature('Seeding and listening to shared values')
           })),
         When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('only the first seed is on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
           })
         ),

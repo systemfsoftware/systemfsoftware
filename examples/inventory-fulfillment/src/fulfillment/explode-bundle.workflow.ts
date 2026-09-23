@@ -34,7 +34,7 @@ export class ExplodeBundleCommand extends S.Class<ExplodeBundleCommand>('Explode
   lines: S.Array(OrderLine),
   kits: S.Array(KitDefinition),
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const scaledDemands = (kit: KitDefinition, factor: number): readonly ComponentDemand[] =>

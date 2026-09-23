@@ -11,6 +11,17 @@ export const PortBinding = Schema.Struct({
 })
 export type PortBinding = typeof PortBinding.Type
 
+const NetworkProfile = Schema.Literals(['public', 'host'])
+type NetworkProfile = typeof NetworkProfile.Type
+
+const HOST_ACCESS_PROFILES: ReadonlyArray<NetworkProfile> = ['public', 'host']
+
+const networkProfilesOf = (hostAccess: boolean | undefined): ReadonlyArray<NetworkProfile> | undefined =>
+  Match.value(hostAccess).pipe(
+    Match.when(true, () => HOST_ACCESS_PROFILES),
+    Match.orElse(() => undefined),
+  )
+
 export const SandboxPlan = Schema.Struct({
   name: Schema.String,
   image: Schema.String,
@@ -21,6 +32,7 @@ export const SandboxPlan = Schema.Struct({
   cmd: Schema.optional(Schema.Array(Schema.String)),
   mounts: Schema.Array(Schema.Struct({ guest: Schema.String, host: Schema.String })),
   portBindings: Schema.Array(PortBinding),
+  networkProfiles: Schema.optional(Schema.Array(NetworkProfile)),
 })
 export type SandboxPlan = typeof SandboxPlan.Type
 
@@ -48,7 +60,7 @@ export class PlanSandbox extends Schema.TaggedClass<PlanSandbox>()('PlanSandbox'
   bindings: Schema.Array(PortBinding),
   name: Schema.String,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['name'] as const
+  static readonly [Workflow.InstrumentationBrand] = { name: 'microsandbox.sandbox.name' } as const
 }
 
 const LOOPBACK_PREFIX = '127.'
@@ -70,6 +82,7 @@ const planOf = (command: PlanSandbox): SandboxPlan =>
       cmd: [...job.cmd],
       mounts: job.mounts.map((mount) => ({ guest: mount.guest, host: mount.host })),
       portBindings: [],
+      networkProfiles: networkProfilesOf(job.hostAccess),
     })),
     Match.tag('Service', (service) => ({
       name: command.name,

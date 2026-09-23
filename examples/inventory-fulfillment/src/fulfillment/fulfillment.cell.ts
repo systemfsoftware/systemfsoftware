@@ -1,4 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
+import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
 import type { SchemaError } from 'effect/Schema'
 import {
@@ -31,6 +32,7 @@ import {
 } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
 import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './explode-bundle.workflow.js'
+import { CreditCharge, FulfillmentSettle, ReservationCommit as ReservationCommitSpan } from './FulfillmentTaxonomy.js'
 import { type Order, OrderFulfillmentCommand, OrderLine } from './order.schema.js'
 import {
   type OrderAllocated,
@@ -237,36 +239,44 @@ const reservationCommitOf = (plan: ReservationPlan, raw: RawContext): Reservatio
 const commitReservation = (
   plan: ReservationPlan,
   raw: RawContext,
-): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> =>
-  Effect.gen(function*() {
-    const log = yield* ReservationLog
-    return yield* log.commit(reservationCommitOf(plan, raw))
-  })
+): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> => {
+  const commit = reservationCommitOf(plan, raw)
+  return Effect.flatMap(ReservationLog, (log) => log.commit(commit)).pipe(
+    Span.start(ReservationCommitSpan, {
+      'app.customer.id': raw.order.customerId,
+      'app.order.id': raw.order.orderId,
+      'app.reservation.event.count': commit.events.length,
+    }),
+  )
+}
 
 const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
   moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
+
+const chargeCredit = (customerId: string, allocations: readonly LotAllocation[]) => {
+  const amount = chargedAmountOf(allocations)
+  return Effect.flatMap(CreditLedger, (ledger) => ledger.charge(customerId, amount)).pipe(
+    Span.start(CreditCharge, { 'app.charge.amount': Number(amount), 'app.customer.id': customerId }),
+  )
+}
 
 const chargeFor = (
   customerId: string,
   decision: FulfillmentDecision | FulfillmentError,
 ): Effect.Effect<void, never, CreditLedger> =>
   Match.value(decision).pipe(
-    Match.tag('AllocatedSplit', (allocated) =>
-      Effect.flatMap(CreditLedger, (ledger) =>
-        ledger.charge(customerId, chargedAmountOf(allocated.allocations)))),
-    Match.tag('AllocatedWithOverdraft', (overdraft) =>
-      Effect.flatMap(CreditLedger, (ledger) =>
-        ledger.charge(customerId, chargedAmountOf(overdraft.allocations)))),
-    Match.tag('CreditHold', () =>
-      Effect.void),
-    Match.tag('Backordered', () =>
-      Effect.void),
-    Match.tag('ConflictRollback', () =>
-      Effect.void),
-    Match.tag('InsufficientStock', () => Effect.void),
-    Match.tag('CreditLimitExceeded', () => Effect.void),
-    Match.tag('Unauthorized', () => Effect.void),
-    Match.tag('Forbidden', () => Effect.void),
+    Match.tag('AllocatedSplit', (allocated) => chargeCredit(customerId, allocated.allocations)),
+    Match.tag('AllocatedWithOverdraft', (overdraft) => chargeCredit(customerId, overdraft.allocations)),
+    Match.tag(
+      'Backordered',
+      'ConflictRollback',
+      'CreditHold',
+      'CreditLimitExceeded',
+      'Forbidden',
+      'InsufficientStock',
+      'Unauthorized',
+      () => Effect.void,
+    ),
     Match.exhaustive,
   )
 
@@ -289,7 +299,7 @@ const writeFulfillment = (encoded: EncodedFulfillment, raw: RawContext) =>
  * The fulfillment sandwich. Callers run `fulfillmentCell.run(request)`.
  * CAS retries and per-customer gating live at the RPC edge (Effect.retry, CustomerGate).
  */
-export const fulfillmentCell = Sandwich.named('fulfillment.settle')(readContext)
+export const fulfillmentCell = Sandwich.named(FulfillmentSettle.name)(readContext)
   .decode(Sandwich.pure(decodeContext))
   .decide(settleFulfillment)
   .encode(

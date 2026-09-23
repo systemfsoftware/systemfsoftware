@@ -26,4 +26,4 @@ jobs:
       - name: Smoke journeys
         run: |
           corepack pnpm --filter @systemfsoftware/effect-microsandbox smoke 2>&1 | tee /tmp/effect-microsandbox-smoke.log
-          grep -Eq 'all journeys green|no /dev/kvm' /tmp/effect-microsandbox-smoke.log
+          grep -q 'all journeys green' /tmp/effect-microsandbox-smoke.log

@@ -46,7 +46,10 @@ export class CreditCheckCommand extends S.Class<CreditCheckCommand>('CreditCheck
   account: CreditAccount,
   requiredAmount: CreditAmount,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['orderId', 'tier'] as const
+  static readonly [Workflow.InstrumentationBrand] = {
+    orderId: 'app.order.id',
+    tier: 'app.credit.tier',
+  } as const
 }
 
 const headroomOf = (account: CreditAccount): number => Num.max(0, account.creditLimit - account.outstandingBalance)

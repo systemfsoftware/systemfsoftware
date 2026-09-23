@@ -138,8 +138,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
       Gherkin.Do.pipe(
         Given('a page that submits new records to a server that accepts them')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = stubHttpClient((request) => {
-              return Effect.succeed(
+            const httpClient = stubHttpClient((request) =>
+              Effect.succeed(
                 HttpClientResponse.fromWeb(
                   request,
                   new Response(JSON.stringify({ id: 1, name: 'grace' }), {
@@ -148,7 +148,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                   }),
                 ),
               )
-            })
+            )
             const Client = AtomHttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -179,8 +179,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
       Gherkin.Do.pipe(
         Given('a page that submits new records to a server that rejects them')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = stubHttpClient((request) => {
-              return Effect.succeed(
+            const httpClient = stubHttpClient((request) =>
+              Effect.succeed(
                 HttpClientResponse.fromWeb(
                   request,
                   new Response(JSON.stringify({ message: 'nope' }), {
@@ -189,7 +189,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                   }),
                 ),
               )
-            })
+            )
             const Client = AtomHttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -313,8 +313,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
       Gherkin.Do.pipe(
         Given('a page that submits records and keeps the raw response')('ctx', () =>
           Effect.sync(() => {
-            const httpClient = stubHttpClient((request) => {
-              return Effect.succeed(
+            const httpClient = stubHttpClient((request) =>
+              Effect.succeed(
                 HttpClientResponse.fromWeb(
                   request,
                   new Response(JSON.stringify({ id: 1, name: 'grace' }), {
@@ -323,7 +323,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                   }),
                 ),
               )
-            })
+            )
             const Client = AtomHttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -356,9 +356,9 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'a page that fetches the profile with reactivity keys, a finite retention, and a hydration key, and another profile kept alive forever',
         )('ctx', () =>
           Effect.sync(() => {
-            const httpClient = stubHttpClient((request) => {
-              return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
-            })
+            const httpClient = stubHttpClient((request) =>
+              Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+            )
             const Client = AtomHttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -415,8 +415,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'ctx',
           () =>
             Effect.sync(() => {
-              const httpClient = stubHttpClient((request) => {
-                return Effect.succeed(
+              const httpClient = stubHttpClient((request) =>
+                Effect.succeed(
                   HttpClientResponse.fromWeb(
                     request,
                     new Response(JSON.stringify({ oops: true }), {
@@ -425,7 +425,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                     }),
                   ),
                 )
-              })
+              )
               const Client = AtomHttpApi.Service()('Client', {
                 api: MutationApi,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
@@ -457,8 +457,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'ctx',
           () =>
             Effect.sync(() => {
-              const httpClient = stubHttpClient((request) => {
-                return Effect.succeed(
+              const httpClient = stubHttpClient((request) =>
+                Effect.succeed(
                   HttpClientResponse.fromWeb(
                     request,
                     new Response(JSON.stringify({ message: 'nope' }), {
@@ -467,7 +467,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                     }),
                   ),
                 )
-              })
+              )
               const Client = AtomHttpApi.Service()('Client', {
                 api: ApiWithRejection,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),

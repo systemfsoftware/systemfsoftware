@@ -120,5 +120,5 @@ export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(Decide
       encode: SchemaGetter.transform(generatedFromCommand),
     }),
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['strategy'] as const
+  static readonly [Workflow.InstrumentationBrand] = { strategy: 'daemon.restart.strategy' } as const
 }
