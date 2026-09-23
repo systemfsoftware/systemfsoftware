@@ -1,5 +1,5 @@
 import { CreditLedger, Fulfillment, Inventory, ReservationLog } from '@systemfsoftware/example-inventory-fulfillment'
-import { Contract, InMemory, Observation, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Array as Arr, Effect, FileSystem, Layer, Option, Result, Schema as S } from 'effect'
 
 const SKU = 'sku-porcelain-mug'
@@ -111,7 +111,7 @@ export const settlementLayers = (options: {
     inventoryStoreLayer([stockPartition()]),
     creditLedgerLayer(options.creditLimits),
     reservationLogLayer(options.commitOutcomes),
-    InMemory.layer(InMemory.make()),
+    ObservationWindow.make('inventory-fulfillment').layer,
     recordingFileSystem,
   )
 

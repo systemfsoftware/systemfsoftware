@@ -2,7 +2,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect } from 'effect'
 import { describe, expect, it } from 'tstyche'
-import { CreditCharge, FulfillmentSettle, ReservationCommit } from '../src/fulfillment/fulfillment-settle.span.js'
+import { CreditCharge, FulfillmentSettle, ReservationCommit } from '../src/fulfillment/FulfillmentTaxonomy.js'
 import { SettleFulfillmentCommand } from '../src/fulfillment/settle-fulfillment.workflow.js'
 
 const settleWith = (orderId: string) => Span.start(FulfillmentSettle, { 'app.order.id': orderId })

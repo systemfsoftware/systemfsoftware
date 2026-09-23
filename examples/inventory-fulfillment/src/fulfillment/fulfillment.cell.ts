@@ -32,11 +32,7 @@ import {
 } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
 import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './explode-bundle.workflow.js'
-import {
-  CreditCharge,
-  FulfillmentSettle,
-  ReservationCommit as ReservationCommitSpan,
-} from './fulfillment-settle.span.js'
+import { CreditCharge, FulfillmentSettle, ReservationCommit as ReservationCommitSpan } from './FulfillmentTaxonomy.js'
 import { type Order, OrderFulfillmentCommand, OrderLine } from './order.schema.js'
 import {
   type OrderAllocated,
