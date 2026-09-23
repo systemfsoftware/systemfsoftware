@@ -1,10 +1,10 @@
-import type * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, Data, Option } from 'effect'
 import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
 
 import { VisitorState } from '../../collector/VisitorState.js'
 import { ReleaseTag } from '../../model/index.js'
+import type { EffectiveDocComment } from './effective-doc-comment.js'
 
 export interface ApiItemMetadataFields {
   readonly declaredReleaseTag: ReleaseTag
@@ -18,7 +18,7 @@ export interface ApiItemMetadataFields {
   readonly deprecated: boolean
   readonly customBlockTagNames: Chunk.Chunk<string>
   readonly modifierTagNames: Chunk.Chunk<string>
-  readonly tsdocComment: Option.Option<tsdoc.DocComment>
+  readonly tsdocComment: Option.Option<EffectiveDocComment>
   readonly undocumented: boolean
   readonly docCommentEnhancerVisitorState: VisitorState
 }

@@ -32,6 +32,7 @@ import { ApiItemMetadata } from './api-item-metadata.js'
 import { CollectorEntity } from './collector-entity.js'
 import { CollectorEntityOrder, consumableOf, exportedOf, singleExportNameOf } from './collector-entity.js'
 import { DeclarationMetadata } from './declaration-metadata.js'
+import { fromParsedDocComment } from './effective-doc-comment.js'
 import { findPackageDocComment, PackageDocComment } from './package-doc-comment.js'
 import { SymbolMetadata } from './symbol-metadata.js'
 
@@ -1208,7 +1209,8 @@ const mainApiItemPhase = (
       deprecated: deprecatedFlagOf(declarationMetadata.tsdocParserContext),
       customBlockTagNames: customBlockTagNamesOf(declarationMetadata.tsdocParserContext),
       modifierTagNames: modifierTagNamesOf(declarationMetadata.tsdocParserContext),
-      tsdocComment: Option.map(declarationMetadata.tsdocParserContext, (context) => context.docComment),
+      tsdocComment: Option.map(declarationMetadata.tsdocParserContext, (context) =>
+        fromParsedDocComment(context.docComment)),
       undocumented: true,
       docCommentEnhancerVisitorState: VisitorState.Unvisited,
     })
@@ -1217,7 +1219,8 @@ const mainApiItemPhase = (
       apiItemMetadata: Arr.reduce(
         Chunk.toReadonlyArray(declarationMetadata.ancillaryDeclarationIds),
         HashMap.set(missingTagState.apiItemMetadata, astDeclaration.declarationId, apiItemMetadata),
-        (map, ancillaryId) => HashMap.set(map, ancillaryId, apiItemMetadata),
+        (map, ancillaryId) =>
+          HashMap.set(map, ancillaryId, apiItemMetadata),
       ),
     }
   })
