@@ -2680,6 +2680,10 @@
   dir: packages/trace-spec
   intents:
     - frank-plums-hang
+"@systemfsoftware/trace-spec@0.2.0":
+  dir: packages/trace-spec
+  intents:
+    - trace-spec-remote-observation
 "@systemfsoftware/trace-taxonomy@0.0.0":
   dir: packages/trace-taxonomy
   intents:
