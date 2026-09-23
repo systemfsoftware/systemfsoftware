@@ -14,6 +14,10 @@ export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
 export const DIFFERENTIAL_SUFFIX = '.differential.test.ts' as const
 
+export const CONFORMANCE_SUFFIX = '.conformance.test.ts' as const
+
+export const MODEL_SUFFIX = '.model.ts' as const
+
 export const TRACE_SUFFIX = '.trace.test.ts' as const
 
 /**
@@ -43,6 +47,8 @@ export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|no
 export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const
 
 export const DIFFERENTIAL_PACKAGE = '@systemfsoftware/differential-spec' as const
+
+export const CONFORMANCE_PACKAGE = '@systemfsoftware/conformance-spec' as const
 
 export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 

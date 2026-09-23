@@ -36,6 +36,8 @@ const _default: {
         'no-io-module-in-source-test': Rule;
         'tests-import-public-api': Rule;
         'differential-test-requires-harness': Rule;
+        'conformance-test-requires-harness': Rule;
+        'model-fixture-imports-subject': Rule;
         'ban-raw-span-name-emit': Rule;
         'trace-test-requires-taxonomy': Rule;
     };
