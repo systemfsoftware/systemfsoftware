@@ -42,6 +42,9 @@ export class BadKeyCmd extends S.Class<BadKeyCmd>('BadKeyCmd')({
 /** A schema but not a class — no `identifier`, no `extend`, so it is refused. */
 export const StructCmd = S.Struct({ value: S.Int })
 
+/** An event list whose element carries no `_tag` — refused as a decision. */
+export const UntaggedEventList = S.Array(StructCmd)
+
 /** The tagged error channel `Inhabited` demands — tagged via the schema, never by hand. */
 export class CommandRefused extends S.TaggedError<CommandRefused>()('CommandRefused', {
   why: S.String,
