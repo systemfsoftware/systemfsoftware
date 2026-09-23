@@ -77,11 +77,11 @@ const dualHolds = <Input, OutputA, OutputB, E>(
   inputA: Input,
   inputB: Input,
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
-): boolean => {
-  const exits = Effect.runSync(runDual(targetA, targetB, inputA, inputB))
-  if (bothSucceeded(exits)) return oracle(exits[0].value, exits[1].value)
-  return failuresMatch(exits)
-}
+): Promise<boolean> =>
+  Effect.runPromise(runDual(targetA, targetB, inputA, inputB)).then((exits) => {
+    if (bothSucceeded(exits)) return oracle(exits[0].value, exits[1].value)
+    return failuresMatch(exits)
+  })
 
 type FailedWithCounterexample<Input> = Extract<
   fc.RunDetails<[Input]>,
@@ -190,9 +190,10 @@ const failWithDisparity = <Input, OutputA, OutputB, E, DescribedInput = unknown>
 
 const checkWithShrink = <Input>(
   arb: fc.Arbitrary<Input>,
-  predicate: (input: Input) => boolean,
+  predicate: (input: Input) => Promise<boolean>,
   options?: DualExecutionSupervisorOptions,
-): fc.RunDetails<[Input]> => fc.check(fc.property(arb, predicate), toFcParameters<Input>(options))
+): Effect.Effect<fc.RunDetails<[Input]>> =>
+  Effect.promise(() => fc.check(fc.asyncProperty(arb, predicate), toFcParameters<Input>(options)))
 
 const runDifferentialWithShrinkImpl = <Input, OutputA, OutputB, E>(
   targetA: (input: Input) => Effect.Effect<OutputA, E>,
@@ -201,14 +202,10 @@ const runDifferentialWithShrinkImpl = <Input, OutputA, OutputB, E>(
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
   options?: DualExecutionSupervisorOptions,
 ): Effect.Effect<void, DisparityError> =>
-  Effect.suspend(() => {
-    const details = checkWithShrink(
-      arb,
-      (input: Input) => dualHolds(targetA, targetB, input, input, oracle),
-      options,
-    )
-    return failWithDisparity(targetA, targetB, Function.identity, Function.identity, details)
-  })
+  Effect.flatMap(
+    checkWithShrink(arb, (input: Input) => dualHolds(targetA, targetB, input, input, oracle), options),
+    (details) => failWithDisparity(targetA, targetB, Function.identity, Function.identity, details),
+  )
 
 export const runDifferentialWithShrink: {
   <Input, OutputA, OutputB, E>(
@@ -233,20 +230,10 @@ const runMetamorphicWithShrinkImpl = <Input, Output, E>(
   relation: (outputA: Output, outputB: Output) => boolean,
   options?: DualExecutionSupervisorOptions,
 ): Effect.Effect<void, DisparityError> =>
-  Effect.suspend(() => {
-    const details = checkWithShrink(
-      arb,
-      (seed: Input) => dualHolds(system, system, seed, transformInput(seed), relation),
-      options,
-    )
-    return failWithDisparity(
-      system,
-      system,
-      transformInput,
-      (seed, followUp) => ({ seed, followUp }),
-      details,
-    )
-  })
+  Effect.flatMap(
+    checkWithShrink(arb, (seed: Input) => dualHolds(system, system, seed, transformInput(seed), relation), options),
+    (details) => failWithDisparity(system, system, transformInput, (seed, followUp) => ({ seed, followUp }), details),
+  )
 
 export const runMetamorphicWithShrink: {
   <Input, Output, E>(
