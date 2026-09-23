@@ -1038,6 +1038,9 @@ importers:
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-dmmf
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -1093,6 +1096,9 @@ importers:
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-dmmf
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -1253,6 +1259,9 @@ importers:
       '@systemfsoftware/oxlint-config-dmmf':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-dmmf
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
       '@systemfsoftware/stryker-config':
         specifier: workspace:^
         version: link:../toolchain/stryker-config

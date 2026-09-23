@@ -746,7 +746,7 @@ export interface Writable<R, W = R> extends Atom<R> {
 export const writable: {
     <R, W>(read: (get: AtomContext) => R, write: (ctx: WriteContext<R>, value: W) => void, refresh?: (f: <A>(atom: Atom<A>) => void) => void): Writable<R, W>;
     <R, W>(write: (ctx: WriteContext<R>, value: W) => void, refresh?: (f: <A>(atom: Atom<A>) => void) => void): (read: (get: AtomContext) => R) => Writable<R, W>;
-    (refresh?: (f: <A>(atom: Atom<A>) => void) => void): (<R, W>(write: (ctx: WriteContext<R>, value: W) => void) => (read: (get: AtomContext) => R) => Writable<R, W>);
+    (refresh?: (f: <A>(atom: Atom<A>) => void) => void): <R, W>(write: (ctx: WriteContext<R>, value: W) => void) => (read: (get: AtomContext) => R) => Writable<R, W>;
 };
 
 // @public
@@ -769,9 +769,9 @@ export interface WriteContext<A> {
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-Vbmakxhc.d.ts:504:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
-// dist/Atom-Vbmakxhc.d.ts:717:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
-// dist/Atom-Vbmakxhc.d.ts:734:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-DtSj6kpK.d.ts:504:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-DtSj6kpK.d.ts:717:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-DtSj6kpK.d.ts:734:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
 
 // (No @packageDocumentation comment for this package)
 
