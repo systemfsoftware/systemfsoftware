@@ -570,12 +570,20 @@
   dir: packages/effect-memfs
   intents:
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-memfs@3.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-namespace-barrel
 "@systemfsoftware/effect-microsandbox@0.1.0":
   dir: packages/effect-microsandbox
   intents:
     - ready-probes-dial
     - spotty-cars-hammer
     - thin-baths-crash
+"@systemfsoftware/effect-microsandbox@0.2.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - moody-pens-carry
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:
