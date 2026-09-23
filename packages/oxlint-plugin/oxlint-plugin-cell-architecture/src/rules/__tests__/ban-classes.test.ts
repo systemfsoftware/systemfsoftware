@@ -309,6 +309,14 @@ ruleTester.run('ban-classes', banClasses, {
       code: `class Foo {}`,
       filename: 'src/__fixtures__/fake.ts',
     },
+    {
+      name: 'Should_Pass_When_ExtendsSchemaTaggedClass_FromDestructuredDynamicImport',
+      code: `
+        const { Schema: S } = await import('effect')
+        class Law extends S.TaggedClass<Law>()('Law', { length: S.Int }) {}
+      `,
+      filename: PROD,
+    },
   ],
   invalid: [
     {
@@ -486,6 +494,15 @@ ruleTester.run('ban-classes', banClasses, {
       name: 'Should_ReportViolation_When_ExtendsPipeableClass',
       code: `
         import { Pipeable } from 'effect'
+        class StreamImpl extends Pipeable.Class {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class StreamImpl', 'effect/Pipeable.Class')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsPipeableClass_FromDestructuredDynamicImport',
+      code: `
+        const { Pipeable } = await import('effect')
         class StreamImpl extends Pipeable.Class {}
       `,
       filename: PROD,

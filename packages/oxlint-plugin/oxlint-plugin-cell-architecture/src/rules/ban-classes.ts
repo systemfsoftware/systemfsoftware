@@ -52,6 +52,14 @@ const canonicalModule = (source: string): string =>
 const namespaceSegmentOf = (source: string): string | null =>
   source.startsWith(`${SANCTIONED_MODULE}/`) ? source.slice(SANCTIONED_MODULE.length + 1) : null
 
+const dynamicImportSource = (init: ESTree.Expression | null | undefined): string | null =>
+  init?.type === 'AwaitExpression' &&
+    init.argument.type === 'ImportExpression' &&
+    init.argument.source.type === 'Literal' &&
+    typeof init.argument.source.value === 'string'
+    ? init.argument.source.value
+    : null
+
 export const banClasses = defineRule({
   meta,
   create(context: Context) {
@@ -205,6 +213,25 @@ export const banClasses = defineRule({
         for (const decl of node.declarations) {
           if (decl.id.type === 'Identifier') {
             markShadowed(decl.id.name)
+          } else if (decl.id.type === 'ObjectPattern') {
+            const source = dynamicImportSource(decl.init)
+            for (const property of decl.id.properties) {
+              if (
+                source !== null &&
+                property.type === 'Property' &&
+                property.key.type === 'Identifier' &&
+                property.value.type === 'Identifier'
+              ) {
+                namedBindings.set(property.value.name, {
+                  module: canonicalModule(source),
+                  namespace: property.key.name,
+                })
+              } else if (property.type === 'Property' && property.value.type === 'Identifier') {
+                markShadowed(property.value.name)
+              } else if (property.type === 'RestElement' && property.argument.type === 'Identifier') {
+                markShadowed(property.argument.name)
+              }
+            }
           }
         }
       },
