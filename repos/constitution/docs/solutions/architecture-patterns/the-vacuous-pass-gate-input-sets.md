@@ -1,7 +1,7 @@
 ---
 title: A gate can go green because it stopped looking
 date: 2026-08-18
-last_updated: 2026-09-01
+last_updated: 2026-09-23
 category: architecture-patterns
 module: constitution corpus validator
 problem_type: architecture_pattern
@@ -40,6 +40,7 @@ input set had been widened to a tuple of paths:
   because a newly created file legitimately has nothing to compare. That tolerance also
   swallowed a path **renamed** in the same commit that re-scoped a rule: the older
   revision had no such path, so the rule's retitle went uncompared and the run reported
+  no reassignment.
 - A fourth shape surfaced when the surgery ran in the other direction — merging the two
   files back into one while the gate's input tuple narrowed to a single path. There was
   no legal intermediate commit. Landing the gate first left the live citation from the
@@ -72,6 +73,7 @@ measured. Three rules follow.
    would fire on correct work: a deliberate deletion, a genuinely new input with no
    history. Name them on the success line — which inputs were not compared, which
    identifiers vacated — so the reader sees the reduced coverage instead of inferring
+   full coverage from a clean exit.
 
 **Enumerate the orderings before choosing atomicity.** When the change edits both the
 corpus and the gate that certifies it, write out every commit ordering and prove each
@@ -126,38 +128,26 @@ the gate was now sound.
 
 ## Examples
 
-Before — a single named input. Correct, and silently correct about a third of the corpus
-once the corpus grew:
+The corpus validator names its input set as a collection (`PATHS`), and an absent input is
+fatal rather than a smaller pass:
 
-```python
-PATH = "ONE_FILE.md"
-text = open(PATH, encoding="utf-8").read()
-# ... one file's worth of checking, exit 0
+```ts
+const PATHS = ["CONSTITUTION.md"] as const;
+
+for (const p of PATHS) {
+  try {
+    texts[p] = await Deno.readTextFile(p);
+  } catch {
+    fail([`${p}: missing`]);
+  }
+}
 ```
 
-After — the input set is a collection, absence is fatal, and emptiness is fatal:
-
-```python
-PATHS = ("RESIDENT.md", "RETRIEVED.md")
-
-for p in PATHS:
-    try:
-        texts[p] = open(p, encoding="utf-8").read()
-    except FileNotFoundError:
-        fail([f"{p}: missing — half a corpus scores exactly like a whole one"])
-
-# ... after parsing, every declared input must have produced something
-for p in PATHS:
-    if p not in contributors:
-        errors.append(f"{p}: parses but declares no rule")
-```
-
-And what cannot be failed is stated rather than omitted:
+And what cannot be failed is stated on the success line rather than omitted:
 
 ```
-valid: 40 rules across 6 yaml blocks in 1 files, 9 families;
-  9 id(s) vacated since 9654836~1: CONST-E1,CONST-E2,CONST-E3,CONST-E4,
-    CONST-G1,CONST-G2,CONST-T1,CONST-T2,CONST-T5
+valid: 37 rules across 6 yaml blocks in 1 files, 9 families; no id reassigned since origin/main
+  1 id(s) vacated since origin/main: CONST-T11
 ```
 
 And the fixture-anchoring pair from the reverse surgery — same gate, same narrowing,
@@ -181,15 +171,3 @@ artifact worth keeping:
 | a rule deleted with nothing citing it | pass, and name the vacated identifier |
 | a path renamed alongside a rule retitle | pass, and name the uncompared path |
 
-## Related
-
-- The gate discussed here is the constitution corpus validator invoked by the repository's
-  `test` script; its module docstring carries the same argument at the point of use.
-- `CONST-E6` (Prefer the Gate) made a gate the final word; it was retired 2026-09-07 in the
-  audience split — its substance lives in ENFORCEMENT.md, and the maker-side boundary is
-  CONST-E9. The rule that priced a gate's false-positive budget is gone with its vacated
-  number. This learning is the counterweight either way — a gate that cannot fail is not
-  enforcement, it is a certificate.
-- The transition-state shape and the fixture-anchoring rule were added by the
-  single-document restore (branch `restore-single-document`); the gate-fidelity residuals
-  from that surgery are tracked in this repo's issues #19 and #20.
