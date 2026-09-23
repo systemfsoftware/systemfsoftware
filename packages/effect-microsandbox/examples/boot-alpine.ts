@@ -2,12 +2,13 @@ import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Crypto, Deferred, Effect, Fiber, Layer, Match, Ref } from 'effect'
+import { Crypto, Deferred, Effect, Fiber, Layer, Match } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { Buffer } from 'node:buffer'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { EscapeHatchDefect, HostListenerError, SandboxListingError } from './smoke-failures.schema.js'
 
 const sandboxPrefix = 'effect-microsandbox-'
 
@@ -47,7 +48,7 @@ const portOf = (server: Server): number => {
 }
 
 interface HostListener {
-  readonly requests: Ref.Ref<number>
+  readonly requestCount: () => number
   readonly url: string
 }
 
@@ -55,22 +56,18 @@ type HostReply = (request: IncomingMessage, response: ServerResponse, server: Se
 
 const openListener = (reply: HostReply): Effect.Effect<HostListener, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const requests = yield* Ref.make(0)
+    let requests = 0
     const server = yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () =>
-          new Promise<Server>((resolve, reject) => {
-            const server = createServer((request, response) => {
-              Effect.runSync(Ref.update(requests, (count) => count + 1))
-              reply(request, response, server)
-            })
-            server.once('error', reject)
-            server.listen(0, '127.0.0.1', () => {
-              server.unref()
-              resolve(server)
-            })
-          }),
-        catch: (cause) => new Error('host listener failed to bind', { cause }),
+      Effect.callback<Server, HostListenerError>((resume) => {
+        const server = createServer((request, response) => {
+          requests = requests + 1
+          reply(request, response, server)
+        })
+        server.once('error', (cause) => resume(Effect.fail(new HostListenerError({ cause }))))
+        server.listen(0, '127.0.0.1', () => {
+          server.unref()
+          resume(Effect.succeed(server))
+        })
       }).pipe(Effect.orDie),
       (server) =>
         Effect.sync(() => {
@@ -78,7 +75,7 @@ const openListener = (reply: HostReply): Effect.Effect<HostListener, never, Scop
           server.close()
         }),
     )
-    return { requests, url: `http://host.microsandbox.internal:${portOf(server)}/` }
+    return { requestCount: () => requests, url: `http://host.microsandbox.internal:${portOf(server)}/` }
   })
 
 const exitCodeOf = (completion: MicroVM.JobCompletion): number =>
@@ -104,7 +101,7 @@ const assertSignaled = (label: string, completion: MicroVM.JobCompletion): void 
 const listSandboxPage = (cursor: string | undefined) =>
   Effect.tryPromise({
     try: () => (cursor === undefined ? Sandbox.list() : Sandbox.listWith((list) => list.cursor(cursor))),
-    catch: (cause) => new Error('sandbox listing failed', { cause }),
+    catch: (cause) => new SandboxListingError({ cause }),
   }).pipe(Effect.orDie)
 
 const sandboxNamesFrom = (cursor: string | undefined): Effect.Effect<ReadonlyArray<string>> =>
@@ -192,9 +189,9 @@ const j4 = Effect.scoped(
     )
     assert.equal(refusedGuest, 9999)
     assert.ok(!('sandbox' in vm), 'native driver must not be reachable from the handle surface')
-    const echoed = yield* MicroVM.use(vm, async (sandbox) => sandbox.name)
+    const echoed = yield* MicroVM.use(vm, (sandbox) => Promise.resolve(sandbox.name))
     assert.equal(echoed, vm.name)
-    const defect = new Error('smoke escape-hatch defect')
+    const defect = new EscapeHatchDefect()
     const useRefusal = yield* Effect.flip(MicroVM.use(vm, () => Promise.reject(defect)))
     const preserved = Match.value(useRefusal).pipe(
       Match.tag('SandboxBootError', (error) => error.cause),
@@ -274,7 +271,7 @@ const j8 = Effect.scoped(
       .run
     assert.equal(exitCodeOf(completion), 0, 'host-opted fetch must exit 0')
     assertBytes('J8 host body', completion.stdout, Buffer.from(body))
-    assert.ok((yield* Ref.get(listener.requests)) >= 1, 'guest must reach the host listener')
+    assert.ok(listener.requestCount() >= 1, 'guest must reach the host listener')
   }),
 )
 
@@ -290,7 +287,7 @@ const j9 = Effect.scoped(
     const completion = yield* MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', listener.url]).run
     assertFetchFailed('J9 denied', completion)
     assert.equal(Buffer.from(completion.stdout).includes(body), false, 'denied guest must not receive the body')
-    assert.equal(yield* Ref.get(listener.requests), 0, 'denied guest must not reach the host listener')
+    assert.equal(listener.requestCount(), 0, 'denied guest must not reach the host listener')
   }),
 )
 
@@ -316,12 +313,15 @@ const j11 = Effect.scoped(
 const j12 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J12: interrupt a host-opted job after its first request')
-    const reached = yield* Deferred.make<void>()
+    let signalFirstRequest: (() => void) | undefined
     const listener = yield* openListener((_request, response) => {
-      response.end('reached\n', () => {
-        Effect.runSync(Deferred.succeed(reached, undefined))
-      })
+      response.end('reached\n')
+      signalFirstRequest?.()
     })
+    const awaitFirstRequest = Effect.callback<void>((resume) => {
+      signalFirstRequest = () => resume(Effect.void)
+    })
+    const waiter = yield* Effect.forkChild(awaitFirstRequest.pipe(Effect.timeout('30 seconds')))
     const fiber = yield* Effect.forkChild(
       Effect.scoped(
         MicroVM.job('alpine:3.20', ['sh', '-c', `wget -T 5 -qO- ${listener.url}; sleep 300`])
@@ -329,7 +329,7 @@ const j12 = Effect.scoped(
           .run,
       ),
     )
-    yield* Deferred.await(reached)
+    yield* Fiber.join(waiter)
     yield* Fiber.interrupt(fiber)
     yield* assertNoLeftovers('J12')
   }),

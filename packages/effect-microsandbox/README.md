@@ -43,7 +43,7 @@ Shared-kernel containers leak state between tests and require a local Docker soc
 
 ### Layer & Scoped Execution
 
-A configured container specification (`MicroVM.spec(...)`) directly exposes `.scoped` (to acquire inside an `Effect.scoped` block) and `.layer` (to provide as a testcontainer `Layer`). In accordance with `compound-packs/cell-architecture`, platform dependencies (`Crypto`, `FileSystem`, and the readiness `HostProber`) cleanly propagate to `R` and are satisfied once at your application or test composition root (such as `@effect/platform-node/NodeServices` plus `Readiness.NodeHostProber`).
+A configured container specification (`MicroVM.spec(...)`) directly exposes `.scoped` (to acquire inside an `Effect.scoped` block) and `.layer` (to provide as a testcontainer `Layer`). In accordance with `compound-packs/cell-architecture`, platform dependencies (`Crypto`, `FileSystem`, and the readiness `HostProber`) propagate to `R` — `.scoped` and `.run` carry them in the effect's requirements, and `.layer` carries them in the layer's input requirements — and are satisfied once at your application or test composition root (such as `@effect/platform-node/NodeServices` plus `Readiness.NodeHostProber`).
 
 ## Specifying Containers
 
@@ -60,8 +60,8 @@ const redis = MicroVM.spec('redis:7-alpine')
 // Acquire dynamically in a test scope:
 const vm = yield* redis.scoped
 
-// Or provide as a Layer:
-const RedisLive = redis.layer
+// Or provide as a Layer (its input asks for the readiness prober):
+const RedisLive = Layer.provide(redis.layer, Readiness.NodeHostProber)
 ```
 
 ### Spec Combinators

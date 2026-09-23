@@ -89,7 +89,7 @@ export interface MicroVMResource extends Pipeable {
   >
   layer<Id>(
     service: Context.Key<Id, RunningVM>,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem>
+  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
 }
 
 const makeProto = (raw: MicroVMSpec): MicroVMResource => {
@@ -117,8 +117,8 @@ const makeProto = (raw: MicroVMSpec): MicroVMResource => {
     },
     layer<Id>(
       service: Context.Key<Id, RunningVM>,
-    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> {
-      return Layer.provide(Readiness.NodeHostProber)(Layer.effect(service)(scoped(raw)))
+    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> {
+      return Layer.effect(service)(scoped(raw))
     },
   }
   return self
@@ -172,8 +172,8 @@ const makeJobProto = (raw: JobSpec): JobResource => {
     },
     layer<Id>(
       service: Context.Key<Id, RunningVM>,
-    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> {
-      return Layer.provide(Readiness.NodeHostProber)(Layer.effect(service)(scoped(raw)))
+    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> {
+      return Layer.effect(service)(scoped(raw))
     },
     get run() {
       return runJob.run(raw)
@@ -199,18 +199,18 @@ export const scoped = (
 export const layer: {
   <Id>(
     service: Context.Key<Id, RunningVM>,
-  ): (spec: MicroVMSpec) => Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem>
+  ): (spec: MicroVMSpec) => Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
   <Id>(
     service: Context.Key<Id, RunningVM>,
     spec: MicroVMSpec,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem>
+  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
 } = dual(
   (args) => args.length >= 2,
   <Id>(
     service: Context.Key<Id, RunningVM>,
     spec: MicroVMSpec,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> =>
-    Layer.provide(Readiness.NodeHostProber)(Layer.effect(service)(scoped(spec))),
+  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> =>
+    Layer.effect(service)(scoped(spec)),
 )
 export const service: {
   (ports?: ReadonlyArray<number>): (image: string) => MicroVMResource
