@@ -6,17 +6,16 @@ import type { Graph } from '@systemfsoftware/trace-spec'
  * carrying the hex ids recorded below. The body is the verbatim response;
  * the decoder, not this file, parses it. Wire ids are the base64 proto
  * bytes Tempo serves; the hex ids are what was pushed.
+ *
+ * Image: docker.io/grafana/tempo:latest, Tempo v3.0.0,
+ * sha256:1ce31d6d7ffab62189685e8c47881d4a561c5d38bd0dbd66e40ca83cef07923d
  */
-export const TEMPO_IMAGE_REPOSITORY = 'docker.io/grafana/tempo'
-export const TEMPO_IMAGE_TAG = 'latest'
-export const TEMPO_IMAGE_VERSION = 'v3.0.0'
-export const TEMPO_IMAGE_DIGEST = 'sha256:1ce31d6d7ffab62189685e8c47881d4a561c5d38bd0dbd66e40ca83cef07923d'
 
 export const TEMPO_TRACE_ID = '4bf92f3577b34da6a3ce929d0e0e4736'
 export const TEMPO_ROOT_SPAN_ID = '00f067aa0ba902b7'
-export const TEMPO_CHILD_SPAN_ID = 'b7ad6b7169203331'
-export const TEMPO_LINK_TRACE_ID = '5ba9a4b3c1d2e3f4a5b6c7d8e9f00112'
-export const TEMPO_LINK_SPAN_ID = 'aabbccddeeff0011'
+const TEMPO_CHILD_SPAN_ID = 'b7ad6b7169203331'
+const TEMPO_LINK_TRACE_ID = '5ba9a4b3c1d2e3f4a5b6c7d8e9f00112'
+const TEMPO_LINK_SPAN_ID = 'aabbccddeeff0011'
 
 export const TEMPO_TRACE_ID_WIRE = 'S/kvNXezTaajzpKdDg5HNg=='
 export const TEMPO_ROOT_SPAN_ID_WIRE = 'APBnqgupArc='

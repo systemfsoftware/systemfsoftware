@@ -10,7 +10,7 @@ export class Loopback extends Context.Service<Loopback, { readonly baseUrl: stri
   '@systemfsoftware/trace-spec/tests/__fixtures__/loopback-store.fixture/Loopback',
 ) {}
 
-export type Answering<R> = Effect.Effect<
+type Answering<R> = Effect.Effect<
   Effect.Effect<HttpServerResponse.HttpServerResponse, never, HttpServerRequest>,
   never,
   R
