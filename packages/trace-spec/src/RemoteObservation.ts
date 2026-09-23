@@ -114,42 +114,10 @@ const settleStep = (
   return { settlement: advanced, verdict: verdictOf(advanced, elapsedMillis, windows) }
 }
 
-const quietAfter = (advance: Advance, elapsedMillis: number, windows: Windows): Advance =>
-  settleStep(advance.settlement, NO_SPANS, elapsedMillis, windows)
+const lateRefusal = (settlement: Settlement): Refusal => (settlement.spans.length === 0 ? 'absent' : 'unfinished')
 
-const pollingOf = (verdict: Option.Option<Verdict>): boolean => Option.isNone(verdict)
-
-const settledOf = (verdict: Option.Option<Verdict>): boolean => Option.exists(verdict, Result.isSuccess)
-
-const refusalOf = (verdict: Option.Option<Verdict>): Option.Option<Refusal> =>
-  Option.flatMap(verdict, (found) => (Result.isFailure(found) ? Option.some(found.failure) : Option.none()))
-
-const absentOf = (verdict: Option.Option<Verdict>): boolean =>
-  Option.exists(refusalOf(verdict), (refusal) => refusal === 'absent')
-
-const unfinishedOf = (verdict: Option.Option<Verdict>): boolean =>
-  Option.exists(refusalOf(verdict), (refusal) => refusal === 'unfinished')
-
-const holdsId = (span: SpanRecord, spans: ReadonlyArray<SpanRecord>): boolean =>
-  spans.some((candidate) => candidate.spanId === span.spanId)
-
-const holdsEveryId = (spans: ReadonlyArray<SpanRecord>, of: ReadonlyArray<SpanRecord>): boolean =>
-  of.every((span) => holdsId(span, spans))
-
-const sameIds = (left: ReadonlyArray<SpanRecord>, right: ReadonlyArray<SpanRecord>): boolean => {
-  const leftIds = idsOf(left)
-  const rightIds = idsOf(right)
-  return leftIds.size === rightIds.size && [...leftIds].every((id) => rightIds.has(id))
-}
-
-const firstWithId = (spans: ReadonlyArray<SpanRecord>, spanId: string): SpanRecord | undefined =>
-  spans.find((candidate) => candidate.spanId === spanId)
-
-const keptFirstRecord = (
-  spans: ReadonlyArray<SpanRecord>,
-  read: ReadonlyArray<SpanRecord>,
-  span: SpanRecord,
-): boolean => firstWithId(spans, span.spanId) === firstWithId(read, span.spanId)
+const deadlineVerdict = (settlement: Settlement, elapsedMillis: number, windows: Windows): Option.Option<Verdict> =>
+  pastDeadline(elapsedMillis, windows) ? refusedVerdict(lateRefusal(settlement)) : Option.none()
 
 const millisOf = (input: Duration.Input): number => Duration.toMillis(input)
 
@@ -217,24 +185,22 @@ const advanceAt = (watch: Watch, read: ReadonlyArray<SpanRecord>): Effect.Effect
     return settleStep(yield* Ref.get(watch.settlement), read, elapsedMillis, watch.windows)
   })
 
+const elapsedFor = (watch: Watch): Effect.Effect<number> =>
+  Effect.map(Clock.currentTimeMillis, (now) => now - watch.startedAtMillis)
+
 const poll = <R>(
   source: TraceSource<R>,
   traceId: string,
   options: Options,
   watch: Watch,
 ): Effect.Effect<ReadonlyArray<SpanRecord>, ObservationFailure, R> =>
-  Effect.flatMap(advanceAt(watch, NO_SPANS), (advance) => respond(source, traceId, options, watch, advance))
-
-const respond = <R>(
-  source: TraceSource<R>,
-  traceId: string,
-  options: Options,
-  watch: Watch,
-  advance: Advance,
-): Effect.Effect<ReadonlyArray<SpanRecord>, ObservationFailure, R> =>
-  Option.match(advance.verdict, {
-    onNone: () => readOnce(source, traceId, options, watch),
-    onSome: (verdict) => answer(verdict, advance.settlement, traceId, watch.windows),
+  Effect.gen(function*() {
+    const settlement = yield* Ref.get(watch.settlement)
+    const verdict = deadlineVerdict(settlement, yield* elapsedFor(watch), watch.windows)
+    return yield* Option.match(verdict, {
+      onNone: () => readOnce(source, traceId, options, watch),
+      onSome: (reached) => answer(reached, settlement, traceId, watch.windows),
+    })
   })
 
 const readOnce = <R>(
@@ -302,6 +268,43 @@ if (import.meta.vitest !== void 0) {
   const SLOW: Windows = { settleMillis: 500, timeoutMillis: 100 }
   const Reads = Schema.Array(SpanRecord)
   const SomeReads = Schema.NonEmptyArray(SpanRecord)
+
+  const quietAfter = (advance: Advance, elapsedMillis: number, windows: Windows): Advance =>
+    settleStep(advance.settlement, NO_SPANS, elapsedMillis, windows)
+
+  const pollingOf = (verdict: Option.Option<Verdict>): boolean => Option.isNone(verdict)
+
+  const settledOf = (verdict: Option.Option<Verdict>): boolean => Option.exists(verdict, Result.isSuccess)
+
+  const refusalOf = (verdict: Option.Option<Verdict>): Option.Option<Refusal> =>
+    Option.flatMap(verdict, (found) => (Result.isFailure(found) ? Option.some(found.failure) : Option.none()))
+
+  const absentOf = (verdict: Option.Option<Verdict>): boolean =>
+    Option.exists(refusalOf(verdict), (refusal) => refusal === 'absent')
+
+  const unfinishedOf = (verdict: Option.Option<Verdict>): boolean =>
+    Option.exists(refusalOf(verdict), (refusal) => refusal === 'unfinished')
+
+  const holdsId = (span: SpanRecord, spans: ReadonlyArray<SpanRecord>): boolean =>
+    spans.some((candidate) => candidate.spanId === span.spanId)
+
+  const holdsEveryId = (spans: ReadonlyArray<SpanRecord>, of: ReadonlyArray<SpanRecord>): boolean =>
+    of.every((span) => holdsId(span, spans))
+
+  const sameIds = (left: ReadonlyArray<SpanRecord>, right: ReadonlyArray<SpanRecord>): boolean => {
+    const leftIds = idsOf(left)
+    const rightIds = idsOf(right)
+    return leftIds.size === rightIds.size && [...leftIds].every((id) => rightIds.has(id))
+  }
+
+  const firstWithId = (spans: ReadonlyArray<SpanRecord>, spanId: string): SpanRecord | undefined =>
+    spans.find((candidate) => candidate.spanId === spanId)
+
+  const keptFirstRecord = (
+    spans: ReadonlyArray<SpanRecord>,
+    read: ReadonlyArray<SpanRecord>,
+    span: SpanRecord,
+  ): boolean => firstWithId(spans, span.spanId) === firstWithId(read, span.spanId)
 
   const seenAfter = (read: ReadonlyArray<SpanRecord>): Advance => settleStep(NEVER_READ, read, 0, WINDOWS)
 

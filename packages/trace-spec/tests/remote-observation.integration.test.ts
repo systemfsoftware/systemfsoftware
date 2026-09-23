@@ -199,6 +199,25 @@ Feature('Reading a finished trace back from a remote store')
     )
 
     scenario(
+      'A trace still growing between reads spaced wider than the quiet window is not taken as finished',
+      Gherkin.Do.pipe(
+        Given('a remote store that serves one more span on every read, read less often than its quiet window')(
+          'sparse',
+          () =>
+            storeOf(
+              growsEveryRead,
+              { interval: Duration.millis(80), settle: Duration.millis(50), timeout: Duration.millis(300) },
+            ),
+        ),
+        When('the finished trace is read back')('reading', (s) => readBack(s.sparse.script, s.sparse.options)),
+        Then('the reader reports the trace as unfinished, counting every span the store served')((s) => {
+          expect(reportsUnfinished(s.reading)).toBe(true)
+          expect(countedSpans(s.reading)).toBe(4)
+        }),
+      ),
+    )
+
+    scenario(
       'A reader whose wait between reads outlasts its deadline stops after one read',
       Gherkin.Do.pipe(
         Given('a remote store read more slowly than the whole reading may take')(
