@@ -40,7 +40,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",

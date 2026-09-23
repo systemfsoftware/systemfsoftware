@@ -1,4 +1,15 @@
 {
   "extends": "@systemfsoftware/tsconfig/node",
-  "include": ["oxlint.config.ts", "tsdown.config.ts", "vitest.config.ts", "vitest.smoke.config.ts", "vitest-setup.ts"]
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.node.tsbuildinfo"
+  },
+  "include": [
+    "oxlint.config.ts",
+    "stryker.config.ts",
+    "tsdown.config.ts",
+    "vitest-setup.ts",
+    "vitest.config.ts"
+  ]
 }
