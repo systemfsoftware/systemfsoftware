@@ -41,7 +41,7 @@ type ScenarioEnvironment = Layer.Layer<
 
 const environmentOf = (
   logLayer: Layer.Layer<Readiness.LogSource | DynamicLogStream>,
-): ScenarioEnvironment => Layer.mergeAll(Readiness.NodeHostProber, logLayer, guestService())
+): ScenarioEnvironment => Layer.mergeAll(Readiness.NodeHostProber.layer, logLayer, guestService())
 
 export const dynamicScenarioEnvironment = (
   initialLines: ReadonlyArray<string> = [],
