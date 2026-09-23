@@ -3,6 +3,7 @@
 import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
 import { Effect, Layer, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import type { TestOptions } from 'vitest'
 import * as Register from './Register.js'
@@ -66,7 +67,7 @@ const layeredRegister = <B, E, RShared, RFresh, RFreshReq extends RShared | Scop
   )
 }
 
-export const open = <B, E, C>(
+const openImpl = <B, E, C>(
   bindings: Bindings,
   config: Config,
   use: (register: RegisterFn<B, E, never>, propIt: Vitest.MethodsNonLive<never>) => C,
@@ -76,7 +77,19 @@ export const open = <B, E, C>(
   })
 }
 
-export const openShared = <B, E, RShared, C>(
+export const open: {
+  <B, E, C>(
+    config: Config,
+    use: (register: RegisterFn<B, E, never>, propIt: Vitest.MethodsNonLive<never>) => C,
+  ): (bindings: Bindings) => void
+  <B, E, C>(
+    bindings: Bindings,
+    config: Config,
+    use: (register: RegisterFn<B, E, never>, propIt: Vitest.MethodsNonLive<never>) => C,
+  ): void
+} = dual(3, openImpl)
+
+const openSharedImpl = <B, E, RShared, C>(
   bindings: Bindings,
   config: Config,
   shared: Shared<RShared>,
@@ -89,7 +102,21 @@ export const openShared = <B, E, RShared, C>(
   })
 }
 
-export const openCase = <B, E, RFresh, RFreshReq extends Scope.Scope, C>(
+export const openShared: {
+  <B, E, RShared, C>(
+    config: Config,
+    shared: Shared<RShared>,
+    use: (register: RegisterFn<B, E, RShared>, propIt: Vitest.MethodsNonLive<RShared>) => C,
+  ): (bindings: Bindings) => void
+  <B, E, RShared, C>(
+    bindings: Bindings,
+    config: Config,
+    shared: Shared<RShared>,
+    use: (register: RegisterFn<B, E, RShared>, propIt: Vitest.MethodsNonLive<RShared>) => C,
+  ): void
+} = dual(4, openSharedImpl)
+
+const openCaseImpl = <B, E, RFresh, RFreshReq extends Scope.Scope, C>(
   bindings: Bindings,
   config: Config,
   caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
@@ -100,7 +127,21 @@ export const openCase = <B, E, RFresh, RFreshReq extends Scope.Scope, C>(
   })
 }
 
-export const openSharedCase = <B, E, RShared, RFresh, RFreshReq extends RShared | Scope.Scope, C>(
+export const openCase: {
+  <B, E, RFresh, RFreshReq extends Scope.Scope, C>(
+    config: Config,
+    caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
+    use: (register: RegisterFn<B, E, RFresh | RFreshReq>, propIt: Vitest.MethodsNonLive<never>) => C,
+  ): (bindings: Bindings) => void
+  <B, E, RFresh, RFreshReq extends Scope.Scope, C>(
+    bindings: Bindings,
+    config: Config,
+    caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
+    use: (register: RegisterFn<B, E, RFresh | RFreshReq>, propIt: Vitest.MethodsNonLive<never>) => C,
+  ): void
+} = dual(4, openCaseImpl)
+
+const openSharedCaseImpl = <B, E, RShared, RFresh, RFreshReq extends RShared | Scope.Scope, C>(
   bindings: Bindings,
   config: Config,
   shared: Shared<RShared>,
@@ -113,6 +154,22 @@ export const openSharedCase = <B, E, RShared, RFresh, RFreshReq extends RShared 
     })
   })
 }
+
+export const openSharedCase: {
+  <B, E, RShared, RFresh, RFreshReq extends RShared | Scope.Scope, C>(
+    config: Config,
+    shared: Shared<RShared>,
+    caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
+    use: (register: RegisterFn<B, E, RShared | RFresh | RFreshReq>, propIt: Vitest.MethodsNonLive<RShared>) => C,
+  ): (bindings: Bindings) => void
+  <B, E, RShared, RFresh, RFreshReq extends RShared | Scope.Scope, C>(
+    bindings: Bindings,
+    config: Config,
+    shared: Shared<RShared>,
+    caseLayer: Layer.Layer<RFresh, never, RFreshReq>,
+    use: (register: RegisterFn<B, E, RShared | RFresh | RFreshReq>, propIt: Vitest.MethodsNonLive<RShared>) => C,
+  ): void
+} = dual(5, openSharedCaseImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.

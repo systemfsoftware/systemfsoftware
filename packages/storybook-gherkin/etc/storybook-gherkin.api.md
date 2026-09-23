@@ -45,15 +45,22 @@ export interface Capture<Name extends string = string, _A = unknown> extends Cap
 }
 
 // @public (undocumented)
-export function capture<Name extends string, A>(name: Name, options: {
-    readonly schema: Schema.Codec<A, string>;
-    readonly default?: string;
-}): Capture<Name, A>;
-
-// @public (undocumented)
-export function capture<Name extends string>(name: Name, options?: {
-    readonly default?: string;
-}): Capture<Name, string>;
+export const capture: {
+    <Name extends string, A>(options: {
+        readonly schema: Schema.Codec<A, string>;
+        readonly default?: string;
+    }): (name: Name) => Capture<Name, A>;
+    <Name extends string>(options?: {
+        readonly default?: string;
+    }): (name: Name) => Capture<Name, string>;
+    <Name extends string, A>(name: Name, options: {
+        readonly schema: Schema.Codec<A, string>;
+        readonly default?: string;
+    }): Capture<Name, A>;
+    <Name extends string>(name: Name, options?: {
+        readonly default?: string;
+    }): Capture<Name, string>;
+};
 
 // Warning: (ae-forgotten-export) The symbol "CaptureDecodeFailed_base" needs to be exported by the entry point index.d.ts
 //
@@ -105,7 +112,10 @@ export interface Feature<M, TArgs = unknown> {
 }
 
 // @public
-export const feature: <M>(meta: M, options?: FeatureOptions) => Feature<M>;
+export const feature: {
+    <M>(options: FeatureOptions): (meta: M) => Feature<M>;
+    <M>(meta: M, options: FeatureOptions): Feature<M>;
+};
 
 // @public (undocumented)
 export interface FeatureOptions {

@@ -1,4 +1,5 @@
 import { Effect, Layer, Option, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import type { TestContext } from 'vitest'
 import * as Contract from './Contract.js'
@@ -30,23 +31,14 @@ const announce = (
     onSome: (message) => annotate(context, message),
   })
 
-/**
- * The generated-case predicate for one case: a factory that runs the contract's cell with
- * the dump named after the case — so every failing draw overwrites one file and the last
- * failing draw is the shrunk counterexample the runner reports — and answers the verdict as
- * the boolean: `true` while the relation held, `false` on a break, falsifying the property.
- * Only infrastructure refusals — a failing behaviour, an undecodable span, an empty
- * observation — stay on the error channel. The scenario layer is built fresh per draw, so
- * each draw owns its observation window.
- */
-export function predicate<Input, Output, E, Provided, Required>(
+const predicateImpl = <Input, Output, E, Provided, Required>(
   title: string,
   contract: Contract.Contract<Input, Output, E, Provided>,
   scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
 ): (
   input: Input,
   context: TestContext | undefined,
-) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required> {
+) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required> => {
   const checked = (input: Input, context: TestContext | undefined) =>
     Contract.judge(contract, input, { dumpName: title }).pipe(
       Effect.tap((judgment) => announce(context, judgment.verdict, judgment.dumpPath)),
@@ -56,6 +48,26 @@ export function predicate<Input, Output, E, Provided, Required>(
 
   return (input, context) => checked(input, context)
 }
+
+export const predicate: {
+  <Input, Output, E, Provided, Required>(
+    contract: Contract.Contract<Input, Output, E, Provided>,
+    scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+  ): (
+    title: string,
+  ) => (
+    input: Input,
+    context: TestContext | undefined,
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required>
+  <Input, Output, E, Provided, Required>(
+    title: string,
+    contract: Contract.Contract<Input, Output, E, Provided>,
+    scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+  ): (
+    input: Input,
+    context: TestContext | undefined,
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required>
+} = dual(3, predicateImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.

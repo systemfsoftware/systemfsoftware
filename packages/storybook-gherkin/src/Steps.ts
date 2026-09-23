@@ -1,4 +1,5 @@
 import { Array as Arr, Effect, Match, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type { screen, UserEventObject } from 'storybook/test'
 import type { Simplify, UnionToIntersection } from 'type-fest'
 
@@ -56,8 +57,13 @@ const holeText = (cap: CaptureModel, values: Readonly<Record<string, string>>): 
   return firstString(cap.default, `{${cap.name}}`)
 }
 
-export const renderStepText = (step: StepModel, values: Readonly<Record<string, string>>): string =>
+const renderStepTextImpl = (step: StepModel, values: Readonly<Record<string, string>>): string =>
   joinStep(step, (cap) => holeText(cap, values))
+
+export const renderStepText: {
+  (values: Readonly<Record<string, string>>): (step: StepModel) => string
+  (step: StepModel, values: Readonly<Record<string, string>>): string
+} = dual(2, renderStepTextImpl)
 
 const resolveKeyword = (keyword: Keyword, previous: ConcreteKeyword): ConcreteKeyword =>
   Match.value(keyword).pipe(

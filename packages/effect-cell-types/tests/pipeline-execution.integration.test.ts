@@ -62,7 +62,7 @@ const render = (outcome: Result.Result<Admitted | Rejected, Malformed>): string 
 
 const failureErrorOf = <A, E>(
   exit: Exit.Exit<A, E>,
-): E | undefined => (Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined)
+): E | undefined => Exit.isFailure(exit) ? Option.getOrUndefined(exit.cause.pipe(Cause.findErrorOption)) : undefined
 
 const decodeRaw = (raw: Raw): Result.Result<Decoded, Malformed> =>
   Match.value(raw.bytes).pipe(

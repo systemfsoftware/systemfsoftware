@@ -1,3 +1,4 @@
+import { dual } from 'effect/Function'
 import { flatMap, type Result } from 'effect/Result'
 import type * as Schema from 'effect/Schema'
 
@@ -39,6 +40,14 @@ export type InvalidInstrumentationValue<V extends string> = {
 }
 
 type ClassKeys<C> = C extends { readonly Type: infer T } ? keyof T & string : never
+
+/**
+ * The downstream command class of a composed workflow: its instances carry the upstream
+ * decision and the shared context the pair was composed with.
+ */
+type CommandClassB<SelfB, D1, Ctx> = {
+  new(props: { readonly decision: D1; readonly ctx: Ctx }): SelfB
+}
 
 /** An attribute key is lowercase and carries at least one dot-separated segment. */
 type AttributeKeyIsOtel<V extends string> = [V] extends [Lowercase<V>] ? [V] extends [`${string}.${string}`] ? true
@@ -131,7 +140,7 @@ type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] 
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
   : DecisionShape<Decision> & DispatchableTag<DecisionError>
-export const make = <
+const makeImpl = <
   C extends Schema.Constraint & {
     readonly fields: Schema.Struct.Fields
     readonly Type: object
@@ -150,19 +159,33 @@ export const make = <
   return decide
 }
 
-/**
- * Brands a decision that cannot fail. `make` refuses a `never` error channel outright
- * (`UninhabitedError`); this is the door for the decider that genuinely decides everything.
- * The decision must still choose between at least two tagged variants sharing one TypeId, so
- * `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` still fire.
- *
- * The command schema class comes first, exactly as in {@link make}, so the command channel
- * stays pinned to the class rather than an inferred annotation. The decider's return carries
- * `DecisionShape` written out: the `Workflow` alias is a deferred conditional, and in
- * parameter position it collapses the whole parameter to `unknown` while the decision
- * channel is still generic.
- */
-export const total = <
+export const make: {
+  <
+    C extends Schema.Constraint & {
+      readonly fields: Schema.Struct.Fields
+      readonly Type: object
+      readonly [InstrumentationBrand]: InstrumentationMap
+    },
+    D,
+    E,
+  >(
+    decide: (command: C['Type']) => Result<D, E> & Inhabited<D, E>,
+  ): (command: C & CheckCommandClass<C>) => Workflow<C['Type'], D, E>
+  <
+    C extends Schema.Constraint & {
+      readonly fields: Schema.Struct.Fields
+      readonly Type: object
+      readonly [InstrumentationBrand]: InstrumentationMap
+    },
+    D,
+    E,
+  >(
+    command: C & CheckCommandClass<C>,
+    decide: (command: C['Type']) => Result<D, E> & Inhabited<D, E>,
+  ): Workflow<C['Type'], D, E>
+} = dual(2, makeImpl)
+
+const totalImpl = <
   C extends Schema.Constraint & {
     readonly fields: Schema.Struct.Fields
     readonly Type: object
@@ -182,12 +205,42 @@ export const total = <
 }
 
 /**
- * Composes two workflows: what the upstream decides becomes the command the downstream decides
- * on, and a refusal short-circuits the pair. The return type dispatches on the component error
- * union — two components that cannot fail publish the total form, because the `Workflow` alias
- * refuses a `never` channel; a carried error publishes the union as before.
+ * Brands a decision that cannot fail. `make` refuses a `never` error channel outright
+ * (`UninhabitedError`); this is the door for the decider that genuinely decides everything.
+ * The decision must still choose between at least two tagged variants sharing one TypeId, so
+ * `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` still fire.
+ *
+ * The command schema class comes first, exactly as in {@link make}, so the command channel
+ * stays pinned to the class rather than an inferred annotation. The decider's return carries
+ * `DecisionShape` written out: the `Workflow` alias is a deferred conditional, and in
+ * parameter position it collapses the whole parameter to `unknown` while the decision
+ * channel is still generic.
  */
-export const andThen = <
+export const total: {
+  <
+    C extends Schema.Constraint & {
+      readonly fields: Schema.Struct.Fields
+      readonly Type: object
+      readonly [InstrumentationBrand]: InstrumentationMap
+    },
+    D,
+  >(
+    decide: (command: C['Type']) => Result<D, never> & DecisionShape<D>,
+  ): (command: C & CheckCommandClass<C>) => ((command: C['Type']) => Result<D, never>) & WorkflowBrand
+  <
+    C extends Schema.Constraint & {
+      readonly fields: Schema.Struct.Fields
+      readonly Type: object
+      readonly [InstrumentationBrand]: InstrumentationMap
+    },
+    D,
+  >(
+    command: C & CheckCommandClass<C>,
+    decide: (command: C['Type']) => Result<D, never> & DecisionShape<D>,
+  ): ((command: C['Type']) => Result<D, never>) & WorkflowBrand
+} = dual(2, totalImpl)
+
+const andThenImpl = <
   Ctx,
   SelfA,
   SA extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
@@ -200,7 +253,7 @@ export const andThen = <
 >(
   _commandA: Schema.Class<SelfA, SA, InheritedA>,
   upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
-  commandB: { new(props: { readonly decision: D1; readonly ctx: Ctx }): SelfB },
+  commandB: CommandClassB<SelfB, D1, Ctx>,
   ctx: NoInfer<Ctx>,
   downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
 ): [E1 | E2] extends [never] ? ((command: SelfA) => Result<D2, never>) & WorkflowBrand
@@ -212,6 +265,52 @@ export const andThen = <
   assertComposite<SelfA, D2, E1 | E2>(composed)
   return composed
 }
+
+/**
+ * Composes two workflows: what the upstream decides becomes the command the downstream decides
+ * on, and a refusal short-circuits the pair. The return type dispatches on the component error
+ * union — two components that cannot fail publish the total form, because the `Workflow` alias
+ * refuses a `never` channel; a carried error publishes the union as before.
+ */
+export const andThen: {
+  <
+    Ctx,
+    SelfA,
+    SA extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
+    InheritedA,
+    D1,
+    E1,
+    SelfB extends { readonly decision: D1; readonly ctx: Ctx },
+    D2,
+    E2,
+  >(
+    upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
+    commandB: CommandClassB<SelfB, D1, Ctx>,
+    ctx: NoInfer<Ctx>,
+    downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
+  ): (
+    _commandA: Schema.Class<SelfA, SA, InheritedA>,
+  ) => [E1 | E2] extends [never] ? ((command: SelfA) => Result<D2, never>) & WorkflowBrand
+    : Workflow<SelfA, D2, E1 | E2>
+  <
+    Ctx,
+    SelfA,
+    SA extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
+    InheritedA,
+    D1,
+    E1,
+    SelfB extends { readonly decision: D1; readonly ctx: Ctx },
+    D2,
+    E2,
+  >(
+    _commandA: Schema.Class<SelfA, SA, InheritedA>,
+    upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
+    commandB: CommandClassB<SelfB, D1, Ctx>,
+    ctx: NoInfer<Ctx>,
+    downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
+  ): [E1 | E2] extends [never] ? ((command: SelfA) => Result<D2, never>) & WorkflowBrand
+    : Workflow<SelfA, D2, E1 | E2>
+} = dual(5, andThenImpl)
 
 function assertWorkflow<C, D, E>(
   _decide: (command: C) => Result<D, E> & Inhabited<D, E>,

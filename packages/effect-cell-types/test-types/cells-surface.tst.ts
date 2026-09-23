@@ -142,7 +142,7 @@ describe('the sandwich the chain builds', () => {
 
   it('Should_InferTheCell_When_AllFivePhasesChain', () => {
     const cell = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded).encode(
-      Sandwich.pure((outcome) => Result.succeed(encode(outcome))),
+      Sandwich.pure((outcome) => outcome.pipe(encode, Result.succeed)),
     ).write(writeOutput)
     expect(cell).type.toBe<
       Cell.Cell<Cmd, void, DecodeErr, never> & {
@@ -533,7 +533,7 @@ describe('the sandwich chain the continuation surface builds', () => {
   it('Should_RefuseABareClosure_When_EncodeDemandsAPurePhase', () => {
     const chain = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
     expect<typeof chain.encode>().type.not.toBeCallableWith(
-      (outcome: Result.Result<Decision, Refusal>) => Result.succeed(encode(outcome)),
+      (outcome: Result.Result<Decision, Refusal>) => outcome.pipe(encode, Result.succeed),
     )
   })
 
@@ -541,7 +541,7 @@ describe('the sandwich chain the continuation surface builds', () => {
     const chain = Sandwich.named('cell.surface')(read).decode(Sandwich.pure(decode)).decide(decideOverDecoded)
     expect<typeof chain.encode>().type.not.toBeCallableWith(
       Sandwich.pure((outcome: Result.Result<Decision, Refusal>): Result.Result<Output, Refusal> =>
-        Result.succeed(encode(outcome))
+        outcome.pipe(encode, Result.succeed)
       ),
     )
   })
