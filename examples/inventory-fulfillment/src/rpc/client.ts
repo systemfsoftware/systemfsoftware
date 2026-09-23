@@ -21,6 +21,12 @@ const protocolOf = (options: ClientOptions) =>
     return yield* RpcClient.makeProtocolHttp(withCookie)
   })
 
+/**
+ * Builds an `RpcClient` for the fulfillment group over HTTP. Requires the
+ * caller's `HttpClient` (e.g. `NodeHttpClient.layerUndici`), its
+ * `RpcSerialization` (e.g. `RpcSerialization.layerJson`), and `Scope`, so the
+ * client lives exactly as long as the scope that owns it.
+ */
 export const make = (
   options: ClientOptions,
 ): Effect.Effect<Client, never, HttpClient.HttpClient | Scope.Scope | RpcSerialization.RpcSerialization> =>
