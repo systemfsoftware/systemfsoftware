@@ -10,7 +10,7 @@ In a system with queues, workers, and background consumers, a `200` is not the o
 pnpm add @systemfsoftware/trace-spec @systemfsoftware/trace-taxonomy effect
 ```
 
-The package exports seven namespaces — `Contract`, `Graph`, `Observation`, `ObservationWindow`, `Rel`, `Stimulus`, `Suite`. Errors and verdicts belong to the capability that raises them: `Contract.ContractDecodeError`, `Contract.TraceDisparityError`, `Observation.EmptyObservationError`, `Suite.StimulusFailure`, and `Rel.Hold`/`Rel.Break`/`Rel.Verdict`.
+The package exports nine namespaces — `Contract`, `Graph`, `Observation`, `ObservationWindow`, `RemoteObservation`, `Rel`, `Stimulus`, `Suite`, `TempoTraceStore`. Errors and verdicts belong to the capability that raises them: `Contract.ContractDecodeError`, `Contract.TraceDisparityError`, `Observation.EmptyObservationError`, `Observation.IncompleteObservationError`, `Observation.TransportObservationError`, `Suite.StimulusFailure`, and `Rel.Hold`/`Rel.Break`/`Rel.Verdict`.
 
 ## Write a contract
 
@@ -38,15 +38,17 @@ const paymentUnderCheckout = Contract.of(checkout)
 
 ## Run the contract
 
-`Contract.judge(contract, input)` stimulates the behaviour under its minted trace, collects that trace's spans, decodes them against the taxonomy (`Graph.decode` answers `Result<TraceGraph, Contract.ContractDecodeError>`), applies the relation, and on a break writes the decoded graph under `artifacts/traces/`. It answers a `Contract.Judgment` — the run, the verdict, and the dump path — so a break is a value, not a failure. Behaviour failures and infrastructure refusals (`Contract.ContractDecodeError`, `Observation.EmptyObservationError`) stay on the error channel.
+`Contract.judge(contract, input)` stimulates the behaviour under its minted trace, collects that trace's spans, decodes them against the taxonomy (`Graph.decode` answers `Result<TraceGraph, Contract.ContractDecodeError>`), applies the relation, and on a break writes the decoded graph under `artifacts/traces/`. It answers a `Contract.Judgment` — the run, the verdict, and the dump path — so a break is a value, not a failure. Behaviour failures and infrastructure refusals (`Contract.ContractDecodeError` and the three `Observation` failures) stay on the error channel.
 
 `Contract.check(contract, input)` is the test edge over `judge`: a break fails with `Contract.TraceDisparityError`. Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`, and `Graph.descendants`.
 
-| Outcome                                       | Failure                             | Meaning                                                                                 |
-| --------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| The relation broke                            | `Contract.TraceDisparityError`      | names the broken conjunct, the spans inspected, and where the decoded graph was written |
-| A contracted span lacked a required attribute | `Contract.ContractDecodeError`      | names the declaration and the attribute — never reported as a broken relation           |
-| Nothing ran under the owned trace             | `Observation.EmptyObservationError` | the observation was empty, which is its own outcome, not a break                        |
+| Outcome                                       | Failure                                  | Meaning                                                                                            |
+| --------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| The relation broke                            | `Contract.TraceDisparityError`           | names the broken conjunct, the spans inspected, and where the decoded graph was written            |
+| A contracted span lacked a required attribute | `Contract.ContractDecodeError`           | names the declaration and the attribute — never reported as a broken relation                      |
+| Nothing ran under the owned trace             | `Observation.EmptyObservationError`      | the observation was empty, which is its own outcome, not a break                                   |
+| The trace never finished arriving             | `Observation.IncompleteObservationError` | spans were read but kept changing, or the store marked the trace partial; carries the span count   |
+| The trace store could not be read             | `Observation.TransportObservationError`  | the store refused, was unreachable, or answered a body that does not decode; names the request URL |
 
 ## Register cases
 
@@ -66,7 +68,7 @@ TraceSuite('checkout.place_order')
   })
 ```
 
-`Suite.make({ it, layer })(name)` stages a suite as a Pipeable builder, and `withLayer`/`withScenarioLayer` are `dual` combinators whose terminal `body` registers the cases. The scenario layer is built fresh per case and must provide `Observation.Observation` and a `FileSystem` for failure dumps, plus whatever the stimulated behaviour needs — the requirement is enforced at the type level. A failing case fails with the harness's own error channel — the three outcomes above, or `Suite.StimulusFailure` when the behaviour itself failed before its trace could be judged. Cases run on the live clock.
+`Suite.make({ it, layer })(name)` stages a suite as a Pipeable builder, and `withLayer`/`withScenarioLayer` are `dual` combinators whose terminal `body` registers the cases. The scenario layer is built fresh per case and must provide `Observation.Observation` and a `FileSystem` for failure dumps, plus whatever the stimulated behaviour needs — the requirement is enforced at the type level. A failing case fails with the harness's own error channel — the outcomes above, or `Suite.StimulusFailure` when the behaviour itself failed before its trace could be judged. Cases run on the live clock.
 
 `.withLayer(shared)` registers the suite over a layer built once for the whole suite; the shared layer then carries the observation harness, and `.withScenarioLayer(scenario)` can follow it for what each case needs fresh.
 
@@ -75,6 +77,27 @@ TraceSuite('checkout.place_order')
 ## Observe in memory
 
 `ObservationWindow.make(serviceName)` is the cold resource; the service name is required. `.scoped` acquires an `ObservationWindow` handle for one scope — an OpenTelemetry in-memory exporter behind a simple span processor and an always-on sampler, shut down when the scope closes — and `ObservationWindow.collect(window, traceId)` reads one trace back. `.layer` binds a window as `Observation.Observation` plus the Effect tracer, one window per layer build, so two acquisitions never see each other's spans. Only the handle module imports the OpenTelemetry SDK. The export happens outside any test-clock boundary.
+
+## Observe a remote store
+
+When the behaviour runs in another process — a CLI binary, a worker, a container — its spans never reach an in-memory window. Export them to a trace store and read them back with `RemoteObservation.layer`, which provides `Observation.Observation` over a trace source:
+
+```ts
+import { RemoteObservation, TempoTraceStore } from '@systemfsoftware/trace-spec'
+import { Layer } from 'effect'
+import { FetchHttpClient } from 'effect/unstable/http'
+
+const observation = RemoteObservation.layer(
+  TempoTraceStore.source({ baseUrl: 'http://127.0.0.1:3200' }),
+  { interval: '50 millis', settle: '500 millis', timeout: '10 seconds' },
+).pipe(Layer.provide(FetchHttpClient.layer))
+```
+
+`collect(traceId)` reads the source every `interval` and keeps every span it has seen, keyed by span id. It answers once no read has added a span for `settle`, because no trace store says when a trace is complete: a trace read too early looks finished but is missing spans still in flight. A read that returns fewer spans than an earlier one never drops a span. The whole read runs under `timeout`: nothing read by then fails with `Observation.EmptyObservationError`, spans that never settled fail with `Observation.IncompleteObservationError`. A source failure fails at once, without retrying. Every duration must be positive.
+
+`TempoTraceStore.source({ baseUrl })` reads Grafana Tempo's `GET /api/v2/traces/<traceId>` once. It needs only an `HttpClient`, so auth and tenant headers go on the client you provide: `HttpClient.mapRequest(client, HttpClientRequest.setHeader('X-Scope-OrgID', tenant))`. A trace Tempo marks `PARTIAL` fails with `Observation.IncompleteObservationError`; a non-2xx answer, including `404`, or a body that does not decode fails with `Observation.TransportObservationError`.
+
+Another store needs only another source: a `RemoteObservation.TraceSource<R>` is one read that answers the spans the store holds for a trace id now — empty when it holds none — or fails with `Observation.TransportObservationError` or `Observation.IncompleteObservationError`. It never polls, waits, or retries; the layer owns the cadence.
 
 ## Relations
 
