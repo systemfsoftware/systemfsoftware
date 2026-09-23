@@ -1,5 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Context, Effect, Layer, MutableRef } from 'effect'
+import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 
@@ -13,10 +14,15 @@ export type AnswerFor = (
   request: DecisionModel.ProviderOptions,
 ) => Readonly<Record<string, DecisionModel.ProviderAnswer>>
 
-export const answersFor = (
-  request: DecisionModel.ProviderOptions,
-  answerOf: (decision: Discern.AnyDecision, id: string) => DecisionModel.ProviderAnswer,
-): Readonly<Record<string, DecisionModel.ProviderAnswer>> => {
+interface AnswersForOptions {
+  readonly request: DecisionModel.ProviderOptions
+  readonly answerOf: (decision: Discern.AnyDecision, id: string) => DecisionModel.ProviderAnswer
+}
+
+export const answersFor = ({
+  request,
+  answerOf,
+}: AnswersForOptions): Readonly<Record<string, DecisionModel.ProviderAnswer>> => {
   const answers: Record<string, DecisionModel.ProviderAnswer> = {}
   for (const [id, decision] of Object.entries(request.decisions)) {
     answers[id] = answerOf(decision, id)
@@ -50,32 +56,54 @@ export const answering = (answerFor: AnswerFor): Layer.Layer<DecisionModel.Decis
   )
 
 export const probabilityEverywhere = (probability: number): AnswerFor => (request) =>
-  answersFor(request, () => probabilityAnswer(probability))
+  answersFor({ request, answerOf: () => probabilityAnswer(probability) })
 
-export const classificationEverywhere =
-  (label: string, probabilities: Readonly<Record<string, number>>): AnswerFor => (request) =>
-    answersFor(request, () => classifyAnswer(label, probabilities))
+interface ClassificationOptions {
+  readonly label: string
+  readonly probabilities: Readonly<Record<string, number>>
+}
 
-export const classifyAnswer = (
-  label: string,
-  probabilities: Readonly<Record<string, number>>,
-): DecisionModel.ProviderClassifyAnswer => ({ _tag: 'Classify', label, probabilities })
+export const classificationEverywhere = ({ label, probabilities }: ClassificationOptions): AnswerFor => (request) =>
+  answersFor({ request, answerOf: () => classifyAnswer({ label, probabilities }) })
+
+export const classifyAnswer = ({
+  label,
+  probabilities,
+}: ClassificationOptions): DecisionModel.ProviderClassifyAnswer => ({ _tag: 'Classify', label, probabilities })
 
 export const probabilityAnswer = (probability: number): DecisionModel.ProviderProbabilityAnswer => ({
   _tag: 'Probability',
   probability,
 })
 
-export const rateAnswer = (
-  rating: number,
-  probabilities: Readonly<Record<string, number>>,
-): DecisionModel.ProviderRateAnswer => ({ _tag: 'Rate', rating, probabilities })
+interface RatingOptions {
+  readonly rating: number
+  readonly probabilities: Readonly<Record<string, number>>
+}
 
-export const withProvider = <A, E>(
+export const rateAnswer = ({ rating, probabilities }: RatingOptions): DecisionModel.ProviderRateAnswer => ({
+  _tag: 'Rate',
+  rating,
+  probabilities,
+})
+
+const withProviderImpl = <A, E>(
   effect: Effect.Effect<A, E, DecisionModel.DecisionModel>,
   model: Discern.Model.Provider,
   interceptors: ReadonlyArray<Discern.Model.Interceptor> = [],
 ): Effect.Effect<A, E, never> => Effect.provide(effect, Discern.Model.layer(model, interceptors))
+
+export const withProvider: {
+  <A, E>(
+    model: Discern.Model.Provider,
+    interceptors?: ReadonlyArray<Discern.Model.Interceptor>,
+  ): (effect: Effect.Effect<A, E, DecisionModel.DecisionModel>) => Effect.Effect<A, E, never>
+  <A, E>(
+    effect: Effect.Effect<A, E, DecisionModel.DecisionModel>,
+    model: Discern.Model.Provider,
+    interceptors?: ReadonlyArray<Discern.Model.Interceptor>,
+  ): Effect.Effect<A, E, never>
+} = dual((args: IArguments) => Effect.isEffect(args[0]), withProviderImpl)
 
 export interface Tally {
   readonly bump: () => void

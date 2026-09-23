@@ -11,6 +11,7 @@
  * ordinary Effect code.
  */
 import { Array as Arr, Effect, Match, Option, Result } from 'effect'
+import { dual } from 'effect/Function'
 import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
@@ -499,28 +500,60 @@ export const registry: {
     members: Members,
     options?: RegistryOptions<S, S>,
   ): Registry<Members, S, S, Value, Failure, Requirements>
-} = <
-  S extends Schema.Constraint,
-  const Members extends readonly [
-    Procedure<string, S['Type'], Value, Failure, Requirements, S>,
-    Procedure<string, S['Type'], Value, Failure, Requirements, S>,
-    ...Array<Procedure<string, S['Type'], Value, Failure, Requirements, S>>,
-  ],
-  Value,
-  Failure,
-  Requirements,
->(
-  input: S,
-  members: Members,
-  options?: RegistryOptions<S, S>,
-) => {
-  const settings = options ?? {}
-  refuseDuplicate(duplicatedIdOf(Arr.map(members, (member) => member.id)))
-  return Option.match(Option.fromUndefinedOr(settings.routeBy), {
-    onNone: () => buildRegistry(input, members, input, identityOf, settings),
-    onSome: (routeBy) => buildRegistry(input, members, routeBy.schema, routeBy.select, settings),
-  })
-}
+  <
+    S extends Schema.Constraint,
+    const Members extends readonly [
+      Procedure<string, S['Type'], Value, Failure, Requirements, S>,
+      Procedure<string, S['Type'], Value, Failure, Requirements, S>,
+      ...Array<Procedure<string, S['Type'], Value, Failure, Requirements, S>>,
+    ],
+    Value = OutputOf<Members[number]>,
+    Failure = ErrorOf<Members[number]>,
+    Requirements = RequirementsOf<Members[number]>,
+    RouteInput extends Schema.Constraint = S,
+  >(
+    members: Members,
+    options: RegistryOptions<S, RouteInput> & { readonly routeBy: RouteBy<S, RouteInput> },
+  ): (input: S) => Registry<Members, S, RouteInput, Value, Failure, Requirements>
+  <
+    S extends Schema.Constraint,
+    const Members extends readonly [
+      Procedure<string, S['Type'], Value, Failure, Requirements, S>,
+      Procedure<string, S['Type'], Value, Failure, Requirements, S>,
+      ...Array<Procedure<string, S['Type'], Value, Failure, Requirements, S>>,
+    ],
+    Value = OutputOf<Members[number]>,
+    Failure = ErrorOf<Members[number]>,
+    Requirements = RequirementsOf<Members[number]>,
+  >(
+    members: Members,
+    options?: RegistryOptions<S, S>,
+  ): (input: S) => Registry<Members, S, S, Value, Failure, Requirements>
+} = dual(
+  (args: IArguments) => !Array.isArray(args[0]),
+  <
+    S extends Schema.Constraint,
+    const Members extends readonly [
+      Procedure<string, S['Type'], Value, Failure, Requirements, S>,
+      Procedure<string, S['Type'], Value, Failure, Requirements, S>,
+      ...Array<Procedure<string, S['Type'], Value, Failure, Requirements, S>>,
+    ],
+    Value,
+    Failure,
+    Requirements,
+  >(
+    input: S,
+    members: Members,
+    options?: RegistryOptions<S, S>,
+  ) => {
+    const settings = options ?? {}
+    refuseDuplicate(duplicatedIdOf(Arr.map(members, (member) => member.id)))
+    return Option.match(Option.fromUndefinedOr(settings.routeBy), {
+      onNone: () => buildRegistry(input, members, input, identityOf, settings),
+      onSome: (routeBy) => buildRegistry(input, members, routeBy.schema, routeBy.select, settings),
+    })
+  },
+)
 
 /**
  * Present a registry as a procedure, so registries nest.

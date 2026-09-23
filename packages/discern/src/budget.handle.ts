@@ -1,4 +1,5 @@
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as MutableRef from 'effect/MutableRef'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type { BudgetLimits, BudgetSpend } from './Budget.schema.js'
@@ -37,5 +38,7 @@ export const budget = (limits: BudgetLimits): Budget => {
   }
 }
 
-export const chargeBudget = (self: Budget, decisions: number): Effect.Effect<void> =>
-  Effect.sync(() => self[ChargeId](decisions))
+export const chargeBudget: {
+  (decisions: number): (self: Budget) => Effect.Effect<void>
+  (self: Budget, decisions: number): Effect.Effect<void>
+} = dual(2, (self: Budget, decisions: number): Effect.Effect<void> => Effect.sync(() => self[ChargeId](decisions)))

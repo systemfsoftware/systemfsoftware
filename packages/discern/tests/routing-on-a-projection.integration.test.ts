@@ -75,7 +75,7 @@ Feature('Routing on a projection of the request instead of the whole of it')
         When('a ticket carrying a large evidence blob is routed and run')('answer', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            return yield* withProvider(s.registry.invoke(ticket('what is this about?')), model.model)
+            return yield* withProvider(s.registry.invoke(ticket({ ask: 'what is this about?' })), model.model)
           })),
         Then('the router was shown only the question, and routing is typed by the projection')((s) =>
           Effect.gen(function*() {
@@ -96,13 +96,13 @@ Feature('Routing on a projection of the request instead of the whole of it')
         When('the same ticket is routed and run')('answer', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            return yield* withProvider(s.registry.invoke(ticket('what is this about?')), model.model)
+            return yield* withProvider(s.registry.invoke(ticket({ ask: 'what is this about?' })), model.model)
           })),
         Then('the router saw the whole ticket, evidence included')((s) =>
           Effect.gen(function*() {
             const sight = yield* RoutingSight
             expect(s.answer).toBe('inspected:what is this about?')
-            expect(sight.states()).toStrictEqual([ticket('what is this about?')])
+            expect(sight.states()).toStrictEqual([ticket({ ask: 'what is this about?' })])
           })
         ),
       ),
@@ -122,10 +122,13 @@ Feature('Routing on a projection of the request instead of the whole of it')
             Effect.gen(function*() {
               const model = yield* CountingModel
               const production = yield* withProvider(
-                s.registry.invoke(ticket('what is this?', 'production')),
+                s.registry.invoke(ticket({ ask: 'what is this?', environment: 'production' })),
                 model.model,
               )
-              const local = yield* withProvider(s.registry.invoke(ticket('what is this?', 'local')), model.model)
+              const local = yield* withProvider(
+                s.registry.invoke(ticket({ ask: 'what is this?', environment: 'local' })),
+                model.model,
+              )
               return { production, local }
             }),
         ),
@@ -154,12 +157,14 @@ Feature('Routing on a projection of the request instead of the whole of it')
         When('a local ticket is read for routing')('route', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            return yield* withProvider(s.registry.route(ticket('ship it', 'local')), model.model)
+            return yield* withProvider(s.registry.route(ticket({ ask: 'ship it', environment: 'local' })), model.model)
           })),
         When('the same local ticket is handed to the registry to run')('refused', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            return yield* Effect.flip(withProvider(s.registry.invoke(ticket('ship it', 'local')), model.model))
+            return yield* Effect.flip(
+              withProvider(s.registry.invoke(ticket({ ask: 'ship it', environment: 'local' })), model.model),
+            )
           })),
         Then('the route names the situation and the invocation refuses, both without asking the model')((s) =>
           Effect.gen(function*() {
@@ -180,7 +185,7 @@ Feature('Routing on a projection of the request instead of the whole of it')
         When('a local ticket is read for routing')('route', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            return yield* withProvider(s.registry.route(ticket('ship it', 'local')), model.model)
+            return yield* withProvider(s.registry.route(ticket({ ask: 'ship it', environment: 'local' })), model.model)
           })),
         Then('the last procedure standing wins by elimination, and the model was never asked')((s) =>
           Effect.gen(function*() {
@@ -202,7 +207,7 @@ Feature('Routing on a projection of the request instead of the whole of it')
         When('a release request is invoked and its routing choice reported')('routed', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            return yield* withProvider(s.registry.invokeWithRoute(ticket('please release this')), model.model)
+            return yield* withProvider(s.registry.invokeWithRoute(ticket({ ask: 'please release this' })), model.model)
           })),
         Then('the choice names the winner, how it won, and the full ranking')(({ routed }) => {
           expect(routed.value).toBe('deployed:production')
@@ -228,12 +233,12 @@ Feature('Routing on a projection of the request instead of the whole of it')
           Effect.gen(function*() {
             const model = yield* CountingModel
             yield* withProvider(
-              s.registry.invoke(ticket('what is this?', 'production', 'diff A')),
+              s.registry.invoke(ticket({ ask: 'what is this?', environment: 'production', evidence: 'diff A' })),
               model.model,
               s.cache,
             )
             return yield* withProvider(
-              s.registry.invoke(ticket('what is this?', 'production', 'diff B')),
+              s.registry.invoke(ticket({ ask: 'what is this?', environment: 'production', evidence: 'diff B' })),
               model.model,
               s.cache,
             )

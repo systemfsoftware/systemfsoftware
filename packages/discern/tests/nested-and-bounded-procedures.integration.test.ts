@@ -56,11 +56,14 @@ const top = Discern.Procedure.registry(Request, [code, lint], { id: 'top-route' 
 
 const nestedModel: AnswerFor = (request) => {
   const asked = Object.keys(request.decisions).at(0) ?? ''
-  return answersFor(
+  return answersFor({
     request,
-    (decision) =>
-      routingAnswer(asked === 'top-route' ? { code: 0.9, lint: 0.1 } : { find: 0.05, review: 0.95 }, decision),
-  )
+    answerOf: (decision) =>
+      routingAnswer({
+        preferences: asked === 'top-route' ? { code: 0.9, lint: 0.1 } : { find: 0.05, review: 0.95 },
+        decision,
+      }),
+  })
 }
 
 const backToRegistry = MutableRef.make<

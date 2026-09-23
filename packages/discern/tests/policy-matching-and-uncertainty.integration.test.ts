@@ -34,13 +34,19 @@ const reviewPolicy = Discern.type(Schema.String).pipe(
 )
 
 const breakingAndRisky: AnswerFor = (request) =>
-  answersFor(request, (decision) =>
-    Match.value(decision).pipe(
-      Match.tag('Classify', () => classifyAnswer('breaking', { none: 0.01, behavioral: 0.09, breaking: 0.9 })),
-      Match.tag('Probability', () => probabilityAnswer(0.91)),
-      Match.tag('Rate', () => rateAnswer(0, {})),
-      Match.exhaustive,
-    ))
+  answersFor({
+    request,
+    answerOf: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag(
+          'Classify',
+          () => classifyAnswer({ label: 'breaking', probabilities: { none: 0.01, behavioral: 0.09, breaking: 0.9 } }),
+        ),
+        Match.tag('Probability', () => probabilityAnswer(0.91)),
+        Match.tag('Rate', () => rateAnswer({ rating: 0, probabilities: {} })),
+        Match.exhaustive,
+      ),
+  })
 
 const changeImpact = Change.classify({
   id: 'impact',
@@ -94,7 +100,10 @@ const triage = Discern.type(Schema.String).pipe(
 )
 
 const moderateSeverity: AnswerFor = (request) =>
-  answersFor(request, () => rateAnswer(2, { trivial: 0, minor: 0, major: 1, critical: 0 }))
+  answersFor({
+    request,
+    answerOf: () => rateAnswer({ rating: 2, probabilities: { trivial: 0, minor: 0, major: 1, critical: 0 } }),
+  })
 
 const collidingBefore = Change.probability({ id: 'risk', instructions: 'Risky' })
 const collidingAfter = Change.probability({ id: 'risk', instructions: 'Something else entirely' })
@@ -215,11 +224,14 @@ Feature('Reviewing changes with semantic policies')
     scenario(
       'A change is dispatched by the verdict the model returned',
       {
-        scenarioLayer: answering(classificationEverywhere('behavioral', {
-          none: 0.05,
-          additive: 0.1,
-          behavioral: 0.8,
-          breaking: 0.05,
+        scenarioLayer: answering(classificationEverywhere({
+          label: 'behavioral',
+          probabilities: {
+            none: 0.05,
+            additive: 0.1,
+            behavioral: 0.8,
+            breaking: 0.05,
+          },
         })),
       },
       Gherkin.Do.pipe(

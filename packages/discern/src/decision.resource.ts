@@ -11,14 +11,15 @@
  */
 import { Array as Arr, Match, Schema } from 'effect'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import * as Decision from 'effect/unstable/ai/Decision'
 import * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { decisionFingerprint } from './decision-model.resource.js'
+import { decisionFingerprint, hash } from './decision-model.resource.js'
 import { InvalidThresholdError } from './DiscernError.schema.js'
 import type { Answers, DecisionNode, LeafOptions, NodeCore, Pattern, Top } from './pattern.resource.js'
-import { leafId, matched, missed, semanticLeaf, uncertain } from './pattern.resource.js'
+import { matched, missed, semanticLeaf, uncertain } from './pattern.resource.js'
 import type { PatternResult } from './Verdict.schema.js'
 
 /** Any Effect decision kind. */
@@ -78,12 +79,21 @@ const answerCheckOf = <D extends AnyDecision>(decision: D): AnswerGuard<D> => {
 }
 
 /** Recover one node's own typed answer from a batch, or nothing. */
-export const answerReaderOf = <D extends AnyDecision>(decisionId: string, decision: D): AnswerReader<D> => {
+const answerReaderOf = <D extends AnyDecision>(decisionId: string, decision: D): AnswerReader<D> => {
   const isAnswer = answerCheckOf(decision)
   return (answers) => Option.filter(Option.fromNullishOr(answers[decisionId]), isAnswer)
 }
 
 const missingAnswer = (decisionId: string): PatternResult => uncertain(`no answer for decision "${decisionId}"`)
+
+const leafDescriptionOf = (description: string | undefined): string => description ?? 'custom'
+
+const derivedLeafId = (node: NodeCore, description: string | undefined): string =>
+  `p_${hash({ node: node.id, description: leafDescriptionOf(description) })}`
+
+/** The leaf id for a node interpretation, stable per node id and description. */
+const leafId = (explicit: string | undefined, node: NodeCore, description: string | undefined): string =>
+  explicit ?? derivedLeafId(node, description)
 
 const whereLeaf = <Input, D extends AnyDecision>(
   node: NodeCore,
@@ -93,16 +103,15 @@ const whereLeaf = <Input, D extends AnyDecision>(
   options?: LeafOptions,
 ): Pattern<Input> => {
   const opts: LeafOptions = options ?? {}
-  return semanticLeaf<Input>(
-    node,
-    leafId(opts.id, node, opts.description),
-    opts.description,
-    (answers) =>
+  return semanticLeaf<Input>(node, {
+    id: leafId(opts.id, node, opts.description),
+    description: opts.description,
+    resolve: (answers) =>
       Option.match(readAnswer(answers), {
         onNone: () => missingAnswer(decisionId),
         onSome: resolve,
       }),
-  )
+  })
 }
 
 /** Options for wrapping a decision without an input schema. */
@@ -137,10 +146,16 @@ const makeDecisionNode = <Input, D extends AnyDecision, S extends Schema.Constra
 }
 
 /** Wrap an Effect Decision. Supply a schema to make it executable on its own. */
-export const decision = <D extends AnyDecision>(value: D, options?: DecisionOptions): DecisionNode<Top, D> => {
-  const opts: DecisionOptions = options ?? {}
-  return makeDecisionNode<Top, D, undefined>(value, undefined, opts.id)
-}
+export const decision: {
+  <D extends AnyDecision>(options?: DecisionOptions): (value: D) => DecisionNode<Top, D>
+  <D extends AnyDecision>(value: D, options?: DecisionOptions): DecisionNode<Top, D>
+} = dual(
+  (args: IArguments) => 'instructions' in args[0],
+  <D extends AnyDecision>(value: D, options?: DecisionOptions): DecisionNode<Top, D> => {
+    const opts: DecisionOptions = options ?? {}
+    return makeDecisionNode<Top, D, undefined>(value, undefined, opts.id)
+  },
+)
 
 // -------------------------------------------------------------------------------------------------
 // Classification
@@ -520,17 +535,30 @@ const decisionRecordOf = (nodes: ReadonlyArray<NodeCore>): Record<string, Decisi
  * Deterministic work that a pattern's structure already settled needs no
  * observation at all, so an empty batch answers without reaching a model.
  */
-export const observe = <S extends Schema.Constraint>(
-  schema: S,
-  nodes: ReadonlyArray<NodeCore>,
-  input: S['Type'],
-): Effect.Effect<Answers, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> => {
-  if (nodes.length === 0) return Effect.succeed({})
-  return Effect.map(
-    DecisionModel.decide(Decision.make({ input: schema, decisions: decisionRecordOf(nodes) }), { input }),
-    (response) => response.answers,
-  )
-}
+export const observe: {
+  <S extends Schema.Constraint>(
+    nodes: ReadonlyArray<NodeCore>,
+    input: S['Type'],
+  ): (schema: S) => Effect.Effect<Answers, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+  <S extends Schema.Constraint>(
+    schema: S,
+    nodes: ReadonlyArray<NodeCore>,
+    input: S['Type'],
+  ): Effect.Effect<Answers, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+} = dual(
+  3,
+  <S extends Schema.Constraint>(
+    schema: S,
+    nodes: ReadonlyArray<NodeCore>,
+    input: S['Type'],
+  ): Effect.Effect<Answers, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> => {
+    if (nodes.length === 0) return Effect.succeed({})
+    return Effect.map(
+      DecisionModel.decide(Decision.make({ input: schema, decisions: decisionRecordOf(nodes) }), { input }),
+      (response) => response.answers,
+    )
+  },
+)
 
 /**
  * Ask one schema-scoped decision about one input, outside any matcher.
@@ -539,11 +567,24 @@ export const observe = <S extends Schema.Constraint>(
  * over a distribution, for instance. Only nodes created through
  * {@link on} carry a schema, so the type refuses unscoped decisions.
  */
-export const ask = <D extends AnyDecision, S extends Schema.Constraint>(
-  node: DecisionNode<S['Type'], D, S>,
-  input: S['Type'],
-): Effect.Effect<Answer<D>, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> =>
-  Effect.map(
-    observe(node.schema, [node], input),
-    (answers) => Option.getOrThrow(answerReaderOf(node.id, node.decision)(answers)),
-  )
+export const ask: {
+  <D extends AnyDecision, S extends Schema.Constraint>(
+    input: S['Type'],
+  ): (
+    node: DecisionNode<S['Type'], D, S>,
+  ) => Effect.Effect<Answer<D>, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+  <D extends AnyDecision, S extends Schema.Constraint>(
+    node: DecisionNode<S['Type'], D, S>,
+    input: S['Type'],
+  ): Effect.Effect<Answer<D>, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+} = dual(
+  2,
+  <D extends AnyDecision, S extends Schema.Constraint>(
+    node: DecisionNode<S['Type'], D, S>,
+    input: S['Type'],
+  ): Effect.Effect<Answer<D>, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> =>
+    Effect.map(
+      observe(node.schema, [node], input),
+      (answers) => Option.getOrThrow(answerReaderOf(node.id, node.decision)(answers)),
+    ),
+)

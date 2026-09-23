@@ -9,6 +9,7 @@
  */
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Order, Result, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { observe } from './decision.resource.js'
@@ -189,15 +190,30 @@ const measureCaseOf = <S extends Schema.Constraint>(
 }
 
 /** Evaluate one semantic pattern over labeled examples. */
-export const run = <S extends Schema.Constraint>(
-  schema: S,
-  pattern: Pattern<S['Type']>,
-  examples: ReadonlyArray<EvalExample<S['Type']>>,
-): Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> =>
-  Effect.map(
-    Effect.forEach(examples, (example) => measureOf(measureCaseOf(schema, pattern, example))),
-    (records) => new EvalReport({ metrics: metricsOf(records), records }),
-  )
+export const run: {
+  <S extends Schema.Constraint>(
+    pattern: Pattern<S['Type']>,
+    examples: ReadonlyArray<EvalExample<S['Type']>>,
+  ): (
+    schema: S,
+  ) => Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+  <S extends Schema.Constraint>(
+    schema: S,
+    pattern: Pattern<S['Type']>,
+    examples: ReadonlyArray<EvalExample<S['Type']>>,
+  ): Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']>
+} = dual(
+  3,
+  <S extends Schema.Constraint>(
+    schema: S,
+    pattern: Pattern<S['Type']>,
+    examples: ReadonlyArray<EvalExample<S['Type']>>,
+  ): Effect.Effect<EvalReport, AiError.AiError, DecisionModel.DecisionModel | S['EncodingServices']> =>
+    Effect.map(
+      Effect.forEach(examples, (example) => measureOf(measureCaseOf(schema, pattern, example))),
+      (records) => new EvalReport({ metrics: metricsOf(records), records }),
+    ),
+)
 
 /** Options for a threshold sweep: one pattern per candidate value over shared examples. */
 export interface SweepOptions<S extends Schema.Constraint, V> {

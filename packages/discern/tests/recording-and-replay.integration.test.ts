@@ -52,7 +52,7 @@ const secondPolicy = Discern.type(Schema.String).pipe(
 )
 
 const riskyForSourceFiles: AnswerFor = (request) =>
-  answersFor(request, () => probabilityAnswer(request.state === 'risky.ts' ? 0.95 : 0.05))
+  answersFor({ request, answerOf: () => probabilityAnswer(request.state === 'risky.ts' ? 0.95 : 0.05) })
 
 Feature('Recording what the model said and replaying it later')
   .withScenarioLayer(answering(probabilityEverywhere(0.95)))

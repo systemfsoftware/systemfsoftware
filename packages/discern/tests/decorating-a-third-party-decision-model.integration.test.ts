@@ -29,7 +29,7 @@ const thirdPartyModel = (): ThirdPartyModel => {
         Effect.sync(() => {
           MutableRef.set(calls, MutableRef.get(calls) + 1)
           return {
-            answers: answersFor(request, () => probabilityAnswer(0.95)),
+            answers: answersFor({ request, answerOf: () => probabilityAnswer(0.95) }),
             usage: { inputTokens: 7, outputTokens: 3 },
           }
         }),

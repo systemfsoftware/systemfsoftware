@@ -66,10 +66,16 @@ export const type = <S extends Schema.Constraint>(schema: S): Matcher<S['Type'],
   matcherOf(schema, 'type', Option.none())
 
 /** Start matching one value immediately, analogous to Effect Match.value. */
-export const value = <S extends Schema.Constraint>(
-  schema: S,
-  input: S['Type'],
-): Matcher<S['Type'], S, never, never, never, 'value'> => matcherOf(schema, 'value', Option.some(input))
+export const value: {
+  <S extends Schema.Constraint>(input: S['Type']): (schema: S) => Matcher<S['Type'], S, never, never, never, 'value'>
+  <S extends Schema.Constraint>(schema: S, input: S['Type']): Matcher<S['Type'], S, never, never, never, 'value'>
+} = dual(
+  2,
+  <S extends Schema.Constraint>(
+    schema: S,
+    input: S['Type'],
+  ): Matcher<S['Type'], S, never, never, never, 'value'> => matcherOf(schema, 'value', Option.some(input)),
+)
 
 const matcherOf = <I, S extends Schema.Constraint, Flavor extends MatcherFlavor>(
   schema: S,
@@ -127,39 +133,44 @@ export const when: {
     Flavor
   >
   <
-    I extends PatternInput,
-    S extends Schema.Constraint,
-    Out,
-    Err,
-    Req,
-    Flavor extends MatcherFlavor,
     PatternInput,
     H extends (input: PatternInput) => HandlerResult<Top, Top, Top>,
-  >(
-    self: Matcher<I, S, Out, Err, Req, Flavor>,
-    pattern: Pattern<PatternInput>,
-    handler: H,
-    options: LeafOptions,
-  ): Matcher<I, S, Out | HandlerValue<H>, Err | HandlerError<H>, Req | HandlerServices<H>, Flavor>
-} = dual(
-  4,
-  <
-    I extends PatternInput,
     S extends Schema.Constraint,
     Out,
     Err,
     Req,
     Flavor extends MatcherFlavor,
+  >(
+    self: Matcher<PatternInput, S, Out, Err, Req, Flavor>,
+    pattern: Pattern<PatternInput>,
+    handler: H,
+    options?: LeafOptions,
+  ): Matcher<
     PatternInput,
+    S,
+    Out | HandlerValue<H>,
+    Err | HandlerError<H>,
+    Req | HandlerServices<H>,
+    Flavor
+  >
+} = dual(
+  (args: IArguments) => MatcherTypeId in args[0],
+  <
+    PatternInput,
+    S extends Schema.Constraint,
+    Out,
+    Err,
+    Req,
+    Flavor extends MatcherFlavor,
     Value,
     Err2,
     Req2,
   >(
-    self: Matcher<I, S, Out, Err, Req, Flavor>,
+    self: Matcher<PatternInput, S, Out, Err, Req, Flavor>,
     pattern: Pattern<PatternInput>,
     handler: (input: PatternInput) => HandlerResult<Value, Err2, Req2>,
     options?: LeafOptions,
-  ): Matcher<I, S, Out | Value, Err | Err2, Req | Req2, Flavor> => addCase(self, pattern, handler, options),
+  ): Matcher<PatternInput, S, Out | Value, Err | Err2, Req | Req2, Flavor> => addCase(self, pattern, handler, options),
 )
 
 /** Handle uncertainty from the first higher-priority case that cannot be resolved confidently. */
@@ -169,16 +180,24 @@ export const onUncertain: {
   ): <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor>(
     self: Matcher<Input, S, Out, Err, Req, Flavor>,
   ) => Matcher<Input, S, Out | HandlerValue<H>, Err | HandlerError<H>, Req | HandlerServices<H>, Flavor>
-  <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
-    self: Matcher<S['Type'], S, Out, Err, Req, Flavor>,
-    handler: (input: S['Type'], context: UncertainContext) => HandlerResult<Value, Err2, Req2>,
-  ): Matcher<S['Type'], S, Out | Value, Err | Err2, Req | Req2, Flavor>
+  <
+    Input,
+    H extends (input: Input, context: UncertainContext) => HandlerResult<Top, Top, Top>,
+    S extends Schema.Constraint,
+    Out,
+    Err,
+    Req,
+    Flavor extends MatcherFlavor,
+  >(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+    handler: H,
+  ): Matcher<Input, S, Out | HandlerValue<H>, Err | HandlerError<H>, Req | HandlerServices<H>, Flavor>
 } = dual(
   2,
-  <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
-    self: Matcher<S['Type'], S, Out, Err, Req, Flavor>,
-    handler: (input: S['Type'], context: UncertainContext) => HandlerResult<Value, Err2, Req2>,
-  ): Matcher<S['Type'], S, Out | Value, Err | Err2, Req | Req2, Flavor> => ({
+  <Input, S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+    handler: (input: Input, context: UncertainContext) => HandlerResult<Value, Err2, Req2>,
+  ): Matcher<Input, S, Out | Value, Err | Err2, Req | Req2, Flavor> => ({
     ...self,
     uncertainHandler: handler,
   }),
@@ -270,10 +289,10 @@ export type FinishedMatcher<I, S extends Schema.Constraint, Out, Err, Req, Flavo
       Req | DecisionModel.DecisionModel | S['EncodingServices']
     >
 
-const specOf = <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
-  self: Matcher<S['Type'], S, Out, Err, Req, Flavor>,
-  fallback: (input: S['Type']) => HandlerResult<Value, Err2, Req2>,
-): PolicySpec<S['Type'], S, Out | Value, Err | Err2, Req | Req2> => ({
+const specOf = <Input, S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
+  self: Matcher<Input, S, Out, Err, Req, Flavor>,
+  fallback: (input: Input) => HandlerResult<Value, Err2, Req2>,
+): PolicySpec<Input, S, Out | Value, Err | Err2, Req | Req2> => ({
   schema: self.schema,
   cases: self.cases,
   uncertainHandler: self.uncertainHandler,
@@ -288,21 +307,23 @@ export const orElse: {
   ): <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor>(
     self: Matcher<Input, S, Out, Err, Req, Flavor>,
   ) => FinishedMatcher<Input, S, Out | HandlerValue<H>, Err | HandlerError<H>, Req | HandlerServices<H>, Flavor>
-  <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
-    self: Matcher<S['Type'], S, Out, Err, Req, Flavor>,
-    fallback: (input: S['Type']) => HandlerResult<Value, Err2, Req2>,
-  ):
-    | Policy<S['Type'], Out | Value, Err | Err2, Req | Req2, S>
-    | Effect.Effect<
-      Out | Value,
-      Err | Err2 | AiError.AiError | UncertainMatchError,
-      Req | Req2 | DecisionModel.DecisionModel | S['EncodingServices']
-    >
+  <
+    Input,
+    H extends (input: Input) => HandlerResult<Top, Top, Top>,
+    S extends Schema.Constraint,
+    Out,
+    Err,
+    Req,
+    Flavor extends MatcherFlavor,
+  >(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+    fallback: H,
+  ): FinishedMatcher<Input, S, Out | HandlerValue<H>, Err | HandlerError<H>, Req | HandlerServices<H>, Flavor>
 } = dual(
   2,
-  <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
-    self: Matcher<S['Type'], S, Out, Err, Req, Flavor>,
-    fallback: (input: S['Type']) => HandlerResult<Value, Err2, Req2>,
+  <Input, S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+    fallback: (input: Input) => HandlerResult<Value, Err2, Req2>,
   ) =>
     Option.match(self.provided, {
       onNone: () => finishPolicy(specOf(self, fallback)),
@@ -313,24 +334,46 @@ export const orElse: {
 export const otherwise = orElse
 
 /** Execute an unfinished matcher explicitly while recording a trace. */
-export const runWithTrace = <
-  S extends Schema.Constraint,
-  Out,
-  Err,
-  Req,
-  Flavor extends MatcherFlavor,
-  Value,
-  Err2,
-  Req2,
->(
-  self: Matcher<S['Type'], S, Out, Err, Req, Flavor>,
-  input: S['Type'],
-  fallback: (input: S['Type']) => HandlerResult<Value, Err2, Req2>,
-): Effect.Effect<
-  PolicyRun<Out | Value>,
-  Err | Err2 | AiError.AiError | UncertainMatchError,
-  Req | Req2 | DecisionModel.DecisionModel | S['EncodingServices']
-> => finishPolicy(specOf(self, fallback)).runWithTrace(input)
+export const runWithTrace: {
+  <Input, H extends (input: Input) => HandlerResult<Top, Top, Top>>(
+    input: Input,
+    fallback: H,
+  ): <S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor>(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+  ) => Effect.Effect<
+    PolicyRun<Out | HandlerValue<H>>,
+    Err | HandlerError<H> | AiError.AiError | UncertainMatchError,
+    Req | HandlerServices<H> | DecisionModel.DecisionModel | S['EncodingServices']
+  >
+  <
+    Input,
+    H extends (input: Input) => HandlerResult<Top, Top, Top>,
+    S extends Schema.Constraint,
+    Out,
+    Err,
+    Req,
+    Flavor extends MatcherFlavor,
+  >(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+    input: Input,
+    fallback: H,
+  ): Effect.Effect<
+    PolicyRun<Out | HandlerValue<H>>,
+    Err | HandlerError<H> | AiError.AiError | UncertainMatchError,
+    Req | HandlerServices<H> | DecisionModel.DecisionModel | S['EncodingServices']
+  >
+} = dual(
+  3,
+  <Input, S extends Schema.Constraint, Out, Err, Req, Flavor extends MatcherFlavor, Value, Err2, Req2>(
+    self: Matcher<Input, S, Out, Err, Req, Flavor>,
+    input: Input,
+    fallback: (input: Input) => HandlerResult<Value, Err2, Req2>,
+  ): Effect.Effect<
+    PolicyRun<Out | Value>,
+    Err | Err2 | AiError.AiError | UncertainMatchError,
+    Req | Req2 | DecisionModel.DecisionModel | S['EncodingServices']
+  > => finishPolicy(specOf(self, fallback)).runWithTrace(input),
+)
 
 // -------------------------------------------------------------------------------------------------
 // Exhaustive classification matching
@@ -377,39 +420,46 @@ export const caseOf: {
     Req | HandlerServices<H>
   >
   <
+    const Label extends string,
+    Input,
+    H extends (input: Input) => HandlerResult<Top, Top, Top>,
     S extends Schema.Constraint,
     All extends string,
     Remaining extends All,
     Out,
     Err,
     Req,
-    Label extends All,
-    Value,
-    Err2,
-    Req2,
   >(
-    self: ClassificationMatcher<S['Type'], S, All, Remaining, Out, Err, Req>,
+    self: [Label] extends [Remaining] ? ClassificationMatcher<Input, S, All, Remaining, Out, Err, Req> : never,
     label: Label,
-    handler: (input: S['Type']) => HandlerResult<Value, Err2, Req2>,
-  ): ClassificationMatcher<S['Type'], S, All, Exclude<Remaining, Label>, Out | Value, Err | Err2, Req | Req2>
+    handler: H,
+  ): ClassificationMatcher<
+    Input,
+    S,
+    All,
+    Exclude<Remaining, Label>,
+    Out | HandlerValue<H>,
+    Err | HandlerError<H>,
+    Req | HandlerServices<H>
+  >
 } = dual(
   3,
   <
+    Input,
     S extends Schema.Constraint,
     All extends string,
     Remaining extends All,
     Out,
     Err,
     Req,
-    Label extends All,
     Value,
     Err2,
     Req2,
   >(
-    self: ClassificationMatcher<S['Type'], S, All, Remaining, Out, Err, Req>,
-    label: Label,
-    handler: (input: S['Type']) => HandlerResult<Value, Err2, Req2>,
-  ): ClassificationMatcher<S['Type'], S, All, Exclude<Remaining, Label>, Out | Value, Err | Err2, Req | Req2> => ({
+    self: ClassificationMatcher<Input, S, All, Remaining, Out, Err, Req>,
+    label: All,
+    handler: (input: Input) => HandlerResult<Value, Err2, Req2>,
+  ): ClassificationMatcher<Input, S, All, Exclude<Remaining, All>, Out | Value, Err | Err2, Req | Req2> => ({
     decision: self.decision,
     matcher: addCase(self.matcher, self.decision.is(label), handler, { id: `case_${label}` }),
     ...Prototype,

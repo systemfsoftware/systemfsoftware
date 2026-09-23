@@ -135,11 +135,17 @@ const isStatus = (status: PatternStatus): (result: PatternResult) => boolean => 
 }
 
 /** Whether a possibly-absent resolution carries the given status. */
-export const statusIs = (resolved: PatternResult | undefined, status: PatternStatus): boolean =>
-  Option.match(Option.fromNullishOr(resolved), {
-    onNone: () => false,
-    onSome: (result) => statusOf(result) === status,
-  })
+export const statusIs: {
+  (status: PatternStatus): (resolved: PatternResult | undefined) => boolean
+  (resolved: PatternResult | undefined, status: PatternStatus): boolean
+} = dual(
+  2,
+  (resolved: PatternResult | undefined, status: PatternStatus): boolean =>
+    Option.match(Option.fromNullishOr(resolved), {
+      onNone: () => false,
+      onSome: (result) => statusOf(result) === status,
+    }),
+)
 
 // -------------------------------------------------------------------------------------------------
 // Previews
@@ -153,7 +159,7 @@ const undecidedOf = (preview: Preview): ReadonlyArray<NodeCore> =>
   preview.resolved === undefined ? preview.decisions : []
 
 /** The verdict a set of previews already resolved to the given status, if any. */
-export const settledOn = (parts: ReadonlyArray<Preview>, status: PatternStatus): Option.Option<PatternResult> =>
+const settledOn = (parts: ReadonlyArray<Preview>, status: PatternStatus): Option.Option<PatternResult> =>
   Option.flatMap(
     Arr.findFirst(parts, (part) => statusIs(part.resolved, status)),
     (part) => Option.fromNullishOr(part.resolved),
@@ -180,7 +186,7 @@ const composedPreview = <Input>(
   const parts = Arr.map(patterns, (pattern) => pattern.preview(input))
   const settled = settledOn(parts, dominant)
   return Match.value(settledKindOf(settled)).pipe(
-    Match.when('settled', () => settledPreview(Option.getOrThrow(settled))),
+    Match.when('settled', () => settled.pipe(Option.getOrThrow, settledPreview)),
     Match.when('open', () =>
       Match.value(unanimousKindOf(unanimousOn(parts, unanimous))).pipe(
         Match.when('unanimous', () => settledPreview(unanimousVerdict)),
@@ -213,37 +219,31 @@ const makePattern = <Input>(parts: {
   ...Prototype,
 })
 
+export interface SemanticLeafOptions {
+  readonly id: string
+  readonly description: string | undefined
+  readonly resolve: (answers: Answers) => PatternResult
+}
+
 /**
  * A semantic leaf over one decision node, resolved by decoding the batch entry
  * through the node's own answer check. `resolve` receives the node's validated
  * answer; a missing or undecodable entry never reaches it.
  */
-export const semanticLeaf = <Input>(
-  node: NodeCore,
-  id: string,
-  description: string | undefined,
-  resolve: (answers: Answers) => PatternResult,
-): Pattern<Input> =>
-  makePattern({
-    id,
-    decisions: [node],
-    ast: { kind: 'Semantic', id, decisionId: node.id, description },
-    evaluate: (_input, answers) => resolve(answers),
-    preview: () => openPreview([node]),
-  })
-
-const leafDescriptionOf = (description: string | undefined): string => description ?? 'custom'
-
-const derivedLeafId = (node: NodeCore, description: string | undefined): string =>
-  `p_${hash({ node: node.id, description: leafDescriptionOf(description) })}`
-
-/** The leaf id for a node interpretation, stable per node id and description. */
-export const leafId = (explicit: string | undefined, node: NodeCore, description: string | undefined): string =>
-  explicit ?? derivedLeafId(node, description)
-
-// -------------------------------------------------------------------------------------------------
-// Decision-node collection
-// -------------------------------------------------------------------------------------------------
+export const semanticLeaf: {
+  <Input>(options: SemanticLeafOptions): (node: NodeCore) => Pattern<Input>
+  <Input>(node: NodeCore, options: SemanticLeafOptions): Pattern<Input>
+} = dual(
+  2,
+  <Input>(node: NodeCore, options: SemanticLeafOptions): Pattern<Input> =>
+    makePattern({
+      id: options.id,
+      decisions: [node],
+      ast: { kind: 'Semantic', id: options.id, decisionId: node.id, description: options.description },
+      evaluate: (_input, answers) => options.resolve(answers),
+      preview: () => openPreview([node]),
+    }),
+)
 
 const keepDistinct = (previous: NodeCore, node: NodeCore): NodeCore =>
   previous.fingerprint === node.fingerprint ? previous : collide(node.id)
@@ -349,17 +349,23 @@ const guardIdOf = (opts: LeafOptions, guard: (input: never) => boolean): string 
   opts.id ?? `guard_${hash(guardDescriptionOf(guard, opts.description))}`
 
 /** A deterministic predicate that composes with semantic patterns and costs no model call. */
-export const deterministic = <Input>(guard: (input: Input) => boolean, options?: LeafOptions): Pattern<Input> => {
-  const opts: LeafOptions = options ?? {}
-  const id = guardIdOf(opts, guard)
-  return makePattern({
-    id,
-    decisions: [],
-    ast: { kind: 'Deterministic', id, description: opts.description },
-    evaluate: (input) => (guard(input) ? matched() : missed()),
-    preview: (input) => settledPreview(guard(input) ? matched() : missed()),
-  })
-}
+export const deterministic: {
+  <Input>(options?: LeafOptions): (guard: (input: Input) => boolean) => Pattern<Input>
+  <Input>(guard: (input: Input) => boolean, options?: LeafOptions): Pattern<Input>
+} = dual(
+  (args: IArguments) => typeof args[0] === 'function',
+  <Input>(guard: (input: Input) => boolean, options?: LeafOptions): Pattern<Input> => {
+    const opts: LeafOptions = options ?? {}
+    const id = guardIdOf(opts, guard)
+    return makePattern({
+      id,
+      decisions: [],
+      ast: { kind: 'Deterministic', id, description: opts.description },
+      evaluate: (input) => (guard(input) ? matched() : missed()),
+      preview: (input) => settledPreview(guard(input) ? matched() : missed()),
+    })
+  },
+)
 
 /** Aliases that read naturally next to Effect `Predicate` and `Match` terminology. */
 export const predicate = deterministic

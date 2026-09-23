@@ -60,7 +60,10 @@ const reviewProgram = (change: string) =>
   })
 
 const byUrgency: AnswerFor = (request) =>
-  answersFor(request, (decision) => probabilityAnswer(decision.instructions === 'Risky' ? 0.95 : 0.1))
+  answersFor({
+    request,
+    answerOf: (decision) => probabilityAnswer(decision.instructions === 'Risky' ? 0.95 : 0.1),
+  })
 
 const offersIn = (criteria: { readonly safe: string; readonly breaking: string }) =>
   Discern.on(Schema.String).classify({ id: 'impact', instructions: 'Classify', criteria })
@@ -233,7 +236,11 @@ Feature('Reusing answers without paying twice')
 
     scenario(
       'A question whose answers are offered in a new order is asked again',
-      { scenarioLayer: answering(classificationEverywhere('safe', { safe: 0.9, breaking: 0.1 })) },
+      {
+        scenarioLayer: answering(
+          classificationEverywhere({ label: 'safe', probabilities: { safe: 0.9, breaking: 0.1 } }),
+        ),
+      },
       Gherkin.Do.pipe(
         Given('the same question with its answers declared in two orders')('policies', () =>
           Effect.succeed({

@@ -1,6 +1,7 @@
 import { Match, Schema } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -157,7 +158,7 @@ export const decisionFingerprint = (decision: Decision.Any): string =>
  * single store hold observations from many matchers, and from the same decision
  * asked about different inputs, without collisions.
  */
-export const observationAddress = (decision: Decision.Any, state: Schema.Json): string =>
+const observationAddress = (decision: Decision.Any, state: Schema.Json): string =>
   `o_${digestOf(`${canonicalOf(decisionHashable(decision), false)}|${canonicalOf(state, true)}`)}`
 
 export interface ObservationSplit {
@@ -290,29 +291,32 @@ const policyOf = (options: ReplayOptions): 'fail' | 'ask' => options.onMissing ?
 const onMissingOf = (options: ReplayOptions | undefined): 'fail' | 'ask' =>
   options === undefined ? 'fail' : policyOf(options)
 
-export const replaying = (
-  source: Observations | ObservationStore,
-  options?: ReplayOptions,
-): Interceptor => {
-  const lookup = asStore(source)
-  const onMissing = onMissingOf(options)
-  return (inner) =>
-    provider((request) =>
-      replayObservations
-        .run({
-          options: request,
-          inner,
-          split: splitObservations(request.decisions, request.state, lookup),
-          onMissing,
-        })
-        .pipe(
-          Effect.catchTags({
-            RecordingMissing: (refusal) => Effect.fail(replayMissFailure(refusal)),
-            InvalidRequestError: (reason) => Effect.fail(commandRejectedFailure(reason)),
-          }),
-        )
-    )
-}
+export const replaying: {
+  (options?: ReplayOptions): (source: Observations | ObservationStore) => Interceptor
+  (source: Observations | ObservationStore, options?: ReplayOptions): Interceptor
+} = dual(
+  (args: IArguments) => 'entries' in args[0] || 'get' in args[0],
+  (source: Observations | ObservationStore, options?: ReplayOptions): Interceptor => {
+    const lookup = asStore(source)
+    const onMissing = onMissingOf(options)
+    return (inner) =>
+      provider((request) =>
+        replayObservations
+          .run({
+            options: request,
+            inner,
+            split: splitObservations(request.decisions, request.state, lookup),
+            onMissing,
+          })
+          .pipe(
+            Effect.catchTags({
+              RecordingMissing: (refusal) => Effect.fail(replayMissFailure(refusal)),
+              InvalidRequestError: (reason) => commandRejectedFailure(reason).pipe(Effect.fail),
+            }),
+          )
+      )
+  },
+)
 
 /**
  * Reuse observations across runs, asking the model only for decisions that are
@@ -331,7 +335,7 @@ export const caching = (into: ObservationStore): Interceptor => (inner) =>
       .pipe(
         Effect.catchTags({
           RecordingMissing: (refusal) => Effect.fail(cacheFailure(refusal)),
-          InvalidRequestError: (reason) => Effect.fail(commandRejectedFailure(reason)),
+          InvalidRequestError: (reason) => commandRejectedFailure(reason).pipe(Effect.fail),
         }),
       )
   )
@@ -345,7 +349,7 @@ export const budgeted = (limit: Budget): Interceptor => (inner) =>
     chargeBudgetCall.run({ options: request, inner, budget: limit }).pipe(
       Effect.catchTags({
         BudgetExhausted: (refusal) => Effect.fail(budgetExceededFailure(refusal)),
-        InvalidRequestError: (reason) => Effect.fail(commandRejectedFailure(reason)),
+        InvalidRequestError: (reason) => commandRejectedFailure(reason).pipe(Effect.fail),
       }),
     )
   )
@@ -436,10 +440,14 @@ export const intercept =
       )
 
 /** Build a `DecisionModel` layer from a provider and an interceptor stack. */
-export const layer = (
-  source: Provider,
-  interceptors: ReadonlyArray<Interceptor> = [],
-): Layer.Layer<DecisionModel.DecisionModel> => fromProvider(decorate(interceptors, source))
+export const layer: {
+  (interceptors?: ReadonlyArray<Interceptor>): (source: Provider) => Layer.Layer<DecisionModel.DecisionModel>
+  (source: Provider, interceptors?: ReadonlyArray<Interceptor>): Layer.Layer<DecisionModel.DecisionModel>
+} = dual(
+  (args: IArguments) => !Array.isArray(args[0]),
+  (source: Provider, interceptors?: ReadonlyArray<Interceptor>): Layer.Layer<DecisionModel.DecisionModel> =>
+    fromProvider(decorate(interceptors ?? [], source)),
+)
 
 /** A layer that answers only from recorded observations and never reaches a model. */
 export const replayLayer = (source: Observations | ObservationStore): Layer.Layer<DecisionModel.DecisionModel> =>
@@ -494,10 +502,16 @@ const frozenOf = (node: Branch): RegionTree => ({
  * Arrange a recording as the tree of regions it happened in. Observations made
  * outside any `discern.model.region` land at the root.
  */
-export const tree = (source: Observations, rootName = ''): RegionTree => {
-  const root = branchOf(rootName)
-  Object.values(source.entries).forEach((observation) => {
-    branchAt(root, observation.region).observations.push(observation)
-  })
-  return frozenOf(root)
-}
+export const tree: {
+  (rootName?: string): (source: Observations) => RegionTree
+  (source: Observations, rootName?: string): RegionTree
+} = dual(
+  (args: IArguments) => typeof args[0] !== 'string',
+  (source: Observations, rootName?: string): RegionTree => {
+    const root = branchOf(rootName ?? '')
+    Object.values(source.entries).forEach((observation) => {
+      branchAt(root, observation.region).observations.push(observation)
+    })
+    return frozenOf(root)
+  },
+)

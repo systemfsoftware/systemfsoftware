@@ -72,12 +72,12 @@ export const make = <const Id extends string, S extends Schema.Constraint, Out, 
   ...Prototype,
 })
 
-export const fromEffect = <const Id extends string, S extends Schema.Constraint, Out, Err, Req>(
-  id: Id,
-  description: string,
-  input: S,
-  run: (input: S['Type']) => Effect.Effect<Out, Err, Req>,
-): Procedure<Id, S['Type'], Out, Err, Req, S> => make({ id, description, input, run })
+export const fromEffect = <const Id extends string, S extends Schema.Constraint, Out, Err, Req>(options: {
+  readonly id: Id
+  readonly description: string
+  readonly input: S
+  readonly run: (input: S['Type']) => Effect.Effect<Out, Err, Req>
+}): Procedure<Id, S['Type'], Out, Err, Req, S> => make(options)
 
 export interface InvokeOptions<
   Input,

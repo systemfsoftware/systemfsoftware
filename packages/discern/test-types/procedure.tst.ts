@@ -49,7 +49,7 @@ const envelopes = Discern.Procedure.registry(Envelope, [readIt, countIt], {
 const numeric = Discern.Procedure.make({
   id: 'numeric',
   description: 'Takes a number',
-  input: Schema.Number,
+  input: Schema.Finite,
   run: (value: number) => Effect.succeed(value),
 })
 

@@ -41,21 +41,23 @@ const leaderOf = (probabilities: Readonly<Record<string, number>>, labels: Reado
     (best, candidate) => ((probabilities[candidate] ?? 0) > (probabilities[best] ?? 0) ? candidate : best),
   )
 
-export const routingAnswer = (
-  preferences: RoutingPreferences,
-  decision: Discern.AnyDecision,
-): DecisionModel.ProviderAnswer =>
+interface RoutingAnswerOptions {
+  readonly preferences: RoutingPreferences
+  readonly decision: Discern.AnyDecision
+}
+
+export const routingAnswer = ({ preferences, decision }: RoutingAnswerOptions): DecisionModel.ProviderAnswer =>
   Match.value(decision).pipe(
     Match.tag('Classify', (classified) => {
       const labels = Object.keys(classified.criteria)
       const probabilities = probabilitiesFor(preferences, labels)
-      return classifyAnswer(leaderOf(probabilities, labels), probabilities)
+      return classifyAnswer({ label: leaderOf(probabilities, labels), probabilities })
     }),
     Match.orElse(() => probabilityAnswer(0.9)),
   )
 
 export const routingTo = (preferences: RoutingPreferences): AnswerFor => (request) =>
-  answersFor(request, (decision) => routingAnswer(preferences, decision))
+  answersFor({ request, answerOf: (decision) => routingAnswer({ preferences, decision }) })
 
 const labelsIn = (request: DecisionModel.ProviderOptions): ReadonlyArray<string> =>
   Arr.flatten(
@@ -84,7 +86,7 @@ export const watchingRouting = (
       const recorded: AnswerFor = (request) => {
         MutableRef.set(states, [...MutableRef.get(states), request.state])
         MutableRef.set(offered, [...MutableRef.get(offered), labelsIn(request)])
-        return answersFor(request, (decision) => routingAnswer(preferences, decision))
+        return answersFor({ request, answerOf: (decision) => routingAnswer({ preferences, decision }) })
       }
       return Layer.merge(
         answering(recorded),

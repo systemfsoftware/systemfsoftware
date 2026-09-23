@@ -8,7 +8,15 @@ export const ReleaseTicket = Schema.Struct({
 
 export type ReleaseTicket = typeof ReleaseTicket.Type
 
-export const ticket = (ask: string, environment = 'production', evidence = 'a very large blob'): ReleaseTicket => ({
+interface TicketOptions {
+  readonly ask: string
+  readonly environment?: string
+  readonly evidence?: string
+}
+
+export const ticket = (
+  { ask, environment = 'production', evidence = 'a very large blob' }: TicketOptions,
+): ReleaseTicket => ({
   ask,
   environment,
   evidence,

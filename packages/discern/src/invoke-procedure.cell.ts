@@ -1,5 +1,6 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Option, Order, Ordering, Result } from 'effect'
+import { dual } from 'effect/Function'
 import * as AiError from 'effect/unstable/ai/AiError'
 import { CurrentDepth, MaxDepth } from './procedure-depth.service.js'
 import { type FallbackInvocation, handlerEffectOf, type InvokeOptions } from './procedure.resource.js'
@@ -161,143 +162,238 @@ const prepareRouting = <Input, Projected, R>(
  * duration metric belong to the name, so per-call construction shares them
  * with every other invocation.
  */
-export const invokeProcedure = <Input, Projected, Value, Failure, Requirements, R>(
-  options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
-  request: InvokeRequest<Input>,
-): Effect.Effect<
-  { readonly route: Route; readonly value: Value },
-  | Failure
-  | AiError.AiError
-  | AiError.InvalidRequestError
-  | NoEligibleProcedureError
-  | DepthExceededError
-  | RoutingUncertainError,
-  R | Requirements
-> => {
-  const readInvoke = (invocation: InvokeRequest<Input>) =>
-    Effect.gen(function*() {
-      const limit = yield* MaxDepth.useSync((value) => value)
-      const depth = yield* CurrentDepth.useSync((value) => value)
-      if (depth >= limit) {
-        return yield* new DepthExceededError({ depth, limit })
-      }
-      return yield* Effect.map(
-        prepareRouting(options, invocation.input, thresholdsOf(invocation.options.routing)),
-        (question) => ({
-          _tag: 'SelectRoute' as const,
-          eligibility: question.eligibility,
-          minProbability: question.thresholds.minProbability,
-          minMargin: question.thresholds.minMargin,
-          input: invocation.input,
-          options: invocation.options,
-        }),
-      )
-    })
+export const invokeProcedure: {
+  <Input, Projected, Value, Failure, Requirements, R>(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+  ): (
+    request: InvokeRequest<Input>,
+  ) => Effect.Effect<
+    { readonly route: Route; readonly value: Value },
+    | Failure
+    | AiError.AiError
+    | AiError.InvalidRequestError
+    | NoEligibleProcedureError
+    | DepthExceededError
+    | RoutingUncertainError,
+    R | Requirements
+  >
+  <Input, Projected, Value, Failure, Requirements, R>(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    request: InvokeRequest<Input>,
+  ): Effect.Effect<
+    { readonly route: Route; readonly value: Value },
+    | Failure
+    | AiError.AiError
+    | AiError.InvalidRequestError
+    | NoEligibleProcedureError
+    | DepthExceededError
+    | RoutingUncertainError,
+    R | Requirements
+  >
+} = dual(
+  2,
+  <Input, Projected, Value, Failure, Requirements, R>(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    request: InvokeRequest<Input>,
+  ): Effect.Effect<
+    { readonly route: Route; readonly value: Value },
+    | Failure
+    | AiError.AiError
+    | AiError.InvalidRequestError
+    | NoEligibleProcedureError
+    | DepthExceededError
+    | RoutingUncertainError,
+    R | Requirements
+  > => {
+    const readInvoke = (invocation: InvokeRequest<Input>) =>
+      Effect.gen(function*() {
+        const limit = yield* MaxDepth.useSync((value) => value)
+        const depth = yield* CurrentDepth.useSync((value) => value)
+        if (depth >= limit) {
+          return yield* new DepthExceededError({ depth, limit })
+        }
+        return yield* Effect.map(
+          prepareRouting(options, invocation.input, thresholdsOf(invocation.options.routing)),
+          (question) => ({
+            _tag: 'SelectRoute' as const,
+            eligibility: question.eligibility,
+            minProbability: question.thresholds.minProbability,
+            minMargin: question.thresholds.minMargin,
+            input: invocation.input,
+            options: invocation.options,
+          }),
+        )
+      })
 
-  return Sandwich.named('discern.procedure.invoke')(readInvoke)
-    .decide(selectRoute)
-    .write({
-      RouteMatched: (matched, read) =>
-        Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
-          Effect.map(
-            Effect.provideService(options.runMember(matched.id, read.input), CurrentDepth, depth + 1),
-            (value) => ({ route: new RouteMatched(matched), value }),
-          )),
-      RouteUncertain: (uncertain) =>
-        Effect.fail(new RoutingUncertainError({ reason: uncertain.reason, ranked: uncertain.ranked })),
-      RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
-      CommandRejected: (rejected) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
-    })
-    .run(request)
-}
+    return Sandwich.named('discern.procedure.invoke')(readInvoke)
+      .decide(selectRoute)
+      .write({
+        RouteMatched: (matched, read) =>
+          Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
+            Effect.map(
+              Effect.provideService(options.runMember(matched.id, read.input), CurrentDepth, depth + 1),
+              (value) => ({ route: new RouteMatched(matched), value }),
+            )),
+        RouteUncertain: (uncertain) =>
+          Effect.fail(new RoutingUncertainError({ reason: uncertain.reason, ranked: uncertain.ranked })),
+        RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
+        CommandRejected: (rejected) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
+      })
+      .run(request)
+  },
+)
 
 /**
  * The same shell for a caller that installed an `onUncertain` handler: the
  * handler's answer — a value or an Effect — becomes the invocation's value, so
  * the routing refusal never fires.
  */
-export const invokeProcedureWithFallback = <
-  Input,
-  Projected,
-  Value,
-  Failure,
-  Requirements,
-  R,
-  FallbackValue,
-  FallbackError = never,
-  FallbackServices = never,
->(
-  options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
-  request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
-): Effect.Effect<
-  { readonly route: Route; readonly value: Value | FallbackValue },
-  | Failure
-  | FallbackError
-  | AiError.AiError
-  | AiError.InvalidRequestError
-  | NoEligibleProcedureError
-  | DepthExceededError,
-  R | Requirements | FallbackServices
-> => {
-  const readInvoke = (
-    invocation: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
-  ) =>
-    Effect.gen(function*() {
-      const limit = yield* MaxDepth.useSync((value) => value)
-      const depth = yield* CurrentDepth.useSync((value) => value)
-      if (depth >= limit) {
-        return yield* new DepthExceededError({ depth, limit })
-      }
-      return yield* Effect.map(
-        prepareRouting(options, invocation.input, thresholdsOf(invocation.options.routing)),
-        (question) => ({
-          _tag: 'SelectRoute' as const,
-          eligibility: question.eligibility,
-          minProbability: question.thresholds.minProbability,
-          minMargin: question.thresholds.minMargin,
-          input: invocation.input,
-          options: invocation.options,
-        }),
-      )
-    })
+export const invokeProcedureWithFallback: {
+  <
+    Input,
+    Projected,
+    Value,
+    Failure,
+    Requirements,
+    R,
+    FallbackValue,
+    FallbackError = never,
+    FallbackServices = never,
+  >(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+  ): (
+    request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
+  ) => Effect.Effect<
+    { readonly route: Route; readonly value: Value | FallbackValue },
+    | Failure
+    | FallbackError
+    | AiError.AiError
+    | AiError.InvalidRequestError
+    | NoEligibleProcedureError
+    | DepthExceededError,
+    R | Requirements | FallbackServices
+  >
+  <
+    Input,
+    Projected,
+    Value,
+    Failure,
+    Requirements,
+    R,
+    FallbackValue,
+    FallbackError = never,
+    FallbackServices = never,
+  >(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
+  ): Effect.Effect<
+    { readonly route: Route; readonly value: Value | FallbackValue },
+    | Failure
+    | FallbackError
+    | AiError.AiError
+    | AiError.InvalidRequestError
+    | NoEligibleProcedureError
+    | DepthExceededError,
+    R | Requirements | FallbackServices
+  >
+} = dual(
+  2,
+  <
+    Input,
+    Projected,
+    Value,
+    Failure,
+    Requirements,
+    R,
+    FallbackValue,
+    FallbackError = never,
+    FallbackServices = never,
+  >(
+    options: InvokeProcedureOptions<Input, Projected, Value, Failure, Requirements, R>,
+    request: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
+  ): Effect.Effect<
+    { readonly route: Route; readonly value: Value | FallbackValue },
+    | Failure
+    | FallbackError
+    | AiError.AiError
+    | AiError.InvalidRequestError
+    | NoEligibleProcedureError
+    | DepthExceededError,
+    R | Requirements | FallbackServices
+  > => {
+    const readInvoke = (
+      invocation: FallbackInvocation<Input, FallbackValue, FallbackError, FallbackServices>,
+    ) =>
+      Effect.gen(function*() {
+        const limit = yield* MaxDepth.useSync((value) => value)
+        const depth = yield* CurrentDepth.useSync((value) => value)
+        if (depth >= limit) {
+          return yield* new DepthExceededError({ depth, limit })
+        }
+        return yield* Effect.map(
+          prepareRouting(options, invocation.input, thresholdsOf(invocation.options.routing)),
+          (question) => ({
+            _tag: 'SelectRoute' as const,
+            eligibility: question.eligibility,
+            minProbability: question.thresholds.minProbability,
+            minMargin: question.thresholds.minMargin,
+            input: invocation.input,
+            options: invocation.options,
+          }),
+        )
+      })
 
-  return Sandwich.named('discern.procedure.invoke')(readInvoke)
-    .decide(selectRoute)
-    .write({
-      RouteMatched: (matched, read) =>
-        Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
-          Effect.map(
-            Effect.provideService(options.runMember(matched.id, read.input), CurrentDepth, depth + 1),
-            (value) => ({ route: new RouteMatched(matched), value }),
-          )),
-      RouteUncertain: (uncertain, read) =>
-        Effect.map(handlerEffectOf(read.options.onUncertain(read.input, uncertain)), (value) => ({
-          route: new RouteUncertain(uncertain),
-          value,
-        })),
-      RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
-      CommandRejected: (rejected) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
-    })
-    .run(request)
-}
+    return Sandwich.named('discern.procedure.invoke')(readInvoke)
+      .decide(selectRoute)
+      .write({
+        RouteMatched: (matched, read) =>
+          Effect.flatMap(CurrentDepth.useSync((depth) => depth), (depth) =>
+            Effect.map(
+              Effect.provideService(options.runMember(matched.id, read.input), CurrentDepth, depth + 1),
+              (value) => ({ route: new RouteMatched(matched), value }),
+            )),
+        RouteUncertain: (uncertain, read) =>
+          Effect.map(handlerEffectOf(read.options.onUncertain(read.input, uncertain)), (value) => ({
+            route: new RouteUncertain(uncertain),
+            value,
+          })),
+        RouteNone: (none) => Effect.fail(new NoEligibleProcedureError({ reason: none.reason })),
+        CommandRejected: (rejected) => Effect.fail(new AiError.InvalidRequestError({ description: rejected.issue })),
+      })
+      .run(request)
+  },
+)
 
 /**
  * The routing projection of the invoke cell: eligibility, one model ask at
  * most, and the ranked distribution — the same question the cell's read asks,
  * answered without running any procedure.
  */
-export const prepareRoute = <Input, Projected, R>(
-  view: RoutingView<Input, Projected, R>,
-  input: Input,
-  routing: RouteOptions | undefined,
-): Effect.Effect<Route, AiError.AiError, R> => {
-  const thresholds = thresholdsOf(routing)
-  return Effect.map(prepareRouting(view, input, thresholds), (question) =>
-    routeDecisionOf(
-      new SelectRoute({
-        eligibility: question.eligibility,
-        minProbability: question.thresholds.minProbability,
-        minMargin: question.thresholds.minMargin,
-      }),
-    ))
-}
+export const prepareRoute: {
+  <Input, Projected, R>(
+    input: Input,
+    routing: RouteOptions | undefined,
+  ): (view: RoutingView<Input, Projected, R>) => Effect.Effect<Route, AiError.AiError, R>
+  <Input, Projected, R>(
+    view: RoutingView<Input, Projected, R>,
+    input: Input,
+    routing: RouteOptions | undefined,
+  ): Effect.Effect<Route, AiError.AiError, R>
+} = dual(
+  3,
+  <Input, Projected, R>(
+    view: RoutingView<Input, Projected, R>,
+    input: Input,
+    routing: RouteOptions | undefined,
+  ): Effect.Effect<Route, AiError.AiError, R> => {
+    const thresholds = thresholdsOf(routing)
+    return Effect.map(prepareRouting(view, input, thresholds), (question) =>
+      routeDecisionOf(
+        new SelectRoute({
+          eligibility: question.eligibility,
+          minProbability: question.thresholds.minProbability,
+          minMargin: question.thresholds.minMargin,
+        }),
+      ))
+  },
+)

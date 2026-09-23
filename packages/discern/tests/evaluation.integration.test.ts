@@ -37,7 +37,7 @@ const guardableExamples = [
 ]
 
 const answersWithTheExampleProbability: AnswerFor = (request) =>
-  answersFor(request, () => probabilityAnswer(Number(request.state)))
+  answersFor({ request, answerOf: () => probabilityAnswer(Number(request.state)) })
 
 Feature('Measuring a question against labelled examples')
   .withScenarioLayer(answering(answersWithTheExampleProbability))

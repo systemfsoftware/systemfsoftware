@@ -60,13 +60,16 @@ const awkwardPreferences = Object.fromEntries([
 ])
 
 const measuredModel: AnswerFor = (request) =>
-  answersFor(request, (decision) =>
-    routingAnswer(
-      request.state === 'where is auth'
-        ? { find: 0.9, review: 0.05, 'test-gaps': 0.05 }
-        : { find: 0.05, review: 0.9, 'test-gaps': 0.05 },
-      decision,
-    ))
+  answersFor({
+    request,
+    answerOf: (decision) =>
+      routingAnswer({
+        preferences: request.state === 'where is auth'
+          ? { find: 0.9, review: 0.05, 'test-gaps': 0.05 }
+          : { find: 0.05, review: 0.9, 'test-gaps': 0.05 },
+        decision,
+      }),
+  })
 
 const risk = Discern.on(Request).probability({ id: 'risk', instructions: 'Risky' })
 
@@ -81,10 +84,11 @@ const auditor = Discern.Procedure.make({
 const auditRegistry = Discern.Procedure.registry(Request, [auditor, find])
 
 const auditingModel: AnswerFor = (request) =>
-  answersFor(
+  answersFor({
     request,
-    (decision, id) => id === 'risk' ? probabilityAnswer(0.95) : routingAnswer({ audit: 0.9, find: 0.1 }, decision),
-  )
+    answerOf: (decision, id) =>
+      id === 'risk' ? probabilityAnswer(0.95) : routingAnswer({ preferences: { audit: 0.9, find: 0.1 }, decision }),
+  })
 
 const urgent = Discern.on(Request).probability({ id: 'urgent', instructions: 'Urgent' })
 
@@ -99,10 +103,11 @@ const triage = Discern.Procedure.make({
 const triageRegistry = Discern.Procedure.registry(Request, [triage, find])
 
 const triageModel: AnswerFor = (request) =>
-  answersFor(
+  answersFor({
     request,
-    (decision, id) => id === 'urgent' ? probabilityAnswer(0.95) : routingAnswer({ triage: 0.9, find: 0.1 }, decision),
-  )
+    answerOf: (decision, id) =>
+      id === 'urgent' ? probabilityAnswer(0.95) : routingAnswer({ preferences: { triage: 0.9, find: 0.1 }, decision }),
+  })
 
 Feature('Routing a request to the procedure that handles it')
   .withLayer(Layer.empty)
