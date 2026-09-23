@@ -112,7 +112,7 @@ const resetPostgres = Effect.gen(function*() {
   yield* db.delete(auditEvents).pipe(Effect.orDie, Effect.asVoid)
   yield* db.delete(reservations).pipe(Effect.orDie, Effect.asVoid)
   yield* db.update(stockLots).set({ quantityOnHand: 10, version: 1 }).pipe(Effect.orDie, Effect.asVoid)
-  yield* db.update(user).set({ outstandingBalance: 0 }).pipe(Effect.orDie, Effect.asVoid)
+  yield* db.update(user).set({ outstandingBalance: 0, creditVersion: 1 }).pipe(Effect.orDie, Effect.asVoid)
 })
 
 /** Runs one law against both adapters and reports what each of them answered. */
