@@ -103,12 +103,12 @@ Feature('Waiting for asynchronous values')
         When('the first value arrives, the reader asks for a refresh, and the newer value arrives')(
           'settled',
           (s) =>
-            Effect.promise(function firstPending() {
-              const [first] = s.ctx.pending
-              if (first === undefined) {
-                throw new Error('expected the widget to have created one pending value')
+            Effect.promise(() => {
+              const [firstPending] = s.ctx.pending
+              if (firstPending === undefined) {
+                throw new Error('expected a pending deferred')
               }
-              return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(first, 1))))
+              return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(firstPending, 1))))
                 .then(function firstValue() {
                   return expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('1')
                 })
@@ -121,11 +121,11 @@ Feature('Waiting for asynchronous values')
                   return expect.poll(() => s.ctx.pending.length).toBe(2)
                 })
                 .then(function secondValue() {
-                  const [first, second] = s.ctx.pending
-                  if (first === undefined || second === undefined) {
-                    throw new Error('expected the refresh to have queued a second pending value')
+                  const secondPending = s.ctx.pending[1]
+                  if (secondPending === undefined) {
+                    throw new Error('expected a second pending deferred')
                   }
-                  return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(second, 2))))
+                  return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(secondPending, 2))))
                 })
             }),
         ),
@@ -142,7 +142,7 @@ Feature('Waiting for asynchronous values')
       Gherkin.Do.pipe(
         Given('a widget backed by a value that fails, wrapped in an error boundary')('ctx', () =>
           Effect.sync(() => {
-            const failing = Atom.make(Unavailable.make().pipe(Effect.fail))
+            const failing = Atom.make(Unavailable.make({}).pipe(Effect.fail))
             function Widget() {
               useAtomSuspense(failing)
               return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
@@ -166,7 +166,7 @@ Feature('Waiting for asynchronous values')
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the error boundary shows the failure message and the widget is not rendered')(() =>
-          Effect.promise(function verifyWidgetGone() {
+          Effect.promise(function() {
             return expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load').then(
               () => {
                 expect(screen.queryByTestId('unexpected-widget')).toBeNull()

@@ -214,12 +214,10 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
         Then('only the saved value is included')((s) => {
           expect(s.saved).toHaveLength(1)
-          const [saved] = s.saved
-          if (saved === undefined) {
-            throw new Error('expected the saved state to hold the one serializable value')
-          }
-          expect(saved.key).toBe('k-plain')
-          expect(saved.value).toBe(42)
+          const [entry] = s.saved
+          if (entry === undefined) throw new Error('expected one saved value')
+          expect(entry.key).toBe('k-plain')
+          expect(entry.value).toBe(42)
         }),
       ),
     )

@@ -1172,11 +1172,11 @@ Feature('Deriving values from other values on a page')
           'ctx',
           () =>
             Effect.sync(() => {
-              class Counter extends Context.Service<Counter, number>()(
-                '@systemfsoftware/effect-atom/tests/Atom.integration.test/Counter',
+              class CounterFromRecipe extends Context.Service<CounterFromRecipe, number>()(
+                '@systemfsoftware/effect-atom/tests/Atom.integration.test/CounterFromRecipe',
               ) {}
-              const recipeRuntime = Atom.context()((_get) => Layer.sync(Counter, () => 7))
-              const count = recipeRuntime.atom(Counter.use((n) => Effect.succeed(n)))
+              const recipeRuntime = Atom.context()((_get) => Layer.sync(CounterFromRecipe, () => 7))
+              const count = recipeRuntime.atom(CounterFromRecipe.use((n) => Effect.succeed(n)))
               const page = Registry.make()
               return { page, count }
             }),

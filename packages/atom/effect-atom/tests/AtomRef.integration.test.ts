@@ -75,9 +75,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           (s) =>
             Effect.sync(() => {
               const removed = s.ctx.items.value[1]
-              if (removed === undefined) {
-                throw new Error('expected the middle item to still be in the collection')
-              }
+              if (removed === undefined) throw new Error('expected a middle item')
               s.ctx.items.remove(removed)
               const afterRemoveNotifications = s.ctx.getNotifications()
               removed.set(999)
@@ -169,9 +167,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           Effect.sync(() => {
             const items = AtomRef.collection([1, 2, 3])
             const stranger = AtomRef.collection([9]).value[0]
-            if (stranger === undefined) {
-              throw new Error('expected the stranger collection to hold one item')
-            }
+            if (stranger === undefined) throw new Error('expected an item in the other collection')
             let notifications = 0
             const cancel = items.subscribe(() => {
               notifications++
@@ -222,9 +218,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
                 { name: 'grace', address: { city: 'paris' } },
               ])
               const first = items.value[0]
-              if (first === undefined) {
-                throw new Error('expected the collection to hold two items')
-              }
+              if (first === undefined) throw new Error('expected a first item')
               const firstName = first.prop('name')
               const city = first.prop('address').prop('city')
               let notifications = 0
@@ -243,9 +237,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               s.ctx.city.update((c) => c.toUpperCase())
               const afterNestedUpdate = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
               const removed = s.ctx.items.value[0]
-              if (removed === undefined) {
-                throw new Error('expected the first item to still be in the collection')
-              }
+              if (removed === undefined) throw new Error('expected a first item')
               s.ctx.items.remove(removed)
               removed.prop('name').set('zed')
               const afterRemoval = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
