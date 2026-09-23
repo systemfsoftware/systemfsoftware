@@ -766,7 +766,7 @@ export function builder<A extends AnyResult>(self: A): BuilderFor<A>
  * declaration above is the contract; the class is the mechanism.
  */
 export function builder(self: AnyResult): Top {
-  return new BuilderImpl<never, Top, Top>(self)
+  return makeBuilder(self)
 }
 
 /**
@@ -877,14 +877,9 @@ const interruptOption = <A, E, B>(
   return Option.some(f(interruptors.success, result))
 }
 
-class BuilderImpl<Out, A, E> extends PipeableModule.Class {
-  constructor(result: Result<A, E>) {
-    super()
-    this.result = result
-  }
+interface BuilderImpl<Out, A, E> {
   readonly result: Result<A, E>
-  private output: Option.Option<Top> = Option.none()
-
+  output: Option.Option<Top>
   when<B extends Result<A, E>, C>(
     refinement: Refinement<Result<A, E>, B>,
     f: (result: B) => Option.Option<C>,
@@ -893,7 +888,38 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
     refinement: Predicate<Result<A, E>>,
     f: (result: Result<A, E>) => Option.Option<C>,
   ): BuilderImpl<Out | C, A, E>
-  when<C>(
+  tryWhen<C>(refinement: Predicate<Result<A, E>>, f: (result: Result<A, E>) => Option.Option<C>): void
+  captureWhen(value: Option.Option<Top>): void
+  onWaiting<B>(f: (result: Result<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onInitialOrWaiting<B>(f: (result: Result<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onInitial<B>(f: (result: Initial<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onSuccess<B>(f: (value: A, result: Success<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onFailure<B>(f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onError<B>(f: (error: E, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onErrorIf<B extends E, C>(
+    refinement: Refinement<E, B>,
+    f: (error: B, result: Failure<A, E>) => C,
+  ): BuilderImpl<Out | C, A, Types.EqualsWith<E, B, E, Exclude<E, B>>>
+  onErrorIf<C>(refinement: Predicate<E>, f: (error: E, result: Failure<A, E>) => C): BuilderImpl<Out | C, A, E>
+  onErrorTag<B>(tag: string | readonly string[], f: (error: E, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onDefect<B>(f: (defect: Top, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E>
+  onInterrupt<B>(f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E>
+  orElse<B>(orElse: LazyArg<B>): Out | B
+  orElse(orElse: LazyArg<Top>): Top
+  orNull(): Out | null
+  orNull(): Top
+  render(): Out | null
+  render(): Top
+  renderMissing(): Top
+  exhaustive(): Out
+  exhaustive(): Top
+}
+
+const BuilderImplProto = {
+  ...PipeableModule.Prototype,
+
+  when<Out, A, E, C>(
+    this: BuilderImpl<Out, A, E>,
     refinement: Predicate<Result<A, E>>,
     f: (result: Result<A, E>) => Option.Option<C>,
   ): BuilderImpl<Out | C, A, E> {
@@ -901,48 +927,62 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
       this.tryWhen(refinement, f)
     }
     return this
-  }
+  },
 
-  private tryWhen<C>(
+  tryWhen<Out, A, E, C>(
+    this: BuilderImpl<Out, A, E>,
     refinement: Predicate<Result<A, E>>,
     f: (result: Result<A, E>) => Option.Option<C>,
   ): void {
     if (refinement(this.result)) {
       this.captureWhen(f(this.result))
     }
-  }
+  },
 
-  private captureWhen(value: Option.Option<Top>): void {
+  captureWhen(this: BuilderImpl<Top, Top, Top>, value: Option.Option<Top>): void {
     if (Option.isSome(value)) {
       this.output = value
     }
-  }
+  },
 
-  onWaiting<B>(f: (result: Result<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onWaiting<Out, A, E, B>(this: BuilderImpl<Out, A, E>, f: (result: Result<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when((r) => r.waiting, (r) => Option.some(f(r)))
-  }
+  },
 
-  onInitialOrWaiting<B>(f: (result: Result<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onInitialOrWaiting<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
+    f: (result: Result<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.when((r) => isInitial(r) || r.waiting, (r) => Option.some(f(r)))
-  }
+  },
 
-  onInitial<B>(f: (result: Initial<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onInitial<Out, A, E, B>(this: BuilderImpl<Out, A, E>, f: (result: Initial<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when(isInitial, (r) => Option.some(f(r)))
-  }
+  },
 
-  onSuccess<B>(f: (value: A, result: Success<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onSuccess<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
+    f: (value: A, result: Success<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.when(isSuccess, (r) => Option.some(f(r.value, r)))
-  }
+  },
 
-  onFailure<B>(f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onFailure<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
+    f: (cause: Cause.Cause<E>, result: Failure<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (r) => Option.some(f(r.cause, r)))
-  }
+  },
 
-  onError<B>(f: (error: E, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onError<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
+    f: (error: E, result: Failure<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.onErrorIf(constTrue, f)
-  }
+  },
 
-  onErrorIf<C>(
+  onErrorIf<Out, A, E, C>(
+    this: BuilderImpl<Out, A, E>,
     refinement: Predicate<E>,
     f: (error: E, result: Failure<A, E>) => C,
   ): BuilderImpl<Out | C, A, E> {
@@ -951,9 +991,10 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
         Option.filter(refinement),
         Option.map((error) => f(error, result)),
       ))
-  }
+  },
 
-  onErrorTag<B>(
+  onErrorTag<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
     tag: string | readonly string[],
     f: (error: E, result: Failure<A, E>) => B,
   ): BuilderImpl<Out | B, A, E> {
@@ -961,45 +1002,53 @@ class BuilderImpl<Out, A, E> extends PipeableModule.Class {
       (e) => errorMatchesTag(tag, e),
       f,
     )
-  }
+  },
 
-  onDefect<B>(f: (defect: Top, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onDefect<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
+    f: (defect: Top, result: Failure<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (result) => defectOption(result, f))
-  }
+  },
 
-  onInterrupt<B>(f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
+  onInterrupt<Out, A, E, B>(
+    this: BuilderImpl<Out, A, E>,
+    f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B,
+  ): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (result) => interruptOption(result, f))
-  }
+  },
 
-  orElse<B>(orElse: LazyArg<B>): Out | B
-  orElse(orElse: LazyArg<Top>): Top {
+  orElse<Out, A, E>(this: BuilderImpl<Out, A, E>, orElse: LazyArg<Top>): Top {
     return Option.getOrElse(this.output, orElse)
-  }
+  },
 
-  orNull(): Out | null
-  orNull(): Top {
+  orNull<Out, A, E>(this: BuilderImpl<Out, A, E>): Top {
     return Option.getOrNull(this.output)
-  }
+  },
 
-  render(): Out | null
-  render(): Top {
+  render<Out, A, E>(this: BuilderImpl<Out, A, E>): Top {
     if (Option.isSome(this.output)) {
       return this.output.value
     }
     return this.renderMissing()
-  }
+  },
 
-  private renderMissing(): Top {
+  renderMissing<Out, A, E>(this: BuilderImpl<Out, A, E>): Top {
     if (isFailure(this.result)) {
       throw Cause.squash(this.result.cause)
     }
     return null
-  }
+  },
 
-  exhaustive(): Out
-  exhaustive(): Top {
+  exhaustive<Out, A, E>(this: BuilderImpl<Out, A, E>): Top {
     return this.render()
-  }
+  },
 }
+
+const makeBuilder = (result: AnyResult) =>
+  Object.assign({}, BuilderImplProto, {
+    result,
+    output: Option.none<Top>(),
+  })
 
 export { Schema } from './ResultSchema.js'
