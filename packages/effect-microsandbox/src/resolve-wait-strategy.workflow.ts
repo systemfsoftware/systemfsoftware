@@ -3,20 +3,23 @@ import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { MicroVMSpec, WaitStrategy } from './MicroVMSpec.schema.js'
 
-const WaitTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-microsandbox/WaitStrategyDecision')
-type WaitTypeId = typeof WaitTypeId
+const WaitStrategyDecisionTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/effect-microsandbox/WaitStrategyDecision',
+)
+type WaitStrategyDecisionTypeId = typeof WaitStrategyDecisionTypeId
 
 export class WaitRequired extends Schema.TaggedClass<WaitRequired>()('WaitRequired', {
   strategy: WaitStrategy,
 }) {
-  readonly [WaitTypeId] = WaitTypeId
+  readonly [WaitStrategyDecisionTypeId] = WaitStrategyDecisionTypeId
 }
 
 export class WaitSkipped extends Schema.TaggedClass<WaitSkipped>()('WaitSkipped', {}) {
-  readonly [WaitTypeId] = WaitTypeId
+  readonly [WaitStrategyDecisionTypeId] = WaitStrategyDecisionTypeId
 }
 
-export type WaitStrategyDecision = WaitRequired | WaitSkipped
+export const WaitStrategyDecision = Schema.Union([WaitRequired, WaitSkipped])
+export type WaitStrategyDecision = typeof WaitStrategyDecision.Type
 
 export class ResolveWaitStrategy extends Schema.TaggedClass<ResolveWaitStrategy>()('ResolveWaitStrategy', {
   spec: MicroVMSpec,
@@ -24,9 +27,11 @@ export class ResolveWaitStrategy extends Schema.TaggedClass<ResolveWaitStrategy>
   static readonly [Workflow.InstrumentationBrand] = [] as const
 }
 
-export const resolveWaitStrategy = Workflow.total(
-  ResolveWaitStrategy,
-  (command): Result.Result<WaitStrategyDecision, never> =>
+export const resolveWaitStrategy = Workflow.make({
+  command: ResolveWaitStrategy,
+  decision: WaitStrategyDecision,
+  error: Schema.Never,
+  decide: (command): Result.Result<WaitStrategyDecision, never> =>
     Result.succeed(
       Match.value(command.spec).pipe(
         Match.tag('Job', () => WaitSkipped.make()),
@@ -42,4 +47,4 @@ export const resolveWaitStrategy = Workflow.total(
         Match.exhaustive,
       ),
     ),
-)
+})

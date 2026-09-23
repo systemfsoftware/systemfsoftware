@@ -4,7 +4,7 @@ import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type { Sandbox } from 'microsandbox'
 import { ExecError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
-import type { PortBinding } from './render-sandbox-plan.workflow.js'
+import type { PortBinding } from './render-sandbox-plan.schema.js'
 
 export const TypeId = Symbol.for('~systemfsoftware/microvm/RunningVM')
 export type TypeId = typeof TypeId

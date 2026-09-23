@@ -23,7 +23,8 @@ export class VirtualizationRefused extends Schema.TaggedClass<VirtualizationRefu
   readonly [VerdictTypeId] = VerdictTypeId
 }
 
-export type VirtualizationVerdict = VirtualizationEligible | VirtualizationRefused
+export const VirtualizationVerdict = Schema.Union([VirtualizationEligible, VirtualizationRefused])
+export type VirtualizationVerdict = typeof VirtualizationVerdict.Type
 
 export class KvmAccessible extends Schema.TaggedClass<KvmAccessible>()('KvmAccessible', {}) {}
 
@@ -77,9 +78,11 @@ const REMEDIATIONS = {
 const refused = (topology: string, remediation: string): Result.Result<VirtualizationRefused, never> =>
   Result.succeed(VirtualizationRefused.make({ remediation, topology }))
 
-export const assessVirtualization = Workflow.total(
-  AssessVirtualization,
-  (command): Result.Result<VirtualizationVerdict, never> =>
+export const assessVirtualization = Workflow.make({
+  command: AssessVirtualization,
+  decision: VirtualizationVerdict,
+  error: Schema.Never,
+  decide: (command): Result.Result<VirtualizationVerdict, never> =>
     Match.value(command.observation).pipe(
       Match.tag('KvmAccessible', () => Result.succeed(VirtualizationEligible.make())),
       Match.tag('KvmDenied', ({ topology }) => refused(topology, REMEDIATIONS.kvmDenied)),
@@ -90,4 +93,4 @@ export const assessVirtualization = Workflow.total(
         refused(`platform=${platform} (${arch})`, REMEDIATIONS.unsupported)),
       Match.exhaustive,
     ),
-)
+})

@@ -3,38 +3,7 @@ import { Match, Option, Schema } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Result from 'effect/Result'
 import { GuestPort, MicroVMSpec } from './MicroVMSpec.schema.js'
-
-export const PortBinding = Schema.Struct({
-  guest: GuestPort,
-  host: Schema.String,
-  hostPort: Schema.Int,
-})
-export type PortBinding = typeof PortBinding.Type
-
-const NetworkProfile = Schema.Literals(['public', 'host'])
-type NetworkProfile = typeof NetworkProfile.Type
-
-const HOST_ACCESS_PROFILES: ReadonlyArray<NetworkProfile> = ['public', 'host']
-
-const networkProfilesOf = (hostAccess: boolean | undefined): ReadonlyArray<NetworkProfile> | undefined =>
-  Match.value(hostAccess).pipe(
-    Match.when(true, () => HOST_ACCESS_PROFILES),
-    Match.orElse(() => undefined),
-  )
-
-export const SandboxPlan = Schema.Struct({
-  name: Schema.String,
-  image: Schema.String,
-  envs: Schema.Record(Schema.String, Schema.String),
-  cpus: Schema.optional(Schema.Int),
-  memoryMiB: Schema.optional(Schema.Finite),
-  workdir: Schema.optional(Schema.String),
-  cmd: Schema.optional(Schema.Array(Schema.String)),
-  mounts: Schema.Array(Schema.Struct({ guest: Schema.String, host: Schema.String })),
-  portBindings: Schema.Array(PortBinding),
-  networkProfiles: Schema.optional(Schema.Array(NetworkProfile)),
-})
-export type SandboxPlan = typeof SandboxPlan.Type
+import { PortBinding, SandboxPlan } from './render-sandbox-plan.schema.js'
 
 const PlanTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-microsandbox/SandboxPlanDecision')
 type PlanTypeId = typeof PlanTypeId
@@ -53,7 +22,8 @@ export class PlanRefused extends Schema.TaggedClass<PlanRefused>()('PlanRefused'
   readonly [PlanTypeId] = PlanTypeId
 }
 
-export type SandboxPlanDecision = PlanApproved | PlanRefused
+export const SandboxPlanDecision = Schema.Union([PlanApproved, PlanRefused])
+export type SandboxPlanDecision = typeof SandboxPlanDecision.Type
 
 export class PlanSandbox extends Schema.TaggedClass<PlanSandbox>()('PlanSandbox', {
   spec: MicroVMSpec,
@@ -62,6 +32,14 @@ export class PlanSandbox extends Schema.TaggedClass<PlanSandbox>()('PlanSandbox'
 }) {
   static readonly [Workflow.InstrumentationBrand] = ['name'] as const
 }
+
+const HOST_ACCESS_PROFILES = ['public', 'host'] as const
+
+const networkProfilesOf = (hostAccess: boolean | undefined): ReadonlyArray<'public' | 'host'> | undefined =>
+  Match.value(hostAccess).pipe(
+    Match.when(true, (): ReadonlyArray<'public' | 'host'> => HOST_ACCESS_PROFILES),
+    Match.orElse((): undefined => undefined),
+  )
 
 const LOOPBACK_PREFIX = '127.'
 
@@ -98,9 +76,11 @@ const planOf = (command: PlanSandbox): SandboxPlan =>
     Match.exhaustive,
   )
 
-export const renderSandboxPlan = Workflow.total(
-  PlanSandbox,
-  (command): Result.Result<SandboxPlanDecision, never> =>
+export const renderSandboxPlan = Workflow.make({
+  command: PlanSandbox,
+  decision: SandboxPlanDecision,
+  error: Schema.Never,
+  decide: (command): Result.Result<SandboxPlanDecision, never> =>
     Match.value(illegalBinding(command.bindings)).pipe(
       Match.tag('Some', ({ value }) =>
         Result.succeed(
@@ -109,4 +89,4 @@ export const renderSandboxPlan = Workflow.total(
       Match.tag('None', () => Result.succeed(PlanApproved.make({ plan: planOf(command) }))),
       Match.exhaustive,
     ),
-)
+})
