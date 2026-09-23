@@ -65,21 +65,31 @@ describe('Contract stages', () => {
     expect(Contract.judge(selfContained, 'order-1')).type.toBe<
       Effect.Effect<
         Contract.Judgment<string, string>,
-        Contract.ContractDecodeError | Observation.EmptyObservationError,
+        | Contract.ContractDecodeError
+        | Observation.EmptyObservationError
+        | Observation.IncompleteObservationError
+        | Observation.TransportObservationError,
         Observation.Observation | FileSystem.FileSystem
       >
     >()
     expect(selfContained.pipe(Contract.judge('order-1', { dumpName: 'case' }))).type.toBe<
       Effect.Effect<
         Contract.Judgment<string, string>,
-        Contract.ContractDecodeError | Observation.EmptyObservationError,
+        | Contract.ContractDecodeError
+        | Observation.EmptyObservationError
+        | Observation.IncompleteObservationError
+        | Observation.TransportObservationError,
         Observation.Observation | FileSystem.FileSystem
       >
     >()
     expect(Contract.check(selfContained, 'order-1')).type.toBe<
       Effect.Effect<
         Contract.Judgment<string, string>,
-        Contract.ContractDecodeError | Observation.EmptyObservationError | Contract.TraceDisparityError,
+        | Contract.ContractDecodeError
+        | Observation.EmptyObservationError
+        | Observation.IncompleteObservationError
+        | Observation.TransportObservationError
+        | Contract.TraceDisparityError,
         Observation.Observation | FileSystem.FileSystem
       >
     >()

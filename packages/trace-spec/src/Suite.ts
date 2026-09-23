@@ -5,8 +5,7 @@ import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as Contract from './Contract.js'
-import { ContractDecodeError } from './ContractDecodeError.schema.js'
-import { EmptyObservationError } from './EmptyObservationError.schema.js'
+import { HarnessFailure } from './HarnessFailure.schema.js'
 import type { Observation } from './Observation.service.js'
 import * as Prop from './Prop.js'
 import { StimulusFailure } from './StimulusFailure.schema.js'
@@ -18,7 +17,7 @@ export { StimulusFailure }
 export const TypeId = Symbol.for('@systemfsoftware/trace-spec/Suite')
 export type TypeId = typeof TypeId
 
-export type CaseFailure = ContractDecodeError | EmptyObservationError | TraceDisparityError | StimulusFailure
+export type CaseFailure = HarnessFailure | StimulusFailure
 
 export type Harness = Observation | FileSystem.FileSystem
 
@@ -59,10 +58,10 @@ export interface Shared<SharedProvided> extends Pipeable {
   readonly body: (use: (tools: CaseTools<SharedProvided>) => void) => void
 }
 
-const isCheckFailure = Schema.is(Schema.Union([ContractDecodeError, EmptyObservationError, TraceDisparityError]))
+const isHarnessFailure = Schema.is(HarnessFailure)
 
 const caseFailureOf = (stimulus: string) => <E>(failure: E | CaseFailure): CaseFailure =>
-  isCheckFailure(failure) ? failure : new StimulusFailure({ stimulus, detail: Cause.pretty(Cause.fail(failure)) })
+  isHarnessFailure(failure) ? failure : new StimulusFailure({ stimulus, detail: Cause.pretty(Cause.fail(failure)) })
 
 const rethrowAfter = (
   annotation: Effect.Effect<void>,
