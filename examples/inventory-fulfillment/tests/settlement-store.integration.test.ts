@@ -6,7 +6,7 @@ import type {
   SettlementOutcome,
   SettlementStoreService,
 } from '@systemfsoftware/example-inventory-fulfillment'
-import { Effect } from 'effect'
+import { Effect, Equal } from 'effect'
 import { expect } from 'vitest'
 import {
   acrossStores,
@@ -20,6 +20,7 @@ import {
   SECOND_LOT,
   SECOND_SKU,
   settlementCommandOf,
+  settlementCommandWithoutCharge,
   settlementStoreWorld,
 } from './__fixtures__/settlement-store.fixture.js'
 interface OrderInput {
@@ -57,7 +58,17 @@ const settleOrder = (store: SettlementStoreService, input: OrderInput): Effect.E
     const stock = yield* store.readAllStock
     return yield* store.settle(settlementCommandOf({
       ...input,
-      observedLotVersion: lotVersionOf(stock, input.lotId),
+      creditProof: credit.proof,
+      stockProof: stock.proof,
+    }))
+  })
+
+const settleWithoutCharge = (store: SettlementStoreService, input: OrderInput): Effect.Effect<SettlementOutcome> =>
+  Effect.gen(function*() {
+    const credit = yield* readCreditOf(store, input.customerId)
+    const stock = yield* store.readAllStock
+    return yield* store.settle(settlementCommandWithoutCharge({
+      ...input,
       creditProof: credit.proof,
       stockProof: stock.proof,
     }))
@@ -70,6 +81,14 @@ interface FullState {
   readonly quantityTwo: number
   readonly versionOne: number
   readonly versionTwo: number
+}
+
+interface SettlementLaw {
+  readonly outcome: SettlementOutcome
+  readonly outstandingBalance: number
+  readonly creditProofUnchanged: boolean
+  readonly lotQuantity: number
+  readonly lotVersion: number
 }
 
 interface RepeatedReadResult {
@@ -141,6 +160,49 @@ const committedFinalState = (first: OrderInput, second: OrderInput): Effect.Effe
       return yield* fullState(store)
     }))
 
+const settledWithoutCharge: Effect.Effect<SettlementLaw, never, SettlementStore> = Effect.flatMap(
+  SettlementStore,
+  (store) =>
+    Effect.gen(function*() {
+      const before = yield* readCreditOf(store, FIRST_CUSTOMER)
+      const outcome = yield* settleWithoutCharge(store, FIRST_ORDER)
+      const after = yield* readCreditOf(store, FIRST_CUSTOMER)
+      const stock = yield* store.readAllStock
+      return {
+        outcome,
+        outstandingBalance: after.account.outstandingBalance,
+        creditProofUnchanged: Equal.equals(before.proof, after.proof),
+        lotQuantity: lotQuantityOf(stock, FIRST_LOT),
+        lotVersion: lotVersionOf(stock, FIRST_LOT),
+      }
+    }),
+)
+
+const UNCLAIMED_LOT = 'lot-vanished'
+const claimedOutsideTheProof: Effect.Effect<SettlementLaw, never, SettlementStore> = Effect.flatMap(
+  SettlementStore,
+  (store) =>
+    Effect.gen(function*() {
+      const before = yield* readCreditOf(store, FIRST_CUSTOMER)
+      const stock = yield* store.readAllStock
+      const outcome = yield* store.settle(settlementCommandOf({
+        ...FIRST_ORDER,
+        lotId: UNCLAIMED_LOT,
+        creditProof: before.proof,
+        stockProof: stock.proof,
+      }))
+      const after = yield* readCreditOf(store, FIRST_CUSTOMER)
+      const stockAfter = yield* store.readAllStock
+      return {
+        outcome,
+        outstandingBalance: after.account.outstandingBalance,
+        creditProofUnchanged: Equal.equals(before.proof, after.proof),
+        lotQuantity: lotQuantityOf(stockAfter, FIRST_LOT),
+        lotVersion: lotVersionOf(stockAfter, FIRST_LOT),
+      }
+    }),
+)
+
 const sameProofSettlesTwice: Effect.Effect<
   readonly [SettlementOutcome, SettlementOutcome],
   never,
@@ -153,7 +215,6 @@ const sameProofSettlesTwice: Effect.Effect<
       store.settle(settlementCommandOf({
         ...FIRST_ORDER,
         orderId,
-        observedLotVersion: lotVersionOf(stock, FIRST_LOT),
         creditProof: credit.proof,
         stockProof: stock.proof,
       }))
@@ -172,7 +233,6 @@ const anotherCustomersProof: Effect.Effect<SettlementOutcome, never, SettlementS
         ...FIRST_ORDER,
         orderId: 'order-other',
         customerId: SECOND_CUSTOMER,
-        observedLotVersion: lotVersionOf(stock, FIRST_LOT),
         creditProof: credit.proof,
         stockProof: stock.proof,
       }))
@@ -187,7 +247,6 @@ const staleStockProof: Effect.Effect<SettlementOutcome, never, SettlementStore> 
       const stock = yield* store.readAllStock
       yield* store.settle(settlementCommandOf({
         ...FIRST_ORDER,
-        observedLotVersion: lotVersionOf(stock, FIRST_LOT),
         creditProof: credit.proof,
         stockProof: stock.proof,
       }))
@@ -195,7 +254,6 @@ const staleStockProof: Effect.Effect<SettlementOutcome, never, SettlementStore> 
       return yield* store.settle(settlementCommandOf({
         ...FIRST_ORDER,
         orderId: 'order-second',
-        observedLotVersion: lotVersionOf(stock, FIRST_LOT),
         creditProof: refreshed.proof,
         stockProof: stock.proof,
       }))
@@ -214,6 +272,26 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
         ),
         Then('the charge, the new balance and the moved stock show up, either way')((s) => {
           const expected = { outcome: 'Committed', outstandingBalance: 9, lotQuantity: 7, lotVersion: 2 }
+          expect(s.outcome).toEqual({ memory: expected, postgres: expected })
+        }),
+      ),
+    )
+
+    scenario(
+      'A reservation without a charge moves stock but leaves the account alone',
+      Gherkin.Do.pipe(
+        Given('two customers with clean accounts and a stocked warehouse')(
+          'outcome',
+          () => acrossStores(settledWithoutCharge),
+        ),
+        Then('the stock moves while the account balance and its standing stay put, either way')((s) => {
+          const expected = {
+            outcome: 'Committed',
+            outstandingBalance: 0,
+            creditProofUnchanged: true,
+            lotQuantity: 7,
+            lotVersion: 2,
+          }
           expect(s.outcome).toEqual({ memory: expected, postgres: expected })
         }),
       ),
@@ -282,6 +360,26 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
         ),
         Then('the settlement conflicts for each store')((s) => {
           expect(s.outcome).toEqual({ memory: 'Conflict', postgres: 'Conflict' })
+        }),
+      ),
+    )
+
+    scenario(
+      'A reservation for a lot the read never vouched for is turned away',
+      Gherkin.Do.pipe(
+        Given('two customers with clean accounts and a stocked warehouse')(
+          'outcome',
+          () => acrossStores(claimedOutsideTheProof),
+        ),
+        Then('the settlement conflicts and nothing moves for each store')((s) => {
+          const expected = {
+            outcome: 'Conflict',
+            outstandingBalance: 0,
+            creditProofUnchanged: true,
+            lotQuantity: 10,
+            lotVersion: 1,
+          }
+          expect(s.outcome).toEqual({ memory: expected, postgres: expected })
         }),
       ),
     )

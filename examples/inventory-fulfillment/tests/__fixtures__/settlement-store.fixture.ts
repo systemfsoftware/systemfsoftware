@@ -13,6 +13,7 @@ import {
 import type {
   CreditObservation,
   CreditProof,
+  SettlementCharge,
   SettlementCommand,
   SettlementStoreSeed,
   SettlementStoreService,
@@ -157,10 +158,12 @@ export interface SettlementAttempt {
   readonly sku: string
   readonly lotId: string
   readonly quantity: number
-  readonly charge: number
-  readonly observedLotVersion: number
   readonly creditProof: CreditProof
   readonly stockProof: StockProof
+}
+
+export interface ChargedSettlementAttempt extends SettlementAttempt {
+  readonly charge: number
 }
 
 const attemptOccurredAt = DateTime.makeUnsafe('2026-01-01T00:00:00.000Z')
@@ -168,7 +171,10 @@ const attemptOccurredAt = DateTime.makeUnsafe('2026-01-01T00:00:00.000Z')
 const moneyOf = (value: number): Fulfillment.Credit.Money =>
   Result.getOrThrow(S.decodeResult(Fulfillment.Credit.Money)(value))
 
-export const settlementCommandOf = (attempt: SettlementAttempt): SettlementCommand => ({
+const chargeableCommandOf = (
+  attempt: SettlementAttempt,
+  charge: Option.Option<SettlementCharge>,
+): SettlementCommand => ({
   orderId: attempt.orderId,
   customerId: attempt.customerId,
   events: [
@@ -181,7 +187,6 @@ export const settlementCommandOf = (attempt: SettlementAttempt): SettlementComma
             lotId: attempt.lotId,
             sku: attempt.sku,
             quantity: attempt.quantity,
-            version: attempt.observedLotVersion,
           }),
         ),
       ],
@@ -195,5 +200,11 @@ export const settlementCommandOf = (attempt: SettlementAttempt): SettlementComma
     occurredAt: attemptOccurredAt,
   }),
   stock: attempt.stockProof,
-  charge: Option.some({ amount: moneyOf(attempt.charge), proof: attempt.creditProof }),
+  charge,
 })
+
+export const settlementCommandOf = (attempt: ChargedSettlementAttempt): SettlementCommand =>
+  chargeableCommandOf(attempt, Option.some({ amount: moneyOf(attempt.charge), proof: attempt.creditProof }))
+
+export const settlementCommandWithoutCharge = (attempt: SettlementAttempt): SettlementCommand =>
+  chargeableCommandOf(attempt, Option.none())

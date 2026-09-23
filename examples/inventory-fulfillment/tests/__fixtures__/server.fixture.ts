@@ -122,6 +122,8 @@ export class ConflictSeam extends Context.Service<ConflictSeam, ConflictSeamServ
   '@systemfsoftware/example-inventory-fulfillment/tests/ConflictSeam',
 ) {}
 
+const parkLimit = Duration.seconds(10)
+
 const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
   ConflictSeam,
   Effect.gen(function*() {
@@ -129,6 +131,15 @@ const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
     const holds = yield* Ref.make<HoldMode>('off')
     const parked = yield* Deferred.make<void>()
     const released = yield* Deferred.make<void>()
+    const awaitRelease = Deferred.await(released).pipe(
+      Effect.timeoutOrElse({
+        duration: parkLimit,
+        orElse: () =>
+          Effect.die(
+            new Error('The conflict seam held a read but no test released it: pair holdOnce with held and release.'),
+          ),
+      }),
+    )
     return {
       armOnce: Ref.set(bumps, 'once'),
       armAlways: Ref.set(bumps, 'always'),
@@ -148,7 +159,7 @@ const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
             Match.when('off', () => [false, 'off'] as const),
             Match.exhaustive,
           )),
-        (hold) => (hold ? Effect.andThen(Deferred.succeed(parked, void 0), Deferred.await(released)) : Effect.void),
+        (hold) => (hold ? Effect.andThen(Deferred.succeed(parked, void 0), awaitRelease) : Effect.void),
       ),
       held: Deferred.await(parked),
       release: Effect.asVoid(Deferred.succeed(released, void 0)),
