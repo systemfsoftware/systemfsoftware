@@ -36,18 +36,28 @@ A cell earns a type-level constructor **iff** its content is a pure value or a c
 What shipped — `Workflow.make`, in `packages/effect-cell-types/src/Workflow.ts`:
 
 ```ts
-export const make = <Self, S, Inherited, D, E>(
-  _command: Schema.Class<Self, S, Inherited>,
-  decide: (command: Self) => Result<D, E> & Inhabited<D, E>,
-): Workflow<Self, D, E> => {
-  assertWorkflow(decide)
+export const make = <
+  Command extends InstrumentedCommandSchema,
+  Decision extends DecisionSchema,
+  Error extends DecisionSchema,
+>(options: {
+  readonly command: Command & CheckCommandClass<Command>
+  readonly decision: Decision
+  readonly error: Error
+  readonly decide: (command: Command['Type']) =>
+    & Result<Decision['Type'], Error['Type']>
+    & Inhabited<Decision['Type'], Error['Type']>
+}): MadeWorkflow<Command, Decision, Error> => {
+  const { command, decision, error, decide } = options
+  assertWorkflow<Command, Decision, Error>(decide)
+  Object.assign(decide, { [WorkflowSchemasKey]: { command, decision, error } })
   return decide
 }
 ```
 
-The runtime is identity; all the force is in the parameter type. The return conditional lives on the `Workflow` marker itself and resolves a `never` channel to `UninhabitedDecision` / `UninhabitedError`, making a total workflow uncallable and a `Promise`-returning decider a type error. `Policy` declines a `make`: its contract is fully carried by the type `(self: Effect<A, E, R>) => Effect<A, E, R>` (`Policy.ts`), so a constructor would be the identity function on the type, forcing nothing the type does not already force.
+The runtime attaches declared schemas; all the force is in the options parameter type. The conditional lives on the `Inhabited` constraint over the schemas' types and resolves an uninhabited decision channel to `UninhabitedDecision`, an untagged error to `UntaggedError`, or a single-variant decision without an inhabited error channel to `SingleVariantDecision`, making invalid decisions a type error at construction. For decisions that cannot fail, `error: Schema.Never` is declared explicitly. `Policy` declines a `make`: its contract is fully carried by the type `(self: Effect<A, E, R>) => Effect<A, E, R>` (`Policy.ts`), so a constructor would be the identity function on the type, forcing nothing the type does not already force.
 
-The non-obvious trap: **put the conditional in parameter position and it collapses.** If `make` takes `(decide: Workflow<C, D, E>)` instead of `(decide: (command: C) => Result<D, E>)`, tsc resolves `D`/`E` inside the parameter to `unknown` — a conditional type has no inference site there — so the parameter becomes `(command: C) => Result<unknown, unknown>`, the `Uninhabited*` markers become unreachable, and the constructor accepts everything and enforces nothing while still type-checking green. The conditional must live on the return type, the existing marker. This inference of `D`/`E` from the argument, and the derived `never`-markers, is the whole force a constructor can carry: a hand-written annotation cannot fake it.
+The non-obvious trap: **put the conditional in decider parameter position and it collapses.** If `decide`'s parameter type takes conditional types directly rather than resolving against declared `command`, `decision`, and `error` schemas, tsc resolves the channels inside the parameter to `unknown` — a conditional type has no inference site there — so the parameter becomes `(command: C) => Result<unknown, unknown>`, the markers become unreachable, and the constructor accepts everything and enforces nothing while still type-checking green. Decoupling the declared schema types from the decider return validation keeps the force on the constraint where it belongs.
 
 What did not ship — `executor` and `handler`. They are shells, not cells with a type-level proposition: the only fact a shell carries is `Effect<A, E, R>`, which Effect already supplies. `Effect.gen` **is** the imperative shell — `CONST-B1`'s shell as a value, `CONST-B3`'s bread around the pure filling — and sequencing is inexpressible at the type level (see Why This Matters, (b)). A constructor taking the sandwich phases as named parameters fails on a legitimate use case: a production HTTP executor must write inside a transaction before it knows what to classify, so its order is `read → write → read → decide → encode`, which a fixed parameter product cannot express. A constructor types the seam, never the sequence.
 
@@ -57,7 +67,7 @@ A constructor earns existence only by computing something the author cannot writ
 
 **(a) The type and the suffix rule are complementary, disjoint observers — not substitutes.** A type binds only where it is present. `Workflow.make` rejects a total decision and a `Promise`-returning decider at call sites, but only at call sites — the annotation form defeats the guarantee on the same function, because `const w: Workflow.Workflow<Cmd, Dec, Err> = …` never produces the `Uninhabited*` markers. A suffix rule reads the whole file. Two re-runnable experiments established the boundary, and both were measured, not conceded:
 
-- **Experiment 1 — the marker does not bite at the definition site.** A `*.workflow.ts` was written whose decision is total (`Result<Result<ProbeAccepted, never>>`), produced by `Workflow.make`, exported, and called nowhere. `Workflow<C, D, never>` resolves to `UninhabitedError`, so a consumer cannot call it — yet `typecheck` exits **0** on the file, while `lint` exits **1**. The type-level guarantee is consumer-side; the depth-0 rule is what catches a total decision where it is written.
+- **Experiment 1 — the marker does not bite at the definition site without schema declaration.** In earlier designs without declared schemas, a `*.workflow.ts` was written whose decision lacked error variants. The type-level guarantee was consumer-side; the depth-0 rule was what caught a total decision where it was written.
 - **Experiment 2 — a file-reading rule is broader than the constructor's parameter.** A rule that reads the whole file carries three checks, not one: `asyncFunction` on any function in the file, `awaitExpression` on any `await`, and `promiseType` on any `Promise` type reference anywhere. `make`'s parameter type rejects only a `Promise`-returning _decider_. A private async helper, an `await` inside it, or a `Promise` annotation in a non-decider position all pass the constructor and fail a file-reading rule. File ⊃ decider.
 
 Conclusion, measured against a **hand-authored** file: **zero rules retired, one rule required.** The `.tst.ts` assertions stand as what the constructor promises a consumer, not as replacements. The obligation that rule carried — forcing the constructor, so that the annotation form, a non-`make` initializer, and a local `type Workflow<...>` copy of the contract are refused, because only the constructor's inference is the force — now sits in three rules, all `error` in `configs.recommended` of `@systemfsoftware/oxlint-plugin-effect-workflow` (`packages/oxlint-plugin/oxlint-plugin-effect-workflow`): `workflow-file-make-presence` (a `<stem>.workflow.ts` file constructs its decision with `Workflow.make`), `workflow-file-export-topology` (exactly one non-schema value export, re-exports forbidden), and `damp-workflow-stem` (the file's stem is the kebab phrase its single value export camelCases to).
@@ -95,26 +105,41 @@ export const decide: Workflow.Workflow<Cmd, Dec, Err> = (cmd) =>
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
 
-export const decide = Workflow.make(
-  Cmd,
-  (cmd: Cmd): Result.Result<Dec, Err> =>
-    cmd.kind === 'go' ? Result.succeed({ succeeded: true }) : Result.fail({ code: 1 }),
-)
+export const decide = Workflow.make({
+  command: Cmd,
+  decision: Dec,
+  error: Err,
+  decide: (cmd: Cmd['Type']): Result.Result<Dec['Type'], Err['Type']> =>
+    cmd.kind === 'go' ? Result.succeed(new Dec({ succeeded: true })) : Result.fail(new Err({ code: 1 })),
+})
 ```
 
 The constructor's rejections are pinned by `packages/effect-cell-types/test-types/Workflow.tst.ts`, quoted:
 
 ```ts
 // Should_RejectPromiseReturningDecider_When_ParameterRequiresResultReturn
-expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decidePromiseOverTagged)
+expect<typeof Workflow.make>().type.not.toBeCallableWith({
+  command: TaggedCmd,
+  decision: Dec,
+  error: Err,
+  decide: decidePromiseOverTagged,
+})
 
 // Should_RejectBareValueDecider_When_ParameterRequiresResultReturn
-expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideValueOverTagged)
+expect<typeof Workflow.make>().type.not.toBeCallableWith({
+  command: TaggedCmd,
+  decision: Dec,
+  error: Err,
+  decide: decideValueOverTagged,
+})
 
-// Should_ResolveTotalDecisionToUninhabitedError_When_ErrorChannelIsNever
-declare const totallyDecided: Workflow.Workflow<Cmd, boolean, never>
-// @ts-expect-error: This expression is not callable
-totallyDecided(cmd)
+// Should_RejectSingleVariantWithoutError_When_ErrorIsNever
+expect<typeof Workflow.make>().type.not.toBeCallableWith({
+  command: TaggedCmd,
+  decision: SingleDec,
+  error: S.Never,
+  decide: decideSingleVariant,
+})
 ```
 
 With the pathological variant — the conditional in parameter position — all three `not`-assertions above would fail to reject, because the parameter would have collapsed to `(command: C) => Result<unknown, unknown>`. The type would look correct and enforce nothing; the tests are what keep the force on the return type where it belongs.

@@ -207,9 +207,11 @@ const allocatedOutcome = (
   )
 }
 
-export const allocateStock = Workflow.make(
-  AllocateStockCommand,
-  (command): Result.Result<StockAllocated | StockBackordered, InsufficientStock> => {
+export const allocateStock = Workflow.make({
+  command: AllocateStockCommand,
+  decision: S.Union([StockAllocated, StockBackordered]),
+  error: InsufficientStock,
+  decide: (command): Result.Result<StockAllocated | StockBackordered, InsufficientStock> => {
     const demands = demandsOf(command.lines)
     return Match.value(insufficientOf(command.stock, demands, command.now)).pipe(
       Match.tag('Some', (refusal) => Result.fail(refusal.value)),
@@ -217,4 +219,4 @@ export const allocateStock = Workflow.make(
       Match.exhaustive,
     )
   },
-)
+})

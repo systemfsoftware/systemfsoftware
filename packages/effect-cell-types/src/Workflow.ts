@@ -1,19 +1,11 @@
-import { flatMap, type Result } from 'effect/Result'
+import type { Result } from 'effect/Result'
 import type * as Schema from 'effect/Schema'
 
 const WorkflowTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Workflow')
 type WorkflowTypeId = typeof WorkflowTypeId
+
 export const WorkflowSchemasKey: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/WorkflowSchemas')
 export type WorkflowSchemasKey = typeof WorkflowSchemasKey
-
-export type CommandSchema = Schema.Constraint & { readonly fields: Schema.Struct.Fields }
-
-export interface WorkflowBrand {
-  readonly [WorkflowTypeId]: WorkflowTypeId
-  readonly [WorkflowSchemasKey]?: {
-    readonly commandSchema?: CommandSchema & { readonly [InstrumentationBrand]: InstrumentationMap }
-  }
-}
 
 export const InstrumentationBrand: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/instrumentation')
 export type InstrumentationBrand = typeof InstrumentationBrand
@@ -23,6 +15,46 @@ export type InstrumentationBrand = typeof InstrumentationBrand
  * the OpenTelemetry attribute key the field's value is copied onto the parent span as.
  */
 export type InstrumentationMap = { readonly [field: string]: string }
+
+export type CommandSchema = Schema.Constraint & {
+  readonly fields: Schema.Struct.Fields
+  readonly Type: object
+  readonly DecodingServices: never
+}
+
+export type InstrumentedCommandSchema = CommandSchema & {
+  readonly [InstrumentationBrand]: InstrumentationMap
+}
+
+export type DecisionSchema = Schema.Constraint & {
+  readonly EncodingServices: never
+}
+
+/**
+ * The three schemas a workflow declares: the command it receives, the decision it publishes
+ * and the error it refuses with. This is what {@link WorkflowBrand} carries and what the
+ * sandwich derives its decode and encode steps from.
+ */
+export interface WorkflowSchemas<
+  Command extends Schema.Constraint = Schema.Constraint,
+  Decision extends Schema.Constraint = Schema.Constraint,
+  Error extends Schema.Constraint = Schema.Constraint,
+> {
+  readonly command: Command
+  readonly decision: Decision
+  readonly error: Error
+}
+
+export interface WorkflowBrand<
+  Command extends Schema.Constraint = Schema.Constraint,
+  Decision extends Schema.Constraint = Schema.Constraint,
+  Error extends Schema.Constraint = Schema.Constraint,
+> {
+  readonly [WorkflowTypeId]: WorkflowTypeId
+  readonly [WorkflowSchemasKey]: WorkflowSchemas<Command, Decision, Error>
+}
+
+type ClassKeys<C> = C extends { readonly Type: infer T } ? keyof T & string : never
 
 export type MissingInstrumentationAnnotation = {
   readonly __CELL_SCHEMA_MISSING_INSTRUMENTATION_ANNOTATION__:
@@ -38,8 +70,6 @@ export type InvalidInstrumentationValue<V extends string> = {
     `instrumentation value '${V}' is not an OpenTelemetry attribute key; use lowercase dot-separated segments like 'app.order.id'`
 }
 
-type ClassKeys<C> = C extends { readonly Type: infer T } ? keyof T & string : never
-
 /** An attribute key is lowercase and carries at least one dot-separated segment. */
 type AttributeKeyIsOtel<V extends string> = [V] extends [Lowercase<V>] ? [V] extends [`${string}.${string}`] ? true
   : false
@@ -49,6 +79,11 @@ type InvalidAttributeValues<Map extends InstrumentationMap> = {
   [K in keyof Map]: AttributeKeyIsOtel<Map[K]> extends true ? never : Map[K]
 }[keyof Map]
 
+/**
+ * The command class the constructor accepts: it must carry the instrumentation map, every
+ * field it names must be a field of the class, and every attribute key must be an
+ * OpenTelemetry key.
+ */
 export type CheckCommandClass<C> = C extends { readonly [InstrumentationBrand]: infer Map extends InstrumentationMap }
   ? [Exclude<keyof Map & string, ClassKeys<C>>] extends [never]
     ? ([InvalidAttributeValues<Map>] extends [never] ? object
@@ -72,11 +107,6 @@ export interface UninhabitedDecision {
     'this workflow can never succeed; give it a decision variant it can return'
 }
 
-export interface UninhabitedError {
-  readonly __WORKFLOW_ERROR_CHANNEL_IS_NEVER__:
-    'this workflow cannot fail, so it decides nothing; give it an error variant or fold the function into its owning module'
-}
-
 export interface UntaggedError {
   readonly __WORKFLOW_ERROR_CHANNEL_CARRIES_NO_TAG__:
     'this error carries no _tag the consumer can dispatch on; declare it as an S.TaggedError'
@@ -97,18 +127,18 @@ export interface UnsharedTypeId {
     'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
 }
 
+type Top<A = unknown> = A
+
 type AtLeastTwoDistinct<T, U = T> = U extends U ? [T] extends [U] ? false : true : never
 
 type TaggedMembers<D> = D extends D ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
   : never
 
-type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+type MutuallyAssignable<A, B> = [A] extends [B] ? [B] extends [A] ? true : false : false
 
 type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends D
   ? K extends keyof D ? MutuallyAssignable<D[K], symbol> : false
   : never
-
-type Top<A = unknown> = A
 
 type SharedTypeId<D> = [
   {
@@ -116,113 +146,71 @@ type SharedTypeId<D> = [
   }[keyof D],
 ] extends [never] ? UnsharedTypeId : Top
 
-type DecisionShape<D> = [Top] extends [D] ? Top
-  : AtLeastTwoDistinct<D> extends false ? SingleVariantDecision
-  : boolean extends TaggedMembers<D> ? UntaggedDecision
-  : SharedTypeId<D>
-
-export type Workflow<Command, Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
-  : [DecisionError] extends [never] ? UninhabitedError
-  : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
+/**
+ * A member with no `_tag` is not dispatchable. `TaggedMembers` widens to the boolean literal
+ * `false` when no member carries a tag, so the check reads `false extends` rather than
+ * `boolean extends` — the latter let a bare `boolean` decision through, because `boolean` is
+ * not assignable to `false`.
+ */
+type TaggedVariants<D> = false extends TaggedMembers<D> ? UntaggedDecision : Top
 
 type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? Top : UntaggedError
   : UntaggedError
 
+type ErrorLaw<E> = [E] extends [never] ? Top : DispatchableTag<E>
+
+type ExclusiveOutcomes<D, E> = AtLeastTwoDistinct<D | E> extends false ? SingleVariantDecision : Top
+
+type ExclusiveDecisionLaw<D, E> = ExclusiveOutcomes<D, E> & TaggedVariants<D> & SharedTypeId<D>
+
+type EventListLaw<Element> = TaggedVariants<Element> & SharedTypeId<Element>
+
+type DecisionLaw<D, E> = [D] extends [ReadonlyArray<infer Element>] ? EventListLaw<Element>
+  : ExclusiveDecisionLaw<D, E>
+
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
-  : [DecisionError] extends [never] ? UninhabitedError
-  : DecisionShape<Decision> & DispatchableTag<DecisionError>
+  : DecisionLaw<Decision, DecisionError> & ErrorLaw<DecisionError>
+
+export type Workflow<Command, Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
+  : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
+
+/**
+ * What {@link make} publishes: the callable value plus the three schemas it declares, so the
+ * sandwich can derive decode and encode and the handler record can be held exhaustive over the
+ * encoded tags.
+ */
+export type MadeWorkflow<
+  Command extends CommandSchema,
+  Decision extends DecisionSchema,
+  Error extends DecisionSchema,
+> =
+  & ((command: Command['Type']) => Result<Decision['Type'], Error['Type']>)
+  & WorkflowBrand<Command, Decision, Error>
+
 export const make = <
-  C extends Schema.Constraint & {
-    readonly fields: Schema.Struct.Fields
-    readonly Type: object
-    readonly [InstrumentationBrand]: InstrumentationMap
-  },
-  D,
-  E,
+  Command extends InstrumentedCommandSchema,
+  Decision extends DecisionSchema,
+  Error extends DecisionSchema,
 >(
-  command: C & CheckCommandClass<C>,
-  decide: (command: C['Type']) => Result<D, E> & Inhabited<D, E>,
-): Workflow<C['Type'], D, E> => {
-  assertWorkflow(decide)
-  Object.assign(decide, {
-    [WorkflowSchemasKey]: { commandSchema: command },
-  })
+  options: {
+    readonly command: Command & CheckCommandClass<Command>
+    readonly decision: Decision
+    readonly error: Error
+    readonly decide: (command: Command['Type']) =>
+      & Result<Decision['Type'], Error['Type']>
+      & Inhabited<Decision['Type'], Error['Type']>
+  },
+): MadeWorkflow<Command, Decision, Error> => {
+  const { command, decision, error, decide } = options
+  assertWorkflow<Command, Decision, Error>(decide)
+  Object.assign(decide, { [WorkflowSchemasKey]: { command, decision, error } })
   return decide
 }
 
-/**
- * Brands a decision that cannot fail. `make` refuses a `never` error channel outright
- * (`UninhabitedError`); this is the door for the decider that genuinely decides everything.
- * The decision must still choose between at least two tagged variants sharing one TypeId, so
- * `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` still fire.
- *
- * The command schema class comes first, exactly as in {@link make}, so the command channel
- * stays pinned to the class rather than an inferred annotation. The decider's return carries
- * `DecisionShape` written out: the `Workflow` alias is a deferred conditional, and in
- * parameter position it collapses the whole parameter to `unknown` while the decision
- * channel is still generic.
- */
-export const total = <
-  C extends Schema.Constraint & {
-    readonly fields: Schema.Struct.Fields
-    readonly Type: object
-    readonly [InstrumentationBrand]: InstrumentationMap
-  },
-  D,
+function assertWorkflow<
+  Command extends CommandSchema,
+  Decision extends DecisionSchema,
+  Error extends DecisionSchema,
 >(
-  command: C & CheckCommandClass<C>,
-  decide: (command: C['Type']) => Result<D, never> & DecisionShape<D>,
-): ((command: C['Type']) => Result<D, never>) & WorkflowBrand => {
-  const plain: (command: C['Type']) => Result<D, never> = decide
-  assertTotal(plain)
-  Object.assign(plain, {
-    [WorkflowSchemasKey]: { commandSchema: command },
-  })
-  return plain
-}
-
-/**
- * Composes two workflows: what the upstream decides becomes the command the downstream decides
- * on, and a refusal short-circuits the pair. The return type dispatches on the component error
- * union — two components that cannot fail publish the total form, because the `Workflow` alias
- * refuses a `never` channel; a carried error publishes the union as before.
- */
-export const andThen = <
-  Ctx,
-  SelfA,
-  SA extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
-  InheritedA,
-  D1,
-  E1,
-  SelfB extends { readonly decision: D1; readonly ctx: Ctx },
-  D2,
-  E2,
->(
-  _commandA: Schema.Class<SelfA, SA, InheritedA>,
-  upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
-  commandB: { new(props: { readonly decision: D1; readonly ctx: Ctx }): SelfB },
-  ctx: NoInfer<Ctx>,
-  downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
-): [E1 | E2] extends [never] ? ((command: SelfA) => Result<D2, never>) & WorkflowBrand
-  : Workflow<SelfA, D2, E1 | E2> =>
-{
-  const composed: (command: SelfA) => Result<D2, E1 | E2> = (command) =>
-    flatMap(upstream(command), (decision) => downstream(new commandB({ decision, ctx })))
-
-  assertComposite<SelfA, D2, E1 | E2>(composed)
-  return composed
-}
-
-function assertWorkflow<C, D, E>(
-  _decide: (command: C) => Result<D, E> & Inhabited<D, E>,
-): asserts _decide is Workflow<C, D, E> & ((command: C) => Result<D, E>) {}
-
-function assertTotal<Command, D>(
-  _decide: (command: Command) => Result<D, never>,
-): asserts _decide is ((command: Command) => Result<D, never>) & WorkflowBrand {}
-
-function assertComposite<Command, D, E>(
-  _composed: ((command: Command) => Result<D, E>) | Workflow<Command, D, E>,
-): asserts _composed is [E] extends [never] ? ((command: Command) => Result<D, never>) & WorkflowBrand
-  : Workflow<Command, D, E>
-{}
+  _decide: (command: Command['Type']) => Result<Decision['Type'], Error['Type']>,
+): asserts _decide is MadeWorkflow<Command, Decision, Error> {}

@@ -1,11 +1,5 @@
 import { Schema as S } from 'effect'
-import { KitDefinition, SkuId, WarehouseStockPartition } from '../inventory/inventory.schema.js'
-import { CreditAccount, CustomerTier, FraudRiskScore } from './credit.schema.js'
-
-const OrderFulfillmentCommandTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/OrderFulfillmentCommand',
-)
-export type OrderFulfillmentCommandTypeId = typeof OrderFulfillmentCommandTypeId
+import { SkuId } from '../inventory/inventory.schema.js'
 
 const Quantity = S.Int.pipe(S.check(S.isGreaterThan(0)))
 
@@ -19,15 +13,3 @@ export class Order extends S.Class<Order>('Order')({
   customerId: S.String,
   lines: S.Array(OrderLine),
 }) {}
-
-export class OrderFulfillmentCommand extends S.Class<OrderFulfillmentCommand>('OrderFulfillmentCommand')({
-  order: Order,
-  customerTier: CustomerTier,
-  fraudRisk: FraudRiskScore,
-  credit: CreditAccount,
-  stock: S.Array(WarehouseStockPartition),
-  kits: S.Array(KitDefinition),
-  now: S.DateTimeUtc,
-}) {
-  readonly [OrderFulfillmentCommandTypeId] = OrderFulfillmentCommandTypeId
-}

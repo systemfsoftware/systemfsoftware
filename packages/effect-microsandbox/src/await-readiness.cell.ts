@@ -1,16 +1,10 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer, Match } from 'effect'
-import * as Result from 'effect/Result'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { SandboxBootError, WaitTimeoutError } from './MicroVMError.schema.js'
 import type { WaitStrategy } from './MicroVMSpec.schema.js'
-import {
-  ResolveWaitStrategy,
-  resolveWaitStrategy,
-  type WaitRequired,
-  type WaitSkipped,
-} from './resolve-wait-strategy.workflow.js'
+import { ResolveWaitStrategy, resolveWaitStrategy } from './resolve-wait-strategy.workflow.js'
 
 const WAIT_TIMEOUT_MS = 30_000
 const WAIT_POLL_MS = 250
@@ -65,20 +59,23 @@ const awaitReadinessForStrategy = (
     )
   })
 
-const readReadinessCommand = (vm: AcquiredVM) => Effect.succeed(vm)
+/**
+ * What the cell's `read` returns, and so what every write handler receives and what the cell
+ * answers with: the encoded `ResolveWaitStrategy` command the library decodes for the decision,
+ * joined to the acquired VM it was read from. The VM carries the live sandbox handle, which no
+ * schema can encode, and the next step in `bootMicroVM` needs that same VM, so the cell's input
+ * passes through whole rather than being split into a command and a service.
+ */
+export type AwaitReadinessRead = (typeof ResolveWaitStrategy)['Encoded'] & AcquiredVM
 
-const writeReadiness = (outcome: Result.Result<WaitRequired | WaitSkipped, never>, vm: AcquiredVM) =>
-  Match.value(Result.getOrThrow(outcome)).pipe(
-    Match.tag(
-      'WaitRequired',
-      ({ strategy }) => Effect.as(awaitReadinessForStrategy(vm, strategy), vm),
-    ),
-    Match.tag('WaitSkipped', () => Effect.succeed(vm)),
-    Match.exhaustive,
-  )
+const readReadiness = (vm: AcquiredVM): Effect.Effect<AwaitReadinessRead> =>
+  Effect.succeed({ ...vm, _tag: 'ResolveWaitStrategy' })
 
-export const awaitReadiness = Sandwich.named('await_readiness')(readReadinessCommand)
-  .decode(Sandwich.pure((vm: AcquiredVM) => Result.succeed(new ResolveWaitStrategy({ spec: vm.spec }))))
+export const awaitReadiness = Sandwich.named('await_readiness')(readReadiness)
   .decide(resolveWaitStrategy)
-  .encode(Sandwich.pure(Result.succeed))
-  .write(writeReadiness)
+  .write({
+    WaitRequired: (required, snapshot) => Effect.as(awaitReadinessForStrategy(snapshot, required.strategy), snapshot),
+    WaitSkipped: (_skipped, snapshot) => Effect.succeed(snapshot),
+    CommandRejected: (rejected, snapshot) =>
+      Effect.fail(new SandboxBootError({ sandboxName: snapshot.sandbox.name, cause: rejected })),
+  })

@@ -3,17 +3,11 @@ import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Array, Effect, Function, Option, pipe } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
 import type { NetworkPolicy, Sandbox, SandboxBuilder } from 'microsandbox'
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
-import {
-  PlanSandbox,
-  type PortBinding,
-  renderSandboxPlan,
-  type SandboxPlan,
-  type SandboxPlanDecision,
-} from './render-sandbox-plan.workflow.js'
+import type { PortBinding, SandboxPlan } from './render-sandbox-plan.schema.js'
+import { PlanSandbox, renderSandboxPlan } from './render-sandbox-plan.workflow.js'
 
 type NapiMountBuilderT = { bind(host: string): NapiMountBuilderT }
 type NapiNetworkBuilderT = { policy(policy: NetworkPolicy): NapiNetworkBuilderT }
@@ -140,23 +134,19 @@ const readPlanCommand = (spec: MicroVMSpec) =>
     })
   })
 
-const writeBoot = (outcome: Result.Result<SandboxPlanDecision, never>, command: PlanSandbox) =>
-  Match.value(Result.getOrThrow(outcome)).pipe(
-    Match.tag('PlanRefused', (refused) =>
+export const bootSandbox = Sandwich.named('boot_sandbox')(readPlanCommand)
+  .decide(renderSandboxPlan)
+  .write({
+    PlanApproved: (approved, command) =>
+      Effect.acquireRelease(createSandbox(command.spec, approved.plan), (vm) => teardown(vm.sandbox)),
+    PlanRefused: (refused) =>
       Effect.fail(
         new LoopbackViolationError({
           sandboxName: refused.sandboxName,
           host: refused.host,
           guestPort: refused.guestPort,
         }),
-      )),
-    Match.tag(
-      'PlanApproved',
-      (approved) => Effect.acquireRelease(createSandbox(command.spec, approved.plan), (vm) => teardown(vm.sandbox)),
-    ),
-    Match.exhaustive,
-  )
-
-export const bootSandbox = Sandwich.named('boot_sandbox')(readPlanCommand)
-  .decide(renderSandboxPlan)
-  .write(writeBoot)
+      ),
+    CommandRejected: (rejected, command) =>
+      Effect.fail(new SandboxBootError({ sandboxName: command.name, cause: rejected })),
+  })

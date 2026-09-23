@@ -56,7 +56,7 @@ ruleTester.run('workflow-file-export-topology', workflowFileExportTopology, {
       code: `${IMPORT}
 export class Cmd extends S.TaggedClass<Cmd>()('Cmd', { n: S.Int }) {}
 export class Err extends S.TaggedError<Err>()('Err', {}) {}
-export const decide = Workflow.make(Cmd, (command) => command.n)`,
+export const decide = Workflow.make({ command: Cmd, decision: Err, error: Err, decide: (command) => command.n })`,
       filename: WORKFLOW,
     },
     {
@@ -64,7 +64,7 @@ export const decide = Workflow.make(Cmd, (command) => command.n)`,
       code: `${IMPORT}
 export type Mode = 'a' | 'b'
 export interface Shape { n: number }
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: Shape, decision: Mode, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
     },
     {
@@ -72,22 +72,22 @@ export const decide = Workflow.make((n: number) => n)`,
       code: `${IMPORT}
 class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
 export { Cmd }
-export const decide = Workflow.make(Cmd, (c) => c)`,
+export const decide = Workflow.make({ command: Cmd, decision: Cmd, error: NoError, decide: (c) => c })`,
       filename: WORKFLOW,
     },
     {
       name: 'Should_Pass_When_TheOneValueExportIsAFactoryReturningMake',
       code: `${IMPORT}
-export const traced = (trace: string[]) => Workflow.make((n: number) => {
+export const traced = (trace: string[]) => Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => {
   trace.push('decide')
   return n
-})`,
+} })`,
       filename: WORKFLOW,
     },
     {
       name: 'Should_Pass_When_DefaultExportIsTheSoleValue',
       code: `${IMPORT}
-const decide = Workflow.make((n: number) => n)
+const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })
 export default decide`,
       filename: WORKFLOW,
     },
@@ -110,7 +110,7 @@ export const b = 2`,
 export class A extends S.TaggedClass<A>()('A', {}) {}
 export class B extends S.TaggedClass<B>()('B', {}) {}
 export const Verdict = S.Union([A, B])
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: A, decision: Verdict, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
     },
   ],
@@ -119,7 +119,7 @@ export const decide = Workflow.make((n: number) => n)`,
       name: 'Should_Report_When_AHelperIsExportedBesideTheDecision',
       code: `${IMPORT}
 export const helper = () => 1
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
       errors: [extraError],
     },
@@ -135,7 +135,7 @@ export type CmdType = Cmd`,
       name: 'Should_Report_When_StarReexportIsPresent',
       code: `${IMPORT}
 export * from './other.js'
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
       errors: [reexportError('./other.js')],
     },
@@ -143,7 +143,7 @@ export const decide = Workflow.make((n: number) => n)`,
       name: 'Should_Report_When_NamedReexportIsPresent',
       code: `${IMPORT}
 export { foo } from './other.js'
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
       errors: [reexportError('./other.js')],
     },
@@ -151,7 +151,7 @@ export const decide = Workflow.make((n: number) => n)`,
       name: 'Should_Report_When_TypeReexportIsPresent',
       code: `${IMPORT}
 export type { Foo } from './other.js'
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
       errors: [reexportError('./other.js')],
     },
@@ -160,7 +160,7 @@ export const decide = Workflow.make((n: number) => n)`,
       code: `${IMPORT}
 import { foo } from './other.js'
 export { foo }
-export const decide = Workflow.make((n: number) => n)`,
+export const decide = Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
       errors: [reexportError('the imported binding foo')],
     },
@@ -169,7 +169,7 @@ export const decide = Workflow.make((n: number) => n)`,
       code: `${IMPORT}
 export class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
 export const encode = S.encodeSync(Cmd)
-export const decide = Workflow.make(Cmd, (c) => c)`,
+export const decide = Workflow.make({ command: Cmd, decision: Cmd, error: NoError, decide: (c) => c })`,
       filename: WORKFLOW,
       errors: [extraError],
     },
@@ -177,7 +177,7 @@ export const decide = Workflow.make(Cmd, (c) => c)`,
       name: 'Should_Report_When_DefaultAndNamedValuesBothExport',
       code: `${IMPORT}
 export const helper = 1
-export default Workflow.make((n: number) => n)`,
+export default Workflow.make({ command: null, decision: null, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
       errors: [extraError],
     },

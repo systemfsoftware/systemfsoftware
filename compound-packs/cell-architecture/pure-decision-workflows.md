@@ -7,7 +7,7 @@ applies_when:
 tags: [cell, workflow, pure-core, cyclomatic-complexity, match-exhaustive]
 ---
 
-The `decide` phase of a sandwich must receive a `Workflow` instantiated with `Workflow.make` (or `Workflow.total` for decisions that cannot fail). The slot requires the nominal `WorkflowBrand`; passing an unwrapped anonymous function fails type-checking.
+The `decide` phase of a sandwich must receive a `Workflow` instantiated with `Workflow.make`. For decisions that cannot fail, declare `error: Schema.Never`. The slot requires the nominal `WorkflowBrand`; passing an unwrapped anonymous function fails type-checking.
 
 A workflow is a total, single-path expression: Cyclomatic Complexity = 1. Branching must be expressed as exhaustive dispatch over a closed tagged union (`Match.value(cmd).pipe(...)` terminating in `Match.exhaustive`). Iteration must be expressed as `map`, `filter`, or `fold`, never imperative loops.
 
@@ -22,10 +22,12 @@ export const decideDiscount = (cmd: OrderCmd) => {
   return Result.succeed(new None())
 }
 
-// RIGHT: Workflow.make, complexity = 1 via Match.exhaustive
-export const decideDiscount = Workflow.make(
-  OrderCommand,
-  (cmd): Result.Result<High | Low | None, never> =>
+// RIGHT: Workflow.make with schemas, complexity = 1 via Match.exhaustive
+export const decideDiscount = Workflow.make({
+  command: OrderCommand,
+  decision: DiscountDecision,
+  error: Schema.Never,
+  decide: (cmd): Result.Result<High | Low | None, never> =>
     Match.value(cmd.tier).pipe(
       Match.tag('VIP', () =>
         Match.value(cmd.isOverThreshold).pipe(
@@ -36,7 +38,7 @@ export const decideDiscount = Workflow.make(
       Match.tag('Standard', () => Result.succeed(new None())),
       Match.exhaustive,
     ),
-)
+})
 ```
 
 Gate: `type-checker` — the chain's `decide` method accepts only a `WorkflowBrand`-branded workflow, so a bare function fails compilation.

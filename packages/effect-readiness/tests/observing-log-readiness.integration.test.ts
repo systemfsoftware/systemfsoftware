@@ -23,9 +23,10 @@ const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boole
     Match.exhaustive,
   )
 
-const reportedLogFailure = (error: Readiness.LogSourceError): boolean =>
+const reportedLogFailure = (error: Readiness.LogSourceError | Readiness.ProbeInputInvalid): boolean =>
   Match.value(error).pipe(
     Match.tag('LogSourceError', () => true),
+    Match.tag('ProbeInputInvalid', () => false),
     Match.exhaustive,
   )
 

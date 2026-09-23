@@ -291,10 +291,10 @@ export const CONTROL_FLOW_BANNED_FIX =
 export const UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED = 'a decision body the rules can locate in this file' as const
 
 export const UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL =
-  'a Workflow.make argument whose body is not visible from this file (imported, a non-function value, or an unresolvable reference)' as const
+  'a Workflow.make decide property whose body is not visible from this file (missing, imported, a non-function value, or an unresolvable reference)' as const
 
 export const UNRESOLVABLE_MAKE_ARGUMENT_FIX =
-  'move the decision body inline or into a module-scope function in this file so the one-path and purity obligations bind' as const
+  'write the decision body inline, or bind it to a module-scope function in this file, so the one-path and purity obligations bind' as const
 
 export const RUNTIME_IMPORT_ACTUAL =
   'a runtime import inside the decision body — import(...) or require(...) performs a module load when the decision runs' as const

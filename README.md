@@ -104,50 +104,40 @@ import { InventoryStore } from './ports/InventoryStore.js'
 import { PaymentLedger } from './ports/PaymentLedger.js'
 
 export const submitOrderCell = Sandwich.named('order.submit')(
-  // Phase 1: READ (Impure) — Fetch database records, cache entries, and current time via R
+  // Phase 1: READ (Impure) — Fetch database records, cache entries, and current time via R, returning Command's Encoded type
   (req: SubmitOrderRequest) =>
     Effect.gen(function*() {
       const inventory = yield* InventoryStore
       const ledger = yield* PaymentLedger
       const stock = yield* inventory.getAvailableStock(req.sku)
       const credit = yield* ledger.getCustomerCredit(req.customerId)
-      return { req, stock, credit }
-    }),
-)
-  // Phase 2: DECODE (Pure) — Parse unknown inputs into validated Command schemas
-  .decode(
-    Sandwich.pure(({ credit, req, stock }) =>
-      S.decodeUnknown(SubmitOrderCommand)({
+      return {
         orderId: req.orderId,
         sku: req.sku,
         quantity: req.quantity,
         availableStock: stock.quantity,
         creditBalance: credit.balance,
-      })
-    ),
-  )
+      }
+    }),
+)
+  // Phase 2 (DECODE) & Phase 4 (ENCODE) derived automatically from schemas
   // Phase 3: DECIDE (Pure Core) — Execute a pure decision function (CC = 1)
   .decide(decideOrderFulfillment)
-  // Phase 4: ENCODE (Pure) — Convert domain decision outcomes into persistence records
-  .encode(
-    Sandwich.pure((outcome) =>
-      Result.match(outcome, {
-        onSuccess: (accepted) => new OrderCommittedPayload({ id: accepted.orderId }),
-        onFailure: (refusal) => new OrderRefusalLoggedPayload({ reason: refusal._tag }),
-      })
-    ),
-  )
-  // Phase 5: WRITE (Impure) — Persist records, update tables, and emit events via R
-  .write((payload, { req }) =>
-    Effect.gen(function*() {
-      const ledger = yield* PaymentLedger
-      yield* ledger.commitTransaction(payload)
-      return new SubmitOrderResponse({ orderId: req.orderId, status: payload._tag })
-    })
-  )
+  // Phase 5: WRITE (Impure) — Exhaustive handler record over decision tags, error tags, and CommandRejected
+  .write({
+    OrderCommitted: (payload, raw) =>
+      Effect.gen(function*() {
+        const ledger = yield* PaymentLedger
+        yield* ledger.commitTransaction(payload)
+        return new SubmitOrderResponse({ orderId: raw.orderId, status: payload._tag })
+      }),
+    OrderRefusalLogged: (refusal, raw) =>
+      Effect.succeed(new SubmitOrderResponse({ orderId: raw.orderId, status: refusal._tag })),
+    CommandRejected: (rejected) => Effect.fail(new SubmitOrderError({ issue: rejected.issue })),
+  })
 ```
 
-Calling I/O inside `decide`, skipping a phase, or asserting types without validation (`as`) fails the TypeScript typecheck.
+Calling I/O inside `decide` or asserting types without validation (`as`) fails the TypeScript typecheck.
 
 ### Pure Decision Workflows (CC = 1)
 
@@ -179,9 +169,11 @@ export class InsufficientStockRefusal extends S.TaggedClass<InsufficientStockRef
 }) {}
 
 // Cyclomatic complexity = 1: Single total pipeline ending with Match.exhaustive
-export const allocateStockWorkflow = Workflow.make(
-  AllocateStockCommand,
-  (cmd): Result.Result<StockAllocated, InsufficientStockRefusal> =>
+export const allocateStockWorkflow = Workflow.make({
+  command: AllocateStockCommand,
+  decision: StockAllocated,
+  error: InsufficientStockRefusal,
+  decide: (cmd): Result.Result<StockAllocated, InsufficientStockRefusal> =>
     Match.value(cmd.availableQuantity >= cmd.requestedQuantity).pipe(
       Match.when(true, () =>
         Result.succeed(
@@ -199,7 +191,7 @@ export const allocateStockWorkflow = Workflow.make(
         )),
       Match.exhaustive,
     ),
-)
+})
 ```
 
 ### The Four-Channel Contract
@@ -219,7 +211,7 @@ Following `compound-packs/cell-architecture/service-and-layer-boundaries.md`:
 
 - Capability contracts are declared as `Context.Service<Self, Shape>()(...)` in dedicated `*.service.ts` modules with zero driver imports (`.port.ts` and `.layer.ts` suffixes are prohibited).
 - Concrete implementations export parameterized `layer(options)` factories from dedicated driver/store modules (e.g. `src/drivers/*`, `src/store/*`). Static `*Live` singletons are reserved strictly for the application composition root (`main.ts`).
-- Dependencies bind **once** at the application entrypoint via `Cell.provide(AppStack)`; mid-pipeline binding (`Effect.provide` inside cells) is forbidden.
+- Dependencies bind **once** at the application entrypoint via `Cell.provideContext(appContext)`; mid-pipeline binding (`Effect.provide` inside cells) is forbidden.
 
 ### Resource & Lifecycle Algebra
 

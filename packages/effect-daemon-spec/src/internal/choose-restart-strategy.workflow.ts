@@ -59,6 +59,16 @@ export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhau
 }
 
 /**
+ * The decision channel: the two outcomes a cooldown-or-restart choice is made between, as
+ * one schema the workflow declares. The error channel carries `RestartDecisionExhausted`, so
+ * the compiler holds the three-way dispatch over the encoded tags of both channels.
+ */
+/** @internal */
+export const RestartDecision = S.Union([RestartDecisionContinue, RestartDecisionRestart])
+/** @internal */
+export type RestartDecision = typeof RestartDecision.Type
+
+/**
  * The outcome a restart decision produces. Named here, at the module that owns the
  * decision, so consumers import the contract instead of reconstructing it with
  * `ReturnType<…>` — which couples them to this signature's shape and attaches no
@@ -77,10 +87,20 @@ export type RestartDecisionWorkflow = Workflow.Workflow<
   RestartDecisionExhausted
 >
 
+/**
+ * The restart decision's encoded form: what a cell's `write` handler receives once the
+ * library has encoded the decision. Named here so a handler types against the edge the
+ * library enforces instead of restating the payload.
+ */
 /** @internal */
-export const chooseRestartStrategy = Workflow.make(
-  DecideInput,
-  (command): RestartDecisionOutcome =>
+export type RestartDecisionRestartEncoded = (typeof RestartDecisionRestart)['Encoded']
+
+/** @internal */
+export const chooseRestartStrategy = Workflow.make({
+  command: DecideInput,
+  decision: RestartDecision,
+  error: RestartDecisionExhausted,
+  decide: (command): RestartDecisionOutcome =>
     Match.value(command).pipe(
       Match.when({ exitSuccess: true }, () => Result.succeed(RestartDecisionContinue.make())),
       Match.when({ exitSuccess: false, intensityExceeded: true }, () => Result.fail(RestartDecisionExhausted.make())),
@@ -92,7 +112,7 @@ export const chooseRestartStrategy = Workflow.make(
         )
       ),
     ),
-)
+})
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this

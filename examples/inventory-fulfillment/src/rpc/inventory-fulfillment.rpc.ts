@@ -8,9 +8,7 @@ import {
   Forbidden,
   FulfillmentDecision,
   type FulfillmentDecision as FulfillmentDecisionType,
-  type FulfillmentError,
   InsufficientStock,
-  Unauthorized,
 } from '../fulfillment/decision.schema.js'
 import { AuditPayload, ReservationRolledBack } from '../fulfillment/event.schema.js'
 import { fulfillmentCell } from '../fulfillment/fulfillment.cell.js'
@@ -53,11 +51,8 @@ export const ListStock = Rpc.make('listStock', {
 
 export const FulfillmentRpcs = RpcGroup.make(SubmitOrder, GetReservation, ListStock)
 
-const dieUnreachable = (impossible: Unauthorized | Forbidden): Effect.Effect<never> =>
-  Effect.die(new Error(`fulfillment cell produced an impossible error: ${impossible._tag}`))
-
 const submitOrderOutcome = (
-  outcome: FulfillmentDecisionType | FulfillmentError,
+  outcome: FulfillmentDecisionType | InsufficientStock | CreditLimitExceeded,
 ): Effect.Effect<FulfillmentDecisionType, InsufficientStock | CreditLimitExceeded> =>
   Match.value(outcome).pipe(
     Match.tag('AllocatedSplit', (decision) => Effect.succeed(decision)),
@@ -67,8 +62,6 @@ const submitOrderOutcome = (
     Match.tag('ConflictRollback', (decision) => Effect.succeed(decision)),
     Match.tag('InsufficientStock', (error) => Effect.fail(error)),
     Match.tag('CreditLimitExceeded', (error) => Effect.fail(error)),
-    Match.tag('Unauthorized', dieUnreachable),
-    Match.tag('Forbidden', dieUnreachable),
     Match.exhaustive,
   )
 
@@ -123,7 +116,6 @@ const runFulfillment = (request: {
     return yield* gate.withGate(
       request.order.customerId,
       fulfillmentCell.run(request).pipe(
-        Effect.catchTag('SchemaError', (error) => Effect.die(error)),
         Effect.retry({
           times: config.maxRetries - 1,
           schedule: Schedule.spaced(config.retryInterval),
