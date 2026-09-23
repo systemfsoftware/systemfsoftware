@@ -6,7 +6,7 @@ import { Effect, Layer, Schema } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { TestOptions } from 'vitest'
 import * as Register from './Register.js'
-import * as TaskRef from './TaskRef.js'
+import * as TaskRef from './TaskRef.service.js'
 
 export type { DescribeMode, RegisterMode } from './Register.js'
 
