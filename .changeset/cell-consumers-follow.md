@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-memfs": patch
-"@systemfsoftware/effect-microsandbox": patch
 "@systemfsoftware/effect-daemon-spec": patch
 ---
 
