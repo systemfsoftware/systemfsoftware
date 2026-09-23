@@ -27,3 +27,21 @@ pnpm --filter @systemfsoftware/example-inventory-fulfillment test
 # Run type checks
 pnpm --filter @systemfsoftware/example-inventory-fulfillment typecheck
 ```
+
+## Deploying the `credit_version` migration
+
+`drizzle/20260923215213_add_credit_version` adds `user.credit_version integer not null default 1`. Existing rows start at version 1, so it applies without a backfill.
+
+After deploying, both queries must return zero rows:
+
+```sql
+-- the column exists and is NOT NULL
+SELECT 1 FROM information_schema.columns
+WHERE table_name = 'user' AND column_name = 'credit_version' AND is_nullable = 'YES';
+
+-- no customer owes more than their limit plus overdraft privilege
+SELECT id, outstanding_balance - credit_limit - overdraft_privilege AS overshoot
+FROM "user" WHERE outstanding_balance > credit_limit + overdraft_privilege;
+```
+
+Rollback order matters. Running the previous app version against the new schema is safe, because the defaulted column is ignored. Dropping the column while this version runs breaks every `settle`, because it reads and writes `credit_version`. Roll the app back first, then run `ALTER TABLE "user" DROP COLUMN credit_version`.
