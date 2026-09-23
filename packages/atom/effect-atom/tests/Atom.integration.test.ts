@@ -1070,7 +1070,9 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a page with services that supply a starting number')('ctx', () =>
           Effect.sync(() => {
-            const Counter = Context.Service<number>('Atom.feature.test/Counter')
+            class Counter extends Context.Service<Counter, number>()(
+              '@systemfsoftware/effect-atom/tests/Atom.integration.test/Counter',
+            ) {}
             const counterRuntime = Atom.context()(Layer.sync(Counter, () => 1))
             const count = counterRuntime.atom(Counter.use((n) => Effect.succeed(n)))
             const doubled = counterRuntime.atom((_get) => Counter.use((n) => Effect.succeed(n * 2)))
@@ -1170,9 +1172,11 @@ Feature('Deriving values from other values on a page')
           'ctx',
           () =>
             Effect.sync(() => {
-              const Counter = Context.Service<number>('Atom.feature.test/CounterFromRecipe')
-              const recipeRuntime = Atom.context()((_get) => Layer.sync(Counter, () => 7))
-              const count = recipeRuntime.atom(Counter.use((n) => Effect.succeed(n)))
+              class CounterFromRecipe extends Context.Service<CounterFromRecipe, number>()(
+                '@systemfsoftware/effect-atom/tests/Atom.integration.test/CounterFromRecipe',
+              ) {}
+              const recipeRuntime = Atom.context()((_get) => Layer.sync(CounterFromRecipe, () => 7))
+              const count = recipeRuntime.atom(CounterFromRecipe.use((n) => Effect.succeed(n)))
               const page = Registry.make()
               return { page, count }
             }),

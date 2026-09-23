@@ -5,7 +5,9 @@
     "@systemfsoftware/tsconfig/effect"
   ],
   "include": [
-    "src"
+    "src",
+    "tests",
+    "test-types"
   ],
   "compilerOptions": {
     "customConditions": [
