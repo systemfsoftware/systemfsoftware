@@ -36,7 +36,7 @@ The verification layer, as inherited from the prior session's implementation of 
 - The contract lane's `--from-npm` scenario stood up a `verdaccio/verdaccio:6` container and ran `npm publish` to it. That pulls a foreign image and a foreign package surface into CI, which is rejected. It also hit npm 11's client-side publish auth pre-flight (`noCreds` throws `ENEEDAUTH` before any HTTP), patched reactively with a dummy `.npmrc` token — a fix that exists only because the design was wrong.
 - The contract lane hardcoded a `dist/index.mjs` check; the real tsdown entry is `dist/main.mjs`. Reactive fix.
 - The lane bound itself to the Docker daemon; on this VM only podman's compat socket is available. Reactive `DOCKER_HOST` wiring.
-- The attw CLI has **no** `--registry` option and hardcodes `https://registry.npmjs.org` in two places (`attw.executor.ts` inline fetch, `npm-registry.adapter.ts`), while a proper `NpmRegistry` adapter exists but is never wired into the composition root (`main.ts`). So there is no clean way to point `--from-npm` at a localhost registry.
+- The attw CLI has **no** `--registry` option and hardcodes `https://registry.npmjs.org` in two places (`attw.executor.ts` inline fetch, `npm-registry.ts`), while a proper `NpmRegistry` adapter exists but is never wired into the composition root (`main.ts`). So there is no clean way to point `--from-npm` at a localhost registry.
 - Merging `origin/main` brought `feat(stryker-js)!: inject the sandbox directory through a forked api`, which added `commonTokens.sandboxDirectory` to the vitest-runner's inject tokens. The shared worker binds that token one `provideValue` _after_ registering `PluginCreator`; typed-inject's `ClassProvider` resolves class dependencies from its registration parent, so `PluginCreator` captures an injector without the token. Every mutation run dies with `No provider found for "sandboxDirectory"`. Verified for attw: error before the reorder, 100% (140 killed / 2 timeout / 0 survived) after.
 
 The cost: the verification layer cannot prove the refactor works, and the mutation gate — a stated stop condition of the refactor plan — is blocked by a one-line defect in foreign code.
@@ -80,7 +80,7 @@ The cost: the verification layer cannot prove the refactor works, and the mutati
 
 **KTD2 — `--registry` is `Config`-backed, reusing `AttwConfigFileLayer`.** The attw CLI already constructs a `ConfigProvider` from `.attw.json` (`attw-config.schema.ts:37-47`) and sets it via `Layer.setConfigProvider`. The registry URL becomes a `Config.string('registry').pipe(Config.withDefault('https://registry.npmjs.org'))`, resolved once at the composition root and handed to `NpmRegistryLive`. This gives flag → env → config-file → default priority for free and collapses both hardcoded URLs plus the core's `registryBaseUrl` into one key. Chosen over hand-threading a flag value through every function (the layer-dependency shape the rest of the CLI already uses).
 
-**KTD3 — one acquisition path: wire `NpmRegistryLive`, delete the executor's inline fetch.** `NpmRegistry`/`NpmRegistryLive` already exists (`npm-registry.adapter.ts`) but is absent from `main.ts`'s layer graph, so the executor's inline `fetch` is the live path. The fix wires the adapter into the root (parameterized by the resolved registry URL) and removes the duplicate inline fetch, leaving a single acquisition cell — consistent with the cell architecture the refactor enforces everywhere else.
+**KTD3 — one acquisition path: wire `NpmRegistryLive`, delete the executor's inline fetch.** `NpmRegistry`/`NpmRegistryLive` already exists (`npm-registry.ts`) but is absent from `main.ts`'s layer graph, so the executor's inline `fetch` is the live path. The fix wires the adapter into the root (parameterized by the resolved registry URL) and removes the duplicate inline fetch, leaving a single acquisition cell — consistent with the cell architecture the refactor enforces everywhere else.
 
 **KTD4 — the `sandboxDirectory` fix lands as an attw-verified change, not a broad claim.** Verified for attw: error before reorder, 100% after. typed-inject's `ClassProvider.result` resolves the class against its registration parent (`InjectorImpl.js`), so binding `sandboxDirectory` after `PluginCreator` is the defect; reordering the two `provideValue`/`provideClass` calls fixes it. Broad impact on other consumers is unverified (CI is non-evidence — it dies at `stryker: not found` before any injection) and out of scope. `mutation-run` is ours (not vendored), so editing it is permitted.
 
@@ -93,7 +93,7 @@ flowchart LR
   subgraph Before["Before — two paths, one dead"]
     direction LR
     H1["attw.handler.ts\n--from-npm flag"] --> E1["attw.executor.ts\ninline fetch\nhardcoded npmjs.org"]
-    H1 -.->|"NpmRegistryLive\nnever wired"| A1["npm-registry.adapter.ts\n(dead)"]
+    H1 -.->|"NpmRegistryLive\nnever wired"| A1["npm-registry.ts\n(dead)"]
     E1 --> Core1["core\nregistryBaseUrl seam\n(unreached)"]
   end
   subgraph After["After — one Config-fed path"]
@@ -135,20 +135,20 @@ U1 (the `--registry` CLI enabler) first, because the stub-registry contract scen
 
 ## Implementation Units
 
-| U-ID | Title                                                    | Files touched                                                                                                                                | Depends on     |
-| ---- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| U1   | `--registry` Config-backed option + wire NpmRegistryLive | `cli/src/attw.handler.ts`, `cli/src/attw-config.schema.ts`, `cli/src/npm-registry.adapter.ts`, `cli/src/attw.executor.ts`, `cli/src/main.ts` | —              |
-| U2   | localhost stub registry helper                           | `cli/__tests__/stub-registry.ts` (new)                                                                                                       | U1             |
-| U3   | contract lane: tarball-only + stub-registry `--from-npm` | `cli/__tests__/global-setup.ts`, `cli/__tests__/cli-contract.feature.test.ts`, `cli/__tests__/container.ts`                                  | U1, U2         |
-| U4   | stryker `sandboxDirectory` injection-ordering fix        | `packages/stryker-js/mutation-run/src/worker-pool/child-process-proxy-worker.ts`                                                             | —              |
-| U5   | reproducibility runbook + final gate                     | this plan (runbook section), `cli` gate verification                                                                                         | U1, U2, U3, U4 |
+| U-ID | Title                                                    | Files touched                                                                                                                        | Depends on     |
+| ---- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| U1   | `--registry` Config-backed option + wire NpmRegistryLive | `cli/src/attw.handler.ts`, `cli/src/attw-config.schema.ts`, `cli/src/npm-registry.ts`, `cli/src/attw.executor.ts`, `cli/src/main.ts` | —              |
+| U2   | localhost stub registry helper                           | `cli/__tests__/stub-registry.ts` (new)                                                                                               | U1             |
+| U3   | contract lane: tarball-only + stub-registry `--from-npm` | `cli/__tests__/global-setup.ts`, `cli/__tests__/cli-contract.feature.test.ts`, `cli/__tests__/container.ts`                          | U1, U2         |
+| U4   | stryker `sandboxDirectory` injection-ordering fix        | `packages/stryker-js/mutation-run/src/worker-pool/child-process-proxy-worker.ts`                                                     | —              |
+| U5   | reproducibility runbook + final gate                     | this plan (runbook section), `cli` gate verification                                                                                 | U1, U2, U3, U4 |
 
 ### U1. `--registry` Config-backed option + wire NpmRegistryLive
 
 - **Goal:** Give the CLI a single, `Config`-fed acquisition path so `--from-npm` can target any registry, eliminating both hardcoded `registry.npmjs.org` sites.
 - **Requirements:** V3.
 - **Dependencies:** none.
-- **Files:** `packages/arethetypeswrong/cli/src/attw.handler.ts` (add option), `packages/arethetypeswrong/cli/src/attw-config.schema.ts` (optional `registry` Schema field), `packages/arethetypeswrong/cli/src/npm-registry.adapter.ts` (accept base URL), `packages/arethetypeswrong/cli/src/attw.executor.ts` (delete inline fetch, call the service), `packages/arethetypeswrong/cli/src/main.ts` (wire `NpmRegistryLive` with the resolved URL), `packages/arethetypeswrong/cli/src/__tests__/npm-registry.adapter.test.ts` (or existing adapter test).
+- **Files:** `packages/arethetypeswrong/cli/src/attw.handler.ts` (add option), `packages/arethetypeswrong/cli/src/attw-config.schema.ts` (optional `registry` Schema field), `packages/arethetypeswrong/cli/src/npm-registry.ts` (accept base URL), `packages/arethetypeswrong/cli/src/attw.executor.ts` (delete inline fetch, call the service), `packages/arethetypeswrong/cli/src/main.ts` (wire `NpmRegistryLive` with the resolved URL), `packages/arethetypeswrong/cli/src/__tests__/npm-registry.adapter.test.ts` (or existing adapter test).
 - **Approach:** Define `Options.text('registry')` bound to `Config.string('registry').pipe(Config.withDefault('https://registry.npmjs.org'))`, so the value resolves flag → env → `.attw.json` → default through the existing `AttwConfigFileLayer`. At the composition root, read the resolved URL and build `NpmRegistryLive` parameterized by it. The `NpmRegistryService` already returns manifest + tarball bytes; parameterize its base URL instead of the hardcoded literal. Delete the executor's inline `fetch` (attw.executor.ts:107-136) and route through the service. Thread the URL to the core's `registryBaseUrl` where the core acquisition is reached.
 - **Patterns to follow:** `attw-config.schema.ts` `ConfigProvider` construction; the layer-dependency shape used by `TerminalLive`/`FilesystemLive`/`PackRunnerLive` in `main.ts`.
 - **Test scenarios:**

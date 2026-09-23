@@ -35,7 +35,7 @@ That shape costs exactly what the repo's doctrine says it costs. No decision can
 
 The second cost is silence. `watch` returns `Stream.empty` for every path, so a consumer watching a directory is told "no events" by a filesystem that can never report one. `readDirectory` discards its `recursive` option. `makeTempFile` discards its `suffix` option. Driver failures are rebuilt as `PlatformError`s without `cause`, so the underlying error is destroyed on the way out. `File.seek` sets a negative cursor where the port's contract refuses the seek with `BadArgument`. None of this is visible from the package's own gates, which pass.
 
-The gap is not the lint preset — `@systemfsoftware/oxlint-config-recommended` already composes the cell-architecture rules, so `ban-unknown`, `no-io-boundary-tests`, and `ban-error-string` are live against this package today. The gap is that nothing in the package gives those rules or the mutation instrument anything to read, and the two leaf rules that claim to gate the adapter (`MF1`, `MF2`) name rule ids no plugin publishes and a filename that does not exist.
+The gap is not the lint preset — `@systemfsoftware/oxlint-config-recommended` already composes the cell-architecture rules, so `ban-unknown` and `ban-error-string` are live against this package today. The gap is that nothing in the package gives those rules or the mutation instrument anything to read, and the two leaf rules that claim to gate the adapter (`MF1`, `MF2`) name rule ids no plugin publishes and a filename that does not exist.
 
 ### Key Decisions
 
@@ -88,7 +88,7 @@ The gap is not the lint preset — `@systemfsoftware/oxlint-config-recommended` 
 - R9. The driver semantics this layer relies on are pinned by `@systemfsoftware/differential-spec` comparisons against `node:fs` on the same operations: errno codes, `readdir` recursion, glob path shape, copy and overwrite semantics, temporary-path naming, and mode defaults. (pack: boundary-testing, pin-dependency-semantics.md)
 - R10. The port is verified against a real in-memory volume and a real temporary directory: every operation proves both acceptance where its target exists and refusal where it does not, and every acquired handle, watcher, and listener is released by the end of the suite. (pack: boundary-testing, real-system-oracles.md)
 - R11. Each extracted decision is enrolled in the mutation instrument at its `Workflow.make` boundary; a property test is granted to a decision only where a named risk justifies one, and that risk is stated beside the test.
-- R12. No test targets the adapter file itself, in-source or as a `*.test.ts` — the shell is read by lint provenance and composition tests. (pack: boundary-testing, no-mocks-on-internal-glue.md) Gate: `no-io-boundary-tests` reports zero findings.
+- R12. No test targets the adapter file itself, in-source or as a `*.test.ts` — the shell is read by lint provenance and composition tests. (pack: boundary-testing, no-mocks-on-internal-glue.md) Gate: the shell holds no test, in-source or beside it — owned by `oxlint-plugin-test-discipline`'s `no-io-module-in-source-test`.
 
 #### Topology and governance
 
@@ -148,11 +148,11 @@ None — the three questions deferred to planning are resolved: decision granula
 - `packages/effect-memfs/etc/effect-memfs.api.md` — the frozen published surface named in R14.
 - `packages/effect-memfs/AGENTS.md` — `MF1` and `MF2` with their dead gates and stale path.
 - `packages/effect-memfs/vitest.config.ts` — includes `src/**/*.test.ts`, which matches nothing in the package today.
-- `packages/effect-readiness/src/` — the conformant sibling topology: `*.workflow.ts`, `*.schema.ts`, `*.port.ts`, `drivers/*.layer.ts`, `Readiness/mod.ts`, and `__tests__/*.workflow.property.test.ts`.
-- `packages/effect-readiness/src/drivers/NodeHostProber.layer.ts` — the shell pattern for a driver-backed port, and the laziness comment the packs say belongs in an executable pin instead.
+- `packages/effect-readiness/src/` — the conformant sibling topology: `*.workflow.ts`, `*.schema.ts`, `*.service.ts`, `drivers/*.ts`, `Readiness/mod.ts`, and `__tests__/*.workflow.property.test.ts`.
+- `packages/effect-readiness/src/drivers/NodeHostProber.ts` — the shell pattern for a driver-backed port, and the laziness comment the packs say belongs in an executable pin instead.
 - `packages/effect-microsandbox/etc/effect-microsandbox.api.md` and `packages/effect-readiness/etc/effect-readiness.api.md` — both declare `export namespace X { export { … } }` with real members, so the api-extractor limitation asserted in `packages/effect-memfs/src/index.ts` no longer holds.
 - `packages/differential-spec/src/dsl/Differential.ts` — the pin DSL: `Differential.compare({ reference, candidate }).on(arbitrary).assert(oracle)`.
-- `packages/oxlint-plugin/oxlint-plugin-cell-architecture/src/rules/no-io-boundary-tests.config.ts` — `adapter.*.test.ts` is the banned shape behind R12.
+- `packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/no-io-module-in-source-test.config.ts` — the called, non-type import from a filesystem, process or network module is what R12's gate decides from; the filename is never read.
 - `packages/oxlint-presets/oxlint-config-recommended/src/index.ts` — composes the cell-architecture and dmmf-workflow presets, so this package already runs those rules.
 - `packages/oxlint-plugin/oxlint-plugin-dmmf-workflow/src/index.ts` — the live workflow gates this plan builds to: `make-file-location` (Workflow.make only in a single-segment-stem `*.workflow.ts`, at most once per file), `workflow-file-export-topology` (exactly one non-schema value export), `damp-workflow-stem` (kebab stem of 2-5 tokens whose camelCase equals the export), `make-body-purity`, `workflow-match-exhaustive`, `make-command-schema`, `workflow-variant-constructed`, and the `complexity max 1 (modified)` override for `**/src/**/*.workflow.ts`.
 - `packages/effect-schema-vite/src/mod.ts` with `packages/effect-schema-discovery/src/` — `inlineSchemaTests()` intercepts exactly `src/schema-laws.test.ts` and generates laws for every discovered named schema export across `src/` (`Schema.TaggedError` classes excluded), so the file must exist and the vitest plugin must be wired.
@@ -263,7 +263,7 @@ flowchart TB
   2. Run `writeAll` through `planWriteContinuation` with `Effect.whileLoop`; build the `File` handle over `planSeek` and `planReadSlice` with the cursor held in a closure per acquisition.
   3. Forward `recursive` in `readDirectory` and `suffix` in `makeTempFile`; keep the `dir + '/.'` parent form and the `0o755` default exactly as today per KD3.
   4. Compose `FileSystem.make({...})` unchanged; export `make`, `layer`, `layerWith`, and `Contents` from the barrel and add `export * as MemoryFileSystem` beside the existing named exports in `src/index.ts`, dropping the stale api-extractor-limitation comment the sibling api reports disprove.
-- **Patterns to follow:** `packages/effect-readiness/src/drivers/NodeHostProber.layer.ts` for the driver shell; `packages/effect-readiness/src/Readiness/mod.ts` for the barrel.
+- **Patterns to follow:** `packages/effect-readiness/src/drivers/NodeHostProber.ts` for the driver shell; `packages/effect-readiness/src/Readiness/mod.ts` for the barrel.
 - **Test scenarios:** `Test expectation: none -- the shell has no unit surface; its composition contract is U5's boundary evidence plus the lint and typecheck gates.`
 - **Verification:** `pnpm --filter @systemfsoftware/effect-memfs typecheck` and `test` and `lint` exit 0; `grep` confirms the three deleted files are gone and no source file imports them.
 
@@ -297,7 +297,7 @@ flowchart TB
   3. No test imports the shell module's internals — the suite reaches the port only through `make`/`layerWith`.
 - **Patterns to follow:** `packages/differential-spec/tests/metamorphic.integration.test.ts` for the gherkin-spec integration shape.
 - **Test scenarios:** the shell's composition contract moved here from U3: `layer` and `layerWith(contents)` provide a working `FileSystem`, `make(contents)` mounts the given directory JSON, `readDirectory` honors `recursive`, and `makeTempFile` honors `suffix`; a file created through `writeFile` and through `makeTempFile` each yields `Create` on the watch stream, executing the driver's event surface for both creation paths; plus one acceptance/refusal pair per port method across `access`, `chmod`, `chown`, `copy`, `copyFile`, `glob`, `link`, `makeDirectory`, `makeTempDirectory`, `makeTempFile`, `open`, `readDirectory`, `readFile`, `readLink`, `realPath`, `remove`, `rename`, `stat`, `symlink`, `truncate`, `utimes`, `watch`, `writeFile`, plus the derived `exists`, `readFileString`, `stream`, `sink`, `writeFileString`; each pair names the expected tag on the refusal side.
-- **Verification:** `pnpm --filter @systemfsoftware/effect-memfs test` green; `no-io-boundary-tests` reports zero findings because nothing under `src/` is targeted.
+- **Verification:** `pnpm --filter @systemfsoftware/effect-memfs test` green; `no-io-module-in-source-test` reports nothing new because no module under `src/` holds an in-source `import.meta.vitest` block.
 
 ### U6. Driver parity pins
 
@@ -336,7 +336,7 @@ flowchart TB
 | ------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Types                           | `pnpm --filter @systemfsoftware/effect-memfs typecheck` | The four channels compile; workflow brands hold at construction.                                                   |
 | Tests                           | `pnpm --filter @systemfsoftware/effect-memfs test`      | U1-U6 evidence: property cells, pure-module tables, composition, boundary suites, parity pins.                     |
-| Lint                            | `pnpm --filter @systemfsoftware/effect-memfs lint`      | Workflow topology rules, `no-io-boundary-tests`, `ban-unknown`, and the rewritten `MF` gates.                      |
+| Lint                            | `pnpm --filter @systemfsoftware/effect-memfs lint`      | Workflow topology rules, `ban-unknown`, and the rewritten `MF` gates.                                              |
 | Build + api                     | `pnpm --filter @systemfsoftware/effect-memfs build`     | The rollup regenerates and `etc/effect-memfs.api.md` matches after the deliberate update.                          |
 | Types on the published artifact | `pnpm --filter @systemfsoftware/effect-memfs attw`      | Consumer type resolution survives the namespace barrel.                                                            |
 | Workspace                       | `pnpm check:local`                                      | `REPO-D1`'s gate; run once after the last edit, not per unit.                                                      |

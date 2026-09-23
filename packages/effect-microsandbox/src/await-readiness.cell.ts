@@ -46,7 +46,7 @@ const awaitReadinessForStrategy = (
       pollMs: WAIT_POLL_MS,
     })
     const condition = conditionOf(strategy)
-    const env = Layer.merge(Readiness.NodeHostProber, logSourceOf(vm.sandbox))
+    const env = Layer.merge(Readiness.NodeHostProber.layer, logSourceOf(vm.sandbox))
     const verdict = yield* Readiness.awaitCondition(target, condition).pipe(
       Effect.provide(env),
       Effect.mapError((cause) => new SandboxBootError({ sandboxName: vm.sandbox.name, cause })),
