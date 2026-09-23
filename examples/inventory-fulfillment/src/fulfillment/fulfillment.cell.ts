@@ -3,9 +3,13 @@ import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
 import { allocateStock, type AllocateStockCommand } from '../inventory/allocate-stock.workflow.js'
 import { type KitDefinition, type LotAllocation, type WarehouseStockPartition } from '../inventory/inventory.schema.js'
-import { InventoryStore } from '../inventory/InventoryStore.js'
-import { CreditLedger } from '../ports/CreditLedger.js'
-import { type ReservationCommit, type ReservationCommitOutcome, ReservationLog } from '../ports/ReservationLog.js'
+import {
+  type CreditProof,
+  type SettlementCharge,
+  type SettlementCommand,
+  SettlementStore,
+  type StockProof,
+} from '../ports/SettlementStore.js'
 import { checkCredit, type CreditCheckCommand } from './check-credit.workflow.js'
 import { type CreditAccount, type CustomerTier, type FraudRiskScore, Money } from './credit.schema.js'
 import {
@@ -36,15 +40,22 @@ interface RawContext {
   readonly customerTier: CustomerTier
   readonly fraudRisk: FraudRiskScore
   readonly credit: CreditAccount
+  readonly creditProof: CreditProof
   readonly stock: readonly WarehouseStockPartition[]
+  readonly stockProof: StockProof
   readonly kits: readonly KitDefinition[]
   readonly now: DateTime.Utc
 }
 
-/** Who the charge and the audit event are written for, and when: what the write needs that the pure command does not carry. */
+/** Who the charge and the audit event are written for, and when: what the write needs that the pure command does not. */
 interface SettlementWriteContext {
   readonly customerId: string
   readonly now: DateTime.Utc
+}
+
+interface SettlementProofs {
+  readonly creditProof: CreditProof
+  readonly stockProof: StockProof
 }
 
 type SettleCommandEncoded = (typeof SettleFulfillmentCommand)['Encoded']
@@ -75,9 +86,9 @@ type AllocateRead = (typeof AllocateStockCommand)['Encoded'] & Credited
 
 /**
  * What the settle cell's `read` hands its handlers: the settle command in its encoded form,
- * plus the write context, riding beside the command instead of inside it.
+ * plus the write context and the store's proofs, riding beside the command instead of inside it.
  */
-type SettlementRead = SettleCommandEncoded & SettlementWriteContext
+type SettlementRead = SettleCommandEncoded & SettlementWriteContext & SettlementProofs
 type SettleDecisionEncoded = (typeof SettleFulfillmentDecision)['Encoded']
 type SettleErrorEncoded = (typeof SettleFulfillmentError)['Encoded']
 type WireDecisionEncoded = (typeof CoreFulfillmentDecision)['Encoded']
@@ -131,12 +142,11 @@ const wireRefusalOf = (error: SettleErrorEncoded): Effect.Effect<FulfillmentRefu
 
 const readContext = (
   request: FulfillmentRequest,
-): Effect.Effect<RawContext, CreditAccountNotFound, InventoryStore | CreditLedger> =>
+): Effect.Effect<RawContext, CreditAccountNotFound, SettlementStore> =>
   Effect.gen(function*() {
-    const inventory = yield* InventoryStore
-    const creditLedger = yield* CreditLedger
+    const store = yield* SettlementStore
     const [stock, credit, now] = yield* Effect.all(
-      [inventory.readAllStock, creditLedger.readCredit(request.order.customerId), DateTime.now],
+      [store.readAllStock, store.readCredit(request.order.customerId), DateTime.now],
       { concurrency: 'unbounded' },
     ).pipe(Effect.catchTag(['SchemaError', 'EffectDrizzleQueryError'], (error) => Effect.die(error)))
     return {
@@ -144,7 +154,9 @@ const readContext = (
       customerTier: credit.tier,
       fraudRisk: request.fraudRisk,
       credit: credit.account,
-      stock,
+      creditProof: credit.proof,
+      stock: stock.partitions,
+      stockProof: stock.proof,
       kits: request.kits,
       now,
     }
@@ -156,7 +168,7 @@ const rejectedRead = (cell: string) => (rejected: Sandwich.CommandRejected): Eff
 
 const readExplode = (
   request: FulfillmentRequest,
-): Effect.Effect<ExplodeRead, CreditAccountNotFound, InventoryStore | CreditLedger> =>
+): Effect.Effect<ExplodeRead, CreditAccountNotFound, SettlementStore> =>
   Effect.map(readContext(request), (context) => ({ lines: context.order.lines, kits: context.kits, context }))
 
 const carryComponents = (
@@ -220,6 +232,8 @@ const readSettlement = (allocated: Allocated): Effect.Effect<SettlementRead> =>
     credit: allocated.credit,
     allocation: allocated.allocation,
     customerId: allocated.context.order.customerId,
+    creditProof: allocated.context.creditProof,
+    stockProof: allocated.context.stockProof,
     now: allocated.context.now,
   })
 
@@ -261,69 +275,60 @@ const reservationEventsOf = (
 ): readonly InventoryReservationEvents[] =>
   Arr.getSomes([stockReservedOf(decision, now), backorderRecordedOf(decision, now)])
 
-const reservationCommitOf = (
-  decision: CoreFulfillmentDecision,
-  context: SettlementWriteContext,
-): ReservationCommit => ({
-  orderId: decision.orderId,
-  customerId: context.customerId,
-  events: reservationEventsOf(decision, context.now),
-  audit: new AuditPayload({
-    orderId: decision.orderId,
-    actorId: context.customerId,
-    decisionTag: decision._tag,
-    occurredAt: context.now,
-  }),
-})
-
-const commitReservation = (
-  decision: CoreFulfillmentDecision,
-  context: SettlementWriteContext,
-): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> => {
-  const commit = reservationCommitOf(decision, context)
-  return Effect.flatMap(ReservationLog, (log) => log.commit(commit)).pipe(
-    Span.start(ReservationCommitSpan, {
-      'app.customer.id': context.customerId,
-      'app.order.id': decision.orderId,
-      'app.reservation.event.count': commit.events.length,
-    }),
-  )
-}
-
-const chargedAmountOf = (allocations: readonly LotAllocation[]): Money =>
-  moneyOf(Arr.reduce(allocations, 0, (total, allocation) => total + allocation.quantity))
-
-const chargeCredit = (customerId: string, allocations: readonly LotAllocation[]) => {
-  const amount = chargedAmountOf(allocations)
-  return Effect.flatMap(CreditLedger, (ledger) => ledger.charge(customerId, amount)).pipe(
-    Span.start(CreditCharge, { 'app.charge.amount': Number(amount), 'app.customer.id': customerId }),
-  )
-}
-
-const chargeFor = (
-  customerId: string,
-  decision: CoreFulfillmentDecision,
-): Effect.Effect<void, never, CreditLedger> =>
+const chargedAmountOf = (decision: CoreFulfillmentDecision): Option.Option<Money> =>
   Match.value(decision).pipe(
-    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', ({ allocations }) => chargeCredit(customerId, allocations)),
-    Match.tag('Backordered', 'CreditHold', () => Effect.void),
+    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', ({ allocations }) =>
+      Option.some(moneyOf(Arr.reduce(allocations, 0, (total, allocation) =>
+        total + allocation.quantity)))),
+    Match.tag('Backordered', 'CreditHold', () =>
+      Option.none<Money>()),
     Match.exhaustive,
   )
 
-const persistReservation = (
-  decision: CoreFulfillmentDecision,
-  context: SettlementWriteContext,
-): Effect.Effect<CoreFulfillmentDecision, OptimisticConflict, CreditLedger | ReservationLog> =>
-  Effect.flatMap(commitReservation(decision, context), (outcome) =>
-    Match.value(outcome).pipe(
-      Match.when('VersionConflict', () => Effect.fail(new OptimisticConflict({}))),
-      Match.when('Committed', () => Effect.as(chargeFor(context.customerId, decision), decision)),
-      Match.exhaustive,
-    ))
+const settlementCommandOf = (decision: CoreFulfillmentDecision, read: SettlementRead): SettlementCommand => ({
+  orderId: decision.orderId,
+  customerId: read.customerId,
+  events: reservationEventsOf(decision, read.now),
+  audit: new AuditPayload({
+    orderId: decision.orderId,
+    actorId: read.customerId,
+    decisionTag: decision._tag,
+    occurredAt: read.now,
+  }),
+  stock: read.stockProof,
+  charge: Option.map(chargedAmountOf(decision), (amount) => ({ amount, proof: read.creditProof })),
+})
 
-/** Every settle decision is written the same way: as its wire decision, committed and charged. */
-const settle = (decision: SettleDecisionEncoded, context: SettlementWriteContext) =>
-  Effect.flatMap(wireDecisionOf(decision), (wire) => persistReservation(wire, context))
+/** The charge span records a charge that committed; a conflicted settle writes nothing, so it records none. */
+const recordCharge = (read: SettlementRead, charge: Option.Option<SettlementCharge>): Effect.Effect<void> =>
+  Option.match(charge, {
+    onNone: () => Effect.void,
+    onSome: ({ amount }) =>
+      Span.start(CreditCharge, { 'app.charge.amount': Number(amount), 'app.customer.id': read.customerId })(
+        Effect.void,
+      ),
+  })
+
+/** Every settle decision is written the same way: as its wire decision, committed and charged in one store call. */
+const settle = (decision: SettleDecisionEncoded, read: SettlementRead) =>
+  Effect.flatMap(wireDecisionOf(decision), (wire) => {
+    const command = settlementCommandOf(wire, read)
+    return Effect.flatMap(SettlementStore, (store) => store.settle(command)).pipe(
+      Span.start(ReservationCommitSpan, {
+        'app.customer.id': read.customerId,
+        'app.order.id': wire.orderId,
+        'app.reservation.event.count': command.events.length,
+      }),
+      Effect.flatMap((outcome) =>
+        Match.value(outcome).pipe(
+          Match.when('Conflict', () => Effect.fail(new OptimisticConflict({}))),
+          Match.when('Committed', () => Effect.asVoid(recordCharge(read, command.charge))),
+          Match.exhaustive,
+        )
+      ),
+      Effect.as(wire),
+    )
+  })
 
 const settleFulfillmentCell = Sandwich.named(FulfillmentSettle.name)(readSettlement)
   .decide(settleFulfillment)
@@ -339,8 +344,8 @@ const settleFulfillmentCell = Sandwich.named(FulfillmentSettle.name)(readSettlem
 
 /**
  * The fulfillment pipeline: four sandwiches, one per decision, composed with `Cell.andThen`.
- * Callers run `fulfillmentCell.run(request)`. CAS retries and per-customer gating live at the
- * RPC edge (Effect.retry, CustomerGate).
+ * Callers run `fulfillmentCell.run(request)`. Conflicted orders retry at the RPC edge, which
+ * runs the cell again from read on a configured, jittered schedule.
  */
 export const fulfillmentCell = explodeBundleCell.pipe(
   Cell.andThen(checkCreditCell),

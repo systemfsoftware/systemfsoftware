@@ -9,10 +9,7 @@ import {
 
 const Trace = Suite.make({ it, layer })
 
-const world = settlementLayers({
-  creditLimits: { 'customer-in-good-standing': 1000, 'customer-without-credit': 0 },
-  commitOutcomes: {},
-})
+const world = settlementLayers
 
 Trace('inventory.fulfillment')
   .withScenarioLayer(world)

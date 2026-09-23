@@ -5,8 +5,6 @@ import {
   auditEvents,
   AuthService,
   type Client,
-  CreditLedger,
-  CustomerGate,
   DrizzleSession,
   Fulfillment,
   HttpLive,
@@ -17,14 +15,19 @@ import {
   ReservationLog,
   reservations,
   ReservationView,
+  SettlementStore,
   stockLots,
   StockView,
   SubmitOrderRequest,
   user,
   warehouses,
 } from '@systemfsoftware/example-inventory-fulfillment'
-import type { Client as RpcClientHandle } from '@systemfsoftware/example-inventory-fulfillment'
-import type { DrizzleDatabase } from '@systemfsoftware/example-inventory-fulfillment'
+import type {
+  Client as RpcClientHandle,
+  DrizzleDatabase,
+  SettlementCommand,
+  SettlementStoreService,
+} from '@systemfsoftware/example-inventory-fulfillment'
 import { drizzle } from 'drizzle-orm/pglite'
 import { sql } from 'drizzle-orm/sql'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
@@ -33,12 +36,14 @@ import {
   Context,
   Crypto,
   DateTime,
+  Deferred,
   Duration,
   Effect,
   Layer,
   Match,
   Option,
   Ref,
+  Result,
   Schema as S,
 } from 'effect'
 import type * as Scope from 'effect/Scope'
@@ -64,9 +69,8 @@ const InventoryStore = Inventory.InventoryStore
 
 const pgTestLayer = Layer.mergeAll(
   InventoryStore.Live,
-  CreditLedger.Live,
+  SettlementStore.Live,
   ReservationLog.Live,
-  CustomerGate.Live,
 ).pipe(
   Layer.provideMerge(DrizzleSession.Test),
   Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
@@ -98,13 +102,20 @@ export const uniqueId = nextId
 export const uniqueEmail = (): string => `${nextId('user')}@example.test`
 export const uniquePassword = (): string => `pw-${nextId('secret')}`
 
-type SeamMode = 'off' | 'once' | 'always'
+type BumpMode = 'off' | 'once' | 'always'
+type HoldMode = 'off' | 'hold'
 
 export interface ConflictSeamService {
   readonly armOnce: Effect.Effect<void>
   readonly armAlways: Effect.Effect<void>
+  readonly holdOnce: Effect.Effect<void>
   readonly disarm: Effect.Effect<void>
   readonly shouldBump: Effect.Effect<boolean>
+  /** Called by instrumented reads: parks once when armed, signalling arrival first. */
+  readonly park: Effect.Effect<void>
+  /** Completes when a read has parked at the seam. */
+  readonly held: Effect.Effect<void>
+  readonly release: Effect.Effect<void>
 }
 
 export class ConflictSeam extends Context.Service<ConflictSeam, ConflictSeamService>()(
@@ -114,18 +125,33 @@ export class ConflictSeam extends Context.Service<ConflictSeam, ConflictSeamServ
 const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
   ConflictSeam,
   Effect.gen(function*() {
-    const mode = yield* Ref.make<SeamMode>('off')
+    const bumps = yield* Ref.make<BumpMode>('off')
+    const holds = yield* Ref.make<HoldMode>('off')
+    const parked = yield* Deferred.make<void>()
+    const released = yield* Deferred.make<void>()
     return {
-      armOnce: Ref.set(mode, 'once'),
-      armAlways: Ref.set(mode, 'always'),
-      disarm: Ref.set(mode, 'off'),
-      shouldBump: Ref.modify(mode, (current): readonly [boolean, SeamMode] =>
+      armOnce: Ref.set(bumps, 'once'),
+      armAlways: Ref.set(bumps, 'always'),
+      holdOnce: Ref.set(holds, 'hold'),
+      disarm: Effect.andThen(Ref.set(bumps, 'off'), Ref.set(holds, 'off')),
+      shouldBump: Ref.modify(bumps, (current): readonly [boolean, BumpMode] =>
         Match.value(current).pipe(
           Match.when('always', () => [true, 'always'] as const),
           Match.when('once', () => [true, 'off'] as const),
           Match.when('off', () => [false, 'off'] as const),
           Match.exhaustive,
         )),
+      park: Effect.flatMap(
+        Ref.modify(holds, (current): readonly [boolean, HoldMode] =>
+          Match.value(current).pipe(
+            Match.when('hold', () => [true, 'off'] as const),
+            Match.when('off', () => [false, 'off'] as const),
+            Match.exhaustive,
+          )),
+        (hold) => (hold ? Effect.andThen(Deferred.succeed(parked, void 0), Deferred.await(released)) : Effect.void),
+      ),
+      held: Deferred.await(parked),
+      release: Effect.asVoid(Deferred.succeed(released, void 0)),
     }
   }),
 )
@@ -133,32 +159,32 @@ const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
 const bumpStockVersions = (db: DrizzleDatabase): Effect.Effect<void, never> =>
   db.execute(sql`UPDATE stock_lots SET version = version + 1`).pipe(Effect.orDie, Effect.asVoid)
 
-const seamInstrumentedInventoryStore: Layer.Layer<Inventory.InventoryStore, never, DrizzleSession | ConflictSeam> =
-  pgTestLayer
-    .pipe(
-      Layer.flatMap((context) => {
-        const inner = Context.get(context, InventoryStore)
-        return Layer.effect(
-          InventoryStore,
-          Effect.gen(function*() {
-            const db = yield* DrizzleSession
-            const seam = yield* ConflictSeam
-            return {
-              readAllStock: Effect.gen(function*() {
-                const partitions = yield* inner.readAllStock
-                const bump = yield* seam.shouldBump
-                yield* bump ? bumpStockVersions(db) : Effect.void
-                return partitions
-              }),
-              readStock: (skus) => inner.readStock(skus),
-              readStockPage: (query) => inner.readStockPage(query),
-            }
-          }),
-        )
-      }),
-    )
+const seamInstrumentedSettlementStore: Layer.Layer<SettlementStore, never, DrizzleSession | ConflictSeam> = pgTestLayer
+  .pipe(
+    Layer.flatMap((context) => {
+      const store = Context.get(context, SettlementStore)
+      return Layer.effect(
+        SettlementStore,
+        Effect.gen(function*() {
+          const db = yield* DrizzleSession
+          const seam = yield* ConflictSeam
+          return {
+            readCredit: (customerId: string) =>
+              Effect.flatMap(store.readCredit(customerId), (credit) => Effect.as(seam.park, credit)),
+            readAllStock: Effect.gen(function*() {
+              const stock = yield* store.readAllStock
+              const bump = yield* seam.shouldBump
+              yield* bump ? bumpStockVersions(db) : Effect.void
+              return stock
+            }),
+            settle: (command: SettlementCommand) => store.settle(command),
+          }
+        }),
+      )
+    }),
+  )
 
-const wrappedFoundation = seamInstrumentedInventoryStore.pipe(Layer.provideMerge(pgTestLayer))
+const wrappedFoundation = seamInstrumentedSettlementStore.pipe(Layer.provideMerge(pgTestLayer))
 
 const authLayer: Layer.Layer<AuthService, never, Pglite.PgliteClient> = Layer.effect(
   AuthService,
@@ -208,6 +234,12 @@ export interface StockState {
   readonly version: number
 }
 
+export interface CreditState {
+  readonly creditLimit: number
+  readonly outstandingBalance: number
+  readonly overdraftPrivilege: number
+}
+
 export interface SeedService {
   readonly warehouse: (id: string, region: string) => Effect.Effect<void>
   readonly stockLot: (input: StockLotInput) => Effect.Effect<void>
@@ -216,6 +248,7 @@ export interface SeedService {
 
 export interface InspectService {
   readonly stock: (lotId: string) => Effect.Effect<StockState>
+  readonly credit: (userId: string) => Effect.Effect<CreditState>
   readonly reservations: (orderId: string) => Effect.Effect<readonly ReservationRow[]>
   readonly auditTags: (orderId: string) => Effect.Effect<readonly string[]>
 }
@@ -232,6 +265,29 @@ export interface TestServerService {
 
 export class TestServer extends Context.Service<TestServer, TestServerService>()(
   '@systemfsoftware/example-inventory-fulfillment/tests/TestServer',
+) {}
+
+export type SettlementOutcome =
+  | { readonly _tag: 'Allocated' }
+  | { readonly _tag: 'Backordered' }
+  | { readonly _tag: 'Held'; readonly shortfall: number }
+  | { readonly _tag: 'Refused' }
+  | { readonly _tag: 'Conflicted' }
+
+export interface CellOrderInput {
+  readonly orderId: string
+  readonly customerId: string
+  readonly lines: readonly { readonly sku: string; readonly quantity: number }[]
+}
+
+export interface CellHarnessService {
+  readonly submit: (input: CellOrderInput) => Effect.Effect<SettlementOutcome>
+  readonly seed: SeedService
+  readonly inspect: InspectService
+}
+
+export class CellHarness extends Context.Service<CellHarness, CellHarnessService>()(
+  '@systemfsoftware/example-inventory-fulfillment/tests/CellHarness',
 ) {}
 
 export interface SubmitOrderInput {
@@ -314,63 +370,125 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
       Effect.provideService(HttpClient.HttpClient, http),
     )
 
-  const stockRow = (lotId: string) =>
-    Effect.gen(function*() {
-      const rows = yield* db.select().from(stockLots).where(eq(stockLots.id, lotId)).pipe(Effect.orDie)
-      const found = Option.fromUndefinedOr(rows[0])
-      return yield* Option.match(found, {
-        onNone: () => Effect.die(new Error(`inspect: no stock lot ${lotId}`)),
-        onSome: (row) => Effect.succeed(row),
-      })
-    })
-
   return {
     baseUrl,
     seam,
     signUp: (email, password, name) => authenticate('/api/auth/sign-up/email', { email, password, name }),
     signIn: (email, password) => authenticate('/api/auth/sign-in/email', { email, password }),
     client,
-    seed: {
-      warehouse: (id, region) => db.insert(warehouses).values({ id, region }).pipe(Effect.orDie, Effect.asVoid),
-      stockLot: (input) =>
-        db.insert(stockLots).values({
-          id: input.id,
-          sku: input.sku,
-          warehouseId: input.warehouseId,
-          quantityOnHand: input.quantity,
-          version: input.version ?? 1,
-          expiresAt: input.expiresAt === undefined ? null : DateTime.toDate(input.expiresAt),
-        }).pipe(Effect.orDie, Effect.asVoid),
-      credit: (input) =>
-        db.update(user).set({
-          tier: input.tier,
-          creditLimit: input.creditLimit,
-          outstandingBalance: input.outstandingBalance ?? 0,
-          overdraftPrivilege: input.overdraftPrivilege ?? 0,
-        }).where(eq(user.id, input.userId)).pipe(Effect.orDie, Effect.asVoid),
-    },
-    inspect: {
-      stock: (lotId) =>
-        Effect.map(stockRow(lotId), (row) => ({ quantityOnHand: row.quantityOnHand, version: row.version })),
-      reservations: (orderId) =>
-        Effect.map(
-          db.select().from(reservations).where(eq(reservations.orderId, orderId)).pipe(Effect.orDie),
-          (rows) =>
-            rows.map((row) => ({
-              orderId: row.orderId,
-              customerId: row.customerId,
-              sku: row.sku,
-              warehouseId: row.warehouseId,
-              lotId: row.lotId,
-              quantity: row.quantity,
-            })),
+    seed: seedServiceOf(db),
+    inspect: inspectServiceOf(db),
+  }
+}
+
+const seedServiceOf = (db: DrizzleDatabase): SeedService => ({
+  warehouse: (id, region) => db.insert(warehouses).values({ id, region }).pipe(Effect.orDie, Effect.asVoid),
+  stockLot: (input) =>
+    db.insert(stockLots).values({
+      id: input.id,
+      sku: input.sku,
+      warehouseId: input.warehouseId,
+      quantityOnHand: input.quantity,
+      version: input.version ?? 1,
+      expiresAt: input.expiresAt === undefined ? null : DateTime.toDate(input.expiresAt),
+    }).pipe(Effect.orDie, Effect.asVoid),
+  credit: (input) =>
+    db.update(user).set({
+      tier: input.tier,
+      creditLimit: input.creditLimit,
+      outstandingBalance: input.outstandingBalance ?? 0,
+      overdraftPrivilege: input.overdraftPrivilege ?? 0,
+    }).where(eq(user.id, input.userId)).pipe(Effect.orDie, Effect.asVoid),
+})
+
+const inspectServiceOf = (db: DrizzleDatabase): InspectService => ({
+  stock: (lotId) =>
+    Effect.gen(function*() {
+      const rows = yield* db.select().from(stockLots).where(eq(stockLots.id, lotId)).pipe(Effect.orDie)
+      return yield* Option.match(Option.fromUndefinedOr(rows[0]), {
+        onNone: () => Effect.die(new Error(`inspect: no stock lot ${lotId}`)),
+        onSome: (row) => Effect.succeed({ quantityOnHand: row.quantityOnHand, version: row.version }),
+      })
+    }),
+  credit: (userId) =>
+    Effect.gen(function*() {
+      const rows = yield* db.select().from(user).where(eq(user.id, userId)).pipe(Effect.orDie)
+      return yield* Option.match(Option.fromUndefinedOr(rows[0]), {
+        onNone: () => Effect.die(new Error(`inspect: no credit account ${userId}`)),
+        onSome: (row) =>
+          Effect.succeed({
+            creditLimit: row.creditLimit,
+            outstandingBalance: row.outstandingBalance,
+            overdraftPrivilege: row.overdraftPrivilege,
+          }),
+      })
+    }),
+  reservations: (orderId) =>
+    Effect.map(
+      db.select().from(reservations).where(eq(reservations.orderId, orderId)).pipe(Effect.orDie),
+      (rows) =>
+        rows.map((row) => ({
+          orderId: row.orderId,
+          customerId: row.customerId,
+          sku: row.sku,
+          warehouseId: row.warehouseId,
+          lotId: row.lotId,
+          quantity: row.quantity,
+        })),
+    ),
+  auditTags: (orderId) =>
+    Effect.map(
+      db.select().from(auditEvents).where(eq(auditEvents.orderId, orderId)).pipe(Effect.orDie),
+      (rows) => rows.map((row) => row.decisionTag),
+    ),
+})
+
+type SettlementDecision = Fulfillment.Decision.CoreFulfillmentDecision | Fulfillment.Decision.FulfillmentRefusal
+type SettlementFailure = Fulfillment.Decision.OptimisticConflict | Fulfillment.Decision.CreditAccountNotFound
+
+const conflicted: SettlementOutcome = { _tag: 'Conflicted' }
+
+const outcomeOf = (attempt: Result.Result<SettlementDecision, SettlementFailure>): Effect.Effect<SettlementOutcome> =>
+  Result.match(attempt, {
+    onFailure: (failure) =>
+      Match.value(failure).pipe(
+        Match.tag('OptimisticConflict', (): Effect.Effect<SettlementOutcome> => Effect.succeed(conflicted)),
+        Match.orElse((error) => Effect.die(error)),
+      ),
+    onSuccess: (decision) =>
+      Effect.succeed(
+        Match.value(decision).pipe(
+          Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', (): SettlementOutcome => ({ _tag: 'Allocated' })),
+          Match.tag('Backordered', (): SettlementOutcome => ({ _tag: 'Backordered' })),
+          Match.tag('CreditHold', (held): SettlementOutcome => ({ _tag: 'Held', shortfall: held.shortfall })),
+          Match.tag('InsufficientStock', 'CreditLimitExceeded', (): SettlementOutcome => ({ _tag: 'Refused' })),
+          Match.exhaustive,
         ),
-      auditTags: (orderId) =>
-        Effect.map(
-          db.select().from(auditEvents).where(eq(auditEvents.orderId, orderId)).pipe(Effect.orDie),
-          (rows) => rows.map((row) => row.decisionTag),
-        ),
-    },
+      ),
+  })
+
+const buildCellHarness = (
+  store: SettlementStoreService,
+  db: DrizzleDatabase,
+): CellHarnessService => {
+  const attempt = (input: CellOrderInput): Effect.Effect<SettlementOutcome> =>
+    Effect.gen(function*() {
+      const order = yield* S.decodeEffect(Fulfillment.Order.Order)({
+        orderId: input.orderId,
+        customerId: input.customerId,
+        lines: input.lines,
+      }).pipe(Effect.orDie)
+      const fraudRisk = yield* S.decodeEffect(Fulfillment.Credit.FraudRiskScore)(0).pipe(Effect.orDie)
+      return yield* Fulfillment.fulfillmentCell.run({ order, kits: [], fraudRisk })
+    }).pipe(
+      Effect.provideService(SettlementStore, store),
+      Effect.result,
+      Effect.flatMap(outcomeOf),
+    )
+  return {
+    submit: attempt,
+    seed: seedServiceOf(db),
+    inspect: inspectServiceOf(db),
   }
 }
 
@@ -397,6 +515,14 @@ const fullLayer = Layer.mergeAll(
   NodeHttpClient.layerUndici,
 ).pipe(Layer.orDie)
 
-export const TestServerLayer: Layer.Layer<TestServer> = fullLayer.pipe(
-  Layer.flatMap((context) => Layer.succeed(TestServer, buildService(context))),
+export const TestServerLayer: Layer.Layer<TestServer | CellHarness> = fullLayer.pipe(
+  Layer.flatMap((context) =>
+    Layer.mergeAll(
+      Layer.succeed(TestServer, buildService(context)),
+      Layer.succeed(
+        CellHarness,
+        buildCellHarness(Context.get(context, SettlementStore), Context.get(context, DrizzleSession)),
+      ),
+    )
+  ),
 )

@@ -54,6 +54,7 @@ export const user = pgTable('user', {
   creditLimit: integer('credit_limit').notNull().default(0),
   outstandingBalance: integer('outstanding_balance').notNull().default(0),
   overdraftPrivilege: integer('overdraft_privilege').notNull().default(0),
+  creditVersion: integer('credit_version').notNull().default(1),
 })
 
 export const session = pgTable('session', {

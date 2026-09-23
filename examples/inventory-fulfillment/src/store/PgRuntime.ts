@@ -3,9 +3,8 @@ import { Config, Context, Duration, Effect, Layer, Redacted } from 'effect'
 import { Pool } from 'pg'
 import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
 import { InventoryStore } from '../inventory/InventoryStore.js'
-import { CreditLedger } from '../ports/CreditLedger.js'
-import { CustomerGate } from '../ports/CustomerGate.js'
 import { ReservationLog } from '../ports/ReservationLog.js'
+import { SettlementStore } from '../ports/SettlementStore.js'
 import { DrizzleSession } from './DrizzleSession.js'
 
 const requiredEnv = Effect.all({
@@ -22,7 +21,7 @@ export class PgRuntime extends Context.Service<PgRuntime, PgRuntimeService>()(
   '@systemfsoftware/example-inventory-fulfillment/store/PgRuntime',
 ) {
   static Live: Layer.Layer<
-    DrizzleSession | InventoryStore | CreditLedger | ReservationLog | CustomerGate | PgRuntime | FulfillmentConfig
+    DrizzleSession | InventoryStore | SettlementStore | ReservationLog | PgRuntime | FulfillmentConfig
   >
 }
 
@@ -47,10 +46,9 @@ const clientLayer = Layer.unwrap(
 
 const ports = Layer.mergeAll(
   InventoryStore.Live,
-  CreditLedger.Live,
+  SettlementStore.Live,
   ReservationLog.Live,
-  CustomerGate.Live,
-  Layer.succeed(FulfillmentConfig, { maxRetries: 3, retryInterval: Duration.millis(50) }),
+  Layer.succeed(FulfillmentConfig, { maxRetries: 8, retryInterval: Duration.millis(50) }),
 )
 
 PgRuntime.Live = ports.pipe(

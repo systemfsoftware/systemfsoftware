@@ -5,17 +5,14 @@ import { Effect } from 'effect'
 import { expect } from 'vitest'
 import {
   allocateContract,
+  contestedSettlementLayers,
   disparityOf,
-  settlementLayers,
   settlementRequest,
 } from './__fixtures__/fulfillment-trace.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
-const world = settlementLayers({
-  creditLimits: { 'customer-in-good-standing': 1000, 'customer-without-credit': 0 },
-  commitOutcomes: { 'contested-order': 'VersionConflict' },
-})
+const world = contestedSettlementLayers
 
 Feature('Refusing a settlement whose trace breaks the written contract')
   .withScenarioLayer(world)

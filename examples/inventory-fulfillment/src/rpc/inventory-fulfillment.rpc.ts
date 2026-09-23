@@ -10,13 +10,12 @@ import {
   type FulfillmentDecision as FulfillmentDecisionType,
   InsufficientStock,
 } from '../fulfillment/decision.schema.js'
-import { AuditPayload, ReservationRolledBack } from '../fulfillment/event.schema.js'
+import { AuditPayload } from '../fulfillment/event.schema.js'
 import { fulfillmentCell } from '../fulfillment/fulfillment.cell.js'
 import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
 import { Order } from '../fulfillment/order.schema.js'
 import { InventoryStore } from '../inventory/InventoryStore.js'
 import { AuthContext } from '../ports/AuthContext.js'
-import { CustomerGate } from '../ports/CustomerGate.js'
 import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.js'
 import { AuthMiddleware } from './auth.middleware.js'
 import {
@@ -78,30 +77,18 @@ const ownershipOf = <A, E>(
     Match.exhaustive,
   )
 
-const rollbackReason = 'optimistic concurrency conflict: retry budget exhausted'
-
 const rollback = (orderId: string, customerId: string, attempts: number) =>
   Effect.gen(function*() {
     const log = yield* ReservationLog
     const now = yield* DateTime.now
-    yield* log.commit({
-      orderId,
-      customerId,
-      events: [
-        new ReservationRolledBack({
-          orderId,
-          reason: rollbackReason,
-          allocations: [],
-          occurredAt: now,
-        }),
-      ],
-      audit: new AuditPayload({
+    yield* log.appendRollback(
+      new AuditPayload({
         orderId,
         actorId: customerId,
         decisionTag: 'ConflictRollback',
         occurredAt: now,
       }),
-    })
+    )
     return new ConflictRollback({ orderId, attempts })
   })
 
@@ -111,19 +98,15 @@ const runFulfillment = (request: {
   readonly fraudRisk: SubmitOrderRequest['fraudRisk']
 }) =>
   Effect.gen(function*() {
-    const gate = yield* CustomerGate
     const config = yield* FulfillmentConfig
-    return yield* gate.withGate(
-      request.order.customerId,
-      fulfillmentCell.run(request).pipe(
-        Effect.retry({
-          times: config.maxRetries - 1,
-          schedule: Schedule.spaced(config.retryInterval),
-          while: Predicate.isTagged('OptimisticConflict'),
-        }),
-        Effect.catchTag('OptimisticConflict', () =>
-          rollback(request.order.orderId, request.order.customerId, config.maxRetries)),
-      ),
+    return yield* fulfillmentCell.run(request).pipe(
+      Effect.retry({
+        times: config.maxRetries - 1,
+        schedule: Schedule.spaced(config.retryInterval).pipe(Schedule.jittered),
+        while: Predicate.isTagged('OptimisticConflict'),
+      }),
+      Effect.catchTag('OptimisticConflict', () =>
+        rollback(request.order.orderId, request.order.customerId, config.maxRetries)),
     )
   })
 

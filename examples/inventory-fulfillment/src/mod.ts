@@ -3,9 +3,19 @@ export { HttpLive, httpServerLayer } from './http/server.js'
 export * as Inventory from './inventory/mod.js'
 export { AuthContext } from './ports/AuthContext.js'
 export { AuthService } from './ports/AuthService.js'
-export { CreditLedger } from './ports/CreditLedger.js'
-export { CustomerGate } from './ports/CustomerGate.js'
 export { ReservationLog } from './ports/ReservationLog.js'
+export { SettlementStore } from './ports/SettlementStore.js'
+export type {
+  CreditObservation,
+  CreditProof,
+  SettlementCharge,
+  SettlementCommand,
+  SettlementOutcome,
+  SettlementStoreSeed,
+  SettlementStoreService,
+  StockObservation,
+  StockProof,
+} from './ports/SettlementStore.js'
 export { type Client, make as makeRpcClient } from './rpc/client.js'
 export { ReservationView, StockView, SubmitOrderRequest } from './rpc/inventory-fulfillment.schema.js'
 export { makeAuth } from './store/AuthServiceLive.js'

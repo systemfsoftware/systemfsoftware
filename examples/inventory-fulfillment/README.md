@@ -6,7 +6,8 @@ An end-to-end reference application implementing the [Cell Architecture](../../c
 
 - **Pure Decision Workflows**: Four fulfillment workflows (`explode-bundle`, `allocate-stock`, `check-credit`, `settle-fulfillment`) built with `Workflow.make`, CC = 1, and `Match.exhaustive`.
 - **Five-Phase Cell Sandwiches**: Implemented via `@systemfsoftware/effect-cell-types`. State is read into commands, decoded automatically against schemas, decided purely, encoded, and committed via exhaustive write handler records.
-- **Service & Layer Separation**: `InventoryStore`, `CreditLedger`, and `ReservationLog` declared as pure `Context.Service` contracts; Drizzle layers provide implementations swap-tested between PGlite (in-memory test oracle) and PostgreSQL (production).
+- **Store-Issued Proofs, One Commit Point**: The settlement store's reads issue `CreditProof` and `StockProof` values keyed by module-private symbols; the `settle` write handler cannot typecheck without them. Credit, stock, reservations, and the audit row commit in one transaction that re-checks the account's `credit_version` and each allocated lot's version; a failed check is the only source of `Conflict`, which the RPC edge retries on a configured, jittered schedule and rolls back when the budget runs out.
+- **Service & Layer Separation**: `InventoryStore`, `SettlementStore`, and `ReservationLog` declared as pure `Context.Service` contracts; Drizzle layers provide implementations swap-tested between PGlite (in-memory test oracle) and PostgreSQL (production), and the settlement store ships an in-memory adapter that passes the same law suite.
 - **Zero Driver Mocks**: Full integration suite runs against embedded PostgreSQL with real TCP listeners and real transactions.
 
 ## Stack

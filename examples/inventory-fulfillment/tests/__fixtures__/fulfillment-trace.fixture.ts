@@ -1,6 +1,13 @@
-import { CreditLedger, Fulfillment, Inventory, ReservationLog } from '@systemfsoftware/example-inventory-fulfillment'
+import { Fulfillment, Inventory, SettlementStore } from '@systemfsoftware/example-inventory-fulfillment'
+import type {
+  CreditObservation,
+  SettlementCommand,
+  SettlementStoreSeed,
+  StockObservation,
+} from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
-import { Array as Arr, Effect, FileSystem, Layer, Option, Result, Schema as S } from 'effect'
+import { Context, DateTime, Effect, FileSystem, Layer, Option, Result, Schema as S } from 'effect'
+import type { DateTime as DateTimeUtc } from 'effect'
 import { dual } from 'effect/Function'
 
 const SKU = 'sku-porcelain-mug'
@@ -8,33 +15,13 @@ const WAREHOUSE = 'warehouse-north'
 const ORDERED_QUANTITY = 2
 const STOCKED_QUANTITY = 10
 const FRAUD_RISK = 10
+const CONTENDED_CUSTOMER = 'customer-in-good-standing'
 
 export interface SettlementRequest {
   readonly order: Fulfillment.Order.Order
   readonly kits: readonly Inventory.Schema.KitDefinition[]
   readonly fraudRisk: Fulfillment.Credit.FraudRiskScore
 }
-
-const stockLot = (): Inventory.Schema.StockLot =>
-  Result.getOrThrow(
-    S.decodeResult(Inventory.Schema.StockLot)({
-      lotId: 'lot-1',
-      sku: SKU,
-      warehouseId: WAREHOUSE,
-      quantityOnHand: STOCKED_QUANTITY,
-      version: 1,
-      expiresAt: Option.none(),
-    }),
-  )
-
-export const stockPartition = (): Inventory.Schema.WarehouseStockPartition =>
-  Result.getOrThrow(
-    S.decodeResult(Inventory.Schema.WarehouseStockPartition)({
-      warehouseId: WAREHOUSE,
-      region: 'north',
-      lots: [stockLot()],
-    }),
-  )
 
 export const settlementRequest: {
   (customerId: string): (orderId: string) => SettlementRequest
@@ -54,44 +41,90 @@ export const settlementRequest: {
   }),
 )
 
-const partitionOffering = (
-  partition: Inventory.Schema.WarehouseStockPartition,
-  skus: readonly Inventory.Schema.SkuId[],
-): boolean => Arr.some(partition.lots, (lot) => Arr.contains(skus, lot.sku))
-
-export const inventoryStoreLayer = (
-  partitions: readonly Inventory.Schema.WarehouseStockPartition[],
-): Layer.Layer<Inventory.InventoryStore> =>
-  Layer.succeed(Inventory.InventoryStore, {
-    readAllStock: Effect.succeed(partitions),
-    readStock: (skus) => Effect.succeed(Arr.filter(partitions, (partition) => partitionOffering(partition, skus))),
-    readStockPage: () => Effect.succeed({ partitions, nextCursor: Option.none() }),
-  })
-
-const creditAccount = (customerId: string, creditLimit: number): Fulfillment.Credit.CreditAccount =>
-  Result.getOrThrow(
-    S.decodeResult(Fulfillment.Credit.CreditAccount)({
-      customerId,
-      creditLimit,
+export const settlementSeed = (): SettlementStoreSeed => ({
+  warehouses: [{ warehouseId: WAREHOUSE, region: 'north' }],
+  lots: [
+    { lotId: 'lot-1', sku: SKU, warehouseId: WAREHOUSE, quantityOnHand: STOCKED_QUANTITY, version: 1 },
+  ],
+  customers: [
+    {
+      customerId: CONTENDED_CUSTOMER,
+      tier: 'Standard',
+      creditLimit: 1000,
       outstandingBalance: 0,
       overdraftPrivilege: 0,
+    },
+    {
+      customerId: 'customer-without-credit',
+      tier: 'Standard',
+      creditLimit: 0,
+      outstandingBalance: 0,
+      overdraftPrivilege: 0,
+    },
+  ],
+})
+
+const money = (value: number): Fulfillment.Credit.Money =>
+  Result.getOrThrow(S.decodeResult(Fulfillment.Credit.Money)(value))
+
+/**
+ * A competing settlement commits between this order's read and its settle, so
+ * the proofs the order holds no longer describe the store and the commit
+ * conflicts for real — no double is asked to return a conflict.
+ */
+const competingSettlementOf = (
+  credit: CreditObservation,
+  stock: StockObservation,
+  now: DateTimeUtc.Utc,
+): SettlementCommand => ({
+  orderId: 'competing-order',
+  customerId: CONTENDED_CUSTOMER,
+  events: [
+    new Fulfillment.Event.StockReserved({
+      orderId: 'competing-order',
+      allocations: [
+        Result.getOrThrow(
+          S.decodeResult(Inventory.Schema.LotAllocation)({
+            warehouseId: WAREHOUSE,
+            lotId: 'lot-1',
+            sku: SKU,
+            quantity: 1,
+            version: 1,
+          }),
+        ),
+      ],
+      occurredAt: now,
     }),
-  )
+  ],
+  audit: new Fulfillment.Event.AuditPayload({
+    orderId: 'competing-order',
+    actorId: CONTENDED_CUSTOMER,
+    decisionTag: 'AllocatedSplit',
+    occurredAt: now,
+  }),
+  stock: stock.proof,
+  charge: Option.some({ amount: money(1), proof: credit.proof }),
+})
 
-export const creditLedgerLayer = (limits: Readonly<Record<string, number>>): Layer.Layer<CreditLedger> =>
-  Layer.succeed(CreditLedger, {
-    readCredit: (customerId) =>
-      Effect.succeed({ account: creditAccount(customerId, limits[customerId] ?? 0), tier: 'Standard' }),
-    charge: () => Effect.void,
-  })
-
-export type CommitOutcome = 'Committed' | 'VersionConflict'
-
-export const reservationLogLayer = (outcomes: Readonly<Record<string, CommitOutcome>>): Layer.Layer<ReservationLog> =>
-  Layer.succeed(ReservationLog, {
-    findReservation: () => Effect.succeedNone,
-    commit: (commit) => Effect.succeed(outcomes[commit.orderId] ?? 'Committed'),
-  })
+const contestedSettlementStore: Layer.Layer<SettlementStore> = SettlementStore.memory(settlementSeed()).pipe(
+  Layer.flatMap((context) => {
+    const store = Context.get(context, SettlementStore)
+    return Layer.effect(
+      SettlementStore,
+      Effect.gen(function*() {
+        const credit = yield* Effect.orDie(store.readCredit(CONTENDED_CUSTOMER))
+        const stock = yield* store.readAllStock
+        const now = yield* DateTime.now
+        const competing = competingSettlementOf(credit, stock, now)
+        return {
+          readCredit: store.readCredit,
+          readAllStock: store.readAllStock,
+          settle: (command: SettlementCommand) => Effect.flatMap(store.settle(competing), () => store.settle(command)),
+        }
+      }),
+    )
+  }),
+)
 
 export const recordingFileSystem = Layer.effect(
   FileSystem.FileSystem,
@@ -108,19 +141,18 @@ export const recordingFileSystem = Layer.effect(
   }),
 )
 
-export const settlementLayers = (options: {
-  readonly creditLimits: Readonly<Record<string, number>>
-  readonly commitOutcomes: Readonly<Record<string, CommitOutcome>>
-}): Layer.Layer<
-  Inventory.InventoryStore | CreditLedger | ReservationLog | Observation.Observation | FileSystem.FileSystem
-> =>
-  Layer.mergeAll(
-    inventoryStoreLayer([stockPartition()]),
-    creditLedgerLayer(options.creditLimits),
-    reservationLogLayer(options.commitOutcomes),
-    ObservationWindow.make('inventory-fulfillment').layer,
-    recordingFileSystem,
-  )
+const observationLayers = Layer.mergeAll(
+  ObservationWindow.make('inventory-fulfillment').layer,
+  recordingFileSystem,
+)
+
+export const settlementLayers: Layer.Layer<
+  SettlementStore | Observation.Observation | FileSystem.FileSystem
+> = Layer.mergeAll(SettlementStore.memory(settlementSeed()), observationLayers)
+
+export const contestedSettlementLayers: Layer.Layer<
+  SettlementStore | Observation.Observation | FileSystem.FileSystem
+> = Layer.mergeAll(contestedSettlementStore, observationLayers)
 
 export const settlement = Stimulus.make({
   name: Fulfillment.FulfillmentSettle.id,

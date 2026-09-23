@@ -1,10 +1,11 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { DateTime, Effect, Result, Schema as S } from 'effect'
+import { DateTime, Effect, Match, Result, Schema as S } from 'effect'
 import { expect } from 'vitest'
 import {
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
+  CellHarness,
   ConflictRollback,
   CreditHold,
   DuplicateOrder,
@@ -686,6 +687,70 @@ Feature('Inventory fulfillment across the warehouse network')
           expect(held).toHaveLength(1)
           expect(held[0]?.shortfall).toBe(60)
           expect(held[0]?.requiredDownpayment).toBe(60)
+        }),
+      ),
+    )
+
+    scenario(
+      'Two orders for different products that read the account together never overdraw it',
+      Gherkin.Do.pipe(
+        Given('a Standard customer with a sixty unit credit limit and no overdraft')(
+          'customer',
+          () => registerCustomerWithCredit('Credit Write Skew', { tier: 'Standard', creditLimit: 60 }),
+        ),
+        Given('a warehouse stocking two different products, forty units each')('catalog', () =>
+          Effect.gen(function*() {
+            const first = uniqueId('sku')
+            const second = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(warehouse, 'central', [
+              { id: uniqueId('lot'), sku: first, warehouseId: warehouse, quantity: 40 },
+              { id: uniqueId('lot'), sku: second, warehouseId: warehouse, quantity: 40 },
+            ])
+            return { first, second }
+          })),
+        When('both orders are placed at once while the account can only cover one')(
+          'outcomes',
+          (s) =>
+            Effect.gen(function*() {
+              const server = yield* TestServer
+              const cell = yield* CellHarness
+              const attempt = (sku: string) =>
+                cell.submit({
+                  orderId: uniqueId('order'),
+                  customerId: s.customer.userId,
+                  lines: [{ sku, quantity: 40 }],
+                })
+              yield* server.seam.holdOnce
+              const [contested, sibling] = yield* Effect.all(
+                [
+                  attempt(s.catalog.first),
+                  Effect.gen(function*() {
+                    yield* server.seam.held
+                    const settled = yield* attempt(s.catalog.second)
+                    yield* server.seam.release
+                    return settled
+                  }),
+                ],
+                { concurrency: 'unbounded' },
+              )
+              const contestedFinal = yield* Match.value(contested).pipe(
+                Match.tag('Conflicted', () => attempt(s.catalog.first)),
+                Match.orElse(() => Effect.succeed(contested)),
+              )
+              return { contested: contestedFinal, sibling }
+            }),
+        ),
+        Then('the customer never owes more than the credit allows')((s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            const credit = yield* server.inspect.credit(s.customer.userId)
+            expect(credit.outstandingBalance).toBeLessThanOrEqual(credit.creditLimit + credit.overdraftPrivilege)
+          })
+        ),
+        And('one order is fulfilled and the other is held for credit')((s) => {
+          expect(s.outcomes.sibling).toEqual({ _tag: 'Allocated' })
+          expect(s.outcomes.contested).toEqual({ _tag: 'Held', shortfall: 20 })
         }),
       ),
     )

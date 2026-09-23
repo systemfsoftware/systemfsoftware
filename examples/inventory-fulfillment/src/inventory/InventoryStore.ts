@@ -14,7 +14,6 @@ export interface StockPage {
 }
 
 export interface InventoryStoreService {
-  readonly readAllStock: Effect.Effect<readonly WarehouseStockPartition[]>
   readonly readStock: (skus: readonly SkuId[]) => Effect.Effect<readonly WarehouseStockPartition[]>
   readonly readStockPage: (query: StockPageQuery) => Effect.Effect<StockPage>
 }
