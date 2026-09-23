@@ -47,7 +47,7 @@ export const runExtraction = (
   Effect.gen(function*() {
     const stdout: string[] = []
     const stderr: string[] = []
-    const outcome = yield* Extractor.run(configPath, options).pipe(
+    const outcome = yield* Extractor.run({ configFilePath: configPath, options }).pipe(
       Effect.provide(Extractor.layer({ stdout: sinkInto(stdout), stderr: sinkInto(stderr) })),
       Effect.result,
     )

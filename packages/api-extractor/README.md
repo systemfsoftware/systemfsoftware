@@ -30,7 +30,7 @@ api-extractor init
 
 ## Programmatic API
 
-The package root exports a single `Extractor` namespace. `Extractor.run(configPath, options)` returns an `Effect` that resolves to `ExtractionPassed` or `ExtractionFailed` — errors fail the run, and in verification mode warnings fail it too. The outcome carries `errorCount`, `warningCount`, and one outcome per report variant. Config and compiler problems surface as typed `ExtractorError` variants on the error channel.
+The package root exports a single `Extractor` namespace. `Extractor.run({ configFilePath, options })` returns an `Effect` that resolves to `ExtractionPassed` or `ExtractionFailed` — errors fail the run, and in verification mode warnings fail it too. The outcome carries `errorCount`, `warningCount`, and one outcome per report variant. Config and compiler problems surface as typed `ExtractorError` variants on the error channel.
 
 ```ts
 import * as NodeServices from '@effect/platform-node/NodeServices'
@@ -39,9 +39,9 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
 await Effect.runPromise(
-  Extractor.run('./api-extractor.json', {
-    localBuild: true,
-    cliFlags: { quiet: true },
+  Extractor.run({
+    configFilePath: './api-extractor.json',
+    options: { localBuild: true, cliFlags: { quiet: true } },
   }).pipe(
     Effect.provide(Layer.mergeAll(NodeServices.layer, Extractor.layer())),
   ),
