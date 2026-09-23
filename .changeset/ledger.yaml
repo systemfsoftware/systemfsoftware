@@ -158,6 +158,10 @@
   dir: packages/differential-spec
   intents:
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/differential-spec@0.2.0":
+  dir: packages/differential-spec
+  intents:
+    - loose-plants-show
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -214,6 +218,10 @@
   dir: packages/atom/effect-atom-react
   intents:
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-atom-react@0.9.0":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - famous-oranges-camp
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -281,6 +289,10 @@
   intents:
     - eliminate-bare-classes-and-enforce-ban-classes
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/effect-atom@4.0.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - few-steaks-cheat
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -291,6 +303,10 @@
   intents:
     - otel-instrumentation-map
     - schema-edged-cells
+"@systemfsoftware/effect-cell-types@10.1.0":
+  dir: packages/effect-cell-types
+  intents:
+    - twelve-days-throw
 "@systemfsoftware/effect-cell-types@2.0.0":
   dir: packages/effect-cell-types
   intents:
@@ -471,6 +487,10 @@
   intents:
     - daemon-restart-span-key
     - supervisor-rejects-cool-down
+"@systemfsoftware/effect-daemon-spec@4.1.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - fiery-poets-beg
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -533,6 +553,10 @@
   dir: packages/effect-gherkin-spec
   intents:
     - gherkin-registrar-extraction
+"@systemfsoftware/effect-gherkin-spec@4.3.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - rich-rockets-occur
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -592,6 +616,10 @@
   dir: packages/effect-memfs
   intents:
     - cell-consumers-follow
+"@systemfsoftware/effect-memfs@3.1.0":
+  dir: packages/effect-memfs
+  intents:
+    - six-cities-dream
 "@systemfsoftware/effect-microsandbox@0.1.0":
   dir: packages/effect-microsandbox
   intents:
@@ -607,6 +635,10 @@
   intents:
     - microsandbox-otel-span-keys
     - microsandbox-structured-logs
+"@systemfsoftware/effect-microsandbox@2.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - better-teams-wear
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:
@@ -616,6 +648,10 @@
   intents:
     - readiness-probe-input
     - readiness-service-layer-boundaries
+"@systemfsoftware/effect-readiness@0.2.0":
+  dir: packages/effect-readiness
+  intents:
+    - cyan-ears-flow
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -765,6 +801,10 @@
   dir: packages/effect-schema-law
   intents:
     - stryker-version-bump
+"@systemfsoftware/effect-schema-law@2.3.0":
+  dir: packages/effect-schema-law
+  intents:
+    - wacky-kings-create
 "@systemfsoftware/effect-schema-recursion-budget@0.0.0":
   dir: packages/effect-schema-recursion-budget
   intents:
@@ -782,6 +822,10 @@
   dir: packages/effect-schema-recursion-budget
   intents:
     - stryker-version-bump
+"@systemfsoftware/effect-schema-recursion-budget@1.0.0":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - happy-deer-fall
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -841,6 +885,10 @@
   dir: packages/effect-spec-runtime
   intents:
     - effect-spec-runtime
+"@systemfsoftware/effect-spec-runtime@0.1.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - cozy-waves-give
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -935,6 +983,10 @@
   intents:
     - eliminate-bare-classes-and-enforce-ban-classes
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/npm-package@0.4.0":
+  dir: packages/npm-package
+  intents:
+    - wacky-toys-decide
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -1042,6 +1094,10 @@
   dir: omp/plugins/omp-typescript-discipline
   intents:
     - stryker-version-bump
+"@systemfsoftware/omp-typescript-discipline@1.0.7":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - dull-mangos-sneeze
 "@systemfsoftware/oxlint-config-cell-architecture@1.0.0":
   dir: packages/oxlint-presets/oxlint-config-cell-architecture
   intents:
@@ -1066,6 +1122,10 @@
   intents:
     - ban-raw-span-name-emit
     - trace-test-requires-taxonomy
+"@systemfsoftware/oxlint-config-recommended@2.0.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - bumpy-pans-post
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -1791,6 +1851,10 @@
   dir: packages/storybook-gherkin
   intents:
     - unknown-holes-are-generic-defaults
+"@systemfsoftware/storybook-gherkin@4.0.0":
+  dir: packages/storybook-gherkin
+  intents:
+    - short-laws-draw
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -2612,6 +2676,10 @@
   dir: packages/trace-spec
   intents:
     - trace-spec
+"@systemfsoftware/trace-spec@0.1.0":
+  dir: packages/trace-spec
+  intents:
+    - frank-plums-hang
 "@systemfsoftware/trace-taxonomy@0.0.0":
   dir: packages/trace-taxonomy
   intents:
@@ -2636,3 +2704,7 @@
   dir: packages/toolchain/tsconfig
   intents:
     - stryker-version-bump
+"@systemfsoftware/tsconfig@2.0.0":
+  dir: packages/toolchain/tsconfig
+  intents:
+    - wacky-cooks-cheer
