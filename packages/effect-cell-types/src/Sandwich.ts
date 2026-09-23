@@ -295,17 +295,17 @@ const dispatchAll = <Raw, Value, A, WE, WR>(
 ): Effect.Effect<ReadonlyArray<A>, WE, WR> =>
   Effect.forEach(values, (value) => dispatchOne<Raw, Value, A, WE, WR>(handlers, value, raw))
 
+const isEventList = <Value>(candidate: Value | ReadonlyArray<Value>): candidate is ReadonlyArray<Value> =>
+  Array.isArray(candidate)
+
 const dispatchEncoded = <Raw, Value, A, WE, WR>(
   handlers: object,
   encoded: Value | ReadonlyArray<Value>,
   raw: Raw,
-): Effect.Effect<A | ReadonlyArray<A>, WE, WR> => {
-  const isList = (candidate: Value | ReadonlyArray<Value>): candidate is ReadonlyArray<Value> =>
-    Array.isArray(candidate)
-  return isList(encoded)
+): Effect.Effect<A | ReadonlyArray<A>, WE, WR> =>
+  isEventList(encoded)
     ? dispatchAll<Raw, Value, A, WE, WR>(handlers, encoded, raw)
     : dispatchOne<Raw, Value, A, WE, WR>(handlers, encoded, raw)
-}
 
 const writeValue = <Raw, Value, A, WE, WR>(
   name: string,
