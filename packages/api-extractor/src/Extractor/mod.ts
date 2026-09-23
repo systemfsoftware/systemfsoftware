@@ -9,8 +9,6 @@ export { cell, run } from '../run-extractor.js'
 export { ExtractionFailed, ExtractionPassed } from '../choose-extraction.workflow.js'
 export type { ExtractionDecision, ReportOutcome } from '../choose-extraction.workflow.js'
 
-export { loadExtractorConfig as loadConfig } from '../config/extractor-config.js'
-
 export * from '../errors/analysis.schema.js'
 export * from '../errors/compiler.schema.js'
 export * from '../errors/config.schema.js'

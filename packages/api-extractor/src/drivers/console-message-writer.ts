@@ -1,13 +1,11 @@
+import type { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
+import type { LogLevel } from '../collector/message-router.schema.js'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
-import type { LogLevel } from '../collector/message-router.schema.js'
 import { MessageWriter } from '../message-writer.service.js'
+import { layer as typescriptCompilerLayer } from './typescript-compiler.js'
 
-/**
- * The write end the console driver emits to. `process.stdout` and
- * `process.stderr` satisfy it; tests bind in-memory sinks.
- */
 export interface TextWritable {
   readonly write: (text: string) => void
 }
@@ -24,21 +22,13 @@ const outputStream = (options: ConsoleMessageWriterOptions): TextWritable => opt
 const streamFor = (level: LogLevel, options: ConsoleMessageWriterOptions): TextWritable =>
   level === 'error' ? errorStream(options) : outputStream(options)
 
-/**
- * A MessageWriter whose writes are synchronous console output.
- *
- * Every console line is emitted through this writer from a write phase, and a
- * Terminal-backed writer under NodeServices is asynchronous — a write that
- * suspends would turn the synchronous residue flush into a defect. The driver
- * keeps every write `Effect.sync`, so emitting a run's console lines never
- * suspends the fiber that emits them.
- */
-export const layer = (options: ConsoleMessageWriterOptions = {}): Layer.Layer<MessageWriter> =>
+export const messageWriterLayer = (options: ConsoleMessageWriterOptions = {}): Layer.Layer<MessageWriter> =>
   Layer.succeed(MessageWriter, {
-    // The router emits already-formatted text; the writer only picks the stream
-    // and appends the newline.
     write: (level: LogLevel, text: string) =>
       Effect.sync(() => {
         streamFor(level, options).write(text + '\n')
       }),
   })
+
+export const layer = (options: ConsoleMessageWriterOptions = {}): Layer.Layer<MessageWriter | TypeScriptCompiler> =>
+  Layer.mergeAll(messageWriterLayer(options), typescriptCompilerLayer)

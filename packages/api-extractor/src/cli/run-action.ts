@@ -1,14 +1,27 @@
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Path from 'effect/Path'
+import type * as Path from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
 import * as Schema from 'effect/Schema'
 import { CliError, Command, Flag } from 'effect/unstable/cli'
 
 import type { CliFlags } from '../collector/verbosity.schema.js'
-import { findConfigFileUpwards } from '../config/lookup.js'
-import { ExtractionPassed, type ExtractorRunOptions, MessageWriter, run } from '../Extractor/mod.js'
+import type { TypeScriptCompiler } from '../compiler/typescript-compiler.service.js'
+import {
+  cell as extractorCell,
+  ConfigFileNotFound,
+  type ExtractionDecision,
+  ExtractionPassed,
+  type ExtractorError,
+  type ExtractorRunInput,
+  type ExtractorRunOptions,
+  MessageWriter,
+} from '../Extractor/mod.js'
+import { locateConfig } from '../locate-config.cell.js'
+import { LocateConfig } from '../locate-config.schema.js'
 
 export interface ParsedRunFlags {
   readonly config: Option.Option<string>
@@ -61,21 +74,15 @@ const noConfigFoundError = (): CliError.UserError =>
     userMessage: 'Unable to find an api-extractor.json file from current directory upwards',
   })
 
-const resolveConfigPath = (
-  explicitPath: Option.Option<string>,
-): Effect.Effect<string, CliError.UserError, FileSystem.FileSystem | Path.Path> =>
-  Option.match(explicitPath, {
-    onSome: Effect.succeed,
-    onNone: () =>
-      findConfigFileUpwards('.').pipe(
-        Effect.flatMap((opt) =>
-          Effect.mapError(
-            Effect.fromOption(opt),
-            noConfigFoundError,
-          )
-        ),
-      ),
-  })
+const refusalOf = (failure: ConfigFileNotFound | ExtractorError | PlatformError): CliError.UserError =>
+  Match.value(failure).pipe(
+    Match.tag('ConfigFileNotFound', () => noConfigFoundError()),
+    Match.orElse((cause) =>
+      new CliError.UserError({
+        cause,
+        userMessage: `Extraction failed: ${cause.message}`,
+      })),
+  )
 
 const outcomeMessageOf = (errorCount: number): string =>
   Match.value(errorCount > 0).pipe(
@@ -116,32 +123,37 @@ const toExtractorOptions = (flags: ParsedRunFlags): ExtractorRunOptions => {
 
 const isPassed = Schema.is(ExtractionPassed)
 
+const outcomeEffect = (decision: ExtractionDecision): Effect.Effect<void, CliError.UserError> =>
+  Match.value(isPassed(decision)).pipe(
+    Match.when(true, () => Effect.void),
+    Match.when(false, () => Effect.fail(executionFailedError(decision.errorCount))),
+    Match.exhaustive,
+  )
+
+const runCell = Cell.flatMap(
+  Cell.mapInput(locateConfig, (flags: ParsedRunFlags) =>
+    new LocateConfig({
+      explicitPath: Option.getOrUndefined(flags.config),
+      startFolder: '.',
+    })),
+  (configFilePath: string) =>
+    Cell.mapInput(extractorCell, (flags: ParsedRunFlags): ExtractorRunInput => ({
+      configFilePath,
+      options: toExtractorOptions(flags),
+    })),
+)
+
 const runActionHandler = (
   flags: ParsedRunFlags,
 ): Effect.Effect<
   void,
   CliError.UserError,
-  FileSystem.FileSystem | Path.Path | MessageWriter
+  FileSystem.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler
 > =>
-  Effect.gen(function*() {
-    const configPath = yield* resolveConfigPath(flags.config)
-    const options = toExtractorOptions(flags)
-    const result = yield* run(configPath, options).pipe(
-      Effect.mapError(
-        (err) =>
-          new CliError.UserError({
-            cause: err,
-            userMessage: `Extraction failed: ${err.message}`,
-          }),
-      ),
-    )
-
-    return yield* Match.value(isPassed(result)).pipe(
-      Match.when(true, () => Effect.void),
-      Match.when(false, () => executionFailedError(result.errorCount)),
-      Match.exhaustive,
-    )
-  })
+  runCell.pipe(
+    Cell.mapError(refusalOf),
+    Cell.flatMap((decision) => Cell.fromEffect(outcomeEffect(decision))),
+  ).run(flags)
 
 export const runCommand = Command.make('run', runFlagsConfig, runActionHandler).pipe(
   Command.withDescription('Invoke API Extractor on a project'),

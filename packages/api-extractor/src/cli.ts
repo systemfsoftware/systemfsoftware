@@ -6,7 +6,8 @@ import { Command } from 'effect/unstable/cli'
 
 import { initCommand } from './cli/init-action.js'
 import { runCommand } from './cli/run-action.js'
-import { layer } from './drivers/console-message-writer.js'
+import { messageWriterLayer } from './drivers/console-message-writer.js'
+import { layer as typescriptCompilerLayer } from './drivers/typescript-compiler.js'
 import { extractorVersion } from './version.js'
 
 export const cli = Command.make('api-extractor').pipe(
@@ -18,7 +19,8 @@ export const cli = Command.make('api-extractor').pipe(
 
 const cliLayers = Layer.mergeAll(
   NodeServices.layer,
-  layer(),
+  messageWriterLayer(),
+  typescriptCompilerLayer,
 )
 
 const program = Command.run(cli, { version: extractorVersion }).pipe(

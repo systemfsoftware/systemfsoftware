@@ -1,10 +1,9 @@
 import { Match, Schema } from 'effect'
-import * as Effect from 'effect/Effect'
-import * as FileSystem from 'effect/FileSystem'
+import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
-import * as Path from 'effect/Path'
-import type { PlatformError } from 'effect/PlatformError'
+import type * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
+
 import {
   CircularConfigExtendsError,
   ConfigFileNotFound,
@@ -12,22 +11,75 @@ import {
   ConfigSchemaValidationError,
   type UnresolvedTokenError,
 } from '../errors/config.schema.js'
-import type { ApiReportConfig, ApiReportVariant } from './config-file.schema.js'
+import type {
+  ApiReportConfig,
+  ApiReportVariant,
+  DocModelConfig,
+  DtsRollupConfig,
+  MessagesConfig,
+  TsdocMetadataConfig,
+} from './config-file.schema.js'
 import { ConfigFile } from './config-file.schema.js'
 import { DEFAULT_CONFIG_RECORD } from './defaults.js'
 import type { ExtractorConfig, ExtractorReportConfig } from './extractor-config.schema.js'
-import type { JsonRecord } from './json-record.schema.js'
 import { JsonRecordFromString } from './json-record.schema.js'
 import { MergeConfig, mergeConfig } from './merge-config.workflow.js'
-import type { TokenContext } from './tokens.js'
-import { expandTokens, unscopedPackageName } from './tokens.js'
+import type { JoinSegments, TokenContext } from './tokens.js'
+import { expandTokens, LOOKUP_TOKEN, PROJECT_FOLDER_TOKEN, UNKNOWN_PACKAGE_NAME, unscopedPackageName } from './tokens.js'
 
 export type { ExtractorConfig, ExtractorReportConfig }
 
 export type MutableJsonRecord = Record<string, Schema.Json>
 
+/** Every failure the read phase can refuse a configuration chain with. */
+export type ConfigReadError = ConfigFileNotFound | ConfigJsonSyntaxError | CircularConfigExtendsError
+
+/** Every failure the pure decode can refuse a configuration with. */
+export type ConfigDecodeError = ConfigSchemaValidationError | UnresolvedTokenError
+
+/** One configuration file the read phase read, and the record it holds (without its `extends`). */
+export interface RawConfigLink {
+  readonly filePath: string
+  readonly record: MutableJsonRecord
+}
+
+/** The nearest `package.json` the read phase found, and the record it holds. */
+export interface RawPackageJson {
+  readonly folder: string
+  readonly record: MutableJsonRecord
+}
+
+/**
+ * Everything the read phase gathered from disk for one configuration: the extends chain it
+ * walked, the folder the project would be located in, and the nearest package manifest. The
+ * pure decode below turns this into the configuration the run uses; no I/O happens after it.
+ */
+export interface RawConfigRead {
+  readonly path: Path.Path
+  readonly configFilePath: string
+  readonly configFolder: string
+  readonly links: readonly RawConfigLink[]
+  readonly tsconfigFolder: Option.Option<string>
+  readonly packageJson: Option.Option<RawPackageJson>
+}
+
+const emptyRecord: MutableJsonRecord = {}
+
 export const isConfigRecord = (u: Schema.Json): u is MutableJsonRecord =>
-  typeof u === 'object' && u !== null && !Array.isArray(u)
+  Match.value({ object: typeof u === 'object', nonNull: u !== null, list: Array.isArray(u) }).pipe(
+    Match.when({ object: true, nonNull: true, list: false }, () => true),
+    Match.orElse(() => false),
+  )
+
+/** Decodes one configuration file's text into the record the chain merges. */
+export const decodeJsonRecord = (
+  filePath: string,
+  content: string,
+): Result.Result<MutableJsonRecord, ConfigJsonSyntaxError> =>
+  Result.mapError(
+    Schema.decodeResult(JsonRecordFromString)(content),
+    (error) => new ConfigJsonSyntaxError({ filePath, cause: error.message }),
+  )
 
 export const mergeConfigObjects = (
   base: MutableJsonRecord,
@@ -41,251 +93,142 @@ export const mergeConfigObjects = (
   )
 }
 
+const extendsSpecifierOf = (extendsVal: Schema.Json | undefined): Option.Option<string> =>
+  Option.filter(Option.filter(Option.some(extendsVal), Schema.is(Schema.String)), (specifier) => specifier.length > 0)
+
 export const splitExtends = (
   config: MutableJsonRecord,
 ): { readonly extendsSpecifier: string | undefined; readonly stripped: MutableJsonRecord } => {
   const { extends: extendsVal, ...stripped } = config
-  const isString = typeof extendsVal === 'string'
-  const isNonEmpty = isString && extendsVal.length > 0
-  const extendsSpecifier = isNonEmpty ? extendsVal : undefined
-  return { extendsSpecifier, stripped }
+  return { extendsSpecifier: Option.getOrUndefined(extendsSpecifierOf(extendsVal)), stripped }
 }
 
-const anchorIfRelative = (val: string, folder: string, path: Path.Path): string => {
-  const isAbs = path.isAbsolute(val)
-  if (isAbs) return val
-  const isToken = val.startsWith('<projectFolder>')
-  return isToken ? val : path.join(folder, val)
-}
+const anchorIfRelative = (val: string, folder: string, path: Path.Path): string =>
+  Match.value({ absolute: path.isAbsolute(val), token: val.startsWith(PROJECT_FOLDER_TOKEN) }).pipe(
+    Match.when({ absolute: true }, () => val),
+    Match.when({ token: true }, () => val),
+    Match.orElse(() => path.join(folder, val)),
+  )
 
 const anchorPath = (value: Schema.Json | undefined, folder: string, path: Path.Path): Schema.Json | undefined =>
-  typeof value === 'string' ? anchorIfRelative(value, folder, path) : value
+  Option.match(Option.filter(Option.fromNullishOr(value), Schema.is(Schema.String)), {
+    onNone: () => value,
+    onSome: (raw) => anchorIfRelative(raw, folder, path),
+  })
 
-const cloneAndAssign = (record: MutableJsonRecord, key: string, val: Schema.Json | undefined): MutableJsonRecord => {
-  const copy: MutableJsonRecord = { ...record }
-  if (val !== undefined) {
-    copy[key] = val
-  }
-  return copy
-}
+/** The record with `key` set to `val`; an absent value leaves the record as it was. */
+const assignIfPresent = (
+  record: MutableJsonRecord,
+  key: string,
+  val: Schema.Json | undefined,
+): MutableJsonRecord =>
+  Option.match(Option.fromUndefinedOr(val), {
+    onNone: () => record,
+    onSome: (present) => ({ ...record, [key]: present }),
+  })
 
 const anchorCompiler = (
   compiler: Schema.Json | undefined,
   folder: string,
   path: Path.Path,
-): Schema.Json | undefined => {
-  if (compiler === undefined || !isConfigRecord(compiler)) return compiler
-  const tsconfig = anchorPath(compiler['tsconfigFilePath'], folder, path)
-  return cloneAndAssign(compiler, 'tsconfigFilePath', tsconfig)
-}
+): Schema.Json | undefined =>
+  Option.match(Option.filter(Option.fromNullishOr(compiler), isConfigRecord), {
+    onNone: () => compiler,
+    onSome: (record) =>
+      assignIfPresent(record, 'tsconfigFilePath', anchorPath(record['tsconfigFilePath'], folder, path)),
+  })
 
 const anchorApiReport = (
   apiReport: Schema.Json | undefined,
   folder: string,
   path: Path.Path,
-): Schema.Json | undefined => {
-  if (apiReport === undefined || !isConfigRecord(apiReport)) return apiReport
-  const reportFolder = anchorPath(apiReport['reportFolder'], folder, path)
-  const reportTempFolder = anchorPath(apiReport['reportTempFolder'], folder, path)
-  const withFolder = cloneAndAssign(apiReport, 'reportFolder', reportFolder)
-  return cloneAndAssign(withFolder, 'reportTempFolder', reportTempFolder)
-}
+): Schema.Json | undefined =>
+  Option.match(Option.filter(Option.fromNullishOr(apiReport), isConfigRecord), {
+    onNone: () => apiReport,
+    onSome: (record) =>
+      assignIfPresent(
+        assignIfPresent(record, 'reportFolder', anchorPath(record['reportFolder'], folder, path)),
+        'reportTempFolder',
+        anchorPath(record['reportTempFolder'], folder, path),
+      ),
+  })
 
 const anchorDocModel = (
   docModel: Schema.Json | undefined,
   folder: string,
   path: Path.Path,
-): Schema.Json | undefined => {
-  if (docModel === undefined || !isConfigRecord(docModel)) return docModel
-  const apiJsonFilePath = anchorPath(docModel['apiJsonFilePath'], folder, path)
-  return cloneAndAssign(docModel, 'apiJsonFilePath', apiJsonFilePath)
-}
+): Schema.Json | undefined =>
+  Option.match(Option.filter(Option.fromNullishOr(docModel), isConfigRecord), {
+    onNone: () => docModel,
+    onSome: (record) =>
+      assignIfPresent(record, 'apiJsonFilePath', anchorPath(record['apiJsonFilePath'], folder, path)),
+  })
+
+const dtsRollupPathKeys = ['untrimmedFilePath', 'alphaTrimmedFilePath', 'betaTrimmedFilePath', 'publicTrimmedFilePath'] as const
 
 const anchorDtsRollup = (
   dtsRollup: Schema.Json | undefined,
   folder: string,
   path: Path.Path,
-): Schema.Json | undefined => {
-  if (dtsRollup === undefined || !isConfigRecord(dtsRollup)) return dtsRollup
-  const untrimmed = anchorPath(dtsRollup['untrimmedFilePath'], folder, path)
-  const alpha = anchorPath(dtsRollup['alphaTrimmedFilePath'], folder, path)
-  const beta = anchorPath(dtsRollup['betaTrimmedFilePath'], folder, path)
-  const pub = anchorPath(dtsRollup['publicTrimmedFilePath'], folder, path)
-  const s1 = cloneAndAssign(dtsRollup, 'untrimmedFilePath', untrimmed)
-  const s2 = cloneAndAssign(s1, 'alphaTrimmedFilePath', alpha)
-  const s3 = cloneAndAssign(s2, 'betaTrimmedFilePath', beta)
-  return cloneAndAssign(s3, 'publicTrimmedFilePath', pub)
-}
+): Schema.Json | undefined =>
+  Option.match(Option.filter(Option.fromNullishOr(dtsRollup), isConfigRecord), {
+    onNone: () => dtsRollup,
+    onSome: (record) =>
+      Arr.reduce(dtsRollupPathKeys, record, (anchored, key) =>
+        assignIfPresent(anchored, key, anchorPath(record[key], folder, path))),
+  })
 
 const anchorTsdocMetadata = (
   tsdocMetadata: Schema.Json | undefined,
   folder: string,
   path: Path.Path,
-): Schema.Json | undefined => {
-  if (tsdocMetadata === undefined || !isConfigRecord(tsdocMetadata)) return tsdocMetadata
-  const tsdocMetadataFilePath = anchorPath(tsdocMetadata['tsdocMetadataFilePath'], folder, path)
-  return cloneAndAssign(tsdocMetadata, 'tsdocMetadataFilePath', tsdocMetadataFilePath)
-}
+): Schema.Json | undefined =>
+  Option.match(Option.filter(Option.fromNullishOr(tsdocMetadata), isConfigRecord), {
+    onNone: () => tsdocMetadata,
+    onSome: (record) =>
+      assignIfPresent(record, 'tsdocMetadataFilePath', anchorPath(record['tsdocMetadataFilePath'], folder, path)),
+  })
 
+type AnchoredSection = readonly [
+  key: 'compiler' | 'apiReport' | 'docModel' | 'dtsRollup' | 'tsdocMetadata',
+  anchor: (value: Schema.Json | undefined, folder: string, path: Path.Path) => Schema.Json | undefined,
+]
+
+const anchoredSections: readonly AnchoredSection[] = [
+  ['compiler', anchorCompiler],
+  ['apiReport', anchorApiReport],
+  ['docModel', anchorDocModel],
+  ['dtsRollup', anchorDtsRollup],
+  ['tsdocMetadata', anchorTsdocMetadata],
+]
+
+/**
+ * Every relative path a configuration file declares, anchored to the folder that file sits in:
+ * a path another file's `extends` chain contributed is anchored to its own file, so the chain
+ * merge below compares like with like.
+ */
 export const anchorRelativePaths = (
   config: MutableJsonRecord,
   folder: string,
   path: Path.Path,
-): MutableJsonRecord => {
-  const c = anchorCompiler(config['compiler'], folder, path)
-  const a = anchorApiReport(config['apiReport'], folder, path)
-  const dm = anchorDocModel(config['docModel'], folder, path)
-  const dr = anchorDtsRollup(config['dtsRollup'], folder, path)
-  const tm = anchorTsdocMetadata(config['tsdocMetadata'], folder, path)
-  const r1 = cloneAndAssign(config, 'compiler', c)
-  const r2 = cloneAndAssign(r1, 'apiReport', a)
-  const r3 = cloneAndAssign(r2, 'docModel', dm)
-  const r4 = cloneAndAssign(r3, 'dtsRollup', dr)
-  return cloneAndAssign(r4, 'tsdocMetadata', tm)
-}
+): MutableJsonRecord =>
+  Arr.reduce(anchoredSections, config, (record, [key, anchor]) =>
+    assignIfPresent(record, key, anchor(record[key], folder, path)))
 
-const toSyntaxError = (filePath: string, err: Schema.SchemaError) =>
-  new ConfigJsonSyntaxError({ filePath, cause: err.message })
-
-const toFileError = (filePath: string, err: PlatformError) =>
-  new ConfigJsonSyntaxError({ filePath, cause: err.message })
-
-export const readConfigJson = (
-  filePath: string,
-): Effect.Effect<MutableJsonRecord, ConfigFileNotFound | ConfigJsonSyntaxError, FileSystem.FileSystem> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem
-    const exists = yield* fs.exists(filePath).pipe(Effect.orElseSucceed(() => false))
-    if (!exists) {
-      return yield* new ConfigFileNotFound({ filePath })
-    }
-    const content = yield* fs.readFileString(filePath).pipe(
-      Effect.mapError((err) => toFileError(filePath, err)),
-    )
-    const parsed: JsonRecord = yield* Schema.decodeEffect(JsonRecordFromString)(content).pipe(
-      Effect.mapError((err) => toSyntaxError(filePath, err)),
-    )
-    const result: MutableJsonRecord = { ...parsed }
-    return result
-  })
-
-const resolveExtendsTarget = (
-  specifier: string,
-  fromFolder: string,
-  path: Path.Path,
-): string => {
-  const isRelative = specifier.startsWith('./') || specifier.startsWith('../')
-  return isRelative ? path.resolve(fromFolder, specifier) : specifier
-}
-
-export const walkExtendsChain = (
-  entryPath: string,
-  chain: readonly string[] = [],
-  accumulated: MutableJsonRecord = {},
-): Effect.Effect<
-  MutableJsonRecord,
-  CircularConfigExtendsError | ConfigFileNotFound | ConfigJsonSyntaxError,
-  FileSystem.FileSystem | Path.Path
-> =>
-  Effect.gen(function*() {
-    const path = yield* Path.Path
-    const resolvedPath = path.resolve(entryPath)
-    if (chain.includes(resolvedPath)) {
-      const fullChain = [...chain, resolvedPath]
-      return yield* new CircularConfigExtendsError({ chain: fullChain })
-    }
-    const nextChain = [...chain, resolvedPath]
-    const raw = yield* readConfigJson(resolvedPath)
-    const { extendsSpecifier, stripped } = splitExtends(raw)
-    const folder = path.dirname(resolvedPath)
-    const anchored = anchorRelativePaths(stripped, folder, path)
-    const merged = mergeConfigObjects(anchored, accumulated)
-
-    if (extendsSpecifier === undefined) {
-      return merged
-    }
-    const nextTarget = resolveExtendsTarget(extendsSpecifier, folder, path)
-    return yield* walkExtendsChain(nextTarget, nextChain, merged)
-  })
-
-const defaultReportConfigs = (
-  reportFileNameBase: string,
-  variants: readonly ApiReportVariant[],
-  tokenCtx: TokenContext,
-  configPath: string,
-  join: (folder: string, rest: string) => string,
-): Effect.Effect<readonly ExtractorReportConfig[], UnresolvedTokenError> =>
-  Effect.forEach(variants, (variant) => {
-    const suffix = variant === 'complete' ? '.api.md' : `.${variant}.api.md`
-    return Effect.fromResult(expandTokens(`${reportFileNameBase}${suffix}`, tokenCtx, configPath, join)).pipe(
-      Effect.map((fileName) => ({ variant, fileName })),
-    )
-  })
-
-const probeTsconfigInFolder = (
-  folder: string,
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-): Effect.Effect<Option.Option<string>> =>
-  fs.exists(path.join(folder, 'tsconfig.json')).pipe(
-    Effect.map((exists) => (exists ? Option.some(folder) : Option.none())),
-    Effect.orElseSucceed(() => Option.none()),
-  )
-
-const findNearestTsconfig = (
-  startFolder: string,
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-): Effect.Effect<string, ConfigSchemaValidationError> =>
-  probeTsconfigInFolder(startFolder, fs, path).pipe(
-    Effect.flatMap((opt) => {
-      if (Option.isSome(opt)) {
-        return Effect.succeed(opt.value)
-      }
-      const parent = path.dirname(startFolder)
-      const atRoot = parent.length === 0 || parent === startFolder
-      return atRoot
-        ? new ConfigSchemaValidationError({
-          filePath: startFolder,
-          issues: ['Could not find tsconfig.json in parent folders of <lookup>'],
-        })
-        : findNearestTsconfig(parent, fs, path)
-    }),
-  )
-
-const probePackageJsonInFolder = (
-  folder: string,
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-): Effect.Effect<Option.Option<{ readonly folder: string; readonly packageJson: MutableJsonRecord }>> =>
-  fs.readFileString(path.join(folder, 'package.json')).pipe(
-    Effect.flatMap((content) => Schema.decodeEffect(JsonRecordFromString)(content)),
-    Effect.map((parsed) => Option.some({ folder, packageJson: { ...parsed } })),
-    Effect.orElseSucceed(() => Option.none()),
-  )
-
-const findNearestPackageJson = (
-  startFolder: string,
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-): Effect.Effect<Option.Option<{ readonly folder: string; readonly packageJson: MutableJsonRecord }>> =>
-  probePackageJsonInFolder(startFolder, fs, path).pipe(
-    Effect.flatMap((opt) => {
-      if (Option.isSome(opt)) {
-        return Effect.succeed(opt)
-      }
-      const parent = path.dirname(startFolder)
-      const atRoot = parent.length === 0 || parent === startFolder
-      return atRoot ? Effect.succeedNone : findNearestPackageJson(parent, fs, path)
-    }),
+const packageNameOf = (packageJson: MutableJsonRecord | undefined): string =>
+  Option.getOrElse(
+    Option.flatMap(
+      Option.fromNullishOr(packageJson),
+      (record) => Option.filter(Option.fromNullishOr(record['name']), Schema.is(Schema.String)),
+    ),
+    () => UNKNOWN_PACKAGE_NAME,
   )
 
 const buildTokenContext = (
   projectFolder: string,
   packageJson: MutableJsonRecord | undefined,
 ): TokenContext => {
-  const packageNameVal = packageJson?.['name']
-  const packageName = typeof packageNameVal === 'string' ? packageNameVal : 'unknown-package'
+  const packageName = packageNameOf(packageJson)
   return {
     projectFolder,
     packageName,
@@ -293,96 +236,168 @@ const buildTokenContext = (
   }
 }
 
+const variantSuffix = (variant: ApiReportVariant): string =>
+  Match.value(variant).pipe(
+    Match.when('complete', () => '.api.md'),
+    Match.orElse((other) => `.${other}.api.md`),
+  )
+
+const defaultReportConfigs = (
+  reportFileNameBase: string,
+  variants: readonly ApiReportVariant[],
+  tokenCtx: TokenContext,
+  configPath: string,
+  join: JoinSegments,
+): Result.Result<readonly ExtractorReportConfig[], UnresolvedTokenError> =>
+  Result.all(
+    Arr.map(variants, (variant) =>
+      Result.map(
+        expandTokens(`${reportFileNameBase}${variantSuffix(variant)}`, tokenCtx, configPath, join),
+        (fileName): ExtractorReportConfig => ({ variant, fileName }),
+      )),
+  )
+
+const withoutReportSuffix = (rawFileName: string): string => rawFileName.replace(/\.api\.md$/, '')
+
 const buildReportConfigs = (
   reportCfg: ApiReportConfig,
   tokenCtx: TokenContext,
   resolvedConfigPath: string,
-  join: (folder: string, rest: string) => string,
-): Effect.Effect<readonly ExtractorReportConfig[], UnresolvedTokenError> => {
-  const variants = reportCfg.reportVariants ?? ['complete']
-  const rawFileName = reportCfg.reportFileName ?? '<unscopedPackageName>'
-  const reportBase = rawFileName.replace(/\.api\.md$/, '')
-  return defaultReportConfigs(reportBase, variants, tokenCtx, resolvedConfigPath, join)
-}
+  join: JoinSegments,
+): Result.Result<readonly ExtractorReportConfig[], UnresolvedTokenError> =>
+  defaultReportConfigs(
+    Option.getOrElse(
+      Option.map(Option.fromNullishOr(reportCfg.reportFileName), withoutReportSuffix),
+      () => '<unscopedPackageName>',
+    ),
+    Option.getOrElse(Option.fromUndefinedOr(reportCfg.reportVariants), (): readonly ApiReportVariant[] => ['complete']),
+    tokenCtx,
+    resolvedConfigPath,
+    join,
+  )
 
-const extractOverrideTsconfig = (
-  compiler: Schema.Json | undefined,
-): Schema.Json | undefined => {
-  if (compiler === undefined || !isConfigRecord(compiler)) return undefined
-  return compiler['overrideTsconfig']
-}
+const extractOverrideTsconfig = (compiler: Schema.Json | undefined): Schema.Json | undefined =>
+  Option.getOrUndefined(
+    Option.flatMap(
+      Option.filter(Option.fromNullishOr(compiler), isConfigRecord),
+      (record) => Option.fromNullishOr(record['overrideTsconfig']),
+    ),
+  )
 
-export const loadExtractorConfig = (
-  filePath: string,
-): Effect.Effect<
-  ExtractorConfig,
-  | ConfigFileNotFound
-  | ConfigJsonSyntaxError
-  | ConfigSchemaValidationError
-  | CircularConfigExtendsError
-  | UnresolvedTokenError,
-  FileSystem.FileSystem | Path.Path
-> =>
-  Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
-    const resolvedConfigPath = path.resolve(filePath)
-    const configFolder = path.dirname(resolvedConfigPath)
+const projectFolderOf = (
+  read: RawConfigRead,
+  validated: ConfigFile,
+): Result.Result<string, ConfigSchemaValidationError> =>
+  Option.match(Option.fromNullishOr(validated.projectFolder), {
+    onNone: () => projectFolderFromLookup(read),
+    onSome: (rawProjectFolder) => projectFolderFromRaw(read, rawProjectFolder),
+  })
 
-    const mergedRaw = yield* walkExtendsChain(resolvedConfigPath)
-    const defaultsAsRecord: MutableJsonRecord = { ...DEFAULT_CONFIG_RECORD }
-    const withDefaults = mergeConfigObjects(defaultsAsRecord, mergedRaw)
-
-    const validated = yield* Schema.decodeEffect(ConfigFile)(withDefaults).pipe(
-      Effect.mapError((err) =>
-        new ConfigSchemaValidationError({ filePath: resolvedConfigPath, issues: [err.message] })
+const projectFolderFromLookup = (read: RawConfigRead): Result.Result<string, ConfigSchemaValidationError> =>
+  Option.match(read.tsconfigFolder, {
+    onNone: (): Result.Result<string, ConfigSchemaValidationError> =>
+      Result.fail(
+        new ConfigSchemaValidationError({
+          filePath: read.configFolder,
+          issues: ['Could not find tsconfig.json in parent folders of <lookup>'],
+        }),
       ),
+    onSome: (folder) => Result.succeed(folder),
+  })
+
+const projectFolderFromRaw = (
+  read: RawConfigRead,
+  rawProjectFolder: string,
+): Result.Result<string, ConfigSchemaValidationError> =>
+  Match.value(rawProjectFolder === LOOKUP_TOKEN).pipe(
+    Match.when(true, () => projectFolderFromLookup(read)),
+    Match.when(false, () => Result.succeed(read.path.resolve(read.configFolder, rawProjectFolder))),
+    Match.exhaustive,
+  )
+
+const anchoredExpansion =
+  (projectFolder: string, path: Path.Path) =>
+  (expanded: string): string =>
+    Match.value(expanded.length === 0).pipe(
+      Match.when(true, () => ''),
+      Match.when(false, () => path.resolve(projectFolder, expanded)),
+      Match.exhaustive,
     )
 
-    const rawProjectFolder = validated.projectFolder ?? '.'
-    const projectFolder = rawProjectFolder === '<lookup>'
-      ? yield* findNearestTsconfig(configFolder, fs, path)
-      : path.resolve(configFolder, rawProjectFolder)
-
-    const nearestPkg = yield* findNearestPackageJson(configFolder, fs, path)
-    const packageFolder = Option.isSome(nearestPkg) ? nearestPkg.value.folder : undefined
-    const packageJson = Option.isSome(nearestPkg) ? nearestPkg.value.packageJson : undefined
-
-    const tokenCtx = buildTokenContext(projectFolder, packageJson)
-
-    const expand = (val: string | undefined): Effect.Effect<string, UnresolvedTokenError> =>
-      Effect.fromResult(expandTokens(val ?? '', tokenCtx, resolvedConfigPath, path.join)).pipe(
-        Effect.map((expanded) => expanded.length === 0 ? '' : path.resolve(projectFolder, expanded)),
-      )
-
-    const mainEntryPoint = yield* expand(validated.mainEntryPointFilePath)
-    const tsconfigPath = yield* expand(validated.compiler?.tsconfigFilePath)
-
-    const reportCfg = validated.apiReport ?? { enabled: false }
-    const reportConfigs = yield* buildReportConfigs(reportCfg, tokenCtx, resolvedConfigPath, path.join)
-    const overrideTsconfig = extractOverrideTsconfig(withDefaults['compiler'])
-
-    return {
-      configFilePath: resolvedConfigPath,
+const assembleConfig = (
+  read: RawConfigRead,
+  validated: ConfigFile,
+  overrideTsconfig: Schema.Json | undefined,
+  projectFolder: string,
+): Result.Result<ExtractorConfig, ConfigDecodeError> => {
+  const nearestPackage = read.packageJson
+  const packageJson = Option.getOrUndefined(Option.map(nearestPackage, (found) => found.record))
+  const tokenCtx = buildTokenContext(projectFolder, packageJson)
+  const join: JoinSegments = (folder, rest) => read.path.join(folder, rest)
+  const anchor = anchoredExpansion(projectFolder, read.path)
+  const expand = (raw: string | undefined): Result.Result<string, UnresolvedTokenError> =>
+    Result.map(expandTokens(raw ?? '', tokenCtx, read.configFilePath, join), anchor)
+  const reportCfg: ApiReportConfig = Option.getOrElse(
+    Option.fromUndefinedOr(validated.apiReport),
+    (): ApiReportConfig => ({ enabled: false }),
+  )
+  return Result.map(
+    Result.all([
+      expand(validated.mainEntryPointFilePath),
+      expand(Option.getOrUndefined(Option.map(Option.fromNullishOr(validated.compiler), (compiler) => compiler.tsconfigFilePath))),
+      buildReportConfigs(reportCfg, tokenCtx, read.configFilePath, join),
+    ]),
+    ([mainEntryPointFilePath, tsconfigFilePath, reportConfigs]): ExtractorConfig => ({
+      configFilePath: read.configFilePath,
       projectFolder,
-      packageFolder,
+      packageFolder: Option.getOrUndefined(Option.map(nearestPackage, (found) => found.folder)),
       packageJson,
-      mainEntryPointFilePath: mainEntryPoint,
-      bundledPackages: validated.bundledPackages ?? [],
-      tsconfigFilePath: tsconfigPath,
+      mainEntryPointFilePath,
+      bundledPackages: Option.getOrElse(Option.fromUndefinedOr(validated.bundledPackages), (): readonly string[] => []),
+      tsconfigFilePath,
       overrideTsconfig,
-      skipLibCheck: validated.compiler?.skipLibCheck ?? false,
-      newlineKind: validated.newlineKind ?? 'crlf',
-      enumMemberOrder: validated.enumMemberOrder ?? 'by-name',
-      testMode: validated.testMode ?? false,
-      quiet: validated.quiet ?? false,
+      skipLibCheck: Option.getOrElse(
+        Option.flatMap(Option.fromNullishOr(validated.compiler), (compiler) =>
+          Option.fromUndefinedOr(compiler.skipLibCheck)),
+        () => false,
+      ),
+      newlineKind: Option.getOrElse(Option.fromUndefinedOr(validated.newlineKind), () => 'crlf'),
+      enumMemberOrder: Option.getOrElse(Option.fromUndefinedOr(validated.enumMemberOrder), () => 'by-name'),
+      testMode: Option.getOrElse(Option.fromUndefinedOr(validated.testMode), () => false),
+      quiet: Option.getOrElse(Option.fromUndefinedOr(validated.quiet), () => false),
       apiReport: {
         ...reportCfg,
         reportConfigs,
       },
-      docModel: validated.docModel ?? { enabled: false },
-      dtsRollup: validated.dtsRollup ?? { enabled: false },
-      tsdocMetadata: validated.tsdocMetadata ?? { enabled: false },
-      messages: validated.messages ?? {},
-    }
-  })
+      docModel: Option.getOrElse(Option.fromUndefinedOr(validated.docModel), (): DocModelConfig => ({ enabled: false })),
+      dtsRollup: Option.getOrElse(Option.fromUndefinedOr(validated.dtsRollup), (): DtsRollupConfig => ({ enabled: false })),
+      tsdocMetadata: Option.getOrElse(
+        Option.fromUndefinedOr(validated.tsdocMetadata),
+        (): TsdocMetadataConfig => ({ enabled: false }),
+      ),
+      messages: Option.getOrElse(Option.fromUndefinedOr(validated.messages), (): MessagesConfig => ({})),
+    }),
+  )
+}
+
+/**
+ * Decodes the configuration the read phase gathered. Pure: the chain is anchored and merged
+ * with the defaults, the merged record is validated, the tokens in its paths are expanded, and
+ * the project folder is resolved — all from the read phase's data, with no I/O of its own.
+ */
+export const decodeExtractorConfig = (read: RawConfigRead): Result.Result<ExtractorConfig, ConfigDecodeError> => {
+  const mergedRaw = Arr.reduce(read.links, emptyRecord, (accumulated, link) =>
+    mergeConfigObjects(anchorRelativePaths(link.record, read.path.dirname(link.filePath), read.path), accumulated))
+  const withDefaults = mergeConfigObjects({ ...DEFAULT_CONFIG_RECORD }, mergedRaw)
+  const overrideTsconfig = extractOverrideTsconfig(withDefaults['compiler'])
+  return Result.flatMap(
+    Result.mapError(
+      Schema.decodeResult(ConfigFile)(withDefaults),
+      (error): ConfigSchemaValidationError =>
+        new ConfigSchemaValidationError({ filePath: read.configFilePath, issues: [error.message] }),
+    ),
+    (validated) =>
+      Result.flatMap(projectFolderOf(read, validated), (folder) =>
+        assembleConfig(read, validated, overrideTsconfig, folder)),
+  )
+}

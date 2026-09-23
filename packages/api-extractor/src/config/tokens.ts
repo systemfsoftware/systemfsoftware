@@ -1,4 +1,6 @@
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { UnresolvedTokenError } from '../errors/config.schema.js'
 
@@ -12,29 +14,37 @@ export interface TokenContext {
 
 export const UNKNOWN_PACKAGE_NAME = 'unknown-package'
 
+export const PROJECT_FOLDER_TOKEN = '<projectFolder>'
+
+export const LOOKUP_TOKEN = '<lookup>'
+
 export type JoinSegments = (folder: string, rest: string) => string
 
 const defaultJoin: JoinSegments = (folder, rest) => {
   const head = folder.replace(/[/\\]+$/, '')
   const tail = rest.replace(/^[/\\]+/, '')
-  const empty = tail.length === 0
-  return empty ? head : `${head}/${tail}`
+  return Match.value(tail.length === 0).pipe(
+    Match.when(true, () => head),
+    Match.when(false, () => `${head}/${tail}`),
+    Match.exhaustive,
+  )
 }
 
-const PROJECT_FOLDER_TOKEN = '<projectFolder>'
-const LOOKUP_TOKEN = '<lookup>'
 const TOKEN_PATTERN = /<[^<>]*>/
 
-const stripScopePrefix = (name: string): string => {
-  const slash = name.indexOf('/')
-  const valid = slash > 0
-  return valid ? name.slice(slash + 1) : name
-}
+const stripScopePrefix = (name: string): string =>
+  Match.value(name.indexOf('/') > 0).pipe(
+    Match.when(true, () => name.slice(name.indexOf('/') + 1)),
+    Match.when(false, () => name),
+    Match.exhaustive,
+  )
 
-export const unscopedPackageName = (packageName: string): string => {
-  const isScoped = packageName.startsWith('@')
-  return isScoped ? stripScopePrefix(packageName) : packageName
-}
+export const unscopedPackageName = (packageName: string): string =>
+  Match.value(packageName.startsWith('@')).pipe(
+    Match.when(true, () => stripScopePrefix(packageName)),
+    Match.when(false, () => packageName),
+    Match.exhaustive,
+  )
 
 const substituteNamedTokens = (text: string, context: TokenContext): string =>
   text
@@ -45,10 +55,12 @@ const substituteProjectFolder = (
   text: string,
   folder: string,
   join: JoinSegments,
-): string => {
-  const atStart = text.startsWith(PROJECT_FOLDER_TOKEN)
-  return atStart ? join(folder, text.slice(PROJECT_FOLDER_TOKEN.length)) : text
-}
+): string =>
+  Match.value(text.startsWith(PROJECT_FOLDER_TOKEN)).pipe(
+    Match.when(true, () => join(folder, text.slice(PROJECT_FOLDER_TOKEN.length))),
+    Match.when(false, () => text),
+    Match.exhaustive,
+  )
 
 const ProjectFolderTag = { _tag: 'ProjectFolder' } as const
 type ProjectFolderTag = typeof ProjectFolderTag
@@ -85,30 +97,37 @@ const RESIDUAL_PROBES: readonly ResidualProbe[] = [
   StrayCloseTag,
 ]
 
-const probeResidual = (text: string, probe: ResidualProbe): string | undefined =>
+const residualWhen = (
+  text: string,
+  holds: (candidate: string) => boolean,
+  residual: string,
+): Option.Option<string> => Option.map(Option.filter(Option.some(text), holds), () => residual)
+
+const probeResidual = (text: string, probe: ResidualProbe): Option.Option<string> =>
   Match.value(probe).pipe(
-    Match.tag('ProjectFolder', () => (text.includes(PROJECT_FOLDER_TOKEN) ? PROJECT_FOLDER_TOKEN : undefined)),
-    Match.tag('Lookup', () => (text.includes(LOOKUP_TOKEN) ? LOOKUP_TOKEN : undefined)),
-    Match.tag('Pattern', () => TOKEN_PATTERN.exec(text)?.[0]),
-    Match.tag('StrayOpen', () => (text.includes('<') ? '<' : undefined)),
-    Match.tag('StrayClose', () => (text.includes('>') ? '>' : undefined)),
+    Match.tag('ProjectFolder', () =>
+      residualWhen(text, (candidate) => candidate.includes(PROJECT_FOLDER_TOKEN), PROJECT_FOLDER_TOKEN)),
+    Match.tag('Lookup', () => residualWhen(text, (candidate) => candidate.includes(LOOKUP_TOKEN), LOOKUP_TOKEN)),
+    Match.tag('Pattern', () => Option.fromNullishOr(TOKEN_PATTERN.exec(text)?.[0])),
+    Match.tag('StrayOpen', () => residualWhen(text, (candidate) => candidate.includes('<'), '<')),
+    Match.tag('StrayClose', () => residualWhen(text, (candidate) => candidate.includes('>'), '>')),
     Match.exhaustive,
   )
 
-const findMatchingToken = (text: string): string | undefined => {
-  const probe = RESIDUAL_PROBES.find((candidate) => probeResidual(text, candidate) !== undefined)
-  return probe === undefined ? undefined : probeResidual(text, probe)
-}
+const findMatchingToken = (text: string): Option.Option<string> =>
+  Option.flatMap(
+    Arr.findFirst(RESIDUAL_PROBES, (candidate) => Option.isSome(probeResidual(text, candidate))),
+    (probe) => probeResidual(text, probe),
+  )
 
 const finishExpansion = (
   expanded: string,
   configPath: string,
-): Result.Result<string, UnresolvedTokenError> => {
-  const residual = findMatchingToken(expanded)
-  return residual === undefined
-    ? Result.succeed(expanded)
-    : Result.fail(new UnresolvedTokenError({ token: residual, configPath }))
-}
+): Result.Result<string, UnresolvedTokenError> =>
+  Option.match(findMatchingToken(expanded), {
+    onNone: () => Result.succeed(expanded),
+    onSome: (residual) => Result.fail(new UnresolvedTokenError({ token: residual, configPath })),
+  })
 
 const expandNonEmpty = (
   trimmed: string,
@@ -126,10 +145,12 @@ const dispatchExpansion = (
   context: TokenContext,
   configPath: string,
   join: JoinSegments,
-): Result.Result<string, UnresolvedTokenError> => {
-  const empty = trimmed.length === 0
-  return empty ? Result.succeed('') : expandNonEmpty(trimmed, context, configPath, join)
-}
+): Result.Result<string, UnresolvedTokenError> =>
+  Match.value(trimmed.length === 0).pipe(
+    Match.when(true, () => Result.succeed('')),
+    Match.when(false, () => expandNonEmpty(trimmed, context, configPath, join)),
+    Match.exhaustive,
+  )
 
 export const expandTokens = (
   value: string,
@@ -138,22 +159,26 @@ export const expandTokens = (
   join: JoinSegments = defaultJoin,
 ): Result.Result<string, UnresolvedTokenError> => dispatchExpansion(value.trim(), context, configPath, join)
 
-const normalizeAngleFree = (raw: string): string => raw.replaceAll('<', '').replaceAll('>', '')
-
-const applySubstitutions = (value: string, ctx: TokenContext): string => {
-  const trimmed = value.trim()
-  const empty = trimmed.length === 0
-  return empty ? '' : substituteProjectFolder(substituteNamedTokens(trimmed, ctx), ctx.projectFolder, defaultJoin)
-}
-
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Schema: S } = await import('effect')
 
-  const ContextSchema = S.Struct({
-    projectFolder: S.String,
-    packageName: S.String,
-    unscopedPackageName: S.String,
+  const normalizeAngleFree = (raw: string): string => raw.replaceAll('<', '').replaceAll('>', '')
+
+  const applySubstitutions = (value: string, ctx: TokenContext): string => {
+    const trimmed = value.trim()
+    return Match.value(trimmed.length === 0).pipe(
+      Match.when(true, () => ''),
+      Match.when(false, () =>
+        substituteProjectFolder(substituteNamedTokens(trimmed, ctx), ctx.projectFolder, defaultJoin)),
+      Match.exhaustive,
+    )
+  }
+
+  const cleanContext = (ctx: TokenContext): TokenContext => ({
+    projectFolder: normalizeAngleFree(ctx.projectFolder),
+    packageName: normalizeAngleFree(ctx.packageName),
+    unscopedPackageName: normalizeAngleFree(ctx.unscopedPackageName),
   })
 
   it.prop(
@@ -171,54 +196,50 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀applied_SubstitutionsMatches_≡Expanded',
-    [S.String, ContextSchema],
+    [S.String, S.Struct({
+      projectFolder: S.String,
+      packageName: S.String,
+      unscopedPackageName: S.String,
+    })],
     ([raw, ctx]) => {
       const rawClean = normalizeAngleFree(raw)
-      const projectClean = normalizeAngleFree(ctx.projectFolder)
-      const pkgClean = normalizeAngleFree(ctx.packageName)
-      const unscopedClean = normalizeAngleFree(ctx.unscopedPackageName)
-      const cleanCtx: TokenContext = {
-        projectFolder: projectClean,
-        packageName: pkgClean,
-        unscopedPackageName: unscopedClean,
-      }
+      const cleanCtx = cleanContext(ctx)
       const applied = applySubstitutions(rawClean, cleanCtx)
-      const res = expandTokens(rawClean, cleanCtx, 'config.json')
-      return Result.match(res, {
+      return Result.match(expandTokens(rawClean, cleanCtx, 'config.json'), {
         onSuccess: (out) => out === applied,
         onFailure: () => false,
       })
     },
   )
 
-  const cleanContext = (ctx: TokenContext): TokenContext => ({
-    projectFolder: normalizeAngleFree(ctx.projectFolder),
-    packageName: normalizeAngleFree(ctx.packageName),
-    unscopedPackageName: normalizeAngleFree(ctx.unscopedPackageName),
-  })
-
   it.prop(
     '∀text_Expansion_≡Total',
-    [S.String, ContextSchema],
-    ([raw, ctx]) => {
-      const res = expandTokens(raw, ctx, 'config.json')
-      return Result.match(res, {
+    [S.String, S.Struct({
+      projectFolder: S.String,
+      packageName: S.String,
+      unscopedPackageName: S.String,
+    })],
+    ([raw, ctx]) =>
+      Result.match(expandTokens(raw, ctx, 'config.json'), {
         onSuccess: (out) => typeof out === 'string',
         onFailure: (err) =>
           Match.value(err).pipe(
             Match.tag('UnresolvedTokenError', (e) => e.token.length > 0 && e.configPath === 'config.json'),
             Match.exhaustive,
           ),
-      })
-    },
+      }),
   )
+
   it.prop(
     '∀body_StrayOpen_≡NamesOpenBracket',
-    [S.String, ContextSchema],
+    [S.String, S.Struct({
+      projectFolder: S.String,
+      packageName: S.String,
+      unscopedPackageName: S.String,
+    })],
     ([rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody)
-      const res = expandTokens(`<${body}`, cleanContext(ctx), 'config.json')
-      return Result.match(res, {
+      return Result.match(expandTokens(`<${body}`, cleanContext(ctx), 'config.json'), {
         onSuccess: () => false,
         onFailure: (err) => err.token === '<' && err.configPath === 'config.json',
       })
@@ -227,11 +248,14 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀body_StrayClose_≡NamesCloseBracket',
-    [S.String, ContextSchema],
+    [S.String, S.Struct({
+      projectFolder: S.String,
+      packageName: S.String,
+      unscopedPackageName: S.String,
+    })],
     ([rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody)
-      const res = expandTokens(`>${body}`, cleanContext(ctx), 'config.json')
-      return Result.match(res, {
+      return Result.match(expandTokens(`>${body}`, cleanContext(ctx), 'config.json'), {
         onSuccess: () => false,
         onFailure: (err) => err.token === '>' && err.configPath === 'config.json',
       })
@@ -240,18 +264,19 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀tokenFree_Expansion_≡Idempotent',
-    [S.String, ContextSchema],
+    [S.String, S.Struct({
+      projectFolder: S.String,
+      packageName: S.String,
+      unscopedPackageName: S.String,
+    })],
     ([raw, ctx]) => {
       const cleanCtx = cleanContext(ctx)
-      const once = expandTokens(normalizeAngleFree(raw), cleanCtx, 'config.json')
-      return Result.match(once, {
-        onSuccess: (expanded) => {
-          const twice = expandTokens(expanded, cleanCtx, 'config.json')
-          return Result.match(twice, {
+      return Result.match(expandTokens(normalizeAngleFree(raw), cleanCtx, 'config.json'), {
+        onSuccess: (expanded) =>
+          Result.match(expandTokens(expanded, cleanCtx, 'config.json'), {
             onSuccess: (again) => again === expanded,
             onFailure: () => false,
-          })
-        },
+          }),
         onFailure: () => false,
       })
     },

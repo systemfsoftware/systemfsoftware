@@ -13,10 +13,13 @@ import * as Path from 'effect/Path';
 import { PlatformError } from 'effect/PlatformError';
 import * as Schema$1 from 'effect/Schema';
 import { Schema } from 'effect';
+import * as Ts from 'typescript';
 import { YieldableError } from 'effect/Cause';
 
+// Warning: (ae-forgotten-export) The symbol "TypeScriptCompiler" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
+const cell: Cell.Cell<ExtractorRunInput, ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler>;
 
 // Warning: (ae-forgotten-export) The symbol "CircularConfigExtendsError_base" needs to be exported by the entry point index.d.ts
 //
@@ -83,30 +86,29 @@ interface ExtractionRequest {
 
 declare namespace Extractor {
     export {
-        ConfigFileNotFound,
-        ConfigJsonSyntaxError,
-        ConfigSchemaValidationError,
-        UnresolvedTokenError,
-        CircularConfigExtendsError,
         ExtractionPassed,
         ExtractionFailed,
-        UnsupportedSyntaxError,
-        UnsupportedStarExportError,
-        TsConfigReadError,
-        TsCompilerLoadError,
-        ExtractorError,
         cell,
         run,
         layer,
+        CircularConfigExtendsError,
+        ConfigFileNotFound,
+        ConfigJsonSyntaxError,
+        ConfigSchemaValidationError,
         ConsoleMessageWriterOptions,
         ExtractionDecision,
         ExtractionRequest,
+        ExtractorError,
         ExtractorRunInput,
         ExtractorRunOptions,
         MessageWriter,
         ReportOutcome,
         TextWritable,
-        loadExtractorConfig as loadConfig,
+        TsCompilerLoadError,
+        TsConfigReadError,
+        UnresolvedTokenError,
+        UnsupportedStarExportError,
+        UnsupportedSyntaxError,
         extractorVersion as version
     }
 }
@@ -144,11 +146,8 @@ type ExtractorRunOptions = typeof ExtractorRunOptions.Type;
 // @public (undocumented)
 const extractorVersion = "0.1.0";
 
-// @public
-const layer: (options?: ConsoleMessageWriterOptions) => Layer.Layer<MessageWriter>;
-
 // @public (undocumented)
-const loadExtractorConfig: (filePath: string) => Effect.Effect<ExtractorConfig, ConfigFileNotFound | ConfigJsonSyntaxError | ConfigSchemaValidationError | CircularConfigExtendsError | UnresolvedTokenError, FileSystem_2.FileSystem | Path.Path>;
+const layer: (options?: ConsoleMessageWriterOptions) => Layer.Layer<MessageWriter | TypeScriptCompiler>;
 
 // @public (undocumented)
 interface MessageWriter {
@@ -172,9 +171,9 @@ const MessageWriter: Context.Service<MessageWriter, MessageWriter>;
 type ReportOutcome = ReportUnchanged | ReportUpdated | ReportCreated | ReportDriftRefused | ReportMissingRefused | ReportFolderMissing;
 
 // @public (undocumented)
-const run: (configFilePath: string, options?: ExtractorRunOptions) => Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter>;
+const run: (configFilePath: string, options?: ExtractorRunOptions) => Effect.Effect<ExtractionDecision, ExtractorError | PlatformError, FileSystem_2.FileSystem | Path.Path | MessageWriter | TypeScriptCompiler>;
 
-// @public
+// @public (undocumented)
 interface TextWritable {
     // (undocumented)
     readonly write: (text: string) => void;

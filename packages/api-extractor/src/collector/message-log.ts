@@ -6,7 +6,7 @@ import * as Ts from 'typescript'
 
 import { AstDeclaration } from '../analyzer/AstDeclaration.js'
 import type { AstSymbol } from '../analyzer/AstSymbol.js'
-import { SourceFileLocationFormatter } from '../analyzer/SourceFileLocationFormatter.js'
+import * as SourceFileLocationFormatter from '../analyzer/SourceFileLocationFormatter.js'
 import type { ExtractorMessageId } from './extractor-message-id.js'
 import type { ExtractorMessageCategory, LogLevel } from './message-router.schema.js'
 import type { RoutingDecision } from './route-extractor-message.workflow.js'

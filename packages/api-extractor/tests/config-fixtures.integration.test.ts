@@ -8,8 +8,10 @@ import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
 import {
+  changedEntries,
   type ExtractionRun,
   type FixtureSandbox,
+  reviewProject,
   runExtraction,
   withFixtureProject,
 } from './__fixtures__/extractor-harness.js'
@@ -24,6 +26,9 @@ interface ConfigurationReview {
   readonly configPath: string
   readonly run: ExtractionRun
 }
+
+const reportOutcomesOf = (run: ExtractionRun): ReadonlyArray<Extractor.ReportOutcome> =>
+  Result.isSuccess(run.outcome) ? run.outcome.success.outcomes : []
 
 const reviewWithConfiguration = (config: string) => ({ projectRoot }: FixtureSandbox) =>
   Effect.gen(function*() {
@@ -73,6 +78,52 @@ const reviewConfigurationWithoutCompilerSettings = ({ root }: FixtureSandbox) =>
     return { configPath, run: yield* runExtraction(configPath) } satisfies ConfigurationReview
   })
 
+const inheritedBaseConfiguration = `{
+  "mainEntryPointFilePath": "<projectFolder>/index.d.ts",
+  "compiler": { "tsconfigFilePath": "<projectFolder>/tsconfig.json" },
+  "bundledPackages": ["base-pkg-1", "base-pkg-2"],
+  "apiReport": { "enabled": true, "reportFileName": "base-report.api.md", "reportVariants": ["public"] },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false }
+}`
+
+const derivedConfiguration = `{
+  "extends": "./inherited-base.json",
+  "bundledPackages": ["derived-pkg-override"],
+  "apiReport": { "reportFileName": "lookup1.api.md", "reportVariants": ["complete", "beta"] }
+}`
+
+/**
+ * The committed configuration of the extending project, plus the report variants the derived
+ * configuration declares: both files gain a list of report variants so the review shows which
+ * list won and which compiler settings were inherited.
+ */
+const reviewExtendingProject = ({ projectRoot }: FixtureSandbox) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const configFolder = path.join(projectRoot, 'config-lookup1')
+    yield* fs.writeFileString(path.join(configFolder, 'inherited-base.json'), inheritedBaseConfiguration)
+    yield* fs.writeFileString(path.join(configFolder, 'derived.json'), derivedConfiguration)
+    return yield* reviewProject(configFolder, path.join(configFolder, 'derived.json'))
+  })
+
+/**
+ * The committed configuration of the published workspace package, reviewed against a package
+ * laid out the way the published one is: declarations built beside the sources, and the
+ * compiler settings file the configuration names.
+ */
+const reviewPublishedConfiguration = ({ projectRoot }: FixtureSandbox) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const committed = yield* fs.readFileString(yield* path.fromFileUrl(repositoryConfigUrl))
+    yield* fs.writeFileString(path.join(projectRoot, 'api-extractor.json'), committed)
+    yield* fs.copy(path.join(projectRoot, 'lib/index.d.ts'), path.join(projectRoot, 'dist/index.d.ts'))
+    yield* fs.copy(path.join(projectRoot, 'tsconfig.json'), path.join(projectRoot, 'tsconfig.api.json'))
+    return yield* reviewProject(projectRoot, path.join(projectRoot, 'api-extractor.json'))
+  })
+
 const unrecognizedConfigurationValues = [
   {
     setting: 'a newline style it does not know',
@@ -103,23 +154,22 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       'A configuration that extends a shared base keeps the derived lists and inherits the rest',
       Gherkin.Do.pipe(
         Given('a project whose configuration extends a shared base')(
-          'config',
-          () =>
-            withFixtureProject('config-lookup', ({ projectRoot }) =>
-              Effect.gen(function*() {
-                const path = yield* Path.Path
-                return yield* Extractor.loadConfig(path.join(projectRoot, 'config-lookup1', 'api-extractor.json'))
-              })),
+          'review',
+          () => withFixtureProject('config-lookup', reviewExtendingProject),
         ),
         Then('the list the derived configuration declares replaces the base list')((s) => {
-          expect(s.config.bundledPackages).toEqual(['derived-pkg-override'])
+          expect(reportOutcomesOf(s.review.run).map((outcome) => outcome.variant)).toEqual(['complete', 'beta'])
         }),
         Then('the derived report file name is the one the review writes')((s) => {
-          expect(s.config.apiReport.reportConfigs[0]?.fileName).toBe('lookup1.api.md')
+          expect(reportOutcomesOf(s.review.run).map((outcome) => outcome.reportFileName)).toEqual([
+            'lookup1.api.md',
+            'lookup1.beta.api.md',
+          ])
         }),
         Then('the compiler settings the base declares are inherited')((s) => {
-          expect(s.config.tsconfigFilePath).toContain('config-lookup1')
-          expect(s.config.tsconfigFilePath).toContain('tsconfig.json')
+          const generated = reportOutcomesOf(s.review.run).map((outcome) => outcome.generatedText)
+          expect(generated.length).toBeGreaterThan(0)
+          expect(generated.every((text) => text.includes('export const a = 1'))).toBe(true)
         }),
       ),
     )
@@ -128,22 +178,17 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       'A repository configuration that declares every section loads with its sections resolved',
       Gherkin.Do.pipe(
         Given('the configuration a published workspace package commits')(
-          'config',
-          () =>
-            Effect.gen(function*() {
-              const path = yield* Path.Path
-              return yield* Extractor.loadConfig(yield* path.fromFileUrl(repositoryConfigUrl))
-            }),
+          'review',
+          () => withFixtureProject(workingPackage, reviewPublishedConfiguration),
         ),
         Then('its entry point points at the built declarations')((s) => {
-          expect(s.config.mainEntryPointFilePath).toContain('dist/index.d.ts')
+          expect(changedEntries(s.review.before, s.review.after)).toContain('dist/index.d.ts')
         }),
         Then('its reports are written beside the package')((s) => {
-          expect(s.config.apiReport.reportFolder).toContain('/etc')
-          expect(s.config.apiReport.reportConfigs[0]?.fileName).toBe('npm-package.api.md')
-        }),
-        Then('it bundles nothing')((s) => {
-          expect(s.config.bundledPackages).toEqual([])
+          const [report] = reportOutcomesOf(s.review.run)
+          expect(report?.reportFileName).toBe('npm-package.api.md')
+          expect(report?.reportPath.endsWith('/etc/npm-package.api.md')).toBe(true)
+          expect(report?.reportTempPath.endsWith('/temp/main/npm-package.api.md')).toBe(true)
         }),
       ),
     )

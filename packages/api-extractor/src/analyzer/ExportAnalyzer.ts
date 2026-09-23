@@ -14,10 +14,10 @@ import { AstNamespaceExport } from './AstNamespaceExport.js'
 import { AstNamespaceImport } from './AstNamespaceImport.js'
 import { AstSymbol } from './AstSymbol.js'
 import type { IFetchAstSymbolOptions } from './AstSymbolTable.js'
-import { SourceFileLocationFormatter } from './SourceFileLocationFormatter.js'
-import { SyntaxHelpers } from './SyntaxHelpers.js'
-import { TypeScriptHelpers } from './TypeScriptHelpers.js'
-import { TypeScriptInternals } from './TypeScriptInternals.js'
+import * as SourceFileLocationFormatter from './SourceFileLocationFormatter.js'
+import * as SyntaxHelpers from './SyntaxHelpers.js'
+import * as TypeScriptHelpers from './TypeScriptHelpers.js'
+import * as TypeScriptInternals from './TypeScriptInternals.js'
 
 /*
  * Exposes the minimal APIs from AstSymbolTable that are needed by ExportAnalyzer.

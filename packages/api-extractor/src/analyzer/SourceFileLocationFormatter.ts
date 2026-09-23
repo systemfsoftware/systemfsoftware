@@ -1,7 +1,4 @@
-import * as Pipeable from 'effect/Pipeable'
-// Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
-// See LICENSE in the project root for license information.
-
+import * as Option from 'effect/Option'
 import type * as ts from 'typescript'
 
 import { convertToSlashes, isUnderOrEqual, relative } from './path-helpers.js'
@@ -12,51 +9,49 @@ export interface ISourceFileLocationFormatOptions {
   workingPackageFolderPath?: string | undefined
 }
 
-export class SourceFileLocationFormatter extends Pipeable.Class {
-  /*
-   * Returns a string such as this, based on the context information in the provided node:
-   *   "[C:\Folder\File.ts#123]"
-   */
-  public static formatDeclaration(node: ts.Node, workingPackageFolderPath?: string): string {
-    const sourceFile: ts.SourceFile = node.getSourceFile()
-    const lineAndCharacter: ts.LineAndCharacter = sourceFile.getLineAndCharacterOfPosition(node.getStart())
+const truthy = <A>(value: A): boolean => Boolean(value)
 
-    return SourceFileLocationFormatter.formatPath(sourceFile.fileName, {
-      sourceFileLine: lineAndCharacter.line + 1,
-      sourceFileColumn: lineAndCharacter.character + 1,
-      workingPackageFolderPath,
-    })
-  }
+const relativeToWorkingPackage = (
+  sourceFilePath: string,
+  workingPackageFolderPath: string | undefined,
+): string =>
+  Option.fromUndefinedOr(workingPackageFolderPath).pipe(
+    Option.filter((workingPackageFolderPath) => workingPackageFolderPath.length > 0),
+    Option.filter((workingPackageFolderPath) => isUnderOrEqual(sourceFilePath, workingPackageFolderPath)),
+    Option.map((workingPackageFolderPath) => relative(workingPackageFolderPath, sourceFilePath)),
+    Option.getOrElse(() => sourceFilePath),
+  )
 
-  public static formatPath(sourceFilePath: string, options?: ISourceFileLocationFormatOptions): string {
-    if (!options) {
-      options = {}
-    }
+const columnSuffix = (options: ISourceFileLocationFormatOptions): string =>
+  Option.fromUndefinedOr(options.sourceFileColumn).pipe(
+    Option.filter(truthy),
+    Option.map((sourceFileColumn) => `:${sourceFileColumn}`),
+    Option.getOrElse(() => ''),
+  )
 
-    let result: string = ''
+const lineSuffix = (options: ISourceFileLocationFormatOptions): string =>
+  Option.fromUndefinedOr(options.sourceFileLine).pipe(
+    Option.filter(truthy),
+    Option.map((sourceFileLine) => `:${sourceFileLine}${columnSuffix(options)}`),
+    Option.getOrElse(() => ''),
+  )
 
-    // Make the path relative to the workingPackageFolderPath
-    let scrubbedPath: string = sourceFilePath
+export const formatPath = (
+  sourceFilePath: string,
+  options?: ISourceFileLocationFormatOptions,
+): string => {
+  const resolved: ISourceFileLocationFormatOptions = options ?? {}
+  return convertToSlashes(relativeToWorkingPackage(sourceFilePath, resolved.workingPackageFolderPath)) +
+    lineSuffix(resolved)
+}
 
-    if (options.workingPackageFolderPath) {
-      // If it's under the working folder, make it a relative path
-      if (isUnderOrEqual(sourceFilePath, options.workingPackageFolderPath)) {
-        scrubbedPath = relative(options.workingPackageFolderPath, sourceFilePath)
-      }
-    }
+export const formatDeclaration = (node: ts.Node, workingPackageFolderPath?: string): string => {
+  const sourceFile: ts.SourceFile = node.getSourceFile()
+  const lineAndCharacter: ts.LineAndCharacter = sourceFile.getLineAndCharacterOfPosition(node.getStart())
 
-    // Convert it to a Unix-style path
-    scrubbedPath = convertToSlashes(scrubbedPath)
-    result += scrubbedPath
-
-    if (options.sourceFileLine) {
-      result += `:${options.sourceFileLine}`
-
-      if (options.sourceFileColumn) {
-        result += `:${options.sourceFileColumn}`
-      }
-    }
-
-    return result
-  }
+  return formatPath(sourceFile.fileName, {
+    sourceFileLine: lineAndCharacter.line + 1,
+    sourceFileColumn: lineAndCharacter.character + 1,
+    workingPackageFolderPath,
+  })
 }

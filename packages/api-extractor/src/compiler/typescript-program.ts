@@ -1,9 +1,12 @@
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
-import * as Path from 'effect/Path'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 import type * as Ts from 'typescript'
 
-import { TsCompilerLoadError, TsConfigReadError } from '../errors/index.js'
+import type { TsCompilerLoadError, TsConfigReadError } from '../errors/index.js'
+import type { CompilerHostOptions, CompilerLoadOptions, TypeScriptCompiler } from './typescript-compiler.service.js'
 
 export interface CompilerStateOptions {
   readonly projectFolder: string
@@ -21,176 +24,11 @@ export interface CompilerState {
   readonly entryPoints: readonly string[]
 }
 
-/**
- * Resolves TypeScript from the package under analysis, mirroring upstream: the
- * engine must analyze with the consumer's own compiler (whose standard library —
- * and therefore global-name set — matches the one that generated the package's
- * committed reports), not with whatever copy the engine itself shipped with.
- */
-const isTypeScriptModule = (candidate: unknown): candidate is typeof Ts =>
-  typeof candidate === 'object' &&
-  candidate !== null &&
-  'readConfigFile' in candidate &&
-  typeof candidate.readConfigFile === 'function' &&
-  'parseJsonConfigFileContent' in candidate &&
-  typeof candidate.parseJsonConfigFileContent === 'function' &&
-  'createCompilerHost' in candidate &&
-  typeof candidate.createCompilerHost === 'function' &&
-  'createProgram' in candidate &&
-  typeof candidate.createProgram === 'function' &&
-  'flattenDiagnosticMessageText' in candidate &&
-  typeof candidate.flattenDiagnosticMessageText === 'function' &&
-  'sys' in candidate &&
-  typeof candidate.sys === 'object' &&
-  'version' in candidate &&
-  typeof candidate.version === 'string'
-
-interface RequireFrom {
-  (specifier: string): object
-  resolve: (specifier: string) => string
-}
-
-const consumerEntryCandidates = ['typescript/lib/typescript.js', 'typescript'] as const
-
-const folderEntryCandidates = ['.'] as const
-
-const requireCandidate = (requireFrom: RequireFrom, candidates: readonly string[]): typeof Ts | undefined => {
-  for (const candidate of candidates) {
-    let entry: string
-    try {
-      entry = requireFrom.resolve(candidate)
-    } catch {
-      continue
-    }
-    try {
-      const loaded = requireFrom(entry)
-      if (isTypeScriptModule(loaded)) {
-        return loaded
-      }
-    } catch {
-      continue
-    }
-  }
-  return undefined
-}
-
-const loadCompilerFromFolder = (folderPackageJsonPath: string): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-  Effect.gen(function*() {
-    const requireFrom = process.getBuiltinModule('module').createRequire(folderPackageJsonPath)
-    const loaded = requireCandidate(requireFrom, folderEntryCandidates)
-    if (loaded === undefined) {
-      return yield* new TsCompilerLoadError({
-        modulePath: folderPackageJsonPath,
-        message: 'No usable TypeScript compiler package found in this folder',
-      })
-    }
-    return loaded
-  })
-
-const loadEngineBundledFallback = (): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-  Effect.gen(function*() {
-    const mod = yield* Effect.tryPromise({
-      try: () => import('typescript'),
-      catch: (cause) =>
-        new TsCompilerLoadError({
-          modulePath: 'typescript',
-          message: 'Unable to load the TypeScript compiler',
-          cause,
-        }),
-    })
-    return isTypeScriptModule(mod)
-      ? mod
-      : yield* new TsCompilerLoadError({
-        modulePath: 'typescript',
-        message: 'The loaded module does not expose the TypeScript compiler API',
-      })
-  })
-
-const loadCompilerFromConsumer = (consumerPackageJsonPath: string): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-  Effect.gen(function*() {
-    const requireFrom = process.getBuiltinModule('module').createRequire(consumerPackageJsonPath)
-    const loaded = requireCandidate(requireFrom, consumerEntryCandidates)
-    if (loaded !== undefined) {
-      return loaded
-    }
-    return yield* loadEngineBundledFallback()
-  })
-
-const loadTypeScript = (
-  consumerPackageJsonPath: string,
-  compilerFolderPackageJsonPath: string | undefined,
-): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-  compilerFolderPackageJsonPath === undefined
-    ? loadCompilerFromConsumer(consumerPackageJsonPath)
-    : loadCompilerFromFolder(compilerFolderPackageJsonPath)
-
-const readTsConfig = (
-  typescript: typeof Ts,
-  path: Path.Path,
-  tsconfigFilePath: string,
-): Effect.Effect<Ts.ParsedCommandLine, TsConfigReadError> =>
-  Effect.gen(function*() {
-    const configFile = yield* Effect.try({
-      try: () => typescript.readConfigFile(tsconfigFilePath, (p) => typescript.sys.readFile(p)),
-      catch: (cause) =>
-        new TsConfigReadError({
-          filePath: tsconfigFilePath,
-          cause,
-        }),
-    })
-    if (configFile.error !== undefined) {
-      const message = typescript.flattenDiagnosticMessageText(configFile.error.messageText, '\n')
-      return yield* new TsConfigReadError({
-        filePath: tsconfigFilePath,
-        cause: new Error(message),
-      })
-    }
-    const basePath = path.resolve(path.dirname(tsconfigFilePath))
-    const parsed = yield* Effect.try({
-      try: () =>
-        typescript.parseJsonConfigFileContent(
-          configFile.config,
-          typescript.sys,
-          basePath,
-        ),
-      catch: (cause) =>
-        new TsConfigReadError({
-          filePath: tsconfigFilePath,
-          cause,
-        }),
-    })
-    if (parsed.errors.length > 0) {
-      const firstError = parsed.errors[0]
-      const messageText = firstError === undefined ? '' : firstError.messageText
-      const message = typescript.flattenDiagnosticMessageText(messageText, '\n')
-      return yield* new TsConfigReadError({
-        filePath: tsconfigFilePath,
-        cause: new Error(message),
-      })
-    }
-    return parsed
-  })
-
 const declarationFilePattern = /\.d(\.[^./\\]+)?\.(c|m)?ts$/i
 
-const hasDtsExtension = (filePath: string): boolean => declarationFilePattern.test(filePath)
+export const isDeclarationFile = (filePath: string): boolean => declarationFilePattern.test(filePath)
 
-const collectAnalysisFiles = (filePaths: readonly string[]): string[] => {
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const filePath of filePaths) {
-    const key = filePath.toUpperCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      if (hasDtsExtension(filePath)) {
-        result.push(filePath)
-      }
-    }
-  }
-  return result
-}
-
-const sourceExtensionPattern = /^(.+)(\.[a-z0-9_]+)$/i
+const sourceExtensionPattern = /^(.+)(\.[a-z0-9_]+)$/
 const sourceExtensions: Readonly<Record<string, true>> = {
   '.ts': true,
   '.tsx': true,
@@ -198,75 +36,94 @@ const sourceExtensions: Readonly<Record<string, true>> = {
   '.jsx': true,
 }
 
-const createCompilerHost = (
-  typescript: typeof Ts,
-  path: Path.Path,
-  compilerOptions: Ts.CompilerOptions,
-  typescriptCompilerFolder?: string,
-): Ts.CompilerHost => {
-  const compilerHost = typescript.createCompilerHost(compilerOptions)
-  const defaultCompilerHost = { ...compilerHost }
+const groupOf = (match: RegExpExecArray, index: number): string => match[index] ?? ''
 
-  if (typescriptCompilerFolder !== undefined) {
-    const libFolder = path.join(typescriptCompilerFolder, 'lib')
-    compilerHost.getDefaultLibLocation = () => libFolder
-  }
+const sourceParts = (filePath: string): Option.Option<{ readonly base: string; readonly extension: string }> =>
+  Option.map(Option.fromNullishOr(sourceExtensionPattern.exec(filePath)), (match) => ({
+    base: groupOf(match, 1),
+    extension: groupOf(match, 2).toLowerCase(),
+  }))
 
-  const dtsExistsCache = new Map<string, boolean>()
+/**
+ * The declaration a source file shadows: analysis reads a `.ts`/`.tsx`/`.js`/`.jsx` input
+ * through its `.d.ts` sibling when the sibling exists, so the source itself is not an input.
+ */
+export const shadowingDeclaration = (filePath: string): Option.Option<string> =>
+  Match.value(isDeclarationFile(filePath)).pipe(
+    Match.when(true, () => Option.none<string>()),
+    Match.when(false, () =>
+      Option.flatMap(sourceParts(filePath), (parts) =>
+        Match.value(sourceExtensions[parts.extension] === true).pipe(
+          Match.when(true, () => Option.some(`${parts.base}.d.ts`)),
+          Match.when(false, () => Option.none<string>()),
+          Match.exhaustive,
+        ))),
+    Match.exhaustive,
+  )
 
-  compilerHost.fileExists = (fileName: string): boolean => {
-    if (!hasDtsExtension(fileName)) {
-      const match = sourceExtensionPattern.exec(fileName)
-      if (match !== null) {
-        const pathWithoutExtension = match[1] ?? ''
-        const ext = (match[2] ?? '').toLowerCase()
-        if (sourceExtensions[ext] === true) {
-          const dtsFileName = `${pathWithoutExtension}.d.ts`
-          let dtsFileExists = dtsExistsCache.get(dtsFileName)
-          if (dtsFileExists === undefined) {
-            dtsFileExists = defaultCompilerHost.fileExists(dtsFileName)
-            dtsExistsCache.set(dtsFileName, dtsFileExists)
-          }
-          if (dtsFileExists) {
-            return false
-          }
-        }
-      }
-    }
-    return defaultCompilerHost.fileExists(fileName)
-  }
+/**
+ * The files the program analyses: the case-insensitively deduplicated inputs, keeping only the
+ * declarations analysis reads.
+ */
+export const collectAnalysisFiles = (filePaths: readonly string[]): readonly string[] =>
+  Arr.dedupeWith(filePaths, (left, right) => left.toUpperCase() === right.toUpperCase()).filter(isDeclarationFile)
 
-  return compilerHost
+/** The inputs a program compiles: the tsconfig's file names plus the run's entry points. */
+export const analysisInputs = (
+  options: CompilerStateOptions,
+  tsconfigFileNames: readonly string[],
+): readonly string[] => [
+  ...tsconfigFileNames,
+  options.mainEntryPointFilePath,
+  ...(options.additionalEntryPoints ?? []),
+]
+
+/**
+ * The compiler options the program runs with: the tsconfig's options without the output
+ * settings this engine never emits through, and `skipLibCheck` forced on when the run asks for
+ * it and the tsconfig did not already ask.
+ */
+export const shapeCompilerOptions = (
+  options: Ts.CompilerOptions,
+  skipLibCheck: boolean | undefined,
+): Ts.CompilerOptions => {
+  const cleaned: Ts.CompilerOptions = Struct.omit(options, ['outDir', 'declarationDir'])
+  return Match.value(cleaned.skipLibCheck !== true && skipLibCheck === true).pipe(
+    Match.when(true, () => ({ ...cleaned, skipLibCheck: true })),
+    Match.when(false, () => cleaned),
+    Match.exhaustive,
+  )
 }
 
-export const loadCompilerState = (
+const compilerLoadOptionsOf = (options: CompilerStateOptions): CompilerLoadOptions => ({
+  projectFolder: options.projectFolder,
+  typescriptCompilerFolder: options.typescriptCompilerFolder,
+})
+
+const compilerHostOptionsOf = (
   options: CompilerStateOptions,
-): Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError, Path.Path> =>
+  compilerOptions: Ts.CompilerOptions,
+): CompilerHostOptions => ({
+  compilerOptions,
+  typescriptCompilerFolder: options.typescriptCompilerFolder,
+})
+
+/**
+ * Compiles the state the analysis walks: the compiler the run resolves, the tsconfig it reads,
+ * and the program over the analysis files. Pure sequencing over the compiler port — every sys
+ * call behind it lives in the driver that provides the port.
+ */
+export const loadCompilerState = (
+  compiler: TypeScriptCompiler,
+  options: CompilerStateOptions,
+): Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError> =>
   Effect.gen(function*() {
-    const path = yield* Path.Path
-    const compilerFolderPackageJsonPath = options.typescriptCompilerFolder === undefined
-      ? undefined
-      : path.join(options.typescriptCompilerFolder, 'package.json')
-    const typescript = yield* loadTypeScript(
-      path.join(options.projectFolder, 'package.json'),
-      compilerFolderPackageJsonPath,
-    )
-    const commandLine = yield* readTsConfig(typescript, path, options.tsconfigFilePath)
-
-    const cleanedOptions: Ts.CompilerOptions = Struct.omit(commandLine.options, ['outDir', 'declarationDir'])
-    const compilerOptions: Ts.CompilerOptions = cleanedOptions.skipLibCheck !== true && options.skipLibCheck === true
-      ? { ...cleanedOptions, skipLibCheck: true }
-      : cleanedOptions
-
-    const inputFiles = [
-      ...commandLine.fileNames,
-      options.mainEntryPointFilePath,
-      ...(options.additionalEntryPoints ?? []),
-    ]
-    const analysisFiles = collectAnalysisFiles(inputFiles)
-    const host = createCompilerHost(typescript, path, compilerOptions, options.typescriptCompilerFolder)
-    const program = typescript.createProgram(analysisFiles, compilerOptions, host)
-
+    const typescript = yield* compiler.loadCompiler(compilerLoadOptionsOf(options))
+    const commandLine = yield* compiler.readTsconfig(typescript, options.tsconfigFilePath)
+    const shapedOptions = shapeCompilerOptions(commandLine.options, options.skipLibCheck)
+    const analysisFiles = collectAnalysisFiles(analysisInputs(options, commandLine.fileNames))
+    const host = yield* compiler.makeHost(typescript, compilerHostOptionsOf(options, shapedOptions))
+    const program = compiler.createProgram(typescript, analysisFiles, shapedOptions, host)
     return {
       compiler: typescript,
       program,

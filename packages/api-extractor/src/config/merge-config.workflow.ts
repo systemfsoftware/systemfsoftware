@@ -7,7 +7,10 @@ import * as Result from 'effect/Result'
 export type MutableJsonRecord = Record<string, Schema.Json>
 
 const isConfigRecord = (u: Schema.Json): u is MutableJsonRecord =>
-  typeof u === 'object' && u !== null && !Array.isArray(u)
+  Match.value({ object: typeof u === 'object', nonNull: u !== null, list: Array.isArray(u) }).pipe(
+    Match.when({ object: true, nonNull: true, list: false }, () => true),
+    Match.orElse(() => false),
+  )
 
 const asConfigRecord = (value: Schema.Json | undefined): Option.Option<MutableJsonRecord> =>
   Option.fromNullishOr(value).pipe(Option.filter(isConfigRecord))

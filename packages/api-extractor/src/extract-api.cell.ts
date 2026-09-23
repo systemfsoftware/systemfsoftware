@@ -37,6 +37,7 @@ import { SourceMapper } from './collector/SourceMapper.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
 import type { CompilerState, CompilerStateOptions } from './compiler/typescript-program.js'
 import { loadCompilerState } from './compiler/typescript-program.js'
+import { TypeScriptCompiler } from './compiler/typescript-compiler.service.js'
 import type { ApiReportVariant, NewlineKind } from './config/config-file.schema.js'
 import type { ExtractorConfig, ExtractorReportConfig } from './config/extractor-config.js'
 import { DocCommentEnhancer } from './enhancers/DocCommentEnhancer.js'
@@ -305,7 +306,11 @@ const reportPlanOf = (fs: FileSystem.FileSystem, paths: ReportPaths): Effect.Eff
 
 const readAnalysis = (
   request: ExtractionRequest,
-): Effect.Effect<AnalysisSnapshot, ExtractorError | PlatformError, FileSystem.FileSystem | Path.Path> =>
+): Effect.Effect<
+  AnalysisSnapshot,
+  ExtractorError | PlatformError,
+  FileSystem.FileSystem | Path.Path | TypeScriptCompiler
+> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
@@ -313,7 +318,8 @@ const readAnalysis = (
     const sourceMapper = new SourceMapper()
     const messageLog = new MessageLog({ sourceMapper, diagnostics: request.verbosity === 'diagnostics' })
     const view = yield* messageViewOf(config, messageLog)
-    const compilerState = yield* loadCompilerState(compilerOptionsOf(request))
+    const compiler = yield* TypeScriptCompiler
+    const compilerState = yield* loadCompilerState(compiler, compilerOptionsOf(request))
     const collector = yield* collectorOf({
       config,
       compilerState,

@@ -19,10 +19,11 @@ import { AstNamespaceImport } from './AstNamespaceImport.js'
 import { AstSymbol } from './AstSymbol.js'
 import { ExportAnalyzer } from './ExportAnalyzer.js'
 import { PackageMetadataManager } from './PackageMetadataManager.js'
-import { SourceFileLocationFormatter } from './SourceFileLocationFormatter.js'
-import { SyntaxHelpers } from './SyntaxHelpers.js'
-import { TypeScriptHelpers } from './TypeScriptHelpers.js'
-import { type IGlobalVariableAnalyzer, TypeScriptInternals } from './TypeScriptInternals.js'
+import * as SourceFileLocationFormatter from './SourceFileLocationFormatter.js'
+import * as SyntaxHelpers from './SyntaxHelpers.js'
+import * as TypeScriptHelpers from './TypeScriptHelpers.js'
+import type { IGlobalVariableAnalyzer } from './TypeScriptInternals.js'
+import * as TypeScriptInternals from './TypeScriptInternals.js'
 
 /*
  * Options for `AstSymbolTable._fetchAstSymbol()`

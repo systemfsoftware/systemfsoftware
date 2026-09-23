@@ -1,28 +1,24 @@
-export enum ReleaseTag {
-  None = 0,
-  Internal = 1,
-  Alpha = 2,
-  Beta = 3,
-  Public = 4,
-}
+import * as Match from 'effect/Match'
 
-export namespace ReleaseTag {
-  export function getTagName(releaseTag: ReleaseTag): string {
-    switch (releaseTag) {
-      case ReleaseTag.None:
-        return '(none)'
-      case ReleaseTag.Internal:
-        return '@internal'
-      case ReleaseTag.Alpha:
-        return '@alpha'
-      case ReleaseTag.Beta:
-        return '@beta'
-      case ReleaseTag.Public:
-        return '@public'
-    }
-  }
+export const ReleaseTag = {
+  None: 0,
+  Internal: 1,
+  Alpha: 2,
+  Beta: 3,
+  Public: 4,
+  getTagName(releaseTag: ReleaseTag): string {
+    return Match.value(releaseTag).pipe(
+      Match.when(ReleaseTag.None, () => '(none)'),
+      Match.when(ReleaseTag.Internal, () => '@internal'),
+      Match.when(ReleaseTag.Alpha, () => '@alpha'),
+      Match.when(ReleaseTag.Beta, () => '@beta'),
+      Match.when(ReleaseTag.Public, () => '@public'),
+      Match.exhaustive,
+    )
+  },
+  compare(left: ReleaseTag, right: ReleaseTag): number {
+    return left - right
+  },
+} as const
 
-  export function compare(a: ReleaseTag, b: ReleaseTag): number {
-    return a - b
-  }
-}
+export type ReleaseTag = 0 | 1 | 2 | 3 | 4
