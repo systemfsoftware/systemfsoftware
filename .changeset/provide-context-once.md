@@ -1,0 +1,5 @@
+---
+"@systemfsoftware/oxlint-plugin-effect-platform": minor
+---
+
+`runtime-construction-placement` no longer reports `Cell.provide`, which `@systemfsoftware/effect-cell-types` 10 removes. Its replacement, `Cell.provideContext`, takes a context that was already built, so calling it inside a function rebuilds nothing and is not reported.
