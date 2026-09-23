@@ -54,5 +54,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     echo "Rebase or merge $remote/main before pushing." >&2
     status=1
   fi
+
+  # Gate: allow at most ONE plan file addition in docs/plans relative to remote main.
+  if ! deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write="${TMPDIR:-/tmp}" --allow-env scripts/guards/check-single-plan.ts "$main_sha" "$local_sha"; then
+    status=1
+  fi
 done
 exit "$status"
