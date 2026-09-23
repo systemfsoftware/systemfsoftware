@@ -1,0 +1,87 @@
+{
+  "name": "@systemfsoftware/discern",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/discern"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/discern#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Uncertainty-aware semantic pattern matching and control flow for Effect — forked under systemfsoftware from doeixd/discern.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "decision-model",
+    "pattern-matching",
+    "uncertainty",
+    "classification",
+    "semantic-routing",
+    "control-flow",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./procedure": {
+      "@systemfsoftware/source": "./src/procedure.ts",
+      "types": "./dist/procedure.d.ts",
+      "default": "./dist/procedure.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn && pnpm api:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.procedure.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.procedure.json"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./procedure": {
+        "types": "./dist/procedure.d.ts",
+        "default": "./dist/procedure.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "include": [
+    "dist/index.d.ts"
+  ],
+  "compilerOptions": {
+    "customConditions": []
+  }
+}
