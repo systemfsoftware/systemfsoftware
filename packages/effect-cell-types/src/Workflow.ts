@@ -11,29 +11,61 @@ export type CommandSchema = Schema.Constraint & { readonly fields: Schema.Struct
 export interface WorkflowBrand {
   readonly [WorkflowTypeId]: WorkflowTypeId
   readonly [WorkflowSchemasKey]?: {
-    readonly commandSchema?: CommandSchema & { readonly [InstrumentationBrand]: ReadonlyArray<string> }
+    readonly commandSchema?: CommandSchema & { readonly [InstrumentationBrand]: InstrumentationMap }
   }
 }
 
 export const InstrumentationBrand: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/instrumentation')
 export type InstrumentationBrand = typeof InstrumentationBrand
 
+/**
+ * The literal map a command or decision class declares: each entry names a schema field and
+ * the OpenTelemetry attribute key the field's value is copied onto the parent span as.
+ */
+export type InstrumentationMap = { readonly [field: string]: string }
+
 export type MissingInstrumentationAnnotation = {
   readonly __CELL_SCHEMA_MISSING_INSTRUMENTATION_ANNOTATION__:
-    'a cell command must declare its instrumentation: static readonly [Workflow.InstrumentationBrand] = [...] as const'
+    'a cell command must declare its instrumentation: static readonly [Workflow.InstrumentationBrand] = { fieldName: "app.attribute.key" } as const'
 }
 
 export type InvalidInstrumentationKey<K extends string> = {
   readonly __CELL_SCHEMA_INVALID_INSTRUMENTATION_KEY__: `instrumentation key '${K}' is not a field of this schema class`
 }
 
+export type InvalidInstrumentationValue<V extends string> = {
+  readonly __CELL_SCHEMA_INVALID_INSTRUMENTATION_VALUE__:
+    `instrumentation value '${V}' is not an OpenTelemetry attribute key; use lowercase dot-separated segments like 'app.order.id'`
+}
+
 type ClassKeys<C> = C extends { readonly Type: infer T } ? keyof T & string : never
 
-export type CheckCommandClass<C> = C extends
-  { readonly [InstrumentationBrand]: infer Keys extends ReadonlyArray<string> }
-  ? [Keys[number]] extends [ClassKeys<C>] ? object
-  : InvalidInstrumentationKey<Exclude<Keys[number], ClassKeys<C>>>
+/** An attribute key is lowercase and carries at least one dot-separated segment. */
+type AttributeKeyIsOtel<V extends string> = [V] extends [Lowercase<V>] ? [V] extends [`${string}.${string}`] ? true
+  : false
+  : false
+
+type InvalidAttributeValues<Map extends InstrumentationMap> = {
+  [K in keyof Map]: AttributeKeyIsOtel<Map[K]> extends true ? never : Map[K]
+}[keyof Map]
+
+export type CheckCommandClass<C> = C extends { readonly [InstrumentationBrand]: infer Map extends InstrumentationMap }
+  ? [Exclude<keyof Map & string, ClassKeys<C>>] extends [never]
+    ? ([InvalidAttributeValues<Map>] extends [never] ? object
+      : InvalidInstrumentationValue<InvalidAttributeValues<Map>>)
+  : InvalidInstrumentationKey<Exclude<keyof Map & string, ClassKeys<C>>>
   : MissingInstrumentationAnnotation
+
+/**
+ * The span attribute record a command class declares, keyed by the OpenTelemetry attribute
+ * keys its instrumentation map states and valued by the mapped fields' schema types. This is
+ * the type a span declaration pins its `attrs` schema against, so a map edit and a span
+ * declaration can only drift apart by failing the compile.
+ */
+export type SpanAttributes<C> = C extends
+  { readonly Type: infer T; readonly [InstrumentationBrand]: infer Map extends InstrumentationMap }
+  ? { readonly [K in keyof Map as Map[K]]: K extends keyof T ? T[K] : never }
+  : never
 
 export interface UninhabitedDecision {
   readonly __WORKFLOW_DECISION_CHANNEL_IS_NEVER__:
@@ -103,7 +135,7 @@ export const make = <
   C extends Schema.Constraint & {
     readonly fields: Schema.Struct.Fields
     readonly Type: object
-    readonly [InstrumentationBrand]: ReadonlyArray<string>
+    readonly [InstrumentationBrand]: InstrumentationMap
   },
   D,
   E,
@@ -134,7 +166,7 @@ export const total = <
   C extends Schema.Constraint & {
     readonly fields: Schema.Struct.Fields
     readonly Type: object
-    readonly [InstrumentationBrand]: ReadonlyArray<string>
+    readonly [InstrumentationBrand]: InstrumentationMap
   },
   D,
 >(

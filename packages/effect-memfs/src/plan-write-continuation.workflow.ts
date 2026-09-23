@@ -31,7 +31,7 @@ export class WriteAllChunk extends Schema.TaggedClass<WriteAllChunk>()('WriteAll
   written: Schema.Finite,
   remaining: Schema.Finite,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 class WriteZeroOutcome extends Schema.TaggedClass<WriteZeroOutcome>()('WriteZeroOutcome', {}) {}

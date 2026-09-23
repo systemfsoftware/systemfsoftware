@@ -14,7 +14,7 @@ export class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand
   decision: S.Union([Admitted, Rejected]),
   ctx: S.String,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['ctx'] as const
+  static readonly [Workflow.InstrumentationBrand] = { ctx: 'tests.settle.ctx' } as const
 }
 
 /**

@@ -62,7 +62,7 @@ export class AssessVirtualization extends Schema.TaggedClass<AssessVirtualizatio
   platform: Schema.String,
   observation: ProbeObservation,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['platform'] as const
+  static readonly [Workflow.InstrumentationBrand] = { platform: 'microsandbox.virtualization.platform' } as const
 }
 const REMEDIATIONS = {
   kvmDenied:

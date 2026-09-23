@@ -9,6 +9,7 @@ import { chainAdmitTaggedCommands } from '../tests/__fixtures__/chain-admit-tagg
 import { ChainedTaggedCommand } from '../tests/__fixtures__/chain-admit-tagged-commands.workflow.js'
 import {
   BadKeyCmd,
+  BadValueCmd,
   CommandRefused,
   StructCmd,
   TaggedCmd,
@@ -133,6 +134,7 @@ declare const decideOverTagged: (command: TaggedCmd) => Result<Decision, Decisio
 declare const decideOverUntagged: (command: UntaggedCmd) => Result<Decision, DecisionError>
 declare const decideOverUnstamped: (command: UnstampedCmd) => Result<Decision, DecisionError>
 declare const decideOverBadKey: (command: BadKeyCmd) => Result<Decision, DecisionError>
+declare const decideOverBadValue: (command: BadValueCmd) => Result<Decision, DecisionError>
 declare const decideWidened: typeof refuseWidenedCommand
 declare const decideNeverOverTagged: (command: TaggedCmd) => Result<Decision, never>
 declare const decideLoneOverTagged: (command: TaggedCmd) => Result<LoneDecision, CommandRefused>
@@ -180,14 +182,27 @@ describe('the commands and deciders make refuses', () => {
     expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
   })
 
-  it('Should_RefuseAMissingInstrumentationList_When_TheCommandDeclaresNone', () => {
+  it('Should_RefuseAMissingInstrumentationMap_When_TheCommandDeclaresNone', () => {
     expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
     expect<typeof Workflow.make>().type.not.toBeCallableWith(UnstampedCmd, decideOverUnstamped)
   })
 
-  it('Should_RefuseAnUnknownInstrumentationKey_When_TheListNamesANonField', () => {
+  it('Should_AcceptAnInstrumentationMap_When_EveryValueIsAnAttributeKey', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith(TaggedCmd, decideOverTagged)
+  })
+
+  it('Should_RefuseAnUnknownInstrumentationKey_When_TheMapNamesANonField', () => {
     expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
     expect<typeof Workflow.make>().type.not.toBeCallableWith(BadKeyCmd, decideOverBadKey)
+  })
+
+  it('Should_RefuseAnInstrumentationValue_When_TheKeyIsNotOtel', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith(TaggedCmd, decideOverTagged)
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(BadValueCmd, decideOverBadValue)
+  })
+
+  it('Should_DeriveTheSpanAttributes_When_TheMapRemapsTheFields', () => {
+    expect<Workflow.SpanAttributes<typeof TaggedCmd>>().type.toBe<{ readonly 'tests.command.value': number }>()
   })
 
   it('Should_RefuseTheNeverErrorChannel_When_TheDecisionCannotFail', () => {

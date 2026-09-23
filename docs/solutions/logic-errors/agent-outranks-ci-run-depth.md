@@ -1,6 +1,7 @@
 ---
 title: One CI variable read two ways gave agent runs the thousand-draw forge path
 date: "2026-08-09"
+last_updated: "2026-09-22"
 category: logic-errors
 module: systemfsoftware
 problem_type: logic_error
@@ -133,6 +134,12 @@ For `lint`, `AGENT` selected `--format=unix --quiet`, which changes output prese
 - **Prefer presence to equality for any "am I in environment X" variable.** Producers agree that the variable is set and agree on nothing else. Reserve equality for a variable whose exact values you own.
 
 - **A boolean derived from the environment is a decision, so it belongs in a cache key — but only where it changes the answer.** Both halves bind. Omit an answer-changing variable and the cache serves one caller's result to another; include a presentation-only variable and you partition the cache by who ran it, paying on every invocation for nothing.
+
+- **An agent's green `check:local` is not evidence for CI's configuration.** Because `AGENT` outranks `CI`, an agent shell never runs with coverage on, the 30 s timeout, or the forge draw count. A test that is sensitive to that configuration passes every local run and fails only in CI. The observed case is a test that runs a nested `startVitest` against the package's own config: under `CI` the nested run turned V8 coverage on inside an already-instrumented process and reported no annotations. The fix is `coverage: { enabled: false }` on the nested run, because that run is the instrument and not the subject. Reproduce CI's configuration before pushing a change that touches runner configuration or nests a runner:
+
+  ```sh
+  env -u AGENT CI=true pnpm --filter <pkg> test
+  ```
 
 ## Related
 

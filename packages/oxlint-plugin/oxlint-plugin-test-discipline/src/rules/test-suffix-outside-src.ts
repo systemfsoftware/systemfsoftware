@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { DIFFERENTIAL_SUFFIX, INTEGRATION_SUFFIX } from './path.config.js'
+import { DIFFERENTIAL_SUFFIX, INTEGRATION_SUFFIX, TRACE_SUFFIX } from './path.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
 import {
   meta,
@@ -18,7 +18,10 @@ export const testSuffixOutsideSrc = defineRule({
     if (isUnderSrc(filename)) return {}
     const basename = basenameOf(filename)
     if (!isTestFile(basename)) return {}
-    if (basename.endsWith(INTEGRATION_SUFFIX) || basename.endsWith(DIFFERENTIAL_SUFFIX)) return {}
+    if (
+      basename.endsWith(INTEGRATION_SUFFIX) || basename.endsWith(DIFFERENTIAL_SUFFIX) ||
+      basename.endsWith(TRACE_SUFFIX)
+    ) return {}
     return {
       Program(node: ESTree.Program) {
         context.report({

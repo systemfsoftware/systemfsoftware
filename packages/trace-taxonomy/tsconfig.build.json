@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "stripInternal": true
+  }
+}

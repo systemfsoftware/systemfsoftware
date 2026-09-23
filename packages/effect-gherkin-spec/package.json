@@ -45,6 +45,9 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
+  "dependencies": {
+    "@systemfsoftware/effect-spec-runtime": "workspace:^"
+  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",

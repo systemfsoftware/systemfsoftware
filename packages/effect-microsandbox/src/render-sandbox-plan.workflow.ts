@@ -60,7 +60,7 @@ export class PlanSandbox extends Schema.TaggedClass<PlanSandbox>()('PlanSandbox'
   bindings: Schema.Array(PortBinding),
   name: Schema.String,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['name'] as const
+  static readonly [Workflow.InstrumentationBrand] = { name: 'microsandbox.sandbox.name' } as const
 }
 
 const LOOPBACK_PREFIX = '127.'
