@@ -85,6 +85,7 @@ const isTooling = matchesAny(
   /^\.claude\//,
   /^\.husky\//,
   /^\.opencode\//,
+  /^scripts\//,
   /(^|\/)commitlint\.config\.[mc]?[jt]s$/,
   /(^|\/)\.releaserc(\..+)?$/,
   /(^|\/)\.lintstagedrc(\..+)?$/,
