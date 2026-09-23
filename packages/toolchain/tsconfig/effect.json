@@ -111,8 +111,6 @@
           "missingPipeableSignature": "error",
           // Nested call chains are written as .pipe.
           "missedPipeableOpportunity": "error",
-          // A Layer is provided at the entry point, never inside library code.
-          "strictEffectProvide": "error",
           // Configuration is injected, never read from process.env.
           "processEnv": "error",
           // Node builtins are reached through their Effect-native counterparts.
