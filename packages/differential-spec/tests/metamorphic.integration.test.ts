@@ -1,6 +1,6 @@
 import { runMetamorphicWithShrink } from '@systemfsoftware/differential-spec'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer } from 'effect'
+import { Effect, Exit, Layer } from 'effect'
 import { expect } from 'vitest'
 import { integers } from './__fixtures__/arbitraries.js'
 import { disparityReportOf } from './__fixtures__/disparityReport.js'
@@ -27,6 +27,31 @@ Feature('Proving a system obeys a relation when its input is transformed')
           expect(report).toContain('followUp')
           expect(report).toContain('Output A: 0')
           expect(report).toContain('Output B: 2')
+        }),
+      ),
+    )
+
+    scenario(
+      'A system that settles through promises keeps obeying the relation',
+      Gherkin.Do.pipe(
+        Given(
+          'a system that settles its doubling through a promise while the relation claims growing the input doubles the output',
+        )(
+          'system',
+          () =>
+            Effect.succeed((x: number) =>
+              Effect.gen(function*() {
+                yield* Effect.sleep('1 millis')
+                return yield* Effect.promise(() => Promise.resolve(x * 2))
+              })
+            ),
+        ),
+        When('the metamorphic check runs over generated integers')('outcome', (s) =>
+          Effect.exit(
+            runMetamorphicWithShrink(s.system, integers, (x) => x * 2, (a, b) => b === a * 2),
+          )),
+        Then('the asynchronous run completes without complaint')((s) => {
+          expect(Exit.isSuccess(s.outcome)).toBe(true)
         }),
       ),
     )

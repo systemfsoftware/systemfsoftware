@@ -98,6 +98,18 @@ A boundary verification requirement: every boundary adapter test must assert bot
 
 _Gate:_ `review` — verified in test suites for network and process boundaries.
 
+### Differential Test
+
+A test that runs two implementations on the same generated input and accepts only when a relational oracle holds or both sides fail identically, proving parity without a hardcoded expected value. Lives in a `tests/*.differential.test.ts` file.
+
+_Gate:_ `@systemfsoftware/oxlint-plugin-test-discipline(differential-test-requires-harness)` — the file must import and invoke the differential harness.
+
+### Metamorphic Relation
+
+A property relating a system's own output on a seed input to its output on a transformed follow-up input, checked without any expected output value; the input transformation replaces the oracle's second implementation.
+
+_Gate:_ expressed through the same harness and supervisor as a Differential Test.
+
 ---
 
 ## Schema & Property Law
