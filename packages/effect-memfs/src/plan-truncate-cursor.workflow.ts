@@ -7,6 +7,12 @@ const TruncateCursorDecisionTypeId: unique symbol = Symbol.for(
 )
 type TruncateCursorDecisionTypeId = typeof TruncateCursorDecisionTypeId
 
+/**
+ * The decision variants are declared here rather than in a sibling `*.schema.ts`:
+ * a decision's pure body may import no other module's values (`make-body-purity`),
+ * so the workflow owns the decision it constructs. The schema-law generator picks
+ * the exported schemas up from this module like any other in `src/`.
+ */
 export class CursorKept extends Schema.TaggedClass<CursorKept>()('CursorKept', {
   position: Schema.BigInt,
 }) {
@@ -19,7 +25,8 @@ export class CursorClamped extends Schema.TaggedClass<CursorClamped>()('CursorCl
   readonly [TruncateCursorDecisionTypeId] = TruncateCursorDecisionTypeId
 }
 
-export type TruncateCursorDecision = CursorKept | CursorClamped
+export const TruncateCursorDecision = Schema.Union([CursorKept, CursorClamped])
+export type TruncateCursorDecision = typeof TruncateCursorDecision.Type
 
 export class PlanTruncateCursor extends Schema.TaggedClass<PlanTruncateCursor>()('PlanTruncateCursor', {
   position: Schema.BigInt,
@@ -40,9 +47,11 @@ const classifyCursor = (beyond: boolean): TruncateStepOutcome =>
     Match.exhaustive,
   )
 
-export const planTruncateCursor = Workflow.total(
-  PlanTruncateCursor,
-  (command): Result.Result<TruncateCursorDecision, never> => {
+export const planTruncateCursor = Workflow.make({
+  command: PlanTruncateCursor,
+  decision: TruncateCursorDecision,
+  error: Schema.Never,
+  decide: (command): Result.Result<TruncateCursorDecision, never> => {
     const end = BigInt(command.length)
     return Match.value(classifyCursor(command.position > end)).pipe(
       Match.tag('CursorBeyondEnd', () => Result.succeed(new CursorClamped({ position: end }))),
@@ -50,4 +59,4 @@ export const planTruncateCursor = Workflow.total(
       Match.exhaustive,
     )
   },
-)
+})

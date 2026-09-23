@@ -7,6 +7,12 @@ const WatchEventDecisionTypeId: unique symbol = Symbol.for(
 )
 type WatchEventDecisionTypeId = typeof WatchEventDecisionTypeId
 
+/**
+ * The decision variants are declared here rather than in a sibling `*.schema.ts`:
+ * a decision's pure body may import no other module's values (`make-body-purity`),
+ * so the workflow owns the decision it constructs. The schema-law generator picks
+ * the exported schemas up from this module like any other in `src/`.
+ */
 export class WatchCreate extends Schema.TaggedClass<WatchCreate>()('WatchCreate', {
   path: Schema.String,
 }) {
@@ -25,7 +31,8 @@ export class WatchRemove extends Schema.TaggedClass<WatchRemove>()('WatchRemove'
   readonly [WatchEventDecisionTypeId] = WatchEventDecisionTypeId
 }
 
-export type WatchEventDecision = WatchCreate | WatchUpdate | WatchRemove
+export const WatchEventDecision = Schema.Union([WatchCreate, WatchUpdate, WatchRemove])
+export type WatchEventDecision = typeof WatchEventDecision.Type
 
 export const DriverWatchEventType = Schema.Literals(['rename', 'change'])
 export type DriverWatchEventType = typeof DriverWatchEventType.Type
@@ -58,13 +65,15 @@ const classifyWatchEvent = (eventType: 'rename' | 'change', exists: boolean): Wa
     Match.exhaustive,
   )
 
-export const decodeWatchEvent = Workflow.total(
-  DriverWatchEvent,
-  (command): Result.Result<WatchEventDecision, never> =>
+export const decodeWatchEvent = Workflow.make({
+  command: DriverWatchEvent,
+  decision: WatchEventDecision,
+  error: Schema.Never,
+  decide: (command): Result.Result<WatchEventDecision, never> =>
     Match.value(classifyWatchEvent(command.eventType, command.exists)).pipe(
       Match.tag('WatchCreateOutcome', () => Result.succeed(new WatchCreate({ path: command.filename }))),
       Match.tag('WatchRemoveOutcome', () => Result.succeed(new WatchRemove({ path: command.filename }))),
       Match.tag('WatchUpdateOutcome', () => Result.succeed(new WatchUpdate({ path: command.filename }))),
       Match.exhaustive,
     ),
-)
+})
