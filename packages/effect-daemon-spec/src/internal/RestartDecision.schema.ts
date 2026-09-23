@@ -103,8 +103,8 @@ const DecideInputBase = Schema.Struct({
 
 /**
  * The restart command. A `Schema.Class` rather than a `Schema.Struct` because `Workflow.make`
- * takes the command's class as its first argument, and a struct carries no `identifier` and
- * no `extend` — the constraint refuses it. Every field schema and the cross-field check are
+ * constrains its `command` on the class itself — a struct carries no `identifier` and no
+ * `extend`, and the constraint refuses it. Every field schema and the cross-field check are
  * the ones the struct carried.
  *
  * Class-level `toCodecArbitrary` is what `Arbitrary.schema(DecideInput)` compiles. The
@@ -122,3 +122,11 @@ export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(Decide
 }) {
   static readonly [Workflow.InstrumentationBrand] = { strategy: 'daemon.restart.strategy' } as const
 }
+
+/**
+ * The command's encoded form: what a cell's `read` gathers, and what the library decodes
+ * into `DecideInput` before `decide` runs. Named here so the read types against the command's
+ * edge instead of restating the field map.
+ */
+/** @internal */
+export type DecideInputEncoded = (typeof DecideInput)['Encoded']

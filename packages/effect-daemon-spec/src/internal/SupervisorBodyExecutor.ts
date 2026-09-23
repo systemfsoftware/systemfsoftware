@@ -25,10 +25,10 @@ import type { BootedChild, Supervision, SupervisionContext } from '../Supervisio
 import { allocateSupervisorHealth } from './AllocateSupervisorHealth.js'
 import { allocateWorkerHealth } from './AllocateWorkerHealth.js'
 import { buildWorkerLoop } from './BuildWorkerLoop.js'
-import { chooseRestartStrategy, type RestartDecisionRestart } from './choose-restart-strategy.workflow.js'
+import { chooseRestartStrategy, type RestartDecisionRestartEncoded } from './choose-restart-strategy.workflow.js'
 import { type IntensityTracker, make as makeIntensity, neverExceeds } from './Intensity.js'
 import { raceForExit } from './RaceForExit.js'
-import { type RestartStrategy } from './RestartDecision.schema.js'
+import { type DecideInputEncoded, type RestartStrategy } from './RestartDecision.schema.js'
 import {
   ContinueSupervision,
   CooldownEpoch,
@@ -71,10 +71,15 @@ const handleRestart = <R>(
  * The read is a bump-and-report: recording a restart is how the current rate is obtained, so
  * the mutation is a product gathered across the read's interior rather than a write standing
  * before a decision. That is what keeps this one layer instead of two, and it is why
- * `intensity.record` sits where it does.
+ * `intensity.record` sits where it does. The read is also where the command's encoded form is
+ * gathered, so the library decodes it through the workflow's command schema before `decide`
+ * runs and encodes the decision or the refusal the workflow returns.
  *
- * `encode` is the identity because nothing needs shaping — the decision is already what the
- * write consumes — and the write only dispatches over the tags the decision produced.
+ * The write dispatches one handler per encoded tag, and each handler answers with the epoch
+ * step that follows: a decision to continue stops the epoch, a decision to restart reports and
+ * reboots, and the `Exhausted` refusal cools down. A command the supervisor built that fails its
+ * own schema is a regression in this module, so it is logged and treated as exhausted: the
+ * supervisor cools down instead of dying and taking every child with it.
  *
  * A description is built per failure because the write needs that failure's context, and the
  * phase signatures hand the command to the read alone. Restarts are rare, so the allocation is
@@ -87,39 +92,35 @@ const restartDescription = <R>(spec: {
   readonly ctx: SupervisionContext<R>
   readonly cause: Cause.Cause<never>
   readonly onRestart: (
-    decision: RestartDecisionRestart,
+    decision: RestartDecisionRestartEncoded,
   ) => Effect.Effect<void, never, never>
 }) =>
   Sandwich.named('supervisor.restart-description')((intensity: IntensityTracker) =>
-    Effect.andThen(intensity.record, intensity.isExceeded)
+    Effect.map(
+      Effect.andThen(intensity.record, intensity.isExceeded),
+      (intensityExceeded): DecideInputEncoded => ({
+        strategy: spec.strategy,
+        totalChildren: spec.totalChildren,
+        failedIndex: spec.failedIndex,
+        exitSuccess: false,
+        intensityExceeded,
+      }),
+    )
   )
-    .decode(
-      Sandwich.pure((intensityExceeded) =>
-        Result.succeed({
-          strategy: spec.strategy,
-          totalChildren: spec.totalChildren,
-          failedIndex: spec.failedIndex,
-          exitSuccess: false,
-          intensityExceeded,
-        })
-      ),
-    )
     .decide(chooseRestartStrategy)
-    .encode(Sandwich.pure((outcome) => Result.succeed(outcome)))
-    .write((outcome) =>
-      Result.match(outcome, {
-        onFailure: () => handleExhausted(spec.ctx, spec.cause),
-        onSuccess: (right) =>
-          Match.value(right).pipe(
-            Match.tag('Continue', () => Effect.succeed<EpochStep>(StopEpoch.make())),
-            Match.tag(
-              'Restart',
-              (decision) => handleRestart(spec.ctx, spec.cause, spec.onRestart(decision)),
-            ),
-            Match.exhaustive,
-          ),
-      })
-    )
+    .write({
+      Continue: () => Effect.succeed<EpochStep>(StopEpoch.make()),
+      Restart: (decision) => handleRestart(spec.ctx, spec.cause, spec.onRestart(decision)),
+      Exhausted: () => handleExhausted(spec.ctx, spec.cause),
+      CommandRejected: (rejected) =>
+        Effect.andThen(
+          Effect.logError('supervisor restart command failed its own schema; cooling down', {
+            daemon: spec.ctx.name,
+            issue: String(rejected.issue),
+          }),
+          handleExhausted(spec.ctx, spec.cause),
+        ),
+    })
 
 const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
   Effect.andThen(

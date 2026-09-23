@@ -44,15 +44,17 @@ export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
 export type AmountDecision = Admitted | Rejected
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<AmountDecision, never> =>
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: AmountDecision,
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<AmountDecision, never> =>
     Match.value(command.amount > 0).pipe(
       Match.when(true, () => Result.succeed(new Admitted({}))),
       Match.when(false, () => Result.succeed(new Rejected({}))),
       Match.exhaustive,
     ),
-)
+})
 `,
     },
     {
@@ -69,73 +71,35 @@ export class RestartDecisionContinue extends S.TaggedClass<RestartDecisionContin
 export class RestartDecisionRestart extends S.TaggedClass<RestartDecisionRestart>()('Restart', {}) {}
 export type RestartDecisionOutcome = Result.Result<RestartDecisionContinue | RestartDecisionRestart, never>
 
-export const chooseStrategy = Workflow.make(
-  DecideInput,
-  (command: DecideInput): RestartDecisionOutcome =>
+export const chooseStrategy = Workflow.make({
+  command: DecideInput,
+  decision: RestartDecisionOutcome,
+  error: S.Never,
+  decide: (command: DecideInput): RestartDecisionOutcome =>
     Match.value(command.intensityExceeded).pipe(
       Match.when(true, () => Result.succeed(RestartDecisionContinue.make())),
       Match.when(false, () => Result.succeed(RestartDecisionRestart.make({ indices: [command.failedIndex] }))),
       Match.exhaustive,
     ),
-)
-`,
-    },
-    {
-      // Kills the mutant that keys on \`make\`: a total construction declares its
-      // decision channel too, and both of its variants are built in the body.
-      name: 'Should_Pass_When_ATotalWorkflowConstructsBothVariantsInItsBody',
-      filename: '/repo/pkg/src/total-admit-amount.workflow.ts',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-
-export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
-export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
-
-export const totalAdmitAmount = Workflow.total(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
-    Match.value(command.amount > 0).pipe(
-      Match.when(true, () => Result.succeed(new Admitted({}))),
-      Match.when(false, () => Result.succeed(new Rejected({}))),
-      Match.exhaustive,
-    ),
-)
-`,
-    },
-    {
-      // Kills the mutant that treats a composing constructor as a decision owner: an
-      // andThen file holds no decider body, and its components' variants belong to
-      // the files that build them.
-      name: 'Should_Pass_When_TheFileOnlyComposesImportedWorkflowsWithAndThen',
-      filename: '/repo/pkg/src/chain-admit-decisions.workflow.ts',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { admitDecodedCommand } from './admit-decoded-command.workflow.js'
-import { totalAdmitDecision } from './total-admit-decision.workflow.js'
-
-export const chainAdmitDecisions = Workflow.andThen(
-  Decoded,
-  admitDecodedCommand,
-  SettleCommand,
-  session,
-  totalAdmitDecision,
-)
+})
 `,
     },
     {
       // Kills the mutant that judges names it cannot resolve: an imported variant is
       // not declared in this file, so this file's AST cannot decide its reach.
       name: 'Should_Pass_When_TheDeclaredVariantsAreImportedRatherThanDeclaredHere',
-      filename: '/repo/pkg/src/total-admit-decision.workflow.ts',
+      filename: '/repo/pkg/src/admit-decoded-command.workflow.ts',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
-import { Admitted, Rejected } from './admit-decoded-command.workflow.js'
+import * as S from 'effect/Schema'
+import { Admitted, Rejected } from './admit-variants.schema.js'
 
-export const totalAdmitDecision = Workflow.total(
-  SettleCommand,
-  (command: SettleCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(command.decision),
-)
+export const admitDecodedCommand = Workflow.make({
+  command: SettleCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: SettleCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(command.decision),
+})
 `,
     },
     {
@@ -152,15 +116,17 @@ import * as S from 'effect/Schema'
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
     Match.value(command.amount > 0).pipe(
       Match.when(true, () => Result.succeed(new Admitted({}))),
       Match.when(false, () => Result.succeed(new Admitted({}))),
       Match.exhaustive,
     ),
-)
+})
 `,
     },
     {
@@ -170,9 +136,14 @@ export const admitAmount = Workflow.make(
       filename: '/repo/pkg/src/admit-amount.workflow.ts',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
-export const admitAmount = Workflow.make(AmountCommand, (command: AmountCommand) =>
-  Result.succeed(command.decision))
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([S.String]),
+  error: S.Never,
+  decide: (command: AmountCommand) => Result.succeed(command.decision),
+})
 `,
     },
     {
@@ -195,11 +166,13 @@ const decisionFor = (amount: number): Admitted | Rejected =>
     Match.exhaustive,
   )
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
     Result.succeed(decisionFor(command.amount)),
-)
+})
 `,
     },
     {
@@ -228,16 +201,18 @@ export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('Sur
 export const SurvivorsAdmission = S.Union([Admitted, NoSurvivors])
 export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
 
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+export const admitSurvivorsRun = Workflow.make({
+  command: AdmitSurvivorsRunCommand,
+  decision: SurvivorsAdmission,
+  error: SurvivorsRejection,
+  decide: (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
     Match.value(command.outcome).pipe(
       Match.when('admitted', () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
       Match.when('none', () => Result.succeed(NoSurvivors.make())),
       Match.when('rejected', () => Result.fail(SurvivorsRejection.make({ reason: 'no-report' }))),
       Match.exhaustive,
     ),
-)
+})
 `,
     },
     {
@@ -255,9 +230,11 @@ export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('Sur
 export const SurvivorsAdmission = S.Union([S.Union([Admitted, NoSurvivors]), Withdrawn])
 export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
 
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+export const admitSurvivorsRun = Workflow.make({
+  command: AdmitSurvivorsRunCommand,
+  decision: SurvivorsAdmission,
+  error: SurvivorsRejection,
+  decide: (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
     Match.value(command.outcome).pipe(
       Match.when('admitted', () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
       Match.when('none', () => Result.succeed(NoSurvivors.make())),
@@ -265,7 +242,7 @@ export const admitSurvivorsRun = Workflow.make(
       Match.when('rejected', () => Result.fail(SurvivorsRejection.make({ reason: 'no-report' }))),
       Match.exhaustive,
     ),
-)
+})
 `,
     },
     {
@@ -281,15 +258,17 @@ export class NoSurvivors extends Sx.TaggedClass<NoSurvivors>()('NoSurvivors', {}
 export const SurvivorsAdmission = Sx.Union([Admitted, NoSurvivors])
 export type SurvivorsAdmission = Sx.Schema.Type<typeof SurvivorsAdmission>
 
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
+export const admitSurvivorsRun = Workflow.make({
+  command: AdmitSurvivorsRunCommand,
+  decision: SurvivorsAdmission,
+  error: Sx.Never,
+  decide: (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
     Match.value(command.priorSurvivors.length > 0).pipe(
       Match.when(true, () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
       Match.when(false, () => Result.succeed(NoSurvivors.make())),
       Match.exhaustive,
     ),
-)
+})
 `,
     },
     {
@@ -307,10 +286,12 @@ export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 
 const accepted = new Admitted({})
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
-)
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Never,
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
+})
 `,
     },
     {
@@ -326,10 +307,40 @@ export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 
 const accepted = new Admitted({}) as Admitted
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
-)
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Never,
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
+})
+`,
+    },
+    {
+      // Locator-form pin: the decision may be a same-file reference, shorthand or
+      // computed `Workflow['make']` — the body is found either way, and every variant
+      // it declares is constructed here, so all three stay silent.
+      name: 'Should_Pass_When_TheDecisionIsAShorthandReferencedFunctionBehindAComputedMake',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+const decide = (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
+  Match.value(command.amount > 0).pipe(
+    Match.when(true, () => Result.succeed(new Admitted({}))),
+    Match.when(false, () => Result.succeed(new Rejected({}))),
+    Match.exhaustive,
+  )
+
+export const admitAmount = Workflow['make']({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide,
+})
 `,
     },
   ],
@@ -348,15 +359,17 @@ export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
 export type AmountDecision = Admitted | Rejected
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<AmountDecision, never> =>
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: AmountDecision,
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<AmountDecision, never> =>
     Match.value(command.amount > 0).pipe(
       Match.when(true, () => Result.succeed(new Admitted({}))),
       Match.when(false, () => Result.succeed(new Admitted({}))),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared decision variant Rejected')],
     },
@@ -374,15 +387,17 @@ import * as S from 'effect/Schema'
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
     Match.value(command.amount > 0).pipe(
       Match.when(true, () => Result.succeed(new Admitted({}))),
       Match.when(false, () => Result.succeed(new Admitted({}))),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared decision variant Rejected')],
     },
@@ -400,15 +415,17 @@ export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
 export class Malformed extends S.TaggedError<Malformed>()('Malformed', {}) {}
 export class Refused extends S.TaggedError<Refused>()('Refused', {}) {}
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted, Malformed | Refused> =>
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: Admitted,
+  error: S.Union([Malformed, Refused]),
+  decide: (command: AmountCommand): Result.Result<Admitted, Malformed | Refused> =>
     Match.value(command.amount > 0).pipe(
       Match.when(true, () => Result.succeed(new Admitted({}))),
       Match.when(false, () => Result.fail(new Malformed({}))),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared error variant Refused')],
     },
@@ -427,10 +444,12 @@ export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
 // new Rejected({}) belongs here once the ledger can refuse an amount.
 const note = 'new Rejected({})'
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(new Admitted({})),
-)
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(new Admitted({})),
+})
 `,
       errors: [variantError('the declared decision variant Rejected')],
     },
@@ -449,15 +468,17 @@ export class RestartDecisionRestart extends S.TaggedClass<RestartDecisionRestart
 
 export type RestartDecisionOutcome = Result.Result<RestartDecisionContinue | RestartDecisionRestart, never>
 
-export const chooseStrategy = Workflow.make(
-  DecideInput,
-  (command: DecideInput): RestartDecisionOutcome =>
+export const chooseStrategy = Workflow.make({
+  command: DecideInput,
+  decision: RestartDecisionOutcome,
+  error: S.Never,
+  decide: (command: DecideInput): RestartDecisionOutcome =>
     Match.value(command.intensityExceeded).pipe(
       Match.when(true, () => Result.succeed(RestartDecisionContinue.make())),
       Match.when(false, () => Result.succeed(RestartDecisionContinue.make())),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared decision variant RestartDecisionRestart')],
     },
@@ -476,15 +497,17 @@ export class NoSurvivors extends S.TaggedClass<NoSurvivors>()('NoSurvivors', {})
 export const SurvivorsAdmission = S.Union([Admitted, NoSurvivors])
 export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
 
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
+export const admitSurvivorsRun = Workflow.make({
+  command: AdmitSurvivorsRunCommand,
+  decision: SurvivorsAdmission,
+  error: S.Never,
+  decide: (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
     Match.value(command.priorSurvivors.length > 0).pipe(
       Match.when(true, () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
       Match.when(false, () => Result.succeed(Admitted.make({ survivors: [] }))),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared decision variant NoSurvivors')],
     },
@@ -500,10 +523,12 @@ export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
 
 export type RejectedKeyed = { [new Rejected({})]: string }
 
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(new Admitted({})),
-)
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide: (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(new Admitted({})),
+})
 `,
       errors: [variantError('the declared decision variant Rejected')],
     },
@@ -522,9 +547,11 @@ export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('Sur
 export const SurvivorsAdmission = S.Union([S.Union([Admitted, NoSurvivors]), Withdrawn])
 export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
 
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+export const admitSurvivorsRun = Workflow.make({
+  command: AdmitSurvivorsRunCommand,
+  decision: SurvivorsAdmission,
+  error: SurvivorsRejection,
+  decide: (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
     Match.value(command.outcome).pipe(
       Match.when('admitted', () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
       Match.when('none', () => Result.succeed(Admitted.make({ survivors: [] }))),
@@ -532,7 +559,7 @@ export const admitSurvivorsRun = Workflow.make(
       Match.when('rejected', () => Result.fail(SurvivorsRejection.make({ reason: 'no-report' }))),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared decision variant NoSurvivors')],
     },
@@ -549,17 +576,43 @@ export class NoSurvivors extends Sx.TaggedClass<NoSurvivors>()('NoSurvivors', {}
 export const SurvivorsAdmission = Sx.Union([Admitted, NoSurvivors])
 export type SurvivorsAdmission = Sx.Schema.Type<typeof SurvivorsAdmission>
 
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
+export const admitSurvivorsRun = Workflow.make({
+  command: AdmitSurvivorsRunCommand,
+  decision: SurvivorsAdmission,
+  error: Sx.Never,
+  decide: (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
     Match.value(command.priorSurvivors.length > 0).pipe(
       Match.when(true, () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
       Match.when(false, () => Result.succeed(Admitted.make({ survivors: [] }))),
       Match.exhaustive,
     ),
-)
+})
 `,
       errors: [variantError('the declared decision variant NoSurvivors')],
+    },
+    {
+      // The decision is a shorthand-referenced module-scope function: the locator
+      // must still resolve the body, or this half-constructed union goes silent.
+      name: 'Should_ReportTheUnconstructedVariant_When_TheShorthandDecideHalfConstructsTheUnion',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+const decide = (command: AmountCommand): Result.Result<Admitted | Rejected, never> =>
+  Result.succeed(new Admitted({}))
+
+export const admitAmount = Workflow.make({
+  command: AmountCommand,
+  decision: S.Union([Admitted, Rejected]),
+  error: S.Never,
+  decide,
+})
+`,
+      errors: [variantError('the declared decision variant Rejected')],
     },
   ],
 })

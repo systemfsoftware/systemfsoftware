@@ -25,7 +25,7 @@ test('probeConnection returns true when socket connects', async () => {
 
 // RIGHT: Pure decisions are separated; boundaries run against real system oracles
 // File 1: pure decision workflow tested by property laws
-export const decideReadiness = Workflow.total(AssessTarget, ...)
+export const decideReadiness = Workflow.make({ command: AssessTarget, decision: ReadinessVerdict, error: Schema.Never, decide: ... })
 
 // File 2: boundary tested against a real local listener (127.0.0.1:0) in tests/
 ```

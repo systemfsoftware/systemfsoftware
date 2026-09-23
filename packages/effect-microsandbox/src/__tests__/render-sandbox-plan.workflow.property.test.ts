@@ -3,12 +3,11 @@ import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec } from '../MicroVMSpec.schema.js'
+import { PortBinding, SandboxPlan } from '../render-sandbox-plan.schema.js'
 import {
   PlanRefused,
   PlanSandbox,
-  type PortBinding,
   renderSandboxPlan,
-  SandboxPlan,
   type SandboxPlanDecision,
 } from '../render-sandbox-plan.workflow.js'
 

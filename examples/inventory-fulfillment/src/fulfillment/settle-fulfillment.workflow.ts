@@ -52,6 +52,14 @@ export class OrderHeld extends S.TaggedClass<OrderHeld>()('OrderHeld', {
   readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
 }
 
+export const SettleFulfillmentDecision = S.Union([
+  OrderAllocated,
+  OrderAllocatedWithOverdraft,
+  OrderBackordered,
+  OrderHeld,
+])
+export const SettleFulfillmentError = S.Union([InsufficientStock, CreditLimitExceeded])
+
 export class SettleFulfillmentCommand extends S.Class<SettleFulfillmentCommand>('SettleFulfillmentCommand')({
   orderId: S.String,
   credit: S.Union([CreditGranted, CreditHold, CreditLimitExceeded]),
@@ -76,9 +84,11 @@ const allocatedDecision = (
     Match.exhaustive,
   )
 
-export const settleFulfillment = Workflow.make(
-  SettleFulfillmentCommand,
-  (
+export const settleFulfillment = Workflow.make({
+  command: SettleFulfillmentCommand,
+  decision: SettleFulfillmentDecision,
+  error: SettleFulfillmentError,
+  decide: (
     command,
   ): Result.Result<
     OrderAllocated | OrderAllocatedWithOverdraft | OrderBackordered | OrderHeld,
@@ -113,4 +123,4 @@ export const settleFulfillment = Workflow.make(
         )),
       Match.exhaustive,
     ),
-)
+})

@@ -1,46 +1,28 @@
-import { Sandwich } from '@systemfsoftware/effect-cell-types'
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
-import type { SchemaError } from 'effect/Schema'
-import {
-  allocateStock,
-  AllocateStockCommand,
-  type InsufficientStock as AllocateInsufficientStock,
-  type LotReservation,
-} from '../inventory/allocate-stock.workflow.js'
-import { type KitDefinition, LotAllocation, type WarehouseStockPartition } from '../inventory/inventory.schema.js'
+import { allocateStock, type AllocateStockCommand } from '../inventory/allocate-stock.workflow.js'
+import { type KitDefinition, type LotAllocation, type WarehouseStockPartition } from '../inventory/inventory.schema.js'
 import { InventoryStore } from '../inventory/InventoryStore.js'
 import { CreditLedger } from '../ports/CreditLedger.js'
 import { type ReservationCommit, type ReservationCommitOutcome, ReservationLog } from '../ports/ReservationLog.js'
-import {
-  checkCredit,
-  CreditCheckCommand,
-  type CreditLimitExceeded as CreditCheckLimitExceeded,
-} from './check-credit.workflow.js'
+import { checkCredit, type CreditCheckCommand } from './check-credit.workflow.js'
 import { type CreditAccount, type CustomerTier, type FraudRiskScore, Money } from './credit.schema.js'
 import {
-  AllocatedSplit,
-  AllocatedWithOverdraft,
-  Backordered,
+  CoreFulfillmentDecision,
   type CreditAccountNotFound,
-  CreditHold as WireCreditHold,
-  CreditLimitExceeded as WireCreditLimitExceeded,
-  type FulfillmentDecision,
-  type FulfillmentError,
-  InsufficientStock as WireInsufficientStock,
+  FulfillmentRefusal,
   OptimisticConflict,
 } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
-import { type ComponentDemand, explodeBundle, ExplodeBundleCommand } from './explode-bundle.workflow.js'
+import { type ComponentDemand, explodeBundle, type ExplodeBundleCommand } from './explode-bundle.workflow.js'
 import { CreditCharge, FulfillmentSettle, ReservationCommit as ReservationCommitSpan } from './FulfillmentTaxonomy.js'
-import { type Order, OrderFulfillmentCommand, OrderLine } from './order.schema.js'
+import type { Order, OrderLine } from './order.schema.js'
 import {
-  type OrderAllocated,
-  type OrderAllocatedWithOverdraft,
-  type OrderBackordered,
-  type OrderHeld,
   settleFulfillment,
   SettleFulfillmentCommand,
+  SettleFulfillmentDecision,
+  SettleFulfillmentError,
 } from './settle-fulfillment.workflow.js'
 
 export interface FulfillmentRequest {
@@ -59,128 +41,93 @@ interface RawContext {
   readonly now: DateTime.Utc
 }
 
-interface ReservationPlan {
-  readonly orderId: string
-  readonly decisionTag: string
-  readonly allocations: readonly LotAllocation[]
-  readonly backordered?: readonly OrderLine[] | undefined
+/** Who the charge and the audit event are written for, and when: what the write needs that the pure command does not carry. */
+interface SettlementWriteContext {
+  readonly customerId: string
+  readonly now: DateTime.Utc
 }
 
-interface EncodedFulfillment {
-  readonly decision: FulfillmentDecision | FulfillmentError
-  readonly reservation?: ReservationPlan | undefined
+type SettleCommandEncoded = (typeof SettleFulfillmentCommand)['Encoded']
+
+/**
+ * The settlement runs as four sandwiches, one per decision: explode the bundle, check credit,
+ * allocate stock, settle. The first reads the context once; each later cell's `read` takes the
+ * previous cell's response, so these are the values that flow between them. Credit and
+ * allocation outcomes, refusals included, travel encoded because they are the settle
+ * command's data: settle decides which refusal wins.
+ */
+interface Exploded {
+  readonly context: RawContext
+  readonly components: ReadonlyArray<(typeof ComponentDemand)['Encoded']>
 }
 
-type CoreDecision = OrderAllocated | OrderAllocatedWithOverdraft | OrderBackordered | OrderHeld
-type CoreError = AllocateInsufficientStock | CreditCheckLimitExceeded
+interface Credited extends Exploded {
+  readonly credit: SettleCommandEncoded['credit']
+}
+
+interface Allocated extends Credited {
+  readonly allocation: SettleCommandEncoded['allocation']
+}
+
+type ExplodeRead = (typeof ExplodeBundleCommand)['Encoded'] & { readonly context: RawContext }
+type CreditRead = (typeof CreditCheckCommand)['Encoded'] & Exploded
+type AllocateRead = (typeof AllocateStockCommand)['Encoded'] & Credited
+
+/**
+ * What the settle cell's `read` hands its handlers: the settle command in its encoded form,
+ * plus the write context, riding beside the command instead of inside it.
+ */
+type SettlementRead = SettleCommandEncoded & SettlementWriteContext
+type SettleDecisionEncoded = (typeof SettleFulfillmentDecision)['Encoded']
+type SettleErrorEncoded = (typeof SettleFulfillmentError)['Encoded']
+type WireDecisionEncoded = (typeof CoreFulfillmentDecision)['Encoded']
 
 const moneyOf = (value: number): Money => Result.getOrThrow(S.decodeResult(Money)(value))
 
-const requiredAmountOf = (components: readonly ComponentDemand[]): number =>
+const requiredAmountOf = (components: Exploded['components']): number =>
   Arr.reduce(components, 0, (total, component) => total + component.quantity)
 
-const allocationOf = (reservation: LotReservation): LotAllocation => new LotAllocation(reservation)
-
-const allocationsOf = (reservations: readonly LotReservation[]): readonly LotAllocation[] =>
-  Arr.map(reservations, allocationOf)
-
-const lineOf = (demand: { readonly sku: OrderLine['sku']; readonly quantity: number }): OrderLine =>
-  new OrderLine({ sku: demand.sku, quantity: demand.quantity })
-
-const settlementOf = (command: OrderFulfillmentCommand): SettleFulfillmentCommand => {
-  const exploded = Result.getOrThrow(
-    explodeBundle(new ExplodeBundleCommand({ lines: command.order.lines, kits: command.kits })),
-  )
-  const allocation = Result.merge(
-    allocateStock(
-      new AllocateStockCommand({
-        orderId: command.order.orderId,
-        lines: exploded.components,
-        stock: command.stock,
-        now: command.now,
-      }),
-    ),
-  )
-  const credit = Result.merge(
-    checkCredit(
-      new CreditCheckCommand({
-        orderId: command.order.orderId,
-        tier: command.customerTier,
-        account: command.credit,
-        requiredAmount: requiredAmountOf(exploded.components),
-      }),
-    ),
-  )
-  return new SettleFulfillmentCommand({ orderId: command.order.orderId, credit, allocation })
-}
-
-const planOf = (
-  decision: FulfillmentDecision,
-  orderId: string,
-  allocations: readonly LotAllocation[],
-  backordered?: readonly OrderLine[],
-): ReservationPlan => ({ orderId, decisionTag: decision._tag, allocations, backordered })
-
-const persisted = (decision: FulfillmentDecision, reservation: ReservationPlan): EncodedFulfillment => ({
-  decision,
-  reservation,
-})
-
-const encodeCore = (decision: CoreDecision): EncodedFulfillment =>
+/** The settle decision's fields under the names the wire contract gives them, still encoded. */
+const wireEncodedOf = (decision: SettleDecisionEncoded): WireDecisionEncoded =>
   Match.value(decision).pipe(
-    Match.tag('OrderAllocated', (allocated) => {
-      const allocations = allocationsOf(allocated.reservations)
-      const wire = new AllocatedSplit({ orderId: allocated.orderId, allocations })
-      return persisted(wire, planOf(wire, allocated.orderId, allocations, undefined))
-    }),
-    Match.tag('OrderAllocatedWithOverdraft', (overdraft) => {
-      const allocations = allocationsOf(overdraft.reservations)
-      const wire = new AllocatedWithOverdraft({
-        orderId: overdraft.orderId,
-        allocations,
-        overdraftAmount: moneyOf(overdraft.overdraftAmount),
-      })
-      return persisted(wire, planOf(wire, overdraft.orderId, allocations, undefined))
-    }),
-    Match.tag('OrderBackordered', (backordered) => {
-      const allocations = allocationsOf(backordered.reservations)
-      const lines = Arr.map(backordered.backordered, lineOf)
-      const wire = new Backordered({ orderId: backordered.orderId, allocations, backorderedLines: lines })
-      return persisted(wire, planOf(wire, backordered.orderId, allocations, lines))
-    }),
-    Match.tag('OrderHeld', (held) => {
-      const wire = new WireCreditHold({
-        orderId: held.orderId,
-        shortfall: moneyOf(held.shortfall),
-        requiredDownpayment: moneyOf(held.requiredDownpayment),
-      })
-      return persisted(wire, planOf(wire, held.orderId, [], undefined))
-    }),
+    Match.tag('OrderAllocated', ({ orderId, reservations }): WireDecisionEncoded => ({
+      _tag: 'AllocatedSplit',
+      orderId,
+      allocations: reservations,
+    })),
+    Match.tag('OrderAllocatedWithOverdraft', ({ orderId, reservations, overdraftAmount }): WireDecisionEncoded => ({
+      _tag: 'AllocatedWithOverdraft',
+      orderId,
+      allocations: reservations,
+      overdraftAmount,
+    })),
+    Match.tag('OrderBackordered', ({ orderId, reservations, backordered }): WireDecisionEncoded => ({
+      _tag: 'Backordered',
+      orderId,
+      allocations: reservations,
+      backorderedLines: backordered,
+    })),
+    Match.tag('OrderHeld', ({ orderId, shortfall, requiredDownpayment }): WireDecisionEncoded => ({
+      _tag: 'CreditHold',
+      orderId,
+      shortfall,
+      requiredDownpayment,
+    })),
     Match.exhaustive,
   )
 
-const encodeError = (error: CoreError): FulfillmentError =>
-  Match.value(error).pipe(
-    Match.tag('InsufficientStock', (insufficient) =>
-      new WireInsufficientStock({
-        sku: insufficient.sku,
-        requested: insufficient.requested,
-        available: insufficient.available,
-      })),
-    Match.tag('CreditLimitExceeded', (exceeded) =>
-      new WireCreditLimitExceeded({
-        customerId: exceeded.customerId,
-        requested: moneyOf(exceeded.requested),
-        available: moneyOf(exceeded.available),
-      })),
-    Match.exhaustive,
-  )
+/**
+ * The one place a settle outcome becomes the RPC's wire value. The handlers receive the
+ * outcome encoded, and the wire contract brands its ids and money, so the outcome is renamed
+ * into the wire's encoded form and decoded once. Both schemas live in this example, so a
+ * decode failure is a mismatch between them, a defect rather than a refusal.
+ */
+const wireDecisionOf = (decision: SettleDecisionEncoded): Effect.Effect<CoreFulfillmentDecision> =>
+  Effect.orDie(S.decodeEffect(CoreFulfillmentDecision)(wireEncodedOf(decision)))
 
-const encodedOutcome = (outcome: Result.Result<CoreDecision, CoreError>): EncodedFulfillment =>
-  Result.match(outcome, {
-    onFailure: (error): EncodedFulfillment => ({ decision: encodeError(error), reservation: undefined }),
-    onSuccess: encodeCore,
-  })
+/** Each settle refusal shares its tag and fields with the wire refusal the RPC answers, so it decodes as it is. */
+const wireRefusalOf = (error: SettleErrorEncoded): Effect.Effect<FulfillmentRefusal> =>
+  Effect.orDie(S.decodeEffect(FulfillmentRefusal)(error))
 
 const readContext = (
   request: FulfillmentRequest,
@@ -203,48 +150,141 @@ const readContext = (
     }
   })
 
-const decodeContext = (raw: RawContext): Result.Result<SettleFulfillmentCommand, SchemaError> =>
-  Result.map(S.decodeResult(OrderFulfillmentCommand)(raw), settlementOf)
+/** Every cell here builds its command from values it already holds, so a rejection is a defect in this module. */
+const rejectedRead = (cell: string) => (rejected: Sandwich.CommandRejected): Effect.Effect<never> =>
+  Effect.die(new Error(`the ${cell} command the cell read failed its own schema: ${rejected.issue}`))
 
-const stockReservedOf = (plan: ReservationPlan, now: DateTime.Utc): Option.Option<StockReserved> =>
-  Match.value(plan.allocations.length === 0).pipe(
-    Match.when(true, () => Option.none<StockReserved>()),
-    Match.when(
-      false,
-      () => Option.some(new StockReserved({ orderId: plan.orderId, allocations: plan.allocations, occurredAt: now })),
-    ),
+const readExplode = (
+  request: FulfillmentRequest,
+): Effect.Effect<ExplodeRead, CreditAccountNotFound, InventoryStore | CreditLedger> =>
+  Effect.map(readContext(request), (context) => ({ lines: context.order.lines, kits: context.kits, context }))
+
+const carryComponents = (
+  exploded: { readonly components: Exploded['components'] },
+  read: ExplodeRead,
+): Effect.Effect<Exploded> => Effect.succeed({ context: read.context, components: exploded.components })
+
+const explodeBundleCell = Sandwich.named('inventory.fulfillment.bundle.explode')(readExplode)
+  .decide(explodeBundle)
+  .write({
+    BundleExploded: carryComponents,
+    NothingToExplode: carryComponents,
+    CommandRejected: rejectedRead('bundle explosion'),
+  })
+
+const readCredit = (exploded: Exploded): Effect.Effect<CreditRead> =>
+  Effect.succeed({
+    ...exploded,
+    orderId: exploded.context.order.orderId,
+    tier: exploded.context.customerTier,
+    account: exploded.context.credit,
+    requiredAmount: requiredAmountOf(exploded.components),
+  })
+
+const carryCredit = (credit: Credited['credit'], read: CreditRead): Effect.Effect<Credited> =>
+  Effect.succeed({ context: read.context, components: read.components, credit })
+
+const checkCreditCell = Sandwich.named('inventory.fulfillment.credit.check')(readCredit)
+  .decide(checkCredit)
+  .write({
+    CreditGranted: carryCredit,
+    CreditHold: carryCredit,
+    CreditLimitExceeded: carryCredit,
+    CommandRejected: rejectedRead('credit check'),
+  })
+
+const readAllocation = (credited: Credited): Effect.Effect<AllocateRead> =>
+  Effect.succeed({
+    ...credited,
+    orderId: credited.context.order.orderId,
+    lines: credited.components,
+    stock: credited.context.stock,
+    now: credited.context.now,
+  })
+
+const carryAllocation = (allocation: Allocated['allocation'], read: AllocateRead): Effect.Effect<Allocated> =>
+  Effect.succeed({ context: read.context, components: read.components, credit: read.credit, allocation })
+
+const allocateStockCell = Sandwich.named('inventory.fulfillment.stock.allocate')(readAllocation)
+  .decide(allocateStock)
+  .write({
+    StockAllocated: carryAllocation,
+    StockBackordered: carryAllocation,
+    InsufficientStock: carryAllocation,
+    CommandRejected: rejectedRead('stock allocation'),
+  })
+
+const readSettlement = (allocated: Allocated): Effect.Effect<SettlementRead> =>
+  Effect.succeed({
+    orderId: allocated.context.order.orderId,
+    credit: allocated.credit,
+    allocation: allocated.allocation,
+    customerId: allocated.context.order.customerId,
+    now: allocated.context.now,
+  })
+
+const allocationsOf = (decision: CoreFulfillmentDecision): readonly LotAllocation[] =>
+  Match.value(decision).pipe(
+    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', 'Backordered', ({ allocations }) => allocations),
+    Match.tag('CreditHold', (): readonly LotAllocation[] => []),
     Match.exhaustive,
   )
 
-const backorderRecordedOf = (plan: ReservationPlan, now: DateTime.Utc): Option.Option<BackorderRecorded> =>
-  Option.map(
-    Option.fromUndefinedOr(plan.backordered),
-    (lines) => new BackorderRecorded({ orderId: plan.orderId, backorderedLines: lines, occurredAt: now }),
+const backorderedLinesOf = (decision: CoreFulfillmentDecision): Option.Option<readonly OrderLine[]> =>
+  Match.value(decision).pipe(
+    Match.tag('Backordered', ({ backorderedLines }) => Option.some(backorderedLines)),
+    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', 'CreditHold', () => Option.none<readonly OrderLine[]>()),
+    Match.exhaustive,
   )
 
-const reservationEventsOf = (plan: ReservationPlan, now: DateTime.Utc): readonly InventoryReservationEvents[] =>
-  Arr.getSomes([stockReservedOf(plan, now), backorderRecordedOf(plan, now)])
-const reservationCommitOf = (plan: ReservationPlan, raw: RawContext): ReservationCommit => ({
-  orderId: plan.orderId,
-  customerId: raw.order.customerId,
-  events: reservationEventsOf(plan, raw.now),
+const stockReservedOf = (decision: CoreFulfillmentDecision, now: DateTime.Utc): Option.Option<StockReserved> => {
+  const allocations = allocationsOf(decision)
+  return Match.value(allocations.length === 0).pipe(
+    Match.when(true, () => Option.none<StockReserved>()),
+    Match.when(
+      false,
+      () => Option.some(new StockReserved({ orderId: decision.orderId, allocations, occurredAt: now })),
+    ),
+    Match.exhaustive,
+  )
+}
+
+const backorderRecordedOf = (decision: CoreFulfillmentDecision, now: DateTime.Utc): Option.Option<BackorderRecorded> =>
+  Option.map(
+    backorderedLinesOf(decision),
+    (lines) => new BackorderRecorded({ orderId: decision.orderId, backorderedLines: lines, occurredAt: now }),
+  )
+
+const reservationEventsOf = (
+  decision: CoreFulfillmentDecision,
+  now: DateTime.Utc,
+): readonly InventoryReservationEvents[] =>
+  Arr.getSomes([stockReservedOf(decision, now), backorderRecordedOf(decision, now)])
+
+const reservationCommitOf = (
+  decision: CoreFulfillmentDecision,
+  context: SettlementWriteContext,
+): ReservationCommit => ({
+  orderId: decision.orderId,
+  customerId: context.customerId,
+  events: reservationEventsOf(decision, context.now),
   audit: new AuditPayload({
-    orderId: plan.orderId,
-    actorId: raw.order.customerId,
-    decisionTag: plan.decisionTag,
-    occurredAt: raw.now,
+    orderId: decision.orderId,
+    actorId: context.customerId,
+    decisionTag: decision._tag,
+    occurredAt: context.now,
   }),
 })
 
 const commitReservation = (
-  plan: ReservationPlan,
-  raw: RawContext,
+  decision: CoreFulfillmentDecision,
+  context: SettlementWriteContext,
 ): Effect.Effect<ReservationCommitOutcome, never, ReservationLog> => {
-  const commit = reservationCommitOf(plan, raw)
+  const commit = reservationCommitOf(decision, context)
   return Effect.flatMap(ReservationLog, (log) => log.commit(commit)).pipe(
     Span.start(ReservationCommitSpan, {
-      'app.customer.id': raw.order.customerId,
-      'app.order.id': raw.order.orderId,
+      'app.customer.id': context.customerId,
+      'app.order.id': decision.orderId,
       'app.reservation.event.count': commit.events.length,
     }),
   )
@@ -262,49 +302,48 @@ const chargeCredit = (customerId: string, allocations: readonly LotAllocation[])
 
 const chargeFor = (
   customerId: string,
-  decision: FulfillmentDecision | FulfillmentError,
+  decision: CoreFulfillmentDecision,
 ): Effect.Effect<void, never, CreditLedger> =>
   Match.value(decision).pipe(
-    Match.tag('AllocatedSplit', (allocated) => chargeCredit(customerId, allocated.allocations)),
-    Match.tag('AllocatedWithOverdraft', (overdraft) => chargeCredit(customerId, overdraft.allocations)),
-    Match.tag(
-      'Backordered',
-      'ConflictRollback',
-      'CreditHold',
-      'CreditLimitExceeded',
-      'Forbidden',
-      'InsufficientStock',
-      'Unauthorized',
-      () => Effect.void,
-    ),
+    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', ({ allocations }) => chargeCredit(customerId, allocations)),
+    Match.tag('Backordered', 'CreditHold', () => Effect.void),
     Match.exhaustive,
   )
 
-const writeFulfillment = (encoded: EncodedFulfillment, raw: RawContext) =>
-  Option.match(Option.fromUndefinedOr(encoded.reservation), {
-    onNone: () => Effect.map(chargeFor(raw.order.customerId, encoded.decision), () => encoded.decision),
-    onSome: (plan) =>
-      Effect.flatMap(commitReservation(plan, raw), (outcome) =>
-        Match.value(outcome).pipe(
-          Match.when('VersionConflict', () => Effect.fail(new OptimisticConflict({}))),
-          Match.when(
-            'Committed',
-            () => Effect.map(chargeFor(raw.order.customerId, encoded.decision), () => encoded.decision),
-          ),
-          Match.exhaustive,
-        )),
+const persistReservation = (
+  decision: CoreFulfillmentDecision,
+  context: SettlementWriteContext,
+): Effect.Effect<CoreFulfillmentDecision, OptimisticConflict, CreditLedger | ReservationLog> =>
+  Effect.flatMap(commitReservation(decision, context), (outcome) =>
+    Match.value(outcome).pipe(
+      Match.when('VersionConflict', () => Effect.fail(new OptimisticConflict({}))),
+      Match.when('Committed', () => Effect.as(chargeFor(context.customerId, decision), decision)),
+      Match.exhaustive,
+    ))
+
+/** Every settle decision is written the same way: as its wire decision, committed and charged. */
+const settle = (decision: SettleDecisionEncoded, context: SettlementWriteContext) =>
+  Effect.flatMap(wireDecisionOf(decision), (wire) => persistReservation(wire, context))
+
+const settleFulfillmentCell = Sandwich.named(FulfillmentSettle.name)(readSettlement)
+  .decide(settleFulfillment)
+  .write({
+    OrderAllocated: settle,
+    OrderAllocatedWithOverdraft: settle,
+    OrderBackordered: settle,
+    OrderHeld: settle,
+    InsufficientStock: wireRefusalOf,
+    CreditLimitExceeded: wireRefusalOf,
+    CommandRejected: rejectedRead('settlement'),
   })
 
 /**
- * The fulfillment sandwich. Callers run `fulfillmentCell.run(request)`.
- * CAS retries and per-customer gating live at the RPC edge (Effect.retry, CustomerGate).
+ * The fulfillment pipeline: four sandwiches, one per decision, composed with `Cell.andThen`.
+ * Callers run `fulfillmentCell.run(request)`. CAS retries and per-customer gating live at the
+ * RPC edge (Effect.retry, CustomerGate).
  */
-export const fulfillmentCell = Sandwich.named(FulfillmentSettle.name)(readContext)
-  .decode(Sandwich.pure(decodeContext))
-  .decide(settleFulfillment)
-  .encode(
-    Sandwich.pure((outcome: Result.Result<CoreDecision, CoreError>): Result.Result<EncodedFulfillment, never> =>
-      Result.succeed(encodedOutcome(outcome))
-    ),
-  )
-  .write(writeFulfillment)
+export const fulfillmentCell = explodeBundleCell.pipe(
+  Cell.andThen(checkCreditCell),
+  Cell.andThen(allocateStockCell),
+  Cell.andThen(settleFulfillmentCell),
+)

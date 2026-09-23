@@ -6,17 +6,17 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen$1 as andThen, bind, bindTo, collect, collectAll, fail, flatMap$1 as flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provide, succeed, suspend, tap, zip, zipWith };
+    export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
 }
 
 // @public (undocumented)
 export namespace Sandwich {
-    export { Cell, DEFAULT_DURATION_BOUNDARIES, DecodedChain, DecodedDecidedChain, EncodedChain, NamedCellOptions, PurePhase, RawDecidedChain, ReadChain, ValidOperationName, named, pure };
+    export { Cell, CommandRejected, DEFAULT_DURATION_BOUNDARIES, DecidedChain, ExcessHandlers, HandlerForNoVariant, HandlerRecord, Handlers, NamedCellOptions, Phases, ReadChain, ReadNotEncoded, ValidOperationName, WrittenCell, WrittenFrom, named };
 }
 
 // @public (undocumented)
 export namespace Workflow {
-    export { CheckCommandClass, CommandSchema, Inhabited, InstrumentationBrand, InstrumentationMap, InvalidInstrumentationKey, InvalidInstrumentationValue, MissingInstrumentationAnnotation, SingleVariantDecision, SpanAttributes, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, WorkflowSchemasKey, andThen, make, total };
+    export { CheckCommandClass, CommandSchema, DecisionSchema, Inhabited, InstrumentationBrand, InstrumentationMap, InstrumentedCommandSchema, InvalidInstrumentationKey, InvalidInstrumentationValue, MadeWorkflow, MissingInstrumentationAnnotation, SingleVariantDecision, SpanAttributes, UninhabitedDecision, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, WorkflowSchemas, WorkflowSchemasKey, make };
 }
 
 // (No @packageDocumentation comment for this package)
