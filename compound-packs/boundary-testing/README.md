@@ -12,4 +12,4 @@ Rules in this pack govern:
 - Pinning third-party library semantics and differential parity with contract suites.
 - Forbidding mocks on internal glue and private modules.
 - Enforcing protocol progressions via staged type-level evidence tokens.
-- Shared law contract suites verifying both in-memory fakes and real database store adapters (`fake-and-real-store-laws`).
+- Shared law contract suites verifying store consistency, commutativity, and concurrency across in-memory fakes and production database adapters (`fake-and-real-store-laws`).

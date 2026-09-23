@@ -80,6 +80,7 @@ Capability services required by a cell pipeline's `R` channel must be provided *
 2. **Run Edge Invariant (`R = never`)**: Calling `cell.run(input)` requires that all service dependencies in `R` have been eliminated (reduced to `never`). The only lawful exception is `Scope` when the edge wraps execution in `Effect.scoped`.
 3. **No Mid-Pipeline Binding**: Never call `Effect.provide(program, layer)`, `Cell.provideContext`, or rebuild layers inside domain cells, workflows, or route handlers. Mid-pipeline binding scatters dependency wiring, prevents substitution during testing, and recreates service instances per request.
 4. **Parameterized Constructors in Libraries**: Reusable capability and SDK libraries export parameterized `layer(spec)` constructors, never static `*Live` singletons.
+5. **Service Tags Cannot Carry Type Parameters for Isolation**: Effect's `Context` indexes services in a `ReadonlyMap<string, any>` keyed by each tag's string identifier (`repos/effect/packages/effect/src/Context.ts`). TypeScript erases type parameters at runtime, so generic tags like `Tag<Store<Tenant>>` share a single runtime key and collide. Scoped data boundaries (tenants, sessions, workspaces) must be constructed at the request edge as distinct value handles, not differentiated via generic type parameters on ambient tags.
 
 ### 5. Code Examples
 
@@ -156,3 +157,4 @@ Gate: `review` — verify:
 2. No files use `.port.ts` or `.layer.ts` suffixes.
 3. Static `*Live` identifiers do not appear in reusable libraries; they are defined only at the application composition root.
 4. Neither `Effect.provide` nor `Cell.provideContext` appears inside domain cells, workflows, or route handlers.
+5. Service tags do not carry generic type parameters to distinguish instances; distinct scopes are provided as separate value handles.
