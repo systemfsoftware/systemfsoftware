@@ -18,7 +18,9 @@
  * - `Data.TaggedClass`      -> Data.ts (tagged class factory)
  * - `Request.Class`         -> Request.ts:370
  * - `Request.TaggedClass`   -> Request.ts:409
- * - `Pipeable.Class`        -> Pipeable.ts:625
+ * - `Pipeable.Class` is NOT sanctioned: a pipeable base carries no data
+ *   contract, so it launders a mutable OOP class past this rule. Pipeable
+ *   values spread `Pipeable.Prototype` into a factory object instead.
  * - `Inspectable.Class`     -> Inspectable.ts (extends usage across `src/`)
  * - `Effectable.Class`      -> Effectable.ts:66
  * - `Persistable.Class`     -> unstable/persistence/Persistable.ts:142
@@ -49,7 +51,6 @@ export const SANCTIONED_BASES: ReadonlySet<string> = new Set([
   'effect/Data.TaggedClass',
   'effect/Request.Class',
   'effect/Request.TaggedClass',
-  'effect/Pipeable.Class',
   'effect/Inspectable.Class',
   'effect/Effectable.Class',
   'effect/Persistable.Class',
@@ -82,7 +83,7 @@ export const ANONYMOUS_CLASS = '<anonymous>' as const
 export const TEST_OR_FIXTURE_PATH = /(^|\/)(__tests__|__fixtures__|tests|testResources)\/|\.(test|spec)\.[cm]?[jt]sx?$/
 
 export const EXPECTED =
-  `a class extending a sanctioned Effect v4 constructor (capability: Context.Service / Context.Reference; data model: Schema.Class / Schema.Opaque / Data.Class / Data.TaggedClass / Request.Class / Request.TaggedClass; error model: Schema.Error / Schema.TaggedError / Schema.TaggedClass / Data.Error; rpc: Rpc.make / RpcMiddleware.Service / RpcGroup.make; base class: Pipeable.Class / Inspectable.Class / Effectable.Class / Persistable.Class) or no class at all` as const
+  `a class extending a sanctioned Effect v4 constructor (capability: Context.Service / Context.Reference; data model: Schema.Class / Schema.Opaque / Data.Class / Data.TaggedClass / Request.Class / Request.TaggedClass; error model: Schema.Error / Schema.TaggedError / Schema.TaggedClass / Data.Error; rpc: Rpc.make / RpcMiddleware.Service / RpcGroup.make; base class: Inspectable.Class / Effectable.Class / Persistable.Class) or no class at all` as const
 
 export const FIX =
   "delete the class when it defends nothing the rest of the code depends on; otherwise replace it with a function returning an Effect — for a capability use Context.Service<Self>('Tag'), for a data model Schema.Class<Self>()('Name')({ ... }), for an error model Schema.TaggedError<Self>()('Tag', { ... })" as const

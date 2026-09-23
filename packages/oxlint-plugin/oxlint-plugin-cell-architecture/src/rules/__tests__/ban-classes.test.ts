@@ -170,14 +170,6 @@ ruleTester.run('ban-classes', banClasses, {
       filename: PROD,
     },
     {
-      name: 'Should_Pass_When_ExtendsPipeableClass_WithoutCall',
-      code: `
-        import { Pipeable } from 'effect'
-        class StreamImpl extends Pipeable.Class {}
-      `,
-      filename: PROD,
-    },
-    {
       name: 'Should_Pass_When_ExtendsInspectableClass_WithoutCall',
       code: `
         import { Inspectable } from 'effect'
@@ -326,18 +318,15 @@ ruleTester.run('ban-classes', banClasses, {
       errors: [noSuperclassError('class Foo')],
     },
     {
-      name: 'Should_ReportViolation_When_ClassExtendsObject',
-      code: `class Foo extends Object {}`,
+      name: 'Should_ReportViolation_When_ClassExtendsUnknownBase',
+      code: `class Foo extends Bar {}`,
       filename: PROD,
-      errors: [unsanctionedBaseError('class Foo', 'Object')],
+      errors: [noSuperclassError('class Foo')],
     },
     {
-      name: 'Should_ReportViolation_When_ClassExtendsFunction',
-      code: `class Foo extends Function {}`,
-      filename: PROD,
-      errors: [unsanctionedBaseError('class Foo', 'Function')],
-    },
-    {
+      // Keeps the ambient skip honest: a namespace WITHOUT `declare` emits a
+      // real runtime class, so it carries every harm the rule targets and must
+      // still be reported.
       name: 'Should_ReportViolation_When_ClassInsideNonAmbientNamespace',
       code: `
         namespace Shapes {
@@ -348,10 +337,39 @@ ruleTester.run('ban-classes', banClasses, {
       errors: [noSuperclassError('class Circle')],
     },
     {
+      // Keeps the deep-namespace fix honest: resolving the namespace from the
+      // specifier must not blanket-admit every member of an effect module.
+      name: 'Should_ReportViolation_When_DeepNamespaceImport_ExtendsUnsanctionedMember',
+      code: `
+        import * as Context from 'effect/Context'
+        class Foo extends Context.NotAThing<Foo>()('Foo') {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class Foo', 'effect/Context.NotAThing')],
+    },
+    {
+      // The module check still binds: a namespace called `Context` from a
+      // non-effect package resolves to nothing, however sanctioned the member
+      // name looks.
+      name: 'Should_ReportViolation_When_DeepNamespaceImport_FromForeignModule',
+      code: `
+        import * as Context from 'other-pkg/Context'
+        class Foo extends Context.Service<Foo, string>()('Foo') {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
+    },
+    {
       name: 'Should_ReportViolation_When_ClassExpressionHasNoSuperclass',
       code: `const Foo = class {}`,
       filename: PROD,
       errors: [noSuperclassError('class <anonymous>')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ClassExtendsGenericType',
+      code: `class Foo extends Generic<number> {}`,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
     },
     {
       name: 'Should_ReportViolation_When_ExportedClassHasNoSuperclass',
@@ -364,6 +382,98 @@ ruleTester.run('ban-classes', banClasses, {
       errors: [noSuperclassError('class Foo')],
     },
     {
+      name: 'Should_ReportViolation_When_ClassExtendsLocalBaseClass',
+      code: `
+        class Base {}
+        class Child extends Base {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class Base'), noSuperclassError('class Child')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ClassExtendsLocalFactoryFunction',
+      code: `
+        function makeBase() { return class {} }
+        class Foo extends makeBase() {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class <anonymous>'), noSuperclassError('class Foo')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsV3ContextTag',
+      code: `
+        import { Context } from 'effect'
+        class MyService extends Context.Tag<string, string>()("my-service") {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class MyService', 'effect/Context.Tag')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsSchemaUnion_WhichIsNotAClassBase',
+      code: `
+        import { Schema } from 'effect'
+        class X extends Schema.Union([Schema.String, Schema.Number]) {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class X', 'effect/Schema.Union')],
+    },
+    {
+      name: 'Should_ReportViolation_When_SchemaImportedFromOtherModule',
+      code: `
+        import { Schema } from 'my-other-lib'
+        class X extends Schema.Class<X>("X")({ name: Schema.String }) {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class X', 'my-other-lib/Schema.Class')],
+    },
+    {
+      name: 'Should_ReportViolation_When_SchemaNamespaceNotImported',
+      code: `
+        class X extends Schema.Class<X>("X")({}) {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class X')],
+    },
+    {
+      name: 'Should_ReportViolation_When_SanctionedLocalIsShadowed',
+      code: `
+        import { Schema as S } from 'effect'
+        function S() {}
+        class X extends S.Class<X>("X")({}) {}
+      `,
+      filename: PROD,
+      errors: [
+        {
+          messageId: 'banned',
+          data: {
+            name: 'class X',
+            expected: EXPECTED,
+            actual: 'a class whose superclass is not a sanctioned Effect v4 constructor',
+            fix: FIX,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsComputedMember',
+      code: `
+        import { Context } from 'effect'
+        class X extends Context["Service"]<X>()("X") {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class X')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsDestructuredFactory',
+      code: `
+        import { Schema } from 'effect'
+        const { Class: SchemaClass } = Schema
+        class X extends SchemaClass<X>("X")({}) {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class X')],
+    },
+    {
       name: 'Should_ReportMultipleViolations_When_MultipleClassesInOneFile',
       code: `
         class Foo {}
@@ -371,6 +481,15 @@ ruleTester.run('ban-classes', banClasses, {
       `,
       filename: PROD,
       errors: [noSuperclassError('class Foo'), noSuperclassError('class <anonymous>')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsPipeableClass',
+      code: `
+        import { Pipeable } from 'effect'
+        class StreamImpl extends Pipeable.Class {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class StreamImpl', 'effect/Pipeable.Class')],
     },
   ],
 })
