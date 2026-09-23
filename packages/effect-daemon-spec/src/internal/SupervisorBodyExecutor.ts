@@ -63,7 +63,9 @@ const handleRestart = <R>(
  *
  * The write dispatches one handler per encoded tag, and each handler answers with the epoch
  * step that follows: a decision to continue stops the epoch, a decision to restart reports and
- * reboots, and the `Exhausted` refusal cools down.
+ * reboots, and the `Exhausted` refusal cools down. A command the supervisor built that fails its
+ * own schema is a regression in this module, so it is logged and treated as exhausted: the
+ * supervisor cools down instead of dying and taking every child with it.
  *
  * A description is built per failure because the write needs that failure's context, and the
  * phase signatures hand the command to the read alone. Restarts are rare, so the allocation is
@@ -96,7 +98,14 @@ const restartDescription = <R>(spec: {
       Continue: () => Effect.succeed<EpochStep>(StopEpoch.make()),
       Restart: (decision) => handleRestart(spec.ctx, spec.cause, spec.onRestart(decision)),
       Exhausted: () => handleExhausted(spec.ctx, spec.cause),
-      CommandRejected: () => Effect.die('the restart command the supervisor read failed its own schema'),
+      CommandRejected: (rejected) =>
+        Effect.andThen(
+          Effect.logError('supervisor restart command failed its own schema; cooling down', {
+            daemon: spec.ctx.name,
+            issue: String(rejected.issue),
+          }),
+          handleExhausted(spec.ctx, spec.cause),
+        ),
     })
 
 const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
