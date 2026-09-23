@@ -2,13 +2,31 @@ import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Crypto, Deferred, Effect, Fiber, Layer, Match } from 'effect'
+import { Crypto, Deferred, Effect, Fiber, Layer, Match, Schema } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { Buffer } from 'node:buffer'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { EscapeHatchDefect, HostListenerError, SandboxListingError } from './smoke-failures.schema.ts'
+
+export class HostListenerError extends Schema.TaggedError<HostListenerError>()(
+  'HostListenerError',
+  {
+    cause: Schema.Unknown,
+  },
+) {}
+
+export class SandboxListingError extends Schema.TaggedError<SandboxListingError>()(
+  'SandboxListingError',
+  {
+    cause: Schema.Unknown,
+  },
+) {}
+
+export class EscapeHatchDefect extends Schema.TaggedError<EscapeHatchDefect>()(
+  'EscapeHatchDefect',
+  {},
+) {}
 
 const sandboxPrefix = 'effect-microsandbox-'
 
