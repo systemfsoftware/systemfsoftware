@@ -16,12 +16,13 @@ import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
-import { identity } from 'effect/Function'
+import { dual, identity } from 'effect/Function'
 import * as Hash from 'effect/Hash'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import { type Pipeable, pipeArguments } from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
+import { isPlainOptions } from './internal/plain-object.js'
 
 const now = () => Effect.runSync(Clock.currentTimeMillis)
 
@@ -136,7 +137,7 @@ export const ResultProto = {
     return Match.value(this).pipe(
       Match.tag('Initial', () => tagHash),
       Match.tag('Success', (s) => Hash.combine(tagHash)(Hash.hash(s.value))),
-      Match.tag('Failure', (f) => Hash.combine(tagHash)(Hash.hash(f.cause))),
+      Match.tag('Failure', (f) => Hash.combine(tagHash)(f.cause.pipe(Hash.hash))),
       Match.exhaustive,
     )
   },
@@ -259,25 +260,41 @@ const previousSuccessOption = <A, E>(
   return previousSuccessFromDefined(options)
 }
 
+const successOptions = ['waiting', 'timestamp'] as const
+
 /**
  * Creates a `Success` result with a value and optional `waiting` flag or
  * timestamp override.
  *
  * @since 4.0.0
  */
-export const success = <A, E = never>(value: A, options?: {
-  readonly waiting?: boolean | undefined
-  readonly timestamp?: number | undefined
-}): Success<A, E> => {
-  const result: Success<A, E> = {
-    ...ResultProto,
-    ...SuccessTag,
-    value,
-    waiting: waitingOption(options),
-    timestamp: timestampOption(options),
-  }
-  return result
-}
+export const success: {
+  <A, E = never>(options?: {
+    readonly waiting?: boolean | undefined
+    readonly timestamp?: number | undefined
+  }): (value: A) => Success<A, E>
+  <A, E = never>(value: A, options?: {
+    readonly waiting?: boolean | undefined
+    readonly timestamp?: number | undefined
+  }): Success<A, E>
+} = dual(
+  (args) => args.length > 1 || !isPlainOptions(successOptions)(args[0]),
+  <A, E = never>(value: A, options?: {
+    readonly waiting?: boolean | undefined
+    readonly timestamp?: number | undefined
+  }): Success<A, E> => {
+    const result: Success<A, E> = {
+      ...ResultProto,
+      ...SuccessTag,
+      value,
+      waiting: waitingOption(options),
+      timestamp: timestampOption(options),
+    }
+    return result
+  },
+)
+
+const failureOptions = ['previousSuccess', 'waiting'] as const
 
 /**
  * Creates a `Failure` result from a `Cause`, optionally preserving a previous
@@ -285,19 +302,34 @@ export const success = <A, E = never>(value: A, options?: {
  *
  * @since 4.0.0
  */
-export const failure = <A, E = never>(
-  cause: Cause.Cause<E>,
-  options?: {
+export const failure: {
+  <A, E = never>(options?: {
     readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
     readonly waiting?: boolean | undefined
+  }): (cause: Cause.Cause<E>) => Failure<A, E>
+  <A, E = never>(
+    cause: Cause.Cause<E>,
+    options?: {
+      readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
+} = dual(
+  (args) => args.length > 1 || !isPlainOptions(failureOptions)(args[0]),
+  <A, E = never>(
+    cause: Cause.Cause<E>,
+    options?: {
+      readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> => {
+    const result: Failure<A, E> = {
+      ...ResultProto,
+      ...FailureTag,
+      cause,
+      previousSuccess: previousSuccessOption(options),
+      waiting: waitingOption(options),
+    }
+    return result
   },
-): Failure<A, E> => {
-  const result: Failure<A, E> = {
-    ...ResultProto,
-    ...FailureTag,
-    cause,
-    previousSuccess: previousSuccessOption(options),
-    waiting: waitingOption(options),
-  }
-  return result
-}
+)

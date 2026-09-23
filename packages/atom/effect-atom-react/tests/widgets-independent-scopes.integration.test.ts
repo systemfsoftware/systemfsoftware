@@ -69,8 +69,8 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
 
               vi.advanceTimersByTime(100)
 
-              const firstLoading = !!screen.queryByTestId('first-loading')
-              const secondLoading = !!screen.queryByTestId('second-loading')
+              const firstLoading = screen.queryByTestId('first-loading') !== null
+              const secondLoading = screen.queryByTestId('second-loading') !== null
 
               vi.useRealTimers()
               return { firstLoading, secondLoading }

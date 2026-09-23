@@ -1,5 +1,6 @@
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
+import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { hasProperty } from 'effect/Predicate'
 import * as Schema_ from 'effect/Schema'
@@ -239,5 +240,10 @@ export const Schema = <
  * A codec for `Result` values built from the given success and error schemas.
  */
 
-export const schemaCodec = (success: Schema_.Top, error: Schema_.Top): Schema<Schema_.Top, Schema_.Top> =>
-  Schema({ success, error })
+export const schemaCodec: {
+  (error: Schema_.Top): (success: Schema_.Top) => Schema<Schema_.Top, Schema_.Top>
+  (success: Schema_.Top, error: Schema_.Top): Schema<Schema_.Top, Schema_.Top>
+} = dual(
+  2,
+  (success: Schema_.Top, error: Schema_.Top): Schema<Schema_.Top, Schema_.Top> => Schema({ success, error }),
+)

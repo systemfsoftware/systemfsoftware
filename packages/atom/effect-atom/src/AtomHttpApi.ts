@@ -485,8 +485,8 @@ export const Service =
       return Atom.serializable(fnAtom, {
         key: `AtomHttpApi:mutation:${group}:${endpoint}`,
         schema: schemaCodec(
-          Schema.Union(getSuccessSchemas(definition)),
-          Schema.Union(getErrorSchemas(definition)),
+          Schema.Union(definition.pipe(getSuccessSchemas)),
+          Schema.Union(definition.pipe(getErrorSchemas)),
         ),
       })
     })
@@ -577,8 +577,8 @@ export const Service =
       return Atom.serializable(atom, {
         key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${serializationKey}`,
         schema: schemaCodec(
-          Schema.Union(getSuccessSchemas(endpoint)),
-          Schema.Union(getErrorSchemas(endpoint)),
+          Schema.Union(endpoint.pipe(getSuccessSchemas)),
+          Schema.Union(endpoint.pipe(getErrorSchemas)),
         ),
       })
     }

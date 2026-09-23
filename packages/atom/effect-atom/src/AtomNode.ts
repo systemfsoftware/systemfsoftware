@@ -81,7 +81,7 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   }
 
   get canBeRemoved(): boolean {
-    return fateMeansRemoved(decideNodeFate(nodeLifetimeInput(this)))
+    return this.pipe(nodeLifetimeInput, decideNodeFate, fateMeansRemoved)
   }
 
   _value!: A

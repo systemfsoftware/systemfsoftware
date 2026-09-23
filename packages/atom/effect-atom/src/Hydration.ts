@@ -14,7 +14,9 @@ import * as Clock from 'effect/Clock'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import type * as Fiber from 'effect/Fiber'
+import { dual } from 'effect/Function'
 import * as Atom from './Atom.js'
+import { isPlainOptions } from './internal/plain-object.js'
 import type * as AtomRegistry from './Registry.js'
 import * as AsyncResult from './Result.js'
 
@@ -55,6 +57,8 @@ export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
 type PendingDeferred<V = unknown> = Deferred.Deferred<V>
 const pendingResults = new WeakMap<DehydratedAtomValue, PendingDeferred>()
 
+const dehydrateOptions = ['encodeInitialAs'] as const
+
 /**
  * Encodes the serializable atoms currently stored in a registry into dehydrated
  * state.
@@ -68,23 +72,39 @@ const pendingResults = new WeakMap<DehydratedAtomValue, PendingDeferred>()
  *
  * @since 4.0.0
  */
-export const dehydrate = (
-  registry: AtomRegistry.Registry,
-  options?: {
+export const dehydrate: {
+  (options?: {
     /**
      * How to encode `AsyncResult.Initial` values. Default is "ignore".
      */
     readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
+  }): (registry: AtomRegistry.Registry) => DehydratedAtomValue[]
+  (
+    registry: AtomRegistry.Registry,
+    options?: {
+      /**
+       * How to encode `AsyncResult.Initial` values. Default is "ignore".
+       */
+      readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
+    },
+  ): DehydratedAtomValue[]
+} = dual(
+  (args) => args.length > 1 || !isPlainOptions(dehydrateOptions)(args[0]),
+  (
+    registry: AtomRegistry.Registry,
+    options?: {
+      readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
+    },
+  ): DehydratedAtomValue[] => {
+    const encodeInitialResultMode = encodeInitialMode(options)
+    const arr: DehydratedAtomValue[] = []
+    const now = Effect.runSync(Clock.currentTimeMillis)
+    registry.getNodes().forEach((node, key) => {
+      dehydrateNode(registry, node, key, encodeInitialResultMode, now, arr)
+    })
+    return arr
   },
-): DehydratedAtomValue[] => {
-  const encodeInitialResultMode = encodeInitialMode(options)
-  const arr: DehydratedAtomValue[] = []
-  const now = Effect.runSync(Clock.currentTimeMillis)
-  registry.getNodes().forEach((node, key) => {
-    dehydrateNode(registry, node, key, encodeInitialResultMode, now, arr)
-  })
-  return arr
-}
+)
 
 const encodeInitialMode = (
   options?: {
@@ -256,16 +276,27 @@ const completeDeferred = (
  *
  * @since 4.0.0
  */
-export const hydrate = (
-  registry: AtomRegistry.Registry,
-  dehydratedState: Iterable<DehydratedAtomValue>,
-): Fiber.Fiber<void, never> => {
-  const pending: Effect.Effect<void>[] = []
-  for (const datom of dehydratedState) {
-    hydrateOne(registry, pending, datom)
-  }
-  return Effect.runFork(Effect.forEach(pending, (effect) => effect, { discard: true }))
-}
+export const hydrate: {
+  (
+    dehydratedState: Iterable<DehydratedAtomValue>,
+  ): (registry: AtomRegistry.Registry) => Fiber.Fiber<void, never>
+  (
+    registry: AtomRegistry.Registry,
+    dehydratedState: Iterable<DehydratedAtomValue>,
+  ): Fiber.Fiber<void, never>
+} = dual(
+  2,
+  (
+    registry: AtomRegistry.Registry,
+    dehydratedState: Iterable<DehydratedAtomValue>,
+  ): Fiber.Fiber<void, never> => {
+    const pending: Effect.Effect<void>[] = []
+    for (const datom of dehydratedState) {
+      hydrateOne(registry, pending, datom)
+    }
+    return Effect.runFork(Effect.forEach(pending, (effect) => effect, { discard: true }))
+  },
+)
 
 const hydrateOne = (
   registry: AtomRegistry.Registry,

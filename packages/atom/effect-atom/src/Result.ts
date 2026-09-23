@@ -23,6 +23,7 @@ import type { Predicate, Refinement } from 'effect/Predicate'
 import { isIterable, isTagged } from 'effect/Predicate'
 import * as Either from 'effect/Result'
 import type * as Types from 'effect/Types'
+import { isPlainOptions } from './internal/plain-object.js'
 
 import {
   type Failure,
@@ -90,20 +91,29 @@ export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A
   return failure(exit.cause)
 }
 
+const failOptions = ['previousSuccess', 'waiting'] as const
+const waitingOptions = ['touch'] as const
+
 /**
  * Converts an `Exit` to a result, preserving the latest previous success when the exit is a failure.
  *
  * @since 4.0.0
  */
-export const fromExitWithPrevious = <A, E>(
-  exit: Exit.Exit<A, E>,
-  previous: Option.Option<Result<A, E>>,
-): Success<A, E> | Failure<A, E> => {
-  if (Exit.isSuccess(exit)) {
-    return success(exit.value)
-  }
-  return failureWithPrevious(exit.cause, { previous })
-}
+export const fromExitWithPrevious: {
+  <A, E>(previous: Option.Option<Result<A, E>>): (exit: Exit.Exit<A, E>) => Success<A, E> | Failure<A, E>
+  <A, E>(exit: Exit.Exit<A, E>, previous: Option.Option<Result<A, E>>): Success<A, E> | Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    exit: Exit.Exit<A, E>,
+    previous: Option.Option<Result<A, E>>,
+  ): Success<A, E> | Failure<A, E> => {
+    if (Exit.isSuccess(exit)) {
+      return success(exit.value)
+    }
+    return failureWithPrevious(exit.cause, { previous })
+  },
+)
 
 /**
  * Creates a waiting result from an optional previous result, using `Initial(true)` when no previous result exists.
@@ -172,40 +182,82 @@ const previousSuccessFromResult = <A, E>(result: Result<A, E>): Option.Option<Su
  *
  * @since 4.0.0
  */
-export const failureWithPrevious = <A, E>(
-  cause: Cause.Cause<E>,
-  options: {
+export const failureWithPrevious: {
+  <A, E>(options: {
     readonly previous: Option.Option<Result<A, E>>
     readonly waiting?: boolean | undefined
-  },
-): Failure<A, E> =>
-  failure(cause, {
-    previousSuccess: Option.flatMap(options.previous, previousSuccessFromResult),
-    waiting: options.waiting,
-  })
+  }): (cause: Cause.Cause<E>) => Failure<A, E>
+  <A, E>(
+    cause: Cause.Cause<E>,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    cause: Cause.Cause<E>,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> =>
+    failure(cause, {
+      previousSuccess: Option.flatMap(options.previous, previousSuccessFromResult),
+      waiting: options.waiting,
+    }),
+)
 
 /**
  * Creates a `Failure` result from a typed error, wrapping it in `Cause.fail`.
  *
  * @since 4.0.0
  */
-export const fail = <E, A = never>(error: E, options?: {
-  readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
-  readonly waiting?: boolean | undefined
-}): Failure<A, E> => failure(Cause.fail(error), options)
+export const fail: {
+  <E, A = never>(options?: {
+    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+    readonly waiting?: boolean | undefined
+  }): (error: E) => Failure<A, E>
+  <E, A = never>(error: E, options?: {
+    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+    readonly waiting?: boolean | undefined
+  }): Failure<A, E>
+} = dual(
+  (args) => args.length > 1 || !isPlainOptions(failOptions)(args[0]),
+  <E, A = never>(error: E, options?: {
+    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+    readonly waiting?: boolean | undefined
+  }): Failure<A, E> => failure(Cause.fail(error), options),
+)
 
 /**
  * Creates a `Failure` result from a typed error while carrying forward the latest success stored in a previous result.
  *
  * @since 4.0.0
  */
-export const failWithPrevious = <A, E>(
-  error: E,
-  options: {
+export const failWithPrevious: {
+  <A, E>(options: {
     readonly previous: Option.Option<Result<A, E>>
     readonly waiting?: boolean | undefined
-  },
-): Failure<A, E> => failureWithPrevious(Cause.fail(error), options)
+  }): (error: E) => Failure<A, E>
+  <A, E>(
+    error: E,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    error: E,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> => failureWithPrevious(Cause.fail(error), options),
+)
 
 type TouchOptions = {
   readonly touch?: boolean | undefined
@@ -230,14 +282,24 @@ const maybeTouch = <R extends AnyResult>(self: R, options: TouchOptions | undefi
  *
  * @since 4.0.0
  */
-export const waiting = <R extends AnyResult>(self: R, options?: {
-  readonly touch?: boolean | undefined
-}): R => {
-  if (self.waiting) {
-    return maybeTouch(self, options)
-  }
-  return maybeTouch({ ...self, waiting: true }, options)
-}
+export const waiting: {
+  <R extends AnyResult>(options?: {
+    readonly touch?: boolean | undefined
+  }): (self: R) => R
+  <R extends AnyResult>(self: R, options?: {
+    readonly touch?: boolean | undefined
+  }): R
+} = dual(
+  (args) => args.length > 1 || !isPlainOptions(waitingOptions)(args[0]),
+  <R extends AnyResult>(self: R, options?: {
+    readonly touch?: boolean | undefined
+  }): R => {
+    if (self.waiting) {
+      return maybeTouch(self, options)
+    }
+    return maybeTouch({ ...self, waiting: true }, options)
+  },
+)
 
 /**
  * Refreshes the timestamp of a `Success` result while preserving its value and waiting flag; non-success results are returned unchanged.
@@ -257,19 +319,24 @@ export const touch = <A extends AnyResult>(result: A): A => {
  *
  * @since 4.0.0
  */
-export function replacePrevious<R extends AnyResult, XE, A>(
-  self: R,
-  previous: Option.Option<Result<A, XE>>,
-): With<R, A, Result.Failure<R>>
-export function replacePrevious<A = unknown, E = unknown, XA = unknown>(
-  self: Result<A, E>,
-  previous: Option.Option<Result<XA, E>>,
-): AnyResult {
-  if (isFailure(self)) {
-    return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
-  }
-  return self
-}
+export const replacePrevious: {
+  <R extends AnyResult, XE, A>(previous: Option.Option<Result<A, XE>>): (self: R) => With<R, A, Result.Failure<R>>
+  <R extends AnyResult, XE, A>(
+    self: R,
+    previous: Option.Option<Result<A, XE>>,
+  ): With<R, A, Result.Failure<R>>
+} = dual(
+  2,
+  <A = unknown, E = unknown, XA = unknown>(
+    self: Result<A, E>,
+    previous: Option.Option<Result<XA, E>>,
+  ): AnyResult => {
+    if (isFailure(self)) {
+      return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
+    }
+    return self
+  },
+)
 
 const valueFromNonSuccess = <A, E>(self: Initial<A, E> | Failure<A, E>): Option.Option<A> => {
   if (isFailure(self)) {

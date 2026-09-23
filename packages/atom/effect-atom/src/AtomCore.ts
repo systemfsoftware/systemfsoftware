@@ -105,44 +105,78 @@ export const WritableProto = {
 export const isWritable = <R, W>(atom: Atom<R>): atom is Writable<R, W> => WritableTypeId in atom
 
 /**
+ * @since 4.0.0
+ */
+export type With<R extends AnyAtom, B> = [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
+
+/**
  * Creates a read-only atom from a read function and an optional custom refresh registration callback.
  *
  * @since 4.0.0
  */
-export const readable = <A>(
-  read: (get: AtomContext) => A,
-  refresh?: (f: <A>(atom: Atom<A>) => void) => void,
-): Atom<A> => {
-  const self: Atom<A> = {
-    ...AtomProto,
-    keepAlive: false,
-    lazy: true,
-    read,
-    ...optionalRefresh(refresh),
-  }
-  return self
-}
+export const readable: {
+  <A>(
+    read: (get: AtomContext) => A,
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): Atom<A>
+  (
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): <A>(read: (get: AtomContext) => A) => Atom<A>
+} = dual(
+  (args) => args.length !== 0,
+  <A>(
+    read: (get: AtomContext) => A,
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): Atom<A> => {
+    const self: Atom<A> = {
+      ...AtomProto,
+      keepAlive: false,
+      lazy: true,
+      read,
+      ...optionalRefresh(refresh),
+    }
+    return self
+  },
+)
 
 /**
  * Creates a writable atom from read and write functions, with an optional custom refresh registration callback.
  *
  * @since 4.0.0
  */
-export const writable = <R, W>(
-  read: (get: AtomContext) => R,
-  write: (ctx: WriteContext<R>, value: W) => void,
-  refresh?: (f: <A>(atom: Atom<A>) => void) => void,
-): Writable<R, W> => {
-  const self: Writable<R, W> = {
-    ...WritableProto,
-    keepAlive: false,
-    lazy: true,
-    read,
-    write,
-    ...optionalRefresh(refresh),
-  }
-  return self
-}
+export const writable: {
+  <R, W>(
+    read: (get: AtomContext) => R,
+    write: (ctx: WriteContext<R>, value: W) => void,
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): Writable<R, W>
+  <R, W>(
+    write: (ctx: WriteContext<R>, value: W) => void,
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): (read: (get: AtomContext) => R) => Writable<R, W>
+  (
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): <R, W>(
+    write: (ctx: WriteContext<R>, value: W) => void,
+  ) => (read: (get: AtomContext) => R) => Writable<R, W>
+} = dual(
+  (args) => args.length >= 2,
+  <R, W>(
+    read: (get: AtomContext) => R,
+    write: (ctx: WriteContext<R>, value: W) => void,
+    refresh?: (f: <A>(atom: Atom<A>) => void) => void,
+  ): Writable<R, W> => {
+    const self: Writable<R, W> = {
+      ...WritableProto,
+      keepAlive: false,
+      lazy: true,
+      read,
+      write,
+      ...optionalRefresh(refresh),
+    }
+    return self
+  },
+)
 
 const idleTtlMillis = (duration: Duration.Duration, isFinite: boolean): number | undefined => {
   if (isFinite) {
@@ -249,14 +283,14 @@ export const transform: {
     options?: {
       readonly initialValueTarget?: Atom<B> | undefined
     },
-  ): (self: R) => [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
+  ): (self: R) => With<R, B>
   <R extends AnyAtom, B>(
     self: R,
     f: (get: AtomContext, atom: R) => B,
     options?: {
       readonly initialValueTarget?: Atom<B> | undefined
     },
-  ): [R] extends [Writable<infer _, infer RW>] ? Writable<B, RW> : Atom<B>
+  ): With<R, B>
 } = dual(
   (args) => isAtom(args[0]),
   <A, B>(

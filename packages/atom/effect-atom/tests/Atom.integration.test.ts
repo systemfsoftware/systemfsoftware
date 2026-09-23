@@ -1855,15 +1855,15 @@ Feature('Deriving values from other values on a page')
           Effect.gen(function*() {
             const withPage = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
               Effect.provideService(Registry.AtomRegistry, s.ctx.page)(effect)
-            yield* withPage(Atom.mount(s.ctx.value))
-            const initial = yield* withPage(Atom.get(s.ctx.value))
+            yield* withPage(s.ctx.value.pipe(Atom.mount))
+            const initial = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.set(s.ctx.value, 5))
-            const afterSet = yield* withPage(Atom.get(s.ctx.value))
+            const afterSet = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.update(s.ctx.value, (n) => n + 1))
-            const afterUpdate = yield* withPage(Atom.get(s.ctx.value))
+            const afterUpdate = yield* withPage(s.ctx.value.pipe(Atom.get))
             const doubled = yield* withPage(Atom.modify(s.ctx.value, (n) => [n * 2, n * 2]))
-            yield* withPage(Atom.refresh(s.ctx.value))
-            const finalValue = yield* withPage(Atom.get(s.ctx.value))
+            yield* withPage(s.ctx.value.pipe(Atom.refresh))
+            const finalValue = yield* withPage(s.ctx.value.pipe(Atom.get))
             return { initial, afterSet, afterUpdate, doubled, finalValue }
           })),
         Then('each step saw the value the previous step left behind, and the refresh returned it to its start')((s) => {

@@ -95,10 +95,16 @@ export const useAtomMount: <A>(atom: Atom.Atom<A>) => void;
 export const useAtomRef: <A>(ref: AtomRef.ReadonlyRef<A>) => A;
 
 // @public
-export const useAtomRefProp: <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K) => AtomRef.AtomRef<A[K]>;
+export const useAtomRefProp: {
+    <A, K extends keyof A>(prop: K): (ref: AtomRef.AtomRef<A>) => AtomRef.AtomRef<A[K]>;
+    <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]>;
+};
 
 // @public
-export const useAtomRefPropValue: <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K) => A[K];
+export const useAtomRefPropValue: {
+    <A, K extends keyof A>(prop: K): (ref: AtomRef.AtomRef<A>) => A[K];
+    <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K];
+};
 
 // @public
 export const useAtomRefresh: <A>(atom: Atom.Atom<A>) => () => void;
@@ -110,15 +116,26 @@ export const useAtomSet: <R, W>(atom: Atom.Writable<R, W>) => (value: W) => void
 export const useAtomSetResult: <A, E, W>(atom: Atom.Writable<AsyncResult.Result<A, E>, W>) => (value: W) => Effect.Effect<A, E>;
 
 // @public
-export const useAtomSubscribe: <A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: {
-    readonly immediate?: boolean;
-}) => void;
+export const useAtomSubscribe: {
+    <A>(f: (_: A) => void, options?: {
+        readonly immediate?: boolean;
+    }): (atom: Atom.Atom<A>) => void;
+    <A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: {
+        readonly immediate?: boolean;
+    }): void;
+};
 
-// @public
-export const useAtomSuspense: <A, E>(atom: Atom.Atom<AsyncResult.Result<A, E>>, options?: {
-    readonly suspendOnWaiting?: boolean | undefined;
-    readonly includeFailure?: boolean | undefined;
-}) => AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>;
+// @public (undocumented)
+export const useAtomSuspense: {
+    <A, E>(options?: {
+        readonly suspendOnWaiting?: boolean | undefined;
+        readonly includeFailure?: boolean | undefined;
+    }): (atom: Atom.Atom<AsyncResult.Result<A, E>>) => AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>;
+    <A, E>(atom: Atom.Atom<AsyncResult.Result<A, E>>, options?: {
+        readonly suspendOnWaiting?: boolean | undefined;
+        readonly includeFailure?: boolean | undefined;
+    }): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>;
+};
 
 // @public
 export const useAtomUpdate: <R, W>(atom: Atom.Writable<R, W>) => (f: (previous: R) => W) => void;
@@ -127,6 +144,7 @@ export const useAtomUpdate: <R, W>(atom: Atom.Writable<R, W>) => (f: (previous: 
 export const useAtomValue: {
     <A>(atom: Atom.Atom<A>): A;
     <A, B>(atom: Atom.Atom<A>, f: (_: A) => B): B;
+    <A, B>(f: (_: A) => B): (atom: Atom.Atom<A>) => B;
 };
 
 // (No @packageDocumentation comment for this package)

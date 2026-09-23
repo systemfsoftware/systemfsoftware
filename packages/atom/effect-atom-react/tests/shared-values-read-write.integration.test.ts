@@ -387,4 +387,44 @@ Feature('Reading and changing shared values from on-screen widgets')
         }),
       ),
     )
+
+    scenario(
+      'A screen put right back after a blink keeps the value it showed',
+      Gherkin.Do.pipe(
+        Given('a page showing a value was taken down and put right back inside the blink of an eye')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              vi.useFakeTimers()
+              const savedValue = Atom.make(41)
+              let registry: AtomRegistry.Registry = AtomRegistry.make()
+              function Probe() {
+                registry = React.useContext(RegistryContext)
+                return null
+              }
+              render(
+                React.createElement(
+                  React.StrictMode,
+                  null,
+                  React.createElement(
+                    RegistryProvider,
+                    null,
+                    React.createElement(Probe),
+                  ),
+                ),
+              )
+              registry.set(savedValue, 41)
+              return { readSavedValue: () => registry.get(savedValue) }
+            }),
+        ),
+        When('plenty of time passes with the page still up')('done', () =>
+          Effect.sync(() => {
+            vi.advanceTimersByTime(1000)
+            vi.useRealTimers()
+          })),
+        Then('the page still shows the same value, from a data source that never went away')((s) => {
+          expect(s.ctx.readSavedValue()).toBe(41)
+        }),
+      ),
+    )
   })
