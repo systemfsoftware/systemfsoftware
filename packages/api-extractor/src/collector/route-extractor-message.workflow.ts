@@ -1,6 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Record from 'effect/Record'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
@@ -94,10 +95,7 @@ const defaultRuleFor = (command: RouteExtractorMessage): ReportingRule =>
   )
 
 const ruleFor = (command: RouteExtractorMessage): ReportingRule =>
-  Option.getOrElse(
-    Option.fromNullishOr(command.rules.byMessageId[command.messageId]),
-    () => defaultRuleFor(command),
-  )
+  Option.getOrElse(Record.get(command.rules.byMessageId, command.messageId), () => defaultRuleFor(command))
 
 const routeCommand = (command: RouteExtractorMessage): RoutingDecision =>
   Match.value(command.category).pipe(
