@@ -53,15 +53,15 @@ The falsifier is one step, and it is the check a reviewer runs: **name a defect 
 Two consequences follow, and both are the reason this is an invariant rather than a one-off judgement:
 
 1. **Origin is not a property of the substrate.** `repos/effect` and `packages/discern` are both third-party code; they differ only in whether this repo writes to them. Reading provenance from a directory name, rather than from the write boundary, is what produces the subtree-as-fork category error.
-2. **A fork's first landings are repairs, and repairs need the writable substrate.** The four repairs `packages/discern/AGENTS.md` records — two for `exactOptionalPropertyTypes`, one for a decision that reached providers ill-typed, one for doc references API Extractor cannot resolve — are exactly the class of change a `repos/` tree cannot hold.
+2. **A fork's landings rewrite upstream, and rewrites need the writable substrate.** The first landing repaired four places where `exactOptionalPropertyTypes` and API Extractor refused upstream code; the next replaced every upstream module with cell-taxonomy modules that pass the unrelaxed `recommended` lint preset (`docs/plans/2026-09-23-1600-refactor-discern-cell-architecture-plan.md`). A `repos/` tree can hold neither.
 
 ## Reversing observation
 
-Adopting candidate 1 or 3 after this diverges is a discard, not a move. `src/` already holds repairs upstream does not, and the strictness configuration they satisfy is repo-wide: an npm dependency would silently drop all four, and a subtree would make them unmaintainable. Reversal is therefore measured by the repairs lost, not by the files moved.
+Adopting candidate 1 or 3 after this diverges is a discard, not a move. No upstream module survives in `src/`, and the strictness configuration it satisfies is repo-wide: an npm dependency would silently drop the whole rewrite, and a subtree could not hold it. Reversal is therefore measured by the rewrite lost, not by the files moved.
 
 ## Related
 
-- `packages/discern/AGENTS.md` — the fork's provenance, its four landing repairs, and the gates it answers to
+- `packages/discern/AGENTS.md` — the fork's provenance and the gates it answers to
 - `CONSTITUTION.md`, `repos/constitution/ENFORCEMENT.md` — the `REPO-O1` / `REPO-S3` boundary this record applies
 - `subtrees.toml` — the vendored trees, each read-only
 - `docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md` — the opposite decision, for a fork this repo publishes rather than consumes
