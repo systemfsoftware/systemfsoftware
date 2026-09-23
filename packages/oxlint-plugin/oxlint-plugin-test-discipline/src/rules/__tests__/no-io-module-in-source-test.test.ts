@@ -61,12 +61,12 @@ const load = (p: string) => readFileSync(p, 'utf-8')
       filename: '/repo/pkg/src/handler.ts',
     },
     {
-      name: 'Should_StaySilent_When_FilenameSaysAclWithoutIoCall',
+      name: 'Should_StaySilent_When_AServiceNamedFileHasNoIoCall',
       code: `
 export const decide = (x: number): boolean => x > 0
 ${IN_SOURCE_BLOCK}
 `,
-      filename: '/repo/pkg/src/foo.acl.ts',
+      filename: '/repo/pkg/src/foo.service.ts',
     },
     {
       name: 'Should_StaySilent_When_SeparateTestFileCallsTestFunctions',
@@ -107,14 +107,14 @@ ${IN_SOURCE_BLOCK}
       errors: [error()],
     },
     {
-      name: 'Should_Report_When_AclSuffixedFilePerformsIo',
+      name: 'Should_Report_When_AServiceNamedFilePerformsIo',
       code: `
 import { readFileSync } from 'fs'
 
 const load = (p: string) => readFileSync(p, 'utf-8')
 ${IN_SOURCE_BLOCK}
 `,
-      filename: '/repo/pkg/src/foo.acl.ts',
+      filename: '/repo/pkg/src/foo.service.ts',
       errors: [error()],
     },
     {

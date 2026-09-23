@@ -12,7 +12,7 @@ pnpm add @systemfsoftware/effect-readiness
 
 - **Protocol Agnostic**: Wait for TCP port connectivity, HTTP endpoint health (`2xx` responses), or stdout/stderr log stream patterns.
 - **Pure Core / Imperative Shell**: Decoupled workflow decisions (`resolveProbe`, `evaluateProbe`) and pure schemas with effectful cell-based execution (`awaitCondition`).
-- **Platform Separation**: Pluggable network dialing and stream reading through `HostProber` and `LogSource` Context tags. Built-in `NodeHostProber` using `@effect/platform-node`.
+- **Platform Separation**: Pluggable network dialing and stream reading through the `HostProber` and `LogSource` service contracts. Built-in `NodeHostProber` using `@effect/platform-node`.
 - **Interruption & Resource Safety**: Clean socket disposal with prompt release upon check completion or timeout.
 
 ## Usage
@@ -41,7 +41,7 @@ const checkLog = Readiness.awaitCondition(target, Readiness.Wait.forLog('server 
 const program = checkHttp.pipe(
   Effect.provide(
     Layer.merge(
-      Readiness.NodeHostProber,
+      Readiness.NodeHostProber.layer,
       Layer.succeed(Readiness.LogSource, {
         entries: Effect.succeed(['booting', 'server listening on 8080']),
       }),

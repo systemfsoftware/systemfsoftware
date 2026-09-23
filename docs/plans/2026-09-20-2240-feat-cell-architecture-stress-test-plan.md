@@ -307,7 +307,7 @@ Units are verifiable work packages. Order encodes the dependency DAG; every unit
 
 #### U6 — Port Layers (production + test)
 
-- **Files**: `src/store/InventoryStoreDrizzle.ts`, `src/store/CreditLedgerDrizzle.ts`, `src/store/ReservationLogDrizzle.ts`, `src/store/ClockLive.ts`, `src/store/PgTest.layer.ts`, `src/store/PgProd.layer.ts`, `.env.example` (required keys, no values).
+- **Files**: `src/store/InventoryStoreDrizzle.ts`, `src/store/CreditLedgerDrizzle.ts`, `src/store/ReservationLogDrizzle.ts`, `src/store/ClockLive.ts`, `src/store/PgTest.ts`, `src/store/PgProd.ts`, `.env.example` (required keys, no values).
 - **Change**: One drizzle-backed implementation per port, reading the drizzle session from context. `PgTest.layer` provides `@effect/sql-pglite`'s client + runs migrations via `drizzle-orm/effect-pglite/migrator`; `PgProd.layer` provides `@effect/sql-pg`'s `PgClient.layer` + runs migrations via `drizzle-orm/effect-postgres/migrator`. Port code is driver-agnostic — the Layer swap is the only difference. `PgProd.layer` reads `DATABASE_URL` from `process.env` and fails closed (layer construction dies) when unset; better-auth is initialized with `secret: process.env.BETTER_AUTH_SECRET` under the same fail-closed rule; `src/main.ts` is the sole composition root and contains no credential-like string literals; the env contract is documented in `.env.example` and the package README.
 - **Verification**: Typecheck clean only — stores are forbidden their own test files; boot correctness is proven by U9's integration suite through the in-process PGlite engine.
 

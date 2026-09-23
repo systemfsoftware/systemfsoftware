@@ -54,7 +54,7 @@ The investigation followed five false trails, in the order they fell.
 
 1. **"The matcher is wrong."** Reading `.claude/settings.json` showed the matcher already included `Edit`. The matcher was not the issue.
 
-2. **"The tool-name mapping is wrong."** Proved by reading `omp/packages/omp-utils/src/tool-name.acl.ts:36-42`: `normalizeToolName('edit')` falls into the explicit alias table at line 26 (`edit: 'Edit'`) and returns `'Edit'` — exactly the PascalCase name the Claude Code matcher consumes. The mapping is correct.
+2. **"The tool-name mapping is wrong."** Proved by reading `omp/packages/omp-utils/src/tool-name.ts:36-42`: `normalizeToolName('edit')` falls into the explicit alias table at line 26 (`edit: 'Edit'`) and returns `'Edit'` — exactly the PascalCase name the Claude Code matcher consumes. The mapping is correct.
 
 3. **"The repo's build output is what OMP loads."** Wrong on the same axis — OMP loads plugins from `~/.omp/plugins/node_modules/`, pinned by `~/.omp/plugins/omp-plugins.lock.json`. The freshly-built output under `omp/plugins/omp-claude-compat/dist` was not the loaded code; only the npm-installed tarball was. The repro path here: rebuild locally, re-run, see no change — the change is not in the loaded module.
 
@@ -70,7 +70,7 @@ Two independent defects; both fixed.
 
 ### Repo fix — recover edit content from patch-mode payloads
 
-`omp/packages/omp-utils/src/tool-input.acl.ts:35-38`:
+`omp/packages/omp-utils/src/tool-input.ts:35-38`:
 
 ```ts
 const patchLines = (input: string, sigil: string): string | undefined => {
@@ -81,7 +81,7 @@ const patchLines = (input: string, sigil: string): string | undefined => {
 
 Each marked line is sliced by exactly one sigil's width — that is what turns the patch grammar's `++ item` (an added line whose own first character is `+`) into the inserted `+ item` rather than `item`. The string-joining and the `undefined` return on an empty marked set keep the helper small and total.
 
-`omp/packages/omp-utils/src/tool-input.acl.ts:60-68`:
+`omp/packages/omp-utils/src/tool-input.ts:60-68`:
 
 ```ts
 if (EDIT_TOOLS[toolName] === true && typeof out['input'] === 'string' && !('new_string' in out)) {
@@ -116,9 +116,9 @@ The pre-1.3.0 shape is not visible from this tree and cannot be verified here; i
 
 The root cause is a translation layer that was _partially_ complete.
 
-`omp/packages/omp-utils/src/edit-target.acl.ts:96-105` — `editTargetPaths` — already recovered file _paths_ from the same patch text, both the hashline grammar (`HASHLINE_TAG = /#[0-9a-fA-F]{4}$/u`, line 12; `APPLY_PATCH_FILE`, `APPLY_PATCH_MOVE`, `HASHLINE_MOVE`, lines 13-15) and the apply-patch grammar. So when a patch-mode edit landed, `file_path` was populated from the patch header, and `tool_input` arrived looking well-formed at the path level.
+`omp/packages/omp-utils/src/edit-target.ts:96-105` — `editTargetPaths` — already recovered file _paths_ from the same patch text, both the hashline grammar (`HASHLINE_TAG = /#[0-9a-fA-F]{4}$/u`, line 12; `APPLY_PATCH_FILE`, `APPLY_PATCH_MOVE`, `HASHLINE_MOVE`, lines 13-15) and the apply-patch grammar. So when a patch-mode edit landed, `file_path` was populated from the patch header, and `tool_input` arrived looking well-formed at the path level.
 
-`tool-input.acl.ts` recovered `content`/`new_string` for the _replace_ path (`path` → `file_path`, line 42-45; `edits[]` → synthesized `old_string`/`new_string`, line 47-58) but had no branch for `input: string`. So the path consumers saw a complete payload and the content consumers saw an empty payload. The result: hooks that read only `file_path` (open-file-then-scan, path-based allow/deny) worked; hooks that read `content`/`new_string` (comment checkers, secret scanners, lint guards) silently passed.
+`tool-input.ts` recovered `content`/`new_string` for the _replace_ path (`path` → `file_path`, line 42-45; `edits[]` → synthesized `old_string`/`new_string`, line 47-58) but had no branch for `input: string`. So the path consumers saw a complete payload and the content consumers saw an empty payload. The result: hooks that read only `file_path` (open-file-then-scan, path-based allow/deny) worked; hooks that read `content`/`new_string` (comment checkers, secret scanners, lint guards) silently passed.
 
 A translation that translates _nothing_ fails loudly — every consumer sees the raw foreign shape and reports a missing field. A translation that translates _some_ fields is more dangerous: the payload looks plausible to any consumer that only checks the fields it cares about, and every consumer that _does_ care sees an honest-looking payload with the field they need missing. The plausible-but-broken payload is what hides the defect.
 
@@ -132,7 +132,7 @@ Concrete, checkable, and grounded in the structure that broke here.
 
 (b) **When translating a payload between two systems, enumerate every field the consumer actually reads — not just the ones the producer happens to send.** `content` and `new_string` are what content-scanning hooks read; `file_path` alone is insufficient because the hook never re-reads the file. Any new edit-mode grammar (or any new content-scanning hook) needs the translation layer to enumerate the read-side fields first, then check whether the producer's shape carries them.
 
-(c) **Keep `tool-input.acl.ts` and `edit-target.acl.ts` in step.** Both files parse the same patch text (`HASHLINE_TAG` at `edit-target.acl.ts:12`, the `+/-` sigil at `tool-input.acl.ts:35-37`). A new edit mode that adds a path grammar to one must add the content grammar to the other. They are a paired ACL: one half alone is the failure mode here.
+(c) **Keep `tool-input.ts` and `edit-target.ts` in step.** Both files parse the same patch text (`HASHLINE_TAG` at `edit-target.ts:12`, the `+/-` sigil at `tool-input.ts:35-37`). A new edit mode that adds a path grammar to one must add the content grammar to the other. They are a paired ACL: one half alone is the failure mode here.
 
 (d) **Pin what is actually loaded.** `omp plugin list` is the source of truth. `omp plugin upgrade` does not cover npm-installed plugins. The lock file at `~/.omp/plugins/omp-plugins.lock.json` is the only authoritative record of what the next session will run against.
 

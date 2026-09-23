@@ -1,6 +1,6 @@
 // `await import('vitest')` is the canonical in-source vitest pattern that the
-// rule being tested (packages/effect-gherkin-spec/src/feature-runtime.ts:365
-// and core/src/rules/no-io-boundary-tests.ts:18 are the two existing users).
+// rule being tested consumes (packages/effect-gherkin-spec/src/feature-runtime.ts:365
+// is the existing user).
 // Static import would defeat the test purpose — the guard is what makes the
 // block dead code at build time.
 import {
