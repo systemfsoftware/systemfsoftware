@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-spec-runtime",
   "license": "Apache-2.0",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-spec-runtime#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "The registrar core behind Effect spec harnesses \u2014 describe/it selection, suite and case layer registration, and the Vitest task reference, with error and body types as parameters.",
+  "description": "The registrar core behind Effect spec harnesses — describe/it selection, suite and case layer registration, and the Vitest task reference, with error and body types as parameters.",
   "keywords": [
     "effect",
     "effect-ts",

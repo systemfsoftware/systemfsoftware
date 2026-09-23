@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/trace-spec",
   "license": "Apache-2.0",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Trace contracts as executable specs \u2014 own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
+  "description": "Trace contracts as executable specs — own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
   "keywords": [
     "effect",
     "effect-ts",
