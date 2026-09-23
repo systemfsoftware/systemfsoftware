@@ -35,8 +35,7 @@ const writeTemplate = (
           fs.writeFileString(targetPath, CONFIG_TEMPLATE),
           terminal.display(`Created ${targetPath}\n`),
         )),
-      Match.tag('TemplateRefused', ({ targetPath }) =>
-        Effect.fail(new ConfigTemplateExists({ filePath: targetPath }))),
+      Match.tag('TemplateRefused', ({ targetPath }) => Effect.fail(new ConfigTemplateExists({ filePath: targetPath }))),
       Match.exhaustive,
     )
   })

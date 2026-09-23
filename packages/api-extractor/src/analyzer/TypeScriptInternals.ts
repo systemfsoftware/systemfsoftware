@@ -37,12 +37,13 @@ export const tryGetSymbolForDeclaration = (
   Option.fromUndefinedOr(declaration.symbol).pipe(
     Option.flatMap((symbol) =>
       Match.value(symbol.escapedName === ts.InternalSymbolName.Computed).pipe(
-        Match.when(true, () =>
-          Option.orElse(symbolAtNameOfDeclaration(declaration, checker), () => Option.some(symbol)),
+        Match.when(
+          true,
+          () => Option.orElse(symbolAtNameOfDeclaration(declaration, checker), () => Option.some(symbol)),
         ),
         Match.when(false, () => Option.some(symbol)),
         Match.exhaustive,
-      ),
+      )
     ),
     Option.getOrUndefined,
   )
@@ -62,8 +63,7 @@ export const getResolvedModule = (
   sourceFile: ts.SourceFile,
   moduleNameText: string,
   mode: ts.ResolutionMode,
-): ts.ResolvedModuleFull | undefined =>
-  program.getResolvedModule(sourceFile, moduleNameText, mode)?.resolvedModule
+): ts.ResolvedModuleFull | undefined => program.getResolvedModule(sourceFile, moduleNameText, mode)?.resolvedModule
 
 export const getModeForUsageLocation = (
   file: ts.SourceFile,
@@ -73,11 +73,9 @@ export const getModeForUsageLocation = (
 
 export const getSymbolParent = (symbol: ts.Symbol): ts.Symbol | undefined => symbol.parent
 
-export const tryGetLocalSymbol = (declaration: ts.Declaration): ts.Symbol | undefined =>
-  declaration.localSymbol
+export const tryGetLocalSymbol = (declaration: ts.Declaration): ts.Symbol | undefined => declaration.localSymbol
 
 export const getGlobalVariableAnalyzer = (program: ts.Program): IGlobalVariableAnalyzer =>
   program.getTypeChecker().getEmitResolver()
 
-export const isVarConst = (node: ts.VariableDeclaration | ts.VariableDeclarationList): boolean =>
-  ts.isVarConst(node)
+export const isVarConst = (node: ts.VariableDeclaration | ts.VariableDeclarationList): boolean => ts.isVarConst(node)

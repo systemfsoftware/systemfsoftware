@@ -25,7 +25,13 @@ import type { ExtractorConfig, ExtractorReportConfig } from './extractor-config.
 import { JsonRecordFromString } from './json-record.schema.js'
 import { MergeConfig, mergeConfig } from './merge-config.workflow.js'
 import type { JoinSegments, TokenContext } from './tokens.js'
-import { expandTokens, LOOKUP_TOKEN, PROJECT_FOLDER_TOKEN, UNKNOWN_PACKAGE_NAME, unscopedPackageName } from './tokens.js'
+import {
+  expandTokens,
+  LOOKUP_TOKEN,
+  PROJECT_FOLDER_TOKEN,
+  UNKNOWN_PACKAGE_NAME,
+  unscopedPackageName,
+} from './tokens.js'
 
 export type { ExtractorConfig, ExtractorReportConfig }
 
@@ -160,11 +166,15 @@ const anchorDocModel = (
 ): Schema.Json | undefined =>
   Option.match(Option.filter(Option.fromNullishOr(docModel), isConfigRecord), {
     onNone: () => docModel,
-    onSome: (record) =>
-      assignIfPresent(record, 'apiJsonFilePath', anchorPath(record['apiJsonFilePath'], folder, path)),
+    onSome: (record) => assignIfPresent(record, 'apiJsonFilePath', anchorPath(record['apiJsonFilePath'], folder, path)),
   })
 
-const dtsRollupPathKeys = ['untrimmedFilePath', 'alphaTrimmedFilePath', 'betaTrimmedFilePath', 'publicTrimmedFilePath'] as const
+const dtsRollupPathKeys = [
+  'untrimmedFilePath',
+  'alphaTrimmedFilePath',
+  'betaTrimmedFilePath',
+  'publicTrimmedFilePath',
+] as const
 
 const anchorDtsRollup = (
   dtsRollup: Schema.Json | undefined,
@@ -212,8 +222,11 @@ export const anchorRelativePaths = (
   folder: string,
   path: Path.Path,
 ): MutableJsonRecord =>
-  Arr.reduce(anchoredSections, config, (record, [key, anchor]) =>
-    assignIfPresent(record, key, anchor(record[key], folder, path)))
+  Arr.reduce(
+    anchoredSections,
+    config,
+    (record, [key, anchor]) => assignIfPresent(record, key, anchor(record[key], folder, path)),
+  )
 
 const packageNameOf = (packageJson: MutableJsonRecord | undefined): string =>
   Option.getOrElse(
@@ -315,14 +328,12 @@ const projectFolderFromRaw = (
     Match.exhaustive,
   )
 
-const anchoredExpansion =
-  (projectFolder: string, path: Path.Path) =>
-  (expanded: string): string =>
-    Match.value(expanded.length === 0).pipe(
-      Match.when(true, () => ''),
-      Match.when(false, () => path.resolve(projectFolder, expanded)),
-      Match.exhaustive,
-    )
+const anchoredExpansion = (projectFolder: string, path: Path.Path) => (expanded: string): string =>
+  Match.value(expanded.length === 0).pipe(
+    Match.when(true, () => ''),
+    Match.when(false, () => path.resolve(projectFolder, expanded)),
+    Match.exhaustive,
+  )
 
 const assembleConfig = (
   read: RawConfigRead,
@@ -344,7 +355,11 @@ const assembleConfig = (
   return Result.map(
     Result.all([
       expand(validated.mainEntryPointFilePath),
-      expand(Option.getOrUndefined(Option.map(Option.fromNullishOr(validated.compiler), (compiler) => compiler.tsconfigFilePath))),
+      expand(
+        Option.getOrUndefined(
+          Option.map(Option.fromNullishOr(validated.compiler), (compiler) => compiler.tsconfigFilePath),
+        ),
+      ),
       buildReportConfigs(reportCfg, tokenCtx, read.configFilePath, join),
     ]),
     ([mainEntryPointFilePath, tsconfigFilePath, reportConfigs]): ExtractorConfig => ({
@@ -357,8 +372,10 @@ const assembleConfig = (
       tsconfigFilePath,
       overrideTsconfig,
       skipLibCheck: Option.getOrElse(
-        Option.flatMap(Option.fromNullishOr(validated.compiler), (compiler) =>
-          Option.fromUndefinedOr(compiler.skipLibCheck)),
+        Option.flatMap(
+          Option.fromNullishOr(validated.compiler),
+          (compiler) => Option.fromUndefinedOr(compiler.skipLibCheck),
+        ),
         () => false,
       ),
       newlineKind: Option.getOrElse(Option.fromUndefinedOr(validated.newlineKind), () => 'crlf'),
@@ -369,8 +386,14 @@ const assembleConfig = (
         ...reportCfg,
         reportConfigs,
       },
-      docModel: Option.getOrElse(Option.fromUndefinedOr(validated.docModel), (): DocModelConfig => ({ enabled: false })),
-      dtsRollup: Option.getOrElse(Option.fromUndefinedOr(validated.dtsRollup), (): DtsRollupConfig => ({ enabled: false })),
+      docModel: Option.getOrElse(
+        Option.fromUndefinedOr(validated.docModel),
+        (): DocModelConfig => ({ enabled: false }),
+      ),
+      dtsRollup: Option.getOrElse(
+        Option.fromUndefinedOr(validated.dtsRollup),
+        (): DtsRollupConfig => ({ enabled: false }),
+      ),
       tsdocMetadata: Option.getOrElse(
         Option.fromUndefinedOr(validated.tsdocMetadata),
         (): TsdocMetadataConfig => ({ enabled: false }),
@@ -386,8 +409,12 @@ const assembleConfig = (
  * the project folder is resolved — all from the read phase's data, with no I/O of its own.
  */
 export const decodeExtractorConfig = (read: RawConfigRead): Result.Result<ExtractorConfig, ConfigDecodeError> => {
-  const mergedRaw = Arr.reduce(read.links, emptyRecord, (accumulated, link) =>
-    mergeConfigObjects(anchorRelativePaths(link.record, read.path.dirname(link.filePath), read.path), accumulated))
+  const mergedRaw = Arr.reduce(
+    read.links,
+    emptyRecord,
+    (accumulated, link) =>
+      mergeConfigObjects(anchorRelativePaths(link.record, read.path.dirname(link.filePath), read.path), accumulated),
+  )
   const withDefaults = mergeConfigObjects({ ...DEFAULT_CONFIG_RECORD }, mergedRaw)
   const overrideTsconfig = extractOverrideTsconfig(withDefaults['compiler'])
   return Result.flatMap(
@@ -397,7 +424,9 @@ export const decodeExtractorConfig = (read: RawConfigRead): Result.Result<Extrac
         new ConfigSchemaValidationError({ filePath: read.configFilePath, issues: [error.message] }),
     ),
     (validated) =>
-      Result.flatMap(projectFolderOf(read, validated), (folder) =>
-        assembleConfig(read, validated, overrideTsconfig, folder)),
+      Result.flatMap(
+        projectFolderOf(read, validated),
+        (folder) => assembleConfig(read, validated, overrideTsconfig, folder),
+      ),
   )
 }

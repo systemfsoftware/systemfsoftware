@@ -51,13 +51,16 @@ const sourceParts = (filePath: string): Option.Option<{ readonly base: string; r
 export const shadowingDeclaration = (filePath: string): Option.Option<string> =>
   Match.value(isDeclarationFile(filePath)).pipe(
     Match.when(true, () => Option.none<string>()),
-    Match.when(false, () =>
-      Option.flatMap(sourceParts(filePath), (parts) =>
-        Match.value(sourceExtensions[parts.extension] === true).pipe(
-          Match.when(true, () => Option.some(`${parts.base}.d.ts`)),
-          Match.when(false, () => Option.none<string>()),
-          Match.exhaustive,
-        ))),
+    Match.when(
+      false,
+      () =>
+        Option.flatMap(sourceParts(filePath), (parts) =>
+          Match.value(sourceExtensions[parts.extension] === true).pipe(
+            Match.when(true, () => Option.some(`${parts.base}.d.ts`)),
+            Match.when(false, () => Option.none<string>()),
+            Match.exhaustive,
+          )),
+    ),
     Match.exhaustive,
   )
 

@@ -13,21 +13,17 @@ import { AnnounceRun, resolveVerbosity, type VerbosityDecision } from './collect
 import type { Verbosity } from './collector/verbosity.schema.js'
 import {
   type ConfigReadError,
+  decodeExtractorConfig,
+  decodeJsonRecord,
   type ExtractorConfig,
   type MutableJsonRecord,
   type RawConfigLink,
   type RawConfigRead,
   type RawPackageJson,
-  decodeExtractorConfig,
-  decodeJsonRecord,
   splitExtends,
 } from './config/extractor-config.js'
 import { filePresent, searchUpwards } from './config/folder-walk.js'
-import {
-  CircularConfigExtendsError,
-  ConfigFileNotFound,
-  ConfigJsonSyntaxError,
-} from './errors/config.schema.js'
+import { CircularConfigExtendsError, ConfigFileNotFound, ConfigJsonSyntaxError } from './errors/config.schema.js'
 import type { ExtractorError } from './errors/index.js'
 import type { ExtractionRequest, ExtractorRunInput } from './extraction-request.js'
 import { MessageWriter } from './message-writer.service.js'
@@ -76,7 +72,8 @@ const readConfigRecord = (
         Match.when(Option.isNone, () => Effect.fail(new ConfigFileNotFound({ filePath }))),
         Match.when(Option.isSome, () => readConfigContent(fs, filePath)),
         Match.exhaustive,
-      )),
+      )
+    ),
   )
 
 const extendsTargetOf = (specifier: string, fromFolder: string, path: Path.Path): string =>
@@ -136,9 +133,13 @@ const nearestPackageJson = (
   fs: FileSystem.FileSystem,
   path: Path.Path,
 ): Effect.Effect<Option.Option<RawPackageJson>> =>
-  searchUpwards(folder, path, (searched) =>
-    Effect.map(readPackageRecord(searched, fs, path), (record): Option.Option<RawPackageJson> =>
-      Option.map(record, (found): RawPackageJson => ({ folder: searched, record: found }))))
+  searchUpwards(
+    folder,
+    path,
+    (searched) =>
+      Effect.map(readPackageRecord(searched, fs, path), (record): Option.Option<RawPackageJson> =>
+        Option.map(record, (found): RawPackageJson => ({ folder: searched, record: found }))),
+  )
 
 /**
  * What the announce read phase gathers from disk: the extends chain, the folder the project
@@ -184,12 +185,14 @@ const readAnnouncement = (
 
 const decodeAnnouncement = Sandwich.pure(
   (read: AnnounceRead): Result.Result<AnnounceRun, ExtractorError> =>
-    Result.succeed(new AnnounceRun({
-      cliFlags: read.input.options.cliFlags ?? {},
-      configQuiet: read.config.quiet,
-      config: read.config,
-      options: read.input.options,
-    })),
+    Result.succeed(
+      new AnnounceRun({
+        cliFlags: read.input.options.cliFlags ?? {},
+        configQuiet: read.config.quiet,
+        config: read.config,
+        options: read.input.options,
+      }),
+    ),
 )
 
 const writeAnnouncement = (

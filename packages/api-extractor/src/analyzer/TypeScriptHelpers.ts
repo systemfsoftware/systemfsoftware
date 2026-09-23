@@ -18,8 +18,7 @@ export const followAliases = (symbol: ts.Symbol, typeChecker: ts.TypeChecker): t
         Option.filter((alias: ts.Symbol) => alias !== aliased),
         Option.map((alias: ts.Symbol) => followAliases(alias, typeChecker)),
         Option.getOrElse(() => aliased),
-      ),
-    ),
+      )),
     Match.orElse((unaliased: ts.Symbol) => unaliased),
   )
 
@@ -38,9 +37,7 @@ export const tryGetADeclaration = (symbol: ts.Symbol): ts.Declaration | undefine
 const isInsideDeclareGlobal = (declaration: ts.Declaration): boolean =>
   Option.fromUndefinedOr(findHighestParent<ts.ModuleDeclaration>(declaration, ts.SyntaxKind.ModuleDeclaration))
     .pipe(
-      Option.exists((moduleDeclaration: ts.ModuleDeclaration) =>
-        moduleDeclaration.name.getText().trim() === 'global'
-      ),
+      Option.exists((moduleDeclaration: ts.ModuleDeclaration) => moduleDeclaration.name.getText().trim() === 'global'),
     )
 
 const isModuleSourceFile = (sourceFile: ts.SourceFile, typeChecker: ts.TypeChecker): boolean =>
@@ -113,8 +110,7 @@ export function matchAncestor(node: ts.Node, kindsToMatch: ts.SyntaxKind[]): ts.
         Match.when(0, () =>
           Option.getOrUndefined(
             Option.some(node).pipe(Option.filter((candidate: ts.Node) => candidate.kind === parentKind)),
-          )
-        ),
+          )),
         Match.orElse(() => parentIfKindMatches(current, parentKind)),
       ),
   )

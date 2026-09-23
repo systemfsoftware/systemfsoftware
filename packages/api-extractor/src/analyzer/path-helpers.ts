@@ -38,7 +38,7 @@ export const relative = (from: string, to: string): string => {
       Match.value(normalizedTo.startsWith(`${normalizedFrom}/`)).pipe(
         Match.when(true, () => normalizedTo.substring(normalizedFrom.length + 1)),
         Match.orElse(() => normalizedTo),
-      ),
+      )
     ),
   )
 }

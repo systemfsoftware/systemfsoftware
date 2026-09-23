@@ -11,6 +11,6 @@ export const truncateWithEllipsis = (s: string, maximumLength: number): string =
       Match.value(s.length <= 3).pipe(
         Match.when(true, () => s.substring(0, maximumLength)),
         Match.orElse(() => `${s.substring(0, maximumLength - 3)}...`),
-      ),
+      )
     ),
   )

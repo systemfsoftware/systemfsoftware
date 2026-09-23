@@ -97,13 +97,13 @@ const parseScope = (packageName: string): Result.Result<ParsedNameParts, string>
     Match.when(true, () => {
       const indexOfScopeSlash = packageName.indexOf('/')
       return Match.value(indexOfScopeSlash <= 0).pipe(
-        Match.when(true, () =>
-          Result.fail(`Error parsing "${packageName}": The scope must be followed by a slash`)),
+        Match.when(true, () => Result.fail(`Error parsing "${packageName}": The scope must be followed by a slash`)),
         Match.orElse(() =>
           Result.succeed({
             scope: packageName.substring(0, indexOfScopeSlash),
             unscopedName: packageName.substring(indexOfScopeSlash + 1),
-          })),
+          })
+        ),
       )
     }),
     Match.exhaustive,

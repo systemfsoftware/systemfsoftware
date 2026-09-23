@@ -58,11 +58,14 @@ const requireFrom = (packageJsonPath: string): RequireFrom =>
   process.getBuiltinModule('module').createRequire(packageJsonPath)
 
 const requireCandidate = Option.liftThrowable((loader: RequireFrom, candidate: string): object =>
-  loader(loader.resolve(candidate)))
+  loader(loader.resolve(candidate))
+)
 
 const loadCandidate = (loader: RequireFrom, candidate: string): Option.Option<typeof Ts> =>
-  Option.flatMap(requireCandidate(loader, candidate), (loaded) =>
-    Option.filter(Option.some(loaded), isTypeScriptModule))
+  Option.flatMap(
+    requireCandidate(loader, candidate),
+    (loaded) => Option.filter(Option.some(loaded), isTypeScriptModule),
+  )
 
 const noneCompiler: Option.Option<typeof Ts> = Option.none()
 
@@ -169,7 +172,11 @@ const parsedOf = (
   Effect.flatMap(
     Effect.try({
       try: () =>
-        typescript.parseJsonConfigFileContent(configFile.config, typescript.sys, path.resolve(path.dirname(tsconfigFilePath))),
+        typescript.parseJsonConfigFileContent(
+          configFile.config,
+          typescript.sys,
+          path.resolve(path.dirname(tsconfigFilePath)),
+        ),
       catch: (cause) => new TsConfigReadError({ filePath: tsconfigFilePath, cause }),
     }),
     (parsed) =>
@@ -202,32 +209,34 @@ export const layer: Layer.Layer<TypeScriptCompiler> = Layer.provide(
   Layer.effect(
     TypeScriptCompiler,
     Effect.gen(function*() {
-    const path = yield* Path.Path
-    const loadCompiler = (options: CompilerLoadOptions): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-      Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
-        onNone: () => loadCompilerFromConsumer(path.join(options.projectFolder, 'package.json')),
-        onSome: (folder) => loadCompilerFromFolder(path.join(folder, 'package.json')),
-      })
-    const readTsconfig = (
-      typescript: typeof Ts,
-      tsconfigFilePath: string,
-    ): Effect.Effect<Ts.ParsedCommandLine, TsConfigReadError> =>
-      Effect.flatMap(configFileOf(typescript, tsconfigFilePath), (configFile) =>
-        parsedOf(typescript, tsconfigFilePath, configFile, path))
-    const makeHost = (typescript: typeof Ts, options: CompilerHostOptions): Effect.Effect<Ts.CompilerHost> =>
-      Effect.sync(() => {
-        const host = typescript.createCompilerHost(options.compilerOptions)
-        const defaultHost = { ...host }
-        const withProbe: Ts.CompilerHost = {
-          ...host,
-          fileExists: (fileName: string) => fileExistsProbe(defaultHost, fileName),
-        }
-        return Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
-          onNone: () => withProbe,
-          onSome: (folder) => ({ ...withProbe, getDefaultLibLocation: () => path.join(folder, 'lib') }),
+      const path = yield* Path.Path
+      const loadCompiler = (options: CompilerLoadOptions): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+        Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
+          onNone: () => loadCompilerFromConsumer(path.join(options.projectFolder, 'package.json')),
+          onSome: (folder) => loadCompilerFromFolder(path.join(folder, 'package.json')),
         })
-      })
-    return { loadCompiler, readTsconfig, makeHost, createProgram }
+      const readTsconfig = (
+        typescript: typeof Ts,
+        tsconfigFilePath: string,
+      ): Effect.Effect<Ts.ParsedCommandLine, TsConfigReadError> =>
+        Effect.flatMap(
+          configFileOf(typescript, tsconfigFilePath),
+          (configFile) => parsedOf(typescript, tsconfigFilePath, configFile, path),
+        )
+      const makeHost = (typescript: typeof Ts, options: CompilerHostOptions): Effect.Effect<Ts.CompilerHost> =>
+        Effect.sync(() => {
+          const host = typescript.createCompilerHost(options.compilerOptions)
+          const defaultHost = { ...host }
+          const withProbe: Ts.CompilerHost = {
+            ...host,
+            fileExists: (fileName: string) => fileExistsProbe(defaultHost, fileName),
+          }
+          return Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
+            onNone: () => withProbe,
+            onSome: (folder) => ({ ...withProbe, getDefaultLibLocation: () => path.join(folder, 'lib') }),
+          })
+        })
+      return { loadCompiler, readTsconfig, makeHost, createProgram }
     }),
   ),
   NodeServices.layer,

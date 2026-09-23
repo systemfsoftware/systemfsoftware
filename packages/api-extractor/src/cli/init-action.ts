@@ -21,7 +21,8 @@ const refusalOf = (failure: ConfigTemplateExists | PlatformError): CliError.User
       new CliError.UserError({
         cause,
         userMessage: `Unable to write ${CONFIG_FILE_NAME}: ${cause.message}`,
-      })),
+      })
+    ),
   )
 
 export const initActionHandler = initConfig.pipe(

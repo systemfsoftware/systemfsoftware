@@ -9,7 +9,7 @@ import * as Result from 'effect/Result'
 import { filePresent, searchUpwards } from './config/folder-walk.js'
 import { ConfigFileNotFound } from './errors/config.schema.js'
 import { LocateConfig } from './locate-config.schema.js'
-import { ConfigSearch, type ConfigLocationDecision, resolveConfigLocation } from './resolve-config-location.workflow.js'
+import { type ConfigLocationDecision, ConfigSearch, resolveConfigLocation } from './resolve-config-location.workflow.js'
 
 const CONFIG_FILE_NAME = 'api-extractor.json'
 const CONFIG_FOLDER_NAME = 'config'
@@ -24,7 +24,8 @@ const candidateInFolder = (
       Option.match(nested, {
         onSome: Effect.succeedSome,
         onNone: () => filePresent(path.join(folder, CONFIG_FILE_NAME), fs),
-      })),
+      })
+    ),
   )
 
 const readCandidate = (

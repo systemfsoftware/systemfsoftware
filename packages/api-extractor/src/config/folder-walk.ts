@@ -26,7 +26,8 @@ export const searchUpwards = <A>(
             onNone: () => Effect.succeedNone,
             onSome: (parent) => searchUpwards(parent, path, probe),
           }),
-      })),
+      })
+    ),
   )
 
 /** The file the search probes for, when the folder holds it. */
@@ -37,6 +38,7 @@ export const filePresent = (filePath: string, fs: FileSystem): Effect.Effect<Opt
         Match.when(true, () => Effect.succeedSome(filePath)),
         Match.when(false, () => Effect.succeedNone),
         Match.exhaustive,
-      )),
+      )
+    ),
     Effect.orElseSucceed(() => Option.none()),
   )
