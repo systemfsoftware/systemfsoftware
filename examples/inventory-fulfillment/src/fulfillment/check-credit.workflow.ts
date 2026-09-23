@@ -94,12 +94,14 @@ const standardDecision = (
   )
 }
 
-export const checkCredit = Workflow.make(
-  CreditCheckCommand,
-  (command): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> =>
+export const checkCredit = Workflow.make({
+  command: CreditCheckCommand,
+  decision: S.Union([CreditGranted, CreditHold]),
+  error: CreditLimitExceeded,
+  decide: (command): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> =>
     Match.type<CustomerTier>().pipe(
       Match.when('VIP', () => vipDecision(command)),
       Match.when('Standard', () => standardDecision(command)),
       Match.exhaustive,
     )(command.tier),
-)
+})

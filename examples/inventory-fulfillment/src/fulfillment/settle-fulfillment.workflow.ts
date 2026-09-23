@@ -76,9 +76,11 @@ const allocatedDecision = (
     Match.exhaustive,
   )
 
-export const settleFulfillment = Workflow.make(
-  SettleFulfillmentCommand,
-  (
+export const settleFulfillment = Workflow.make({
+  command: SettleFulfillmentCommand,
+  decision: S.Union([OrderAllocated, OrderAllocatedWithOverdraft, OrderBackordered, OrderHeld]),
+  error: S.Union([InsufficientStock, CreditLimitExceeded]),
+  decide: (
     command,
   ): Result.Result<
     OrderAllocated | OrderAllocatedWithOverdraft | OrderBackordered | OrderHeld,
@@ -113,4 +115,4 @@ export const settleFulfillment = Workflow.make(
         )),
       Match.exhaustive,
     ),
-)
+})

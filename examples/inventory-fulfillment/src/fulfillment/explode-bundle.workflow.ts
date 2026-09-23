@@ -56,12 +56,14 @@ const explodedComponents = (command: ExplodeBundleCommand): readonly ComponentDe
 const hasKitLine = (command: ExplodeBundleCommand): boolean =>
   Arr.some(command.lines, (line) => Arr.some(command.kits, (kit) => kit.kitSku === line.sku))
 
-export const explodeBundle = Workflow.total(
-  ExplodeBundleCommand,
-  (command): Result.Result<BundleExploded | NothingToExplode, never> =>
+export const explodeBundle = Workflow.make({
+  command: ExplodeBundleCommand,
+  decision: S.Union([BundleExploded, NothingToExplode]),
+  error: S.Never,
+  decide: (command): Result.Result<BundleExploded | NothingToExplode, never> =>
     Match.value(hasKitLine(command)).pipe(
       Match.when(true, () => Result.succeed(new BundleExploded({ components: explodedComponents(command) }))),
       Match.when(false, () => Result.succeed(new NothingToExplode({ components: explodedComponents(command) }))),
       Match.exhaustive,
     ),
-)
+})

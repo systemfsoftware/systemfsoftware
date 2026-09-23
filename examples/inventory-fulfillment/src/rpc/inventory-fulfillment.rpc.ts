@@ -123,7 +123,6 @@ const runFulfillment = (request: {
     return yield* gate.withGate(
       request.order.customerId,
       fulfillmentCell.run(request).pipe(
-        Effect.catchTag('SchemaError', (error) => Effect.die(error)),
         Effect.retry({
           times: config.maxRetries - 1,
           schedule: Schedule.spaced(config.retryInterval),
