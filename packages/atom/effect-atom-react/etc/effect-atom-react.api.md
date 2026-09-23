@@ -125,7 +125,7 @@ export const useAtomSubscribe: {
     }): void;
 };
 
-// @public (undocumented)
+// @public
 export const useAtomSuspense: {
     <A, E>(options?: {
         readonly suspendOnWaiting?: boolean | undefined;

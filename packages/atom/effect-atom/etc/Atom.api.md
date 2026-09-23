@@ -355,26 +355,16 @@ export function kvs<S extends Schema.ConstraintCodec<Top, Top>, const Mode exten
 }): Writable<'async' extends Mode ? Result<S['Type']> : S['Type'], S['Type']>;
 
 // @public
-export function make<A, E>(create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options?: {
-    readonly initialValue?: A | undefined;
-    readonly uninterruptible?: boolean | undefined;
-}): Atom<Result<A, E>>;
+export function make<A, E>(create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>): Atom<Result<A, E>>;
 
 // @public (undocumented)
-export function make<A, E>(effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): Atom<Result<A, E>>;
+export function make<A, E>(effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>): Atom<Result<A, E>>;
 
 // @public (undocumented)
-export function make<A, E>(create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>, options?: {
-    readonly initialValue?: A;
-}): Atom<Result<A, E | Cause.NoSuchElementError>>;
+export function make<A, E>(create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>): Atom<Result<A, E | Cause.NoSuchElementError>>;
 
 // @public (undocumented)
-export function make<A, E>(stream: Stream.Stream<A, E, AtomRegistry>, options?: {
-    readonly initialValue?: A;
-}): Atom<Result<A, E | Cause.NoSuchElementError>>;
+export function make<A, E>(stream: Stream.Stream<A, E, AtomRegistry>): Atom<Result<A, E | Cause.NoSuchElementError>>;
 
 // @public (undocumented)
 export function make<A>(create: (get: AtomContext) => A): Atom<A>;
@@ -383,50 +373,16 @@ export function make<A>(create: (get: AtomContext) => A): Atom<A>;
 export function make<A>(initialValue: A): Writable<A>;
 
 // @public (undocumented)
-export function make<A, E>(options?: {
-    readonly initialValue?: A | undefined;
-    readonly uninterruptible?: boolean | undefined;
-}): (create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<Result<A, E>>;
+export function makeRead<A, E>(effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>): (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
 
 // @public (undocumented)
-export function make<A, E>(options?: {
-    readonly initialValue?: A | undefined;
-    readonly uninterruptible?: boolean | undefined;
-}): (effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<Result<A, E>>;
+export function makeRead<A, E>(create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>): (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
 
 // @public (undocumented)
-export function make<A, E>(options?: {
-    readonly initialValue?: A;
-}): (create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>) => Atom<Result<A, E | Cause.NoSuchElementError>>;
+export function makeRead<A, E>(stream: Stream.Stream<A, E, AtomRegistry>): (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
 
 // @public (undocumented)
-export function make<A, E>(options?: {
-    readonly initialValue?: A;
-}): (stream: Stream.Stream<A, E, AtomRegistry>) => Atom<Result<A, E | Cause.NoSuchElementError>>;
-
-// @public (undocumented)
-export function makeRead<A, E>(effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
-
-// @public (undocumented)
-export function makeRead<A, E>(create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
-
-// @public (undocumented)
-export function makeRead<A, E>(stream: Stream.Stream<A, E, AtomRegistry>, options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
-
-// @public (undocumented)
-export function makeRead<A, E>(create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>, options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
+export function makeRead<A, E>(create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>): (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
 
 // @public (undocumented)
 export function makeRead<A>(create: (get: AtomContext) => A): (get: AtomContext, services?: Context.Context<never>) => A;
@@ -434,34 +390,78 @@ export function makeRead<A>(create: (get: AtomContext) => A): (get: AtomContext,
 // @public (undocumented)
 export function makeRead<A>(initialValue: A): Writable<A>;
 
-// @public (undocumented)
-export function makeRead<A, E>(options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
-
-// @public (undocumented)
-export function makeRead<A, E>(options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
-
-// @public (undocumented)
-export function makeRead<A, E>(options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (stream: Stream.Stream<A, E, AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
-
-// @public (undocumented)
-export function makeRead<A, E>(options?: {
-    readonly initialValue?: A;
-    readonly uninterruptible?: boolean | undefined;
-}): (create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
+// @public
+export const makeReadWith: {
+    <A, E>(effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
+    <A, E>(create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
+    <A, E>(stream: Stream.Stream<A, E, AtomRegistry>, options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
+    <A, E>(create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>, options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
+    <A, E>(options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
+    <A, E>(options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E>;
+    <A, E>(options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (stream: Stream.Stream<A, E, AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
+    <A, E>(options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): (create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>) => (get: AtomContext, services?: Context.Context<never>) => Result<A, E | Cause.NoSuchElementError>;
+};
 
 // Warning: (ae-forgotten-export) The symbol "AnyAtom$2" needs to be exported by the entry point Atom.d.ts
 //
 // @public
 export const makeRefreshOnSignal: <S>(signal: Atom<S>) => <A extends AnyAtom$2>(self: A) => WithoutSerializable<A>;
+
+// @public
+export const makeWith: {
+    <A, E>(create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options: {
+        readonly initialValue?: A | undefined;
+        readonly uninterruptible?: boolean | undefined;
+    }): Atom<Result<A, E>>;
+    <A, E>(effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>, options: {
+        readonly initialValue?: A;
+        readonly uninterruptible?: boolean | undefined;
+    }): Atom<Result<A, E>>;
+    <A, E>(create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>, options: {
+        readonly initialValue?: A;
+    }): Atom<Result<A, E | Cause.NoSuchElementError>>;
+    <A, E>(stream: Stream.Stream<A, E, AtomRegistry>, options: {
+        readonly initialValue?: A;
+    }): Atom<Result<A, E | Cause.NoSuchElementError>>;
+    <A, E>(options: {
+        readonly initialValue?: A | undefined;
+        readonly uninterruptible?: boolean | undefined;
+    }): (create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<Result<A, E>>;
+    <A, E>(options: {
+        readonly initialValue?: A | undefined;
+        readonly uninterruptible?: boolean | undefined;
+    }): (effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<Result<A, E>>;
+    <A, E>(options: {
+        readonly initialValue?: A;
+    }): (create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>) => Atom<Result<A, E | Cause.NoSuchElementError>>;
+    <A, E>(options: {
+        readonly initialValue?: A;
+    }): (stream: Stream.Stream<A, E, AtomRegistry>) => Atom<Result<A, E | Cause.NoSuchElementError>>;
+};
 
 // @public
 export const map: {
@@ -769,9 +769,9 @@ export interface WriteContext<A> {
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-DtSj6kpK.d.ts:504:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
-// dist/Atom-DtSj6kpK.d.ts:717:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
-// dist/Atom-DtSj6kpK.d.ts:734:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-DknB4GDT.d.ts:504:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-DknB4GDT.d.ts:745:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-DknB4GDT.d.ts:762:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -16,8 +16,7 @@ import * as Effect from 'effect/Effect'
 import type * as Fiber from 'effect/Fiber'
 import { dual } from 'effect/Function'
 import * as Atom from './Atom.js'
-import { isPlainOptions } from './internal/plain-object.js'
-import type * as AtomRegistry from './Registry.js'
+import * as AtomRegistry from './Registry.js'
 import * as AsyncResult from './Result.js'
 
 type AnyAtom<A = unknown> = Atom.Atom<A>
@@ -57,8 +56,6 @@ export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
 type PendingDeferred<V = unknown> = Deferred.Deferred<V>
 const pendingResults = new WeakMap<DehydratedAtomValue, PendingDeferred>()
 
-const dehydrateOptions = ['encodeInitialAs'] as const
-
 /**
  * Encodes the serializable atoms currently stored in a registry into dehydrated
  * state.
@@ -89,7 +86,7 @@ export const dehydrate: {
     },
   ): DehydratedAtomValue[]
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(dehydrateOptions)(args[0]),
+  (args) => AtomRegistry.isAtomRegistry(args[0]),
   (
     registry: AtomRegistry.Registry,
     options?: {

@@ -260,7 +260,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     onInitial: (t) => Result.initial(t.waiting),
                     onFailure: (t) =>
                       Result.failure(t.cause, { previousSuccess: t.previousSuccess, waiting: t.waiting }),
-                    onSuccess: (t) => Result.success(t.value, { waiting: t.waiting, timestamp: t.timestamp }),
+                    onSuccess: (t) => Result.successWith(t.value, { waiting: t.waiting, timestamp: t.timestamp }),
                   })
                   return !Equal.equals(result, rebuilt) || Hash.hash(result) === Hash.hash(rebuilt)
                 })()
@@ -611,7 +611,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     Equal.equals(mappedd.cause, result.cause) &&
                     Equal.equals(
                       mappedd.previousSuccess,
-                      Option.map(result.previousSuccess, (s) => Result.success(s.value + 1, s)),
+                      Option.map(result.previousSuccess, (s) => Result.successWith(s.value + 1, s)),
                     )
                 })()
               )
@@ -1195,6 +1195,28 @@ Feature('Keeping the last good answer on screen when a retry fails')
       ),
     )
     scenario(
+      'A success built from an empty object keeps the object as its value',
+      Gherkin.Do.pipe(
+        Given('a success whose value is an empty object')('outcome', () => Effect.sync(() => Result.success({}))),
+        When('the outcome is inspected')('reading', (s) => Effect.sync(() => s.outcome)),
+        Then('it is a success carrying exactly that object')((s) => {
+          expect(Result.isSuccess(s.reading)).toBe(true)
+          expect(s.reading.value).toEqual({})
+        }),
+      ),
+    )
+    scenario(
+      'A failure built from an empty object is a failure carrying that error',
+      Gherkin.Do.pipe(
+        Given('a failure whose error is an empty object')('outcome', () => Effect.sync(() => Result.fail({}))),
+        When('the outcome is inspected')('reading', (s) => Effect.sync(() => s.outcome)),
+        Then('it reports a failure whose error is exactly that object')((s) => {
+          expect(Result.isFailure(s.reading)).toBe(true)
+          expect(Equal.equals(Result.error(s.reading), Option.some({}))).toBe(true)
+        }),
+      ),
+    )
+    scenario(
       'Failing with a previous result carries forward its remembered success',
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
@@ -1244,8 +1266,8 @@ const RESULT_SAMPLES: readonly Schema.Schema.Type<typeof resultSchema>[] = [
   Result.initial(false),
   Result.initial(true),
   Result.success(1),
-  Result.success(2, { timestamp: 0 }),
-  Result.success(3, { waiting: true }),
+  Result.successWith(2, { timestamp: 0 }),
+  Result.successWith(3, { waiting: true }),
   Result.failure(Cause.fail('x')),
   Result.failure(Cause.fail('x'), { previousSuccess: Option.some(Result.success(1)), waiting: true }),
   Result.failure(Cause.die('boom')),

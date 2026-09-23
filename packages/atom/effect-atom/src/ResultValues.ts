@@ -22,7 +22,6 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import { type Pipeable, pipeArguments } from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
-import { isPlainOptions } from './internal/plain-object.js'
 
 const now = () => Effect.runSync(Clock.currentTimeMillis)
 
@@ -260,29 +259,28 @@ const previousSuccessOption = <A, E>(
   return previousSuccessFromDefined(options)
 }
 
-const successOptions = ['waiting', 'timestamp'] as const
+type SuccessOptions = WaitingOptions & TimestampOptions
 
 /**
- * Creates a `Success` result with a value and optional `waiting` flag or
- * timestamp override.
- *
  * @since 4.0.0
  */
-export const success: {
-  <A, E = never>(options?: {
+export const success = <A, E = never>(value: A): Success<A, E> => successWith(value, {})
+
+/**
+ * @since 4.0.0
+ */
+export const successWith: {
+  <A, E = never>(options: {
     readonly waiting?: boolean | undefined
     readonly timestamp?: number | undefined
   }): (value: A) => Success<A, E>
-  <A, E = never>(value: A, options?: {
+  <A, E = never>(value: A, options: {
     readonly waiting?: boolean | undefined
     readonly timestamp?: number | undefined
   }): Success<A, E>
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(successOptions)(args[0]),
-  <A, E = never>(value: A, options?: {
-    readonly waiting?: boolean | undefined
-    readonly timestamp?: number | undefined
-  }): Success<A, E> => {
+  2,
+  <A, E = never>(value: A, options: SuccessOptions): Success<A, E> => {
     const result: Success<A, E> = {
       ...ResultProto,
       ...SuccessTag,
@@ -293,8 +291,6 @@ export const success: {
     return result
   },
 )
-
-const failureOptions = ['previousSuccess', 'waiting'] as const
 
 /**
  * Creates a `Failure` result from a `Cause`, optionally preserving a previous
@@ -315,7 +311,7 @@ export const failure: {
     },
   ): Failure<A, E>
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(failureOptions)(args[0]),
+  (args) => Cause.isCause(args[0]),
   <A, E = never>(
     cause: Cause.Cause<E>,
     options?: {

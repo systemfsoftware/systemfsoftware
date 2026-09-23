@@ -8,7 +8,7 @@ import * as SchemaGetter from 'effect/SchemaGetter'
 import * as SchemaIssue from 'effect/SchemaIssue'
 import * as SchemaParser from 'effect/SchemaParser'
 import * as SchemaTransformation from 'effect/SchemaTransformation'
-import { failure, initial, isResult, success } from './ResultValues.js'
+import { failure, initial, isResult, successWith } from './ResultValues.js'
 import type { Failure, Result, Success } from './ResultValues.js'
 
 type AnyFailure<A = unknown, E = unknown> = Failure<A, E>
@@ -75,7 +75,7 @@ export const Schema = <
             Effect.mapBothEager(
               SchemaParser.decodeUnknownEffect(value)(ps.value, options),
               {
-                onSuccess: (value) => Option.some(success(value, ps)),
+                onSuccess: (value) => Option.some(successWith(value, ps)),
                 onFailure: (issue) =>
                   new SchemaIssue.Composite(
                     ast,
@@ -110,7 +110,7 @@ export const Schema = <
           return Effect.mapBothEager(
             SchemaParser.decodeUnknownEffect(value)(known.value, options),
             {
-              onSuccess: (value) => success(value, known),
+              onSuccess: (value) => successWith(value, known),
               onFailure: (issue) =>
                 new SchemaIssue.Composite(ast, [new SchemaIssue.Pointer(['value'], issue)], input, options),
             },
@@ -157,7 +157,7 @@ export const Schema = <
               function decodeRest(rest: typeof encoded) {
                 if (hasProperty(rest, 'cause')) {
                   return failure(rest.cause, {
-                    previousSuccess: Option.map(rest.previousSuccess, (ps) => success(ps.value, ps)),
+                    previousSuccess: Option.map(rest.previousSuccess, (ps) => successWith(ps.value, ps)),
                     waiting: rest.waiting,
                   })
                 }
@@ -166,7 +166,7 @@ export const Schema = <
                 )
               }
               if (hasProperty(encoded, 'value')) {
-                return success(encoded.value, { waiting: encoded.waiting, timestamp: encoded.timestamp })
+                return successWith(encoded.value, { waiting: encoded.waiting, timestamp: encoded.timestamp })
               }
               return decodeRest(encoded)
             },

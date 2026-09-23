@@ -25,6 +25,7 @@ import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import type { Pipeable } from 'effect/Pipeable'
+import * as Predicate from 'effect/Predicate'
 import * as Pull from 'effect/Pull'
 import type { ReadonlyRecord } from 'effect/Record'
 import * as Scheduler from 'effect/Scheduler'
@@ -47,7 +48,6 @@ import {
   writable,
   WritableTypeId,
 } from './AtomCore.js'
-import { isPlainOptions } from './internal/plain-object.js'
 export {
   isAtom,
   isWritable,
@@ -1637,7 +1637,7 @@ function runOptimisticFn<A, W, XA, XE, OW>(
   get: FnContext,
 ): Effect.Effect<XA, XE> {
   const value = optimisticFnValue(options.reducer(get(self), arg))
-  get.set(transition, AsyncResult.success(value, { waiting: true }))
+  get.set(transition, AsyncResult.successWith(value, { waiting: true }))
   get.set(self, transition)
   const fnAtom = optimisticFnAtom(options.fn, transition, get)
   get.set(fnAtom, arg)
@@ -1675,7 +1675,7 @@ function setOptimisticFnTransition<W>(
   transition: Writable<AsyncResult.Result<W, Top>>,
   value: W,
 ): void {
-  get.set(transition, AsyncResult.success(waitingIfResult(value), { waiting: true }))
+  get.set(transition, AsyncResult.successWith(waitingIfResult(value), { waiting: true }))
 }
 
 function waitingIfResult<W>(value: W): W {
@@ -1910,76 +1910,104 @@ function serializableLabel(self: Atom<Top>, key: string): readonly [string, stri
 // constructors
 // -----------------------------------------------------------------------------
 
-const makeOptionsKeys = ['initialValue', 'uninterruptible'] as const
-
-const isCurriedMakeCall = (
-  arg: unknown,
-  argCount: number,
-): arg is {
-  readonly initialValue?: Top
-  readonly uninterruptible?: boolean | undefined
-} => argCount < 2 && isPlainOptions(makeOptionsKeys)(arg)
-
 /**
  * Creates an atom from a synchronous value or read function, or from an `Effect` or `Stream` whose state is exposed as an `AsyncResult`; plain values create writable state atoms.
+ *
+ * To pass `initialValue` or `uninterruptible`, use `makeWith`.
  *
  * @since 4.0.0
  */
 export function make<A, E>(
   create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
-  options?: {
-    readonly initialValue?: A | undefined
-    readonly uninterruptible?: boolean | undefined
-  },
 ): Atom<AsyncResult.Result<A, E>>
 export function make<A, E>(
   effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
 ): Atom<AsyncResult.Result<A, E>>
 export function make<A, E>(
   create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-  },
 ): Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
 export function make<A, E>(
   stream: Stream.Stream<A, E, AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-  },
 ): Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
 export function make<A>(create: (get: AtomContext) => A): Atom<A>
 export function make<A>(initialValue: A): Writable<A>
 export function make<A, E>(
-  options?: {
-    readonly initialValue?: A | undefined
-    readonly uninterruptible?: boolean | undefined
-  },
-): (create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<AsyncResult.Result<A, E>>
-export function make<A, E>(
-  options?: {
-    readonly initialValue?: A | undefined
-    readonly uninterruptible?: boolean | undefined
-  },
-): (effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<AsyncResult.Result<A, E>>
-export function make<A, E>(
-  options?: {
-    readonly initialValue?: A
-  },
-): (
-  create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
-) => Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
-export function make<A, E>(
-  options?: {
-    readonly initialValue?: A
-  },
-): (stream: Stream.Stream<A, E, AtomRegistry>) => Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
-export function make<A, E>(
-  ...args: readonly [
-    arg?: (
+  arg:
+    | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
+    | ((
+      get: AtomContext,
+      services?: Context.Context<never>,
+    ) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>)
+    | Stream.Stream<A, E, AtomRegistry>
+    | ((get: AtomContext, services?: Context.Context<never>) => Stream.Stream<A, E, AtomRegistry>)
+    | ((get: AtomContext, services?: Context.Context<never>) => A)
+    | A,
+): Top {
+  return asReadableAtom(makeReadOrAtom(arg))
+}
+
+/**
+ * `make` for the Effect, Effect-returning function, Stream, and
+ * Stream-returning function forms, with required `initialValue` and
+ * `uninterruptible` options.
+ *
+ * @since 4.0.0
+ */
+export const makeWith: {
+  <A, E>(
+    create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
+    options: {
+      readonly initialValue?: A | undefined
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): Atom<AsyncResult.Result<A, E>>
+  <A, E>(
+    effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): Atom<AsyncResult.Result<A, E>>
+  <A, E>(
+    create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+    },
+  ): Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
+  <A, E>(
+    stream: Stream.Stream<A, E, AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+    },
+  ): Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
+  <A, E>(
+    options: {
+      readonly initialValue?: A | undefined
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<AsyncResult.Result<A, E>>
+  <A, E>(
+    options: {
+      readonly initialValue?: A | undefined
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>) => Atom<AsyncResult.Result<A, E>>
+  <A, E>(
+    options: {
+      readonly initialValue?: A
+    },
+  ): (
+    create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
+  ) => Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
+  <A, E>(
+    options: {
+      readonly initialValue?: A
+    },
+  ): (stream: Stream.Stream<A, E, AtomRegistry>) => Atom<AsyncResult.Result<A, E | Cause.NoSuchElementError>>
+} = dual(
+  2,
+  <A, E>(
+    arg:
       | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
       | ((
         get: AtomContext,
@@ -1988,20 +2016,13 @@ export function make<A, E>(
       | Stream.Stream<A, E, AtomRegistry>
       | ((get: AtomContext, services?: Context.Context<never>) => Stream.Stream<A, E, AtomRegistry>)
       | ((get: AtomContext, services?: Context.Context<never>) => A)
-      | A
-    ),
-    options?: {
+      | A,
+    options: {
       readonly initialValue?: Top
       readonly uninterruptible?: boolean | undefined
     },
-  ]
-): Top {
-  const [arg, options] = args
-  if (isCurriedMakeCall(arg, args.length)) {
-    return (create: (get: AtomContext) => A) => asReadableAtom(makeReadOrAtom(create, arg))
-  }
-  return asReadableAtom(makeReadOrAtom(arg, options))
-}
+  ): Top => asReadableAtom(makeReadOrAtom(arg, options)),
+)
 
 // -----------------------------------------------------------------------------
 // constructors - effect
@@ -2009,71 +2030,107 @@ export function make<A, E>(
 
 export function makeRead<A, E>(
   effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
 ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
 export function makeRead<A, E>(
   create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
 ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
 export function makeRead<A, E>(
   stream: Stream.Stream<A, E, AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
 ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
 export function makeRead<A, E>(
   create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
 ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
 export function makeRead<A>(
   create: (get: AtomContext) => A,
 ): (get: AtomContext, services?: Context.Context<never>) => A
 export function makeRead<A>(initialValue: A): Writable<A>
 export function makeRead<A, E>(
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
-): (
-  effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
-) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
-export function makeRead<A, E>(
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
-): (
-  create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
-) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
-export function makeRead<A, E>(
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
-): (
-  stream: Stream.Stream<A, E, AtomRegistry>,
-) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
-export function makeRead<A, E>(
-  options?: {
-    readonly initialValue?: A
-    readonly uninterruptible?: boolean | undefined
-  },
-): (
-  create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
-) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
-export function makeRead<A, E>(
-  ...args: readonly [
-    arg?: (
+  arg:
+    | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
+    | ((
+      get: AtomContext,
+      services?: Context.Context<never>,
+    ) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>)
+    | Stream.Stream<A, E, AtomRegistry>
+    | ((get: AtomContext, services?: Context.Context<never>) => Stream.Stream<A, E, AtomRegistry>)
+    | ((get: AtomContext, services?: Context.Context<never>) => A)
+    | A,
+): Top {
+  return makeReadOrAtom(arg)
+}
+
+/**
+ * `makeRead` for the Effect, Effect-returning function, Stream, and
+ * Stream-returning function forms, with required `initialValue` and
+ * `uninterruptible` options.
+ *
+ * @since 4.0.0
+ */
+export const makeReadWith: {
+  <A, E>(
+    effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
+  <A, E>(
+    create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
+  <A, E>(
+    stream: Stream.Stream<A, E, AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
+  <A, E>(
+    create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
+  <A, E>(
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (
+    effect: Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
+  ) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
+  <A, E>(
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (
+    create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>,
+  ) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E>
+  <A, E>(
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (
+    stream: Stream.Stream<A, E, AtomRegistry>,
+  ) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
+  <A, E>(
+    options: {
+      readonly initialValue?: A
+      readonly uninterruptible?: boolean | undefined
+    },
+  ): (
+    create: (get: AtomContext) => Stream.Stream<A, E, AtomRegistry>,
+  ) => (get: AtomContext, services?: Context.Context<never>) => AsyncResult.Result<A, E | Cause.NoSuchElementError>
+} = dual(
+  2,
+  <A, E>(
+    arg:
       | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
       | ((
         get: AtomContext,
@@ -2082,25 +2139,13 @@ export function makeRead<A, E>(
       | Stream.Stream<A, E, AtomRegistry>
       | ((get: AtomContext, services?: Context.Context<never>) => Stream.Stream<A, E, AtomRegistry>)
       | ((get: AtomContext, services?: Context.Context<never>) => A)
-      | A
-    ),
-    options?: {
+      | A,
+    options: {
       readonly initialValue?: Top
       readonly uninterruptible?: boolean | undefined
     },
-  ]
-): Top {
-  const [arg, options] = args
-  if (isCurriedMakeCall(arg, args.length)) {
-    return (
-      input:
-        | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
-        | Stream.Stream<A, E, AtomRegistry>
-        | A,
-    ) => makeReadOrAtom(input, arg)
-  }
-  return makeReadOrAtom(arg, options)
-}
+  ): Top => makeReadOrAtom(arg, options),
+)
 
 const state = <A>(
   initialValue: A,
@@ -2564,7 +2609,7 @@ function runMakeStream<A, E, R0>(
         step(arr) {
           const last = Arr.lastNonEmpty(arr)
           latest = Option.some(last)
-          ctx.setSelf(AsyncResult.success(last, {
+          ctx.setSelf(AsyncResult.successWith(last, {
             waiting: true,
           }))
         },
@@ -3066,8 +3111,6 @@ export type PullResult<A, E = never> = AsyncResult.Result<{
   readonly items: Arr.NonEmptyReadonlyArray<A>
 }, E | Cause.NoSuchElementError>
 
-const pullOptions = ['disableAccumulation'] as const
-
 /**
  * Creates a writable atom that pulls an initial chunk from a stream and then pulls the next chunk whenever it is written to, accumulating items unless `disableAccumulation` is enabled.
  *
@@ -3088,7 +3131,7 @@ export const pull: {
     },
   ): Writable<PullResult<A, E>, void>
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(pullOptions)(args[0]),
+  (args) => Stream.isStream(args[0]) || Predicate.isFunction(args[0]),
   <A, E>(
     create: ((get: AtomContext) => Stream.Stream<A, E, AtomRegistry>) | Stream.Stream<A, E, AtomRegistry>,
     options?: {

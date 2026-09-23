@@ -67,16 +67,7 @@ export interface Defect {
 export const error: <A, E>(self: Result<A, E>) => Option_2.Option<E>;
 
 // @public
-export const fail: {
-    <E, A = never>(options?: {
-        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
-        readonly waiting?: boolean | undefined;
-    }): (error: E) => Failure<A, E>;
-    <E, A = never>(error: E, options?: {
-        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
-        readonly waiting?: boolean | undefined;
-    }): Failure<A, E>;
-};
+export const fail: <E, A = never>(error: E) => Failure<A, E>;
 
 // Warning: (ae-forgotten-export) The symbol "FailureTag" needs to be exported by the entry point Result.d.ts
 //
@@ -108,6 +99,18 @@ export const failureWithPrevious: {
     }): (cause: Cause.Cause<E>) => Failure<A, E>;
     <A, E>(cause: Cause.Cause<E>, options: {
         readonly previous: Option_2.Option<Result<A, E>>;
+        readonly waiting?: boolean | undefined;
+    }): Failure<A, E>;
+};
+
+// @public
+export const failWith: {
+    <A, E>(options: {
+        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
+        readonly waiting?: boolean | undefined;
+    }): (error: E) => Failure<A, E>;
+    <A, E>(error: E, options: {
+        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
         readonly waiting?: boolean | undefined;
     }): Failure<A, E>;
 };
@@ -288,12 +291,15 @@ export interface Success<A, E = never> extends Result.Proto<A, E>, SuccessTag {
 }
 
 // @public
-export const success: {
-    <A, E = never>(options?: {
+export const success: <A, E = never>(value: A) => Success<A, E>;
+
+// @public
+export const successWith: {
+    <A, E = never>(options: {
         readonly waiting?: boolean | undefined;
         readonly timestamp?: number | undefined;
     }): (value: A) => Success<A, E>;
-    <A, E = never>(value: A, options?: {
+    <A, E = never>(value: A, options: {
         readonly waiting?: boolean | undefined;
         readonly timestamp?: number | undefined;
     }): Success<A, E>;

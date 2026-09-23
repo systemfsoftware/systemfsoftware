@@ -23,7 +23,6 @@ import type { Predicate, Refinement } from 'effect/Predicate'
 import { isIterable, isTagged } from 'effect/Predicate'
 import * as Either from 'effect/Result'
 import type * as Types from 'effect/Types'
-import { isPlainOptions } from './internal/plain-object.js'
 
 import {
   type Failure,
@@ -34,6 +33,7 @@ import {
   type Result,
   type Success,
   success,
+  successWith,
   TypeId,
 } from './ResultValues.js'
 
@@ -54,6 +54,7 @@ export {
   // alias: upstream names this guard `isAsyncResult`
   isResult as isAsyncResult,
   success,
+  successWith,
   TypeId,
 }
 export type { Failure, Initial, Result, Success } from './ResultValues.js'
@@ -90,9 +91,6 @@ export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A
   }
   return failure(exit.cause)
 }
-
-const failOptions = ['previousSuccess', 'waiting'] as const
-const waitingOptions = ['touch'] as const
 
 /**
  * Converts an `Exit` to a result, preserving the latest previous success when the exit is a failure.
@@ -212,23 +210,39 @@ export const failureWithPrevious: {
 /**
  * Creates a `Failure` result from a typed error, wrapping it in `Cause.fail`.
  *
+ * To carry forward a previous success or mark the result as waiting, use
+ * `failWith`.
+ *
  * @since 4.0.0
  */
-export const fail: {
-  <E, A = never>(options?: {
+export const fail = <E, A = never>(error: E): Failure<A, E> => failWith(error, {})
+
+/**
+ * Can also be called data-last inside `pipe`: `failWith(options)(error)`.
+ *
+ * @since 4.0.0
+ */
+export const failWith: {
+  <A, E>(options: {
     readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
     readonly waiting?: boolean | undefined
   }): (error: E) => Failure<A, E>
-  <E, A = never>(error: E, options?: {
-    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
-    readonly waiting?: boolean | undefined
-  }): Failure<A, E>
+  <A, E>(
+    error: E,
+    options: {
+      readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(failOptions)(args[0]),
-  <E, A = never>(error: E, options?: {
-    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
-    readonly waiting?: boolean | undefined
-  }): Failure<A, E> => failure(Cause.fail(error), options),
+  2,
+  <A, E>(
+    error: E,
+    options: {
+      readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> => failure(Cause.fail(error), options),
 )
 
 /**
@@ -290,7 +304,7 @@ export const waiting: {
     readonly touch?: boolean | undefined
   }): R
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(waitingOptions)(args[0]),
+  (args) => isResult(args[0]),
   <R extends AnyResult>(self: R, options?: {
     readonly touch?: boolean | undefined
   }): R => {
@@ -426,7 +440,7 @@ export const toExit: {
 const mapNonSuccess = <E, A, B>(self: Initial<A, E> | Failure<A, E>, f: (a: A) => B): Result<B, E> => {
   if (isFailure(self)) {
     return failure(self.cause, {
-      previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
+      previousSuccess: Option.map(self.previousSuccess, (s) => successWith(f(s.value), s)),
       waiting: self.waiting,
     })
   }
@@ -443,7 +457,7 @@ export const map: {
   <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E>
 } = dual(2, <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E> => {
   if (isSuccess(self)) {
-    return success(f(self.value), self)
+    return successWith(f(self.value), self)
   }
   return mapNonSuccess(self, f)
 })
@@ -750,7 +764,7 @@ const finishArray = (state: AllArrayState): AnyResult => {
   if (state.early !== undefined) {
     return state.early
   }
-  return success(state.successes, { waiting: state.waiting })
+  return successWith(state.successes, { waiting: state.waiting })
 }
 
 const allIterable = <T = unknown>(results: Iterable<T>): AnyResult => {
@@ -791,7 +805,7 @@ const finishRecord = (state: AllRecordState): AnyResult => {
   if (state.early !== undefined) {
     return state.early
   }
-  return success(state.successes, { waiting: state.waiting })
+  return successWith(state.successes, { waiting: state.waiting })
 }
 
 const allRecord = <T = unknown>(results: Record<string, T>): AnyResult => {

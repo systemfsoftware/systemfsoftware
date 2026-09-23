@@ -509,26 +509,6 @@ function resolveAtomSuspense<A, E>(
  *
  * @since 4.0.0
  */
-const isNonNullObject = (value: unknown): value is object => {
-  if (typeof value !== 'object') {
-    return false
-  }
-  return value !== null
-}
-
-const hasPlainProto = (value: object): boolean =>
-  Reflect.getPrototypeOf(value) === Object.prototype || Reflect.getPrototypeOf(value) === null
-
-const isPlainObject = (value: unknown): value is object => isNonNullObject(value) && hasPlainProto(value)
-
-const hasOnlyKeys = (value: object, keys: readonly string[]): boolean =>
-  Object.keys(value).every((key) => keys.includes(key))
-
-const isPlainOptions = (value: unknown, keys: readonly string[]): value is object =>
-  isPlainObject(value) && hasOnlyKeys(value, keys)
-
-const suspenseOptions = ['suspendOnWaiting', 'includeFailure'] as const
-
 export const useAtomSuspense: {
   <A, E>(
     options?: {
@@ -544,7 +524,7 @@ export const useAtomSuspense: {
     },
   ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>
 } = dual(
-  (args) => args.length > 1 || !isPlainOptions(args[0], suspenseOptions),
+  (args) => Atom.isAtom(args[0]),
   <A, E>(
     atom: Atom.Atom<AsyncResult.Result<A, E>>,
     options?: {
