@@ -6,6 +6,7 @@ declare module 'semver' {
     constructor(range: string)
   }
   export function minVersion(range: string | Range): SemVer | null
+  export function validRange(range: string): string | null
   export function gt(v1: string | SemVer, v2: string | SemVer): boolean
   export function valid(version: string): string | null
   export function major(version: string): number
