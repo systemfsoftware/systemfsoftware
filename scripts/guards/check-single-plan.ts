@@ -74,29 +74,16 @@ export const extractAddedPlans = (diffNameStatusOutput: string): readonly string
 
 export const formatAiDiagnostic = (addedPlans: readonly string[]): string => {
   return [
-    `::error::pre-push: Multiple plan file additions detected (${addedPlans.length} plans added).`,
+    `error[REPO-D2]: multiple plan document additions in pull request (${addedPlans.length} plans added)`,
+    ...addedPlans.map((p) => `  --> added: ${p}`),
     ``,
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-    `AI AGENT DIAGNOSTIC: CONSOLIDATE PLAN DOCUMENTS`,
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-    `Rule: A Pull Request must introduce at most ONE plan document in docs/plans/.`,
+    `help: pull requests represent a single unit of work and must introduce at most one plan file in docs/plans/.`,
+    `      Scattering tasks across multiple plan files fragments review trails and context.`,
     ``,
-    `Detected additions:`,
-    ...addedPlans.map((p) => `  - ${p}`),
-    ``,
-    `Why this rule exists:`,
-    `  Pull Requests represent a single cohesive unit of work and delivery.`,
-    `  Scattering work across multiple plan documents in a single PR degrades`,
-    `  context, bifurcates review trails, and indicates unmerged or uncoordinated`,
-    `  agent task artifacts.`,
-    ``,
-    `Required Remediation for AI Agents:`,
-    `  1. Consolidate: Merge the separate plan documents into ONE unified plan file`,
-    `     under docs/plans/ covering the full scope of this PR.`,
-    `  2. Remove or unstage: Delete or git rm the extra plan files.`,
-    `  3. Squash or amend: Update your commits so only one new plan file is added`,
-    `     relative to origin/main.`,
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `remediation:`,
+    `  1. Consolidate: merge all plan files into a single unified plan under docs/plans/`,
+    `  2. Remove extra plans: git rm ${addedPlans.slice(1).join(' ')}`,
+    `  3. Update git history: git commit -a --amend or squash commits before pushing`,
     ``,
   ].join('\n')
 }
@@ -171,7 +158,7 @@ const selftest = (): number => {
         ].join('\n')
         const result = checkPlanAdditions(diff)
         if (result.ok) throw new Error('Should not be ok with 2 added plans')
-        if (!result.error?.includes('AI AGENT DIAGNOSTIC: CONSOLIDATE PLAN DOCUMENTS')) {
+        if (!result.error?.includes('error[REPO-D2]: multiple plan document additions in pull request')) {
           throw new Error('Diagnostic missing required header')
         }
         if (!result.error?.includes('docs/plans/2026-09-23-plan-a.md')) {
