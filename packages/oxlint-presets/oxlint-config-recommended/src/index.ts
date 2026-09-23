@@ -17,10 +17,11 @@ export const promoteWarnToError = (rules: Record<string, unknown> | undefined): 
   return out
 }
 
+const effectPlatformJsPlugin = import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-platform')
+
 export const jsPlugins: readonly string[] = [
   ...dmmfJsPlugins,
   ...cellJsPlugins,
-  import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-platform'),
   import.meta.resolve('@systemfsoftware/oxlint-plugin-test-discipline'),
 ]
 
@@ -32,7 +33,6 @@ export const plugins: NonNullable<OxlintConfig['plugins']> = [
   'jsdoc',
   'node',
   'oxc',
-  'effecttsgo',
   'promise',
 ]
 
@@ -41,7 +41,6 @@ export const options: NonNullable<OxlintConfig['options']> = {
 }
 
 export const rules: NonNullable<OxlintConfig['rules']> = {
-  ...effectPlatform.configs.recommended.rules,
   ...testDiscipline.configs.recommended.rules,
 }
 
@@ -52,19 +51,32 @@ const testFilePatterns = [
   '**/tests/**',
 ] as const
 
-const sourceAndTestOverrides: NonNullable<OxlintConfig['overrides']> = [
-  {
-    files: ['**/src/**', ...testFilePatterns],
-    rules: {
-      ...rules,
-      ...promoteWarnToError(tsgoCorrectness.rules),
-      ...promoteWarnToError(tsgoRecommended.rules),
-      'effecttsgo/global-date-in-effect': 'error',
-      'effecttsgo/global-timers-in-effect': 'error',
-      'effecttsgo/new-promise': 'error',
-    },
-  },
-]
+const entryFilePatterns = [...testFilePatterns, '**/test-types/**', '**/examples/**'] as const
+
+// Entry set: every Effect rule the entry roles carry. Provision is a composition decision,
+// so strict-effect-provide is absent here rather than set to off.
+const entryRules: NonNullable<OxlintConfig['rules']> = {
+  ...promoteWarnToError(tsgoCorrectness.rules),
+  ...promoteWarnToError(tsgoRecommended.rules),
+  'effecttsgo/global-date-in-effect': 'error',
+  'effecttsgo/global-timers-in-effect': 'error',
+  'effecttsgo/new-promise': 'error',
+  'effecttsgo/strict-boolean-expressions': 'error',
+  'effecttsgo/missing-pipeable-signature': 'error',
+  'effecttsgo/missed-pipeable-opportunity': 'error',
+  'effecttsgo/process-env': 'error',
+  'effecttsgo/node-builtin-import': 'error',
+  'effecttsgo/any-unknown-in-error-context': 'error',
+  'effecttsgo/global-date': 'error',
+  'effecttsgo/global-timers': 'error',
+}
+
+// Library set: the entry set plus strict-effect-provide, because shipped library code
+// never provides a Layer — that is the caller's composition decision.
+const libraryRules: NonNullable<OxlintConfig['rules']> = {
+  ...entryRules,
+  'effecttsgo/strict-effect-provide': 'error',
+}
 
 const observerOverrides: NonNullable<OxlintConfig['overrides']> = [
   {
@@ -87,11 +99,53 @@ const recommendedConfig: OxlintConfig = {
   options: { ...options },
   categories: { correctness: 'error' },
   ignorePatterns: [...ignorePatterns],
+  overrides: [...observerOverrides],
+}
+
+export default recommendedConfig
+
+const effectPlugins: NonNullable<OxlintConfig['plugins']> = ['effecttsgo']
+const effectJsPlugins: NonNullable<OxlintConfig['jsPlugins']> = [effectPlatformJsPlugin]
+const effectRules: NonNullable<OxlintConfig['rules']> = {
+  ...effectPlatform.configs.recommended.rules,
+}
+
+const sourceOverride = (rules: OxlintConfig['rules']): NonNullable<OxlintConfig['overrides']> => [
+  {
+    files: ['**/src/**'],
+    rules: { ...rules },
+  },
+]
+
+const entryOverride = (rules: OxlintConfig['rules']): NonNullable<OxlintConfig['overrides']> => [
+  {
+    files: [...entryFilePatterns],
+    rules: { ...rules },
+  },
+]
+
+// Library role: shipped src/ carries the full library set; entry files carry the entry set.
+export const effect: OxlintConfig = {
+  extends: [recommendedConfig],
+  plugins: effectPlugins,
+  jsPlugins: effectJsPlugins,
+  rules: effectRules,
   overrides: [
-    ...sourceAndTestOverrides,
-    ...observerOverrides,
+    ...sourceOverride(libraryRules),
+    ...entryOverride(entryRules),
     ...effectPlatform.configs.recommended.overrides,
   ],
 }
 
-export default recommendedConfig
+// Composition role: every file is a composition point, so both overrides carry the entry set.
+export const effectComposition: OxlintConfig = {
+  extends: [recommendedConfig],
+  plugins: effectPlugins,
+  jsPlugins: effectJsPlugins,
+  rules: effectRules,
+  overrides: [
+    ...sourceOverride(entryRules),
+    ...entryOverride(entryRules),
+    ...effectPlatform.configs.recommended.overrides,
+  ],
+}
