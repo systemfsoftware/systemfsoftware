@@ -4,4 +4,4 @@
 "@systemfsoftware/effect-daemon-spec": patch
 ---
 
-Built on `@systemfsoftware/effect-cell-types` 10. Public APIs and behavior are unchanged.
+Built on the new `@systemfsoftware/effect-cell-types` cell edges. Public APIs and behavior are unchanged.

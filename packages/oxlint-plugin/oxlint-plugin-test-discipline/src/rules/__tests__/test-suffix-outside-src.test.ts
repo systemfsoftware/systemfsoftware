@@ -21,6 +21,11 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       filename: '/repo/pkg/lib/helper.ts',
     },
     {
+      name: 'Should_Allow_TraceTest_When_TraceSuffixIsSanctioned',
+      code: '',
+      filename: '/repo/pkg/tests/a.trace.test.ts',
+    },
+    {
       name: 'Should_Allow_AnyFileInSrc_When_RuleInactiveUnderSrc',
       code: '',
       filename: '/repo/pkg/src/widget.ts',

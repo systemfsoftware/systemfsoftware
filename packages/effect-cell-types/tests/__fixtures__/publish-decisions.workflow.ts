@@ -11,7 +11,7 @@ import { DecisionEvents, DecisionOne, DecisionTwo } from './Decision.schema.js'
 export class PublishDecisions extends S.TaggedClass<PublishDecisions>()('PublishDecisions', {
   count: S.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['count'] as const
+  static readonly [Workflow.InstrumentationBrand] = { count: 'tests.publishing.count' } as const
 }
 
 export const publishDecisions = Workflow.make({

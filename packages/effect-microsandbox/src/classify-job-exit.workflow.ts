@@ -25,7 +25,7 @@ export class ClassifyJobExit extends Schema.TaggedClass<ClassifyJobExit>()('Clas
   stdout: Schema.Uint8Array,
   stderr: Schema.Uint8Array,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['code'] as const
+  static readonly [Workflow.InstrumentationBrand] = { code: 'microsandbox.job.exit.code' } as const
 }
 
 export const classifyJobExit = Workflow.make({

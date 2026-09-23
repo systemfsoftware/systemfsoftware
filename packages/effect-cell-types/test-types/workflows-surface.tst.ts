@@ -14,6 +14,7 @@ import {
 } from '../tests/__fixtures__/admit-decoded-command.workflow.js'
 import {
   BadKeyCmd,
+  BadValueCmd,
   CommandRefused,
   StructCmd,
   TaggedCmd,
@@ -87,6 +88,7 @@ declare const decideOverTagged: (command: TaggedCmd) => Result.Result<DecisionVa
 declare const decideOverUntagged: (command: UntaggedCmd) => Result.Result<DecisionVariants, CommandRefused>
 declare const decideOverUnstamped: (command: UnstampedCmd) => Result.Result<DecisionVariants, CommandRefused>
 declare const decideOverBadKey: (command: BadKeyCmd) => Result.Result<DecisionVariants, CommandRefused>
+declare const decideOverBadValue: (command: BadValueCmd) => Result.Result<DecisionVariants, CommandRefused>
 declare const decidePromiseOverTagged: (command: TaggedCmd) => Promise<DecisionOne>
 declare const decideNeverOverTagged: (command: TaggedCmd) => Result.Result<DecisionVariants, never>
 declare const decideLoneOverTagged: (command: TaggedCmd) => Result.Result<LoneDecision, never>
@@ -150,7 +152,7 @@ describe('the workflow the constructor publishes', () => {
 })
 
 describe('the commands the constructor refuses', () => {
-  it('Should_RefuseAMissingInstrumentationList_When_TheCommandDeclaresNone', () => {
+  it('Should_RefuseAMissingInstrumentationMap_When_TheCommandDeclaresNone', () => {
     expect<typeof Workflow.make>().type.toBeCallableWith({
       command: UntaggedCmd,
       decision: Decision,
@@ -165,7 +167,26 @@ describe('the commands the constructor refuses', () => {
     })
   })
 
-  it('Should_RefuseAnUnknownInstrumentationKey_When_TheListNamesANonField', () => {
+  it('Should_RefuseAnInstrumentationValue_When_TheKeyIsNotOtel', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith({
+      command: TaggedCmd,
+      decision: Decision,
+      error: CommandRefused,
+      decide: decideOverTagged,
+    })
+    expect<typeof Workflow.make>().type.not.toBeCallableWith({
+      command: BadValueCmd,
+      decision: Decision,
+      error: CommandRefused,
+      decide: decideOverBadValue,
+    })
+  })
+
+  it('Should_DeriveTheSpanAttributes_When_TheMapRemapsTheFields', () => {
+    expect<Workflow.SpanAttributes<typeof TaggedCmd>>().type.toBe<{ readonly 'tests.command.value': number }>()
+  })
+
+  it('Should_RefuseAnUnknownInstrumentationKey_When_TheMapNamesANonField', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith({
       command: BadKeyCmd,
       decision: Decision,

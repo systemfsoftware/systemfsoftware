@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -6,9 +7,16 @@ import { Prototype } from 'effect/Pipeable'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
+import type { AnySpan, Span } from 'effect/Tracer'
 import { type Cell, CellTypeId } from './Cell.js'
 import { CommandRejected } from './CommandRejected.schema.js'
-import type { DecisionSchema, InstrumentedCommandSchema, WorkflowBrand, WorkflowSchemas } from './Workflow.js'
+import type {
+  DecisionSchema,
+  InstrumentationMap,
+  InstrumentedCommandSchema,
+  WorkflowBrand,
+  WorkflowSchemas,
+} from './Workflow.js'
 import { InstrumentationBrand, WorkflowSchemasKey } from './Workflow.js'
 export type { Cell } from './Cell.js'
 export { CommandRejected } from './CommandRejected.schema.js'
@@ -61,30 +69,34 @@ export type Phases = readonly ['read', 'decode', 'decide', 'encode', 'write']
 
 type Settle = (resultClass: ResultClass) => Effect.Effect<void>
 
+/** The class-side declaration the runner reads: the field→attribute-key map a span may carry. */
+type BrandHolder = { readonly [InstrumentationBrand]: InstrumentationMap }
+
+const entriesOf = (map: InstrumentationMap): ReadonlyArray<readonly [string, string]> => Object.entries(map)
+
+const isMapDeclaration = (value: unknown): value is InstrumentationMap => typeof value === 'object' && value !== null
+
 const annotateFields = <C>(schema: InstrumentedCommandSchema, command: C): Effect.Effect<void> =>
   Effect.forEach(
-    schema[InstrumentationBrand],
-    (key) => Effect.annotateCurrentSpan(key, Reflect.get(Object(command), key)),
+    entriesOf(schema[InstrumentationBrand]),
+    ([field, attribute]) => Effect.annotateCurrentSpan(attribute, Reflect.get(Object(command), field)),
     { discard: true },
   )
 
 const tagOf = <T>(value: T): string => String(Reflect.get(Object(value), '_tag'))
 
 const holdsBrand = (holder: unknown): holder is BrandHolder =>
-  Array.isArray(Reflect.get(Object(holder), InstrumentationBrand))
+  isMapDeclaration(Reflect.get(Object(holder), InstrumentationBrand))
 
 const hasHeldBrand = (value: unknown): value is { constructor: BrandHolder } =>
   holdsBrand(Reflect.get(Object(value), 'constructor'))
 
-type BrandHolder = { readonly [InstrumentationBrand]: ReadonlyArray<string> }
-
-const heldKeys = <T>(value: T): ReadonlyArray<string> =>
-  hasHeldBrand(value) ? value.constructor[InstrumentationBrand] : []
+const heldMap = <T>(value: T): InstrumentationMap => hasHeldBrand(value) ? value.constructor[InstrumentationBrand] : {}
 
 const annotateHeld = <T>(value: T): Effect.Effect<void> =>
   Effect.forEach(
-    heldKeys(value).map((key) => [key, Reflect.get(Object(value), key)] as const),
-    ([key, field]) => Effect.annotateCurrentSpan(key, field),
+    entriesOf(heldMap(value)),
+    ([field, attribute]) => Effect.annotateCurrentSpan(attribute, Reflect.get(Object(value), field)),
     { discard: true },
   )
 
@@ -94,10 +106,10 @@ const annotateTagged = <T>(label: string, value: T): Effect.Effect<void> =>
     yield* annotateHeld(value)
   })
 
-const annotateOutcome = <D, E>(outcome: Result.Result<D, E>): Effect.Effect<void> =>
+const annotateOutcome = <D, E>(name: string, outcome: Result.Result<D, E>): Effect.Effect<void> =>
   Result.match(outcome, {
-    onSuccess: (decision) => annotateTagged('decision', decision),
-    onFailure: (refusal) => annotateTagged('failure', refusal),
+    onSuccess: (decision) => annotateTagged(`app.${name}.decision`, decision),
+    onFailure: (refusal) => annotateTagged(`app.${name}.failure`, refusal),
   })
 
 const okOrRefusal = <D, E>(outcome: Result.Result<D, E>): ResultClass =>
@@ -340,7 +352,7 @@ const outcomeRun = <
   Effect.gen(function*() {
     yield* annotateFields(schemas.command, decoded)
     const outcome = workflow(decoded)
-    yield* annotateOutcome(outcome)
+    yield* annotateOutcome(name, outcome)
     yield* settle(okOrRefusal(outcome))
     return yield* Result.match(outcome, {
       onFailure: (refusal) =>
@@ -443,4 +455,110 @@ export const named = <N extends string>(
 
     return { 'sentence: must decide after read': true as const, decide }
   }
+}
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published module graph.
+  const { it } = await import('@effect/vitest')
+  const { Array: Arr, Effect, Match, Option, Predicate, Result, Schema } = await import('effect')
+  const { make } = await import('./Workflow.js')
+
+  const Operation = 'span.command.law'
+  const LawDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/SpanLaw/Decision')
+
+  class LawCommand extends Schema.TaggedClass<LawCommand>()('LawCommand', {
+    length: Schema.Int,
+  }) {
+    static readonly [InstrumentationBrand] = { length: 'tests.span.length' } as const
+  }
+
+  class LawAdmitted extends Schema.TaggedClass<LawAdmitted>()('LawAdmitted', {
+    length: Schema.Int,
+  }) {
+    readonly [LawDecisionTypeId] = LawDecisionTypeId
+    static readonly [InstrumentationBrand] = { length: 'tests.span.admitted.length' } as const
+  }
+
+  class LawRefused extends Schema.TaggedClass<LawRefused>()('LawRefused', {
+    why: Schema.String,
+  }) {
+    readonly [LawDecisionTypeId] = LawDecisionTypeId
+  }
+
+  class LawMalformed extends Schema.TaggedError<LawMalformed>()('LawMalformed', {
+    length: Schema.Int,
+  }) {
+    readonly [LawDecisionTypeId] = LawDecisionTypeId
+  }
+
+  const decideLawCommand = make({
+    command: LawCommand,
+    decision: Schema.Union([LawAdmitted, LawRefused]),
+    error: LawMalformed,
+    decide: (command): Result.Result<LawAdmitted | LawRefused, LawMalformed> =>
+      Match.value(command.length < 0).pipe(
+        Match.when(true, () => Result.fail(new LawMalformed({ length: command.length }))),
+        Match.when(false, () =>
+          Match.value(command.length > 3).pipe(
+            Match.when(true, () => Result.succeed(new LawAdmitted({ length: command.length }))),
+            Match.when(false, () => Result.succeed(new LawRefused({ why: 'too short' }))),
+            Match.exhaustive,
+          )),
+        Match.exhaustive,
+      ),
+  })
+
+  const isLocalSpan = (parent: AnySpan): parent is Span => Predicate.hasProperty(parent, 'attributes')
+
+  /** Every handler answers the encoded outcome's tag and the cell's own span, read from inside the write phase. */
+  const observe = <Outcome>(outcome: Outcome) =>
+    Effect.map(
+      Effect.currentSpan,
+      (span) => Option.some({ tag: tagOf(outcome), operation: Option.filter(span.parent, isLocalSpan) }),
+    )
+
+  const cell = named(Operation)((command: LawCommand) => Effect.succeed(command))
+    .decide(decideLawCommand)
+    .write({ LawAdmitted: observe, LawRefused: observe, LawMalformed: observe, CommandRejected: observe })
+
+  const AdmittedLength = Schema.Int.pipe(Schema.check(Schema.isGreaterThan(3)))
+  const RefusedLength = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: -100, maximum: -1 })))
+  const holds = (verdicts: ReadonlyArray<boolean>): boolean => Arr.every(verdicts, (verdict) => verdict)
+
+  it.effect.prop('∀c_Span_=Named', [AdmittedLength], ([length]) =>
+    Effect.gen(function*() {
+      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
+      return Option.getOrThrow(observed.operation).name === Operation
+    }))
+
+  it.effect.prop('∀c_Span_=Mapped', [Schema.Int], ([length]) =>
+    Effect.gen(function*() {
+      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
+      const attributes = Option.getOrThrow(observed.operation).attributes
+      return holds([
+        attributes.get('tests.span.length') === length,
+        !attributes.has('length'),
+      ])
+    }))
+
+  it.effect.prop('∀c_Span_=Decided', [AdmittedLength], ([length]) =>
+    Effect.gen(function*() {
+      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
+      const attributes = Option.getOrThrow(observed.operation).attributes
+      return holds([
+        attributes.get('app.span.command.law.decision') === observed.tag,
+        attributes.get('tests.span.admitted.length') === length,
+        !attributes.has('decision'),
+      ])
+    }))
+
+  it.effect.prop('∀c_Span_=Refused', [RefusedLength], ([length]) =>
+    Effect.gen(function*() {
+      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
+      const attributes = Option.getOrThrow(observed.operation).attributes
+      return holds([
+        attributes.get('app.span.command.law.failure') === 'LawMalformed',
+        !attributes.has('failure'),
+      ])
+    }))
 }

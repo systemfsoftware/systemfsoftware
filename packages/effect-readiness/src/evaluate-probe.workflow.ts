@@ -29,7 +29,7 @@ export class EvaluateProbe extends Schema.TaggedClass<EvaluateProbe>()('Evaluate
   condition: Condition,
   evidence: ProbeEvidence,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const STATUS_LINE_OK = /^HTTP\/[\d.]+ 2\d\d/

@@ -3,4 +3,4 @@
 ### Patch Changes
 
 - Updated dependencies:
-  - @systemfsoftware/effect-cell-types@9.0.0
+  - @systemfsoftware/effect-cell-types@10.0.0

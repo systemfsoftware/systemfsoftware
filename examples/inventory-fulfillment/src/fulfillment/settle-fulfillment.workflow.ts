@@ -57,7 +57,7 @@ export class SettleFulfillmentCommand extends S.Class<SettleFulfillmentCommand>(
   credit: S.Union([CreditGranted, CreditHold, CreditLimitExceeded]),
   allocation: S.Union([StockAllocated, StockBackordered, InsufficientStock]),
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['orderId'] as const
+  static readonly [Workflow.InstrumentationBrand] = { orderId: 'app.order.id' } as const
 }
 
 const allocatedDecision = (

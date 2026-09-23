@@ -11,7 +11,7 @@ import { DecisionError, WideDecision, WideOne } from './Decision.schema.js'
 export class WideCommand extends S.TaggedClass<WideCommand>()('WideCommand', {
   n: S.Int,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = ['n'] as const
+  static readonly [Workflow.InstrumentationBrand] = { n: 'tests.wide.n' } as const
 }
 
 export const admitWideCommand = Workflow.make({

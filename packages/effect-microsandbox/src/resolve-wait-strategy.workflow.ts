@@ -24,7 +24,7 @@ export type WaitStrategyDecision = typeof WaitStrategyDecision.Type
 export class ResolveWaitStrategy extends Schema.TaggedClass<ResolveWaitStrategy>()('ResolveWaitStrategy', {
   spec: MicroVMSpec,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 export const resolveWaitStrategy = Workflow.make({

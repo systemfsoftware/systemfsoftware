@@ -34,7 +34,7 @@ export class ReadSlice extends Schema.TaggedClass<ReadSlice>()('ReadSlice', {
   bytesRead: Schema.Finite,
   requested: Schema.Finite,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 class ReadExhaustedOutcome extends Schema.TaggedClass<ReadExhaustedOutcome>()('ReadExhaustedOutcome', {}) {}

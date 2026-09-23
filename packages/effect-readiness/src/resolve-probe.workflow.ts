@@ -39,7 +39,7 @@ export class ResolveProbe extends Schema.TaggedClass<ResolveProbe>()('ResolvePro
   target: ProbeTarget,
   condition: Condition,
 }) {
-  static readonly [Workflow.InstrumentationBrand] = [] as const
+  static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
 const bindingOf = (target: ProbeTarget, guestPort: number): Option.Option<PortBinding> =>

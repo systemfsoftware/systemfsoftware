@@ -1,8 +1,10 @@
 /// <reference types="vitest/importMeta" />
+import type { Suite } from '@systemfsoftware/effect-spec-runtime'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
+import * as CaseLayers from './CaseLayers.js'
 import type { GherkinEffect, GivenStage, ScopeIdentifiers, ScopeMap, ScopeServices, ThenStage } from './DoNotation.js'
 import { makeFreshSoftContext, SoftFailuresRef } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
@@ -17,41 +19,11 @@ type Top<T = unknown> = T
 
 export type ScenarioBody<R = never> = Effect.Effect<Top, StepError, R>
 
-export type RegisterMode = 'run' | 'skip' | 'only'
+export type RegisterMode = Suite.RegisterMode
 
-const applyWhenBothPresent = <R, A, E>(
-  effect: Effect.Effect<A, E, R>,
-  scenarioLayer: Layer.Layer<never>,
-  extra: Layer.Layer<never> | undefined,
-): Effect.Effect<A, E, R> => {
-  if (extra === void 0) {
-    return effect.pipe(Effect.provide(Layer.fresh(scenarioLayer)))
-  }
-  return effect.pipe(Effect.provide(Layer.mergeAll(Layer.fresh(scenarioLayer), extra)))
-}
-
-const applyWhenScenarioMissing = <R, A, E>(
-  effect: Effect.Effect<A, E, R>,
-  extra: Layer.Layer<never> | undefined,
-): Effect.Effect<A, E, R> => {
-  if (extra === void 0) return effect
-  return effect.pipe(Effect.provide(extra))
-}
-
-const applyDefinedOpts = <R, A, E>(
-  effect: Effect.Effect<A, E, R>,
-  opts: ScenarioOptions<never, never>,
-): Effect.Effect<A, E, R> => {
-  if (opts.scenarioLayer === void 0) return applyWhenScenarioMissing(effect, opts.layer)
-  return applyWhenBothPresent(effect, opts.scenarioLayer, opts.layer)
-}
-
-const applyScenarioOpts = <R, A, E>(
-  effect: Effect.Effect<A, E, R>,
-  opts: ScenarioOptions<never, never> | null,
-): Effect.Effect<A, E, R> => {
-  if (opts === null) return effect
-  return applyDefinedOpts(effect, opts)
+const caseLayersFrom = (opts: ScenarioOptions<never, never> | null): CaseLayers.Layers => {
+  if (opts === null) return CaseLayers.empty
+  return { scenarioLayer: opts.scenarioLayer, extra: opts.layer }
 }
 
 export const checkSoftFailures = <R>(
@@ -84,42 +56,12 @@ const composeWithBackground = <R>(
   return normalizePipeline(background).pipe(Effect.flatMap(() => normalized))
 }
 
-const buildScenarioNoFresh = <R>(
+const buildScenario = <R>(
   pipeline: Effect.Effect<Top, StepError, R>,
   opts: ScenarioOptions<never, never> | null,
   background: Effect.Effect<Top, StepError, R> | null,
-): Effect.Effect<void, StepError, R> => {
-  const effect = composeWithBackground(pipeline, background)
-  return applyScenarioOpts(effect, opts)
-}
-
-const provideFreshOptional = <R, A, E>(
-  effect: Effect.Effect<A, E, R>,
-  layer: Layer.Layer<never> | undefined,
-): Effect.Effect<A, E, R> => {
-  if (layer === void 0) return effect
-  return effect.pipe(Effect.provide(Layer.fresh(layer)))
-}
-
-const layersFromOpts = (
-  opts: ScenarioOptions<never, never> | null,
-): ScenarioOptions<never, never> => {
-  if (opts === null) return {}
-  return opts
-}
-
-const buildScenarioWithFresh = <RShared, RFresh, RFreshReq>(
-  pipeline: Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq>,
-  opts: ScenarioOptions<never, never> | null,
-  background: Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
-  featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
-): Effect.Effect<void, StepError, RShared | RFreshReq> => {
-  const composed = composeWithBackground(pipeline, background)
-  const layers = layersFromOpts(opts)
-  const withScenario = provideFreshOptional(composed, layers.scenarioLayer)
-  const withExtra = applyWhenScenarioMissing(withScenario, layers.layer)
-  return withExtra.pipe(Effect.provide(Layer.fresh(featureScenarioLayer)))
-}
+): Effect.Effect<void, StepError, R> =>
+  CaseLayers.compose(composeWithBackground(pipeline, background), caseLayersFrom(opts))
 
 /**
  * A scenario title names a concrete situation in natural-language prose. Two
@@ -243,7 +185,7 @@ const makeOutlineCallableNoFresh = <R = never>(
       name,
       expandOutline(name, examples),
       mode,
-      (row) => buildScenarioNoFresh<R>(stepFactory(row), optsOrNull(opts), getBackground()),
+      (row) => buildScenario<R>(stepFactory(row), optsOrNull(opts), getBackground()),
     )
   }
   return outlineFn
@@ -260,9 +202,12 @@ export const createOutlineFnNoFresh = <R = never>(
 }
 
 const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
-  register: (name: string, effect: Effect.Effect<void, StepError, RShared | RFreshReq>, mode: RegisterMode) => void,
+  register: (
+    name: string,
+    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
+    mode: RegisterMode,
+  ) => void,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
-  featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   mode: RegisterMode,
 ): OutlineCallable<RShared, RFresh, RFreshReq> => {
   function outlineFn<
@@ -294,40 +239,22 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
       name,
       expandOutline(name, examples),
       mode,
-      (row) =>
-        buildScenarioWithFresh<RShared, RFresh, RFreshReq>(
-          stepFactory(row),
-          optsOrNull(opts),
-          getBackground(),
-          featureScenarioLayer,
-        ),
+      (row) => buildScenario<RShared | RFresh | RFreshReq>(stepFactory(row), optsOrNull(opts), getBackground()),
     )
   }
   return outlineFn
 }
 export const createOutlineFnWithFresh = <RShared, RFresh, RFreshReq>(
-  register: (name: string, effect: Effect.Effect<void, StepError, RShared | RFreshReq>, mode: RegisterMode) => void,
+  register: (
+    name: string,
+    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
+    mode: RegisterMode,
+  ) => void,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
-  featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
 ): OutlineFn<RShared, RFresh, RFreshReq> => {
-  const base = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(
-    register,
-    getBackground,
-    featureScenarioLayer,
-    'run',
-  )
-  const skip = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(
-    register,
-    getBackground,
-    featureScenarioLayer,
-    'skip',
-  )
-  const only = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(
-    register,
-    getBackground,
-    featureScenarioLayer,
-    'only',
-  )
+  const base = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'run')
+  const skip = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'skip')
+  const only = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'only')
   return Object.assign(base, { skip, only })
 }
 
@@ -461,15 +388,18 @@ const makeScenarioCallableNoFresh = <R>(
   ): void {
     const { pipeline, opts } = resolveScenarioArgs(second, third)
     const background = getBackground()
-    register(name, buildScenarioNoFresh<R>(pipeline, opts, background), mode)
+    register(name, buildScenario<R>(pipeline, opts, background), mode)
   }
   return scenarioFn
 }
 
 const makeScenarioCallableWithFresh = <RShared, RFresh, RFreshReq>(
-  register: (name: string, effect: Effect.Effect<void, StepError, RShared | RFreshReq>, mode: RegisterMode) => void,
+  register: (
+    name: string,
+    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
+    mode: RegisterMode,
+  ) => void,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
-  featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   mode: RegisterMode,
 ): ScenarioCallable<RShared, RFresh, RFreshReq> => {
   function scenarioFn<RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
@@ -490,11 +420,7 @@ const makeScenarioCallableWithFresh = <RShared, RFresh, RFreshReq>(
   ): void {
     const { pipeline, opts } = resolveScenarioArgs(second, third)
     const background = getBackground()
-    register(
-      name,
-      buildScenarioWithFresh<RShared, RFresh, RFreshReq>(pipeline, opts, background, featureScenarioLayer),
-      mode,
-    )
+    register(name, buildScenario<RShared | RFresh | RFreshReq>(pipeline, opts, background), mode)
   }
   return scenarioFn
 }
@@ -510,27 +436,15 @@ export const createScenarioNoFresh = <R = never>(
 }
 
 export const createScenarioWithFresh = <RShared = never, RFresh = never, RFreshReq = never>(
-  register: (name: string, effect: Effect.Effect<void, StepError, RShared | RFreshReq>, mode: RegisterMode) => void,
+  register: (
+    name: string,
+    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
+    mode: RegisterMode,
+  ) => void,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
-  featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
 ): ScenarioFn<RShared, RFresh, RFreshReq> => {
-  const base = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(
-    register,
-    getBackground,
-    featureScenarioLayer,
-    'run',
-  )
-  const skip = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(
-    register,
-    getBackground,
-    featureScenarioLayer,
-    'skip',
-  )
-  const only = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(
-    register,
-    getBackground,
-    featureScenarioLayer,
-    'only',
-  )
+  const base = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'run')
+  const skip = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'skip')
+  const only = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'only')
   return Object.assign(base, { skip, only })
 }

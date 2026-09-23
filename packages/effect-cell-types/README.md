@@ -26,8 +26,8 @@ class ReserveStock extends Schema.TaggedClass<ReserveStock>()('ReserveStock', {
   requested: Schema.Int,
   onHand: Schema.Int,
 }) {
-  // Fields copied onto the cell's trace span.
-  static readonly [Workflow.InstrumentationBrand] = ['sku', 'requested'] as const
+  // Each field copied onto the cell's span, and the OpenTelemetry attribute key it is copied as.
+  static readonly [Workflow.InstrumentationBrand] = { sku: 'app.stock.sku', requested: 'app.stock.requested' } as const
 }
 
 // Every outcome of one decision carries the same family brand.
@@ -175,6 +175,7 @@ The compiler refuses a decision that breaks these rules. Each refusal names the 
 | a `decision` of `Schema.Never`                                   | `UninhabitedDecision`                         |
 | a command class without `[Workflow.InstrumentationBrand]`        | the missing `[InstrumentationBrand]` property |
 | a brand key that is not a field of the command                   | `InvalidInstrumentationKey`                   |
+| a brand value that is not a lowercase, dotted OpenTelemetry key  | `InvalidInstrumentationValue`                 |
 | a `read` whose result cannot be the command's `Encoded` form     | `ReadNotEncoded` or a type mismatch           |
 | a `write` missing a handler, or a handler typed on the class     | a missing property or parameter mismatch      |
 
@@ -242,11 +243,14 @@ Only failures of `read` and of handlers reach `mapError`, `orElse`, and the fail
 
 The name given to `Sandwich.named` must be a string literal without a unit suffix; the compiler rejects `'order_ms'` or a variable of type `string`. Each run then records:
 
-- a span with that name, with child spans `<name>.read` and `<name>.write`, and the command fields listed in `[Workflow.InstrumentationBrand]` as attributes;
-- the span attribute `decision` or `failure` with the outcome's tag;
+- a span with that name, with child spans `<name>.read` and `<name>.write`;
+- on that span, each command field in the `[Workflow.InstrumentationBrand]` map under its mapped key. Map only fields holding a string, number, or boolean: an object is copied as a raw object, which OTLP backends reject;
+- the span attribute `app.<name>.decision` or `app.<name>.failure`, holding the outcome's tag, plus the fields an outcome class maps with its own `[Workflow.InstrumentationBrand]`;
 - a duration histogram `app.<name>.duration` in seconds, labelled `result_class`: `success` when a decision was written, `failure` for a domain error or `CommandRejected`, `infrastructure` when `read` or a handler failed.
 
-The histogram uses `Sandwich.DEFAULT_DURATION_BOUNDARIES` unless you pass `{ boundaries }` as the second argument to `Sandwich.named`.
+`Workflow.SpanAttributes<typeof Command>` is the attribute record a command's map declares, so a span declaration elsewhere can be typed against it.
+
+The histogram uses `Sandwich.DEFAULT_DURATION_BOUNDARIES` unless you pass `{ boundaries }` as the second argument to `Sandwich.named`. The buckets belong to the name: two cells sharing a name share one histogram, and the boundaries declared first win.
 
 ## Contributing
 

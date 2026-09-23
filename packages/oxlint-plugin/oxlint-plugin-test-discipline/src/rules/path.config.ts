@@ -14,6 +14,8 @@ export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
 export const DIFFERENTIAL_SUFFIX = '.differential.test.ts' as const
 
+export const TRACE_SUFFIX = '.trace.test.ts' as const
+
 /**
  * The one test file the taxonomy sanctions by name rather than by suffix: the
  * entry point the schema-laws Vite plugin rewrites, whose generated
@@ -41,6 +43,8 @@ export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|no
 export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const
 
 export const DIFFERENTIAL_PACKAGE = '@systemfsoftware/differential-spec' as const
+
+export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 
 export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
 

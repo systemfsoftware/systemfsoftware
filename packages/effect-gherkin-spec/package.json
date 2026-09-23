@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-gherkin-spec",
   "license": "Apache-2.0",
-  "version": "4.2.2",
+  "version": "4.2.3",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -44,6 +44,9 @@
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-spec-runtime": "workspace:^"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
