@@ -19,26 +19,25 @@ tags:
 
 # A Generic Default in Parameter Position Still Enforces
 
-The sandwich authoring surface brands its pure filling slots with `PurePhase` (`PurePhase<In, Out, E = never>`) and the `DecodedDecidedChain` encode slot takes `PurePhase<Result<Dec, DE>, Out>` with the third argument unwritten. During review, a P1 finding claimed that unwritten position left the refusal channel open, so a `Result.fail` inside the encode body would slip through into the writer. A direct compile probe refuted it: the call fails with `TS2345`, and writing the third argument explicitly would change only the printed declaration, not acceptance.
+A slot taking a generic type with a default (`GenericSlot<In, Out, E = never>`) can leave the third argument unwritten at the parameter. During review, a finding claimed that unwritten position left the refusal channel open, so an error inside the argument would slip through. A direct compile probe refuted it: the call fails with `TS2345`, and writing the third argument explicitly would change only the printed declaration, not acceptance.
 
 ## Guidance
 
-Read an omitted generic argument at a parameter as fully applied, not as left open. When the parameter type is `PurePhase<A, B>` against a declaration `PurePhase<In, Out, E = never>`, the compiler binds `E` to `never` and checks the argument against it. A filling function that can fail does not fit, with or without the explicit third argument.
+Read an omitted generic argument at a parameter as fully applied, not as left open. When the parameter type is `GenericSlot<A, B>` against a declaration `GenericSlot<In, Out, E = never>`, the compiler binds `E` to `never` and checks the argument against it. An argument that can fail does not fit, with or without the explicit third argument.
 
-The probe, against the shipped chain:
+The probe:
 
 ```ts
-const badEncode = (outcome: Result.Result<Dec, Refusal>): Result.Result<string, Refusal> =>
-  Result.succeed('unreachable')
+type SafeSlot<In, Out, E = never> = (input: In) => Result.Result<Out, E>
 
-Sandwich.read(read)
-  .decode(Sandwich.pure(decode))
-  .decide(decide)
-  .encode(Sandwich.pure(badEncode)) // TS2345: not assignable to 'PurePhase<Result<Dec, Refusal>, string, never>'
-  .write(write)
+declare const acceptSlot: <In, Out>(slot: SafeSlot<In, Out>) => void
+
+const badHandler = (input: string): Result.Result<number, Error> => Result.succeed(1)
+
+acceptSlot(badHandler) // TS2345: not assignable to parameter of type 'SafeSlot<string, number, never>'
 ```
 
-Do not "fix" the slot by spelling the `never` explicitly in order to close a channel the parameter already closes. Prefer the two-argument form the chain ships; the explicit form is documentation, not enforcement.
+Do not "fix" the slot by spelling the `never` explicitly in order to close a channel the parameter already closes. Prefer the terse form; the explicit form is documentation, not enforcement.
 
 ## Why This Matters
 
@@ -51,11 +50,9 @@ The mistake is easy because the sibling trap runs the other way: a conditional t
 
 ## Examples
 
-Before (the alleged hole): `encode<Out>(phase: PurePhase<Result.Result<Dec, DE>, Out>)` — `E` unwritten, claimed open.
+Before (the alleged hole): `slot<Out>(phase: SafeSlot<In, Out>)` — `E` unwritten, claimed open.
 
-After the probe: the same signature rejects `PurePhase<Result<Dec, Refusal>, string, Refusal>` with `TS2345 ... not assignable to parameter of type 'PurePhase<Result<Dec, Refusal>, string, never>'`. The spelling `PurePhase<Result.Result<Dec, DE>, Out, never>` accepts exactly the same set. No edit shipped; the finding was withdrawn.
-
-The runtime side matches: the composer unwraps the encode result with a `Result.match` whose failure arm takes `(error: never)`, so a refusal is unrepresentable at both layers — rejected at the parameter by the type, uninhabitable in the body by the `never` arm.
+After the probe: the same signature rejects `SafeSlot<In, Out, Error>` with `TS2345 ... not assignable to parameter of type 'SafeSlot<In, Out, never>'`. The spelling `SafeSlot<In, Out, never>` accepts exactly the same set. No edit shipped; the finding was withdrawn.
 
 ## Related
 

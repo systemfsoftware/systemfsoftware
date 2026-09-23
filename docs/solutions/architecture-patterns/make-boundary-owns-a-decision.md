@@ -6,8 +6,7 @@ topic: architecture-patterns
 
 # The workflow constructor boundary, not a filename, owns a decision
 
-The organizing unit is the workflow constructor boundary: the brand (`WorkflowTypeId`, applied by
-the body-bearing constructors `make` and `total`) forces every running decision through a
+The organizing unit is the workflow constructor boundary: the brand (`WorkflowTypeId`, applied by the constructor `make`) forces every running decision through a
 constructor, `Cell.decide` demands the brand, and the `workflow-make-boundary` Stryker ignorer
 selects the mutation population from it.
 
@@ -53,7 +52,4 @@ shrinks accordingly — the re-export prohibition is a convention this records r
 adversaries — any legitimately branded value can donate the phantom by intersection, which is the
 documented strength of every phantom mark (`phantom-marks-are-donatable.md`).
 
-Since the 2026-09-12 widening, the ignorer recognizes `Workflow.total` as a second body-bearing
-constructor and treats `Workflow.andThen` as a composing member: the member set names it a
-constructor, but it opens no mutation population, because its operands are already-branded
-workflow values, not decider bodies.
+The ignorer keys on the `Workflow.make` boundary: `make` is the sole workflow constructor, declaring its schemas and decider options, and opening the mutation population for the decider body.

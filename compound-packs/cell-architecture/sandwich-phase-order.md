@@ -12,13 +12,13 @@ Every outside interaction is an **I/O Sandwich**: five sequential phases execute
 
 The interaction is authored using `Sandwich.named(name)`:
 
-1. `Sandwich.named(name)(readFn)`: The `name` is a static literal operation string used for telemetry spans and duration metrics. The `read` phase pulls raw data from stores, queues, sockets, or clock environments.
-2. `.decode(Sandwich.pure(decodeFn))`: Pure validation of raw inputs into typed domain commands. Decode failure is an `Effect` failure that short-circuits the pipeline straight to the cell's `E` channel.
-3. `.decide(workflow)`: A pure decision `Workflow` created with `Workflow.make`. Decision refusals (`Result.fail(DomainError)`) are domain _outcomes_ that pass to `encode` and `write`; channel assignment is prescribed by `four-channel-contracts.md`.
-4. `.encode(Sandwich.pure(encodeFn))`: Pure transformation of the decision outcome into persistence payloads, response DTOs, or notification events.
-5. `.write(writeFn)`: Terminal impure phase persisting mutations, emitting events, or returning responses.
+1. `Sandwich.named(name)(readFn)`: The `name` is a static literal operation string used for telemetry spans and duration metrics. The `read` phase pulls raw data from stores, queues, sockets, or clock environments, returning the command schema's `Encoded` type.
+2. `decode`: Derived automatically by the library using the workflow's `command` schema via `Schema.decodeUnknownResult`. Malformed input produces a `CommandRejected` error dispatched to the write handlers.
+3. `.decide(workflow)`: A pure decision `Workflow` created with `Workflow.make({ command, decision, error, decide })`. Decision outcomes and domain refusals pass to encoding; channel assignment is prescribed by `four-channel-contracts.md`.
+4. `encode`: Derived automatically by the library using the workflow's `decision` and `error` schemas via `Schema.encodeResult`.
+5. `.write(handlers)`: Terminal impure phase dispatching to an exhaustive handler record keyed by encoded decision tags, error tags, and `CommandRejected`. Handlers receive the encoded value and the original encoded command.
 
-When input decoding or output encoding is identity, use the raw three-phase sandwich chain: `read` → `decide` → `write`.
+Every sandwich chain is five phases: `read` → `decide` → `write` where decode and encode are derived from schemas.
 
 ```ts
 // WRONG: hand-sequenced imperative steps with no phase order guarantees
@@ -31,10 +31,12 @@ export const processOrder = async (req: Request) => {
 
 // RIGHT: typed Sandwich chain; out-of-order phase composition fails compilation
 export const processOrderCell = Sandwich.named('order.submit')((req: Request) => fetchOrderEffect(req.id))
-  .decode(Sandwich.pure(decodeOrder))
   .decide(decideOrderWorkflow)
-  .encode(Sandwich.pure((outcome) => Result.succeed(formatOutcome(outcome))))
-  .write((encoded, raw) => persistOrderEffect(encoded, raw))
+  .write({
+    OrderAccepted: (accepted, raw) => persistOrderEffect(accepted, raw),
+    OrderRejected: (rejected, raw) => logRefusalEffect(rejected, raw),
+    CommandRejected: (rejected, raw) => Effect.fail(new InvalidOrderInput({ issue: rejected.issue })),
+  })
 ```
 
-Gate: `type-checker` — `Sandwich` continuation interfaces carry sentence types (`sentence: must decide after decode`, `sentence: must write after encode`) that restrict the lawful next step.
+Gate: `type-checker` — `Sandwich` continuation interfaces enforce the lawful chain `named -> decide -> write` and hold write handler keys exhaustive over decision tags, error tags, and `CommandRejected`.

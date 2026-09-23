@@ -54,7 +54,7 @@ dispatch is unfalsifiable — `Match.orElse` on a primitive swallows any new exi
 
 ## Why This Matters
 
-Constitution `CONST-P1` (Purity) and `CONST-D2` (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating `CONST-D2`). The mistake reproduces because nothing in the build chain catches it.
+Constitution `CONST-P1` (Purity) and `CONST-D2` (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` checks the error schema at construction time (`UntaggedError` refuses an untagged error; decisions that cannot fail declare `error: Schema.Never`), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating `CONST-D2`). The mistake reproduces because nothing in the build chain catches it.
 
 The 100% mutation gate is the other failure mode this prevents: a workflow that swallows `Either.left` to `null` is unfalsifiable. The mutator changes the parse path to always succeed and the test still passes because the workflow never branched on the failure in the first place.
 
@@ -142,7 +142,7 @@ const decision = Either.match(verdict, {
 
 ## See Also
 
-- The `Workflow` constructor's `Inhabited` / `UninhabitedError` / `UntaggedError` refusals — the enforcement that gives this document its gates
+- The `Workflow` constructor's `UntaggedError` and `SingleVariantDecision` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
 - `CONSTITUTION.md` `CONST-D2` (Each Error Its Own Variant) and `CONST-T3` (Mutation Is the Measure)
 - `packages/effect-daemon-spec/src/LeaderLock.schema.ts` — reference usage of `S.TaggedError` in the monorepo
