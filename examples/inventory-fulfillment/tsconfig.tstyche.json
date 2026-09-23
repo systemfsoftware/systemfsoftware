@@ -5,6 +5,9 @@
     "@systemfsoftware/tsconfig/effect/entrypoint"
   ],
   "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.tstyche.tsbuildinfo",
     "types": [
       "node"
     ],
@@ -14,5 +17,10 @@
   },
   "include": [
     "test-types"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    }
   ]
 }
