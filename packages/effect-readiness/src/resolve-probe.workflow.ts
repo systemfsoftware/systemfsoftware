@@ -8,14 +8,17 @@ import { ProbeTarget } from './ProbeTarget.schema.js'
 const ProbePlanTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-readiness/ProbePlan')
 type ProbePlanTypeId = typeof ProbePlanTypeId
 
+/** The condition names a port with no binding behind it; no host probe runs. */
 export class ProbeAbsent extends Schema.TaggedClass<ProbeAbsent>()('ProbeAbsent', { guestPort: Schema.Int }) {
   readonly [ProbePlanTypeId] = ProbePlanTypeId
 }
 
+/** The condition dials the bound host socket. */
 export class ProbeTcp extends Schema.TaggedClass<ProbeTcp>()('ProbeTcp', { binding: PortBinding }) {
   readonly [ProbePlanTypeId] = ProbePlanTypeId
 }
 
+/** The condition exchanges an HTTP request over the bound host socket. */
 export class ProbeHttp extends Schema.TaggedClass<ProbeHttp>()('ProbeHttp', {
   binding: PortBinding,
   path: Schema.String,
@@ -23,11 +26,14 @@ export class ProbeHttp extends Schema.TaggedClass<ProbeHttp>()('ProbeHttp', {
   readonly [ProbePlanTypeId] = ProbePlanTypeId
 }
 
+/** The condition reads the guest log stream for a pattern. */
 export class ProbeLog extends Schema.TaggedClass<ProbeLog>()('ProbeLog', { pattern: Schema.String }) {
   readonly [ProbePlanTypeId] = ProbePlanTypeId
 }
 
-export type ProbePlan = ProbeAbsent | ProbeTcp | ProbeHttp | ProbeLog
+/** The probe one condition resolves to. */
+export const ProbePlan = Schema.Union([ProbeAbsent, ProbeTcp, ProbeHttp, ProbeLog])
+export type ProbePlan = typeof ProbePlan.Type
 
 export class ResolveProbe extends Schema.TaggedClass<ResolveProbe>()('ResolveProbe', {
   target: ProbeTarget,
@@ -49,9 +55,11 @@ const mappedPlan = (
     onSome: onBound,
   })
 
-export const resolveProbe = Workflow.total(
-  ResolveProbe,
-  (command): Result.Result<ProbePlan, never> =>
+export const resolveProbe = Workflow.make({
+  command: ResolveProbe,
+  decision: ProbePlan,
+  error: Schema.Never,
+  decide: (command): Result.Result<ProbePlan, never> =>
     Result.succeed(
       Match.value(command.condition).pipe(
         Match.tag('Log', (log): ProbePlan => new ProbeLog({ pattern: log.pattern })),
@@ -76,4 +84,4 @@ export const resolveProbe = Workflow.total(
         Match.exhaustive,
       ),
     ),
-)
+})
