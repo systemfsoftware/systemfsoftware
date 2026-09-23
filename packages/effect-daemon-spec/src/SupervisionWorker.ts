@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Schedule } from 'effect'
+import { Context, Duration, Effect, Function, Schedule } from 'effect'
 import { cappedBackoff } from './Backoff.js'
 import { BoundedIntensity } from './DaemonPolicy.schema.js'
 import type { SupervisionConfig } from './DaemonSpec.schema.js'
@@ -14,18 +14,47 @@ export const WorkerConfig = Context.Reference<SupervisionConfig>(
   },
 )
 
-export const worker = <
-  INTENSITY,
-  COOLDOWN extends Duration.Input,
-  BACKOFFBASE extends Duration.Input,
->(
-  config: { readonly intensity: INTENSITY; readonly backoffBase: BACKOFFBASE; readonly cooldown: COOLDOWN },
-  cap: Duration.Input,
-): Effect.Effect<
-  { readonly intensity: INTENSITY; readonly backoff: Schedule.Schedule<Duration.Duration>; readonly cooldown: COOLDOWN }
-> =>
-  Effect.succeed({
-    intensity: config.intensity,
-    backoff: cappedBackoff(config.backoffBase, cap),
-    cooldown: config.cooldown,
-  })
+export const worker: {
+  (
+    cap: Duration.Input,
+  ): <INTENSITY, COOLDOWN extends Duration.Input, BACKOFFBASE extends Duration.Input>(
+    config: { readonly intensity: INTENSITY; readonly backoffBase: BACKOFFBASE; readonly cooldown: COOLDOWN },
+  ) => Effect.Effect<
+    {
+      readonly intensity: INTENSITY
+      readonly backoff: Schedule.Schedule<Duration.Duration>
+      readonly cooldown: COOLDOWN
+    }
+  >
+  <INTENSITY, COOLDOWN extends Duration.Input, BACKOFFBASE extends Duration.Input>(
+    config: { readonly intensity: INTENSITY; readonly backoffBase: BACKOFFBASE; readonly cooldown: COOLDOWN },
+    cap: Duration.Input,
+  ): Effect.Effect<
+    {
+      readonly intensity: INTENSITY
+      readonly backoff: Schedule.Schedule<Duration.Duration>
+      readonly cooldown: COOLDOWN
+    }
+  >
+} = Function.dual(
+  2,
+  <
+    INTENSITY,
+    COOLDOWN extends Duration.Input,
+    BACKOFFBASE extends Duration.Input,
+  >(
+    config: { readonly intensity: INTENSITY; readonly backoffBase: BACKOFFBASE; readonly cooldown: COOLDOWN },
+    cap: Duration.Input,
+  ): Effect.Effect<
+    {
+      readonly intensity: INTENSITY
+      readonly backoff: Schedule.Schedule<Duration.Duration>
+      readonly cooldown: COOLDOWN
+    }
+  > =>
+    Effect.succeed({
+      intensity: config.intensity,
+      backoff: cappedBackoff(config.backoffBase, cap),
+      cooldown: config.cooldown,
+    }),
+)

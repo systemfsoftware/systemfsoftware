@@ -114,6 +114,9 @@ export const andThen: {
     that: Cell<A, B, E2, R2>,
   ): Cell<I, B, E | E2, R | R2>
   <A, B, E2, R2>(
+    that: Cell<A, B, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <A, B, E2, R2>(
     f: (response: A) => Cell<A, B, E2, R2>,
   ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
   <I, A, E, R, B, E2, R2>(

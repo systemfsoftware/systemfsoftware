@@ -17,6 +17,7 @@ import { readable, transform, writable } from './AtomCore.js'
 
 type AnyAtom<A = unknown> = Atom<A>
 type StringCodec<Type = unknown, Encoded extends string = string> = Schema.ConstraintCodec<Type, Encoded>
+type Top<A = unknown> = A
 
 // -----------------------------------------------------------------------------
 // Focus
@@ -99,13 +100,33 @@ export const refreshOnWindowFocus: <A extends AnyAtom>(self: A) => WithoutSerial
  *
  * @since 4.0.0
  */
+export function searchParam<S extends StringCodec = never>(options?: {
+  readonly schema?: S | undefined
+}): (name: string) => Writable<[S] extends [never] ? string : Option.Option<S['Type']>>
 export function searchParam<S extends StringCodec = never>(
   name: string,
   options?: {
     readonly schema?: S | undefined
   },
 ): Writable<[S] extends [never] ? string : Option.Option<S['Type']>>
-export function searchParam<S extends StringCodec = never>(
+export function searchParam(
+  ...args: readonly [
+    nameOrOptions?: string | {
+      readonly schema?: StringCodec | undefined
+    },
+    options?: {
+      readonly schema?: StringCodec | undefined
+    },
+  ]
+): Top {
+  const [nameOrOptions, options] = args
+  if (typeof nameOrOptions === 'string') {
+    return makeSearchParam(nameOrOptions, options)
+  }
+  return (name: string) => makeSearchParam(name, nameOrOptions)
+}
+
+function makeSearchParam<S extends StringCodec = never>(
   name: string,
   options?: {
     readonly schema?: S | undefined

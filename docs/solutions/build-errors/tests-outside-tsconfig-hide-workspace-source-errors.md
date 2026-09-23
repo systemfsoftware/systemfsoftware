@@ -49,15 +49,15 @@ That same resolution makes the consumer compile the provider's source. Any ambie
 
 ### Architectural Invariants
 
-1. **Every importer is checked.** For each file $f$ that imports a workspace package by its published name: $f \in \text{include}(\texttt{tsconfig.json})$. Otherwise no program type-checks it, and the only signal is the lint's error-type findings.
+1. **Every file is checked.** Each tracked TypeScript file $f$ belongs to exactly one project $p$ referenced from the package's `tsconfig.json`: $|\{p : f \in \text{files}(p)\}| = 1$. A file in none is checked by no program, and the only signal is the lint's error-type findings.
 2. **The provider's ambient types fit every consumer.** $\text{ambient}(\text{provider/src}) \subseteq \bigcap_{c} \text{types}(c)$. A source condition makes each consumer compile the provider's source, so the provider may lean only on globals that all consumers declare. With a `types: []` consumer, that intersection is empty.
 
-Code smell to grep for: `"include": ["src"]` in a package that has a `tests/` directory, and bare `Buffer` (no import) in a package that exports a source condition.
+Code smell to grep for: a package directory whose files `tsc --showConfig` lists in no referenced project, and bare `Buffer` (no import) in a package that exports a source condition.
 
 ## Prevention
 
-- The standing check is the `dev-conditions` test lane in `pnpm test:scripts` (inside `gate:tasks`): it enumerates every workspace member and fails when a first-party file imports a workspace package by its published name while no tsconfig covering that file resolves `@systemfsoftware/source`. Runtime-loaded config and setup files are exempt — Node loads them without a condition, so they resolve `dist/` by design and the `^build` edge supplies it.
-- Any package whose `tests/` (or `test-types/`) import a workspace package by its published name keeps that directory in `tsconfig.json#include`. Delete the dependency's `dist/` and run the consumer's `typecheck` and `lint`. Both must pass.
+- The project-membership guard (`check-project-membership`, part of `gate:tasks`) fails when a tracked TypeScript file belongs to no project or to two; tests live in the test project, which references the app project. Delete the dependency's `dist/` and run the consumer's `typecheck` and `lint`. Both must pass.
+- The `dev-conditions` test lane in `pnpm test:scripts` (inside `gate:tasks`) enumerates every workspace member and fails when a first-party file imports a workspace package by its published name while no tsconfig covering that file resolves `@systemfsoftware/source`. Runtime-loaded config and setup files are exempt — Node loads them without a condition, so they resolve `dist/` by design and the `^build` edge supplies it.
 - Provider source used through the source condition refers to no ambient global that a consumer with `types: []` lacks. Prefer `Uint8Array` and web-standard APIs over Node globals.
 
 ## Related Issues

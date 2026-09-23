@@ -1,5 +1,6 @@
 import type { Context } from 'effect'
 import { Effect, Layer } from 'effect'
+import { dual } from 'effect/Function'
 
 import type { GherkinEffect, GivenStage, InitialStage, StepText, WhenStage } from '../DoNotation.js'
 import { resolveText, StageTypeId, stageWhen, stepWrap } from '../DoNotation.js'
@@ -19,10 +20,21 @@ export interface PairwiseMatrix<Identifier = unknown, RA = never, RB = never> {
   readonly b: { readonly name: string; readonly layer: Layer.Layer<Identifier, never, RB> }
 }
 
-export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
+const pairwiseForImpl = <Identifier, Service, RA = never, RB = never>(
   matrix: PairwiseMatrix<Identifier, RA, RB>,
   service: Context.Service<Identifier, Service>,
-) => {
+): (
+  text: StepText,
+) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(
+  name: N,
+  f: (scope: NoInfer<A>) => (svc: Service) => Effect.Effect<Out, E, never>,
+) => <E1, R1>(
+  self: GherkinEffect<A, E1, R1>,
+) => GherkinEffect<
+  Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage,
+  E1 | StepError,
+  R1 | RA | RB
+> => {
   type DualReq = RA | RB
   const bindPairwise = (text: StepText) => {
     function step<N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(
@@ -76,3 +88,37 @@ export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
   }
   return bindPairwise
 }
+
+export const pairwiseFor: {
+  <Identifier, Service, RA = never, RB = never>(
+    service: Context.Service<Identifier, Service>,
+  ): (
+    matrix: PairwiseMatrix<Identifier, RA, RB>,
+  ) => (
+    text: StepText,
+  ) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(
+    name: N,
+    f: (scope: NoInfer<A>) => (svc: Service) => Effect.Effect<Out, E, never>,
+  ) => <E1, R1>(
+    self: GherkinEffect<A, E1, R1>,
+  ) => GherkinEffect<
+    Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage,
+    E1 | StepError,
+    R1 | RA | RB
+  >
+  <Identifier, Service, RA = never, RB = never>(
+    matrix: PairwiseMatrix<Identifier, RA, RB>,
+    service: Context.Service<Identifier, Service>,
+  ): (
+    text: StepText,
+  ) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(
+    name: N,
+    f: (scope: NoInfer<A>) => (svc: Service) => Effect.Effect<Out, E, never>,
+  ) => <E1, R1>(
+    self: GherkinEffect<A, E1, R1>,
+  ) => GherkinEffect<
+    Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage,
+    E1 | StepError,
+    R1 | RA | RB
+  >
+} = dual(2, pairwiseForImpl)

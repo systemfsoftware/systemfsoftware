@@ -8,13 +8,29 @@ export interface DualExecutionSupervisorOptions {
   readonly interruptAfterTimeLimit?: number
 }
 
-export const runDual = <InputA, InputB, OutputA, OutputB, E>(
+const runDualImpl = <InputA, InputB, OutputA, OutputB, E>(
   targetA: (input: InputA) => Effect.Effect<OutputA, E>,
   targetB: (input: InputB) => Effect.Effect<OutputB, E>,
   inputA: InputA,
   inputB: InputB,
 ): Effect.Effect<[Exit.Exit<OutputA, E>, Exit.Exit<OutputB, E>], never> =>
   Effect.all([Effect.exit(targetA(inputA)), Effect.exit(targetB(inputB))])
+
+export const runDual: {
+  <InputA, InputB, OutputA, OutputB, E>(
+    targetB: (input: InputB) => Effect.Effect<OutputB, E>,
+    inputA: InputA,
+    inputB: InputB,
+  ): (
+    targetA: (input: InputA) => Effect.Effect<OutputA, E>,
+  ) => Effect.Effect<[Exit.Exit<OutputA, E>, Exit.Exit<OutputB, E>], never>
+  <InputA, InputB, OutputA, OutputB, E>(
+    targetA: (input: InputA) => Effect.Effect<OutputA, E>,
+    targetB: (input: InputB) => Effect.Effect<OutputB, E>,
+    inputA: InputA,
+    inputB: InputB,
+  ): Effect.Effect<[Exit.Exit<OutputA, E>, Exit.Exit<OutputB, E>], never>
+} = Function.dual(4, runDualImpl)
 
 const DEFAULT_OPTIONS = {
   runBudget: 100,
@@ -178,7 +194,7 @@ const checkWithShrink = <Input>(
   options?: DualExecutionSupervisorOptions,
 ): fc.RunDetails<[Input]> => fc.check(fc.property(arb, predicate), toFcParameters<Input>(options))
 
-export const runDifferentialWithShrink = <Input, OutputA, OutputB, E>(
+const runDifferentialWithShrinkImpl = <Input, OutputA, OutputB, E>(
   targetA: (input: Input) => Effect.Effect<OutputA, E>,
   targetB: (input: Input) => Effect.Effect<OutputB, E>,
   arb: fc.Arbitrary<Input>,
@@ -194,7 +210,23 @@ export const runDifferentialWithShrink = <Input, OutputA, OutputB, E>(
     return failWithDisparity(targetA, targetB, Function.identity, Function.identity, details)
   })
 
-export const runMetamorphicWithShrink = <Input, Output, E>(
+export const runDifferentialWithShrink: {
+  <Input, OutputA, OutputB, E>(
+    targetB: (input: Input) => Effect.Effect<OutputB, E>,
+    arb: fc.Arbitrary<Input>,
+    oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+    options?: DualExecutionSupervisorOptions,
+  ): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<void, DisparityError>
+  <Input, OutputA, OutputB, E>(
+    targetA: (input: Input) => Effect.Effect<OutputA, E>,
+    targetB: (input: Input) => Effect.Effect<OutputB, E>,
+    arb: fc.Arbitrary<Input>,
+    oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+    options?: DualExecutionSupervisorOptions,
+  ): Effect.Effect<void, DisparityError>
+} = Function.dual((args: IArguments) => typeof args[3] === 'function', runDifferentialWithShrinkImpl)
+
+const runMetamorphicWithShrinkImpl = <Input, Output, E>(
   system: (input: Input) => Effect.Effect<Output, E>,
   arb: fc.Arbitrary<Input>,
   transformInput: (input: Input) => Input,
@@ -215,3 +247,19 @@ export const runMetamorphicWithShrink = <Input, Output, E>(
       details,
     )
   })
+
+export const runMetamorphicWithShrink: {
+  <Input, Output, E>(
+    arb: fc.Arbitrary<Input>,
+    transformInput: (input: Input) => Input,
+    relation: (outputA: Output, outputB: Output) => boolean,
+    options?: DualExecutionSupervisorOptions,
+  ): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<void, DisparityError>
+  <Input, Output, E>(
+    system: (input: Input) => Effect.Effect<Output, E>,
+    arb: fc.Arbitrary<Input>,
+    transformInput: (input: Input) => Input,
+    relation: (outputA: Output, outputB: Output) => boolean,
+    options?: DualExecutionSupervisorOptions,
+  ): Effect.Effect<void, DisparityError>
+} = Function.dual((args: IArguments) => typeof args[3] === 'function', runMetamorphicWithShrinkImpl)

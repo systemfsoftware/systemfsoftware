@@ -1,5 +1,6 @@
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
+import { dual } from 'effect/Function'
 import { StepError } from './StepError.schema.js'
 import * as SuiteScope from './SuiteScope.js'
 
@@ -150,12 +151,17 @@ export type GherkinScope<A extends object> = A & {
 
 export type StepText<A extends object = object> = string | ((scope: A) => string)
 
-export const resolveText = (text: StepText, scope: object): string => {
+const resolveTextImpl = (text: StepText, scope: object): string => {
   if (typeof text === 'function') return text(scope)
   return text
 }
 
-export const stepWrap = <A, E, R>(
+export const resolveText: {
+  (scope: object): (text: StepText) => string
+  (text: StepText, scope: object): string
+} = dual(2, resolveTextImpl)
+
+const stepWrapImpl = <A, E, R>(
   keyword: string,
   text: string,
   body: Effect.Effect<A, E, R>,
@@ -165,6 +171,11 @@ export const stepWrap = <A, E, R>(
     Effect.catchCause((cause) => Effect.fail(StepError.make({ keyword, text, cause: Cause.squash(cause) }))),
   )
 }
+
+export const stepWrap: {
+  <A, E, R>(text: string, body: Effect.Effect<A, E, R>): (keyword: string) => Effect.Effect<A, StepError, R>
+  <A, E, R>(keyword: string, text: string, body: Effect.Effect<A, E, R>): Effect.Effect<A, StepError, R>
+} = dual(3, stepWrapImpl)
 
 export type GherkinEffect<A extends object, E, R> = Effect.Effect<GherkinScope<A>, E, R>
 

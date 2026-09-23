@@ -13,12 +13,15 @@ import { Pipeable } from 'effect/Pipeable';
 import { Scheduler } from 'effect/Scheduler';
 import * as Stream from 'effect/Stream';
 
-// Warning: (ae-forgotten-export) The symbol "Registry" needs to be exported by the entry point Hydration.d.ts
-//
 // @public
-export const dehydrate: (registry: Registry, options?: {
-    readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined;
-}) => DehydratedAtomValue[];
+export const dehydrate: {
+    (options?: {
+        readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined;
+    }): (registry: Registry) => DehydratedAtomValue[];
+    (registry: Registry, options?: {
+        readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined;
+    }): DehydratedAtomValue[];
+};
 
 // @public
 export interface DehydratedAtom {
@@ -37,12 +40,19 @@ export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
 }
 
 // @public
-export const hydrate: (registry: Registry, dehydratedState: Iterable<DehydratedAtomValue>) => Fiber.Fiber<void, never>;
+export const hydrate: {
+    (dehydratedState: Iterable<DehydratedAtomValue>): (registry: Registry) => Fiber.Fiber<void, never>;
+    (registry: Registry, dehydratedState: Iterable<DehydratedAtomValue>): Fiber.Fiber<void, never>;
+};
 
 // @public (undocumented)
 export namespace t {
     export { DehydratedAtom, DehydratedAtomValue, dehydrate, hydrate };
 }
+
+// Warnings were encountered during analysis:
+//
+// dist/Hydration.d.ts:43:3 - (ae-forgotten-export) The symbol "Registry" needs to be exported by the entry point Hydration.d.ts
 
 // (No @packageDocumentation comment for this package)
 

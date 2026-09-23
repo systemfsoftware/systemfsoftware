@@ -2,6 +2,7 @@
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import { dual } from 'effect/Function'
 import * as Metric from 'effect/Metric'
 import { Prototype } from 'effect/Pipeable'
 import * as Ref from 'effect/Ref'
@@ -412,7 +413,7 @@ const runOnce = <
  * `decide` rules, the library encodes the decision or error with its schema, and `write`
  * answers through a handler record the compiler holds exhaustive.
  */
-export const named = <N extends string>(
+const namedImpl = <N extends string>(
   name: ValidOperationName<N>,
   options?: NamedCellOptions,
 ): <I, Raw, RE, RR>(read: (command: I) => Effect.Effect<Raw, RE, RR>) => ReadChain<I, Raw, RE, RR> => {
@@ -469,6 +470,23 @@ export const named = <N extends string>(
     return { 'sentence: must decide after read': true as const, decide }
   }
 }
+
+/**
+ * Starts a sandwich at a static operation name. The name is the parent span's name and the
+ * stem of the duration metric's name; the shell boundaries it opens are the only places a
+ * span is created, so an operational cell emits its trace because it was constructed.
+ */
+export const named: {
+  <N extends string>(
+    options?: NamedCellOptions,
+  ): (
+    name: ValidOperationName<N>,
+  ) => <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE, RR>) => ReadChain<I, Raw, RE, RR>
+  <N extends string>(
+    name: ValidOperationName<N>,
+    options?: NamedCellOptions,
+  ): <I, Raw, RE, RR>(run: (command: I) => Effect.Effect<Raw, RE, RR>) => ReadChain<I, Raw, RE, RR>
+} = dual((args: IArguments) => typeof args[0] === 'string', namedImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published module graph.

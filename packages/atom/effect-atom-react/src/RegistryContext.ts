@@ -57,7 +57,7 @@ type RegistryProviderOptions = {
 
 type RegistryRef = {
   readonly registry: AtomRegistry.Registry
-  timeout?: ReturnType<typeof setTimeout> | undefined
+  cancelDispose?: (() => void) | undefined
 }
 
 function scheduleTaskFrom(options: RegistryProviderOptions): (f: () => void) => () => void {
@@ -78,18 +78,19 @@ function createRegistryState(options: RegistryProviderOptions): RegistryRef {
   }
 }
 
-function clearTimeoutIfSet(current: RegistryRef): void {
-  if (current.timeout === undefined) {
+function cancelDisposeTimerIfSet(current: RegistryRef): void {
+  if (current.cancelDispose === undefined) {
     return
   }
-  clearTimeout(current.timeout)
+  current.cancelDispose()
+  current.cancelDispose = undefined
 }
 
 function cancelPendingDispose(current: RegistryRef | null): void {
   if (current === null) {
     return
   }
-  clearTimeoutIfSet(current)
+  cancelDisposeTimerIfSet(current)
 }
 
 function disposeRegistryRef(ref: React.RefObject<RegistryRef | null>): void {
@@ -101,17 +102,16 @@ function disposeRegistryRef(ref: React.RefObject<RegistryRef | null>): void {
   ref.current = null
 }
 
-function assignDisposeTimeout(ref: React.RefObject<RegistryRef | null>): void {
+function assignDisposeTimer(ref: React.RefObject<RegistryRef | null>): void {
   const current = ref.current
   if (current === null) {
     return
   }
-  // React lifecycle timing, not Effect timing: the dispose is deferred so a
-  // remount - StrictMode's double invoke, or fast refresh - reclaims the same
-  // registry instead of losing it. There is no fiber here to carry an
-  // `Effect.sleep` and none to interrupt it on the remount that cancels this.
-  // @effect-diagnostics-next-line globalTimers:off
-  current.timeout = setTimeout(() => {
+  // The dispose is deferred so a remount - StrictMode's double invoke, or fast
+  // refresh - reclaims the same registry instead of losing it. The delay runs
+  // on the registry's configured `scheduleTimer`, so the remount cancels the
+  // scheduled dispose instead of reaching for the platform timer globals.
+  current.cancelDispose = current.registry.scheduleTimer(() => {
     disposeRegistryRef(ref)
   }, 500)
 }
@@ -120,7 +120,7 @@ function scheduleDelayedDispose(ref: React.RefObject<RegistryRef | null>): void 
   if (ref.current === null) {
     return
   }
-  assignDisposeTimeout(ref)
+  assignDisposeTimer(ref)
 }
 
 /**

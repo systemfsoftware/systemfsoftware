@@ -1,6 +1,6 @@
 import type { StorybookConfig } from '@storybook/react-vite'
 
-const config = {
+const config: StorybookConfig = {
   stories: ['../test/browser/**/*.stories.ts'],
   addons: [],
   framework: {
@@ -14,6 +14,6 @@ const config = {
       conditions: [...(viteConfig.resolve?.conditions ?? []), '@systemfsoftware/source'],
     },
   }),
-} satisfies StorybookConfig
+}
 
 export default config

@@ -225,8 +225,8 @@ export const TypeId: TypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-CNcOgrn0.d.ts:338:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
-// dist/Atom-CNcOgrn0.d.ts:338:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-DknB4GDT.d.ts:349:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-DknB4GDT.d.ts:349:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
 
 // (No @packageDocumentation comment for this package)
 

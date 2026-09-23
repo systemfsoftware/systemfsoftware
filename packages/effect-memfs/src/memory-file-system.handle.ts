@@ -439,17 +439,15 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
     )
 
   const decidedFrom = (entry: string, exists: boolean): FileSystem.WatchEvent =>
-    eventOf(
-      Result.getOrThrow(
-        decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })),
-      ),
+    decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })).pipe(
+      Result.getOrThrow,
+      eventOf,
     )
 
   const changedFrom = (entry: string): FileSystem.WatchEvent =>
-    eventOf(
-      Result.getOrThrow(
-        decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })),
-      ),
+    decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })).pipe(
+      Result.getOrThrow,
+      eventOf,
     )
 
   type DriverEvent = { readonly eventType: string; readonly entry: string }

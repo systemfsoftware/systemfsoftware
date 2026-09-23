@@ -2,28 +2,41 @@
  * Host clock and timer primitives for the atom registry.
  *
  * This module is the named host boundary for wall-clock reads and delayed
- * scheduling. It deliberately imports nothing from `effect`: the registry
- * itself is a fiber-free store, and consumers who need deterministic idle
- * eviction pass their own `now` / `scheduleTimer` to `Registry.make` /
- * `Registry.layerOptions`. The defaults here are the plain platform
- * implementations.
+ * scheduling. The registry itself is a fiber-free store, and consumers who
+ * need deterministic idle eviction pass their own `now` / `scheduleTimer` to
+ * `Registry.make` / `Registry.layerOptions`. The defaults here route through
+ * the Effect-native primitives — the default `Clock` reference's wall clock,
+ * and `Effect.sleep` forked on the default runtime — so a caller who does not
+ * configure scheduling still lands on the platform's clock without this
+ * boundary reaching for the `Date` or timer globals directly.
  *
  * @since 4.0.0
  */
-// The two diagnostics below are disabled for this module and nowhere else. The
-// Effect answers - `Clock` and `Effect.sleep`/`Schedule` - both require a fiber,
-// and this module exists precisely because the registry has none: it is a
-// fiber-free store, and a consumer who needs deterministic time passes its own
-// `now` / `scheduleTimer` to `Registry.make`. These are the platform defaults for
-// a caller who does not. Moving them into Effect would put a runtime under every
-// registry read, which is the design this file is the boundary of.
-/** @internal */
-// @effect-diagnostics-next-line globalDate:off
-export const hostNow = (): number => Date.now()
+import * as Clock from 'effect/Clock'
+import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
+import { dual } from 'effect/Function'
+
+let hostClock: Clock.Clock | undefined
 
 /** @internal */
-export const hostScheduleTimer = (f: () => void, delayMillis: number): () => void => {
-  // @effect-diagnostics-next-line globalTimers:off
-  const id = setTimeout(f, delayMillis)
-  return () => clearTimeout(id)
+export const hostNow = (): number => {
+  if (hostClock === undefined) {
+    hostClock = Clock.Clock.defaultValue()
+  }
+  return hostClock.currentTimeMillisUnsafe()
 }
+
+/** @internal */
+export const hostScheduleTimer: {
+  (delayMillis: number): (f: () => void) => () => void
+  (f: () => void, delayMillis: number): () => void
+} = dual(
+  2,
+  (f: () => void, delayMillis: number): () => void => {
+    const fiber = Effect.runFork(Effect.andThen(Effect.sleep(delayMillis), Effect.sync(f)))
+    return () => {
+      Effect.runFork(fiber.pipe(Fiber.interrupt))
+    }
+  },
+)

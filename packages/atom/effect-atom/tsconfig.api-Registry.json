@@ -1,5 +1,5 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
   "include": [
     "dist/Registry.d.ts"
   ],

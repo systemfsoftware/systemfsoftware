@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Atom {
-    export { Atom, AtomContext, AtomResultFn, AtomRuntime, Failure, FnContext, Interrupt, PullResult, PullSuccess, RegistryRuntimeFactory, Reset, RuntimeFactory, Serializable, SerializableJson, SerializableTypeId, ServerValue, ServerValueTypeId, SharedRuntimeFactory, Success, Type, TypeId$1 as TypeId, WithoutSerializable, Writable, WritableTypeId, WriteContext, autoDispose, batch, context, debounce, family, fn, fnSync, get, getResult, getServerValue, initialValue, isAtom, isSerializable, isWritable, keepAlive, kvs, make, makeRead, makeRefreshOnSignal, map, mapResult, modify, mount, optimistic, optimisticFn, pull, readable, refresh, refreshOnWindowFocus, runtime, searchParam, serializable, set, setIdleTTL, setLazy, subscriptionRef, swr, toStream, toStreamResult, transform, update, windowFocusSignal, withEquality, withFallback, withLabel, withReactivity, withRefresh, withServerValue, withServerValueInitial, writable };
+    export { Atom, AtomContext, AtomResultFn, AtomRuntime, Failure, FnContext, Interrupt, PullResult, PullSuccess, RegistryRuntimeFactory, Reset, RuntimeFactory, Serializable, SerializableJson, SerializableTypeId, ServerValue, ServerValueTypeId, SharedRuntimeFactory, Success, Type, TypeId$1 as TypeId, With, WithoutSerializable, Writable, WritableTypeId, WriteContext, autoDispose, batch, context, debounce, family, fn, fnSync, get, getResult, getServerValue, initialValue, isAtom, isSerializable, isWritable, keepAlive, kvs, make, makeRead, makeReadWith, makeRefreshOnSignal, makeWith, map, mapResult, modify, mount, optimistic, optimisticFn, pull, readable, refresh, refreshOnWindowFocus, runtime, searchParam, serializable, set, setIdleTTL, setLazy, subscriptionRef, swr, toStream, toStreamResult, transform, update, windowFocusSignal, withEquality, withFallback, withLabel, withReactivity, withRefresh, withServerValue, withServerValueInitial, writable };
 }
 
 // @public (undocumented)
@@ -36,7 +36,7 @@ export namespace Registry {
 
 // @public (undocumented)
 export namespace Result {
-    export { Builder, Defect, Failure, Initial, Interrupt, Result, Schema, Success, TypeId, With, all, builder, cause, error, fail, failWithPrevious, failure, failureWithPrevious, flatMap, fromExit, fromExitWithPrevious, getOrElse, getOrThrow, initial, isResult as isAsyncResult, isFailure, isInitial, isInterrupted, isNotInitial, isResult, isSuccess, isWaiting, map, match, matchWithError, matchWithWaiting, replacePrevious, success, toExit, touch, value, waiting, waitingFrom };
+    export { Builder, Defect, Failure, Initial, Interrupt, Result, Schema, Success, TypeId, With, all, builder, cause, error, fail, failWith, failWithPrevious, failure, failureWithPrevious, flatMap, fromExit, fromExitWithPrevious, getOrElse, getOrThrow, initial, isResult as isAsyncResult, isFailure, isInitial, isInterrupted, isNotInitial, isResult, isSuccess, isWaiting, map, match, matchWithError, matchWithWaiting, replacePrevious, success, successWith, toExit, touch, value, waiting, waitingFrom };
 }
 
 // (No @packageDocumentation comment for this package)

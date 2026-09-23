@@ -27,6 +27,27 @@ Feature('Deriving values from other values on a page')
       ),
     )
     scenario(
+      'A page value built from an empty object holds that object and can be replaced',
+      Gherkin.Do.pipe(
+        Given('a page whose value starts as an empty object')('ctx', () =>
+          Effect.sync(() => {
+            const value = Atom.make({})
+            const page = Registry.make()
+            return { page, value }
+          })),
+        When('the value is read, replaced, and read again')('readings', (s) =>
+          Effect.sync(() => {
+            const before = s.ctx.page.get(s.ctx.value)
+            s.ctx.page.set(s.ctx.value, { filled: true })
+            return { before, after: s.ctx.page.get(s.ctx.value) }
+          })),
+        Then('the page first held the empty object and then the replacement')((s) => {
+          expect(s.readings.before).toEqual({})
+          expect(s.readings.after).toEqual({ filled: true })
+        }),
+      ),
+    )
+    scenario(
       'A value computed from another value stays in sync with it',
       Gherkin.Do.pipe(
         Given('a page with a value doubled from another value')('ctx', () =>
@@ -500,7 +521,7 @@ Feature('Deriving values from other values on a page')
             const optimisticValue = source.pipe(Atom.optimistic)
             const save = optimisticValue.pipe(
               Atom.optimisticFn({
-                reducer: (_current, update: number) => Result.success(update, { waiting: true }),
+                reducer: (_current, update: number) => Result.successWith(update, { waiting: true }),
                 fn: Atom.fn(Effect.fnUntraced(function*() {
                   yield* latch.await
                 })),
@@ -749,7 +770,7 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value that fetches from a signal it cannot control yet')('ctx', () =>
           Effect.sync(() => {
             const gate = Deferred.makeUnsafe<number>()
-            const value = Atom.make(Deferred.await(gate), { initialValue: 0 })
+            const value = Atom.makeWith(Deferred.await(gate), { initialValue: 0 })
             const page = Registry.make()
             page.mount(value)
             return { gate, page, value }
@@ -814,7 +835,7 @@ Feature('Deriving values from other values on a page')
         Given('a page with a streamed value that waits for a signal before emitting')('ctx', () =>
           Effect.sync(() => {
             const gate = Deferred.makeUnsafe<number>()
-            const value = Atom.make(Stream.fromEffect(Deferred.await(gate)), { initialValue: 0 })
+            const value = Atom.makeWith(Stream.fromEffect(Deferred.await(gate)), { initialValue: 0 })
             const page = Registry.make()
             page.mount(value)
             return { gate, page, value }
@@ -1488,7 +1509,7 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value that failed and one that is still waiting')('ctx', () =>
           Effect.sync(() => {
             const failing = Atom.make(Effect.fail('down' as const)).pipe(Atom.swr({ staleTime: 100 }))
-            const waiting = Atom.make(() => Result.success(1, { waiting: true })).pipe(Atom.swr({ staleTime: 100 }))
+            const waiting = Atom.make(() => Result.successWith(1, { waiting: true })).pipe(Atom.swr({ staleTime: 100 }))
             const page = Registry.make()
             return { page, failing, waiting }
           })),
@@ -1531,10 +1552,10 @@ Feature('Deriving values from other values on a page')
             const optimistic2 = source2.pipe(Atom.optimistic)
             const save2 = optimistic2.pipe(
               Atom.optimisticFn({
-                reducer: (_current, update: number) => Result.success(update, { waiting: true }),
+                reducer: (_current, update: number) => Result.successWith(update, { waiting: true }),
                 fn: (set) =>
                   Atom.fn(Effect.fnUntraced(function*(n: number) {
-                    set(Result.success(n * 10, { waiting: true }))
+                    set(Result.successWith(n * 10, { waiting: true }))
                     yield* latch2.await
                     return n
                   })),
@@ -1812,8 +1833,8 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a page with a running value and one that must not be interrupted')('ctx', () =>
           Effect.sync(() => {
-            const running = Atom.make(Effect.never, { initialValue: 1 })
-            const guarded = Atom.make(Effect.never, { initialValue: 1, uninterruptible: true })
+            const running = Atom.makeWith(Effect.never, { initialValue: 1 })
+            const guarded = Atom.makeWith(Effect.never, { initialValue: 1, uninterruptible: true })
             const page = Registry.make()
             const stopRunning = page.mount(running)
             const stopGuarded = page.mount(guarded)
@@ -1859,15 +1880,15 @@ Feature('Deriving values from other values on a page')
           Effect.gen(function*() {
             const withPage = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
               Effect.provideService(Registry.AtomRegistry, s.ctx.page)(effect)
-            yield* withPage(Atom.mount(s.ctx.value))
-            const initial = yield* withPage(Atom.get(s.ctx.value))
+            yield* withPage(s.ctx.value.pipe(Atom.mount))
+            const initial = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.set(s.ctx.value, 5))
-            const afterSet = yield* withPage(Atom.get(s.ctx.value))
+            const afterSet = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.update(s.ctx.value, (n) => n + 1))
-            const afterUpdate = yield* withPage(Atom.get(s.ctx.value))
+            const afterUpdate = yield* withPage(s.ctx.value.pipe(Atom.get))
             const doubled = yield* withPage(Atom.modify(s.ctx.value, (n) => [n * 2, n * 2]))
-            yield* withPage(Atom.refresh(s.ctx.value))
-            const finalValue = yield* withPage(Atom.get(s.ctx.value))
+            yield* withPage(s.ctx.value.pipe(Atom.refresh))
+            const finalValue = yield* withPage(s.ctx.value.pipe(Atom.get))
             return { initial, afterSet, afterUpdate, doubled, finalValue }
           })),
         Then('each step saw the value the previous step left behind, and the refresh returned it to its start')((s) => {

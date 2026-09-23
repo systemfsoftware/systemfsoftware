@@ -14,7 +14,8 @@ pnpm add @systemfsoftware/effect-microsandbox
 import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Effect, HashMap } from 'effect'
+import { Readiness } from '@systemfsoftware/effect-readiness'
+import { Effect, HashMap, Layer } from 'effect'
 
 const alpine = MicroVM.spec('alpine:3.20')
   .withExposedPorts([6379])
@@ -29,7 +30,7 @@ const program = Effect.scoped(
   }),
 )
 
-NodeRuntime.runMain(Effect.provide(program, nodeServicesLayer))
+NodeRuntime.runMain(Effect.provide(program, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber.layer)))
 ```
 
 When the scope closes — normally or through interruption — the sandbox is stopped, destroyed, and its record removed. There is nothing to clean up by hand.
@@ -42,7 +43,7 @@ Shared-kernel containers leak state between tests and require a local Docker soc
 
 ### Layer & Scoped Execution
 
-A configured container specification (`MicroVM.spec(...)`) directly exposes `.scoped` (to acquire inside an `Effect.scoped` block) and `.layer` (to provide as a testcontainer `Layer`). In accordance with `compound-packs/cell-architecture`, platform dependencies (`Crypto` and `FileSystem`) cleanly propagate to `R` and are satisfied once at your application or test composition root (such as `@effect/platform-node/NodeServices`).
+A configured container specification (`MicroVM.spec(...)`) directly exposes `.scoped` (to acquire inside an `Effect.scoped` block) and `.layer` (to provide as a testcontainer `Layer`). In accordance with `compound-packs/cell-architecture`, platform dependencies (`Crypto`, `FileSystem`, and the readiness `HostProber`) propagate to `R` — `.scoped` and `.run` carry them in the effect's requirements, and `.layer` carries them in the layer's input requirements — and are satisfied once at your application or test composition root (such as `@effect/platform-node/NodeServices` plus `Readiness.NodeHostProber.layer`).
 
 ## Specifying Containers
 
@@ -59,8 +60,8 @@ const redis = MicroVM.spec('redis:7-alpine')
 // Acquire dynamically in a test scope:
 const vm = yield* redis.scoped
 
-// Or provide as a Layer:
-const RedisLive = redis.layer
+// Or provide as a Layer (its input asks for the readiness prober):
+const RedisLive = Layer.provide(redis.layer, Readiness.NodeHostProber.layer)
 ```
 
 ### Spec Combinators
@@ -91,7 +92,8 @@ VM startup does not complete until the specified wait strategy passes (30-second
 import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Effect, Match } from 'effect'
+import { Readiness } from '@systemfsoftware/effect-readiness'
+import { Effect, Layer, Match } from 'effect'
 
 const probe = MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', 'http://host.microsandbox.internal:4318/health'])
   .withHostAccess(true)
@@ -109,7 +111,7 @@ const program = Effect.scoped(
   }),
 )
 
-NodeRuntime.runMain(Effect.provide(program, nodeServicesLayer))
+NodeRuntime.runMain(Effect.provide(program, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber.layer)))
 ```
 
 A `JobCompletion` holds:

@@ -2,5 +2,7 @@
   "$schema": "./node_modules/tstyche/schemas/config.json",
   "rejectAnyType": true,
   "rejectNeverType": true,
-  "testFileMatch": ["test-types/**/*.tst.ts"]
+  "testFileMatch": [
+    "test-types/**/*.tst.ts"
+  ]
 }

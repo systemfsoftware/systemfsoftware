@@ -1,0 +1,5 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "include": ["dist/recursion-budget-runtime.d.ts"],
+  "compilerOptions": { "customConditions": [] }
+}

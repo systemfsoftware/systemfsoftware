@@ -1,5 +1,5 @@
 import { it } from '@effect/vitest'
-import { Option, Schema, Schema as S } from 'effect'
+import { Function, Option, Schema, Schema as S } from 'effect'
 
 /**
  * The two laws, as decisions over one schema's own values.
@@ -64,13 +64,19 @@ const lawsOf = <A, I>(schema: S.Codec<A, I>): {
  *
  * Use inside a `describe` block to scope the generated tests.
  */
-export const ruleOfSchemas = <A, I>(
-  name: string,
-  schema: S.Codec<A, I>,
-): void => {
-  const { encodeStable, roundTrips } = lawsOf(schema)
-  const options = { arbitrary: { runs: 100 } }
-  it.prop(`∀x_${name}Enc_=x`, [schema], ([value]) => encodeStable(value), options)
+export const ruleOfSchemas: {
+  (name: string): <A, I>(schema: S.Codec<A, I>) => void
+  <A, I>(name: string, schema: S.Codec<A, I>): void
+} = Function.dual(
+  2,
+  <A, I>(
+    name: string,
+    schema: S.Codec<A, I>,
+  ): void => {
+    const { encodeStable, roundTrips } = lawsOf(schema)
+    const options = { arbitrary: { runs: 100 } }
+    it.prop(`∀x_${name}Enc_=x`, [schema], ([value]) => encodeStable(value), options)
 
-  it.prop(`∀x_${name}_=x`, [schema], ([value]) => roundTrips(value), options)
-}
+    it.prop(`∀x_${name}_=x`, [schema], ([value]) => roundTrips(value), options)
+  },
+)

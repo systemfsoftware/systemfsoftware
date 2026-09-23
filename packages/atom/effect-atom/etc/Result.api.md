@@ -67,10 +67,7 @@ export interface Defect {
 export const error: <A, E>(self: Result<A, E>) => Option_2.Option<E>;
 
 // @public
-export const fail: <E, A = never>(error: E, options?: {
-    readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
-    readonly waiting?: boolean | undefined;
-}) => Failure<A, E>;
+export const fail: <E, A = never>(error: E) => Failure<A, E>;
 
 // Warning: (ae-forgotten-export) The symbol "FailureTag" needs to be exported by the entry point Result.d.ts
 //
@@ -83,22 +80,52 @@ export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
 }
 
 // @public
-export const failure: <A, E = never>(cause: Cause.Cause<E>, options?: {
-    readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
-    readonly waiting?: boolean | undefined;
-}) => Failure<A, E>;
+export const failure: {
+    <A, E = never>(options?: {
+        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
+        readonly waiting?: boolean | undefined;
+    }): (cause: Cause.Cause<E>) => Failure<A, E>;
+    <A, E = never>(cause: Cause.Cause<E>, options?: {
+        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
+        readonly waiting?: boolean | undefined;
+    }): Failure<A, E>;
+};
 
 // @public
-export const failureWithPrevious: <A, E>(cause: Cause.Cause<E>, options: {
-    readonly previous: Option_2.Option<Result<A, E>>;
-    readonly waiting?: boolean | undefined;
-}) => Failure<A, E>;
+export const failureWithPrevious: {
+    <A, E>(options: {
+        readonly previous: Option_2.Option<Result<A, E>>;
+        readonly waiting?: boolean | undefined;
+    }): (cause: Cause.Cause<E>) => Failure<A, E>;
+    <A, E>(cause: Cause.Cause<E>, options: {
+        readonly previous: Option_2.Option<Result<A, E>>;
+        readonly waiting?: boolean | undefined;
+    }): Failure<A, E>;
+};
 
 // @public
-export const failWithPrevious: <A, E>(error: E, options: {
-    readonly previous: Option_2.Option<Result<A, E>>;
-    readonly waiting?: boolean | undefined;
-}) => Failure<A, E>;
+export const failWith: {
+    <A, E>(options: {
+        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
+        readonly waiting?: boolean | undefined;
+    }): (error: E) => Failure<A, E>;
+    <A, E>(error: E, options: {
+        readonly previousSuccess?: Option_2.Option<Success<A, E>> | undefined;
+        readonly waiting?: boolean | undefined;
+    }): Failure<A, E>;
+};
+
+// @public
+export const failWithPrevious: {
+    <A, E>(options: {
+        readonly previous: Option_2.Option<Result<A, E>>;
+        readonly waiting?: boolean | undefined;
+    }): (error: E) => Failure<A, E>;
+    <A, E>(error: E, options: {
+        readonly previous: Option_2.Option<Result<A, E>>;
+        readonly waiting?: boolean | undefined;
+    }): Failure<A, E>;
+};
 
 // @public
 export const flatMap: {
@@ -110,7 +137,10 @@ export const flatMap: {
 export const fromExit: <A, E>(exit: Exit.Exit<A, E>) => Success<A, E> | Failure<A, E>;
 
 // @public
-export const fromExitWithPrevious: <A, E>(exit: Exit.Exit<A, E>, previous: Option_2.Option<Result<A, E>>) => Success<A, E> | Failure<A, E>;
+export const fromExitWithPrevious: {
+    <A, E>(previous: Option_2.Option<Result<A, E>>): (exit: Exit.Exit<A, E>) => Success<A, E> | Failure<A, E>;
+    <A, E>(exit: Exit.Exit<A, E>, previous: Option_2.Option<Result<A, E>>): Success<A, E> | Failure<A, E>;
+};
 
 // @public
 export const getOrElse: {
@@ -213,7 +243,10 @@ export const matchWithWaiting: {
 };
 
 // @public
-export function replacePrevious<R extends AnyResult, XE, A>(self: R, previous: Option_2.Option<Result<A, XE>>): With<R, A, Result.Failure<R>>;
+export const replacePrevious: {
+    <R extends AnyResult, XE, A>(previous: Option_2.Option<Result<A, XE>>): (self: R) => With<R, A, Result.Failure<R>>;
+    <R extends AnyResult, XE, A>(self: R, previous: Option_2.Option<Result<A, XE>>): With<R, A, Result.Failure<R>>;
+};
 
 // @public
 export namespace Result {
@@ -258,10 +291,19 @@ export interface Success<A, E = never> extends Result.Proto<A, E>, SuccessTag {
 }
 
 // @public
-export const success: <A, E = never>(value: A, options?: {
-    readonly waiting?: boolean | undefined;
-    readonly timestamp?: number | undefined;
-}) => Success<A, E>;
+export const success: <A, E = never>(value: A) => Success<A, E>;
+
+// @public
+export const successWith: {
+    <A, E = never>(options: {
+        readonly waiting?: boolean | undefined;
+        readonly timestamp?: number | undefined;
+    }): (value: A) => Success<A, E>;
+    <A, E = never>(value: A, options: {
+        readonly waiting?: boolean | undefined;
+        readonly timestamp?: number | undefined;
+    }): Success<A, E>;
+};
 
 // @public
 export const toExit: {
@@ -282,9 +324,14 @@ export const TypeId: TypeId;
 export const value: <A, E>(self: Result<A, E>) => Option_2.Option<A>;
 
 // @public
-export const waiting: <R extends AnyResult>(self: R, options?: {
-    readonly touch?: boolean | undefined;
-}) => R;
+export const waiting: {
+    <R extends AnyResult>(options?: {
+        readonly touch?: boolean | undefined;
+    }): (self: R) => R;
+    <R extends AnyResult>(self: R, options?: {
+        readonly touch?: boolean | undefined;
+    }): R;
+};
 
 // @public
 export const waitingFrom: <A, E>(previous: Option_2.Option<Result<A, E>>) => Result<A, E>;

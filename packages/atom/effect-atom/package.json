@@ -68,11 +68,11 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm dts:check && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
-    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.app.json --format ${TSGO_FORMAT:-text} && effect-tsgo diagnostics --project tsconfig.test.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json",
     "api:check": "concurrently --kill-others-on-fail \"api-extractor-quiet run\" \"api-extractor-quiet run --config api-extractor.Atom.json\" \"api-extractor-quiet run --config api-extractor.AtomRef.json\" \"api-extractor-quiet run --config api-extractor.AtomRpc.json\" \"api-extractor-quiet run --config api-extractor.AtomHttpApi.json\" \"api-extractor-quiet run --config api-extractor.Hydration.json\" \"api-extractor-quiet run --config api-extractor.Registry.json\" \"api-extractor-quiet run --config api-extractor.Result.json\"",

@@ -16,7 +16,7 @@ import { parseSync } from 'oxc-parser'
 import { createServer } from 'vite'
 import { afterAll, expect } from 'vitest'
 
-import { RECURSION_BUDGET_VIRTUAL_ID } from '@systemfsoftware/effect-schema-recursion-budget'
+import { RECURSION_BUDGET_RUNTIME_SPECIFIER } from '@systemfsoftware/effect-schema-recursion-budget'
 import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
 
 const LAW_PKG = '@systemfsoftware/effect-schema-law'
@@ -90,7 +90,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const drivenByPlugin = async (
   root: string,
-): Promise<{ readonly code: string; readonly runtime: string | null }> => {
+): Promise<{ readonly code: string; readonly runtime: string | null; readonly exportedSchemas: readonly string[] }> => {
   const server = await createServer({
     root,
     configFile: false,
@@ -101,8 +101,13 @@ const drivenByPlugin = async (
   })
   try {
     const transformed = await server.transformRequest('/src/recursive.schema.ts')
-    const resolved = await server.pluginContainer.resolveId(RECURSION_BUDGET_VIRTUAL_ID)
-    return { code: transformed?.code ?? '', runtime: resolved?.id ?? null }
+    const resolved = await server.pluginContainer.resolveId(RECURSION_BUDGET_RUNTIME_SPECIFIER)
+    const loaded = await server.ssrLoadModule('/src/recursive.schema.ts')
+    return {
+      code: transformed?.code ?? '',
+      runtime: resolved?.id ?? null,
+      exportedSchemas: Object.keys(loaded),
+    }
   } finally {
     await server.close()
   }
@@ -312,6 +317,9 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       Then('the runtime the hook imports resolves to a module on disk')((s) => {
         expect(s.driven.runtime).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
         expect(s.driven.runtime === null ? false : existsSync(s.driven.runtime)).toBe(true)
+      }),
+      Then('the transformed module runs and exports its schema for the consumer')((s) => {
+        expect(s.driven.exportedSchemas).toContain('RecursiveExpr')
       }),
     ),
   )

@@ -14,6 +14,7 @@ import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as React from 'react'
 import { RegistryContext } from './RegistryContext.js'
 
@@ -114,14 +115,18 @@ export const useAtomInitialValues = (initialValues: Iterable<AnyInitialValue>): 
 export const useAtomValue: {
   <A>(atom: Atom.Atom<A>): A
   <A, B>(atom: Atom.Atom<A>, f: (_: A) => B): B
-} = <A>(atom: Atom.Atom<A>, f?: (_: A) => A): A => {
-  const registry = React.useContext(RegistryContext)
-  if (f) {
-    const atomB = React.useMemo(() => Atom.map(atom, f), [atom, f])
-    return useStore(registry, atomB)
-  }
-  return useStore(registry, atom)
-}
+  <A, B>(f: (_: A) => B): (atom: Atom.Atom<A>) => B
+} = dual(
+  (args) => typeof args[0] !== 'function',
+  <A>(atom: Atom.Atom<A>, f?: (_: A) => A): A => {
+    const registry = React.useContext(RegistryContext)
+    if (f !== undefined) {
+      const atomB = React.useMemo(() => Atom.map(atom, f), [atom, f])
+      return useStore(registry, atomB)
+    }
+    return useStore(registry, atom)
+  },
+)
 
 function mountAtom<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): void {
   React.useEffect(() => registry.mount(atom), [atom, registry])
@@ -504,19 +509,36 @@ function resolveAtomSuspense<A, E>(
  *
  * @since 4.0.0
  */
-export const useAtomSuspense = <A, E>(
-  atom: Atom.Atom<AsyncResult.Result<A, E>>,
-  options?: {
-    readonly suspendOnWaiting?: boolean | undefined
-    readonly includeFailure?: boolean | undefined
+export const useAtomSuspense: {
+  <A, E>(
+    options?: {
+      readonly suspendOnWaiting?: boolean | undefined
+      readonly includeFailure?: boolean | undefined
+    },
+  ): (atom: Atom.Atom<AsyncResult.Result<A, E>>) => AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>
+  <A, E>(
+    atom: Atom.Atom<AsyncResult.Result<A, E>>,
+    options?: {
+      readonly suspendOnWaiting?: boolean | undefined
+      readonly includeFailure?: boolean | undefined
+    },
+  ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>
+} = dual(
+  (args) => Atom.isAtom(args[0]),
+  <A, E>(
+    atom: Atom.Atom<AsyncResult.Result<A, E>>,
+    options?: {
+      readonly suspendOnWaiting?: boolean | undefined
+      readonly includeFailure?: boolean | undefined
+    },
+  ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> => {
+    const registry = React.useContext(RegistryContext)
+    return resolveAtomSuspense(
+      atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
+      options,
+    )
   },
-): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> => {
-  const registry = React.useContext(RegistryContext)
-  return resolveAtomSuspense(
-    atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
-    options,
-  )
-}
+)
 
 /**
  * Subscribes a callback to an atom in the current React registry for the
@@ -537,19 +559,32 @@ export const useAtomSuspense = <A, E>(
  *
  * @since 4.0.0
  */
-export const useAtomSubscribe = <A>(
-  atom: Atom.Atom<A>,
-  f: (_: A) => void,
-  options?: { readonly immediate?: boolean },
-): void => {
-  const registry = React.useContext(RegistryContext)
-  const fRef = React.useRef(f)
-  fRef.current = f
-  React.useEffect(
-    () => registry.subscribe(atom, (value) => fRef.current(value), options),
-    [registry, atom, options?.immediate],
-  )
-}
+export const useAtomSubscribe: {
+  <A>(
+    f: (_: A) => void,
+    options?: { readonly immediate?: boolean },
+  ): (atom: Atom.Atom<A>) => void
+  <A>(
+    atom: Atom.Atom<A>,
+    f: (_: A) => void,
+    options?: { readonly immediate?: boolean },
+  ): void
+} = dual(
+  (args) => typeof args[0] !== 'function',
+  <A>(
+    atom: Atom.Atom<A>,
+    f: (_: A) => void,
+    options?: { readonly immediate?: boolean },
+  ): void => {
+    const registry = React.useContext(RegistryContext)
+    const fRef = React.useRef(f)
+    fRef.current = f
+    React.useEffect(
+      () => registry.subscribe(atom, (value) => fRef.current(value), options),
+      [registry, atom, options?.immediate],
+    )
+  },
+)
 
 /**
  * Subscribes to an atom ref and returns its latest value.
@@ -593,8 +628,14 @@ export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
  *
  * @since 4.0.0
  */
-export const useAtomRefProp = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
-  React.useMemo(() => ref.prop(prop), [ref, prop])
+export const useAtomRefProp: {
+  <A, K extends keyof A>(prop: K): (ref: AtomRef.AtomRef<A>) => AtomRef.AtomRef<A[K]>
+  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]>
+} = dual(
+  2,
+  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
+    React.useMemo(() => ref.prop(prop), [ref, prop]),
+)
 
 /**
  * Subscribes to a property ref derived from an atom ref and returns its current
@@ -616,5 +657,10 @@ export const useAtomRefProp = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, pr
  *
  * @since 4.0.0
  */
-export const useAtomRefPropValue = <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K] =>
-  useAtomRef(useAtomRefProp(ref, prop))
+export const useAtomRefPropValue: {
+  <A, K extends keyof A>(prop: K): (ref: AtomRef.AtomRef<A>) => A[K]
+  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K]
+} = dual(
+  2,
+  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K] => useAtomRef(useAtomRefProp(ref, prop)),
+)

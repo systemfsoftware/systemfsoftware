@@ -33,6 +33,7 @@ import {
   type Result,
   type Success,
   success,
+  successWith,
   TypeId,
 } from './ResultValues.js'
 
@@ -53,6 +54,7 @@ export {
   // alias: upstream names this guard `isAsyncResult`
   isResult as isAsyncResult,
   success,
+  successWith,
   TypeId,
 }
 export type { Failure, Initial, Result, Success } from './ResultValues.js'
@@ -95,15 +97,21 @@ export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A
  *
  * @since 4.0.0
  */
-export const fromExitWithPrevious = <A, E>(
-  exit: Exit.Exit<A, E>,
-  previous: Option.Option<Result<A, E>>,
-): Success<A, E> | Failure<A, E> => {
-  if (Exit.isSuccess(exit)) {
-    return success(exit.value)
-  }
-  return failureWithPrevious(exit.cause, { previous })
-}
+export const fromExitWithPrevious: {
+  <A, E>(previous: Option.Option<Result<A, E>>): (exit: Exit.Exit<A, E>) => Success<A, E> | Failure<A, E>
+  <A, E>(exit: Exit.Exit<A, E>, previous: Option.Option<Result<A, E>>): Success<A, E> | Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    exit: Exit.Exit<A, E>,
+    previous: Option.Option<Result<A, E>>,
+  ): Success<A, E> | Failure<A, E> => {
+    if (Exit.isSuccess(exit)) {
+      return success(exit.value)
+    }
+    return failureWithPrevious(exit.cause, { previous })
+  },
+)
 
 /**
  * Creates a waiting result from an optional previous result, using `Initial(true)` when no previous result exists.
@@ -172,40 +180,98 @@ const previousSuccessFromResult = <A, E>(result: Result<A, E>): Option.Option<Su
  *
  * @since 4.0.0
  */
-export const failureWithPrevious = <A, E>(
-  cause: Cause.Cause<E>,
-  options: {
+export const failureWithPrevious: {
+  <A, E>(options: {
     readonly previous: Option.Option<Result<A, E>>
     readonly waiting?: boolean | undefined
-  },
-): Failure<A, E> =>
-  failure(cause, {
-    previousSuccess: Option.flatMap(options.previous, previousSuccessFromResult),
-    waiting: options.waiting,
-  })
+  }): (cause: Cause.Cause<E>) => Failure<A, E>
+  <A, E>(
+    cause: Cause.Cause<E>,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    cause: Cause.Cause<E>,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> =>
+    failure(cause, {
+      previousSuccess: Option.flatMap(options.previous, previousSuccessFromResult),
+      waiting: options.waiting,
+    }),
+)
 
 /**
  * Creates a `Failure` result from a typed error, wrapping it in `Cause.fail`.
  *
+ * To carry forward a previous success or mark the result as waiting, use
+ * `failWith`.
+ *
  * @since 4.0.0
  */
-export const fail = <E, A = never>(error: E, options?: {
-  readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
-  readonly waiting?: boolean | undefined
-}): Failure<A, E> => failure(Cause.fail(error), options)
+export const fail = <E, A = never>(error: E): Failure<A, E> => failWith(error, {})
+
+/**
+ * Can also be called data-last inside `pipe`: `failWith(options)(error)`.
+ *
+ * @since 4.0.0
+ */
+export const failWith: {
+  <A, E>(options: {
+    readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+    readonly waiting?: boolean | undefined
+  }): (error: E) => Failure<A, E>
+  <A, E>(
+    error: E,
+    options: {
+      readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    error: E,
+    options: {
+      readonly previousSuccess?: Option.Option<Success<A, E>> | undefined
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> => failure(Cause.fail(error), options),
+)
 
 /**
  * Creates a `Failure` result from a typed error while carrying forward the latest success stored in a previous result.
  *
  * @since 4.0.0
  */
-export const failWithPrevious = <A, E>(
-  error: E,
-  options: {
+export const failWithPrevious: {
+  <A, E>(options: {
     readonly previous: Option.Option<Result<A, E>>
     readonly waiting?: boolean | undefined
-  },
-): Failure<A, E> => failureWithPrevious(Cause.fail(error), options)
+  }): (error: E) => Failure<A, E>
+  <A, E>(
+    error: E,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E>
+} = dual(
+  2,
+  <A, E>(
+    error: E,
+    options: {
+      readonly previous: Option.Option<Result<A, E>>
+      readonly waiting?: boolean | undefined
+    },
+  ): Failure<A, E> => failureWithPrevious(Cause.fail(error), options),
+)
 
 type TouchOptions = {
   readonly touch?: boolean | undefined
@@ -230,14 +296,24 @@ const maybeTouch = <R extends AnyResult>(self: R, options: TouchOptions | undefi
  *
  * @since 4.0.0
  */
-export const waiting = <R extends AnyResult>(self: R, options?: {
-  readonly touch?: boolean | undefined
-}): R => {
-  if (self.waiting) {
-    return maybeTouch(self, options)
-  }
-  return maybeTouch({ ...self, waiting: true }, options)
-}
+export const waiting: {
+  <R extends AnyResult>(options?: {
+    readonly touch?: boolean | undefined
+  }): (self: R) => R
+  <R extends AnyResult>(self: R, options?: {
+    readonly touch?: boolean | undefined
+  }): R
+} = dual(
+  (args) => isResult(args[0]),
+  <R extends AnyResult>(self: R, options?: {
+    readonly touch?: boolean | undefined
+  }): R => {
+    if (self.waiting) {
+      return maybeTouch(self, options)
+    }
+    return maybeTouch({ ...self, waiting: true }, options)
+  },
+)
 
 /**
  * Refreshes the timestamp of a `Success` result while preserving its value and waiting flag; non-success results are returned unchanged.
@@ -257,19 +333,24 @@ export const touch = <A extends AnyResult>(result: A): A => {
  *
  * @since 4.0.0
  */
-export function replacePrevious<R extends AnyResult, XE, A>(
-  self: R,
-  previous: Option.Option<Result<A, XE>>,
-): With<R, A, Result.Failure<R>>
-export function replacePrevious<A = unknown, E = unknown, XA = unknown>(
-  self: Result<A, E>,
-  previous: Option.Option<Result<XA, E>>,
-): AnyResult {
-  if (isFailure(self)) {
-    return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
-  }
-  return self
-}
+export const replacePrevious: {
+  <R extends AnyResult, XE, A>(previous: Option.Option<Result<A, XE>>): (self: R) => With<R, A, Result.Failure<R>>
+  <R extends AnyResult, XE, A>(
+    self: R,
+    previous: Option.Option<Result<A, XE>>,
+  ): With<R, A, Result.Failure<R>>
+} = dual(
+  2,
+  <A = unknown, E = unknown, XA = unknown>(
+    self: Result<A, E>,
+    previous: Option.Option<Result<XA, E>>,
+  ): AnyResult => {
+    if (isFailure(self)) {
+      return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
+    }
+    return self
+  },
+)
 
 const valueFromNonSuccess = <A, E>(self: Initial<A, E> | Failure<A, E>): Option.Option<A> => {
   if (isFailure(self)) {
@@ -359,7 +440,7 @@ export const toExit: {
 const mapNonSuccess = <E, A, B>(self: Initial<A, E> | Failure<A, E>, f: (a: A) => B): Result<B, E> => {
   if (isFailure(self)) {
     return failure(self.cause, {
-      previousSuccess: Option.map(self.previousSuccess, (s) => success(f(s.value), s)),
+      previousSuccess: Option.map(self.previousSuccess, (s) => successWith(f(s.value), s)),
       waiting: self.waiting,
     })
   }
@@ -376,7 +457,7 @@ export const map: {
   <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E>
 } = dual(2, <E, A, B>(self: Result<A, E>, f: (a: A) => B): Result<B, E> => {
   if (isSuccess(self)) {
-    return success(f(self.value), self)
+    return successWith(f(self.value), self)
   }
   return mapNonSuccess(self, f)
 })
@@ -683,7 +764,7 @@ const finishArray = (state: AllArrayState): AnyResult => {
   if (state.early !== undefined) {
     return state.early
   }
-  return success(state.successes, { waiting: state.waiting })
+  return successWith(state.successes, { waiting: state.waiting })
 }
 
 const allIterable = <T = unknown>(results: Iterable<T>): AnyResult => {
@@ -724,7 +805,7 @@ const finishRecord = (state: AllRecordState): AnyResult => {
   if (state.early !== undefined) {
     return state.early
   }
-  return success(state.successes, { waiting: state.waiting })
+  return successWith(state.successes, { waiting: state.waiting })
 }
 
 const allRecord = <T = unknown>(results: Record<string, T>): AnyResult => {

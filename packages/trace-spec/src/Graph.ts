@@ -1,21 +1,37 @@
 /// <reference types="vitest/importMeta" />
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Match, Result, Schema, type SchemaIssue } from 'effect'
+import { dual } from 'effect/Function'
 import { ContractDecodeError } from './ContractDecodeError.schema.js'
 import type { Attributes, GraphNode, SpanRecord, TraceGraph } from './TraceGraph.schema.js'
 
 export * from './TraceGraph.schema.js'
 
-export const byId = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> =>
+const byIdImpl = (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode> =>
   graph.nodes.filter((node) => node.name === spec.name)
 
-export const children = (graph: TraceGraph, node: GraphNode): ReadonlyArray<GraphNode> =>
+export const byId: {
+  (spec: Span.Span): (graph: TraceGraph) => ReadonlyArray<GraphNode>
+  (graph: TraceGraph, spec: Span.Span): ReadonlyArray<GraphNode>
+} = dual(2, byIdImpl)
+
+const childrenImpl = (graph: TraceGraph, node: GraphNode): ReadonlyArray<GraphNode> =>
   graph.nodes.filter((candidate) => candidate.parentSpanId === node.spanId)
 
-export const descendants = (graph: TraceGraph, node: GraphNode): ReadonlyArray<GraphNode> => {
+export const children: {
+  (node: GraphNode): (graph: TraceGraph) => ReadonlyArray<GraphNode>
+  (graph: TraceGraph, node: GraphNode): ReadonlyArray<GraphNode>
+} = dual(2, childrenImpl)
+
+const descendantsImpl = (graph: TraceGraph, node: GraphNode): ReadonlyArray<GraphNode> => {
   const direct = children(graph, node)
   return [...direct, ...direct.flatMap((child) => descendants(graph, child))]
 }
+
+export const descendants: {
+  (node: GraphNode): (graph: TraceGraph) => ReadonlyArray<GraphNode>
+  (graph: TraceGraph, node: GraphNode): ReadonlyArray<GraphNode>
+} = dual(2, descendantsImpl)
 
 const indexDeclarations = (taxonomy: Taxonomy.Taxonomy): ReadonlyMap<string, Span.Span> =>
   new Map(taxonomy.spans.map((span): readonly [string, Span.Span] => [span.name, span]))
@@ -97,14 +113,7 @@ const declaredNodeOf = (
 
 const graphOf = (traceId: string, nodes: ReadonlyArray<GraphNode>): TraceGraph => ({ traceId, nodes })
 
-/**
- * Decodes the recorded spans of one trace against a taxonomy, purely: a declared span
- * whose required attributes do not decode refuses with {@link ContractDecodeError}
- * naming the declaration and the attribute, and a span no declaration accounts for enters
- * the graph as recorded. Failure is a `Result`, so the phase that reads the trace cannot
- * fail the pipeline by accident.
- */
-export const decode = (
+const decodeImpl = (
   traceId: string,
   spans: ReadonlyArray<SpanRecord>,
   taxonomy: Taxonomy.Taxonomy,
@@ -115,6 +124,25 @@ export const decode = (
     (nodes) => graphOf(traceId, nodes),
   )
 }
+
+/**
+ * Decodes the recorded spans of one trace against a taxonomy, purely: a declared span
+ * whose required attributes do not decode refuses with {@link ContractDecodeError}
+ * naming the declaration and the attribute, and a span no declaration accounts for enters
+ * the graph as recorded. Failure is a `Result`, so the phase that reads the trace cannot
+ * fail the pipeline by accident.
+ */
+export const decode: {
+  (
+    spans: ReadonlyArray<SpanRecord>,
+    taxonomy: Taxonomy.Taxonomy,
+  ): (traceId: string) => Result.Result<TraceGraph, ContractDecodeError>
+  (
+    traceId: string,
+    spans: ReadonlyArray<SpanRecord>,
+    taxonomy: Taxonomy.Taxonomy,
+  ): Result.Result<TraceGraph, ContractDecodeError>
+} = dual(3, decodeImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.

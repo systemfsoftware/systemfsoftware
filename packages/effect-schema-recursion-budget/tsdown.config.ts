@@ -5,11 +5,18 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
   '.': './dist/effect-schema-recursion-budget.d.ts',
+  './runtime': './dist/recursion-budget-runtime.d.ts',
 }
 
-const UNEXPORTED_ENTRIES: ReadonlyArray<string> = ['./recursion-budget-runtime']
+const RUNTIME_ENTRY = './recursion-budget-runtime'
+const RUNTIME_SUBPATH = './runtime'
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  const runtimeEntry = exports[RUNTIME_ENTRY]
+  if (runtimeEntry !== undefined) {
+    exports[RUNTIME_SUBPATH] = runtimeEntry
+    delete exports[RUNTIME_ENTRY]
+  }
   for (const [subpath, types] of Object.entries(typesMap)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
@@ -23,7 +30,6 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
       exports[subpath] = { ...rest, types, ...withDefault }
     }
   }
-  for (const unexported of UNEXPORTED_ENTRIES) delete exports[unexported]
   return exports
 }
 

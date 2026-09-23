@@ -43,6 +43,7 @@ import {
 } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
+import { RpcSerialization } from 'effect/unstable/rpc'
 
 const {
   AllocatedSplit,
@@ -308,7 +309,10 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
     })
 
   const client = (cookie?: string): Effect.Effect<RpcClientHandle, never, Scope.Scope> =>
-    makeRpcClient({ baseUrl, cookie }).pipe(Effect.provideService(HttpClient.HttpClient, http))
+    makeRpcClient({ baseUrl, cookie }).pipe(
+      Effect.provide(RpcSerialization.layerJson),
+      Effect.provideService(HttpClient.HttpClient, http),
+    )
 
   const stockRow = (lotId: string) =>
     Effect.gen(function*() {

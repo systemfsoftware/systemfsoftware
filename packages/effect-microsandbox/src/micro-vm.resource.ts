@@ -1,4 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Readiness } from '@systemfsoftware/effect-readiness'
 import { type Context, Effect, Exit, Layer, Match, Schema } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
@@ -84,11 +85,11 @@ export interface MicroVMResource extends Pipeable {
   readonly scoped: Effect.Effect<
     RunningVM,
     MicroVMError,
-    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem
+    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
   >
   layer<Id>(
     service: Context.Key<Id, RunningVM>,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem>
+  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
 }
 
 const makeProto = (raw: MicroVMSpec): MicroVMResource => {
@@ -116,7 +117,7 @@ const makeProto = (raw: MicroVMSpec): MicroVMResource => {
     },
     layer<Id>(
       service: Context.Key<Id, RunningVM>,
-    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> {
+    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> {
       return Layer.effect(service)(scoped(raw))
     },
   }
@@ -134,7 +135,7 @@ export interface JobResource extends MicroVMResource {
   readonly run: Effect.Effect<
     JobCompletion,
     MicroVMError,
-    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem
+    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
   >
 }
 
@@ -171,7 +172,7 @@ const makeJobProto = (raw: JobSpec): JobResource => {
     },
     layer<Id>(
       service: Context.Key<Id, RunningVM>,
-    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> {
+    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> {
       return Layer.effect(service)(scoped(raw))
     },
     get run() {
@@ -192,18 +193,42 @@ export const scoped = (
 ): Effect.Effect<
   RunningVM,
   MicroVMError,
-  Scope.Scope | Crypto.Crypto | FileSystem.FileSystem
+  Scope.Scope | Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
 > => Effect.map(bootMicroVM.run(spec), runningVMOf)
 
-export const layer = <Id>(
-  service: Context.Key<Id, RunningVM>,
-  spec: MicroVMSpec,
-): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem> => Layer.effect(service)(scoped(spec))
-export const service = (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
-  makeProto(new ServiceSpec({ image, ports, env: {}, mounts: [] }))
+export const layer: {
+  <Id>(
+    service: Context.Key<Id, RunningVM>,
+  ): (spec: MicroVMSpec) => Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
+  <Id>(
+    service: Context.Key<Id, RunningVM>,
+    spec: MicroVMSpec,
+  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
+} = dual(
+  (args) => args.length >= 2,
+  <Id>(
+    service: Context.Key<Id, RunningVM>,
+    spec: MicroVMSpec,
+  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> =>
+    Layer.effect(service)(scoped(spec)),
+)
+export const service: {
+  (ports?: ReadonlyArray<number>): (image: string) => MicroVMResource
+  (image: string, ports?: ReadonlyArray<number>): MicroVMResource
+} = dual(
+  (args) => typeof args[0] === 'string',
+  (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
+    makeProto(new ServiceSpec({ image, ports, env: {}, mounts: [] })),
+)
 
-export const job = (image: string, cmd: readonly [string, ...Array<string>]): JobResource =>
-  makeJobProto(new JobSpec({ image, cmd, env: {}, mounts: [] }))
+export const job: {
+  (cmd: readonly [string, ...Array<string>]): (image: string) => JobResource
+  (image: string, cmd: readonly [string, ...Array<string>]): JobResource
+} = dual(
+  2,
+  (image: string, cmd: readonly [string, ...Array<string>]): JobResource =>
+    makeJobProto(new JobSpec({ image, cmd, env: {}, mounts: [] })),
+)
 
 export const make = (image: string): MicroVMResource => service(image, [])
 export const spec = make

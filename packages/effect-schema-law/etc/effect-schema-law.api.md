@@ -7,10 +7,16 @@
 import { Schema } from 'effect';
 
 // @public (undocumented)
-export const recursionLaws: <A, I>(label: string, schema: Schema.Codec<A, I>) => void;
+export const recursionLaws: {
+    (label: string): <A, I>(schema: Schema.Codec<A, I>) => void;
+    <A, I>(label: string, schema: Schema.Codec<A, I>): void;
+};
 
 // @public
-export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Codec<A, I>) => void;
+export const ruleOfSchemas: {
+    (name: string): <A, I>(schema: Schema.Codec<A, I>) => void;
+    <A, I>(name: string, schema: Schema.Codec<A, I>): void;
+};
 
 // (No @packageDocumentation comment for this package)
 

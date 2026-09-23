@@ -4,6 +4,7 @@ import {
   Effect,
   Exit,
   Fiber as FiberModule,
+  Function,
   Latch,
   Match,
   Metric,
@@ -168,14 +169,29 @@ const buildSubscriptionLoop = <E, R, W extends WorkerShape<WWork, E, R>, WWork =
 }
 
 /** @internal */
-export const buildWorkerLoop = <E, R, WWork = unknown>(
-  worker: WorkerShape<WorkerShape<WWork, E, R>, E, R>,
-  health: DaemonHealthShape,
-  readyGauge: Metric.Gauge<number>,
-): Effect.Effect<void, E | Cause.TimeoutError, R | Scope.Scope> =>
-  Match.value(worker.loop).pipe(
-    Match.tag('Poll', (loop) => buildPollLoop(worker, loop, health, readyGauge)),
-    Match.tag('Stream', (loop) => buildStreamLoop(worker, loop, health, readyGauge)),
-    Match.tag('Subscription', (loop) => buildSubscriptionLoop(worker, loop, health, readyGauge)),
-    Match.exhaustive,
-  )
+export const buildWorkerLoop: {
+  <E, R, WWork = unknown>(
+    health: DaemonHealthShape,
+    readyGauge: Metric.Gauge<number>,
+  ): (
+    worker: WorkerShape<WorkerShape<WWork, E, R>, E, R>,
+  ) => Effect.Effect<void, E | Cause.TimeoutError, R | Scope.Scope>
+  <E, R, WWork = unknown>(
+    worker: WorkerShape<WorkerShape<WWork, E, R>, E, R>,
+    health: DaemonHealthShape,
+    readyGauge: Metric.Gauge<number>,
+  ): Effect.Effect<void, E | Cause.TimeoutError, R | Scope.Scope>
+} = Function.dual(
+  3,
+  <E, R, WWork = unknown>(
+    worker: WorkerShape<WorkerShape<WWork, E, R>, E, R>,
+    health: DaemonHealthShape,
+    readyGauge: Metric.Gauge<number>,
+  ): Effect.Effect<void, E | Cause.TimeoutError, R | Scope.Scope> =>
+    Match.value(worker.loop).pipe(
+      Match.tag('Poll', (loop) => buildPollLoop(worker, loop, health, readyGauge)),
+      Match.tag('Stream', (loop) => buildStreamLoop(worker, loop, health, readyGauge)),
+      Match.tag('Subscription', (loop) => buildSubscriptionLoop(worker, loop, health, readyGauge)),
+      Match.exhaustive,
+    ),
+)

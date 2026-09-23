@@ -1,5 +1,6 @@
 /// <reference types="vitest/importMeta" />
 import { Context, Effect, Option, Schema } from 'effect'
+import { dual } from 'effect/Function'
 
 export interface VitestTaskContext<Ann = unknown> {
   readonly annotate?: ((message: string, type?: string) => Promise<void> | void) | undefined
@@ -32,11 +33,16 @@ const readTaskContext = <Ctx>(ctx: Ctx): VitestTaskContext | null =>
 const readRawTaskContext = <Ctx>(ctx: Ctx): VitestTaskContext | null =>
   Option.getOrNull(Option.liftPredicate(ctx, isTaskContext))
 
-export const provideTaskRef = <A, E, R, Ctx>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R> =>
+const provideTaskRefImpl = <A, E, R, Ctx>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R> =>
   effect.pipe(
     Effect.provideService(VitestTaskRef, readTaskContext(ctx)),
     Effect.provideService(RawVitestTaskRef, readRawTaskContext(ctx)),
   )
+
+export const provideTaskRef: {
+  <Ctx>(ctx: Ctx): <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  <A, E, R, Ctx>(effect: Effect.Effect<A, E, R>, ctx: Ctx): Effect.Effect<A, E, R>
+} = dual(2, provideTaskRefImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.

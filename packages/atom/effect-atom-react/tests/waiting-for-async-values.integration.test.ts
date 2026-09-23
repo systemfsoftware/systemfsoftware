@@ -27,7 +27,7 @@ Feature('Waiting for asynchronous values')
           () =>
             Effect.sync(() => {
               const source = Deferred.makeUnsafe<number>()
-              const loaded = Atom.make(Deferred.await(source))
+              const loaded = Atom.make(source.pipe(Deferred.await))
               function Widget() {
                 const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
                 return React.createElement('div', { 'data-testid': 'loaded-value' }, AsyncResult.getOrThrow(result))
@@ -142,7 +142,7 @@ Feature('Waiting for asynchronous values')
       Gherkin.Do.pipe(
         Given('a widget backed by a value that fails, wrapped in an error boundary')('ctx', () =>
           Effect.sync(() => {
-            const failing = Atom.make(Effect.fail(Unavailable.make({})))
+            const failing = Atom.make(Unavailable.make({}).pipe(Effect.fail))
             function Widget() {
               useAtomSuspense(failing)
               return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')

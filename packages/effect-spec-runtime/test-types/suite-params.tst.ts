@@ -21,15 +21,15 @@ const bindings = { it: vitestIt, layer }
 const config: Suite.Config = { name: 'suite params', describe: 'describe', options: undefined, liveClock: false }
 const freshFixtureLayer: Layer.Layer<FreshFixture> = Layer.effect(
   FreshFixture,
-  Effect.acquireRelease(Effect.sync(() => true), () => Effect.void),
+  Effect.acquireRelease(Effect.succeed(true), () => Effect.void),
 )
 const otherFixtureLayer: Layer.Layer<OtherFixture> = Layer.effect(
   OtherFixture,
-  Effect.acquireRelease(Effect.sync(() => true), () => Effect.void),
+  Effect.acquireRelease(Effect.succeed(true), () => Effect.void),
 )
 const sharedFixtureLayer: Layer.Layer<SharedFixture> = Layer.effect(
   SharedFixture,
-  Effect.acquireRelease(Effect.sync(() => true), () => Effect.void),
+  Effect.acquireRelease(Effect.succeed(true), () => Effect.void),
 )
 
 declare const numericRegister: Suite.RegisterFn<number, CaseError, never>

@@ -1,6 +1,7 @@
 /// <reference types="vitest/importMeta" />
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Equal, Match, Option, Result, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type { GraphNode, SpanRecord, Status, TraceGraph } from './Graph.js'
 import { byId, children, decode, descendants } from './Graph.js'
 import { Break, Hold, Verdict } from './Verdict.schema.js'
@@ -133,7 +134,7 @@ const reachedUnder = (
   return matchedNodes(graph, childSpan).some((node) => reached.has(node.spanId))
 }
 
-export const child = (parent: Span.Span, childSpan: Span.Span): Relation =>
+const childImpl = (parent: Span.Span, childSpan: Span.Span): Relation =>
   declared({
     id: `child(${parent.id},${childSpan.id})`,
     spans: [parent, childSpan],
@@ -142,7 +143,12 @@ export const child = (parent: Span.Span, childSpan: Span.Span): Relation =>
     holds: (graph) => reachedUnder(graph, parent, childSpan, childIdsOf),
   })
 
-export const descendant = (parent: Span.Span, childSpan: Span.Span): Relation =>
+export const child: {
+  (childSpan: Span.Span): (parent: Span.Span) => Relation
+  (parent: Span.Span, childSpan: Span.Span): Relation
+} = dual(2, childImpl)
+
+const descendantImpl = (parent: Span.Span, childSpan: Span.Span): Relation =>
   declared({
     id: `descendant(${parent.id},${childSpan.id})`,
     spans: [parent, childSpan],
@@ -151,7 +157,12 @@ export const descendant = (parent: Span.Span, childSpan: Span.Span): Relation =>
     holds: (graph) => reachedUnder(graph, parent, childSpan, descendantIdsOf),
   })
 
-export const order = (before: Span.Span, after: Span.Span): Relation =>
+export const descendant: {
+  (childSpan: Span.Span): (parent: Span.Span) => Relation
+  (parent: Span.Span, childSpan: Span.Span): Relation
+} = dual(2, descendantImpl)
+
+const orderImpl = (before: Span.Span, after: Span.Span): Relation =>
   declared({
     id: `order(${before.id},${after.id})`,
     spans: [before, after],
@@ -161,7 +172,12 @@ export const order = (before: Span.Span, after: Span.Span): Relation =>
       matchedAll(matchedNodes(graph, after), (node) => startsAfterSome(matchedNodes(graph, before), node)),
   })
 
-export const status = (spec: Span.Span, expected: Status): Relation =>
+export const order: {
+  (after: Span.Span): (before: Span.Span) => Relation
+  (before: Span.Span, after: Span.Span): Relation
+} = dual(2, orderImpl)
+
+const statusImpl = (spec: Span.Span, expected: Status): Relation =>
   declared({
     id: `status(${spec.id},${expected})`,
     spans: [spec],
@@ -170,7 +186,12 @@ export const status = (spec: Span.Span, expected: Status): Relation =>
     holds: holdsEveryOf(spec, (node) => node.status === expected),
   })
 
-export const errorType = (spec: Span.Span, expected: string): Relation =>
+export const status: {
+  (expected: Status): (spec: Span.Span) => Relation
+  (spec: Span.Span, expected: Status): Relation
+} = dual(2, statusImpl)
+
+const errorTypeImpl = (spec: Span.Span, expected: string): Relation =>
   declared({
     id: `errorType(${spec.id},${expected})`,
     spans: [spec],
@@ -178,6 +199,11 @@ export const errorType = (spec: Span.Span, expected: string): Relation =>
     detail: `a ${spec.id} span carries a different error.type`,
     holds: holdsEveryOf(spec, (node) => node.errorType === expected),
   })
+
+export const errorType: {
+  (expected: string): (spec: Span.Span) => Relation
+  (spec: Span.Span, expected: string): Relation
+} = dual(2, errorTypeImpl)
 
 const partialMatches = (
   attributes: Span.AttributeRecord,
@@ -187,7 +213,7 @@ const partialMatches = (
     .filter(([, value]) => value !== undefined)
     .every(([key, value]) => Equal.equals(attributes[key], value))
 
-export const attrs = <S extends Span.Span>(spec: S, partial: Partial<Span.AttrsOf<S>>): Relation =>
+const attrsImpl = <S extends Span.Span>(spec: S, partial: Partial<Span.AttrsOf<S>>): Relation =>
   declared({
     id: `attrs(${spec.id})`,
     spans: [spec],
@@ -196,7 +222,12 @@ export const attrs = <S extends Span.Span>(spec: S, partial: Partial<Span.AttrsO
     holds: holdsEveryOf(spec, (node) => partialMatches(node.attrs, partial)),
   })
 
-export const durationLessThan = (spec: Span.Span, millis: number): Relation =>
+export const attrs: {
+  <S extends Span.Span>(partial: Partial<Span.AttrsOf<S>>): (spec: S) => Relation
+  <S extends Span.Span>(spec: S, partial: Partial<Span.AttrsOf<S>>): Relation
+} = dual(2, attrsImpl)
+
+const durationLessThanImpl = (spec: Span.Span, millis: number): Relation =>
   declared({
     id: `durationLessThan(${spec.id},${millis})`,
     spans: [spec],
@@ -205,9 +236,14 @@ export const durationLessThan = (spec: Span.Span, millis: number): Relation =>
     holds: holdsEveryOf(spec, (node) => node.durationMillis < millis),
   })
 
+export const durationLessThan: {
+  (millis: number): (spec: Span.Span) => Relation
+  (spec: Span.Span, millis: number): Relation
+} = dual(2, durationLessThanImpl)
+
 const carriesEvent = (name: string) => (node: GraphNode): boolean => node.events.some((event) => event.name === name)
 
-export const event = (spec: Span.Span, name: string): Relation =>
+const eventImpl = (spec: Span.Span, name: string): Relation =>
   declared({
     id: `event(${spec.id},${name})`,
     spans: [spec],
@@ -216,7 +252,12 @@ export const event = (spec: Span.Span, name: string): Relation =>
     holds: holdsEveryOf(spec, carriesEvent(name)),
   })
 
-export const forall = (spec: Span.Span, predicate: (node: GraphNode) => boolean, detail: string): Relation => {
+export const event: {
+  (name: string): (spec: Span.Span) => Relation
+  (spec: Span.Span, name: string): Relation
+} = dual(2, eventImpl)
+
+const forallImpl = (spec: Span.Span, predicate: (node: GraphNode) => boolean, detail: string): Relation => {
   const id = `forall(${spec.id})`
   return relation({
     id,
@@ -233,6 +274,11 @@ export const forall = (spec: Span.Span, predicate: (node: GraphNode) => boolean,
     },
   })
 }
+
+export const forall: {
+  (predicate: (node: GraphNode) => boolean, detail: string): (spec: Span.Span) => Relation
+  (spec: Span.Span, predicate: (node: GraphNode) => boolean, detail: string): Relation
+} = dual(3, forallImpl)
 
 export const soft = (self: Relation): Relation =>
   self.softenable
@@ -351,13 +397,18 @@ const forbidsAt = (entry: Taxonomy.Forbidden, path: string): boolean =>
 const forbiddenOn = (path: string) => (entry: Taxonomy.Forbidden): ReadonlyArray<Relation> =>
   forbidsAt(entry, path) ? [absent(entry.span)] : []
 
-export const fromTaxonomy = (taxonomy: Taxonomy.Taxonomy, options: { readonly path: string }): Relation =>
+const fromTaxonomyImpl = (taxonomy: Taxonomy.Taxonomy, options: { readonly path: string }): Relation =>
   combined({
     id: `fromTaxonomy(${taxonomy.id},${options.path})`,
     relations: [...taxonomy.edges.map(placementOf), ...taxonomy.forbidden.flatMap(forbiddenOn(options.path))],
     soft: false,
     softenable: false,
   })
+
+export const fromTaxonomy: {
+  (options: { readonly path: string }): (taxonomy: Taxonomy.Taxonomy) => Relation
+  (taxonomy: Taxonomy.Taxonomy, options: { readonly path: string }): Relation
+} = dual(2, fromTaxonomyImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.

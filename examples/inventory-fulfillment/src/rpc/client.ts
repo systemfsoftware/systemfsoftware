@@ -18,17 +18,18 @@ const protocolOf = (options: ClientOptions) =>
       onNone: () => withUrl,
       onSome: (cookie) => withUrl.pipe(HttpClient.mapRequest(HttpClientRequest.setHeader('cookie', cookie))),
     })
-    return yield* RpcClient.makeProtocolHttp(withCookie).pipe(Effect.provide(RpcSerialization.layerJson))
+    return yield* RpcClient.makeProtocolHttp(withCookie)
   })
 
 /**
- * Builds an `RpcClient` for the fulfillment group over HTTP JSON. Requires the
- * caller's `HttpClient` (e.g. `NodeHttpClient.layerUndici`) and `Scope`, so the
+ * Builds an `RpcClient` for the fulfillment group over HTTP. Requires the
+ * caller's `HttpClient` (e.g. `NodeHttpClient.layerUndici`), its
+ * `RpcSerialization` (e.g. `RpcSerialization.layerJson`), and `Scope`, so the
  * client lives exactly as long as the scope that owns it.
  */
 export const make = (
   options: ClientOptions,
-): Effect.Effect<Client, never, HttpClient.HttpClient | Scope.Scope> =>
+): Effect.Effect<Client, never, HttpClient.HttpClient | Scope.Scope | RpcSerialization.RpcSerialization> =>
   Effect.gen(function*() {
     const protocol = yield* protocolOf(options)
     return yield* RpcClient.make(FulfillmentRpcs).pipe(Effect.provideService(RpcClient.Protocol, protocol))

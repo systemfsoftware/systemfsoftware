@@ -13,6 +13,7 @@ import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Predicate from 'effect/Predicate'
 import type { ReadonlyRecord } from 'effect/Record'
 import * as Schema from 'effect/Schema'
 import type { Simplify } from 'effect/Types'
@@ -44,57 +45,16 @@ const getSuccessSchemas = (endpoint: HttpApiEndpoint.Top): readonly [Schema.Top,
 }
 const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): readonly Schema.Top[] => Array.from(endpoint.error)
 
-const isNonNullObject = (value: unknown): value is object => {
-  if (typeof value !== 'object') {
-    return false
-  }
-  return value !== null
-}
-
-const isObjectOrFunction = (value: unknown): value is object =>
-  [typeof value === 'function', isNonNullObject(value)].includes(true)
-
-const hasGroupIdentifier = (candidate: object, group: string): boolean => {
-  if (!('identifier' in candidate)) {
-    return false
-  }
-  return candidate.identifier === group
-}
-
-const isGroupCandidate = (candidate: unknown, group: string): candidate is object => {
-  if (!isObjectOrFunction(candidate)) {
-    return false
-  }
-  return hasGroupIdentifier(candidate, group)
-}
-
-const objectOrUndefined = <V = unknown>(value: V): object | undefined => {
-  if (!isNonNullObject(value)) {
-    return undefined
-  }
-  return value
-}
+const isGroupCandidate = (candidate: unknown, group: string): candidate is object =>
+  Predicate.hasProperty(candidate, 'identifier') && candidate.identifier === group
 
 const endpointsOf = (candidate: object): object | undefined => {
-  if (!('endpoints' in candidate)) {
-    return undefined
-  }
-  return objectOrUndefined(candidate.endpoints)
+  const endpoints: Top = Reflect.get(candidate, 'endpoints')
+  return Predicate.isObject(endpoints) ? endpoints : undefined
 }
 
-const isEndpointWithId = (definition: object, endpoint: string): definition is HttpApiEndpoint.Top => {
-  if (!HttpApiEndpoint.isHttpApiEndpoint(definition)) {
-    return false
-  }
-  return definition.identifier === endpoint
-}
-
-const isMatchingEndpoint = (definition: unknown, endpoint: string): definition is HttpApiEndpoint.Top => {
-  if (!isObjectOrFunction(definition)) {
-    return false
-  }
-  return isEndpointWithId(definition, endpoint)
-}
+const isMatchingEndpoint = (definition: unknown, endpoint: string): definition is HttpApiEndpoint.Top =>
+  HttpApiEndpoint.isHttpApiEndpoint(definition) && definition.identifier === endpoint
 
 const matchingEndpoint = (
   endpoints: object,
@@ -153,10 +113,10 @@ interface EndpointCall<A = unknown> {
   ): Effect.Effect<A, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
 }
 
-const isEndpointCall = (u: unknown): u is EndpointCall => typeof u === 'function'
+const isEndpointCall = (u: unknown): u is EndpointCall => Predicate.isFunction(u)
 
 const propertyOf = <C = unknown>(client: C, group: string): Top => {
-  if (!isObjectOrFunction(client)) {
+  if (!Predicate.isObjectKeyword(client)) {
     return undefined
   }
   const prop: Top = Reflect.get(client, group)
@@ -165,7 +125,7 @@ const propertyOf = <C = unknown>(client: C, group: string): Top => {
 
 const groupEntryOf = <C = unknown>(client: C, group: string): object => {
   const groupEntry = propertyOf(client, group)
-  if (!isNonNullObject(groupEntry)) {
+  if (!Predicate.isObject(groupEntry)) {
     throw new Error(`Unknown API group: ${group}`)
   }
   return groupEntry
@@ -485,8 +445,8 @@ export const Service =
       return Atom.serializable(fnAtom, {
         key: `AtomHttpApi:mutation:${group}:${endpoint}`,
         schema: schemaCodec(
-          Schema.Union(getSuccessSchemas(definition)),
-          Schema.Union(getErrorSchemas(definition)),
+          Schema.Union(definition.pipe(getSuccessSchemas)),
+          Schema.Union(definition.pipe(getErrorSchemas)),
         ),
       })
     })
@@ -577,8 +537,8 @@ export const Service =
       return Atom.serializable(atom, {
         key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${serializationKey}`,
         schema: schemaCodec(
-          Schema.Union(getSuccessSchemas(endpoint)),
-          Schema.Union(getErrorSchemas(endpoint)),
+          Schema.Union(endpoint.pipe(getSuccessSchemas)),
+          Schema.Union(endpoint.pipe(getErrorSchemas)),
         ),
       })
     }
