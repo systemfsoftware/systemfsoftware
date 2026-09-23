@@ -148,12 +148,7 @@ export const creditHoldContract = Contract.of(Fulfillment.fulfillmentTaxonomy)
     ),
   )
 
-export type CheckFailure =
-  | Contract.ContractDecodeError
-  | Observation.EmptyObservationError
-  | Contract.TraceDisparityError
-
-export const disparityOf = (failure: CheckFailure): Contract.TraceDisparityError => {
+export const disparityOf = (failure: Contract.CheckFailure<never>): Contract.TraceDisparityError => {
   if (!S.is(Contract.TraceDisparityError)(failure)) {
     throw new Error('the refusal was not a trace disparity')
   }
