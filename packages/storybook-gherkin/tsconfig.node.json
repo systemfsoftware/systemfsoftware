@@ -1,4 +1,16 @@
 {
   "extends": "@systemfsoftware/tsconfig/node",
-  "include": ["oxlint.config.ts", "tsdown.config.ts", "vitest.config.ts", "scripts/check-dts.mjs"]
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.node.tsbuildinfo"
+  },
+  "include": [
+    ".storybook/main.ts",
+    ".storybook/preview.ts",
+    "oxlint.config.ts",
+    "scripts/check-dts.mjs",
+    "tsdown.config.ts",
+    "vitest.config.ts"
+  ]
 }
