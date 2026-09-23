@@ -42,7 +42,7 @@ Feature('Restoring saved page state')
           })),
         When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('the saved value is already on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function showSavedTemperature() {
             return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
           })
         ),
@@ -75,7 +75,7 @@ Feature('Restoring saved page state')
         ),
         When('the page is shown')('shown', () => Effect.succeed(true)),
         Then('the value that was set is still on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function showRoomTemperature() {
             return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
           })
         ),

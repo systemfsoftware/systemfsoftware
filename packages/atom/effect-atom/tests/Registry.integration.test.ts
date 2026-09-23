@@ -1204,11 +1204,21 @@ Feature('Keeping a value that is still loading available to every reader')
               s.ctx.registry.set(s.ctx.waiting, Result.success(2, { waiting: true }))
               s.ctx.registry.set(s.ctx.waiting, Result.success(3))
               s.ctx.registry.set(s.ctx.noOption, Option.some(5))
-              const settledValue = yield* Fiber.join(s.ctx.fibers[0])
-              const resumedValue = yield* Fiber.join(s.ctx.fibers[1])
-              const optionValue = yield* Fiber.join(s.ctx.fibers[2])
-              const throughWaiting = yield* Fiber.join(s.ctx.fibers[3])
-              const throughNone = yield* Fiber.join(s.ctx.fibers[4])
+              const [settledFiber, resumedFiber, optionFiber, waitingFiber, noneFiber] = s.ctx.fibers
+              if (
+                settledFiber === undefined ||
+                resumedFiber === undefined ||
+                optionFiber === undefined ||
+                waitingFiber === undefined ||
+                noneFiber === undefined
+              ) {
+                throw new Error('expected five forked reads from the value')
+              }
+              const settledValue = yield* Fiber.join(settledFiber)
+              const resumedValue = yield* Fiber.join(resumedFiber)
+              const optionValue = yield* Fiber.join(optionFiber)
+              const throughWaiting = yield* Fiber.join(waitingFiber)
+              const throughNone = yield* Fiber.join(noneFiber)
               s.ctx.registry.refresh(s.ctx.value)
               const maybeNode = s.ctx.registry.getNodes().get(s.ctx.value)
               if (maybeNode === undefined) {

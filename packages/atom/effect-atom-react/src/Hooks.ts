@@ -519,9 +519,7 @@ const isNonNullObject = (value: unknown): value is object => {
 const hasPlainProto = (value: object): boolean =>
   Reflect.getPrototypeOf(value) === Object.prototype || Reflect.getPrototypeOf(value) === null
 
-const isPlainObject = (value: unknown): value is object => {
-  return isNonNullObject(value) && hasPlainProto(value)
-}
+const isPlainObject = (value: unknown): value is object => isNonNullObject(value) && hasPlainProto(value)
 
 const hasOnlyKeys = (value: object, keys: readonly string[]): boolean =>
   Object.keys(value).every((key) => keys.includes(key))

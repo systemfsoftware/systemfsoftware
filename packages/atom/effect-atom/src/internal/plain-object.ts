@@ -19,9 +19,7 @@ export const hasPlainProto = (value: object): boolean =>
   Reflect.getPrototypeOf(value) === Object.prototype || Reflect.getPrototypeOf(value) === null
 
 /** @internal */
-export const isPlainObject = (value: unknown): value is object => {
-  return isNonNullObject(value) && hasPlainProto(value)
-}
+export const isPlainObject = (value: unknown): value is object => isNonNullObject(value) && hasPlainProto(value)
 
 const hasOnlyKeys = (value: object, keys: readonly string[]): boolean =>
   Object.keys(value).every((key) => keys.includes(key))

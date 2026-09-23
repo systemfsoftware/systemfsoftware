@@ -1259,7 +1259,7 @@ type AnyValue<A = unknown> = A
 const GARBAGE_SAMPLES: readonly AnyValue[] = [null, 5, 'x', { a: 1 }, { _tag: 'Weird' }, []]
 const TAGGED_SAMPLES: readonly Schema.Schema.Type<typeof taggedSchema>[] = [
   Result.success(2),
-  Result.failure(Cause.fail({ _tag: 'T', code: 7 })),
+  Result.failure(Cause.fail<TaggedError>({ _tag: 'T', code: 7 })),
   Result.failure(Cause.fail('plain')),
 ]
 const interruptedResult = Result.failure<never, never>(Cause.interrupt(1))

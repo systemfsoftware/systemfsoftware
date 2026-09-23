@@ -56,7 +56,7 @@ Feature('Scoped atoms that belong to one part of the page')
             }),
         ),
         Then('the widget shows the updated counter')(() =>
-          Effect.promise(() => {
+          Effect.promise(function showUpdatedCounter() {
             return expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
           })
         ),
@@ -85,7 +85,7 @@ Feature('Scoped atoms that belong to one part of the page')
           })),
         When('the greeting is shown')('shown', () => Effect.succeed(true)),
         Then('the input name is on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function showGreeting() {
             return expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
           })
         ),
@@ -127,7 +127,7 @@ Feature('Scoped atoms that belong to one part of the page')
             })
           })),
         Then('the original atom is still on screen')(() =>
-          Effect.promise(() => {
+          Effect.promise(function showKeptName() {
             return expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
           })
         ),
@@ -163,7 +163,7 @@ Feature('Scoped atoms that belong to one part of the page')
         ),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
         Then('the error boundary reports the missing provider')(() =>
-          Effect.promise(() => {
+          Effect.promise(function showMissingProvider() {
             return expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
           })
         ),
