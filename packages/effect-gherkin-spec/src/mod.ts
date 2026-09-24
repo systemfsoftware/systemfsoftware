@@ -2,6 +2,7 @@ export { it, layer } from '@effect/vitest'
 export { And, But, Gherkin, Given, Then, When } from './DoNotation.js'
 export type {
   AssertedPipeline,
+  AssertionStateRefused,
   GherkinEffect,
   GherkinScope,
   GivenStage,
@@ -11,6 +12,7 @@ export type {
   ScopeMap,
   ScopeServices,
   Stage,
+  StepCheck,
   StepText,
   ThenStage,
   VitestTaskContext,
@@ -23,6 +25,7 @@ export {
   stageThen,
   StageTypeId,
   stageWhen,
+  StepExpect,
   VitestTaskRef,
 } from './DoNotation.js'
 export type { PairwiseMatrix, PairwiseResult } from './extensions/Pairwise.js'
@@ -38,13 +41,14 @@ export {
   type FeatureSuiteOptions,
   makeFeature,
 } from './Feature.js'
-export { checkSoftFailures, resolveScenarioArgs } from './FeatureRuntime.js'
+export { resolveScenarioArgs } from './FeatureRuntime.js'
 export type {
   HeadlessPipelineRejected,
   OutlineFn,
   ScenarioBody,
   ScenarioFn,
   ScenarioOptions,
+  ScenarioRun,
   ValidScenarioPipeline,
 } from './FeatureRuntime.js'
 export { expandOutline, renderTitle, stringifyForTitle, tokenizeTemplate } from './OutlineExpand.js'

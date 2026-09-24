@@ -1,14 +1,12 @@
-import { captureRunBinding } from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
+import { type Asserted, captureRunBinding } from '@effect/vitest/integration'
 import { Effect, Option, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import { describe } from 'vitest'
-import type { TestContext } from 'vitest'
 import * as KernelCase from './KernelCase.js'
 import type { LiveCase } from './KernelCase.js'
 import type { Options } from './Suite.js'
-import * as TaskRef from './TaskRef.service.js'
 
 export type RegisterMode = 'run' | 'skip' | 'only'
 
@@ -42,8 +40,40 @@ export const invokeDescribe: {
   (mode: DescribeMode, suiteName: string, suiteOpts: Options | undefined): (fn: () => void) => void
   (mode: DescribeMode, suiteName: string, suiteOpts: Options | undefined, fn: () => void): void
 } = dual(4, invokeDescribeImpl)
-const pickTester = <R>(family: Vitest.Tester<R>, mode: RegisterMode): Vitest.Test<R> =>
-  ({ skip: family.skip, only: family.only, run: family })[mode]
+/**
+ * One fork lane and the two mode variants that share its call signature. A lane is a
+ * generator-body registrar, and every lane is scoped: the fork provides `Scope` around each test,
+ * so a lane's requirement channel carries it whatever the layer adds.
+ */
+interface Lanes<R> {
+  readonly run: Vitest.Test<R>
+  readonly skip: Vitest.Test<R>
+  readonly only: Vitest.Test<R>
+}
+
+const pickLane = <R>(lanes: Lanes<R>, mode: RegisterMode): Vitest.Test<R> =>
+  ({ skip: lanes.skip, only: lanes.only, run: lanes.run })[mode]
+
+/** The virtual-clock lane: the fork's own generator-body `it` and its two mode variants. */
+const virtualLanes = (methodsIt: Vitest.Methods): Lanes<Scope.Scope> => ({
+  run: methodsIt,
+  skip: methodsIt.skip,
+  only: methodsIt.only,
+})
+
+/** The live-clock lane: `it.live` and its two mode variants, which already carry `Scope`. */
+const liveLanes = (methodsIt: Vitest.Methods): Lanes<Scope.Scope> => ({
+  run: methodsIt.live,
+  skip: methodsIt.live.skip,
+  only: methodsIt.live.only,
+})
+
+/**
+ * An explored case runs under the kernel's own clock, so it registers on the virtual lane; a
+ * live-declared case keeps the real clock and registers on `it.live`.
+ */
+const caseLanes = (methodsIt: Vitest.Methods, live: LiveCase | undefined): Lanes<Scope.Scope> =>
+  live === undefined ? virtualLanes(methodsIt) : liveLanes(methodsIt)
 
 const scopedBody = Effect.scoped
 
@@ -54,14 +84,18 @@ const scopedBody = Effect.scoped
  */
 export const UNTIMED = { timeout: 0 } as const
 
-export const exploredBody = <A, E>(
+/**
+ * One case's program under the kernel: the test's binding is re-provided onto it (the kernel
+ * drives it in its own run, so the check ledger and the running Vitest task are handed over), the
+ * run is scoped, and a failure reports its seed and decision path.
+ */
+export const exploredProgram = <A, E>(
   program: Effect.Effect<A, E, Scope.Scope>,
-): (ctx: TestContext) => Effect.Effect<void> =>
-(ctx) =>
+): Effect.Effect<void, E, Asserted> =>
   Effect.gen(function*() {
     const binding = yield* captureRunBinding
-    const bound = binding.bind(TaskRef.provideTaskRef(program, ctx))
-    yield* Effect.promise(() => bound.pipe(scopedBody, KernelCase.explore))
+    const bound = binding.bind(program)
+    return yield* Effect.promise(() => bound.pipe(scopedBody, KernelCase.explore))
   })
 
 /**
@@ -73,7 +107,7 @@ const selectCaseRunnerImpl = (
   methodsIt: Vitest.Methods,
   mode: RegisterMode,
   live: LiveCase | undefined,
-): Vitest.Test<Scope.Scope> => pickTester(live === undefined ? methodsIt.effect : methodsIt.live, mode)
+): Vitest.Test<Scope.Scope> => pickLane(caseLanes(methodsIt, live), mode)
 
 export const selectCaseRunner: {
   (mode: RegisterMode, live: LiveCase | undefined): (methodsIt: Vitest.Methods) => Vitest.Test<Scope.Scope>

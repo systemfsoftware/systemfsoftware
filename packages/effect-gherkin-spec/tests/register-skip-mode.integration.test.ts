@@ -1,5 +1,4 @@
-import { afterAll, expect } from '@effect/vitest'
-import { Gherkin, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 
 const executions = { ran: 0 }
@@ -11,15 +10,18 @@ Feature.skip('A suite registered in skip mode is not executed')
     scenario(
       'A scenario of a skipped suite never runs its steps',
       Gherkin.Do.pipe(
-        Then('this step records an execution whenever it actually runs')(() =>
+        When('the step records an execution whenever it actually runs')(() =>
           Effect.sync(() => {
             executions.ran += 1
           })
+        ),
+        Then('this scenario performed exactly the one execution it recorded')((_s, expect) =>
+          expect(executions.ran).toBe(1)
         ),
       ),
     )
   })
 
-afterAll(() => {
-  expect(executions.ran).toBe(0)
+it('A skipped suite never ran any of its steps', function*({ expect }) {
+  yield* expect(executions.ran).toBe(0)
 })

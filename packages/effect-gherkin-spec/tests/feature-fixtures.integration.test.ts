@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer } from 'effect'
 
@@ -48,12 +47,10 @@ Feature('Scenario workspace fixture isolation')
               Effect.flatMap((ws) => ws.write('spec.txt', 'BDD feature')),
             ),
         ),
-        Then('the workspace contains the saved file')(() =>
+        Then('the workspace contains the saved file')((_s, expect) =>
           WorkspaceDirectory.pipe(
             Effect.flatMap((ws) => ws.files),
-            Effect.map((files) => {
-              expect(files).toContain('spec.txt')
-            }),
+            Effect.map((files) => expect(files).toEqual(['spec.txt'])),
           )
         ),
       ),
@@ -67,9 +64,7 @@ Feature('Scenario workspace fixture isolation')
           'files',
           () => WorkspaceDirectory.pipe(Effect.flatMap((ws) => ws.files)),
         ),
-        Then('no files from previous scenarios are present')((s) => {
-          expect(s.files).toEqual([])
-        }),
+        Then('no files from previous scenarios are present')((s, expect) => expect(s.files).toEqual([])),
       ),
     )
   })

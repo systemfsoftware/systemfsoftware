@@ -1,4 +1,5 @@
 import { it as vitestIt, layer } from '@effect/vitest'
+import type { Expect } from '@effect/vitest'
 import { KernelCase, Suite } from '@systemfsoftware/effect-spec-runtime'
 import { Context, Effect, Layer } from 'effect'
 import { describe, expect, it } from 'tstyche'
@@ -57,10 +58,19 @@ describe('Suite.open', () => {
   })
 
   it('Should_RouteTheBodyAndErrorChannels_When_TheRegistrarAdvertisesThem', () => {
-    expect(numericRegister).type.toBeCallableWith('counting case', Effect.succeed(42), 'run')
-    expect(numericRegister).type.not.toBeCallableWith('string case', Effect.succeed('42'), 'run')
-    expect(numericRegister).type.not.toBeCallableWith('failing case', Effect.fail('plain string'), 'run')
-    expect(numericRegister).type.toBeCallableWith('failing case', Effect.fail<CaseError>({ message: 'nope' }), 'run')
+    expect(numericRegister).type.toBeCallableWith('counting case', (_expect: Expect) => Effect.succeed(42), 'run')
+    expect(numericRegister).type.not.toBeCallableWith('bare effect case', Effect.succeed(42), 'run')
+    expect(numericRegister).type.not.toBeCallableWith('string case', (_expect: Expect) => Effect.succeed('42'), 'run')
+    expect(numericRegister).type.not.toBeCallableWith(
+      'failing case',
+      (_expect: Expect) => Effect.fail('plain string'),
+      'run',
+    )
+    expect(numericRegister).type.toBeCallableWith(
+      'failing case',
+      (_expect: Expect) => Effect.fail<CaseError>({ message: 'nope' }),
+      'run',
+    )
   })
 
   it('Should_KeepTheErrorChannelNarrow_When_ComparedToABroaderSignature', () => {
@@ -84,8 +94,16 @@ describe('Suite.openCase', () => {
   })
 
   it('Should_RouteTheCaseLayerServiceIntoTheRegistrar_When_ItNeedsTheFreshFixture', () => {
-    expect(freshRegister).type.toBeCallableWith('needing the fresh fixture', Effect.asVoid(FreshFixture), 'run')
-    expect(freshRegister).type.not.toBeCallableWith('needing another fixture', Effect.asVoid(OtherFixture), 'run')
+    expect(freshRegister).type.toBeCallableWith(
+      'needing the fresh fixture',
+      (_expect: Expect) => Effect.asVoid(FreshFixture),
+      'run',
+    )
+    expect(freshRegister).type.not.toBeCallableWith(
+      'needing another fixture',
+      (_expect: Expect) => Effect.asVoid(OtherFixture),
+      'run',
+    )
   })
 
   it('Should_PinTheRegisterAndDescribeModeUnions_When_TheModesAreDeclared', () => {
@@ -104,19 +122,22 @@ describe('Suite.Config live declaration', () => {
   it('Should_AcceptACaseLevelLiveDeclaration_When_ItCarriesItsReason', () => {
     expect(numericRegister).type.toBeCallableWith(
       'driving its own kernel',
-      Effect.succeed(42),
+      (_expect: Expect) => Effect.succeed(42),
       'run',
       { reason: 'drives its own kernel run' },
     )
     expect(numericRegister).type.not.toBeCallableWith(
       'driving its own kernel',
-      Effect.succeed(42),
+      (_expect: Expect) => Effect.succeed(42),
       'run',
       {},
     )
-    expect(numericRegister).type.not.toBeCallableWith('counting case', Effect.succeed(42), 'run', {
-      reason: 42,
-    })
+    expect(numericRegister).type.not.toBeCallableWith(
+      'counting case',
+      (_expect: Expect) => Effect.succeed(42),
+      'run',
+      { reason: 42 },
+    )
   })
 })
 

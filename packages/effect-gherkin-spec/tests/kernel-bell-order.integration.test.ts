@@ -1,5 +1,4 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber } from 'effect'
 import type { SavedBasket } from './__fixtures__/clerk-shelf.fixture.js'
 import { Shelf, shelfLayer } from './__fixtures__/clerk-shelf.fixture.js'
@@ -40,14 +39,16 @@ Feature('A bell settles who shelves first')
       'Two clerks shelve in bell order and the second basket is on top',
       Gherkin.Do.pipe(
         Given('a service bell and two full baskets')('order', () => bellOrderOf()),
-        And('the first clerk has shelved the first basket and rung the bell')((s) => shelveThenRing(s.order)),
+        When('the first clerk shelves the first basket and rings the bell')(
+          'firstShelved',
+          (s) => shelveThenRing(s.order),
+        ),
         When('the second clerk shelves after hearing the bell')('shelved', (s) => shelveAfterTheBell(s.order)),
-        Then('the basket on top of the shelf is the second clerk’s')(() =>
-          Effect.gen(function*() {
-            const shelf = yield* Shelf
-            const reopened = yield* shelf.reopen
-            expect(reopened.owner).toBe('the second clerk')
-          })
+        Then('the basket on top of the shelf is the second clerk’s')((_s, expect) =>
+          Shelf.pipe(
+            Effect.flatMap((shelf) => shelf.reopen),
+            Effect.map((reopened) => expect(reopened.owner).toBe('the second clerk')),
+          )
         ),
       ),
     )

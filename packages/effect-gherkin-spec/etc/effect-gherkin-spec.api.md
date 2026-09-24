@@ -4,10 +4,13 @@
 
 ```ts
 
+import { Asserted } from '@effect/vitest/integration';
+import { Check } from '@effect/vitest';
 import { Context } from 'effect';
 import { Duration } from 'effect';
 import * as Effect$1 from 'effect/Effect';
 import { Effect } from 'effect';
+import { Expect } from '@effect/vitest';
 import { it } from '@effect/vitest';
 import * as Layer$1 from 'effect/Layer';
 import { Layer } from 'effect';
@@ -20,25 +23,21 @@ import { Suite } from '@systemfsoftware/effect-spec-runtime';
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime';
 import { YieldableError } from 'effect/Cause';
 
-// Warning: (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "_and" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const And: ((text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>) & {
-    soft: (text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-    poll: (text: StepText, opts?: PollOptions) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-};
+export const And: typeof _and;
 
 // @public (undocumented)
 export type AssertedPipeline<R = never> = Effect.Effect<GherkinScope<object & ThenStage>, StepError, R>;
 
-// @public (undocumented)
-export const But: ((text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>) & {
-    soft: (text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-    poll: (text: StepText, opts?: PollOptions) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-};
+// @public
+export type AssertionStateRefused = '✗ a second assertion step on the same state. Assert it once in one Then: Then(text)((s, expect) => expect({ a: s.a, b: s.b }).toEqual({...})).';
 
+// Warning: (ae-forgotten-export) The symbol "_but" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const checkSoftFailures: <R>(effect: Effect$1.Effect<void, StepError, R>) => Effect$1.Effect<void, StepError, R>;
+export const But: typeof _but;
 
 // @public (undocumented)
 export type EffectVitestBindings = Suite.Bindings;
@@ -54,7 +53,7 @@ export const expandOutline: {
 // @public (undocumented)
 export type FeatureBody<RShared = never, RFresh = never, RFreshReq = never, S extends ScopeMap = EmptyScopeMap$1> = (ctx: {
     readonly scenario: ScenarioFn<RShared, RFresh, RFreshReq>;
-    readonly background: (pipeline: Effect$1.Effect<Top, StepError, RShared | RFresh | RFreshReq>) => void;
+    readonly background: (pipeline: BackgroundEffect<RShared | RFresh | RFreshReq>) => void;
     readonly scenarioOutline: OutlineFn<RShared, RFresh, RFreshReq>;
     readonly scope: GherkinEffect<ScopeServices<S> & GivenStage, never, ScopeIdentifiers<S>>;
     readonly Do: Effect$1.Effect<object, never, never>;
@@ -112,26 +111,17 @@ export const Gherkin: {
     readonly scope: typeof makeScope;
     readonly Given: typeof _given;
     readonly When: ((text: StepText) => {
-        <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>;
-        <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>;
+        <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
+        <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
     }) & {
         poll: (text: StepText, opts?: PollOptions) => {
-            <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>;
-            <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>;
+            <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
+            <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
         };
     };
-    readonly Then: ((text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>) & {
-        soft: (text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-        poll: (text: StepText, opts?: PollOptions) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-    };
-    readonly And: ((text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>) & {
-        soft: (text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-        poll: (text: StepText, opts?: PollOptions) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-    };
-    readonly But: ((text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>) & {
-        soft: (text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-        poll: (text: StepText, opts?: PollOptions) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-    };
+    readonly Then: typeof _then;
+    readonly And: typeof _and;
+    readonly But: typeof _but;
 };
 
 // @public (undocumented)
@@ -183,8 +173,8 @@ export interface OutlineRow<Row> {
 
 // @public (undocumented)
 export const pairwiseFor: {
-    <Identifier, Service, RA = never, RB = never>(service: Context.Service<Identifier, Service>): (matrix: PairwiseMatrix<Identifier, RA, RB>) => (text: StepText) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(name: N, f: (scope: NoInfer_2<A>) => (svc: Service) => Effect.Effect<Out, E, never>) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage, E1 | StepError, R1 | RA | RB>;
-    <Identifier, Service, RA = never, RB = never>(matrix: PairwiseMatrix<Identifier, RA, RB>, service: Context.Service<Identifier, Service>): (text: StepText) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(name: N, f: (scope: NoInfer_2<A>) => (svc: Service) => Effect.Effect<Out, E, never>) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage, E1 | StepError, R1 | RA | RB>;
+    <Identifier, Service, RA = never, RB = never>(service: Context.Service<Identifier, Service>): (matrix: PairwiseMatrix<Identifier, RA, RB>) => (text: StepText) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(name: N, f: (scope: NoInfer_2<A>) => (svc: Service) => Effect.Effect<Out, E, never>) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage, E1 | StepError, R1 | RA | RB | Asserted>;
+    <Identifier, Service, RA = never, RB = never>(matrix: PairwiseMatrix<Identifier, RA, RB>, service: Context.Service<Identifier, Service>): (text: StepText) => <N extends string, A extends object & (InitialStage | GivenStage | WhenStage), Out, E>(name: N, f: (scope: NoInfer_2<A>) => (svc: Service) => Effect.Effect<Out, E, never>) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, PairwiseResult<Out>> & WhenStage, E1 | StepError, R1 | RA | RB | Asserted>;
 };
 
 // @public (undocumented)
@@ -254,6 +244,9 @@ export type ScenarioOptions<RScenario = never, RExtra = never> = {
     readonly live?: string;
 };
 
+// @public
+export type ScenarioRun<R = never> = (expect: Expect) => Effect$1.Effect<void, StepError, R | Scope.Scope | Asserted>;
+
 // Warning: (ae-forgotten-export) The symbol "ScopeIdentifiers$1" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -287,10 +280,16 @@ export const StageTypeId: unique symbol;
 // @public (undocumented)
 export const stageWhen: WhenStage;
 
+// @public
+export type StepCheck<E = never, R = never> = Check | Effect.Effect<Check, E, R>;
+
 // Warning: (ae-forgotten-export) The symbol "StepError_base" needs to be exported by the entry point index.d.ts
 //
 // @public
 export class StepError extends StepError_base {}
+
+// @public
+export const StepExpect: Context.Reference<Expect | null>;
 
 // @public (undocumented)
 export type StepText<A extends object = object> = string | ((scope: A) => string);
@@ -305,10 +304,7 @@ export type TemplateToken = {
 };
 
 // @public (undocumented)
-export const Then: ((text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>) & {
-    soft: (text: StepText) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-    poll: (text: StepText, opts?: PollOptions) => <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void) => <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & ThenStage, E1 | StepError, R1 | R2>;
-};
+export const Then: typeof _then;
 
 // @public (undocumented)
 export type ThenStage = {
@@ -329,12 +325,12 @@ export const VitestTaskRef: Context.Reference<TaskRef.VitestTaskContext<unknown>
 
 // @public (undocumented)
 export const When: ((text: StepText) => {
-    <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>;
-    <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>;
+    <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
+    <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
 }) & {
     poll: (text: StepText, opts?: PollOptions) => {
-        <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2>;
-        <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2>;
+        <N extends string, A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), B, E2, R2>(name: N, f: (a: NoInfer$1<A>) => Effect.Effect<B, E2, R2>): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & Record<N, B> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
+        <A extends object & (InitialStage | GivenStage | WhenStage | ThenStage), E2 = never, R2 = never, Out = unknown>(f: (a: NoInfer$1<A>) => Effect.Effect<Out, E2, R2> | void): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<Omit<A, typeof StageTypeId> & WhenStage, E1 | StepError, R1 | R2 | Asserted>;
     };
 };
 
@@ -345,11 +341,14 @@ export type WhenStage = {
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:86:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:87:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:148:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:196:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:304:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:114:3 - (ae-forgotten-export) The symbol "makeScope" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:115:3 - (ae-forgotten-export) The symbol "_given" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:117:5 - (ae-forgotten-export) The symbol "NoInfer$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:125:3 - (ae-forgotten-export) The symbol "_then" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:158:3 - (ae-forgotten-export) The symbol "NoInfer_2" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:213:3 - (ae-forgotten-export) The symbol "BackgroundEffect" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:219:3 - (ae-forgotten-export) The symbol "Top" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:321:3 - (ae-forgotten-export) The symbol "AnyRow" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

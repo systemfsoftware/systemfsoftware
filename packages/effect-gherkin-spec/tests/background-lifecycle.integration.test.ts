@@ -1,5 +1,4 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 interface SessionStoreService {
@@ -35,7 +34,7 @@ Feature('Background precondition lifecycle and scenario isolation')
     background(
       Gherkin.Do.pipe(
         Given('an active session store')('store', () => SessionStore),
-        Then('the background registers an initial session touch')((s) => s.store.incrementAccess),
+        When('the background registers an initial session touch')('touch', (s) => s.store.incrementAccess),
       ),
     )
 
@@ -48,17 +47,14 @@ Feature('Background precondition lifecycle and scenario isolation')
             Effect.flatMap(() => s.store.incrementAccess),
           )
         ),
-        Then('the session reflects the administrator identity')((s) =>
+        Then('the session reflects the administrator identity and records two total accesses')((s, expect) =>
           Effect.gen(function*() {
             const user = yield* s.store.activeUser
-            expect(user).toBe('admin')
-          })
-        ),
-        And('the session store records two total accesses in this scenario')((s) =>
-          Effect.gen(function*() {
             const count = yield* s.store.accessCount
-            expect(count).toBe(2)
-          })
+            return { user, count }
+          }).pipe(
+            Effect.map((observation) => expect(observation).toEqual({ user: 'admin', count: 2 })),
+          )
         ),
       ),
     )
@@ -67,17 +63,15 @@ Feature('Background precondition lifecycle and scenario isolation')
       'A second scenario receives a fresh background setup and is completely isolated from previous scenario mutations',
       Gherkin.Do.pipe(
         Given('the session store from the fresh background')('store', () => SessionStore),
-        Then('the active user remains the default guest identity without pollution')((s) =>
-          Effect.gen(function*() {
-            const user = yield* s.store.activeUser
-            expect(user).toBe('guest')
-          })
-        ),
-        And('the access count reflects only the current scenario background execution')((s) =>
-          Effect.gen(function*() {
-            const count = yield* s.store.accessCount
-            expect(count).toBe(1)
-          })
+        Then('the active user is the default guest and the access count reflects only this scenario background')(
+          (s, expect) =>
+            Effect.gen(function*() {
+              const user = yield* s.store.activeUser
+              const count = yield* s.store.accessCount
+              return { user, count }
+            }).pipe(
+              Effect.map((observation) => expect(observation).toEqual({ user: 'guest', count: 1 })),
+            ),
         ),
       ),
     )

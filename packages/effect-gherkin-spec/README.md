@@ -2,12 +2,11 @@
 
 Write Gherkin-style behaviour tests with [Effect](https://effect.website).
 
-`makeFeature({ it })` gives you a `Feature` builder for organising integration tests as Given/When/Then step pipelines. Every scenario runs under the simulation kernel by default (the zero-preemption schedule, then the profile's seeded schedules); a scenario that must stay on the live clock declares a required reason, which the run report lists.
+`makeFeature({ it })` gives you a `Feature` builder for organising integration tests as Given/When/Then step pipelines. A `Then` body is `(state, expect) => one check`: it asserts the state the last Given or When produced, exactly once — several facts about that state become one check over a record. Every scenario runs under the simulation kernel by default (the zero-preemption schedule, then the profile's seeded schedules); a scenario that must stay on the live clock declares a required reason, which the run report lists.
 
 ```ts
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
@@ -19,10 +18,8 @@ Feature('Borrowing a library book')
       Gherkin.Do.pipe(
         Given('an available book on the shelf')('book', () => BookCheckoutLive.current()),
         When('the member borrows the book')(() => BookCheckoutLive.borrow('member-42')),
-        Then('the book is checked out to the member')(() =>
-          Effect.map(BookCheckoutLive.holder(), (holder) => {
-            expect(holder).toBe('member-42')
-          })
+        Then('the book is checked out to the member')((_scope, expect) =>
+          Effect.map(BookCheckoutLive.holder(), (holder) => expect(holder).toBe('member-42'))
         ),
       ),
     )
@@ -32,9 +29,7 @@ Feature('Borrowing a library book')
       { live: 'the notification leaves the process for a real socket' },
       Gherkin.Do.pipe(
         Given('a notification on its way out')('notice', () => Effect.succeed('due-reminder')),
-        Then('the socket receives the notice')((scope) => {
-          expect(scope.notice).toBe('due-reminder')
-        }),
+        Then('the socket receives the notice')((scope, expect) => expect(scope.notice).toBe('due-reminder')),
       ),
     )
   })
@@ -54,10 +49,8 @@ Feature('Calculating late fees')
       ({ daysLate, fee }) =>
         Gherkin.Do.pipe(
           Given('a book returned late')(() => LoanLedgerLive.recordReturn({ daysLate })),
-          Then('the ledger shows the accrued fee')(() =>
-            Effect.map(LoanLedgerLive.fee(), (charged) => {
-              expect(charged).toBe(fee)
-            })
+          Then('the ledger shows the accrued fee')((_scope, expect) =>
+            Effect.map(LoanLedgerLive.fee(), (charged) => expect(charged).toBe(fee))
           ),
         ),
     )

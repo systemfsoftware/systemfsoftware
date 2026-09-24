@@ -1,5 +1,4 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 interface LifecycleCounters {
@@ -48,16 +47,16 @@ Feature('A scenario fixture is opened fresh for each scenario')
       'The first scenario opens its own workspace and nothing has closed yet',
       Gherkin.Do.pipe(
         Given('a fresh workspace for the first scenario')('workspace', () => Workspace),
-        When('the first scenario reads its workspace marker')((s) =>
-          Effect.sync(() => {
-            expect(s.workspace.marker).toBe('workspace-1')
-          })
-        ),
-        Then('the workspace count shows a single open and no release yet')(() =>
+        Then('the first workspace is open and none has been released')((s, expect) =>
           Effect.gen(function*() {
             const counters = yield* Lifecycle
-            expect(yield* Ref.get(counters)).toEqual({ opened: 1, closed: 0 })
-          })
+            return { marker: s.workspace.marker, counters: yield* Ref.get(counters) }
+          }).pipe(Effect.map((facts) =>
+            expect(facts).toEqual({
+              marker: 'workspace-1',
+              counters: { opened: 1, closed: 0 },
+            })
+          ))
         ),
       ),
     )
@@ -67,14 +66,16 @@ Feature('A scenario fixture is opened fresh for each scenario')
       Gherkin.Do.pipe(
         Given('a fresh workspace for the later scenario')('workspace', () => Workspace),
         When('the later scenario reads its workspace marker')('marker', (s) => Effect.succeed(s.workspace.marker)),
-        Then('the later scenario sees the first workspace, not one left behind by the earlier scenario')((s) => {
-          expect(s.marker).toBe('workspace-1')
-        }),
-        And('exactly one workspace is open and none has been released')(() =>
+        Then('the later scenario sees its own fresh workspace and nothing has been released')((s, expect) =>
           Effect.gen(function*() {
             const counters = yield* Lifecycle
-            expect(yield* Ref.get(counters)).toEqual({ opened: 1, closed: 0 })
-          })
+            return { marker: s.marker, counters: yield* Ref.get(counters) }
+          }).pipe(Effect.map((facts) =>
+            expect(facts).toEqual({
+              marker: 'workspace-1',
+              counters: { opened: 1, closed: 0 },
+            })
+          ))
         ),
       ),
     )

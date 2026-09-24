@@ -16,8 +16,9 @@ declare const Feature: FeatureFn
 
 const pipeline = Gherkin.Do.pipe(
   Given('a saved basket on the counter')('basket', () => Effect.succeed({ owner: 'the visiting shopper' })),
-  Then('the basket is saved')((s) => {
+  Then('the basket is saved')((s, exp) => {
     expect(s.basket.owner).type.toBe<string>()
+    return exp(s.basket.owner).toBe('the visiting shopper')
   }),
 )
 
