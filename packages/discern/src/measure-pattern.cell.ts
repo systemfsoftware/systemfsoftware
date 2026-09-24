@@ -12,7 +12,7 @@ import { Array as Arr, Effect, Match, Option, Order, Result, Schema } from 'effe
 import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { observe } from './decision.resource.js'
+import { observe } from './decision.blueprint.js'
 import {
   DecisionIdCollisionError,
   InvalidThresholdError,
@@ -20,8 +20,8 @@ import {
   MeasureInputRefused,
 } from './DiscernError.schema.js'
 import { EvalMetrics, EvalRecord, EvalReport } from './EvalReport.schema.js'
-import type { Answers, Pattern, PatternRefusal, Preview } from './pattern.resource.js'
-import { evaluate, preview, statusOf } from './pattern.resource.js'
+import type { Answers, Pattern, PatternRefusal, Preview } from './pattern.blueprint.js'
+import { evaluate, preview, statusOf } from './pattern.blueprint.js'
 import { ScoreEvalRecord, scoreEvalRecord } from './score-eval-record.workflow.js'
 import type { EvalScore } from './score-eval-record.workflow.js'
 import type { PatternResult } from './Verdict.schema.js'

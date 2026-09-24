@@ -351,10 +351,10 @@ describe('the budget the model hands out', () => {
 
 const nakedModel = Discern.Model.model(Discern.Model.unavailable)
 const figuredModel = Discern.Model.model(Discern.Model.unavailable).pipe(
-  Discern.Model.Model.combinators.recording(observations),
-  Discern.Model.Model.combinators.caching(observations),
-  Discern.Model.Model.combinators.replaying(observations),
-  Discern.Model.Model.combinators.budgeted(spend),
+  Discern.Model.Model.operations.recording(observations),
+  Discern.Model.Model.operations.caching(observations),
+  Discern.Model.Model.operations.replaying(observations),
+  Discern.Model.Model.operations.budgeted(spend),
 )
 
 describe('the model builder', () => {
@@ -366,12 +366,12 @@ describe('the model builder', () => {
   })
 
   it('Should_CombineTheInterceptorStacks_When_MethodsAndDualsAreMixed', () => {
-    expect(nakedModel.pipe(Discern.Model.Model.combinators.recording(observations))).type.toBe<
+    expect(nakedModel.pipe(Discern.Model.Model.operations.recording(observations))).type.toBe<
       Discern.Model.Model
     >()
-    expect(Discern.Model.Model.combinators.recording(nakedModel, observations)).type.toBe<Discern.Model.Model>()
-    expect(Discern.Model.Model.combinators.budgeted).type.toBeCallableWith(spend)
-    expect(Discern.Model.Model.combinators.budgeted).type.not.toBeCallableWith(observations)
+    expect(Discern.Model.Model.operations.recording(nakedModel, observations)).type.toBe<Discern.Model.Model>()
+    expect(Discern.Model.Model.operations.budgeted).type.toBeCallableWith(spend)
+    expect(Discern.Model.Model.operations.budgeted).type.not.toBeCallableWith(observations)
   })
 
   it('Should_CompileTheBuilderAgainstTheDual_When_TheLayerProjectionIsRead', () => {

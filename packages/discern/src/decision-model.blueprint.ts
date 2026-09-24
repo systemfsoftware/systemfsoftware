@@ -1,4 +1,4 @@
-import { Resource } from '@systemfsoftware/effect-cell-types'
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Match, Schema } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -436,19 +436,18 @@ const appendOf = (spec: ModelSpec, interceptor: Interceptor): ModelSpec => ({
 const layerOf = (spec: ModelSpec): Layer.Layer<DecisionModel.DecisionModel> =>
   fromProvider(decorate(spec.interceptors, spec.provider))
 
-export const Model = Resource.make<ModelSpec>()({
-  typeId: TypeId,
-  combinators: {
+export const Model = Blueprint.make<ModelSpec>()(TypeId).steps({
+  steps: {
     recording: (spec, into: ObservationStore): ModelSpec => appendOf(spec, recording(into)),
     caching: (spec, into: ObservationStore): ModelSpec => appendOf(spec, caching(into)),
     replaying: (spec, source: Observations | ObservationStore, options?: ReplayOptions): ModelSpec =>
       appendOf(spec, replaying(source, options)),
     budgeted: (spec, limit: Budget): ModelSpec => appendOf(spec, budgeted(limit)),
   },
-  projections: { layer: layerOf },
+  targets: { layer: layerOf },
 })
 
-export type Model = Resource.Of<typeof Model>
+export type Model = Blueprint.Of<typeof Model>
 
 export const model = (source: Provider): Model => Model.of({ provider: source, interceptors: [] })
 

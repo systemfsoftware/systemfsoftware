@@ -12,9 +12,9 @@ import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as Decision from 'effect/unstable/ai/Decision'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import type { Hashable } from './decision-model.resource.js'
-import { hash } from './decision-model.resource.js'
-import type { ClassifyDecision } from './decision.resource.js'
+import type { Hashable } from './decision-model.blueprint.js'
+import { hash } from './decision-model.blueprint.js'
+import type { ClassifyDecision } from './decision.blueprint.js'
 import {
   DecisionIdCollisionError,
   ExhaustiveMatchError,
@@ -23,8 +23,8 @@ import {
 } from './DiscernError.schema.js'
 import { UncertainMatchError } from './DiscernError.schema.js'
 import { CaseInspection, CompiledPlan, DecisionInspection } from './Inspection.schema.js'
-import type { HandlerResult, LeafOptions, NodeCore, Pattern, UncertainContext } from './pattern.resource.js'
-import { distinctDecisions } from './pattern.resource.js'
+import type { HandlerResult, LeafOptions, NodeCore, Pattern, UncertainContext } from './pattern.blueprint.js'
+import { distinctDecisions } from './pattern.blueprint.js'
 import { finishPolicy } from './run-policy.cell.js'
 import type { Policy, PolicyCase, PolicySpec, UncertainHandler } from './run-policy.cell.js'
 

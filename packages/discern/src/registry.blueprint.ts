@@ -18,7 +18,7 @@ import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { ask, type ClassifyDecision, on } from './decision.resource.js'
+import { ask, type ClassifyDecision, on } from './decision.blueprint.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import {
   invokeProcedure,
@@ -38,7 +38,7 @@ import {
   type OutputOf,
   type Procedure,
   type RequirementsOf,
-} from './procedure.resource.js'
+} from './procedure.blueprint.js'
 import {
   DepthExceededError,
   NoEligibleProcedureError,
