@@ -1,7 +1,6 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
 import * as Crypto from 'effect/Crypto'
-import * as Match from 'effect/Match'
 import type { Sandbox } from 'microsandbox'
 import { LoopbackViolationError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
