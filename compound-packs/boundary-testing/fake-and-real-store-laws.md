@@ -11,7 +11,7 @@ A store is a capability port over shared state that outlives a single interactio
 
 A test double that diverges from real database semantics invalidates all higher-level tests relying on it (James Shore, _Testing Without Mocks_; https://www.jamesshore.com/v2/projects/nullables/testing-without-mocks). A fake store must not be a bespoke mock configured with canned return values. It is a stateful in-process implementation obeying the exact same transactional, consistency, and commutativity laws as production adapters:
 
-1. **Shared In-Process Law Suite**: The contract suite lives outside `src/` as a `*.integration.test.ts` file (e.g. `tests/settlement-store.integration.test.ts`). It executes against both the in-memory fake (e.g. `SettlementStore.memory`) and the production adapter running on an embedded engine (e.g. `SettlementStore.Live` over PGlite).
+1. **Shared In-Process Law Suite**: The contract suite lives outside `src/` as a `*.integration.test.ts` file (e.g. `tests/settlement-store.integration.test.ts`). It executes against both the in-memory fake (e.g. `Settlement.Memory.layer(seed)`) and the production adapter running on an embedded engine (e.g. `Settlement.Drizzle.layer` over PGlite).
 2. **Mandatory Algebraic Base Laws**: Every store's law suite must test and prove at least three properties:
    - **Read-after-write**: Reading a key immediately following a successful save returns the value written.
    - **Repeated read stability**: Repeating a read without intervening writes yields identical state and causes no mutations.
@@ -43,7 +43,7 @@ const twoSettlesOnOneVersion = Effect.gen(function*() {
     yield* store.settle(commandFor('order-2', second.proof, stock.proof)),
   ]
 })
-// expected: ['Committed', 'Conflict'] for SettlementStore.memory(seed) and SettlementStore.Live over PGlite
+// expected: ['Committed', 'Conflict'] for Settlement.Memory.layer(seed) and Settlement.Drizzle.layer over PGlite
 ```
 
 Gate: `review` — verify that any port managing shared state across interactions defines formal consistency guarantees and runs against a shared law contract suite in `tests/` passing on both in-memory fakes and production database adapters, asserting base laws (read-after-write, stability, commutativity) and deterministic concurrent interleavings.

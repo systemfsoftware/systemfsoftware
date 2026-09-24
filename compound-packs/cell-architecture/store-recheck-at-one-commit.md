@@ -30,11 +30,11 @@ export const settleOrderCell = reserveStockCell.pipe(Cell.andThen(chargeCreditCe
 // RIGHT: one store call commits credit, stock, reservations, and audit in a single transaction,
 // or conflicts. Confluent audit/rollback events append freely under fresh ids with no version check.
 export interface SettlementStore {
-  readonly settle: (command: SettlementCommand) => Effect.Effect<'Committed' | 'Conflict'>
+  readonly settle: (command: SettlementCommand) => Effect.Effect<'Committed' | 'Conflict', StoreUnavailable>
 }
 
 export interface ReservationLog {
-  readonly appendRollback: (event: RollbackEvent) => Effect.Effect<void>
+  readonly appendRollback: (audit: AuditPayload) => Effect.Effect<void, StoreUnavailable>
 }
 
 // The RPC edge retries OptimisticConflict by running the whole cell again:
