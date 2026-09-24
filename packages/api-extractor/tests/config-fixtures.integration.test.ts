@@ -1,7 +1,7 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { expect } from '@effect/vitest'
 import { Extractor } from '@systemfsoftware/api-extractor'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'

@@ -173,7 +173,7 @@ export const expandTokens = dual<
 )
 
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Schema: S } = await import('effect')
 
   const normalizeAngleFree = (raw: string): string => raw.replaceAll('<', '').replaceAll('>', '')

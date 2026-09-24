@@ -1,6 +1,6 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 import { reviewFixture } from './__fixtures__/extractor-harness.js'

@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Match } from 'effect'
 import * as Result from 'effect/Result'
 

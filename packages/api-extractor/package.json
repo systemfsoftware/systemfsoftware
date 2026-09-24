@@ -55,7 +55,6 @@
     "typescript": "5.9.3"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/differential-spec": "workspace:^",
@@ -66,6 +65,7 @@
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",

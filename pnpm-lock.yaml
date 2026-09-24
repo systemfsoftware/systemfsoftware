@@ -528,9 +528,6 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
     devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: link:../vitest
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -561,6 +558,9 @@ importers:
       '@systemfsoftware/tsdown-config':
         specifier: workspace:^
         version: link:../toolchain/tsdown-config
+      '@systemfsoftware/vitest':
+        specifier: workspace:^
+        version: link:../vitest
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../toolchain/vitest-config
