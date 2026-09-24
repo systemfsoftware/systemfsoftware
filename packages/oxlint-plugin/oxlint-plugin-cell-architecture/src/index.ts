@@ -1,7 +1,14 @@
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { banUnknown } from './rules/ban-unknown.js'
+import { handleDefinitionStaysPrivate } from './rules/handle-definition-stays-private.js'
+import { handleExportsGuard } from './rules/handle-exports-guard.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
+import { kindFileConstruction } from './rules/kind-file-construction.js'
+import { kindFileDeclaresNoService } from './rules/kind-file-declares-no-service.js'
+import { kindFileHoldsNoModuleState } from './rules/kind-file-holds-no-module-state.js'
+import { kindRecordMintedByKind } from './rules/kind-record-minted-by-kind.js'
+import { kindTypeIdBySymbolFor } from './rules/kind-typeid-by-symbol-for.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
@@ -32,7 +39,14 @@ export default {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'ban-unknown': banUnknown,
+    'handle-definition-stays-private': handleDefinitionStaysPrivate,
+    'handle-exports-guard': handleExportsGuard,
     'internal-export-jsdoc': internalExportJsdoc,
+    'kind-file-construction': kindFileConstruction,
+    'kind-file-declares-no-service': kindFileDeclaresNoService,
+    'kind-file-holds-no-module-state': kindFileHoldsNoModuleState,
+    'kind-record-minted-by-kind': kindRecordMintedByKind,
+    'kind-typeid-by-symbol-for': kindTypeIdBySymbolFor,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,
