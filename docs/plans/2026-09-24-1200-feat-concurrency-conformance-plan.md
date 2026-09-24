@@ -1,7 +1,7 @@
 ---
 title: Concurrency Conformance Testing - Plan
 type: feat
-date: 2026-09-23
+date: 2026-09-24
 topic: concurrency-conformance
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
