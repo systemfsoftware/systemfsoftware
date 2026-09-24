@@ -1,11 +1,16 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
 import * as Match from 'effect/Match'
-import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { ClassifyJobExit, classifyJobExit, JobExited, JobSignaled } from './classify-job-exit.workflow.js'
 import { JobCompletion } from './JobCompletion.schema.js'
 import { ExecError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
+import { awaitExit, type RunningVMType } from './running-vm.handle.js'
+
+export interface JobExitInput {
+  readonly vm: RunningVMType
+  readonly spec: MicroVMSpec
+}
 
 const argvOf = (spec: MicroVMSpec): ReadonlyArray<string> =>
   Match.value(spec).pipe(
@@ -14,29 +19,19 @@ const argvOf = (spec: MicroVMSpec): ReadonlyArray<string> =>
     Match.exhaustive,
   )
 
-/**
- * The read snapshot the write handlers receive: the encoded `ClassifyJobExit` command plus the
- * argv the read ran, so a rejected command can still name the workload it could not classify.
- */
 type JobExitSnapshot = (typeof ClassifyJobExit)['Encoded'] & {
   readonly argv: ReadonlyArray<string>
 }
 
-const readJobExit = (acquired: AcquiredVM): Effect.Effect<JobExitSnapshot, ExecError> => {
-  const argv = argvOf(acquired.spec)
-  return Effect.map(
-    Effect.tryPromise({
-      try: () => acquired.sandbox.execDefault(),
-      catch: (cause) => new ExecError({ argv, cause }),
-    }),
-    (output) => ({
-      _tag: 'ClassifyJobExit',
-      code: output.code,
-      stdout: output.stdoutBytes(),
-      stderr: output.stderrBytes(),
-      argv,
-    }),
-  )
+const readJobExit = (input: JobExitInput): Effect.Effect<JobExitSnapshot, ExecError> => {
+  const argv = argvOf(input.spec)
+  return Effect.map(awaitExit(input.vm, argv), (output) => ({
+    _tag: 'ClassifyJobExit',
+    code: output.code,
+    stdout: output.stdout,
+    stderr: output.stderr,
+    argv,
+  }))
 }
 
 export const awaitJobCompletion = Sandwich.named('await_job_completion')(readJobExit)

@@ -39,6 +39,7 @@
     "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run --config vitest.config.ts",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "smoke": "pnpm exec turbo run smoke:journey --filter=@systemfsoftware/effect-microsandbox",
