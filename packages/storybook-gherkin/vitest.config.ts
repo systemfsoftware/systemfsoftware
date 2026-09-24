@@ -32,6 +32,15 @@ export default defineConfig({
           },
         },
       },
+      {
+        extends: true,
+        test: {
+          name: 'conformance',
+          environment: 'jsdom',
+          globals: true,
+          include: ['tests/**/*.test.ts'],
+        },
+      },
     ],
   },
 })

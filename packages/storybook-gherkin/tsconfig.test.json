@@ -16,7 +16,8 @@
     "types": []
   },
   "include": [
-    "test/browser"
+    "test/browser",
+    "tests"
   ],
   "references": [
     {
