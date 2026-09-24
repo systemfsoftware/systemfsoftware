@@ -13,6 +13,8 @@ Rules in this pack govern:
 - Algebraic cell composition (`Cell.andThen`, `Cell.zip`).
 - Capability contracts (`*.service.ts`), layer provisioning tiers, and single-site binding at the composition root.
 - Scoped resource lifecycles (`Scope`) with escalating finalizers.
-- Staged lawful builders and resource-vs-handle duality.
+- Staged lawful blueprint builders and blueprint-vs-handle duality.
 - Handle state privacy and pipeable dual parity.
 - Single primary namespace barrels.
+- Running a read-decide-save that protects a non-confluent invariant inside one serializable unit of work, retried whole on a serialization failure (`store-serializable-unit-of-work`).
+- A store's decision-serving reads and saves as operations on a unit handle that only the store's unitOfWork mints (`store-unit-of-work-handle`).

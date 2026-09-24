@@ -1,15 +1,16 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { DateTime, Effect, Result, Schema as S } from 'effect'
+import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
+import { DateTime, Effect, Encoding, Result, Schema as S } from 'effect'
 import { expect } from 'vitest'
 import {
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
-  ConflictRollback,
   CreditHold,
   DuplicateOrder,
   Forbidden,
   InsufficientStock,
+  StoreUnavailable,
   submitRequest,
   TestServer,
   TestServerLayer,
@@ -19,6 +20,7 @@ import {
   uniquePassword,
 } from './__fixtures__/server.fixture.js'
 import type {
+  Client,
   CreditInput,
   FulfillmentDecision,
   Session,
@@ -106,8 +108,11 @@ const lotIdsOf = (view: StockView): readonly string[] =>
 interface StockPageRequest {
   readonly warehouseId: string
   readonly limit: number
-  readonly cursor?: string | undefined
+  readonly cursor?: Inventory.Schema.StockPosition | undefined
 }
+
+const positionOf = (token: string): Inventory.Schema.StockPosition =>
+  Result.getOrThrow(S.decodeResult(Inventory.Schema.StockCursor)(token))
 
 const listStockPage = (session: Session, request: StockPageRequest) =>
   Effect.gen(function*() {
@@ -238,7 +243,7 @@ Feature('Inventory fulfillment across the warehouse network')
             const decision = yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 5 }])
             return { decision, reservations: yield* server.inspect.reservations(orderId) }
           })),
-        Then('three units are reserved and two are recorded as backordered')(
+        Then('three units are reserved without a charge, and two are recorded as backordered')(
           (s) =>
             Effect.gen(function*() {
               const backordered = yield* S.decodeUnknownEffect(Backordered)(s.outcome.decision)
@@ -247,6 +252,8 @@ Feature('Inventory fulfillment across the warehouse network')
                 backordered.backorderedLines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
               ).toEqual([{ sku: s.catalog.sku, quantity: 2 }])
               expect(s.outcome.reservations.map((row) => row.quantity)).toEqual([3])
+              const server = yield* TestServer
+              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(0)
             }),
         ),
       ),
@@ -365,34 +372,37 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 1 }])
             return { sku, lot }
           })),
-        When('both customers submit an order for that unit at the same time')('tags', (s) =>
-          Effect.gen(function*() {
-            const server = yield* TestServer
-            const firstClient = yield* server.client(s.customers.first.cookie)
-            const secondClient = yield* server.client(s.customers.second.cookie)
-            const firstPayload = yield* submitRequest({
-              orderId: uniqueId('order'),
-              lines: [{ sku: s.catalog.sku, quantity: 1 }],
-            })
-            const secondPayload = yield* submitRequest({
-              orderId: uniqueId('order'),
-              lines: [{ sku: s.catalog.sku, quantity: 1 }],
-            })
-            const results = yield* Effect.all(
-              [
-                Effect.result(firstClient.submitOrder(firstPayload)),
-                Effect.result(secondClient.submitOrder(secondPayload)),
-              ],
-              { concurrency: 'unbounded' },
-            )
-            return yield* Effect.forEach(results, (result) =>
-              Result.match(result, {
-                onFailure: (error) =>
-                  S.decodeUnknownEffect(InsufficientStock)(error).pipe(Effect.as('InsufficientStock')),
-                onSuccess: (decision) =>
-                  S.decodeUnknownEffect(AllocatedSplit)(decision).pipe(Effect.as('AllocatedSplit')),
-              }))
-          })),
+        When('both customers order the last unit at once')(
+          'tags',
+          (s) =>
+            Effect.gen(function*() {
+              const server = yield* TestServer
+              const firstClient = yield* server.client(s.customers.first.cookie)
+              const secondClient = yield* server.client(s.customers.second.cookie)
+              const firstPayload = yield* submitRequest({
+                orderId: uniqueId('order'),
+                lines: [{ sku: s.catalog.sku, quantity: 1 }],
+              })
+              const secondPayload = yield* submitRequest({
+                orderId: uniqueId('order'),
+                lines: [{ sku: s.catalog.sku, quantity: 1 }],
+              })
+              const [contested, sibling] = yield* Effect.all(
+                [
+                  Effect.result(firstClient.submitOrder(firstPayload)),
+                  Effect.result(secondClient.submitOrder(secondPayload)),
+                ],
+                { concurrency: 'unbounded' },
+              )
+              return yield* Effect.forEach([contested, sibling], (result) =>
+                Result.match(result, {
+                  onFailure: (error) =>
+                    S.decodeUnknownEffect(InsufficientStock)(error).pipe(Effect.as('InsufficientStock')),
+                  onSuccess: (decision) =>
+                    S.decodeUnknownEffect(AllocatedSplit)(decision).pipe(Effect.as('AllocatedSplit')),
+                }))
+            }),
+        ),
         Then('exactly one order is fulfilled and stock never goes negative')(
           (s) =>
             Effect.gen(function*() {
@@ -406,7 +416,7 @@ Feature('Inventory fulfillment across the warehouse network')
     )
 
     scenario(
-      'A writer whose read version went stale retries and still fulfills the order',
+      'An order whose first commit attempt fails is retried and still fulfills the order',
       Gherkin.Do.pipe(
         Given('a customer with a Standard account and ample credit')(
           'customer',
@@ -420,7 +430,7 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 5 }])
             return { sku, lot }
           })),
-        When('another writer changes the stock version after the read')('outcome', (s) =>
+        When('the first commit attempt raises a serialization failure')('outcome', (s) =>
           Effect.gen(function*() {
             const server = yield* TestServer
             yield* server.seam.armOnce
@@ -428,7 +438,7 @@ Feature('Inventory fulfillment across the warehouse network')
             const decision = yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
             return { decision, orderId }
           })),
-        Then('the retry fulfills the order and reserves the stock')(
+        Then('the retry fulfills the order, charges once, and reserves the stock')(
           (s) =>
             Effect.gen(function*() {
               const server = yield* TestServer
@@ -436,13 +446,15 @@ Feature('Inventory fulfillment across the warehouse network')
               expect(split.allocations.map((allocation) => allocation.quantity)).toEqual([2])
               expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(3)
               expect((yield* server.inspect.reservations(s.outcome.orderId)).map((row) => row.quantity)).toEqual([2])
+              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(2)
+              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(1)
             }),
         ),
       ),
     )
 
     scenario(
-      'A writer that keeps losing the race rolls the reservation back',
+      'An order that keeps failing to commit is refused and inventory is untouched',
       Gherkin.Do.pipe(
         Given('a customer with a Standard account and ample credit')(
           'customer',
@@ -456,28 +468,28 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 5 }])
             return { sku, lot }
           })),
-        When('every write attempt is invalidated by a newer stock version')('outcome', (s) =>
+        When('every commit attempt raises a serialization failure')('outcome', (s) =>
           Effect.gen(function*() {
             const server = yield* TestServer
             const orderId = uniqueId('order')
-            const decision = yield* Effect.ensuring(
-              Effect.gen(function*() {
-                yield* server.seam.armAlways
-                return yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
-              }),
+            yield* server.seam.armAlways
+            const failure = yield* Effect.ensuring(
+              Effect.flip(
+                placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }]),
+              ),
               server.seam.disarm,
             )
-            return { orderId, decision }
+            return { orderId, failure }
           })),
-        Then('the order is reported as rolled back and inventory is untouched')(
+        Then('the order is refused as unavailable and nothing is written')(
           (s) =>
             Effect.gen(function*() {
               const server = yield* TestServer
-              const rollback = yield* S.decodeUnknownEffect(ConflictRollback)(s.outcome.decision)
-              expect(rollback.attempts).toBe(3)
+              expect(S.is(StoreUnavailable)(s.outcome.failure)).toBe(true)
               expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(5)
               expect(yield* server.inspect.reservations(s.outcome.orderId)).toHaveLength(0)
-              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toContain('ConflictRollback')
+              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(0)
+              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(0)
             }),
         ),
       ),
@@ -600,6 +612,64 @@ Feature('Inventory fulfillment across the warehouse network')
     )
 
     scenario(
+      'Another caller naming a fulfilled order is refused',
+      Gherkin.Do.pipe(
+        Given('two customers with Standard accounts and ample credit')('customers', () =>
+          Effect.gen(function*() {
+            const owner = yield* registerCustomerWithCredit('Duplicate Owner', {
+              tier: 'Standard',
+              creditLimit: 1000,
+            })
+            const other = yield* registerCustomerWithCredit('Duplicate Other', {
+              tier: 'Standard',
+              creditLimit: 1000,
+            })
+            return { owner, other }
+          })),
+        Given('a warehouse holding five units')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(warehouse, 'central', [{
+              id: uniqueId('lot'),
+              sku,
+              warehouseId: warehouse,
+              quantity: 5,
+            }])
+            return { sku }
+          })),
+        When('the first customer fulfills an order')(
+          'order',
+          (s) =>
+            Effect.gen(function*() {
+              const orderId = uniqueId('order')
+              yield* placeOrder(s.customers.owner, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
+              return { orderId }
+            }),
+        ),
+        When('the second customer submits the same order')(
+          'refusal',
+          (s) =>
+            Effect.gen(function*() {
+              const refusal = yield* Effect.flip(
+                placeOrder(s.customers.other, s.order.orderId, [{ sku: s.catalog.sku, quantity: 2 }]),
+              )
+              return yield* S.decodeUnknownEffect(Forbidden)(refusal)
+            }),
+        ),
+        Then('the refusal names the order and the other customer is charged nothing')((s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            expect(s.refusal.resource).toBe(s.order.orderId)
+            expect(yield* server.inspect.reservations(s.order.orderId)).toHaveLength(1)
+            expect(yield* server.inspect.auditTags(s.order.orderId)).toHaveLength(1)
+            expect((yield* server.inspect.credit(s.customers.other.userId)).outstandingBalance).toBe(0)
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'A customer paging through the stock list reaches every lot',
       Gherkin.Do.pipe(
         Given('a customer with an authenticated session')('customer', () => registerCustomer('Stock Pager')),
@@ -621,7 +691,7 @@ Feature('Inventory fulfillment across the warehouse network')
             const second = yield* listStockPage(s.customer, {
               warehouseId: s.catalog.warehouse,
               limit: 4,
-              cursor: first.nextCursor ?? undefined,
+              cursor: first.nextCursor === null ? undefined : positionOf(first.nextCursor),
             })
             return { first, second }
           })),
@@ -636,6 +706,62 @@ Feature('Inventory fulfillment across the warehouse network')
           expect([...secondIds, ...firstIds].sort()).toEqual([...s.catalog.lots].sort())
           expect(s.pages.second.nextCursor).toBeNull()
         }),
+      ),
+    )
+
+    scenario(
+      'A stock page key nobody issued is refused while the real listing still closes',
+      Gherkin.Do.pipe(
+        Given('a customer with an authenticated session')('customer', () => registerCustomer('Page Key Refusal')),
+        Given('a warehouse stocking five lots of a single item')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(
+              warehouse,
+              'central',
+              [uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot')].map((id) => ({
+                id,
+                sku,
+                warehouseId: warehouse,
+                quantity: 1,
+              })),
+            )
+            return { warehouse }
+          })),
+        When('they ask for the next page with a page key nobody issued')('refusal', (s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            return yield* server.postRpc(
+              'listStock',
+              {
+                warehouseId: s.catalog.warehouse,
+                limit: 4,
+                cursor: Encoding.encodeBase64('no-separator'),
+              },
+              s.customer.cookie,
+            )
+          })),
+        Then('the refusal names the page key and never blames the store')((s) => {
+          expect(s.refusal).toHaveLength(1)
+          const defect = s.refusal[0]?.exit.cause[0]?.defect ?? ''
+          expect(defect).toContain('JSON string')
+          expect(defect).toContain('cursor')
+          expect(defect).not.toContain('StoreUnavailable')
+        }),
+        And('the listing itself still pages through every lot and closes')((s) =>
+          Effect.gen(function*() {
+            const first = yield* listStockPage(s.customer, { warehouseId: s.catalog.warehouse, limit: 4 })
+            const second = yield* listStockPage(s.customer, {
+              warehouseId: s.catalog.warehouse,
+              limit: 4,
+              cursor: first.nextCursor === null ? undefined : positionOf(first.nextCursor),
+            })
+            expect(lotIdsOf(first)).toHaveLength(4)
+            expect(lotIdsOf(second)).toHaveLength(1)
+            expect(second.nextCursor).toBeNull()
+          })
+        ),
       ),
     )
 
@@ -656,7 +782,7 @@ Feature('Inventory fulfillment across the warehouse network')
             ])
             return { sku }
           })),
-        When('the customer submits two eighty unit orders at the same moment')(
+        When('both orders draw on the account at once')(
           'outcomes',
           (s) =>
             Effect.gen(function*() {
@@ -671,11 +797,14 @@ Feature('Inventory fulfillment across the warehouse network')
                 orderId: uniqueId('order'),
                 lines: [{ sku: s.catalog.sku, quantity: 80 }],
               })
-              const decisions = yield* Effect.all(
-                [firstClient.submitOrder(firstPayload), secondClient.submitOrder(secondPayload)],
+              const [contested, sibling] = yield* Effect.all(
+                [
+                  firstClient.submitOrder(firstPayload),
+                  secondClient.submitOrder(secondPayload),
+                ],
                 { concurrency: 'unbounded' },
               )
-              return yield* Effect.forEach(decisions, classifyCreditOutcome)
+              return yield* Effect.forEach([contested, sibling], classifyCreditOutcome)
             }),
         ),
         Then('exactly one order is allocated and the other is held for the shortfall')((s) => {
@@ -686,6 +815,65 @@ Feature('Inventory fulfillment across the warehouse network')
           expect(held).toHaveLength(1)
           expect(held[0]?.shortfall).toBe(60)
           expect(held[0]?.requiredDownpayment).toBe(60)
+        }),
+      ),
+    )
+
+    scenario(
+      'Two orders for different products that read the account together never overdraw it',
+      Gherkin.Do.pipe(
+        Given('a Standard customer with a sixty unit credit limit and no overdraft')(
+          'customer',
+          () => registerCustomerWithCredit('Credit Write Skew', { tier: 'Standard', creditLimit: 60 }),
+        ),
+        Given('a warehouse stocking two different products, forty units each')('catalog', () =>
+          Effect.gen(function*() {
+            const first = uniqueId('sku')
+            const second = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(warehouse, 'central', [
+              { id: uniqueId('lot'), sku: first, warehouseId: warehouse, quantity: 40 },
+              { id: uniqueId('lot'), sku: second, warehouseId: warehouse, quantity: 40 },
+            ])
+            return { first, second }
+          })),
+        When('both orders are placed at once while the account can only cover one')(
+          'outcomes',
+          (s) =>
+            Effect.gen(function*() {
+              const server = yield* TestServer
+              const firstClient = yield* server.client(s.customer.cookie)
+              const secondClient = yield* server.client(s.customer.cookie)
+              const attempt = (client: Client, sku: string) =>
+                Effect.gen(function*() {
+                  const payload = yield* submitRequest({
+                    orderId: uniqueId('order'),
+                    lines: [{ sku, quantity: 40 }],
+                  })
+                  return yield* client.submitOrder(payload)
+                })
+              const [contested, sibling] = yield* Effect.all(
+                [attempt(firstClient, s.catalog.first), attempt(secondClient, s.catalog.second)],
+                { concurrency: 'unbounded' },
+              )
+              return yield* Effect.forEach([contested, sibling], classifyCreditOutcome)
+            }),
+        ),
+        Then('the customer never owes more than the credit allows')((s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            const credit = yield* server.inspect.credit(s.customer.userId)
+            expect(credit.outstandingBalance).toBeLessThanOrEqual(credit.creditLimit + credit.overdraftPrivilege)
+          })
+        ),
+        And('one order is fulfilled and the other is held for credit')((s) => {
+          expect(s.outcomes.filter((outcome) => outcome.tag === 'AllocatedSplit')).toHaveLength(1)
+          const held = s.outcomes.filter(
+            (outcome): outcome is CreditHoldOutcome => outcome.tag === 'CreditHold',
+          )
+          expect(held).toHaveLength(1)
+          expect(held[0]?.shortfall).toBe(20)
+          expect(held[0]?.requiredDownpayment).toBe(20)
         }),
       ),
     )

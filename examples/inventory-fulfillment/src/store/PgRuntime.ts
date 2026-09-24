@@ -1,12 +1,20 @@
 import { layer as pgClientLayer } from '@effect/sql-pg/PgClient'
 import { Config, Context, Duration, Effect, Layer, Redacted } from 'effect'
 import { Pool } from 'pg'
-import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
-import { InventoryStore } from '../inventory/InventoryStore.js'
-import { CreditLedger } from '../ports/CreditLedger.js'
-import { CustomerGate } from '../ports/CustomerGate.js'
-import { ReservationLog } from '../ports/ReservationLog.js'
-import { DrizzleSession } from './DrizzleSession.js'
+import { InventoryStore } from '../inventory/InventoryStore.service.js'
+import { ReservationLog } from '../ports/ReservationLog.service.js'
+import { SettlementStore } from '../ports/SettlementStore.service.js'
+import { DrizzleSession, layer as drizzleSessionLayer } from './DrizzleSession.js'
+import { layer as inventoryStoreLayer } from './InventoryStoreDrizzle.js'
+import { layer as reservationLogLayer } from './ReservationLogDrizzle.js'
+import { layer as settlementStoreLayer, type RetryBudget } from './SettlementStoreDrizzle.js'
+
+const retryBudget: Effect.Effect<RetryBudget, Config.ConfigError> = Effect.gen(function*() {
+  const attempts = yield* Config.Int('SETTLEMENT_RETRY_ATTEMPTS').pipe(Config.withDefault(30))
+  const baseIntervalMs = yield* Config.Int('SETTLEMENT_RETRY_BASE_INTERVAL_MS').pipe(Config.withDefault(2))
+  const maxIntervalMs = yield* Config.Int('SETTLEMENT_RETRY_MAX_INTERVAL_MS').pipe(Config.withDefault(100))
+  return { attempts, baseInterval: Duration.millis(baseIntervalMs), maxInterval: Duration.millis(maxIntervalMs) }
+})
 
 const requiredEnv = Effect.all({
   databaseUrl: Config.String('DATABASE_URL'),
@@ -20,11 +28,7 @@ export interface PgRuntimeService {
 
 export class PgRuntime extends Context.Service<PgRuntime, PgRuntimeService>()(
   '@systemfsoftware/example-inventory-fulfillment/store/PgRuntime',
-) {
-  static Live: Layer.Layer<
-    DrizzleSession | InventoryStore | CreditLedger | ReservationLog | CustomerGate | PgRuntime | FulfillmentConfig
-  >
-}
+) {}
 
 export const rawClient: Layer.Layer<PgRuntime> = Layer.effect(
   PgRuntime,
@@ -46,15 +50,15 @@ const clientLayer = Layer.unwrap(
 )
 
 const ports = Layer.mergeAll(
-  InventoryStore.Live,
-  CreditLedger.Live,
-  ReservationLog.Live,
-  CustomerGate.Live,
-  Layer.succeed(FulfillmentConfig, { maxRetries: 3, retryInterval: Duration.millis(50) }),
+  inventoryStoreLayer,
+  Layer.unwrap(Effect.map(retryBudget, (budget) => settlementStoreLayer(budget))),
+  reservationLogLayer,
 )
 
-PgRuntime.Live = ports.pipe(
-  Layer.provideMerge(DrizzleSession.Live.pipe(Layer.provide(clientLayer))),
+export const PgRuntimeLive: Layer.Layer<
+  DrizzleSession | InventoryStore | SettlementStore | ReservationLog | PgRuntime
+> = ports.pipe(
+  Layer.provideMerge(drizzleSessionLayer.pipe(Layer.provide(clientLayer))),
   Layer.provideMerge(rawClient),
   Layer.orDie,
 )

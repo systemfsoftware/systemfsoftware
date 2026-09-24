@@ -1,5 +1,7 @@
 /// <reference types="vitest/importMeta" />
 import { Schema as S } from 'effect'
+import * as Arr from 'effect/Array'
+import * as Result from 'effect/Result'
 
 export const Money = S.Finite.pipe(
   S.check(S.isGreaterThanOrEqualTo(0)),
@@ -7,6 +9,9 @@ export const Money = S.Finite.pipe(
   S.brand('@systemfsoftware/example-inventory-fulfillment/Money'),
 )
 export type Money = S.Schema.Type<typeof Money>
+
+export const Amount = S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0)))
+export type Amount = S.Schema.Type<typeof Amount>
 
 export const CustomerTier = S.Literals(['VIP', 'Standard'])
 export type CustomerTier = S.Schema.Type<typeof CustomerTier>
@@ -24,3 +29,53 @@ export class CreditAccount extends S.Class<CreditAccount>('CreditAccount')({
   outstandingBalance: Money,
   overdraftPrivilege: Money,
 }) {}
+
+const amountSeeds = [-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0]
+const fraudRiskScoreSeeds = [
+  -1,
+  101,
+  1.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+  0,
+  100,
+]
+
+const nonNegativeFinite = (value: number): boolean => Number.isFinite(value) && value >= 0
+const inScoreRange = (value: number): boolean => value >= 0 && value <= 100
+const boundedInteger = (value: number): boolean => Number.isInteger(value) && inScoreRange(value)
+
+const moneyVerdicts = (candidates: readonly number[]): boolean =>
+  Arr.every(
+    candidates,
+    (candidate) => Result.isSuccess(S.decodeResult(Money)(candidate)) === nonNegativeFinite(candidate),
+  )
+
+const amountVerdicts = (candidates: readonly number[]): boolean =>
+  Arr.every(
+    candidates,
+    (candidate) => Result.isSuccess(S.decodeResult(Amount)(candidate)) === nonNegativeFinite(candidate),
+  )
+
+const fraudRiskScoreVerdicts = (candidates: readonly number[]): boolean =>
+  Arr.every(
+    candidates,
+    (candidate) => Result.isSuccess(S.decodeResult(FraudRiskScore)(candidate)) === boundedInteger(candidate),
+  )
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so a static
+  // import would enter the published module graph (packages/effect-memfs/src/driver-values.ts).
+  const { it } = await import('@effect/vitest')
+
+  it.prop('∀n_MoneyRefusal_≡NonNegative', [S.Finite], ([value]) => moneyVerdicts(Arr.append(amountSeeds, value)))
+
+  it.prop('∀n_AmountRefusal_≡NonNegative', [S.Finite], ([value]) => amountVerdicts(Arr.append(amountSeeds, value)))
+
+  it.prop(
+    '∀n_FraudRiskScoreRefusal_∈Bounds',
+    [S.Finite],
+    ([value]) => fraudRiskScoreVerdicts(Arr.append(fraudRiskScoreSeeds, value)),
+  )
+}

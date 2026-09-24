@@ -17,7 +17,8 @@
     ]
   },
   "include": [
-    "tests"
+    "tests",
+    "scripts"
   ],
   "references": [
     {

@@ -71,6 +71,10 @@ collisions from other writers.
 - Grep gate: any `catchTag('EffectTransactionRollbackError', ...)` must map _distinct_ rollback
   causes to distinct outcomes, or document why the collapse is safe.
 
+## Update 2026-09-24
+
+The example no longer uses version checks or `ConflictRollback`. The whole order runs in one SERIALIZABLE transaction, and the store re-runs it only on SQLSTATE `40001` or `40P01`; every other failure, including a unique violation, surfaces as `StoreUnavailable` without a retry. The duplicate check moved _inside_ that transaction: `load` reads any existing reservation for the order id, and the cell refuses `DuplicateOrder` (owner) or `Forbidden` (anyone else). A check before the transaction opens is outside serialization and can go stale. The attribution lesson above still holds: only a real serialization failure may trigger a retry.
+
 ## Related
 
 - `docs/solutions/tooling-decisions/effect-v4-unstable-stack-binding.md` (CAS seam, single-permit PGlite serialization)

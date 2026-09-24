@@ -2,163 +2,78 @@ import { NodeCrypto, NodeHttpClient } from '@effect/platform-node'
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import type { PGlite } from '@electric-sql/pglite'
 import {
-  auditEvents,
-  AuthService,
-  type Client,
-  CreditLedger,
-  CustomerGate,
-  DrizzleSession,
+  Auth,
   Fulfillment,
-  HttpLive,
-  httpServerLayer,
+  Http,
   Inventory,
-  makeAuth,
-  makeRpcClient,
-  ReservationLog,
-  reservations,
-  ReservationView,
-  stockLots,
-  StockView,
-  SubmitOrderRequest,
-  user,
-  warehouses,
+  Persistence,
+  Reservation,
+  Rpc,
+  Settlement,
 } from '@systemfsoftware/example-inventory-fulfillment'
-import type { Client as RpcClientHandle } from '@systemfsoftware/example-inventory-fulfillment'
-import type { DrizzleDatabase } from '@systemfsoftware/example-inventory-fulfillment'
 import { drizzle } from 'drizzle-orm/pglite'
-import { sql } from 'drizzle-orm/sql'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
-import {
-  ConfigProvider,
-  Context,
-  Crypto,
-  DateTime,
-  Duration,
-  Effect,
-  Layer,
-  Match,
-  Option,
-  Ref,
-  Schema as S,
-} from 'effect'
+import { ConfigProvider, Context, Crypto, DateTime, Effect, Layer, Option, Schema as S } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
 import { RpcSerialization } from 'effect/unstable/rpc'
+import { RpcWireFailure } from './rpc-wire.schema.js'
+import {
+  armSeamAlways,
+  armSeamOnce,
+  disarmSeam,
+  exhaustedBudget,
+  serializationSeamLayer,
+} from './settlement-store.fixture.js'
 
 const {
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
-  ConflictRollback,
   CreditHold,
   CreditLimitExceeded,
   DuplicateOrder,
   Forbidden,
   InsufficientStock,
+  StoreUnavailable,
   Unauthorized,
 } = Fulfillment.Decision
+const AuthService = Auth.Service.AuthService
+type AuthService = Auth.Service.AuthService
+const DrizzleSession = Persistence.DrizzleSession.DrizzleSession
+type DrizzleSession = Persistence.DrizzleSession.DrizzleSession
+const makeRpcClient = Rpc.Client.make
+const HttpLive = Http.Server.HttpLive
+const httpServerLayer = Http.Server.httpServerLayer
+const makeAuthService = Auth.Live.makeAuthService
+const auditEvents = Persistence.Tables.auditEvents
+const reservations = Persistence.Tables.reservations
+const stockLots = Persistence.Tables.stockLots
+const user = Persistence.Tables.user
+const warehouses = Persistence.Tables.warehouses
+const ReservationView = Rpc.Schema.ReservationView
+type ReservationView = Rpc.Schema.ReservationView
+const StockView = Rpc.Schema.StockView
+type StockView = Rpc.Schema.StockView
+const SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
+type SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
+type Client = Rpc.Client.Client
+type DrizzleDatabase = Persistence.DrizzleSession.DrizzleDatabase
 type FulfillmentDecision = Fulfillment.Decision.FulfillmentDecision
 type FulfillmentError = Fulfillment.Decision.FulfillmentError
-const FulfillmentConfig = Fulfillment.FulfillmentConfig
-const InventoryStore = Inventory.InventoryStore
 
 const pgTestLayer = Layer.mergeAll(
-  InventoryStore.Live,
-  CreditLedger.Live,
-  ReservationLog.Live,
-  CustomerGate.Live,
+  Inventory.Drizzle.layer,
+  Settlement.Drizzle.layer(exhaustedBudget),
+  Reservation.Drizzle.layer,
 ).pipe(
-  Layer.provideMerge(DrizzleSession.Test),
+  Layer.provideMerge(Persistence.DrizzleSession.layerTest),
   Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
 )
 
-export {
-  AllocatedSplit,
-  AllocatedWithOverdraft,
-  Backordered,
-  ConflictRollback,
-  CreditHold,
-  CreditLimitExceeded,
-  DuplicateOrder,
-  Forbidden,
-  InsufficientStock,
-  ReservationView,
-  StockView,
-  Unauthorized,
-}
-export type { Client, FulfillmentDecision, FulfillmentError }
-
-let sequence = 0
-const nextId = (prefix: string): string => {
-  sequence += 1
-  return `${prefix}-${process.pid.toString(36)}-${sequence}`
-}
-
-export const uniqueId = nextId
-export const uniqueEmail = (): string => `${nextId('user')}@example.test`
-export const uniquePassword = (): string => `pw-${nextId('secret')}`
-
-type SeamMode = 'off' | 'once' | 'always'
-
-export interface ConflictSeamService {
-  readonly armOnce: Effect.Effect<void>
-  readonly armAlways: Effect.Effect<void>
-  readonly disarm: Effect.Effect<void>
-  readonly shouldBump: Effect.Effect<boolean>
-}
-
-export class ConflictSeam extends Context.Service<ConflictSeam, ConflictSeamService>()(
-  '@systemfsoftware/example-inventory-fulfillment/tests/ConflictSeam',
-) {}
-
-const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
-  ConflictSeam,
-  Effect.gen(function*() {
-    const mode = yield* Ref.make<SeamMode>('off')
-    return {
-      armOnce: Ref.set(mode, 'once'),
-      armAlways: Ref.set(mode, 'always'),
-      disarm: Ref.set(mode, 'off'),
-      shouldBump: Ref.modify(mode, (current): readonly [boolean, SeamMode] =>
-        Match.value(current).pipe(
-          Match.when('always', () => [true, 'always'] as const),
-          Match.when('once', () => [true, 'off'] as const),
-          Match.when('off', () => [false, 'off'] as const),
-          Match.exhaustive,
-        )),
-    }
-  }),
+const wrappedFoundation = pgTestLayer.pipe(
+  Layer.provideMerge(serializationSeamLayer.pipe(Layer.provide(pgTestLayer))),
 )
-
-const bumpStockVersions = (db: DrizzleDatabase): Effect.Effect<void, never> =>
-  db.execute(sql`UPDATE stock_lots SET version = version + 1`).pipe(Effect.orDie, Effect.asVoid)
-
-const seamInstrumentedInventoryStore: Layer.Layer<Inventory.InventoryStore, never, DrizzleSession | ConflictSeam> =
-  pgTestLayer
-    .pipe(
-      Layer.flatMap((context) => {
-        const inner = Context.get(context, InventoryStore)
-        return Layer.effect(
-          InventoryStore,
-          Effect.gen(function*() {
-            const db = yield* DrizzleSession
-            const seam = yield* ConflictSeam
-            return {
-              readAllStock: Effect.gen(function*() {
-                const partitions = yield* inner.readAllStock
-                const bump = yield* seam.shouldBump
-                yield* bump ? bumpStockVersions(db) : Effect.void
-                return partitions
-              }),
-              readStock: (skus) => inner.readStock(skus),
-              readStockPage: (query) => inner.readStockPage(query),
-            }
-          }),
-        )
-      }),
-    )
-
-const wrappedFoundation = seamInstrumentedInventoryStore.pipe(Layer.provideMerge(pgTestLayer))
 
 const authLayer: Layer.Layer<AuthService, never, Pglite.PgliteClient> = Layer.effect(
   AuthService,
@@ -168,7 +83,7 @@ const authLayer: Layer.Layer<AuthService, never, Pglite.PgliteClient> = Layer.ef
     const uuid1 = yield* crypto.randomUUIDv4
     const uuid2 = yield* crypto.randomUUIDv4
     const promiseDb = drizzle({ client: raw.pglite as PGlite })
-    return makeAuth(promiseDb, `${uuid1}${uuid2}`)
+    return makeAuthService(promiseDb, `${uuid1}${uuid2}`)
   }),
 ).pipe(Layer.provide(NodeCrypto.layer), Layer.orDie)
 
@@ -208,6 +123,12 @@ export interface StockState {
   readonly version: number
 }
 
+export interface CreditState {
+  readonly creditLimit: number
+  readonly outstandingBalance: number
+  readonly overdraftPrivilege: number
+}
+
 export interface SeedService {
   readonly warehouse: (id: string, region: string) => Effect.Effect<void>
   readonly stockLot: (input: StockLotInput) => Effect.Effect<void>
@@ -216,16 +137,34 @@ export interface SeedService {
 
 export interface InspectService {
   readonly stock: (lotId: string) => Effect.Effect<StockState>
+  readonly credit: (userId: string) => Effect.Effect<CreditState>
   readonly reservations: (orderId: string) => Effect.Effect<readonly ReservationRow[]>
   readonly auditTags: (orderId: string) => Effect.Effect<readonly string[]>
 }
+
+export interface SerializationSeamService {
+  readonly armOnce: Effect.Effect<void>
+  readonly armAlways: Effect.Effect<void>
+  readonly disarm: Effect.Effect<void>
+}
+
+const seamServiceOf = (db: DrizzleDatabase): SerializationSeamService => ({
+  armOnce: Effect.provideService(armSeamOnce, DrizzleSession, db),
+  armAlways: Effect.provideService(armSeamAlways, DrizzleSession, db),
+  disarm: Effect.provideService(disarmSeam, DrizzleSession, db),
+})
 
 export interface TestServerService {
   readonly baseUrl: string
   readonly signUp: (email: string, password: string, name: string) => Effect.Effect<Session>
   readonly signIn: (email: string, password: string) => Effect.Effect<Session>
-  readonly client: (cookie?: string) => Effect.Effect<RpcClientHandle, never, Scope.Scope>
-  readonly seam: ConflictSeamService
+  readonly client: (cookie?: string) => Effect.Effect<Client, never, Scope.Scope>
+  readonly postRpc: (
+    tag: string,
+    payload: Record<string, string | number>,
+    cookie?: string,
+  ) => Effect.Effect<readonly RpcWireFailure[]>
+  readonly seam: SerializationSeamService
   readonly seed: SeedService
   readonly inspect: InspectService
 }
@@ -252,6 +191,32 @@ export const submitRequest = (input: SubmitOrderInput): Effect.Effect<SubmitOrde
     fraudRisk: input.fraudRisk ?? 0,
   }).pipe(Effect.orDie)
 
+export {
+  AllocatedSplit,
+  AllocatedWithOverdraft,
+  Backordered,
+  CreditHold,
+  CreditLimitExceeded,
+  DuplicateOrder,
+  Forbidden,
+  InsufficientStock,
+  ReservationView,
+  StockView,
+  StoreUnavailable,
+  Unauthorized,
+}
+export type { Client, FulfillmentDecision, FulfillmentError }
+
+let sequence = 0
+const nextId = (prefix: string): string => {
+  sequence += 1
+  return `${prefix}-${process.pid.toString(36)}-${sequence}`
+}
+
+export const uniqueId = nextId
+export const uniqueEmail = (): string => `${nextId('user')}@example.test`
+export const uniquePassword = (): string => `pw-${nextId('secret')}`
+
 const cookieHeaderOf = (cookies: Cookies.Cookies): string => {
   const header = Cookies.toCookieHeader(cookies)
   if (header.length === 0) {
@@ -269,13 +234,12 @@ const userFromSession = <J = unknown>(json: J): string => {
   return id
 }
 
-type BuildContext = HttpServer.HttpServer | HttpClient.HttpClient | DrizzleSession | ConflictSeam
+type BuildContext = HttpServer.HttpServer | HttpClient.HttpClient | DrizzleSession
 
 const buildService = (context: Context.Context<BuildContext>): TestServerService => {
   const server = Context.get(context, HttpServer.HttpServer)
   const http = Context.get(context, HttpClient.HttpClient)
   const db = Context.get(context, DrizzleSession)
-  const seam = Context.get(context, ConflictSeam)
   const baseUrl = HttpServer.formatAddress(server.address)
 
   const execute = (request: HttpClientRequest.HttpClientRequest) => http.execute(request).pipe(Effect.orDie)
@@ -308,86 +272,115 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
       return { userId, cookie }
     })
 
-  const client = (cookie?: string): Effect.Effect<RpcClientHandle, never, Scope.Scope> =>
+  const client = (cookie?: string): Effect.Effect<Client, never, Scope.Scope> =>
     makeRpcClient({ baseUrl, cookie }).pipe(
       Effect.provide(RpcSerialization.layerJson),
       Effect.provideService(HttpClient.HttpClient, http),
     )
 
-  const stockRow = (lotId: string) =>
+  const postRpc = (
+    tag: string,
+    payload: Record<string, string | number>,
+    cookie?: string,
+  ): Effect.Effect<readonly RpcWireFailure[]> =>
     Effect.gen(function*() {
-      const rows = yield* db.select().from(stockLots).where(eq(stockLots.id, lotId)).pipe(Effect.orDie)
-      const found = Option.fromUndefinedOr(rows[0])
-      return yield* Option.match(found, {
-        onNone: () => Effect.die(new Error(`inspect: no stock lot ${lotId}`)),
-        onSome: (row) => Effect.succeed(row),
-      })
+      const request = HttpClientRequest.post(`${baseUrl}/rpc`).pipe(
+        HttpClientRequest.bodyJsonUnsafe({
+          _tag: 'Request',
+          id: 'raw-wire-request',
+          tag,
+          payload,
+          headers: [] as const,
+        }),
+      )
+      const response = yield* execute(
+        cookie === undefined ? request : HttpClientRequest.setHeader(request, 'cookie', cookie),
+      )
+      const json = yield* response.json.pipe(Effect.orDie)
+      return yield* S.decodeUnknownEffect(S.Array(RpcWireFailure))(json).pipe(Effect.orDie)
     })
 
   return {
     baseUrl,
-    seam,
     signUp: (email, password, name) => authenticate('/api/auth/sign-up/email', { email, password, name }),
     signIn: (email, password) => authenticate('/api/auth/sign-in/email', { email, password }),
     client,
-    seed: {
-      warehouse: (id, region) => db.insert(warehouses).values({ id, region }).pipe(Effect.orDie, Effect.asVoid),
-      stockLot: (input) =>
-        db.insert(stockLots).values({
-          id: input.id,
-          sku: input.sku,
-          warehouseId: input.warehouseId,
-          quantityOnHand: input.quantity,
-          version: input.version ?? 1,
-          expiresAt: input.expiresAt === undefined ? null : DateTime.toDate(input.expiresAt),
-        }).pipe(Effect.orDie, Effect.asVoid),
-      credit: (input) =>
-        db.update(user).set({
-          tier: input.tier,
-          creditLimit: input.creditLimit,
-          outstandingBalance: input.outstandingBalance ?? 0,
-          overdraftPrivilege: input.overdraftPrivilege ?? 0,
-        }).where(eq(user.id, input.userId)).pipe(Effect.orDie, Effect.asVoid),
-    },
-    inspect: {
-      stock: (lotId) =>
-        Effect.map(stockRow(lotId), (row) => ({ quantityOnHand: row.quantityOnHand, version: row.version })),
-      reservations: (orderId) =>
-        Effect.map(
-          db.select().from(reservations).where(eq(reservations.orderId, orderId)).pipe(Effect.orDie),
-          (rows) =>
-            rows.map((row) => ({
-              orderId: row.orderId,
-              customerId: row.customerId,
-              sku: row.sku,
-              warehouseId: row.warehouseId,
-              lotId: row.lotId,
-              quantity: row.quantity,
-            })),
-        ),
-      auditTags: (orderId) =>
-        Effect.map(
-          db.select().from(auditEvents).where(eq(auditEvents.orderId, orderId)).pipe(Effect.orDie),
-          (rows) => rows.map((row) => row.decisionTag),
-        ),
-    },
+    postRpc,
+    seam: seamServiceOf(db),
+    seed: seedServiceOf(db),
+    inspect: inspectServiceOf(db),
   }
 }
+
+const seedServiceOf = (db: DrizzleDatabase): SeedService => ({
+  warehouse: (id, region) => db.insert(warehouses).values({ id, region }).pipe(Effect.orDie, Effect.asVoid),
+  stockLot: (input) =>
+    db.insert(stockLots).values({
+      id: input.id,
+      sku: input.sku,
+      warehouseId: input.warehouseId,
+      quantityOnHand: input.quantity,
+      version: input.version ?? 1,
+      expiresAt: input.expiresAt === undefined ? null : DateTime.toDate(input.expiresAt),
+    }).pipe(Effect.orDie, Effect.asVoid),
+  credit: (input) =>
+    db.update(user).set({
+      tier: input.tier,
+      creditLimit: input.creditLimit,
+      outstandingBalance: input.outstandingBalance ?? 0,
+      overdraftPrivilege: input.overdraftPrivilege ?? 0,
+    }).where(eq(user.id, input.userId)).pipe(Effect.orDie, Effect.asVoid),
+})
+
+const inspectServiceOf = (db: DrizzleDatabase): InspectService => ({
+  stock: (lotId) =>
+    Effect.gen(function*() {
+      const rows = yield* db.select().from(stockLots).where(eq(stockLots.id, lotId)).pipe(Effect.orDie)
+      return yield* Option.match(Option.fromUndefinedOr(rows[0]), {
+        onNone: () => Effect.die(new Error(`inspect: no stock lot ${lotId}`)),
+        onSome: (row) => Effect.succeed({ quantityOnHand: row.quantityOnHand, version: row.version }),
+      })
+    }),
+  credit: (userId) =>
+    Effect.gen(function*() {
+      const rows = yield* db.select().from(user).where(eq(user.id, userId)).pipe(Effect.orDie)
+      return yield* Option.match(Option.fromUndefinedOr(rows[0]), {
+        onNone: () => Effect.die(new Error(`inspect: no credit account ${userId}`)),
+        onSome: (row) =>
+          Effect.succeed({
+            creditLimit: row.creditLimit,
+            outstandingBalance: row.outstandingBalance,
+            overdraftPrivilege: row.overdraftPrivilege,
+          }),
+      })
+    }),
+  reservations: (orderId) =>
+    Effect.map(
+      db.select().from(reservations).where(eq(reservations.orderId, orderId)).pipe(Effect.orDie),
+      (rows) =>
+        rows.map((row) => ({
+          orderId: row.orderId,
+          customerId: row.customerId,
+          sku: row.sku,
+          warehouseId: row.warehouseId,
+          lotId: row.lotId,
+          quantity: row.quantity,
+        })),
+    ),
+  auditTags: (orderId) =>
+    Effect.map(
+      db.select().from(auditEvents).where(eq(auditEvents.orderId, orderId)).pipe(Effect.orDie),
+      (rows) => rows.map((row) => row.decisionTag),
+    ),
+})
 
 const ephemeralPortConfigLayer = ConfigProvider.layer(
   ConfigProvider.fromUnknown({ PORT: '0' }),
 )
 
-const fulfillmentConfigLayer = Layer.succeed(FulfillmentConfig, {
-  maxRetries: 3,
-  retryInterval: Duration.millis(10),
-})
-
 const appLayer = HttpLive.pipe(
   Layer.provide(authLayer),
   Layer.provideMerge(wrappedFoundation),
-  Layer.provideMerge(conflictSeamLayer),
-  Layer.provideMerge(fulfillmentConfigLayer),
   Layer.provide(ephemeralPortConfigLayer),
 )
 

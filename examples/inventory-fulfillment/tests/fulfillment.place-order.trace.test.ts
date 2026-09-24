@@ -1,0 +1,33 @@
+import { it, layer } from '@effect/vitest'
+import { Suite } from '@systemfsoftware/trace-spec'
+import {
+  allocateContract,
+  creditHoldContract,
+  placeOrderRequest,
+  retriedSettlementContract,
+  settlementLayers,
+} from './__fixtures__/fulfillment-trace.fixture.js'
+
+const Trace = Suite.make({ it, layer })
+
+const world = settlementLayers
+
+Trace('inventory.fulfillment')
+  .withScenarioLayer(world)
+  .body(({ Case }) => {
+    Case(
+      'an allocated order commits its reservation and charges credit',
+      allocateContract,
+      placeOrderRequest('order-1', 'customer-in-good-standing'),
+    )
+    Case(
+      'a held order commits its audit row without charging credit',
+      creditHoldContract,
+      placeOrderRequest('order-2', 'customer-without-credit'),
+    )
+    Case(
+      'an order whose first commit attempt fails is retried and commits once',
+      retriedSettlementContract,
+      placeOrderRequest('order-3', 'customer-in-good-standing'),
+    )
+  })

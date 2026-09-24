@@ -1,7 +1,13 @@
 import { Schema as S } from 'effect'
 import { FraudRiskScore } from '../fulfillment/credit.schema.js'
 import { OrderLine } from '../fulfillment/order.schema.js'
-import { KitDefinition, LotAllocation, WarehouseStockPartition } from '../inventory/inventory.schema.js'
+import {
+  KitDefinition,
+  LotAllocation,
+  StockCursor,
+  StockPageSize,
+  WarehouseStockPartition,
+} from '../inventory/inventory.schema.js'
 
 export class SubmitOrderRequest extends S.Class<SubmitOrderRequest>('SubmitOrderRequest')({
   orderId: S.String,
@@ -15,9 +21,9 @@ export class GetReservationRequest extends S.Class<GetReservationRequest>('GetRe
 }) {}
 
 export class ListStockRequest extends S.Class<ListStockRequest>('ListStockRequest')({
-  cursor: S.optional(S.String),
+  cursor: S.optional(StockCursor),
   warehouseId: S.optional(S.String),
-  limit: S.optional(S.Int),
+  limit: S.optional(StockPageSize),
 }) {}
 
 export class ReservationView extends S.Class<ReservationView>('ReservationView')({
