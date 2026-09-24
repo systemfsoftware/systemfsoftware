@@ -64,6 +64,8 @@ const annotationCollector = (): { readonly reporter: Reporter; readonly messages
   return { reporter, messages }
 }
 
+const fixtureRuns = 100
+
 const runVitestOn = (fixture: string): Effect.Effect<Omit<Observed, 'dumps'>> =>
   Effect.gen(function*() {
     const collector = annotationCollector()
@@ -73,6 +75,7 @@ const runVitestOn = (fixture: string): Effect.Effect<Omit<Observed, 'dumps'>> =>
         watch: false,
         bail: 0,
         coverage: { enabled: false },
+        provide: { '@systemfsoftware/vitest:property-check': { runs: fixtureRuns } },
         reporters: [collector.reporter],
       })
     )
