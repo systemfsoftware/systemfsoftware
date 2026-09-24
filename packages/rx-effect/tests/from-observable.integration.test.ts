@@ -15,7 +15,7 @@
  *     element out of a long stream.
  */
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 import { expect } from 'vitest'
@@ -24,7 +24,7 @@ import { Observable, ReplaySubject } from 'rxjs'
 
 import { fromObservable } from '@systemfsoftware/rx-effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<readonly A[], E, never> =>
   Stream.runCollect(stream).pipe(Effect.map((chunk) => Array.from(chunk)))

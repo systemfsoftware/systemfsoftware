@@ -2262,9 +2262,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
-      '@systemfsoftware/effect-sim-kernel':
-        specifier: workspace:^
-        version: link:../effect-sim-kernel
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended
