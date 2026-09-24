@@ -148,7 +148,7 @@ const guestsDecided = (command: PlanSandbox, guests: ReadonlyArray<number>): boo
   )
 
 it.prop(
-  '∀spec_Approved_Guests_=DecidedPorts',
+  '∀spec_ApprovedGuests_=DecidedPorts',
   { of: [successCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     Option.match(approvedDecisionOf(subject, command), {
