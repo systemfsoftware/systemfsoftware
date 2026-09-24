@@ -1,8 +1,8 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { FOREIGN_VITEST_SOURCES } from './path.config.js'
 import { isRawVitestPackage } from './path.js'
 import {
-  FOREIGN_VITEST_SOURCES,
   meta,
   VIOLATION_ACTUAL,
   VIOLATION_EXPECTED,

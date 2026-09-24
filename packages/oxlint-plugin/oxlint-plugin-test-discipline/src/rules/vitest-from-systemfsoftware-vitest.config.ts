@@ -1,10 +1,5 @@
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
-export const FOREIGN_VITEST_SOURCES: Record<string, true> = {
-  'vitest': true,
-  '@effect/vitest': true,
-}
-
 export const VIOLATION_NAME = 'a value import from a foreign vitest runner' as const
 
 export const VIOLATION_EXPECTED =
