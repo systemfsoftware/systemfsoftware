@@ -22,7 +22,7 @@ const pipeline = Gherkin.Do.pipe(
 )
 
 describe('Feature live declaration', () => {
-  it('carries the reason string on every builder stage and keeps the builder type', () => {
+  it('Should_CarryTheReasonStringOnEveryBuilderStage_When_DeclaredLive', () => {
     expect(Feature('opening a store checkout').live).type.toBeCallableWith(
       'the browser suite waits on real page events',
     )
@@ -31,13 +31,13 @@ describe('Feature live declaration', () => {
     >()
   })
 
-  it('rejects a live declaration without a reason', () => {
+  it('Should_RejectALiveDeclaration_When_NoReasonIsGiven', () => {
     expect(Feature('opening a store checkout').live).type.not.toBeCallableWith()
     expect(Feature('opening a store checkout').live).type.not.toBeCallableWith(42)
     expect(Feature('opening a store checkout').live).type.not.toBeCallableWith(true)
   })
 
-  it('stages the reason through withLayer and withScenarioLayer with the same reason law', () => {
+  it('Should_StageTheReasonThroughLayerAndScenarioLayer_When_DeclaredLive', () => {
     expect(Feature('opening a store checkout').live('waiting on a container').withLayer).type.toBeCallableWith(
       layerShared,
     )
@@ -48,13 +48,13 @@ describe('Feature live declaration', () => {
 declare const scenario: ScenarioFn
 
 describe('Scenario live declaration', () => {
-  it('accepts options that carry a reason and rejects a reasonless flag', () => {
+  it('Should_AcceptOptionsThatCarryAReason_When_DeclaringTheScenarioLive', () => {
     expect(scenario).type.toBeCallableWith('two clerks shelve at once', { live: 'needs real wall time' }, pipeline)
     expect(scenario).type.not.toBeCallableWith('two clerks shelve at once', { live: true }, pipeline)
     expect(scenario).type.not.toBeCallableWith('two clerks shelve at once', { live: undefined }, pipeline)
   })
 
-  it('keeps the options object optional', () => {
+  it('Should_KeepTheOptionsObjectOptional_When_NoLiveOptionsAreGiven', () => {
     expect(scenario).type.toBeCallableWith('two clerks shelve at once', pipeline)
     expect<{ readonly live: string }>().type.toBeAssignableTo<ScenarioOptions>()
     expect<{ readonly live: boolean }>().type.not.toBeAssignableTo<ScenarioOptions>()
@@ -64,7 +64,7 @@ describe('Scenario live declaration', () => {
 declare const bindings: EffectVitestBindings
 
 describe('Feature bindings', () => {
-  it('names only the vitest it methods after the layered runner removal', () => {
+  it('Should_NameOnlyTheVitestItMethods_When_TheLayeredRunnerIsRemoved', () => {
     expect(bindings.it).type.toBe<Vitest.Methods>()
     expect(itOnly).type.toBeAssignableTo<EffectVitestBindings>()
     expect(makeFeature(bindings)).type.toBe<FeatureFn>()
