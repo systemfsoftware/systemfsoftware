@@ -331,6 +331,13 @@ export interface ClassifyOptions<Label extends string> {
   readonly criteria: { readonly [L in Label]: string }
 }
 
+type Unbounded<Label> = Label extends string ? (Record<never, never> extends Record<Label, never> ? true : false)
+  : never
+
+type Finite<Label extends string, Options> = [Label] extends [never] ? Options & { readonly criteria: never }
+  : true extends Unbounded<Label> ? Options & { readonly criteria: never }
+  : Options
+
 const matchAtOf = (limits: ClassifyThresholds): number => limits.match ?? 0.8
 
 const missAtOf = (limits: ClassifyThresholds): number => limits.miss ?? matchAtOf(limits)
@@ -458,7 +465,7 @@ const classifyFor = <Input, Label extends string, S extends Schema.Constraint | 
  * decision is bound to a schema through {@link on}.
  */
 export const classify = <Label extends string, Input = unknown>(
-  options: ClassifyOptions<Label>,
+  options: Finite<Label, ClassifyOptions<Label>>,
 ): ClassifyDecision<Input, Label> => classifyFor<Input, Label, undefined>(options, undefined)
 
 // -------------------------------------------------------------------------------------------------
@@ -621,7 +628,7 @@ const rateFor = <Input, const Level extends string, S extends Schema.Constraint 
 
 /** Create an unscoped semantic ordered rating: the input stays open until the decision is bound through {@link on}. */
 export const rate = <const Level extends string, Input = unknown>(
-  options: RateOptions<Level>,
+  options: Finite<Level, RateOptions<Level>>,
 ): RateDecision<Input, Level> => rateFor<Input, Level, undefined>(options, undefined)
 
 // -------------------------------------------------------------------------------------------------
@@ -631,19 +638,29 @@ export const rate = <const Level extends string, Input = unknown>(
 /** Semantic decision constructors bound to one input schema. */
 export interface DecisionScope<S extends Schema.Constraint> {
   readonly schema: S
-  readonly classify: <Label extends string>(options: ClassifyOptions<Label>) => ClassifyDecision<S['Type'], Label, S>
+  readonly classify: <Label extends string>(
+    options: Finite<Label, ClassifyOptions<Label>>,
+  ) => ClassifyDecision<S['Type'], Label, S>
   readonly probability: (options: ProbabilityOptions) => ProbabilityDecision<S['Type'], S>
-  readonly rate: <const Level extends string>(options: RateOptions<Level>) => RateDecision<S['Type'], Level, S>
+  readonly rate: <const Level extends string>(
+    options: Finite<Level, RateOptions<Level>>,
+  ) => RateDecision<S['Type'], Level, S>
 }
 
 /** Bind semantic decision constructors to one input schema. */
 export const on = <S extends Schema.Constraint>(schema: S): DecisionScope<S> => ({
   schema,
-  classify: <Label extends string>(options: ClassifyOptions<Label>) =>
+  classify: <Label extends string>(options: Finite<Label, ClassifyOptions<Label>>) =>
     classifyFor<S['Type'], Label, S>(options, schema),
   probability: (options: ProbabilityOptions) => probabilityFor<S['Type'], S>(options, schema),
-  rate: <const Level extends string>(options: RateOptions<Level>) => rateFor<S['Type'], Level, S>(options, schema),
+  rate: <const Level extends string>(options: Finite<Level, RateOptions<Level>>) =>
+    rateFor<S['Type'], Level, S>(options, schema),
 })
+
+export const classifyOpenOn =
+  <S extends Schema.Constraint>(schema: S) =>
+  (options: ClassifyOptions<string>): ClassifyDecision<S['Type'], string, S> =>
+    classifyFor<S['Type'], string, S>(options, schema)
 
 // -------------------------------------------------------------------------------------------------
 // Observation
