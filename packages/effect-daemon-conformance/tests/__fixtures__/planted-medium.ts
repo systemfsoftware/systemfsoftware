@@ -1,7 +1,6 @@
+import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Cause, Effect, Exit, Fiber, Layer, Match, Option, Queue, Scope } from 'effect'
-import type { ChildStep } from '../../src/ChildScript.schema.js'
-import type { ConformanceDriver, LaunchedChild } from '../../src/driver.js'
 
 const PlantedTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-conformance/PlantedStarted')
 type PlantedTypeId = typeof PlantedTypeId
@@ -18,12 +17,14 @@ const plantedOf = (evidence: Supervisor.Medium.Started): Option.Option<PlantedSt
     (candidate): candidate is PlantedStarted => PlantedTypeId in candidate,
   )
 
-const consume = (steps: Queue.Queue<ChildStep>, ready: Effect.Effect<void>): Effect.Effect<void, never, never> =>
-  Effect.flatMap(Queue.take(steps), (step) => continueOf(step, steps, ready))
+const consume = (
+  steps: Queue.Queue<Conformance.ChildStep>,
+  ready: Effect.Effect<void>,
+): Effect.Effect<void, never, never> => Effect.flatMap(Queue.take(steps), (step) => continueOf(step, steps, ready))
 
 const continueOf = (
-  step: ChildStep,
-  steps: Queue.Queue<ChildStep>,
+  step: Conformance.ChildStep,
+  steps: Queue.Queue<Conformance.ChildStep>,
   ready: Effect.Effect<void>,
 ): Effect.Effect<void, never, never> =>
   Match.value(step).pipe(
@@ -81,15 +82,15 @@ const port = Supervisor.Medium.MediumPort<Supervisor.FiberProgram, never, Scope.
 
 const launch = (
   _childId: string,
-  _script: ReadonlyArray<ChildStep>,
-): Effect.Effect<LaunchedChild<Supervisor.FiberProgram>, never, never> =>
-  Effect.map(Queue.unbounded<ChildStep>(), (steps) => ({
+  _script: ReadonlyArray<Conformance.ChildStep>,
+): Effect.Effect<Conformance.LaunchedChild<Supervisor.FiberProgram>, never, never> =>
+  Effect.map(Queue.unbounded<Conformance.ChildStep>(), (steps) => ({
     program: (ready) => consume(steps, ready),
     control: { advance: (step, _generation) => Effect.asVoid(Queue.offer(steps, step)) },
   }))
 
 /** A medium that reports a child ready without starting it — the AE10 plant, which must diverge. */
-export const PlantedMedium: ConformanceDriver<Supervisor.FiberProgram, never, never> = {
+export const PlantedMedium: Conformance.ConformanceDriver<Supervisor.FiberProgram, never, never> = {
   name: 'planted',
   declaration: { reporting: 'full', groupStop: 'atomic' },
   port,

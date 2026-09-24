@@ -3,7 +3,7 @@ import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Match } from 'effect'
+import { Effect, Layer, Match } from 'effect'
 
 const Feature = makeFeature({ it })
 
@@ -44,6 +44,7 @@ const divergedAt = (comparison: Conformance.TraceComparison): number =>
   )
 
 Feature('Holding a medium to the group-stop guarantee it claims')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A group restart whose stops finish in a different order conforms only under the eventual guarantee',

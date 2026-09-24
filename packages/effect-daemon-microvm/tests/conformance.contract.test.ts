@@ -28,10 +28,9 @@ const MicroVMLayer = Layer.mergeAll(
   Readiness.NodeHostProber.layer,
 )
 
-const ContractFeature = kvmGate.available ? Feature : Feature.skip
-
-ContractFeature(
+Feature(
   featureNameOf('Supervising a workload in a microVM matches supervising it in process'),
+  kvmGate.available ? undefined : { skip: true },
 )
   .live(
     'each scenario boots and tears down real microsandbox virtual machines, which the simulation kernel cannot observe',

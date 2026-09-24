@@ -1,7 +1,6 @@
+import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Array as Arr, Effect, Layer, type Scope } from 'effect'
-import type { ConformanceDriver } from '../../src/driver.js'
-import { FiberReference } from '../../src/FiberReference.js'
 
 const LATE_HOPS = 3
 
@@ -15,11 +14,11 @@ const medium = (): Supervisor.Medium.Medium<Supervisor.FiberProgram, never, Scop
 
 const port = Supervisor.Medium.MediumPort<Supervisor.FiberProgram, never, Scope.Scope>('LateStopMedium')
 
-export const LateStopMedium: ConformanceDriver<Supervisor.FiberProgram, never, never> = {
+export const LateStopMedium: Conformance.ConformanceDriver<Supervisor.FiberProgram, never, never> = {
   name: 'late-stop',
   declaration: { reporting: 'full', groupStop: 'atomic' },
   port,
-  launch: FiberReference.launch,
+  launch: Conformance.FiberReference.launch,
 }
 
 export const LateStopMediumLayer: Layer.Layer<

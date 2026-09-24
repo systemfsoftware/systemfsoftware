@@ -1,7 +1,6 @@
+import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Array as Arr, Cause, Deferred, Effect, Exit, Fiber, Layer, Match, Option, Queue, Scope } from 'effect'
-import type { ChildStep } from '../../src/ChildScript.schema.js'
-import type { ConformanceDriver, LaunchedChild } from '../../src/driver.js'
 
 const StoppedEarlyTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/effect-daemon-conformance/StoppedEarlyStarted',
@@ -26,12 +25,14 @@ const LATE_HOPS = 3
 const lateHops = (): Effect.Effect<void> =>
   Effect.forEach(Arr.range(1, LATE_HOPS), () => Effect.yieldNow, { discard: true })
 
-const consume = (steps: Queue.Queue<ChildStep>, ready: Effect.Effect<void>): Effect.Effect<void, never, never> =>
-  Effect.flatMap(Queue.take(steps), (step) => continueOf(step, steps, ready))
+const consume = (
+  steps: Queue.Queue<Conformance.ChildStep>,
+  ready: Effect.Effect<void>,
+): Effect.Effect<void, never, never> => Effect.flatMap(Queue.take(steps), (step) => continueOf(step, steps, ready))
 
 const continueOf = (
-  step: ChildStep,
-  steps: Queue.Queue<ChildStep>,
+  step: Conformance.ChildStep,
+  steps: Queue.Queue<Conformance.ChildStep>,
   ready: Effect.Effect<void>,
 ): Effect.Effect<void, never, never> =>
   Match.value(step).pipe(
@@ -105,15 +106,15 @@ const port = Supervisor.Medium.MediumPort<Supervisor.FiberProgram, never, Scope.
 
 const launch = (
   _childId: string,
-  _script: ReadonlyArray<ChildStep>,
-): Effect.Effect<LaunchedChild<Supervisor.FiberProgram>, never, never> =>
-  Effect.map(Queue.unbounded<ChildStep>(), (steps) => ({
+  _script: ReadonlyArray<Conformance.ChildStep>,
+): Effect.Effect<Conformance.LaunchedChild<Supervisor.FiberProgram>, never, never> =>
+  Effect.map(Queue.unbounded<Conformance.ChildStep>(), (steps) => ({
     program: (ready) => consume(steps, ready),
     control: { advance: (step, _generation) => Effect.asVoid(Queue.offer(steps, step)) },
   }))
 
 /** A medium that reports a stop before its incarnation stops, driven over one channel per child: the step a restarted incarnation is for reaches the dying one. */
-export const SharedChannelMedium: ConformanceDriver<Supervisor.FiberProgram, never, never> = {
+export const SharedChannelMedium: Conformance.ConformanceDriver<Supervisor.FiberProgram, never, never> = {
   name: 'shared-channel',
   declaration: { reporting: 'full', groupStop: 'atomic' },
   port,

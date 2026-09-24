@@ -67,10 +67,9 @@ const sandboxesLeftByAnIncarnation = Effect.gen(function*() {
   return names.filter((name) => name.startsWith(SANDBOX_NAME_PREFIX))
 })
 
-const ContractFeature = kvmGate.available ? Feature : Feature.skip
-
-ContractFeature(
+Feature(
   featureNameOf('A workload in a microVM tells its supervisor how it ended, and the machine it ran in goes away'),
+  kvmGate.available ? undefined : { skip: true },
 )
   .live('each scenario boots, reports and tears down a real microsandbox virtual machine on the host')
   .withLayer(MicroVMLayer)
