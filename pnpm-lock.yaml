@@ -502,7 +502,7 @@ importers:
     dependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.0-rc.116(effect@4.0.0-rc.116)(redis@6.2.1(@opentelemetry/api@1.9.1))
+        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@microsoft/tsdoc':
         specifier: ~0.17.0
         version: 0.17.0
@@ -517,7 +517,7 @@ importers:
         version: 8.0.4
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-rc.116
+        version: 4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea)
       minimatch:
         specifier: ^10.2.3
         version: 10.2.5
@@ -533,7 +533,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.116(effect@4.0.0-rc.116)(vitest@5.0.1)
+        version: link:../vitest
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
