@@ -1,9 +1,8 @@
-import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Deferred, Effect, Equal, Exit, Fiber, Layer } from 'effect'
-import { answeredOperation, failReportOf, operationsOfRun, passReportOf } from './__fixtures__/checkReports.js'
+import { Deferred, Effect, Equal, Exit, Fiber, Layer, Schema } from 'effect'
+import { answeredOperation, failReportOf, operationsOfRun } from './__fixtures__/checkReports.js'
 import type { LockOperation } from './__fixtures__/checkReports.js'
 import { LockCommand, lockModel, LockState, stepLock, tryAcquire } from './__fixtures__/lock.model.js'
 import type { LockState as LockStateValue } from './__fixtures__/lock.model.js'
@@ -103,18 +102,20 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           'checked',
           (s) => lockCheck(s.lock),
         ),
-        Then('the history is rejected because no sequential order explains it')((s) => {
-          expect(failReportOf(s.checked).failure.judgement.problem).toBe('no-sequential-order')
-        }),
-        And('the failing schedule shrinks to a single departure from the ordinary order')((s) => {
-          expect(failReportOf(s.checked).failure.deviations).toBe(1)
-        }),
-        And('both callers observed the lock as free at the same moment')((s) => {
-          const holders = failReportOf(s.checked).failure.operations.filter(
-            (operation) => operation.response === true,
-          )
-          expect(holders.length).toBe(2)
-          expect(new Set(holders.map((operation) => operation.worker)).size).toBe(2)
+        Then('the history is rejected with one deviation, both callers having seen the lock as free')((s, expect) => {
+          const holders = failReportOf(s.checked).failure.operations.filter((operation) => operation.response === true)
+          return expect({
+            report: s.checked,
+            holders: holders.length,
+            distinctHolders: new Set(holders.map((operation) => operation.worker)).size,
+          }).toMatchObject({
+            report: {
+              _tag: 'Fail',
+              failure: { judgement: { problem: 'no-sequential-order' }, deviations: 1 },
+            },
+            holders: 2,
+            distinctHolders: 2,
+          })
         }),
       ),
     )
@@ -130,14 +131,17 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           'checked',
           (s) => lockCheck(s.lock),
         ),
-        Then("the report spells out the shrunk schedule and both callers' observations")((s) => {
-          const text = Conformance.render(s.checked)
-          expect(text).toContain('no sequential order explains this history')
-          expect(text).toContain('deviation')
-          expect(text).toContain('fiber 0')
-          expect(text).toContain('fiber 1')
-          expect(text).toContain('true')
-        }),
+        Then("the report spells out the shrunk schedule and both callers' observations")((s, expect) =>
+          expect({
+            report: s.checked,
+            rendered: Conformance.render(s.checked),
+          }).toMatchObject({
+            report: { _tag: 'Fail', failure: { judgement: { problem: 'no-sequential-order' } } },
+            rendered: expect.stringMatching(
+              /no sequential order explains this history[\s\S]*deviation[\s\S]*fiber 0[\s\S]*fiber 1[\s\S]*true/,
+            ),
+          })
+        ),
       ),
     )
 
@@ -152,9 +156,12 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           'checked',
           (s) => lockCheck(s.lock),
         ),
-        Then('every interleaving is explained by some sequential order of the model')((s) => {
-          expect(passReportOf(s.checked).histories).toBeGreaterThan(1)
-        }),
+        Then('every interleaving is explained by some sequential order of the model')((s, expect) =>
+          expect(s.checked).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(1)))),
+          })
+        ),
       ),
     )
 
@@ -182,9 +189,9 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
             'explained',
             (s) => Effect.sync(() => Conformance.order(lockModel, s.history)),
           ),
-          Then('the calls are explained by the order the callers finished in, or not at all')((s) => {
+          Then('the calls are explained by the order the callers finished in, or not at all')((s, expect) =>
             expect(s.explained).toEqual(row.expectedOrder)
-          }),
+          ),
         ),
     )
 
@@ -196,12 +203,14 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           () => Effect.succeed({ lock: atomicLock, model: pinnedModel }),
         ),
         When('the check is started')('refused', (s) => Effect.flip(lockCheck(s.subject.lock, s.subject.model))),
-        Then('the refusal names the state itself as the problem')((s) => {
-          expect(s.refused.problem).toBe('state-not-structural')
-        }),
-        And('the refusal explains that the state must compare by structure')((s) => {
-          expect(s.refused.detail).toContain('compare by structure')
-        }),
+        Then('the refusal names the state itself as the problem and asks the model to compare by structure')(
+          (s, expect) =>
+            expect(s.refused).toMatchObject({
+              _tag: 'ModelError',
+              problem: 'state-not-structural',
+              detail: expect.stringContaining('compare by structure'),
+            }),
+        ),
       ),
     )
 
@@ -216,16 +225,13 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           'recording',
           (s) => Effect.promise(() => Kernel.run(s.program)),
         ),
-        Then('the finished call keeps its answer in the history')((s) => {
-          const operations = operationsOfRun(s.recording)
-          expect(operations[0]?.worker).toBe(0)
-          expect(operations[0]?.response).toBe(true)
-        }),
-        And('the interrupted call keeps its invocation without an answer')((s) => {
-          const operations = operationsOfRun(s.recording)
-          expect(operations[1]?.worker).toBe(1)
-          expect(operations[1]?.answered).toBeUndefined()
-        }),
+        Then('the finished call keeps its answer and the interrupted call keeps its invocation without an answer')(
+          (s, expect) =>
+            expect(operationsOfRun(s.recording)).toMatchObject([
+              expect.objectContaining({ worker: 0, response: true }),
+              expect.objectContaining({ worker: 1, answered: undefined }),
+            ]),
+        ),
       ),
     )
 
@@ -240,25 +246,30 @@ Feature('Proving concurrent callers against a pure model', { timeout: 0 })
           'checked',
           (s) => lockCheck(s.lock),
         ),
-        Then('the report names the calls both callers saw and still cannot be explained')((s) => {
-          const failed = failReportOf(s.checked)
-          expect(failed.failure.judgement.problem).toBe('no-sequential-order')
-          expect(failed.failure.operations.length).toBeGreaterThan(0)
-        }),
-        And('the effort it reports is the effort a fresh exploration of just those calls takes')((s) => {
-          const failed = failReportOf(s.checked)
-          return Effect.map(
-            Effect.promise(() =>
-              Kernel.search(
-                Effect.provide(recordedOver(assignmentOfHistory(failed.failure.operations)), s.lock),
-                { isFailure: unexplained },
-              )
-            ),
-            (fresh) => {
-              expect(failed.failure.bound).toEqual(fresh.bound)
-            },
-          )
-        }),
+        Then('the report names the calls both callers saw and the effort a fresh exploration of them takes')(
+          (s, expect) => {
+            const operations = failReportOf(s.checked).failure.operations
+            return Effect.map(
+              Effect.promise(() =>
+                Kernel.search(
+                  Effect.provide(recordedOver(assignmentOfHistory(operations)), s.lock),
+                  { isFailure: unexplained },
+                )
+              ),
+              (fresh) =>
+                expect({ report: s.checked, operationCount: operations.length }).toMatchObject({
+                  report: {
+                    _tag: 'Fail',
+                    failure: {
+                      judgement: { problem: 'no-sequential-order' },
+                      bound: fresh.bound,
+                    },
+                  },
+                  operationCount: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+                }),
+            )
+          },
+        ),
       ),
     )
   })
