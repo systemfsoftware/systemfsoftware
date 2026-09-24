@@ -48,14 +48,14 @@ ruleTester.run('prop-generated-law-duplicate', propGeneratedLawDuplicate, {
     {
       name: 'Should_StaySilent_When_NoGuard',
       code: `${SCHEMA_IMPORTS}
-it.prop('p', [roundTrips], ([s]) => Exit.isSuccess(Schema.decodeUnknownExit(Schema.String)(s)))`,
+it.prop('p', { of: [roundTrips], subject: (s) => s, runs: 100 }, (s, [v]) => Exit.isSuccess(Schema.decodeUnknownExit(Schema.String)(v)))`,
       filename: FILENAME,
     },
     {
       name: 'Should_StaySilent_When_PredicateCallsAModuleArrow',
       code: `${SCHEMA_IMPORTS}
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => decide(s))
+it.prop('p', { of: [roundTrips], subject: decide, runs: 100 }, (s, [v]) => decide(v))
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -66,7 +66,7 @@ function widen(s: string): string {
   return s.trim()
 }
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => widen(s) !== s || s.length >= 0)
+it.prop('p', { of: [roundTrips], subject: widen, runs: 100 }, (s, [v]) => widen(v) !== v || v.length >= 0)
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -75,7 +75,7 @@ ${GUARD_END}`,
       code: `${SCHEMA_IMPORTS}
 import { narrowMoney } from './money.js'
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => narrowMoney(s) !== null)
+it.prop('p', { of: [roundTrips], subject: narrowMoney, runs: 100 }, (s, [v]) => narrowMoney(v) !== null)
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -83,7 +83,7 @@ ${GUARD_END}`,
       name: 'Should_StaySilent_When_CodecWrapsADomainFunction',
       code: `${SCHEMA_IMPORTS}
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => Exit.isSuccess(Schema.decodeUnknownExit(Schema.String)(decide(s))))
+it.prop('p', { of: [roundTrips], subject: decide, runs: 100 }, (s, [v]) => Exit.isSuccess(Schema.decodeUnknownExit(Schema.String)(decide(v))))
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -93,7 +93,7 @@ ${GUARD_END}`,
       name: 'Should_Report_When_PredicateIsDecodeAcceptanceOnly',
       code: `${SCHEMA_IMPORTS}
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => Exit.isSuccess(Schema.decodeUnknownExit(Schema.String)(s)))
+it.prop('p', { of: [roundTrips], subject: (s) => s, runs: 100 }, (s, [v]) => Exit.isSuccess(Schema.decodeUnknownExit(Schema.String)(v)))
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'noDomainFunction', data: NO_FUNCTION_DATA }],
@@ -102,7 +102,7 @@ ${GUARD_END}`,
       name: 'Should_Report_When_PredicateIsDecodeRefusalOnly',
       code: `${SCHEMA_IMPORTS}
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => Exit.isFailure(Schema.decodeUnknownExit(Schema.String)(s)))
+it.prop('p', { of: [roundTrips], subject: (s) => s, runs: 100 }, (s, [v]) => Exit.isFailure(Schema.decodeUnknownExit(Schema.String)(v)))
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'noDomainFunction', data: NO_FUNCTION_DATA }],
@@ -112,7 +112,7 @@ ${GUARD_END}`,
       code: `${SCHEMA_IMPORTS}
 const decode = Schema.decodeUnknownExit(Schema.String)
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => Exit.isSuccess(decode(s)))
+it.prop('p', { of: [roundTrips], subject: decode, runs: 100 }, (s, [v]) => Exit.isSuccess(decode(v)))
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'noDomainFunction', data: NO_FUNCTION_DATA }],
@@ -123,7 +123,7 @@ ${GUARD_END}`,
 const produce = (s: string) => ({ value: s })
 const MoneyTypeId = Symbol.for('money')
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => Object.getOwnPropertySymbols(produce(s)).some((sym) => sym === MoneyTypeId))
+it.prop('p', { of: [roundTrips], subject: produce, runs: 100 }, (s, [v]) => Object.getOwnPropertySymbols(produce(v)).some((sym) => sym === MoneyTypeId))
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'compilerDuplicate', data: COMPILER_DATA }],
@@ -134,7 +134,7 @@ ${GUARD_END}`,
 const produce = (s: string) => ({ value: s })
 const MoneyTypeId = Symbol.for('money')
 ${GUARD}
-it.prop('p', [roundTrips], ([s]) => produce(s).value === s && MoneyTypeId !== undefined)
+it.prop('p', { of: [roundTrips], subject: produce, runs: 100 }, (s, [v]) => produce(v).value === v && MoneyTypeId !== undefined)
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'compilerDuplicate', data: COMPILER_DATA }],

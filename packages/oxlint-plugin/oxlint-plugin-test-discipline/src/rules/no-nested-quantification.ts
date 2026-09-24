@@ -83,13 +83,17 @@ const isConstantPool = (element: unknown): boolean => {
 
 const boundedPoolIndices = (call: ESTree.CallExpression): ReadonlySet<number> => {
   const bounded = new Set<number>()
-  const generators = call.arguments.find(
-    (argument): argument is ESTree.ArrayExpression => argument.type === 'ArrayExpression',
-  )
-  if (generators === undefined) return bounded
-  generators.elements.forEach((element, index) => {
-    if (isConstantPool(element)) bounded.add(index)
-  })
+  const options = call.arguments[1]
+  if (options === undefined || options.type !== 'ObjectExpression') return bounded
+  for (const property of options.properties) {
+    if (property.type !== 'Property' || property.computed) continue
+    if (property.key.type !== 'Identifier' || property.key.name !== 'of') continue
+    if (property.value.type !== 'ArrayExpression') return bounded
+    property.value.elements.forEach((element, index) => {
+      if (isConstantPool(element)) bounded.add(index)
+    })
+    return bounded
+  }
   return bounded
 }
 
@@ -98,14 +102,14 @@ const drawnNamesIn = (predicate: PredicateFn, bounded: ReadonlySet<number>): Rea
   const addFrom = (value: unknown): void => {
     for (const name of identifiersIn(value)) drawn.add(name)
   }
-  const [first, ...rest] = predicate.params
-  if (isNode(first) && first.type === 'ArrayPattern') {
-    first.elements.forEach((element, index) => {
+  const [, values, ...rest] = predicate.params
+  if (isNode(values) && values.type === 'ArrayPattern') {
+    values.elements.forEach((element, index) => {
       if (bounded.has(index)) return
       addFrom(element)
     })
   } else {
-    addFrom(first)
+    addFrom(values)
   }
   addFrom(rest)
   visit(predicate.body, (node) => {
