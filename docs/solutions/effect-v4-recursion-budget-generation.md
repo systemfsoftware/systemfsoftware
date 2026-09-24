@@ -1,3 +1,16 @@
+---
+title: Effect v4 gives recursion budgets one honest job — validate and mark, never bound
+date: "2026-09-20"
+module: effect-schema-recursion-budget
+problem_type: architecture_pattern
+component: testing_framework
+severity: medium
+applies_when:
+  - porting a v3 fast-check depth-bounding hook onto a v4 Schema.suspend
+  - deciding whether a derivation hook can bound generation depth
+tags: [effect-v4, schema-suspend, arbitrary-derivation, recursion-budget, propagation]
+---
+
 # Solution: Effect v4 gives recursion budgets one honest job — validate and mark, never bound
 
 ## Problem

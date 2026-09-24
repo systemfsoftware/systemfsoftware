@@ -42,19 +42,12 @@ The penny dropped on widening a pattern by hand — `{1,2}` to `{1,3}`, a charac
 
 **If a schema's `S.pattern(...)` (or any refinement) mutants survive while its round-trip laws stay green, the laws are tautological with respect to that refinement. Stop adding round-trip laws. Author rejection properties whose generators come from the domain contract, never from the pattern literal.**
 
-The mechanism is visible in `packages/effect-schema-law/src/rule-of-schemas.kernel.ts`. `ruleOfSchemas` (`rule-of-schemas.kernel.ts:13`) registers exactly two properties per schema, and feeds both from the schema itself:
+The mechanism is visible in `packages/effect-schema-law/src/RuleOfSchemas.ts`. `ruleOfSchemas` registers exactly two properties per schema, and feeds both from the schema itself:
 
 ```ts
-// packages/effect-schema-law/src/rule-of-schemas.kernel.ts:34-42
-it.prop(
-  `∀x_${name}_=x`,
-  [schema], // ← the arbitrary IS the schema under test
-  ([value]) => {
-    const encoded = encodeSync(value)
-    const result = decodeEither(encoded)
-    return Either.isRight(result) && typeEq(result.right, value)
-  },
-)
+// packages/effect-schema-law/src/RuleOfSchemas.ts
+it.prop(`∀x_${name}Enc_=x`, [schema], ([value]) => encodeStable(value), options)
+it.prop(`∀x_${name}_=x`, [schema], ([value]) => roundTrips(value), options)
 ```
 
 The `[schema]` argument is fast-check drawing from `Schema.Arbitrary`, which the schema's own `S.annotations({ arbitrary })` supplies. Rejection is the one thing that arbitrary is engineered never to produce.
@@ -120,11 +113,11 @@ There is a third principle in play, and the case here is its mirror image. Behav
 
 Rejection properties initially had no legal home in this repo, which is why the fix took a taxonomy change and not just new tests:
 
-- `*.schema.test.ts` is forbidden outright (`packages/oxlint-plugins/test-placement/src/rules/path.config.ts`), because hand-written schema tests had only ever restated generated coverage.
+- `*.schema.test.ts` is forbidden outright (`packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/path.config.ts`), because hand-written schema tests had only ever restated generated coverage.
 - `<cell>.property.test.ts` was restricted to `.workflow` / `.policy` stems.
-- The in-source `if (import.meta.vitest)` route needs a module-level non-exported binding, which `prefixed-hex.schema.ts` and `uint8array-from-prefixed-hex.schema.ts` do not have — they are pure pipes with no local helper to pin.
+- The in-source `if (import.meta.vitest)` route needs a module-level non-exported binding, which `PrefixedHex.schema.ts` and `Uint8arrayFromPrefixedHex.schema.ts` do not have — they are pure pipes with no local helper to pin.
 
-The resolution: `.schema` joined `COLOCATABLE_CELLS` (`path.config.ts:49`) — not a new suffix, the existing `<cell>.property.test.ts` scheme — and the original ban kept its teeth through a new lint rule, `no-schema-law-duplicate` in `packages/oxlint-plugins/effect-schema`, which fails the build if a `*.schema.property.test.ts` calls `ruleOfSchemas`, `Schema.equivalence`, or `Schema.encodedSchema`. That door is deliberately narrow: the file earns its place by stating a refusal, or it does not exist. The `architect-schema` agent skill carries the same mandate as gate item 7.
+The resolution: `.schema` property tests were admitted under the `<cell>.property.test.ts` scheme (now enforced by `src-property-test-cell`), and duplicate laws are refused by `prop-generated-law-duplicate` in `packages/oxlint-plugin/oxlint-plugin-test-discipline`. The file earns its place by stating a refusal, or it does not exist.
 
 ## When to Apply
 
