@@ -23,11 +23,19 @@ Oxlint rules for module structure and export hygiene — classes must extend a s
 | `no-direct-tag-access`            | Ban direct `_tag` access except in comparisons the rule allows.                                                                                                                                                                                                                                                  |
 | `no-either-tag-assertions`        | Ban Either `_tag` assertions in test files; assert the full value instead.                                                                                                                                                                                                                                       |
 
+| `no-context-generic-tag` | Ban `Context.GenericTag`; a v4 service is declared with `Context.Service`. |
+| `no-direct-tag-access` | Ban direct `_tag` access; the allowed expressions are configurable. |
+| `no-either-tag-assertions` | Ban Either `_tag` assertions in test files; use `expect().toEqual(Either.left/right(...))` instead. |
+| `sandwich-shell-is-straight-line` | Refuse control flow, `Match` pipelines, and clock reads inside the read and write phases of a Sandwich cell. |
+| `medium-owns-no-recovery` | Refuse `Effect.retry`, `Effect.retryOrElse`, `Effect.forever` and `Stream.retry` inside the ports of `Supervisor.Medium.make`. |
+
+Both kernel-boundary rules resolve their builders by import origin and are included in `configs.recommended`.
+
 `ban-classes` is included in `configs.recommended`.
 
 ## Shared rule modules
 
-`src/rules/` keeps the single-copy helpers this package owns: `internal-jsdoc.ts`, `internal-path.ts`, `kind-file.ts` (suffix keying), `module-origin.ts` (import-origin resolution for the kinds), and `module-scope.ts` (module-level declarations, export surface, AST walk). No other package's module is vendored here. No plugin vendors a copy of another's code, and plugins never depend on each other.
+`src/rules/` keeps the single-copy helpers this package owns: `internal-jsdoc.ts`, `internal-path.ts`, `kernel-boundary.ts` (the node walk and boundary resolution shared by the kernel-boundary rules), `kind-file.ts` (suffix keying), `module-origin.ts` (import-origin resolution for the kinds), and `module-scope.ts` (module-level declarations, export surface, AST walk). No other package's module is vendored here. No plugin vendors a copy of another's code, and plugins never depend on each other.
 
 ## Enrollment
 

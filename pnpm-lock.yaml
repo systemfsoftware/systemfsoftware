@@ -1893,6 +1893,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
+      '@systemfsoftware/oxlint-import-origin':
+        specifier: workspace:^
+        version: link:../import-origin
       '@systemfsoftware/stryker-config':
         specifier: workspace:^
         version: link:../../toolchain/stryker-config
