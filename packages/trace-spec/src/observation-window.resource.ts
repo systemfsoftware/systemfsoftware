@@ -1,7 +1,7 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
 import * as OtelResource from '@effect/opentelemetry/Resource'
+import { Resource } from '@systemfsoftware/effect-cell-types'
 import { Effect, Layer } from 'effect'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type * as Scope from 'effect/Scope'
 import * as Handle from './observation-window.handle.js'
 import type { Observation } from './Observation.service.js'
@@ -16,15 +16,8 @@ export {
   TypeId as ObservationWindowTypeId,
 } from './observation-window.handle.js'
 
-const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindowResource')
+export const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindowResource')
 export type TypeId = typeof TypeId
-
-export interface ObservationWindowResource extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly spec: ObservationWindowSpec
-  readonly scoped: Effect.Effect<Handle.ObservationWindow, never, Scope.Scope>
-  readonly layer: Layer.Layer<Observation | OtelTracer.OtelTracer>
-}
 
 const scoped = (spec: ObservationWindowSpec): Effect.Effect<Handle.ObservationWindow, never, Scope.Scope> =>
   Effect.acquireRelease(Effect.sync(() => Handle.make(spec)), Handle.shutdown)
@@ -35,17 +28,13 @@ const layer = (spec: ObservationWindowSpec): Layer.Layer<Observation | OtelTrace
     Layer.provideMerge(Layer.effectContext(Effect.map(scoped(spec), Handle.context))),
   )
 
-const makeProto = (spec: ObservationWindowSpec): ObservationWindowResource => ({
-  [TypeId]: TypeId,
-  spec,
-  get scoped() {
-    return scoped(spec)
-  },
-  get layer() {
-    return layer(spec)
-  },
-  ...Prototype,
+const ObservationWindows = Resource.make<ObservationWindowSpec>()({
+  typeId: TypeId,
+  combinators: {},
+  projections: { scoped, layer },
 })
 
+export type ObservationWindowResource = Resource.Of<typeof ObservationWindows>
+
 export const make = (serviceName: string): ObservationWindowResource =>
-  makeProto(new ObservationWindowSpec({ serviceName }))
+  ObservationWindows.of(new ObservationWindowSpec({ serviceName }))
