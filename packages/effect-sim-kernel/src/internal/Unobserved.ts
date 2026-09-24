@@ -10,7 +10,7 @@
 import { Context, Effect, Latch, Option, PubSub, Queue, Scope, Semaphore } from 'effect'
 
 import type { UnobservedPrimitive } from '../Kernel/Bound.js'
-import { currentKernel } from './runMark.js'
+import { currentKernel, FIBER_PROTOTYPE } from './runMark.js'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
@@ -134,7 +134,7 @@ const installSetContext = (proto: object, original: (...args: ReadonlyArray<Fiel
   })
 }
 
-const fiberProto = (): object | undefined => Effect.runFork(Effect.void).pipe(protoOf, claimed)
+const fiberProto = (): object | undefined => claimed(FIBER_PROTOTYPE)
 
 const withOriginalSetContext = (proto: object): void => {
   const original = originalSetContext(proto)

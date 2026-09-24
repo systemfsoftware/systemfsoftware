@@ -11,13 +11,13 @@
  * package (R17). They are pinned to `effect` 4.0.0-rc.116 and fail loudly when a
  * field or method moves.
  */
-import { Deferred, Effect, Match, Ref, Scheduler } from 'effect'
+import { Clock, Context, Deferred, Match, Ref, Scheduler } from 'effect'
 
 import { makeRunClocks } from './clocks.js'
 import type { RunClocks } from './clocks.js'
 import type { AnyFiber } from './deadlock.js'
 import type { Escape } from './escapeRecorder.js'
-import { claimRun, isRunLive, releaseRun } from './runMark.js'
+import { claimRun, FIBER_PROTOTYPE, isRunLive, releaseRun } from './runMark.js'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
@@ -123,8 +123,6 @@ const protoOf = (value: object): object => {
   const proto: Field = Object.getPrototypeOf(value)
   return isHostObject(proto) ? proto : Object.prototype
 }
-
-const fiberPrototype = (): object => protoOf(Effect.runFork(Effect.void))
 
 // ---------------------------------------------------------------------------
 // Hook acquisition and release
@@ -257,6 +255,45 @@ const interceptFields = (
   for (const field of fields) interceptField(proto, field, guard)
 }
 
+const DEFAULT_VALUE = '~effect/Context/defaultValue'
+const FIBER_CACHE = '_fiberCache'
+
+const emptyContextRoot = (): object => {
+  const root: Field = Reflect.get(Context.empty(), 'cacheRoot')
+  if (!isHostObject(root)) {
+    throw new Error('effect-sim-kernel: Context no longer has a cache root on the pinned Effect version')
+  }
+  return root
+}
+
+const setAsideFiberCache = (root: object): PropertyDescriptor | undefined => {
+  const captured = captureDescriptor(root, FIBER_CACHE)
+  Reflect.deleteProperty(root, FIBER_CACHE)
+  return captured
+}
+
+const restoreFiberCache = (root: object, captured: PropertyDescriptor | undefined): void => {
+  if (captured === undefined) Reflect.deleteProperty(root, FIBER_CACHE)
+  else Reflect.defineProperty(root, FIBER_CACHE, captured)
+}
+
+const cachedDefaultOf = <A>(reference: Context.Reference<A>): PropertyDescriptor => {
+  Context.getOption(Context.empty(), reference)
+  const descriptor = captureDescriptor(reference, DEFAULT_VALUE)
+  if (descriptor === undefined) {
+    throw new Error('effect-sim-kernel: Context no longer caches reference defaults on the pinned Effect version')
+  }
+  return descriptor
+}
+
+const pinDefault = <A>(reference: Context.Reference<A>, value: A): void => {
+  Reflect.defineProperty(reference, DEFAULT_VALUE, { configurable: true, writable: true, value })
+}
+
+const restoreDefault = <A>(reference: Context.Reference<A>, captured: PropertyDescriptor): void => {
+  Reflect.defineProperty(reference, DEFAULT_VALUE, captured)
+}
+
 /**
  * Claims the hooks for one run: the fiber methods and the `Ref` and `Deferred`
  * fields are patched with closures over this kernel, and the live run is
@@ -266,12 +303,15 @@ const acquireHooks = (kernel: Kernel): () => void => {
   if (isRunLive()) {
     throw new Error('effect-sim-kernel: a kernel run is already active — one kernel owns the global hooks at a time')
   }
-  const fiberProto = fiberPrototype()
+  const fiberProto = FIBER_PROTOTYPE
   const originals = originalMethodsOf(fiberProto)
   const refProto = protoOf(Ref.makeUnsafe(0))
   const deferredProto = protoOf(Deferred.makeUnsafe())
   const capturedRef = captureDescriptors(refProto, REF_FIELDS)
   const capturedDeferred = captureDescriptors(deferredProto, DEFERRED_FIELDS)
+  const capturedScheduler = cachedDefaultOf(Scheduler.Scheduler)
+  const capturedClock = cachedDefaultOf(Clock.Clock)
+  const emptyRoot = emptyContextRoot()
   const guard = (target: object): void => {
     if (kernel.running) kernel.observeShared(target)
   }
@@ -279,11 +319,17 @@ const acquireHooks = (kernel: Kernel): () => void => {
   patchMethods(fiberProto, originals, kernel)
   interceptFields(refProto, REF_FIELDS, guard)
   interceptFields(deferredProto, DEFERRED_FIELDS, guard)
+  pinDefault(Scheduler.Scheduler, kernel.scheduler)
+  pinDefault(Clock.Clock, kernel.clocks.clock)
+  const capturedFiberCache = setAsideFiberCache(emptyRoot)
   return () => {
     releaseRun()
     restoreMethods(fiberProto, originals)
     restoreFields(refProto, REF_FIELDS, capturedRef)
     restoreFields(deferredProto, DEFERRED_FIELDS, capturedDeferred)
+    restoreDefault(Scheduler.Scheduler, capturedScheduler)
+    restoreDefault(Clock.Clock, capturedClock)
+    restoreFiberCache(emptyRoot, capturedFiberCache)
   }
 }
 

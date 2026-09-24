@@ -25,9 +25,10 @@ const protoOf = (value: object): object => {
   return isHostObject(proto) ? proto : Object.prototype
 }
 
-const fiberPrototype = (): object => protoOf(Effect.runFork(Effect.void))
+/** @internal */
+export const FIBER_PROTOTYPE: object = protoOf(Effect.runFork(Effect.void))
 
-const heldRun = (): Field => fieldOf(fiberPrototype(), ACTIVE_RUN)
+const heldRun = (): Field => fieldOf(FIBER_PROTOTYPE, ACTIVE_RUN)
 
 const isLiveKernel = (candidate: Field): candidate is Kernel => isHostObject(candidate) && isKernel(candidate)
 
@@ -42,10 +43,10 @@ export const isRunLive = (): boolean => isHostObject(heldRun())
 
 /** @internal */
 export const claimRun = (kernel: Kernel): void => {
-  Reflect.set(fiberPrototype(), ACTIVE_RUN, kernel)
+  Reflect.set(FIBER_PROTOTYPE, ACTIVE_RUN, kernel)
 }
 
 /** @internal */
 export const releaseRun = (): void => {
-  Reflect.set(fiberPrototype(), ACTIVE_RUN, undefined)
+  Reflect.set(FIBER_PROTOTYPE, ACTIVE_RUN, undefined)
 }
