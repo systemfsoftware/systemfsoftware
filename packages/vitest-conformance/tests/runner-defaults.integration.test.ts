@@ -15,7 +15,8 @@ import {
 const Feature = makeFeature({ it })
 
 const refusal = {
-  noCheck: '✗ this test ran no check, so it cannot fail. Yield one: yield* expect(actual).toEqual(expected).',
+  noCheck:
+    "✗ this test yields no check, so it cannot fail. Yield one from the test's own expect: it(name, function* ({ expect }) { yield* expect(actual).toEqual(expected) }). An expect imported from vitest does not count.",
   syncBody:
     '✗ the body must be a generator that yields its checks: it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
 } as const

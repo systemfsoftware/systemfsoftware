@@ -21,6 +21,8 @@ import type {
   RefuseAsyncBody,
   RefuseEffectBody,
   RefuseSyncBody,
+  ScopedLaneRefusal,
+  ScopedLiveLaneRefusal,
   UnprovidedRefusal,
 } from './internal/refusals.js'
 import * as internal from './internal/runner.js'
@@ -189,13 +191,14 @@ export namespace Vitest {
   }
 
   /**
-   * A removed habit lane: calling it is a `this`-type error naming the rewrite, and a run-time throw with the
-   * same text (R9, KTD3). It keeps `prop`, so `it.effect.prop` still runs properties.
+   * A removed habit lane: calling it is a `this`-type error naming the lane and its rewrite, and a run-time
+   * throw with the same text (R9, KTD3). `Refusal` is that lane's own text, so `it.scoped` blames `it.scoped`
+   * and `it.effect` blames `it.effect`. It keeps `prop`, so `it.effect.prop` still runs properties.
    *
    * @since 4.0.0
    */
-  export interface EffectLane<R> {
-    (this: EffectLaneRefusal, ...args: ReadonlyArray<Argument>): never
+  export interface EffectLane<R, Refusal extends string = EffectLaneRefusal> {
+    (this: Refusal, ...args: ReadonlyArray<Argument>): never
     readonly prop: EffectProperty<R | Scope.Scope>
   }
 
@@ -310,9 +313,9 @@ export namespace Vitest {
    * @since 4.0.0
    */
   export interface MethodsNonLive<R = never> extends Test<R | Scope.Scope>, Modifiers<R | Scope.Scope> {
-    readonly effect: EffectLane<R>
-    readonly scoped: EffectLane<R>
-    readonly scopedLive: EffectLane<R>
+    readonly effect: EffectLane<R, EffectLaneRefusal>
+    readonly scoped: EffectLane<R, ScopedLaneRefusal>
+    readonly scopedLive: EffectLane<R, ScopedLiveLaneRefusal>
     readonly flakyTest: FlakyTest
     readonly layer: LayerOf<R, NestedLayerOptions>
 

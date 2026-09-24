@@ -32,7 +32,18 @@ import { registerEqualTester } from './equal.js'
 import * as Refusals from './errors.schema.js'
 import { markTask } from './guard.js'
 import { makeProperty, type PropertyRuntime } from './property/engine.js'
-import { refuseAsyncBody, refuseEffectLane, refuseHook, refuseSyncBody, unprovidedText } from './refusals.js'
+import {
+  type HookRefusal,
+  isRefusal as isRefusalError,
+  refusalOf as refusalError,
+  refuseAsyncBody,
+  refuseEffectLane,
+  refuseHook,
+  refuseScopedLane,
+  refuseScopedLiveLane,
+  refuseSyncBody,
+  unprovidedText,
+} from './refusals.js'
 import { VitestTestContext } from './test-context.js'
 import { makeVirtualRuntime, virtualClockLayer, type VirtualRuntime } from './virtual-time.js'
 
@@ -227,7 +238,7 @@ type LaneRegister = <Eff, AEff>(
 ) => void
 
 const refuseBody = (text: string): never => {
-  throw new Error(text)
+  throw refusalError(text)
 }
 
 /** The constructor names of the function kinds that hand back a promise instead of a generator. */
@@ -294,15 +305,15 @@ const outcomeOf = (promise: Promise<void>): Promise<Error | undefined> =>
 
 const isSlop = (error: Error): error is Refusals.Slop => Schema.is(Refusals.Slop)(error)
 
-/** Every failure the fork itself names, as `Schema.is`: the families a second run must not relabel. */
-const refusalChecks: ReadonlyArray<(error: Error) => boolean> = [
+/** Every failure the fork itself names: the branded refusals, plus the Schema-tagged families. */
+const otherRefusals: ReadonlyArray<(error: Error) => boolean> = [
   isSlop,
   Schema.is(Refusals.InvalidBudget),
   Schema.is(Refusals.NonBooleanVerdict),
   Schema.is(Refusals.LeakedState),
 ]
 
-const isRefusal = (error: Error): boolean => refusalChecks.some((matches) => matches(error))
+const isRefusal = (error: Error): boolean => isRefusalError(error) || otherRefusals.some((matches) => matches(error))
 
 const clipped = (message: string): string => message.length > 400 ? message.slice(0, 400) : message
 
@@ -741,12 +752,14 @@ export const flakyTest: {
  * The lanes a removed habit name reaches: the call is refused with its rewrite, on the `this` type and at run
  * time, and the property the lane used to carry still runs (R9, KTD3).
  */
-const refuseHabitLane = (): never => {
-  throw new Error(refuseEffectLane)
+const refuseHabitLane = (text: string): never => {
+  throw refusalError(text)
 }
 
-const effectLaneRefusal = <R>(prop: Vitest.Vitest.EffectLane<R>['prop']): Vitest.Vitest.EffectLane<R> =>
-  Object.assign(refuseHabitLane, { prop })
+const effectLaneRefusal = <R, Text extends string>(
+  prop: Vitest.Vitest.EffectLane<R, Text>['prop'],
+  text: Text,
+): Vitest.Vitest.EffectLane<R, Text> => Object.assign(() => refuseHabitLane(text), { prop })
 
 /**
  * The lanes over one `mapEffect`: `it`, its modifiers and `it.each` all register the same generator body, and
@@ -823,9 +836,9 @@ const methodsFor = <R>(
 ): Vitest.Vitest.MethodsNonLive<R> => {
   const tester = makeTesterWith<R | Scope.Scope>(mapEffect, it, envFor, rerunnable)
   return Object.assign(tester, {
-    effect: effectLaneRefusal(tester.prop),
-    scoped: effectLaneRefusal(tester.prop),
-    scopedLive: effectLaneRefusal(tester.prop),
+    effect: effectLaneRefusal(tester.prop, refuseEffectLane),
+    scoped: effectLaneRefusal(tester.prop, refuseScopedLane),
+    scopedLive: effectLaneRefusal(tester.prop, refuseScopedLiveLane),
     prop,
     law: property.law,
     flakyTest,
@@ -834,7 +847,7 @@ const methodsFor = <R>(
 }
 
 const refuseHookNow = (): never => {
-  throw new Error(refuseHook)
+  throw refusalError(refuseHook)
 }
 
 const takesHook = (args: IArguments): boolean => typeof args[0] === 'function'
@@ -853,16 +866,16 @@ type AfterEachFirst = Parameters<typeof V.afterEach>[0]
  * @internal
  */
 export const beforeEach: {
-  (fn: EachFirst, timeout?: number): never
-  (timeout?: number): (fn: EachFirst) => never
+  (this: HookRefusal, fn: EachFirst, timeout?: number): never
+  (this: HookRefusal, timeout?: number): (fn: EachFirst) => never
 } = Function.dual(takesHook, refuseHookPair)
 
 /**
  * @internal
  */
 export const afterEach: {
-  (fn: AfterEachFirst, timeout?: number): never
-  (timeout?: number): (fn: AfterEachFirst) => never
+  (this: HookRefusal, fn: AfterEachFirst, timeout?: number): never
+  (this: HookRefusal, timeout?: number): (fn: AfterEachFirst) => never
 } = Function.dual(takesHook, refuseHookPair)
 
 /**

@@ -27,8 +27,10 @@ export const step = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E,
  * bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know it.
  *
  * A runtime of its own re-runs the bound effect — a kernel explores a baseline and then its seeded replays — and
- * every run is a fresh execution of the system, so `bind` opens a new observed state before each one. One check
- * per run, and two checks inside one run are still refused.
+ * executing the bound effect opens a new observed state before it runs, so each execution is a run. `bind`
+ * resets nothing on its own: the step runs when the bound effect is executed. A runtime that re-runs a check
+ * without executing the bound effect has opened no state, so its second check is refused, as any two checks on
+ * one state are. One check per execution, and two checks inside one execution are still refused.
  *
  * @since 4.0.0
  */

@@ -44,6 +44,10 @@ const refused = {
     '✗ .resolves/.rejects assert on a Promise outside the test runtime. Yield the Effect: const value = yield* program; its failure: const error = yield* Effect.flip(program); then yield* expect(error).toEqual(new MyError(...)).',
   anything:
     '✗ expect.anything() matches every value. Say what the value must be: expect.any(Money), expect.objectContaining({ ... }), expect.schemaMatching(Schema).',
+  poll:
+    '✗ expect.poll waits on the real clock, outside the runner\'s virtual time. Let time pass inside the test: yield* TestClock.adjust("3 seconds"); then yield* expect(value).toEqual(expected).',
+  soft:
+    '✗ expect.soft reports several failures on one state; the fork reports the state once. Assert the state once: yield* expect(actual).toEqual(expected).',
 } as const
 
 const needed = {
@@ -58,6 +62,12 @@ const needed = {
 const habit = {
   effectLane:
     '✗ it.effect is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
+  scopedLane:
+    '✗ it.scoped is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
+  scopedLiveLane:
+    '✗ it.scopedLive is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
+  hook:
+    '✗ hooks share state between tests. Build what a test needs inside it; services come fresh per test from layer(Service.layer)((it) => { ... }).',
 } as const
 
 const gate = {
@@ -92,6 +102,8 @@ describe('the curated vocabulary refuses a weak claim by name (R6)', () => {
       const resolves = check(Promise.resolve(1)).resolves
       const rejects = check(Promise.reject(new Error('x'))).rejects
       const anything = check.anything
+      const poll = check.poll
+      const soft = check.soft
 
       expect<ThisOf<typeof toBeDefined>>().type.toBe<(typeof refused)['toBeDefined']>()
       expect<ThisOf<typeof toBeTruthy>>().type.toBe<(typeof refused)['toBeTruthy']>()
@@ -116,6 +128,8 @@ describe('the curated vocabulary refuses a weak claim by name (R6)', () => {
       expect<typeof resolves>().type.toBe<(typeof refused)['promiseChain']>()
       expect<typeof rejects>().type.toBe<(typeof refused)['promiseChain']>()
       expect<ThisOf<typeof anything>>().type.toBe<(typeof refused)['anything']>()
+      expect<ThisOf<typeof poll>>().type.toBe<(typeof refused)['poll']>()
+      expect<ThisOf<typeof soft>>().type.toBe<(typeof refused)['soft']>()
 
       expect(toBeDefined).type.not.toBeCallableWith()
       expect(toHaveLength).type.not.toBeCallableWith(2)
@@ -163,10 +177,15 @@ describe('the test name carries the gate refusal (KTD4)', () => {
 })
 
 describe('the habit names a test author reaches for are refusals (R9)', () => {
-  it('carries the rewrite as the `this` type of every removed lane', () => {
+  it('carries each lane its own refusal as the `this` type of every removed lane', () => {
     expect<ThisOf<typeof Fork.it.effect>>().type.toBe<(typeof habit)['effectLane']>()
-    expect<ThisOf<typeof Fork.it.scoped>>().type.toBe<(typeof habit)['effectLane']>()
-    expect<ThisOf<typeof Fork.it.scopedLive>>().type.toBe<(typeof habit)['effectLane']>()
+    expect<ThisOf<typeof Fork.it.scoped>>().type.toBe<(typeof habit)['scopedLane']>()
+    expect<ThisOf<typeof Fork.it.scopedLive>>().type.toBe<(typeof habit)['scopedLiveLane']>()
+  })
+
+  it('carries the hook refusal as the `this` type of the removed hooks', () => {
+    expect<ThisOf<typeof Fork.beforeEach>>().type.toBe<(typeof habit)['hook']>()
+    expect<ThisOf<typeof Fork.afterEach>>().type.toBe<(typeof habit)['hook']>()
   })
 
   it('refuses the removed lanes and keeps the real-clock lane', () => {

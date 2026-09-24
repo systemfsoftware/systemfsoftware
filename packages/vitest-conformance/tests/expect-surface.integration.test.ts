@@ -9,13 +9,18 @@ const Feature = makeFeature({ it })
 const refusal = {
   unyielded:
     '✗ a check was written but never yielded, so it never ran. Yield it: yield* expect(actual).toEqual(expected).',
-  noCheck: '✗ this test ran no check, so it cannot fail. Yield one: yield* expect(actual).toEqual(expected).',
+  noCheck:
+    "✗ this test yields no check, so it cannot fail. Yield one from the test's own expect: it(name, function* ({ expect }) { yield* expect(actual).toEqual(expected) }). An expect imported from vitest does not count.",
   oneState:
     '✗ a second check on the same state. Checking a state piece by piece reports one field at a time and misses the ones never checked. Assert the state once: yield* expect(order).toMatchObject({ id: 1, status: "Pending" }), or gather what you observed: yield* expect({ total, status }).toEqual({ total: Money.of(4.4), status: "Pending" }). A check inside a loop is the same: assert the whole array once. Several inputs: it.each(rows)(name, function* (row, { expect }) { ... }).',
   syncBody:
     '✗ the body must be a generator that yields its checks: it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
   effectLane:
     '✗ it.effect is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
+  scopedLane:
+    '✗ it.scoped is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
+  scopedLiveLane:
+    '✗ it.scopedLive is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
   hook:
     '✗ hooks share state between tests. Build what a test needs inside it; services come fresh per test from layer(Service.layer)((it) => { ... }).',
   rawExpect:
@@ -39,6 +44,12 @@ const refusal = {
     '✗ toMatchObject({}) matches every object. Name the fields that must hold: toMatchObject({ status: "Pending" }).',
   booleanActual:
     '✗ expect(<boolean>) can only report \'expected false to be true\'. Pass the two values instead: yield* expect(a).toEqual(b), which uses Effect Equal. A predicate: yield* expect(value).toSatisfy(predicate, "what must hold").',
+  anything:
+    '✗ expect.anything() matches every value. Say what the value must be: expect.any(Money), expect.objectContaining({ ... }), expect.schemaMatching(Schema).',
+  poll:
+    '✗ expect.poll waits on the real clock, outside the runner\'s virtual time. Let time pass inside the test: yield* TestClock.adjust("3 seconds"); then yield* expect(value).toEqual(expected).',
+  soft:
+    '✗ expect.soft reports several failures on one state; the fork reports the state once. Assert the state once: yield* expect(actual).toEqual(expected).',
 } as const
 
 type RefusedCase = readonly [name: string, text: string]
@@ -294,15 +305,55 @@ Feature('Fork expect surface')
     )
 
     scenario(
-      'A lane a test author reaches for by habit is refused',
+      'A lane a test author reaches for by habit is refused by name',
       Gherkin.Do.pipe(
-        Given('a test registered on the lane the library removed')(
+        Given('tests registered on the three lanes the library removed')(
           'fixtures',
-          () => Effect.succeed(['expect/habit.test.ts']),
+          () =>
+            Effect.succeed([
+              'expect/habit.test.ts',
+              'expect/habit-scoped.test.ts',
+              'expect/habit-scoped-live.test.ts',
+            ]),
         ),
-        When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
-        Then('the suite refuses the lane with the generator body to write instead')((s, expect) =>
-          refusedFileCheck(expect, s.report, 'expect/habit.test.ts', refusal.effectLane)
+        When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
+        Then('each lane is refused, naming the lane that was called, with the generator body to write instead')(
+          (s, expect) => {
+            const fileAt = (stem: string) => ({
+              status: fileOf(s.report, stem).status,
+              message: fileOf(s.report, stem).message,
+            })
+            return expect({
+              effect: fileAt('expect/habit.test.ts'),
+              scoped: fileAt('expect/habit-scoped.test.ts'),
+              scopedLive: fileAt('expect/habit-scoped-live.test.ts'),
+            }).toMatchObject({
+              effect: { status: 'failed', message: expect.stringContaining(refusal.effectLane) },
+              scoped: { status: 'failed', message: expect.stringContaining(refusal.scopedLane) },
+              scopedLive: { status: 'failed', message: expect.stringContaining(refusal.scopedLiveLane) },
+            })
+          },
+        ),
+      ),
+    )
+
+    scenario(
+      'A refused helper is refused when it is read, not only when it is called',
+      Gherkin.Do.pipe(
+        Given('checks that read a refused helper but never call it')(
+          'fixtures',
+          () => Effect.succeed(['expect/statics.test.ts']),
+        ),
+        When('the suite runs those checks')('report', (s) => runFixtures(s.fixtures)),
+        Then('each read is refused with the rewrite that replaces the helper')((s, expect) =>
+          refusedSuiteCheck(expect, s.report, 'expect/statics.test.ts', [
+            [
+              'the refused statics Should_RefuseTheAnythingStatic_When_ItIsReadButNotCalled',
+              refusal.anything,
+            ],
+            ['the refused statics Should_RefuseThePollStatic_When_ItIsReadButNotCalled', refusal.poll],
+            ['the refused statics Should_RefuseTheSoftStatic_When_ItIsReadButNotCalled', refusal.soft],
+          ])
         ),
       ),
     )

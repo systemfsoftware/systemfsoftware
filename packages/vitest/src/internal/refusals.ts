@@ -9,6 +9,29 @@
  * @since 4.0.0
  */
 
+/**
+ * The brand every run-time refusal carries. A test is run a second time on a fresh build to catch leaked state,
+ * so when that second run fails with a refusal the fork itself made, the runner re-throws the refusal rather than
+ * relabelling it as a leak (see `throwSecondRun` in `runner.ts`). The brand is a `Symbol.for` value because a
+ * worker holds two copies of these modules at once — the setup file's `dist/guard.mjs` beside the test graph's
+ * `src/mod.ts` — and a refusal thrown by either copy has to be recognisable to the other, exactly as the guard's
+ * window is shared.
+ */
+const refusalBrand = Symbol.for('@systemfsoftware/vitest/refusal')
+
+/** The error a refusal throws: the refusal text, branded so {@link isRefusal} recognises it. */
+/** @internal */
+export const refusalOf = (text: string): Error => {
+  const error = new Error(text)
+  Reflect.set(error, refusalBrand, true)
+  return error
+}
+
+/** Whether an error is one of the fork's own refusals, rather than a failure of the test under it. */
+/** @internal */
+export const isRefusal = (error: unknown): error is Error =>
+  error instanceof Error && Reflect.get(error, refusalBrand) === true
+
 /** @internal */
 export const refusedText = {
   toBeDefined:
@@ -112,16 +135,6 @@ export type refuseUnyielded = typeof refuseUnyielded
 export type RefuseUnyielded = typeof refuseUnyielded
 
 /** @internal */
-export const noAssertion =
-  '✗ this test ran no check, so it cannot fail. Yield one: yield* expect(actual).toEqual(expected).'
-
-/** @internal */
-export type noAssertion = typeof noAssertion
-
-/** @internal */
-export type NoAssertion = typeof noAssertion
-
-/** @internal */
 export const noCheckRefusal =
   "✗ this test yields no check, so it cannot fail. Yield one from the test's own expect: it(name, function* ({ expect }) { yield* expect(actual).toEqual(expected) }). An expect imported from vitest does not count."
 
@@ -180,6 +193,26 @@ export type refuseEffectLane = typeof refuseEffectLane
 
 /** @internal */
 export type EffectLaneRefusal = typeof refuseEffectLane
+
+/** @internal */
+export const refuseScopedLane =
+  '✗ it.scoped is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).'
+
+/** @internal */
+export type refuseScopedLane = typeof refuseScopedLane
+
+/** @internal */
+export type ScopedLaneRefusal = typeof refuseScopedLane
+
+/** @internal */
+export const refuseScopedLiveLane =
+  '✗ it.scopedLive is removed: the body is the generator itself, so the runner sees every step. it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).'
+
+/** @internal */
+export type refuseScopedLiveLane = typeof refuseScopedLiveLane
+
+/** @internal */
+export type ScopedLiveLaneRefusal = typeof refuseScopedLiveLane
 
 /** @internal */
 export const refuseHook =

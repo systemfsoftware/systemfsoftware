@@ -16,7 +16,7 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Function from 'effect/Function'
 import { Asserted, isCheck, type Ledger } from './checks.js'
-import { noAssertion, refuseUnyielded } from './refusals.js'
+import { noCheckRefusal, refusalOf, refuseUnyielded } from './refusals.js'
 
 /**
  * The generator a test body hands over: `function* ({ expect }) { ... }`, or `function* (row, { expect })` per
@@ -51,7 +51,7 @@ const runEffect = (value: Effect.Effect<never, never, never>, ledger: Ledger): E
 
 /** One step: anything the driver cannot run is refused, because then no step of the test ran at all. */
 const runStep = <Y>(value: Y, ledger: Ledger): Effect.Effect<never, never, never> =>
-  isRunnable(value) ? runEffect(value, ledger) : Effect.die(new Error(refuseUnsteppable))
+  isRunnable(value) ? runEffect(value, ledger) : Effect.die(refusalOf(refuseUnsteppable))
 
 /** Steps the iterator to its end, feeding each yielded Effect's result back into the body. */
 const stepThrough = <Y, Done>(steps: Steps<Y, Done>, ledger: Ledger, input: undefined): Effect.Effect<void> =>
@@ -63,14 +63,15 @@ const stepThrough = <Y, Done>(steps: Steps<Y, Done>, ledger: Ledger, input: unde
 
 /**
  * After the body returns: a check written and never yielded is refused first, then a body that judged none.
- * Both are a plain `Error` carrying the text the refusal also carries on its compile channel.
+ * Both carry the same text the refusal carries on its compile channel, branded by `refusalOf` so the runner's
+ * second run re-throws them as the refusals they are.
  */
 const gate = (ledger: Ledger): Effect.Effect<void> =>
   Effect.suspend(() => ledger.unyielded() > 0 ? refuse(refuseUnyielded) : judgedNone(ledger))
 
-const judgedNone = (ledger: Ledger): Effect.Effect<void> => ledger.judged() === 0 ? refuse(noAssertion) : Effect.void
+const judgedNone = (ledger: Ledger): Effect.Effect<void> => ledger.judged() === 0 ? refuse(noCheckRefusal) : Effect.void
 
-const refuse = (text: string): Effect.Effect<never> => Effect.die(new Error(text))
+const refuse = (text: string): Effect.Effect<never> => Effect.die(refusalOf(text))
 
 /**
  * A failure or an interruption returns the generator, so its `finally` blocks run and the step after the failed

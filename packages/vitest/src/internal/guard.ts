@@ -31,7 +31,7 @@
  */
 import { chai } from 'vitest'
 import type * as V from 'vitest'
-import { refuseRawExpect } from './refusals.js'
+import { refusalOf, refuseRawExpect } from './refusals.js'
 
 declare module 'vitest' {
   interface TaskMeta {
@@ -84,7 +84,7 @@ const isUnwrapped = (value: Opaque): value is AnyCall => isCallable(value) && !i
 const authorized = (): boolean => state.depth > 0
 
 const refuse = (): never => {
-  throw new Error(refuseRawExpect)
+  throw refusalOf(refuseRawExpect)
 }
 
 /** @internal */
@@ -137,16 +137,22 @@ const guardedDescriptor = (descriptor: PropertyDescriptor): PropertyDescriptor =
 const isWrappable = (descriptor: PropertyDescriptor | undefined): descriptor is PropertyDescriptor =>
   descriptor?.configurable === true
 
-const guardMember = (proto: object, name: string): void => {
+const guardMember = (proto: object, name: PropertyKey): void => {
   const descriptor = Object.getOwnPropertyDescriptor(proto, name)
   if (!isWrappable(descriptor)) return
   Object.defineProperty(proto, name, guardedDescriptor(descriptor))
 }
 
-const bookkeeping: ReadonlyArray<string> = ['constructor', '__methods', '__flags', '_obj']
+const bookkeeping: ReadonlyArray<PropertyKey> = ['constructor', '__methods', '__flags', '_obj']
 
-const assertionMembers = (proto: object): ReadonlyArray<string> =>
-  Object.getOwnPropertyNames(proto).filter((name) => !bookkeeping.includes(name))
+/**
+ * Every own member of the prototype, string- and symbol-keyed, except chai's bookkeeping fields. `Reflect.ownKeys`
+ * rather than `Object.getOwnPropertyNames`, so a member chai hangs off a symbol is guarded too: measured on chai
+ * 6.2.2, `Assertion.prototype` carries 104 string-keyed own members and no symbol-keyed ones, so the enumeration
+ * is unchanged today and stays closed if chai adds one.
+ */
+const assertionMembers = (proto: object): ReadonlyArray<PropertyKey> =>
+  Reflect.ownKeys(proto).filter((name) => bookkeeping.includes(name) === false)
 
 const guardPrototype = (): void => {
   const proto: object = chai.Assertion.prototype

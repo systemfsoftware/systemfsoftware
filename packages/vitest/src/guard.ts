@@ -9,10 +9,10 @@
  */
 import { beforeEach } from 'vitest'
 import { installGuard, isMarked } from './internal/guard.js'
-import { refuseRawIt } from './internal/refusals.js'
+import { refusalOf, refuseRawIt } from './internal/refusals.js'
 
 installGuard()
 
 beforeEach((context) => {
-  if (!isMarked(context.task)) throw new Error(refuseRawIt)
+  if (!isMarked(context.task)) throw refusalOf(refuseRawIt)
 })

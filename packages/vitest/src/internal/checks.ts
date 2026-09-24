@@ -14,7 +14,7 @@ import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import * as V from 'vitest'
 import { authorize } from './guard.js'
-import { booleanRefusal, neededText, negatedText, refusedText, refusePiecewise } from './refusals.js'
+import { booleanRefusal, neededText, negatedText, refusalOf, refusedText, refusePiecewise } from './refusals.js'
 
 /** An opaque runtime value: the fork does not read it, only hands it back. */
 type Opaque<A = unknown> = A
@@ -200,7 +200,7 @@ const isEmptyShape = (value: Opaque): boolean => isPlainObject(value) && Object.
 
 /** A thunk that refuses with `text`: thrown when a matcher is called, or when a static is read. */
 const refusing = (text: string): () => never => () => {
-  throw new Error(text)
+  throw refusalOf(text)
 }
 
 const forView = (view: View, negated: boolean): View => ({ ...view, negated })
@@ -267,7 +267,7 @@ const genericMember = (view: View, property: string): (...args: ReadonlyArray<Op
   judgedCheck(view, property, args)
 
 const neededMember = (view: View, property: Needed): (...args: ReadonlyArray<Opaque>) => Check => (...args) => {
-  if (missingArgument(property, args)) throw new Error(neededText[property])
+  if (missingArgument(property, args)) throw refusalOf(neededText[property])
   return judgedCheck(view, property, args)
 }
 
@@ -308,7 +308,7 @@ const viewMember = (view: View, property: string): Member => {
 
 const memberOf = (view: View, property: string): Opaque => {
   const read = readRefusal(property)
-  if (read !== undefined) throw new Error(read)
+  if (read !== undefined) throw refusalOf(read)
   return valueOf(viewMember(view, property))
 }
 
@@ -322,7 +322,7 @@ const viewHandler = (view: View): ProxyHandler<object> => ({
 const matcherView = (view: View): object => new Proxy({}, viewHandler(view))
 
 const assertionView = (written: (j: Judgement) => void, args: ReadonlyArray<Opaque>): object => {
-  if (refuseBooleanActual(args[0])) throw new Error(booleanRefusal)
+  if (refuseBooleanActual(args[0])) throw refusalOf(booleanRefusal)
   return matcherView(viewFor(written, args[0], messageOf(args[1])))
 }
 
@@ -396,7 +396,7 @@ export const makeLedger = (ctx: V.TestContext): Ledger => {
         pending.delete(judgement)
         counter.judged += 1
         counter.since += 1
-        if (counter.since > 1) throw new Error(refusePiecewise)
+        if (counter.since > 1) throw refusalOf(refusePiecewise)
         authorize(() => judgement(hard))
       },
       step: () => {
