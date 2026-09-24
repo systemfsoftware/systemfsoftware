@@ -156,7 +156,7 @@ export interface OrderInput {
   readonly charge: number | undefined
 }
 
-export const keyOf = (input: OrderInput): Settlement.Store.OrderKey => ({
+export const keyOf = (input: OrderInput): Settlement.Unit.OrderKey => ({
   orderId: input.orderId,
   customerId: input.customerId,
   skus: [input.sku],
@@ -177,7 +177,7 @@ const allocationOf = (input: OrderInput) =>
     }),
   )
 
-export const planOf = (input: OrderInput): Settlement.Store.OrderPlan => ({
+export const planOf = (input: OrderInput): Settlement.Unit.OrderPlan => ({
   orderId: input.orderId,
   customerId: input.customerId,
   charge: input.charge === undefined ? Option.none() : Option.some(moneyOf(input.charge)),
@@ -199,39 +199,42 @@ export const planOf = (input: OrderInput): Settlement.Store.OrderPlan => ({
 export const settleInUnit: {
   (input: OrderInput): (
     store: Settlement.Store.SettlementStoreService,
-  ) => Effect.Effect<void, Settlement.Store.SettlementFailure>
+  ) => Effect.Effect<void, Settlement.Unit.SettlementFailure>
   (
     store: Settlement.Store.SettlementStoreService,
     input: OrderInput,
-  ): Effect.Effect<void, Settlement.Store.SettlementFailure>
+  ): Effect.Effect<void, Settlement.Unit.SettlementFailure>
 } = dual(
   2,
   (store: Settlement.Store.SettlementStoreService, input: OrderInput) =>
-    store.unitOfWork(Effect.flatMap(store.load(keyOf(input)), () => store.settle(planOf(input)))),
+    store.unitOfWork((unit) =>
+      Effect.flatMap(Settlement.Unit.load(unit, keyOf(input)), () => Settlement.Unit.settle(unit, planOf(input)))
+    ),
 )
 
 export const snapshotInUnit: {
   (input: OrderInput): (
     store: Settlement.Store.SettlementStoreService,
-  ) => Effect.Effect<Settlement.Store.OrderSnapshot, Settlement.Store.SettlementFailure>
+  ) => Effect.Effect<Settlement.Unit.OrderSnapshot, Settlement.Unit.SettlementFailure>
   (
     store: Settlement.Store.SettlementStoreService,
     input: OrderInput,
-  ): Effect.Effect<Settlement.Store.OrderSnapshot, Settlement.Store.SettlementFailure>
+  ): Effect.Effect<Settlement.Unit.OrderSnapshot, Settlement.Unit.SettlementFailure>
 } = dual(
   2,
-  (store: Settlement.Store.SettlementStoreService, input: OrderInput) => store.unitOfWork(store.load(keyOf(input))),
+  (store: Settlement.Store.SettlementStoreService, input: OrderInput) =>
+    store.unitOfWork(Settlement.Unit.load(keyOf(input))),
 )
 
 export const lotQuantityOf: {
-  (lotId: string): (stock: Settlement.Store.OrderSnapshot['stock']) => number
-  (stock: Settlement.Store.OrderSnapshot['stock'], lotId: string): number
+  (lotId: string): (stock: Settlement.Unit.OrderSnapshot['stock']) => number
+  (stock: Settlement.Unit.OrderSnapshot['stock'], lotId: string): number
 } = dual(
   2,
-  (stock: Settlement.Store.OrderSnapshot['stock'], lotId: string) => lotStateOf(stock, lotId).quantityOnHand,
+  (stock: Settlement.Unit.OrderSnapshot['stock'], lotId: string) => lotStateOf(stock, lotId).quantityOnHand,
 )
 
-const lotStateOf = (stock: Settlement.Store.OrderSnapshot['stock'], lotId: string) => {
+const lotStateOf = (stock: Settlement.Unit.OrderSnapshot['stock'], lotId: string) => {
   const lot = Option.fromUndefinedOr(
     stock.flatMap((partition) => partition.lots).find((lot) => lot.lotId === lotId),
   )

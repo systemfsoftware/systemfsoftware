@@ -117,10 +117,10 @@ const race = Effect.gen(function*() {
   ) =>
     Effect.gen(function*() {
       const settlement = yield* Settlement.Store.SettlementStore
-      return yield* settlement.unitOfWork(
+      return yield* settlement.unitOfWork((unit) =>
         Ref.update(transactions, (n) => n + 1).pipe(
-          Effect.andThen(Fulfillment.Cell.placeOrderCell.run(request)),
-        ),
+          Effect.andThen(Fulfillment.Cell.placeOrderCell(unit).run(request)),
+        )
       )
     }).pipe(
       Effect.match({ onSuccess: (decision) => decision._tag, onFailure: (error) => error._tag }),

@@ -1,22 +1,11 @@
-import {
-  Array as Arr,
-  Context,
-  Effect,
-  Exit,
-  HashMap,
-  Layer,
-  Match,
-  Option,
-  Record as Record_,
-  Ref,
-  Semaphore,
-} from 'effect'
+import { Array as Arr, Effect, Exit, HashMap, Layer, Match, Option, Record as Record_, Ref, Semaphore } from 'effect'
 import type { CreditAccount, CustomerTier } from '../fulfillment/credit.schema.js'
 import { CreditAccountNotFound, StoreUnavailable } from '../fulfillment/decision.schema.js'
 import type { InventoryReservationEvents } from '../fulfillment/event.schema.js'
 import type { LotAllocation, WarehouseStockPartition } from '../inventory/inventory.schema.js'
-import type { OrderKey, OrderPlan } from '../ports/SettlementStore.service.js'
-import { SettlementStore, type SettlementStoreSeed, UnitOfWork } from '../ports/SettlementStore.service.js'
+import * as SettlementUnit from '../ports/settlement-unit.handle.js'
+import type { OrderKey, OrderPlan } from '../ports/settlement-unit.handle.js'
+import { SettlementStore, type SettlementStoreSeed } from '../ports/SettlementStore.service.js'
 import { decodeCreditAccount, decodeCustomerTier, decodeWarehouseStockPartition } from './decode.js'
 
 interface CustomerState {
@@ -40,26 +29,6 @@ interface MemoryState {
   readonly reservations: HashMap.HashMap<string, string>
   readonly audits: HashMap.HashMap<string, string>
 }
-
-class OpenTransaction extends Context.Service<OpenTransaction, Ref.Ref<MemoryState>>()(
-  '@systemfsoftware/example-inventory-fulfillment/store/SettlementStoreMemory/OpenTransaction',
-) {}
-
-const unitProvidedElsewhere = new Error(
-  'UnitOfWork was provided by something other than SettlementStore.unitOfWork',
-)
-
-const inTransaction = <A, E>(
-  use: (staged: Ref.Ref<MemoryState>) => Effect.Effect<A, E>,
-): Effect.Effect<A, E, UnitOfWork> =>
-  Effect.gen(function*() {
-    yield* UnitOfWork
-    return yield* Effect.flatMap(
-      Effect.serviceOption(OpenTransaction),
-      Option.match({ onNone: () => Effect.die(unitProvidedElsewhere), onSome: use }),
-    )
-  })
-
 const initialStateOf = (seed: SettlementStoreSeed): MemoryState => ({
   warehouses: HashMap.fromIterable(
     Arr.map(seed.warehouses, (warehouse) => [warehouse.warehouseId, warehouse.region] as const),
@@ -234,18 +203,14 @@ const make = (seed: SettlementStoreSeed) =>
     const state = yield* Ref.make(initialStateOf(seed))
     const gate = yield* Semaphore.make(1)
     return {
-      load: (key: OrderKey) => inTransaction((staged) => load(staged, key)),
-      settle: (plan: OrderPlan) => inTransaction((staged) => settle(staged, plan)),
-      unitOfWork: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      unitOfWork: <A, E, R>(use: (unit: SettlementUnit.SettlementUnit) => Effect.Effect<A, E, R>) =>
         gate.withPermits(1)(
           Effect.gen(function*() {
             const staged = yield* Ref.make(yield* Ref.get(state))
-            const exit = yield* Effect.exit(
-              effect.pipe(
-                Effect.provideService(UnitOfWork, { open: true }),
-                Effect.provideService(OpenTransaction, staged),
-              ),
-            )
+            const exit = yield* Effect.exit(Effect.scoped(Effect.flatMap(
+              SettlementUnit.open({ load: (key) => load(staged, key), settle: (plan) => settle(staged, plan) }),
+              use,
+            )))
             if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause)
             yield* Ref.set(state, yield* Ref.get(staged))
             return exit.value

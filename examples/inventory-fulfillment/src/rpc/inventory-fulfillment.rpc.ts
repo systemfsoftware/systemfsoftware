@@ -84,13 +84,13 @@ const submitOrder = (request: SubmitOrderRequest) =>
   Effect.gen(function*() {
     const { userId } = yield* AuthContext
     const store = yield* SettlementStore
-    const outcome = yield* store.unitOfWork(
-      placeOrderCell.run({
+    const outcome = yield* store.unitOfWork((unit) =>
+      placeOrderCell(unit).run({
         orderId: request.orderId,
         customerId: userId,
         lines: request.lines,
         kits: request.kits,
-      }),
+      })
     )
     return yield* submitOrderOutcome(outcome)
   })

@@ -138,7 +138,7 @@ const runThroughStore = (input: PlaceOrderInput) =>
   Effect.gen(function*() {
     const store = yield* Settlement.Store.SettlementStore
     const request = yield* cellRequestOf(input)
-    return yield* Effect.result(store.unitOfWork(Fulfillment.Cell.placeOrderCell.run(request)))
+    return yield* Effect.result(store.unitOfWork((unit) => Fulfillment.Cell.placeOrderCell(unit).run(request)))
   })
 
 const armedRunThroughStore = (request: Fulfillment.Cell.PlaceOrderRequest) =>
@@ -146,7 +146,7 @@ const armedRunThroughStore = (request: Fulfillment.Cell.PlaceOrderRequest) =>
     const arms = yield* SerializationArms
     const store = yield* Settlement.Store.SettlementStore
     yield* arms.arm
-    return yield* Effect.result(store.unitOfWork(Fulfillment.Cell.placeOrderCell.run(request)))
+    return yield* Effect.result(store.unitOfWork((unit) => Fulfillment.Cell.placeOrderCell(unit).run(request)))
   })
 
 export const settlement = Stimulus.make({

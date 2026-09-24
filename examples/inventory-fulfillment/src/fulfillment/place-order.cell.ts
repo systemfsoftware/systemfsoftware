@@ -2,7 +2,8 @@ import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Array as Arr, DateTime, Effect, Match, Option, Result, Schema as S } from 'effect'
 import type { KitDefinition, LotAllocation } from '../inventory/inventory.schema.js'
-import { type OrderPlan, SettlementStore } from '../ports/SettlementStore.service.js'
+import * as SettlementUnit from '../ports/settlement-unit.handle.js'
+import type { OrderPlan } from '../ports/settlement-unit.handle.js'
 import { type Money, Money as MoneySchema } from './credit.schema.js'
 import { DuplicateOrder, Forbidden, FulfillmentDecision, FulfillmentRefusal } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
@@ -100,10 +101,9 @@ const reservationRefusal = (owner: string, request: PlaceOrderRequest): Duplicat
  * The read runs inside the store's unit of work, so the account, the lots, and the existing
  * reservation are the values the whole decision commits against.
  */
-const load = (request: PlaceOrderRequest) =>
+const loadIn = (unit: SettlementUnit.SettlementUnit) => (request: PlaceOrderRequest) =>
   Effect.gen(function*() {
-    const store = yield* SettlementStore
-    const snapshot = yield* store.load({
+    const snapshot = yield* SettlementUnit.load(unit, {
       orderId: request.orderId,
       customerId: request.customerId,
       skus: skusOf(request),
@@ -201,13 +201,12 @@ const recordCharge = (plan: OrderPlan): Effect.Effect<void> =>
       Span.start(CreditCharge, { 'app.charge.amount': amount, 'app.customer.id': plan.customerId })(Effect.void),
   })
 
-/** Every settle decision is written the same way: committed in one store call, then charged. */
-const commit = (decision: SettleDecisionEncoded, read: PlaceOrderRead) =>
+/** Every settle decision is written the same way: committed in the unit that loaded it, then charged. */
+const commitIn = (unit: SettlementUnit.SettlementUnit) => (decision: SettleDecisionEncoded, read: PlaceOrderRead) =>
   Effect.gen(function*() {
     const wire = yield* wireDecisionOf(decision)
-    const store = yield* SettlementStore
     const plan = planOf(wire, read)
-    yield* store.settle(plan).pipe(
+    yield* SettlementUnit.settle(unit, plan).pipe(
       Span.start(ReservationCommit, {
         'app.customer.id': plan.customerId,
         'app.order.id': plan.orderId,
@@ -219,17 +218,20 @@ const commit = (decision: SettleDecisionEncoded, read: PlaceOrderRead) =>
   })
 
 /**
- * The whole use case: load, decide, settle. The read and the settle need `UnitOfWork`, so the
- * cell cannot run outside the store's unit of work.
+ * The whole use case over one open unit: load, decide, settle. Only the store's `unitOfWork`
+ * hands out a unit, so the cell cannot run outside one, and it settles in the unit it read from.
  */
-export const placeOrderCell = Sandwich.named(PlaceOrder.name)(load)
-  .decide(placeOrder)
-  .write({
-    OrderAllocated: commit,
-    OrderAllocatedWithOverdraft: commit,
-    OrderBackordered: commit,
-    OrderHeld: commit,
-    InsufficientStock: refuse,
-    CreditLimitExceeded: refuse,
-    CommandRejected: rejectedRead,
-  })
+export const placeOrderCell = (unit: SettlementUnit.SettlementUnit) => {
+  const read = loadIn(unit)
+  return Sandwich.named(PlaceOrder.name)(read)
+    .decide(placeOrder)
+    .write({
+      OrderAllocated: commitIn(unit),
+      OrderAllocatedWithOverdraft: commitIn(unit),
+      OrderBackordered: commitIn(unit),
+      OrderHeld: commitIn(unit),
+      InsufficientStock: refuse,
+      CreditLimitExceeded: refuse,
+      CommandRejected: rejectedRead,
+    })
+}

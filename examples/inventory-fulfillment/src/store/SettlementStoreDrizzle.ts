@@ -1,11 +1,12 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm'
-import { Array as Arr, Cause, Context, DateTime, Effect, Layer, Match, Option, Schedule } from 'effect'
+import { Array as Arr, Cause, DateTime, Effect, Layer, Match, Option, Schedule } from 'effect'
 import type { Duration as DurationTime } from 'effect'
 import { CreditAccountNotFound, StoreUnavailable } from '../fulfillment/decision.schema.js'
 import type { InventoryReservationEvents } from '../fulfillment/event.schema.js'
 import type { LotAllocation, WarehouseStockPartition } from '../inventory/inventory.schema.js'
-import type { OrderKey, OrderPlan } from '../ports/SettlementStore.service.js'
-import { SettlementStore, UnitOfWork } from '../ports/SettlementStore.service.js'
+import * as SettlementUnit from '../ports/settlement-unit.handle.js'
+import type { OrderKey, OrderPlan } from '../ports/settlement-unit.handle.js'
+import { SettlementStore } from '../ports/SettlementStore.service.js'
 import { decodeCreditAccount, decodeCustomerTier } from './decode.js'
 import { type DrizzleDatabase, DrizzleSession } from './DrizzleSession.js'
 import { auditEvents, reservations, stockLots, user } from './schema.tables.js'
@@ -18,24 +19,6 @@ export interface RetryBudget {
 }
 
 type Tx = Parameters<Parameters<DrizzleDatabase['transaction']>[0]>[0]
-
-class OpenTransaction extends Context.Service<OpenTransaction, Tx>()(
-  '@systemfsoftware/example-inventory-fulfillment/store/SettlementStoreDrizzle/OpenTransaction',
-) {}
-
-const unitProvidedElsewhere = new Error(
-  'UnitOfWork was provided by something other than SettlementStore.unitOfWork',
-)
-
-const inTransaction = <A, E>(use: (tx: Tx) => Effect.Effect<A, E>): Effect.Effect<A, E, UnitOfWork> =>
-  Effect.gen(function*() {
-    yield* UnitOfWork
-    return yield* Effect.flatMap(
-      Effect.serviceOption(OpenTransaction),
-      Option.match({ onNone: () => Effect.die(unitProvidedElsewhere), onSome: use }),
-    )
-  })
-
 type UserRow = typeof user.$inferSelect
 
 const accountRowOf = (row: UserRow) => ({
@@ -182,15 +165,13 @@ export const layer = (budget: RetryBudget): Layer.Layer<SettlementStore, never, 
         Schedule.spaced(budget.maxInterval),
       ])
       return {
-        load: (key: OrderKey) => inTransaction((tx) => load(tx, key)),
-        settle: (plan: OrderPlan) => inTransaction((tx) => settle(tx, plan)),
-        unitOfWork: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        unitOfWork: <A, E, R>(use: (unit: SettlementUnit.SettlementUnit) => Effect.Effect<A, E, R>) =>
           db.transaction(
             (tx) =>
-              effect.pipe(
-                Effect.provideService(UnitOfWork, { open: true }),
-                Effect.provideService(OpenTransaction, tx),
-              ),
+              Effect.scoped(Effect.flatMap(
+                SettlementUnit.open({ load: (key) => load(tx, key), settle: (plan) => settle(tx, plan) }),
+                use,
+              )),
             { isolationLevel: 'serializable' },
           ).pipe(
             Effect.retry({
