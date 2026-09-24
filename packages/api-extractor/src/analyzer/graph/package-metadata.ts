@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import type { Json } from 'effect/Schema'
@@ -182,18 +183,23 @@ const tsdocMetadataRelativePathOf = (packageJson: INodePackageJson): string =>
     () => TSDOC_METADATA_FILENAME,
   )
 
-export const resolveTsdocMetadataPath = (
-  packageFolder: string,
-  packageJson: INodePackageJson,
-  tsdocMetadataPath?: string,
-): string =>
-  Option.match(Option.fromNullishOr(tsdocMetadataPath), {
-    onSome: (explicit) => path.resolve(packageFolder, explicit),
-    onNone: () => path.resolve(packageFolder, tsdocMetadataRelativePathOf(packageJson)),
-  })
+export const resolveTsdocMetadataPath = dual<
+  (packageJson: INodePackageJson, tsdocMetadataPath?: string) => (packageFolder: string) => string,
+  (packageFolder: string, packageJson: INodePackageJson, tsdocMetadataPath?: string) => string
+>(
+  (args) => typeof args[0] === 'string',
+  (packageFolder, packageJson, tsdocMetadataPath): string =>
+    Option.match(Option.fromNullishOr(tsdocMetadataPath), {
+      onSome: (explicit) => path.resolve(packageFolder, explicit),
+      onNone: () => path.resolve(packageFolder, tsdocMetadataRelativePathOf(packageJson)),
+    }),
+)
 
-export const makePackageMetadata = (
+export const makePackageMetadata = dual<
+  (packageJson: INodePackageJson, aedocSupported: boolean) => (packageJsonPath: string) => PackageMetadata,
+  (packageJsonPath: string, packageJson: INodePackageJson, aedocSupported: boolean) => PackageMetadata
+>(3, (
   packageJsonPath: string,
   packageJson: INodePackageJson,
   aedocSupported: boolean,
-): PackageMetadata => new PackageMetadata({ packageJsonPath, packageJson, aedocSupported })
+): PackageMetadata => new PackageMetadata({ packageJsonPath, packageJson, aedocSupported }))

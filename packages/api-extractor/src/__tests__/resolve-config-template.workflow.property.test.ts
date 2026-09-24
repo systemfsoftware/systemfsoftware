@@ -17,6 +17,6 @@ const admitsOccupancy = (target: ConfigTarget, decision: ConfigTemplateDecision)
 
 it.prop(
   '∀t_ConfigTemplate_≡Occupancy',
-  [ConfigTarget],
-  ([target]) => admitsOccupancy(target, Result.merge(resolveConfigTemplate(target))),
+  { of: [ConfigTarget], subject: resolveConfigTemplate },
+  (subject, [target]) => admitsOccupancy(target, subject(target).pipe(Result.merge)),
 )

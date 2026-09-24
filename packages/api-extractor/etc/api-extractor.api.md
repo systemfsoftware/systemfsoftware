@@ -59,7 +59,10 @@ interface ConsoleMessageWriterOptions {
 }
 
 // @public (undocumented)
-type ExtractionDecision = ExtractionPassed | ExtractionFailed;
+const ExtractionDecision: Schema$1.Union<readonly [typeof ExtractionPassed, typeof ExtractionFailed]>;
+
+// @public (undocumented)
+type ExtractionDecision = typeof ExtractionDecision.Type;
 
 // Warning: (ae-forgotten-export) The symbol "ExtractionFailed_base" needs to be exported by the entry point index.d.ts
 //

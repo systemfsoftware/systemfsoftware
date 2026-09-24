@@ -1,5 +1,6 @@
 import { Chunk, HashMap, HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
@@ -41,7 +42,21 @@ export interface PlanState {
   readonly exportsToEmit: ReadonlyArray<ExportToEmit>
 }
 
-export const initialPlanState = (
+export const initialPlanState = dual<
+  (
+    reportVariant: ApiReportVariant,
+    entity: Snapshot.CollectorEntity,
+    handled: HashSet.HashSet<number>,
+    exportsToEmit: ReadonlyArray<ExportToEmit>,
+  ) => (snapshot: Snapshot.AnalysisSnapshot) => PlanState,
+  (
+    snapshot: Snapshot.AnalysisSnapshot,
+    reportVariant: ApiReportVariant,
+    entity: Snapshot.CollectorEntity,
+    handled: HashSet.HashSet<number>,
+    exportsToEmit: ReadonlyArray<ExportToEmit>,
+  ) => PlanState
+>(5, (
   snapshot: Snapshot.AnalysisSnapshot,
   reportVariant: ApiReportVariant,
   entity: Snapshot.CollectorEntity,
@@ -56,7 +71,7 @@ export const initialPlanState = (
   consumed: HashSet.empty(),
   processedSignatures: HashSet.empty(),
   exportsToEmit,
-})
+}))
 
 export interface MessageSelectionState {
   readonly snapshot: Snapshot.AnalysisSnapshot
@@ -72,7 +87,10 @@ export interface SelectedMessages {
   readonly consumed: HashSet.HashSet<number>
 }
 
-export const associatedMessagesOf = (
+export const associatedMessagesOf = dual<
+  (astDeclaration: Snapshot.AstDeclaration) => (state: MessageSelectionState) => SelectedMessages,
+  (state: MessageSelectionState, astDeclaration: Snapshot.AstDeclaration) => SelectedMessages
+>(2, (
   state: MessageSelectionState,
   astDeclaration: Snapshot.AstDeclaration,
 ): SelectedMessages => {
@@ -88,7 +106,7 @@ export const associatedMessagesOf = (
       HashSet.fromIterable(Arr.map(selected, (candidate) => candidate.index)),
     ),
   }
-}
+})
 
 export const unassociatedMessagesOf = (state: MessageSelectionState): SelectedMessages => {
   const selected = Snapshot.reportMessages(state.snapshot).unassociatedReportMessages(
@@ -104,12 +122,15 @@ export const unassociatedMessagesOf = (state: MessageSelectionState): SelectedMe
   }
 }
 
-export const writeLineAsComments = (writer: TextWriter.TextWriter, line: string): TextWriter.TextWriter =>
+export const writeLineAsComments = dual<
+  (line: string) => (writer: TextWriter.TextWriter) => TextWriter.TextWriter,
+  (writer: TextWriter.TextWriter, line: string) => TextWriter.TextWriter
+>(2, (writer: TextWriter.TextWriter, line: string): TextWriter.TextWriter =>
   Arr.reduce(
     Arr.fromIterable(convertToLf(line).split('\n')),
     writer,
     (current, realLine) => TextWriter.writeLine(TextWriter.write(TextWriter.write(current, '// '), realLine)),
-  )
+  ))
 
 const hasCustomBlock = (apiItemMetadata: Snapshot.ApiItemMetadata, tag: string): boolean =>
   Option.match(apiItemMetadata.tsdocComment, {
@@ -205,15 +226,25 @@ export interface AedocSynopsis {
   readonly snapshot: Snapshot.AnalysisSnapshot
 }
 
-export const getAedocSynopsis = (
+export const getAedocSynopsis = dual<
+  (
+    astDeclaration: Snapshot.AstDeclaration,
+    messagesToReport: ReadonlyArray<ExtractorMessage>,
+  ) => (snapshot: Snapshot.AnalysisSnapshot) => AedocSynopsis,
+  (
+    snapshot: Snapshot.AnalysisSnapshot,
+    astDeclaration: Snapshot.AstDeclaration,
+    messagesToReport: ReadonlyArray<ExtractorMessage>,
+  ) => AedocSynopsis
+>(3, (
   snapshot: Snapshot.AnalysisSnapshot,
   astDeclaration: Snapshot.AstDeclaration,
-  messagesToReport: ReadonlyArray<ExtractorMessage> = [],
+  messagesToReport: ReadonlyArray<ExtractorMessage>,
 ): AedocSynopsis =>
   Match.value(Snapshot.isAncillaryDeclaration(snapshot, astDeclaration)).pipe(
     Match.when(true, (): AedocSynopsis => ({ text: '', snapshot })),
     Match.orElse(() => aedocSynopsisOf(snapshot, astDeclaration, messagesToReport)),
-  )
+  ))
 
 const aedocSynopsisOf = (
   snapshot: Snapshot.AnalysisSnapshot,
@@ -302,6 +333,7 @@ const aedocFooterPartsOf = (
         ExtractorMessageId.Undocumented,
         `Missing documentation for "${Snapshot.localName(snapshot, astDeclaration)}".`,
         astDeclaration,
+        undefined,
       ),
     })),
     Match.when(false, (): AedocFooter => ({ parts: footerParts, snapshot })),
@@ -326,7 +358,10 @@ const shouldIncludeReleaseTag = (releaseTag: ReleaseTag, reportVariant: ApiRepor
 const releaseTagAdmittedOf = (releaseTag: ReleaseTag, admitted: ReadonlyArray<ReleaseTag>): boolean =>
   Arr.some(admitted, (candidate) => candidate === releaseTag)
 
-export const shouldIncludeDeclaration = (
+export const shouldIncludeDeclaration = dual<
+  (astDeclaration: Snapshot.AstDeclaration) => (state: PlanState) => boolean,
+  (state: PlanState, astDeclaration: Snapshot.AstDeclaration) => boolean
+>(2, (
   state: PlanState,
   astDeclaration: Snapshot.AstDeclaration,
 ): boolean =>
@@ -340,7 +375,7 @@ export const shouldIncludeDeclaration = (
         state.reportVariant,
       )),
     Match.exhaustive,
-  )
+  ))
 
 const keywordModifiersOf = (kind: ts.SyntaxKind): boolean =>
   Match.value(kind).pipe(
@@ -760,10 +795,32 @@ const plannedPreapprovedChild = (walk: PreapprovedWalk, child: SpanTree): Preapp
   }
 }
 
-export const planForPreapproved = (plan: SpanPlan.SpanPlan, tree: SpanTree): SpanPlan.SpanPlan =>
-  Arr.reduce(tree.children, { plan, skipRest: false } satisfies PreapprovedWalk, plannedPreapprovedChild).plan
+export const planForPreapproved = dual<
+  (tree: SpanTree) => (plan: SpanPlan.SpanPlan) => SpanPlan.SpanPlan,
+  (plan: SpanPlan.SpanPlan, tree: SpanTree) => SpanPlan.SpanPlan
+>(
+  2,
+  (plan: SpanPlan.SpanPlan, tree: SpanTree): SpanPlan.SpanPlan =>
+    Arr.reduce(tree.children, { plan, skipRest: false } satisfies PreapprovedWalk, plannedPreapprovedChild).plan,
+)
 
-export const planDeclarationSpan = (
+export const planDeclarationSpan = dual<
+  (
+    tree: SpanTree,
+    parent: Option.Option<SpanTree>,
+    previousSibling: Option.Option<SpanTree>,
+    astDeclaration: Snapshot.AstDeclaration,
+    insideTypeLiteral: boolean,
+  ) => (state: PlanState) => Result.Result<PlanState, RenderFailure>,
+  (
+    state: PlanState,
+    tree: SpanTree,
+    parent: Option.Option<SpanTree>,
+    previousSibling: Option.Option<SpanTree>,
+    astDeclaration: Snapshot.AstDeclaration,
+    insideTypeLiteral: boolean,
+  ) => Result.Result<PlanState, RenderFailure>
+>(6, (
   state: PlanState,
   tree: SpanTree,
   parent: Option.Option<SpanTree>,
@@ -775,7 +832,7 @@ export const planDeclarationSpan = (
     Match.when(false, () => Result.succeed({ ...state, plan: SpanPlan.skipAll(state.plan, tree) })),
     Match.when(true, () => planIncludedSpan(state, tree, parent, previousSibling, insideTypeLiteral, astDeclaration)),
     Match.exhaustive,
-  )
+  ))
 
 const planIncludedSpan = (
   state: PlanState,

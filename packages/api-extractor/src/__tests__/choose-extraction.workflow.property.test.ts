@@ -16,7 +16,8 @@ import {
   ReportUpdated,
 } from '../choose-extraction.workflow.js'
 
-const decisionOf = (command: DecideExtraction): ExtractionDecision => Result.merge(chooseExtraction(command))
+const decisionOf = (choose: typeof chooseExtraction, command: DecideExtraction): ExtractionDecision =>
+  choose(command).pipe(Result.merge)
 
 const identityOf = (evidence: ReportEvidence) => ({
   variant: evidence.variant,
@@ -108,17 +109,21 @@ const passedOf = (decision: ExtractionDecision): boolean =>
 
 it.prop(
   '∀c_Outcomes_≡TruthTable',
-  [DecideExtraction],
-  ([command]) => Equal.equals(decisionOf(command).outcomes, expectedOutcomesOf(command)),
+  { of: [DecideExtraction], subject: chooseExtraction },
+  (subject, [command]) => Equal.equals(decisionOf(subject, command).outcomes, expectedOutcomesOf(command)),
 )
 
-it.prop('∀c_Counts_≡ResiduePlusOutcomes', [DecideExtraction], ([command]) => {
-  const decision = decisionOf(command)
-  const expected = expectedCountsOf(command)
-  return decision.errorCount === expected.errorCount && decision.warningCount === expected.warningCount
-})
+it.prop(
+  '∀c_Counts_≡ResiduePlusOutcomes',
+  { of: [DecideExtraction], subject: chooseExtraction },
+  (subject, [command]) => {
+    const decision = decisionOf(subject, command)
+    const expected = expectedCountsOf(command)
+    return decision.errorCount === expected.errorCount && decision.warningCount === expected.warningCount
+  },
+)
 
-it.prop('∀c_Pass_≡CountRule', [DecideExtraction], ([command]) => {
-  const decision = decisionOf(command)
+it.prop('∀c_Pass_≡CountRule', { of: [DecideExtraction], subject: chooseExtraction }, (subject, [command]) => {
+  const decision = decisionOf(subject, command)
   return passedOf(decision) === expectedPassesOf(command, expectedCountsOf(command))
 })

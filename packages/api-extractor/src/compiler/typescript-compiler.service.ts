@@ -5,7 +5,6 @@ import type * as Ts from 'typescript'
 import type { TsCompilerLoadError, TsConfigReadError } from '../errors/index.js'
 
 export interface CompilerLoadOptions {
-  readonly projectFolder: string
   readonly typescriptCompilerFolder?: string | undefined
 }
 

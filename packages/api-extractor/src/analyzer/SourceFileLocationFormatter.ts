@@ -1,3 +1,4 @@
+import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as ts from 'typescript'
 
@@ -36,16 +37,19 @@ const lineSuffix = (options: ISourceFileLocationFormatOptions): string =>
     Option.getOrElse(() => ''),
   )
 
-export const formatPath = (
-  sourceFilePath: string,
-  options?: ISourceFileLocationFormatOptions,
-): string => {
+export const formatPath = dual<
+  (options?: ISourceFileLocationFormatOptions) => (sourceFilePath: string) => string,
+  (sourceFilePath: string, options?: ISourceFileLocationFormatOptions) => string
+>((args) => typeof args[0] === 'string', (sourceFilePath, options): string => {
   const resolved: ISourceFileLocationFormatOptions = options ?? {}
   return convertToSlashes(relativeToWorkingPackage(sourceFilePath, resolved.workingPackageFolderPath)) +
     lineSuffix(resolved)
-}
+})
 
-export const formatDeclaration = (node: ts.Node, workingPackageFolderPath?: string): string => {
+export const formatDeclaration = dual<
+  (workingPackageFolderPath?: string) => (node: ts.Node) => string,
+  (node: ts.Node, workingPackageFolderPath?: string) => string
+>((args) => typeof args[0] !== 'string', (node, workingPackageFolderPath): string => {
   const sourceFile: ts.SourceFile = node.getSourceFile()
   const lineAndCharacter: ts.LineAndCharacter = sourceFile.getLineAndCharacterOfPosition(node.getStart())
 
@@ -54,4 +58,4 @@ export const formatDeclaration = (node: ts.Node, workingPackageFolderPath?: stri
     sourceFileColumn: lineAndCharacter.character + 1,
     workingPackageFolderPath,
   })
-}
+})

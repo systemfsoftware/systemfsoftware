@@ -28,7 +28,13 @@ export class VerbosityNormal extends Schema.TaggedClass<VerbosityNormal>()('Verb
   readonly [VerbosityTypeId] = VerbosityTypeId
 }
 
-export type VerbosityDecision = VerbosityDiagnostics | VerbosityVerbose | VerbositySilent | VerbosityNormal
+export const VerbosityDecision = Schema.Union([
+  VerbosityDiagnostics,
+  VerbosityVerbose,
+  VerbositySilent,
+  VerbosityNormal,
+])
+export type VerbosityDecision = typeof VerbosityDecision.Type
 
 export class AnnounceRun extends Schema.TaggedClass<AnnounceRun>()('AnnounceRun', {
   cliFlags: CliFlags,
@@ -53,9 +59,11 @@ const signalCarriers: Readonly<Record<VerbositySignal, (command: AnnounceRun) =>
 const winningSignal = (command: AnnounceRun): Option.Option<VerbositySignal> =>
   Arr.findFirst(signalPrecedence, (signal) => signalCarriers[signal](command))
 
-export const resolveVerbosity = Workflow.total(
-  AnnounceRun,
-  (command) =>
+export const resolveVerbosity = Workflow.make({
+  command: AnnounceRun,
+  decision: VerbosityDecision,
+  error: Schema.Never,
+  decide: (command: AnnounceRun): Result.Result<VerbosityDecision, never> =>
     Result.succeed(
       Option.match(winningSignal(command), {
         onNone: () => VerbosityNormal.make(),
@@ -69,4 +77,4 @@ export const resolveVerbosity = Workflow.total(
           ),
       }),
     ),
-)
+})

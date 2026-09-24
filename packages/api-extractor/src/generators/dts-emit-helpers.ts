@@ -1,5 +1,6 @@
 import { HashMap, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
@@ -85,7 +86,17 @@ const importPrefixOf = (astImport: Snapshot.AstImport): string =>
     Match.exhaustive,
   )
 
-export const emitImport = (
+export const emitImport = dual<
+  (
+    collectorEntity: Snapshot.CollectorEntity,
+    astImport: Snapshot.AstImport,
+  ) => (writer: TextWriter.TextWriter) => TextWriter.TextWriter,
+  (
+    writer: TextWriter.TextWriter,
+    collectorEntity: Snapshot.CollectorEntity,
+    astImport: Snapshot.AstImport,
+  ) => TextWriter.TextWriter
+>(3, (
   writer: TextWriter.TextWriter,
   collectorEntity: Snapshot.CollectorEntity,
   astImport: Snapshot.AstImport,
@@ -93,9 +104,17 @@ export const emitImport = (
   TextWriter.writeLine(
     writer,
     importLineBuilders[astImport.importKind](importPrefixOf(astImport), collectorEntity, astImport),
-  )
+  ))
 
-export const writeImports = (
+export const writeImports = dual<
+  (
+    snapshot: Snapshot.AnalysisSnapshot,
+  ) => (writer: TextWriter.TextWriter) => Result.Result<TextWriter.TextWriter, RenderFailure>,
+  (
+    writer: TextWriter.TextWriter,
+    snapshot: Snapshot.AnalysisSnapshot,
+  ) => Result.Result<TextWriter.TextWriter, RenderFailure>
+>(2, (
   writer: TextWriter.TextWriter,
   snapshot: Snapshot.AnalysisSnapshot,
 ): Result.Result<TextWriter.TextWriter, RenderFailure> => {
@@ -115,9 +134,12 @@ export const writeImports = (
         )),
   )
   return Result.map(afterImports, (current) => TextWriter.ensureSkippedLine(current))
-}
+})
 
-export const formatNamedExport = (exportName: string, name: string): string =>
+export const formatNamedExport = dual<
+  (name: string) => (exportName: string) => string,
+  (exportName: string, name: string) => string
+>(2, (exportName: string, name: string): string =>
   Match.value(exportName === ts.InternalSymbolName.Default).pipe(
     Match.when(true, () => `export default ${name};`),
     Match.when(false, () =>
@@ -127,15 +149,28 @@ export const formatNamedExport = (exportName: string, name: string): string =>
         Match.exhaustive,
       )),
     Match.exhaustive,
-  )
+  ))
 
-export const emitNamedExport = (
+export const emitNamedExport = dual<
+  (
+    exportName: string,
+    collectorEntity: Snapshot.CollectorEntity,
+  ) => (writer: TextWriter.TextWriter) => TextWriter.TextWriter,
+  (
+    writer: TextWriter.TextWriter,
+    exportName: string,
+    collectorEntity: Snapshot.CollectorEntity,
+  ) => TextWriter.TextWriter
+>(3, (
   writer: TextWriter.TextWriter,
   exportName: string,
   collectorEntity: Snapshot.CollectorEntity,
-): TextWriter.TextWriter => TextWriter.writeLine(writer, formatNamedExport(exportName, entityNameOf(collectorEntity)))
+): TextWriter.TextWriter => TextWriter.writeLine(writer, formatNamedExport(exportName, entityNameOf(collectorEntity))))
 
-export const emitStarExports = (
+export const emitStarExports = dual<
+  (snapshot: Snapshot.AnalysisSnapshot) => (writer: TextWriter.TextWriter) => TextWriter.TextWriter,
+  (writer: TextWriter.TextWriter, snapshot: Snapshot.AnalysisSnapshot) => TextWriter.TextWriter
+>(2, (
   writer: TextWriter.TextWriter,
   snapshot: Snapshot.AnalysisSnapshot,
 ): TextWriter.TextWriter =>
@@ -148,7 +183,7 @@ export const emitStarExports = (
         (current, modulePath) => TextWriter.writeLine(current, `export * from "${modulePath}";`),
       )
     ),
-  )
+  ))
 
 export const isExportKeywordInNamespaceExportDeclaration = (node: ts.Node): boolean =>
   Match.value(ts.isExportDeclaration(node.parent)).pipe(
@@ -330,6 +365,7 @@ const unresolvedImportTypeOf = <S extends ImportTypePlannerState>(
           ` into the .d.ts rollup, where it does not resolve to anything. Import the symbol at the top` +
           ` of the file instead of using an inline import() type.`,
         planner.astDeclaration,
+        undefined,
       ),
   })
   return { state: { ...planner.state, snapshot: withIssue }, plan: planner.state.plan }
@@ -340,17 +376,23 @@ const nestedQualifiersOf = (
   node: ts.ImportTypeNode,
   ref: Snapshot.AstEntityRef,
 ): Result.Result<string, RenderFailure> =>
-  Option.match(Snapshot.astImportOf(snapshot, ref), {
-    onNone: () => internalInvariantOf('Missing AstImport for an AstImportRef'),
-    onSome: (astImport) =>
-      Result.succeed(
-        Match.value(astImport.importKind === Snapshot.AstImportKind.ImportType && astImport.exportName.length > 0).pipe(
-          Match.when(true, () => resolveNestedQualifiersText(node)),
-          Match.when(false, () => ''),
-          Match.exhaustive,
-        ),
-      ),
-  })
+  Match.value(ref).pipe(
+    Match.tag('AstImportRef', () =>
+      Option.match(Snapshot.astImportOf(snapshot, ref), {
+        onNone: () => internalInvariantOf('Missing AstImport for an AstImportRef'),
+        onSome: (astImport) =>
+          Result.succeed(
+            Match.value(
+              astImport.importKind === Snapshot.AstImportKind.ImportType && astImport.exportName.length > 0,
+            ).pipe(
+              Match.when(true, () => resolveNestedQualifiersText(node)),
+              Match.when(false, () => ''),
+              Match.exhaustive,
+            ),
+          ),
+      })),
+    Match.orElse(() => Result.succeed('')),
+  )
 
 interface NestedWalk<S> {
   readonly state: S

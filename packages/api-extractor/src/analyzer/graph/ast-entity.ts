@@ -1,8 +1,8 @@
 import { Data } from 'effect'
 import * as Equivalence from 'effect/Equivalence'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Order from 'effect/Order'
 
 import type { SymbolId } from '../TypeScriptInternals.js'
 import type { AstImport } from './ast-import.js'
@@ -29,12 +29,10 @@ const refKeyOf = (ref: AstEntityRef): string =>
     Match.exhaustive,
   )
 
-export const AstEntityRefOrder: Order.Order<AstEntityRef> = Order.mapInput(Order.String, refKeyOf)
-
-export const AstEntityRefEquivalence: Equivalence.Equivalence<AstEntityRef> = Equivalence.mapInput(
-  Equivalence.String,
-  refKeyOf,
-)
+export const AstEntityRefEquivalence: {
+  (that: AstEntityRef): (self: AstEntityRef) => boolean
+  (self: AstEntityRef, that: AstEntityRef): boolean
+} = dual(2, Equivalence.mapInput(Equivalence.String, refKeyOf))
 
 export const refOf = (astEntity: AstEntity): AstEntityRef =>
   Match.value(astEntity).pipe(

@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as ts from 'typescript'
@@ -11,7 +12,10 @@ const uniqueSymbolNameRegExp = /^__@.*@\d+$/
 
 const isAlias = (symbol: ts.Symbol): boolean => (symbol.flags & ts.SymbolFlags.Alias) !== 0
 
-export const followAliases = (symbol: ts.Symbol, typeChecker: ts.TypeChecker): ts.Symbol =>
+export const followAliases = dual<
+  (typeChecker: ts.TypeChecker) => (symbol: ts.Symbol) => ts.Symbol,
+  (symbol: ts.Symbol, typeChecker: ts.TypeChecker) => ts.Symbol
+>(2, (symbol: ts.Symbol, typeChecker: ts.TypeChecker): ts.Symbol =>
   Match.value(symbol).pipe(
     Match.when(isAlias, (aliased) =>
       Option.fromUndefinedOr(typeChecker.getAliasedSymbol(aliased)).pipe(
@@ -20,13 +24,16 @@ export const followAliases = (symbol: ts.Symbol, typeChecker: ts.TypeChecker): t
         Option.getOrElse(() => aliased),
       )),
     Match.orElse((unaliased: ts.Symbol) => unaliased),
-  )
+  ))
 
-export const isFollowableAlias = (symbol: ts.Symbol, typeChecker: ts.TypeChecker): boolean =>
+export const isFollowableAlias = dual<
+  (typeChecker: ts.TypeChecker) => (symbol: ts.Symbol) => boolean,
+  (symbol: ts.Symbol, typeChecker: ts.TypeChecker) => boolean
+>(2, (symbol: ts.Symbol, typeChecker: ts.TypeChecker): boolean =>
   isAlias(symbol) &&
   Option.fromUndefinedOr(typeChecker.getAliasedSymbol(symbol)).pipe(
     Option.exists((alias: ts.Symbol) => alias !== symbol),
-  )
+  ))
 
 export const tryGetADeclaration = (symbol: ts.Symbol): ts.Declaration | undefined =>
   Option.fromNullishOr(symbol.declarations).pipe(
@@ -43,7 +50,10 @@ const isInsideDeclareGlobal = (declaration: ts.Declaration): boolean =>
 const isModuleSourceFile = (sourceFile: ts.SourceFile, typeChecker: ts.TypeChecker): boolean =>
   typeChecker.getSymbolAtLocation(sourceFile) !== undefined
 
-export const isAmbient = (symbol: ts.Symbol, typeChecker: ts.TypeChecker): boolean => {
+export const isAmbient = dual<
+  (typeChecker: ts.TypeChecker) => (symbol: ts.Symbol) => boolean,
+  (symbol: ts.Symbol, typeChecker: ts.TypeChecker) => boolean
+>(2, (symbol: ts.Symbol, typeChecker: ts.TypeChecker): boolean => {
   const followedSymbol: ts.Symbol = followAliases(symbol, typeChecker)
   return Option.fromUndefinedOr(tryGetADeclaration(followedSymbol)).pipe(
     Option.map((firstDeclaration: ts.Declaration) =>
@@ -54,12 +64,15 @@ export const isAmbient = (symbol: ts.Symbol, typeChecker: ts.TypeChecker): boole
     ),
     Option.getOrElse(() => true),
   )
-}
+})
 
-export const getSymbolForDeclaration = (
+export const getSymbolForDeclaration = dual<
+  (checker: ts.TypeChecker) => (declaration: ts.Declaration) => ts.Symbol | undefined,
+  (declaration: ts.Declaration, checker: ts.TypeChecker) => ts.Symbol | undefined
+>(2, (
   declaration: ts.Declaration,
   checker: ts.TypeChecker,
-): ts.Symbol | undefined => TypeScriptInternals.tryGetSymbolForDeclaration(declaration, checker)
+): ts.Symbol | undefined => TypeScriptInternals.tryGetSymbolForDeclaration(declaration, checker))
 
 const importTypeLiteralText = (importTypeNode: ts.ImportTypeNode): string | undefined =>
   Option.some(importTypeNode.argument).pipe(
@@ -99,8 +112,10 @@ const parentIfKindMatches = (current: ts.Node | undefined, kind: ts.SyntaxKind):
     Option.getOrUndefined,
   )
 
-export function matchAncestor<T extends ts.Node>(node: ts.Node, kindsToMatch: ts.SyntaxKind[]): T | undefined
-export function matchAncestor(node: ts.Node, kindsToMatch: ts.SyntaxKind[]): ts.Node | undefined {
+export const matchAncestor: {
+  <T extends ts.Node>(kindsToMatch: ReadonlyArray<ts.SyntaxKind>): (node: ts.Node) => T | undefined
+  <T extends ts.Node>(node: ts.Node, kindsToMatch: ReadonlyArray<ts.SyntaxKind>): T | undefined
+} = dual(2, (node: ts.Node, kindsToMatch: ReadonlyArray<ts.SyntaxKind>): ts.Node | undefined => {
   const reversedParentKinds: ReadonlyArray<ts.SyntaxKind> = Arr.reverse(kindsToMatch)
   return Arr.reduce<ts.SyntaxKind, ts.Node | undefined>(
     reversedParentKinds,
@@ -114,7 +129,7 @@ export function matchAncestor(node: ts.Node, kindsToMatch: ts.SyntaxKind[]): ts.
         Match.orElse(() => parentIfKindMatches(current, parentKind)),
       ),
   )
-}
+})
 
 const ancestors = (node: ts.Node): ReadonlyArray<ts.Node> =>
   Option.fromNullishOr(node.parent).pipe(
@@ -122,8 +137,10 @@ const ancestors = (node: ts.Node): ReadonlyArray<ts.Node> =>
     Option.getOrElse((): ReadonlyArray<ts.Node> => []),
   )
 
-export function findFirstChildNode<T extends ts.Node>(node: ts.Node, kindToMatch: ts.SyntaxKind): T | undefined
-export function findFirstChildNode(node: ts.Node, kindToMatch: ts.SyntaxKind): ts.Node | undefined {
+export const findFirstChildNode: {
+  <T extends ts.Node>(kindToMatch: ts.SyntaxKind): (node: ts.Node) => T | undefined
+  <T extends ts.Node>(node: ts.Node, kindToMatch: ts.SyntaxKind): T | undefined
+} = dual(2, (node: ts.Node, kindToMatch: ts.SyntaxKind): ts.Node | undefined => {
   return Arr.reduce<ts.Node, ts.Node | undefined>(
     node.getChildren(),
     undefined,
@@ -136,15 +153,19 @@ export function findFirstChildNode(node: ts.Node, kindToMatch: ts.SyntaxKind): t
           ),
         ),
   )
-}
+})
 
-export function findFirstParent<T extends ts.Node>(node: ts.Node, kindToMatch: ts.SyntaxKind): T | undefined
-export function findFirstParent(node: ts.Node, kindToMatch: ts.SyntaxKind): ts.Node | undefined {
-  return Option.getOrUndefined(Arr.findFirst(ancestors(node), (ancestor: ts.Node) => ancestor.kind === kindToMatch))
-}
+export const findFirstParent: {
+  <T extends ts.Node>(kindToMatch: ts.SyntaxKind): (node: ts.Node) => T | undefined
+  <T extends ts.Node>(node: ts.Node, kindToMatch: ts.SyntaxKind): T | undefined
+} = dual(
+  2,
+  (node: ts.Node, kindToMatch: ts.SyntaxKind): ts.Node | undefined =>
+    Option.getOrUndefined(Arr.findFirst(ancestors(node), (ancestor: ts.Node) => ancestor.kind === kindToMatch)),
+)
 
-export function findHighestParent<T extends ts.Node>(node: ts.Node, kindToMatch: ts.SyntaxKind): T | undefined
-export function findHighestParent(node: ts.Node, kindToMatch: ts.SyntaxKind): ts.Node | undefined {
+function findHighestParent<T extends ts.Node>(node: ts.Node, kindToMatch: ts.SyntaxKind): T | undefined
+function findHighestParent(node: ts.Node, kindToMatch: ts.SyntaxKind): ts.Node | undefined {
   return Arr.reduce<ts.Node, ts.Node | undefined>(
     ancestors(node),
     undefined,

@@ -25,14 +25,17 @@ export class TemplateRefused extends Schema.TaggedClass<TemplateRefused>()('Temp
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export type ConfigTemplateDecision = TemplateWritten | TemplateRefused
+export const ConfigTemplateDecision = Schema.Union([TemplateWritten, TemplateRefused])
+export type ConfigTemplateDecision = typeof ConfigTemplateDecision.Type
 
-export const resolveConfigTemplate = Workflow.total(
-  ConfigTarget,
-  (target): Result.Result<ConfigTemplateDecision, never> =>
+export const resolveConfigTemplate = Workflow.make({
+  command: ConfigTarget,
+  decision: ConfigTemplateDecision,
+  error: Schema.Never,
+  decide: (target: ConfigTarget): Result.Result<ConfigTemplateDecision, never> =>
     Match.value(target.occupied).pipe(
       Match.when(true, () => Result.succeed(new TemplateRefused({ targetPath: target.targetPath }))),
       Match.when(false, () => Result.succeed(new TemplateWritten({ targetPath: target.targetPath }))),
       Match.exhaustive,
     ),
-)
+})

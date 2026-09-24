@@ -26,7 +26,7 @@ export interface PackageNameParseError extends PackageNameParseErrorTag {
   readonly cause?: string | undefined
 }
 
-export const makePackageNameParseError = (
+const makePackageNameParseError = (
   packageName: string,
   message: string,
   cause?: string,

@@ -1,6 +1,7 @@
 import type * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as ts from 'typescript'
@@ -68,25 +69,43 @@ export interface AnalysisSnapshot {
   readonly reportMessages: ReportMessageSource
 }
 
-export const make = (
+export const make = dual<
+  (collected: CollectedAnalysis, reportMessages: ReportMessageSource) => (graph: AnalysisGraph) => AnalysisSnapshot,
+  (graph: AnalysisGraph, collected: CollectedAnalysis, reportMessages: ReportMessageSource) => AnalysisSnapshot
+>(3, (
   graph: AnalysisGraph,
   collected: CollectedAnalysis,
   reportMessages: ReportMessageSource,
-): AnalysisSnapshot => ({ graph, collected, reportMessages })
+): AnalysisSnapshot => ({ graph, collected, reportMessages }))
 
 export const messageLog = (snapshot: AnalysisSnapshot): MessageLog => snapshot.collected.messageLog
 
-export const withMessageLog = (snapshot: AnalysisSnapshot, log: MessageLog): AnalysisSnapshot => ({
+export const withMessageLog = dual<
+  (log: MessageLog) => (snapshot: AnalysisSnapshot) => AnalysisSnapshot,
+  (snapshot: AnalysisSnapshot, log: MessageLog) => AnalysisSnapshot
+>(2, (snapshot: AnalysisSnapshot, log: MessageLog): AnalysisSnapshot => ({
   ...snapshot,
   collected: { ...snapshot.collected, messageLog: log },
-})
+}))
 
 /** Maps every raw `.d.ts` position in the log through the pre-read index. */
-export const locateMessages = (snapshot: AnalysisSnapshot, index: SourceMapIndex): AnalysisSnapshot =>
-  withMessageLog(snapshot, MessageLog.locate(messageLog(snapshot), index))
+export const locateMessages = dual<
+  (index: SourceMapIndex) => (snapshot: AnalysisSnapshot) => AnalysisSnapshot,
+  (snapshot: AnalysisSnapshot, index: SourceMapIndex) => AnalysisSnapshot
+>(
+  2,
+  (snapshot: AnalysisSnapshot, index: SourceMapIndex): AnalysisSnapshot =>
+    withMessageLog(snapshot, MessageLog.locate(messageLog(snapshot), index)),
+)
 
-export const markHandled = (snapshot: AnalysisSnapshot, handled: HashSet.HashSet<number>): AnalysisSnapshot =>
-  withMessageLog(snapshot, MessageLog.withHandled(messageLog(snapshot), handled))
+export const markHandled = dual<
+  (handled: HashSet.HashSet<number>) => (snapshot: AnalysisSnapshot) => AnalysisSnapshot,
+  (snapshot: AnalysisSnapshot, handled: HashSet.HashSet<number>) => AnalysisSnapshot
+>(
+  2,
+  (snapshot: AnalysisSnapshot, handled: HashSet.HashSet<number>): AnalysisSnapshot =>
+    withMessageLog(snapshot, MessageLog.withHandled(messageLog(snapshot), handled)),
+)
 
 export const entities = (snapshot: AnalysisSnapshot): Chunk.Chunk<CollectorEntity> => snapshot.collected.entities
 
@@ -121,19 +140,28 @@ export const isSupportedDeclarationKind = (kind: ts.SyntaxKind): boolean => isSu
 
 export const refOf = (entity: CollectorEntity): AstEntityRef => entity.astEntity
 
-export const astSymbolOf = (snapshot: AnalysisSnapshot, ref: AstEntityRef): Option.Option<AstSymbol> =>
+export const astSymbolOf = dual<
+  (ref: AstEntityRef) => (snapshot: AnalysisSnapshot) => Option.Option<AstSymbol>,
+  (snapshot: AnalysisSnapshot, ref: AstEntityRef) => Option.Option<AstSymbol>
+>(2, (snapshot: AnalysisSnapshot, ref: AstEntityRef): Option.Option<AstSymbol> =>
   Match.value(ref).pipe(
     Match.tag('AstSymbolRef', (symbolRef) => symbolOf(snapshot.graph, symbolRef.symbolId)),
     Match.orElse(() => Option.none()),
-  )
+  ))
 
-export const astImportOf = (snapshot: AnalysisSnapshot, ref: AstEntityRef): Option.Option<AstImport> =>
+export const astImportOf = dual<
+  (ref: AstEntityRef) => (snapshot: AnalysisSnapshot) => Option.Option<AstImport>,
+  (snapshot: AnalysisSnapshot, ref: AstEntityRef) => Option.Option<AstImport>
+>(2, (snapshot: AnalysisSnapshot, ref: AstEntityRef): Option.Option<AstImport> =>
   Match.value(ref).pipe(
     Match.tag('AstImportRef', (importRef) => HashMap.get(snapshot.graph.imports, importRef.key)),
     Match.orElse(() => Option.none()),
-  )
+  ))
 
-export const astNamespaceImportOf = (
+export const astNamespaceImportOf = dual<
+  (ref: AstEntityRef) => (snapshot: AnalysisSnapshot) => Option.Option<AstNamespaceImport>,
+  (snapshot: AnalysisSnapshot, ref: AstEntityRef) => Option.Option<AstNamespaceImport>
+>(2, (
   snapshot: AnalysisSnapshot,
   ref: AstEntityRef,
 ): Option.Option<AstNamespaceImport> =>
@@ -143,30 +171,39 @@ export const astNamespaceImportOf = (
     Match.orElse(() =>
       Option.none()
     ),
-  )
+  ))
 
-export const localName = (snapshot: AnalysisSnapshot, source: AstEntityRef | AstDeclaration): string =>
+export const localName = dual<
+  (source: AstEntityRef | AstDeclaration) => (snapshot: AnalysisSnapshot) => string,
+  (snapshot: AnalysisSnapshot, source: AstEntityRef | AstDeclaration) => string
+>(2, (snapshot: AnalysisSnapshot, source: AstEntityRef | AstDeclaration): string =>
   Match.value(source).pipe(
     Match.tag(
       'AstDeclaration',
       (astDeclaration) => localNameOfDeclarationId(snapshot.graph, astDeclaration.declarationId),
     ),
     Match.orElse((ref) => Option.getOrElse(localNameOfRef(snapshot.graph, ref), () => '')),
-  )
+  ))
 
-export const tryGetCollectorEntity = (
+export const tryGetCollectorEntity = dual<
+  (ref: AstEntityRef) => (snapshot: AnalysisSnapshot) => Option.Option<CollectorEntity>,
+  (snapshot: AnalysisSnapshot, ref: AstEntityRef) => Option.Option<CollectorEntity>
+>(2, (
   snapshot: AnalysisSnapshot,
   ref: AstEntityRef,
-): Option.Option<CollectorEntity> => entityOfRef(snapshot.collected, ref)
+): Option.Option<CollectorEntity> => entityOfRef(snapshot.collected, ref))
 
-export const tryFetchMetadataForAstEntity = (
+export const tryFetchMetadataForAstEntity = dual<
+  (ref: AstEntityRef) => (snapshot: AnalysisSnapshot) => Option.Option<SymbolMetadata>,
+  (snapshot: AnalysisSnapshot, ref: AstEntityRef) => Option.Option<SymbolMetadata>
+>(2, (
   snapshot: AnalysisSnapshot,
   ref: AstEntityRef,
 ): Option.Option<SymbolMetadata> =>
   Match.value(ref).pipe(
     Match.tag('AstSymbolRef', (symbolRef) => symbolMetadataOf(snapshot.collected, symbolRef.symbolId)),
     Match.orElse(() => Option.none()),
-  )
+  ))
 
 const defaultApiItemMetadata: ApiItemMetadata = new ApiItemMetadata({
   declaredReleaseTag: ReleaseTag.None,
@@ -191,36 +228,70 @@ const defaultDeclarationMetadata: DeclarationMetadata = new DeclarationMetadata(
   ancillaryDeclarationIds: Chunk.empty(),
 })
 
-export const fetchApiItemMetadata = (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ApiItemMetadata =>
-  Option.getOrElse(apiItemMetadataOf(snapshot.collected, astDeclaration.declarationId), () => defaultApiItemMetadata)
+export const fetchApiItemMetadata = dual<
+  (astDeclaration: AstDeclaration) => (snapshot: AnalysisSnapshot) => ApiItemMetadata,
+  (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration) => ApiItemMetadata
+>(
+  2,
+  (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ApiItemMetadata =>
+    Option.getOrElse(apiItemMetadataOf(snapshot.collected, astDeclaration.declarationId), () => defaultApiItemMetadata),
+)
 
-export const fetchDeclarationMetadata = (
+export const fetchDeclarationMetadata = dual<
+  (astDeclaration: AstDeclaration) => (snapshot: AnalysisSnapshot) => DeclarationMetadata,
+  (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration) => DeclarationMetadata
+>(2, (
   snapshot: AnalysisSnapshot,
   astDeclaration: AstDeclaration,
 ): DeclarationMetadata =>
   Option.getOrElse(
     declarationMetadataOf(snapshot.collected, astDeclaration.declarationId),
     () => defaultDeclarationMetadata,
-  )
+  ))
 
-export const isAncillaryDeclaration = (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): boolean =>
-  isAncillaryOf(snapshot.collected, astDeclaration.declarationId)
+export const isAncillaryDeclaration = dual<
+  (astDeclaration: AstDeclaration) => (snapshot: AnalysisSnapshot) => boolean,
+  (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration) => boolean
+>(
+  2,
+  (snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): boolean =>
+    isAncillaryOf(snapshot.collected, astDeclaration.declarationId),
+)
 
-export const astDeclarations = (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): Chunk.Chunk<AstDeclaration> =>
-  declarationsOfIds(snapshot.graph, declarationIdsOfSymbol(snapshot.graph, astSymbol.followedSymbolId))
+export const astDeclarations = dual<
+  (astSymbol: AstSymbol) => (snapshot: AnalysisSnapshot) => Chunk.Chunk<AstDeclaration>,
+  (snapshot: AnalysisSnapshot, astSymbol: AstSymbol) => Chunk.Chunk<AstDeclaration>
+>(
+  2,
+  (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): Chunk.Chunk<AstDeclaration> =>
+    declarationsOfIds(snapshot.graph, declarationIdsOfSymbol(snapshot.graph, astSymbol.followedSymbolId)),
+)
 
-export const modifierFlags = (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ts.ModifierFlags =>
-  astDeclaration.modifierFlags
+export const modifierFlags = dual<
+  (astDeclaration: AstDeclaration) => (_snapshot: AnalysisSnapshot) => ts.ModifierFlags,
+  (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration) => ts.ModifierFlags
+>(2, (_snapshot: AnalysisSnapshot, astDeclaration: AstDeclaration): ts.ModifierFlags => astDeclaration.modifierFlags)
 
-export const symbolFlags = (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): ts.SymbolFlags =>
+export const symbolFlags = dual<
+  (astSymbol: AstSymbol) => (snapshot: AnalysisSnapshot) => ts.SymbolFlags,
+  (snapshot: AnalysisSnapshot, astSymbol: AstSymbol) => ts.SymbolFlags
+>(2, (snapshot: AnalysisSnapshot, astSymbol: AstSymbol): ts.SymbolFlags =>
   Option.getOrElse(
     Option.flatMap(symbolOf(snapshot.graph, astSymbol.followedSymbolId), (astSymbol) =>
       Option.map(symbolValueOf(snapshot.graph, astSymbol.followedSymbolId), (symbol) => symbol.flags)),
     () =>
       ts.SymbolFlags.None,
-  )
+  ))
 
-export const declaration = (
+export const declaration = dual<
+  (
+    source: AstDeclaration | AstNamespaceImport,
+  ) => (snapshot: AnalysisSnapshot) => Result.Result<ts.Node, InternalInvariantError>,
+  (
+    snapshot: AnalysisSnapshot,
+    source: AstDeclaration | AstNamespaceImport,
+  ) => Result.Result<ts.Node, InternalInvariantError>
+>(2, (
   snapshot: AnalysisSnapshot,
   source: AstDeclaration | AstNamespaceImport,
 ): Result.Result<ts.Node, InternalInvariantError> => {
@@ -233,9 +304,19 @@ export const declaration = (
       Result.fail(new InternalInvariantError({ message: 'Missing declaration node for the analysis graph' })),
     onSome: (node) => Result.succeed(node),
   })
-}
+})
 
-export const childDeclarationByNode = (
+export const childDeclarationByNode = dual<
+  (
+    node: ts.Node,
+    parentAstDeclaration: AstDeclaration,
+  ) => (snapshot: AnalysisSnapshot) => Result.Result<AstDeclaration, InternalInvariantError>,
+  (
+    snapshot: AnalysisSnapshot,
+    node: ts.Node,
+    parentAstDeclaration: AstDeclaration,
+  ) => Result.Result<AstDeclaration, InternalInvariantError>
+>(3, (
   snapshot: AnalysisSnapshot,
   node: ts.Node,
   parentAstDeclaration: AstDeclaration,
@@ -260,9 +341,17 @@ export const childDeclarationByNode = (
         ),
         Match.exhaustive,
       ),
-  })
+  }))
 
-export const tryGetEntityForNode = (
+export const tryGetEntityForNode = dual<
+  (
+    node: ts.Identifier | ts.ImportTypeNode,
+  ) => (snapshot: AnalysisSnapshot) => Result.Result<Option.Option<CollectorEntity>, InternalInvariantError>,
+  (
+    snapshot: AnalysisSnapshot,
+    node: ts.Identifier | ts.ImportTypeNode,
+  ) => Result.Result<Option.Option<CollectorEntity>, InternalInvariantError>
+>(2, (
   snapshot: AnalysisSnapshot,
   node: ts.Identifier | ts.ImportTypeNode,
 ): Result.Result<Option.Option<CollectorEntity>, InternalInvariantError> => {
@@ -287,13 +376,16 @@ export const tryGetEntityForNode = (
     ),
     Match.exhaustive,
   )
-}
+})
 
-export const fetchAstModuleExportInfo = (
+export const fetchAstModuleExportInfo = dual<
+  (astNamespaceImport: AstNamespaceImport) => (snapshot: AnalysisSnapshot) => AstModuleExportInfo,
+  (snapshot: AnalysisSnapshot, astNamespaceImport: AstNamespaceImport) => AstModuleExportInfo
+>(2, (
   snapshot: AnalysisSnapshot,
   astNamespaceImport: AstNamespaceImport,
 ): AstModuleExportInfo =>
-  Option.getOrElse(moduleExportInfoOf(snapshot.graph, astNamespaceImport.astModuleId), () => emptyAstModuleExportInfo)
+  Option.getOrElse(moduleExportInfoOf(snapshot.graph, astNamespaceImport.astModuleId), () => emptyAstModuleExportInfo))
 
 const declarationIdOf = (source: AstDeclaration | AstSymbol): Option.Option<NodeId> =>
   Match.value(source).pipe(
@@ -302,12 +394,26 @@ const declarationIdOf = (source: AstDeclaration | AstSymbol): Option.Option<Node
   )
 
 /** Appends an analyzer issue associated with the declaration (or the symbol's first declaration). */
-export const addAnalyzerIssue = (
+export const addAnalyzerIssue = dual<
+  (
+    messageId: ExtractorMessageId,
+    messageText: string,
+    astDeclarationOrSymbol: AstDeclaration | AstSymbol | undefined,
+    properties: ExtractorMessageProperties | undefined,
+  ) => (snapshot: AnalysisSnapshot) => AnalysisSnapshot,
+  (
+    snapshot: AnalysisSnapshot,
+    messageId: ExtractorMessageId,
+    messageText: string,
+    astDeclarationOrSymbol: AstDeclaration | AstSymbol | undefined,
+    properties: ExtractorMessageProperties | undefined,
+  ) => AnalysisSnapshot
+>(5, (
   snapshot: AnalysisSnapshot,
   messageId: ExtractorMessageId,
   messageText: string,
-  astDeclarationOrSymbol?: AstDeclaration | AstSymbol,
-  properties?: ExtractorMessageProperties,
+  astDeclarationOrSymbol: AstDeclaration | AstSymbol | undefined,
+  properties: ExtractorMessageProperties | undefined,
 ): AnalysisSnapshot =>
   Option.match(Option.fromNullishOr(astDeclarationOrSymbol), {
     onNone: () => snapshot,
@@ -332,4 +438,4 @@ export const addAnalyzerIssue = (
               ),
           }),
       }),
-  })
+  }))

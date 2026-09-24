@@ -1,5 +1,6 @@
 import { Match, Schema } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
@@ -78,16 +79,22 @@ export const isConfigRecord = (u: Schema.Json): u is MutableJsonRecord =>
   )
 
 /** Decodes one configuration file's text into the record the chain merges. */
-export const decodeJsonRecord = (
+export const decodeJsonRecord = dual<
+  (content: string) => (filePath: string) => Result.Result<MutableJsonRecord, ConfigJsonSyntaxError>,
+  (filePath: string, content: string) => Result.Result<MutableJsonRecord, ConfigJsonSyntaxError>
+>(2, (
   filePath: string,
   content: string,
 ): Result.Result<MutableJsonRecord, ConfigJsonSyntaxError> =>
   Result.mapError(
     Schema.decodeResult(JsonRecordFromString)(content),
     (error) => new ConfigJsonSyntaxError({ filePath, cause: error.message }),
-  )
+  ))
 
-export const mergeConfigObjects = (
+export const mergeConfigObjects = dual<
+  (derived: MutableJsonRecord) => (base: MutableJsonRecord) => MutableJsonRecord,
+  (base: MutableJsonRecord, derived: MutableJsonRecord) => MutableJsonRecord
+>(2, (
   base: MutableJsonRecord,
   derived: MutableJsonRecord,
 ): MutableJsonRecord => {
@@ -97,7 +104,7 @@ export const mergeConfigObjects = (
     Match.tag('ConfigReplaced', (d) => ({ ...d.derived })),
     Match.exhaustive,
   )
-}
+})
 
 const extendsSpecifierOf = (extendsVal: Schema.Json | undefined): Option.Option<string> =>
   Option.filter(Option.filter(Option.some(extendsVal), Schema.is(Schema.String)), (specifier) => specifier.length > 0)
@@ -217,7 +224,10 @@ const anchoredSections: readonly AnchoredSection[] = [
  * a path another file's `extends` chain contributed is anchored to its own file, so the chain
  * merge below compares like with like.
  */
-export const anchorRelativePaths = (
+export const anchorRelativePaths = dual<
+  (folder: string, path: Path.Path) => (config: MutableJsonRecord) => MutableJsonRecord,
+  (config: MutableJsonRecord, folder: string, path: Path.Path) => MutableJsonRecord
+>(3, (
   config: MutableJsonRecord,
   folder: string,
   path: Path.Path,
@@ -226,7 +236,7 @@ export const anchorRelativePaths = (
     anchoredSections,
     config,
     (record, [key, anchor]) => assignIfPresent(record, key, anchor(record[key], folder, path)),
-  )
+  ))
 
 const packageNameOf = (packageJson: MutableJsonRecord | undefined): string =>
   Option.getOrElse(
@@ -356,8 +366,9 @@ const assembleConfig = (
     Result.all([
       expand(validated.mainEntryPointFilePath),
       expand(
-        Option.getOrUndefined(
-          Option.map(Option.fromNullishOr(validated.compiler), (compiler) => compiler.tsconfigFilePath),
+        Option.fromNullishOr(validated.compiler).pipe(
+          Option.map((compiler) => compiler.tsconfigFilePath),
+          Option.getOrUndefined,
         ),
       ),
       buildReportConfigs(reportCfg, tokenCtx, read.configFilePath, join),

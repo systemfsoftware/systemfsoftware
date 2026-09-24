@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -62,7 +63,10 @@ const levelLabel: Readonly<Record<LogLevel, string>> = {
   verbose: '',
 }
 
-export const formatConsoleLine = (level: LogLevel, text: string): string => levelLabel[level] + text
+export const formatConsoleLine = dual<
+  (text: string) => (level: LogLevel) => string,
+  (level: LogLevel, text: string) => string
+>(2, (level: LogLevel, text: string): string => levelLabel[level] + text)
 
 const isVerboseAdmitted = (v: Verbosity): boolean => v === 'verbose' || v === 'diagnostics'
 
@@ -74,7 +78,10 @@ const levelMatrix: Readonly<Record<LogLevel, (verbosity: Verbosity) => boolean>>
   verbose: isVerboseAdmitted,
 }
 
-export const admits = (verbosity: Verbosity, level: LogLevel): boolean => levelMatrix[level](verbosity)
+export const admits = dual<
+  (level: LogLevel) => (verbosity: Verbosity) => boolean,
+  (verbosity: Verbosity, level: LogLevel) => boolean
+>(2, (verbosity: Verbosity, level: LogLevel): boolean => levelMatrix[level](verbosity))
 
 export interface ReportCandidate extends MessageCandidate {
   readonly decision: RoutingDecision
@@ -311,7 +318,10 @@ const messageViewOf = (request: MessageViewRequest, rules: MessageReportingRules
   const consumedLevelOf = (handled: HashSet.HashSet<number>) => (candidate: MessageCandidate): LogLevel =>
     Match.value(HashSet.has(handled, candidate.index)).pipe(
       Match.when(true, (): LogLevel => 'none'),
-      Match.when(false, (): LogLevel => Option.getOrElse(consoleLevelOf(decisionOf(candidate.message)), () => 'none')),
+      Match.when(
+        false,
+        (): LogLevel => Option.getOrElse(consoleLevelOf(candidate.message.pipe(decisionOf)), () => 'none'),
+      ),
       Match.exhaustive,
     )
 
@@ -333,7 +343,7 @@ const messageViewOf = (request: MessageViewRequest, rules: MessageReportingRules
   })
 
   const levelLineOf = (message: ExtractorMessage): readonly ConsoleLine[] =>
-    Option.match(consoleLevelOf(decisionOf(message)), {
+    Option.match(consoleLevelOf(message.pipe(decisionOf)), {
       onNone: () => [],
       onSome: (level) => [{ level, text: message.formatMessageWithLocation(request.workingPackageFolder) }],
     })

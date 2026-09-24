@@ -1,6 +1,7 @@
 import * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as ts from 'typescript'
@@ -21,80 +22,141 @@ import type { CollectorEntity } from './collector-entity.js'
 import type { DeclarationMetadata } from './declaration-metadata.js'
 import type { SymbolMetadata } from './symbol-metadata.js'
 
-export const symbolOf = (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<AstSymbol> =>
-  HashMap.get(graph.symbols, symbolId)
+export const symbolOf = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => Option.Option<AstSymbol>,
+  (graph: AnalysisGraph, symbolId: SymbolId) => Option.Option<AstSymbol>
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<AstSymbol> => HashMap.get(graph.symbols, symbolId))
 
-export const declarationOf = (graph: AnalysisGraph, declarationId: NodeId): Option.Option<AstDeclaration> =>
-  astDeclarationOfId(graph, declarationId)
+export const declarationOf = dual<
+  (declarationId: NodeId) => (graph: AnalysisGraph) => Option.Option<AstDeclaration>,
+  (graph: AnalysisGraph, declarationId: NodeId) => Option.Option<AstDeclaration>
+>(
+  2,
+  (graph: AnalysisGraph, declarationId: NodeId): Option.Option<AstDeclaration> =>
+    astDeclarationOfId(graph, declarationId),
+)
 
-export const nodeOf = (graph: AnalysisGraph, declarationId: NodeId): Option.Option<ts.Node> =>
-  nodeValueOf(graph, declarationId)
+export const nodeOf = dual<
+  (declarationId: NodeId) => (graph: AnalysisGraph) => Option.Option<ts.Node>,
+  (graph: AnalysisGraph, declarationId: NodeId) => Option.Option<ts.Node>
+>(2, (graph: AnalysisGraph, declarationId: NodeId): Option.Option<ts.Node> => nodeValueOf(graph, declarationId))
 
-export const nodeKindOf = (graph: AnalysisGraph, declarationId: NodeId): Option.Option<ts.SyntaxKind> =>
-  Option.map(nodeOf(graph, declarationId), (node) => node.kind)
+export const nodeKindOf = dual<
+  (declarationId: NodeId) => (graph: AnalysisGraph) => Option.Option<ts.SyntaxKind>,
+  (graph: AnalysisGraph, declarationId: NodeId) => Option.Option<ts.SyntaxKind>
+>(
+  2,
+  (graph: AnalysisGraph, declarationId: NodeId): Option.Option<ts.SyntaxKind> =>
+    Option.map(nodeOf(graph, declarationId), (node) => node.kind),
+)
 
-export const childrenOf = (graph: AnalysisGraph, declarationId: NodeId): Chunk.Chunk<NodeId> =>
-  Option.getOrElse(HashMap.get(graph.childrenByDeclaration, declarationId), () => Chunk.empty())
+export const childrenOf = dual<
+  (declarationId: NodeId) => (graph: AnalysisGraph) => Chunk.Chunk<NodeId>,
+  (graph: AnalysisGraph, declarationId: NodeId) => Chunk.Chunk<NodeId>
+>(
+  2,
+  (graph: AnalysisGraph, declarationId: NodeId): Chunk.Chunk<NodeId> =>
+    Option.getOrElse(HashMap.get(graph.childrenByDeclaration, declarationId), () => Chunk.empty()),
+)
 
-export const referencedEntitiesOf = (graph: AnalysisGraph, declarationId: NodeId): Chunk.Chunk<AstEntityRef> =>
-  Option.getOrElse(HashMap.get(graph.referencedByDeclaration, declarationId), () => Chunk.empty())
+export const referencedEntitiesOf = dual<
+  (declarationId: NodeId) => (graph: AnalysisGraph) => Chunk.Chunk<AstEntityRef>,
+  (graph: AnalysisGraph, declarationId: NodeId) => Chunk.Chunk<AstEntityRef>
+>(
+  2,
+  (graph: AnalysisGraph, declarationId: NodeId): Chunk.Chunk<AstEntityRef> =>
+    Option.getOrElse(HashMap.get(graph.referencedByDeclaration, declarationId), () => Chunk.empty()),
+)
 
-export const namespaceImportOf = (
+export const namespaceImportOf = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => Option.Option<AstNamespaceImport>,
+  (graph: AnalysisGraph, symbolId: SymbolId) => Option.Option<AstNamespaceImport>
+>(2, (
   graph: AnalysisGraph,
   symbolId: SymbolId,
-): Option.Option<AstNamespaceImport> => HashMap.get(graph.namespaceImports, symbolId)
+): Option.Option<AstNamespaceImport> => HashMap.get(graph.namespaceImports, symbolId))
 
-export const moduleExportInfoOf = (
+export const moduleExportInfoOf = dual<
+  (moduleSymbolId: SymbolId) => (graph: AnalysisGraph) => Option.Option<AstModuleExportInfo>,
+  (graph: AnalysisGraph, moduleSymbolId: SymbolId) => Option.Option<AstModuleExportInfo>
+>(2, (
   graph: AnalysisGraph,
   moduleSymbolId: SymbolId,
-): Option.Option<AstModuleExportInfo> => HashMap.get(graph.moduleExportInfo, moduleSymbolId)
+): Option.Option<AstModuleExportInfo> => HashMap.get(graph.moduleExportInfo, moduleSymbolId))
 
-export const symbolMetadataOf = (
+export const symbolMetadataOf = dual<
+  (symbolId: SymbolId) => (collected: CollectedAnalysis) => Option.Option<SymbolMetadata>,
+  (collected: CollectedAnalysis, symbolId: SymbolId) => Option.Option<SymbolMetadata>
+>(2, (
   collected: CollectedAnalysis,
   symbolId: SymbolId,
-): Option.Option<SymbolMetadata> => HashMap.get(collected.symbolMetadata, symbolId)
+): Option.Option<SymbolMetadata> => HashMap.get(collected.symbolMetadata, symbolId))
 
-export const apiItemMetadataOf = (
+export const apiItemMetadataOf = dual<
+  (declarationId: NodeId) => (collected: CollectedAnalysis) => Option.Option<ApiItemMetadata>,
+  (collected: CollectedAnalysis, declarationId: NodeId) => Option.Option<ApiItemMetadata>
+>(2, (
   collected: CollectedAnalysis,
   declarationId: NodeId,
-): Option.Option<ApiItemMetadata> => HashMap.get(collected.apiItemMetadata, declarationId)
+): Option.Option<ApiItemMetadata> => HashMap.get(collected.apiItemMetadata, declarationId))
 
-export const declarationMetadataOf = (
+export const declarationMetadataOf = dual<
+  (declarationId: NodeId) => (collected: CollectedAnalysis) => Option.Option<DeclarationMetadata>,
+  (collected: CollectedAnalysis, declarationId: NodeId) => Option.Option<DeclarationMetadata>
+>(2, (
   collected: CollectedAnalysis,
   declarationId: NodeId,
-): Option.Option<DeclarationMetadata> => HashMap.get(collected.declarationMetadata, declarationId)
+): Option.Option<DeclarationMetadata> => HashMap.get(collected.declarationMetadata, declarationId))
 
-export const entityOfRef = (
+export const entityOfRef = dual<
+  (entityRef: AstEntityRef) => (collected: CollectedAnalysis) => Option.Option<CollectorEntity>,
+  (collected: CollectedAnalysis, entityRef: AstEntityRef) => Option.Option<CollectorEntity>
+>(2, (
   collected: CollectedAnalysis,
   entityRef: AstEntityRef,
-): Option.Option<CollectorEntity> => HashMap.get(collected.entityByRef, entityRef)
+): Option.Option<CollectorEntity> => HashMap.get(collected.entityByRef, entityRef))
 
-export const entityOfSymbolId = (
+export const entityOfSymbolId = dual<
+  (symbolId: SymbolId) => (collected: CollectedAnalysis) => Option.Option<CollectorEntity>,
+  (collected: CollectedAnalysis, symbolId: SymbolId) => Option.Option<CollectorEntity>
+>(2, (
   collected: CollectedAnalysis,
   symbolId: SymbolId,
-): Option.Option<CollectorEntity> => HashMap.get(collected.entityBySymbolId, symbolId)
+): Option.Option<CollectorEntity> => HashMap.get(collected.entityBySymbolId, symbolId))
 
-export const isAncillaryOf = (collected: CollectedAnalysis, declarationId: NodeId): boolean =>
+export const isAncillaryOf = dual<
+  (declarationId: NodeId) => (collected: CollectedAnalysis) => boolean,
+  (collected: CollectedAnalysis, declarationId: NodeId) => boolean
+>(2, (collected: CollectedAnalysis, declarationId: NodeId): boolean =>
   Option.getOrElse(
     Option.map(declarationMetadataOf(collected, declarationId), (metadata) => metadata.isAncillary),
     () => false,
-  )
+  ))
 
-export const localNameOfSymbolId = (graph: AnalysisGraph, symbolId: SymbolId): string =>
+export const localNameOfSymbolId = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => string,
+  (graph: AnalysisGraph, symbolId: SymbolId) => string
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): string =>
   Option.getOrElse(
     Option.map(symbolOf(graph, symbolId), (astSymbol) => astSymbol.localName),
     () => '',
-  )
+  ))
 
-export const localNameOfDeclarationId = (graph: AnalysisGraph, declarationId: NodeId): string =>
+export const localNameOfDeclarationId = dual<
+  (declarationId: NodeId) => (graph: AnalysisGraph) => string,
+  (graph: AnalysisGraph, declarationId: NodeId) => string
+>(2, (graph: AnalysisGraph, declarationId: NodeId): string =>
   Option.getOrElse(
     Option.map(declarationOf(graph, declarationId), (astDeclaration) =>
       localNameOfSymbolId(graph, astDeclaration.astSymbolId)),
     () =>
       '',
-  )
+  ))
 
-export const localNameOfRef = (graph: AnalysisGraph, entityRef: AstEntityRef): Option.Option<string> =>
+export const localNameOfRef = dual<
+  (entityRef: AstEntityRef) => (graph: AnalysisGraph) => Option.Option<string>,
+  (graph: AnalysisGraph, entityRef: AstEntityRef) => Option.Option<string>
+>(2, (graph: AnalysisGraph, entityRef: AstEntityRef): Option.Option<string> =>
   Match.value(entityRef).pipe(
     Match.tag('AstSymbolRef', (symbolRef) => Option.map(symbolOf(graph, symbolRef.symbolId), (s) => s.localName)),
     Match.tag('AstImportRef', (importRef) => Option.map(HashMap.get(graph.imports, importRef.key), (i) => i.localName)),
@@ -103,39 +165,60 @@ export const localNameOfRef = (graph: AnalysisGraph, entityRef: AstEntityRef): O
       (namespaceRef) => Option.map(namespaceImportOf(graph, namespaceRef.symbolId), (record) => record.localName),
     ),
     Match.exhaustive,
-  )
+  ))
 
-export const isExternalSymbol = (graph: AnalysisGraph, symbolId: SymbolId): boolean =>
+export const isExternalSymbol = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => boolean,
+  (graph: AnalysisGraph, symbolId: SymbolId) => boolean
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): boolean =>
   Option.getOrElse(
     Option.map(symbolOf(graph, symbolId), (astSymbol) => astSymbol.isExternal),
     () => false,
-  )
+  ))
 
-export const parentSymbolIdOf = (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<SymbolId> =>
-  Option.flatMap(symbolOf(graph, symbolId), (astSymbol) => astSymbol.parentAstSymbolId)
+export const parentSymbolIdOf = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => Option.Option<SymbolId>,
+  (graph: AnalysisGraph, symbolId: SymbolId) => Option.Option<SymbolId>
+>(
+  2,
+  (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<SymbolId> =>
+    Option.flatMap(symbolOf(graph, symbolId), (astSymbol) => astSymbol.parentAstSymbolId),
+)
 
-export const rootSymbolIdOf = (graph: AnalysisGraph, symbolId: SymbolId): SymbolId =>
+export const rootSymbolIdOf = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => SymbolId,
+  (graph: AnalysisGraph, symbolId: SymbolId) => SymbolId
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): SymbolId =>
   Option.getOrElse(
     Option.map(symbolOf(graph, symbolId), (astSymbol) => astSymbol.rootAstSymbolId),
     () => symbolId,
-  )
+  ))
 
-export const declarationIdsOfSymbol = (graph: AnalysisGraph, symbolId: SymbolId): Chunk.Chunk<NodeId> =>
+export const declarationIdsOfSymbol = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => Chunk.Chunk<NodeId>,
+  (graph: AnalysisGraph, symbolId: SymbolId) => Chunk.Chunk<NodeId>
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): Chunk.Chunk<NodeId> =>
   Option.getOrElse(
     Option.map(symbolOf(graph, symbolId), (astSymbol) => astSymbol.declarationIds),
     () => Chunk.empty(),
-  )
+  ))
 
-export const declarationsOfIds = (
+export const declarationsOfIds = dual<
+  (declarationIds: Chunk.Chunk<NodeId>) => (graph: AnalysisGraph) => Chunk.Chunk<AstDeclaration>,
+  (graph: AnalysisGraph, declarationIds: Chunk.Chunk<NodeId>) => Chunk.Chunk<AstDeclaration>
+>(2, (
   graph: AnalysisGraph,
   declarationIds: Chunk.Chunk<NodeId>,
 ): Chunk.Chunk<AstDeclaration> =>
   Chunk.fromIterable(
     Arr.filterMap(Chunk.toReadonlyArray(declarationIds), (declarationId) =>
       Result.fromOption(declarationOf(graph, declarationId), () => undefined)),
-  )
+  ))
 
-export const declarationsPreOrder = (
+export const declarationsPreOrder = dual<
+  (declarationIds: Chunk.Chunk<NodeId>) => (graph: AnalysisGraph) => Chunk.Chunk<AstDeclaration>,
+  (graph: AnalysisGraph, declarationIds: Chunk.Chunk<NodeId>) => Chunk.Chunk<AstDeclaration>
+>(2, (
   graph: AnalysisGraph,
   declarationIds: Chunk.Chunk<NodeId>,
 ): Chunk.Chunk<AstDeclaration> =>
@@ -143,7 +226,7 @@ export const declarationsPreOrder = (
     Chunk.toReadonlyArray(declarationIds),
     Chunk.empty<AstDeclaration>(),
     (accumulated, declarationId) => Chunk.appendAll(accumulated, declarationPreOrder(graph, declarationId)),
-  )
+  ))
 
 const declarationPreOrder = (graph: AnalysisGraph, declarationId: NodeId): Chunk.Chunk<AstDeclaration> =>
   Option.match(declarationOf(graph, declarationId), {
@@ -159,7 +242,17 @@ const declarationChildrenPreOrder = (graph: AnalysisGraph, declarationId: NodeId
     (accumulated, childId) => Chunk.appendAll(accumulated, declarationPreOrder(graph, childId)),
   )
 
-export const updateApiItemMetadata = (
+export const updateApiItemMetadata = dual<
+  (
+    declarationId: NodeId,
+    update: (metadata: ApiItemMetadata) => ApiItemMetadata,
+  ) => (collected: CollectedAnalysis) => CollectedAnalysis,
+  (
+    collected: CollectedAnalysis,
+    declarationId: NodeId,
+    update: (metadata: ApiItemMetadata) => ApiItemMetadata,
+  ) => CollectedAnalysis
+>(3, (
   collected: CollectedAnalysis,
   declarationId: NodeId,
   update: (metadata: ApiItemMetadata) => ApiItemMetadata,
@@ -178,15 +271,31 @@ export const updateApiItemMetadata = (
           )),
       }
     },
-  })
+  }))
 
-export const issueForDeclaration = (
+export const issueForDeclaration = dual<
+  (
+    graph: AnalysisGraph,
+    messageId: string,
+    messageText: string,
+    declarationId: NodeId,
+    properties: ExtractorMessageProperties | undefined,
+  ) => (collected: CollectedAnalysis) => CollectedAnalysis,
+  (
+    collected: CollectedAnalysis,
+    graph: AnalysisGraph,
+    messageId: string,
+    messageText: string,
+    declarationId: NodeId,
+    properties: ExtractorMessageProperties | undefined,
+  ) => CollectedAnalysis
+>(6, (
   collected: CollectedAnalysis,
   graph: AnalysisGraph,
   messageId: string,
   messageText: string,
   declarationId: NodeId,
-  properties?: ExtractorMessageProperties,
+  properties: ExtractorMessageProperties | undefined,
 ): CollectedAnalysis =>
   Option.match(nodeOf(graph, declarationId), {
     onNone: () => collected,
@@ -202,22 +311,48 @@ export const issueForDeclaration = (
         properties,
       ),
     }),
-  })
+  }))
 
-export const issueForSymbol = (
+export const issueForSymbol = dual<
+  (
+    graph: AnalysisGraph,
+    messageId: string,
+    messageText: string,
+    symbolId: SymbolId,
+    properties: ExtractorMessageProperties | undefined,
+  ) => (collected: CollectedAnalysis) => CollectedAnalysis,
+  (
+    collected: CollectedAnalysis,
+    graph: AnalysisGraph,
+    messageId: string,
+    messageText: string,
+    symbolId: SymbolId,
+    properties: ExtractorMessageProperties | undefined,
+  ) => CollectedAnalysis
+>(6, (
   collected: CollectedAnalysis,
   graph: AnalysisGraph,
   messageId: string,
   messageText: string,
   symbolId: SymbolId,
-  properties?: ExtractorMessageProperties,
+  properties: ExtractorMessageProperties | undefined,
 ): CollectedAnalysis =>
   Option.match(Arr.head(Chunk.toReadonlyArray(declarationIdsOfSymbol(graph, symbolId))), {
     onNone: () => collected,
     onSome: (declarationId) => issueForDeclaration(collected, graph, messageId, messageText, declarationId, properties),
-  })
+  }))
 
-export const resolveReferenceIn = (
+export const resolveReferenceIn = dual<
+  (
+    collected: CollectedAnalysis,
+    declarationReference: tsdoc.DocDeclarationReference,
+  ) => (graph: AnalysisGraph) => Result.Result<AstDeclaration, string>,
+  (
+    graph: AnalysisGraph,
+    collected: CollectedAnalysis,
+    declarationReference: tsdoc.DocDeclarationReference,
+  ) => Result.Result<AstDeclaration, string>
+>(3, (
   graph: AnalysisGraph,
   collected: CollectedAnalysis,
   declarationReference: tsdoc.DocDeclarationReference,
@@ -226,7 +361,7 @@ export const resolveReferenceIn = (
     graph,
     { isAncillary: (declarationId) => isAncillaryOf(collected, declarationId) },
     declarationReference,
-  )
+  ))
 
 export const workingPackageNameOf = (graph: AnalysisGraph): string =>
   Option.getOrElse(Option.map(graph.workingPackage, (workingPackage) => workingPackage.name), () => '')
@@ -235,5 +370,7 @@ export const includeForgottenExports = (graph: AnalysisGraph): boolean =>
   Option.getOrElse(Option.fromNullishOr(graph.extractorConfig.apiReport.includeForgottenExports), () => false) ||
   Option.getOrElse(Option.fromNullishOr(graph.extractorConfig.docModel.includeForgottenExports), () => false)
 
-export const isWarned = (warned: HashSet.HashSet<AstEntityRef>, entityRef: AstEntityRef): boolean =>
-  HashSet.has(warned, entityRef)
+export const isWarned = dual<
+  (entityRef: AstEntityRef) => (warned: HashSet.HashSet<AstEntityRef>) => boolean,
+  (warned: HashSet.HashSet<AstEntityRef>, entityRef: AstEntityRef) => boolean
+>(2, (warned: HashSet.HashSet<AstEntityRef>, entityRef: AstEntityRef): boolean => HashSet.has(warned, entityRef))

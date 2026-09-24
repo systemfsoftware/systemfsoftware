@@ -1,6 +1,7 @@
 import type * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Ref from 'effect/Ref'
 import type * as Ts from 'typescript'
@@ -100,17 +101,25 @@ export const makeGraph = (input: AnalysisGraphInput): AnalysisGraph => ({
 
 export const makeAnalysisRef = (input: AnalysisGraphInput): Effect.Effect<AnalysisRef> => Ref.make(makeGraph(input))
 
-export const symbolValueOf = (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<Ts.Symbol> =>
-  HashMap.get(graph.symbolValues, symbolId)
+export const symbolValueOf = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => Option.Option<Ts.Symbol>,
+  (graph: AnalysisGraph, symbolId: SymbolId) => Option.Option<Ts.Symbol>
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<Ts.Symbol> => HashMap.get(graph.symbolValues, symbolId))
 
-export const nodeValueOf = (graph: AnalysisGraph, nodeId: NodeId): Option.Option<Ts.Node> =>
-  HashMap.get(graph.declarationValues, nodeId)
+export const nodeValueOf = dual<
+  (nodeId: NodeId) => (graph: AnalysisGraph) => Option.Option<Ts.Node>,
+  (graph: AnalysisGraph, nodeId: NodeId) => Option.Option<Ts.Node>
+>(2, (graph: AnalysisGraph, nodeId: NodeId): Option.Option<Ts.Node> => HashMap.get(graph.declarationValues, nodeId))
 
-export const astSymbolOfId = (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<AstSymbol> =>
-  HashMap.get(graph.symbols, symbolId)
+export const astSymbolOfId = dual<
+  (symbolId: SymbolId) => (graph: AnalysisGraph) => Option.Option<AstSymbol>,
+  (graph: AnalysisGraph, symbolId: SymbolId) => Option.Option<AstSymbol>
+>(2, (graph: AnalysisGraph, symbolId: SymbolId): Option.Option<AstSymbol> => HashMap.get(graph.symbols, symbolId))
 
-export const astDeclarationOfId = (graph: AnalysisGraph, nodeId: NodeId): Option.Option<AstDeclaration> =>
-  HashMap.get(graph.declarations, nodeId)
+export const astDeclarationOfId = dual<
+  (nodeId: NodeId) => (graph: AnalysisGraph) => Option.Option<AstDeclaration>,
+  (graph: AnalysisGraph, nodeId: NodeId) => Option.Option<AstDeclaration>
+>(2, (graph: AnalysisGraph, nodeId: NodeId): Option.Option<AstDeclaration> => HashMap.get(graph.declarations, nodeId))
 
 const messageOf = (message: LocatedMessage): ExtractorMessage =>
   Option.match(message.position, {
@@ -124,13 +133,16 @@ const messageOf = (message: LocatedMessage): ExtractorMessage =>
       }),
   })
 
-export const appendMessage = (graph: AnalysisGraph, message: LocatedMessage): AnalysisGraph => ({
+export const appendMessage = dual<
+  (message: LocatedMessage) => (graph: AnalysisGraph) => AnalysisGraph,
+  (graph: AnalysisGraph, message: LocatedMessage) => AnalysisGraph
+>(2, (graph: AnalysisGraph, message: LocatedMessage): AnalysisGraph => ({
   ...graph,
   messageLog: {
     ...graph.messageLog,
     messages: Chunk.append(graph.messageLog.messages, messageOf(message)),
   },
-})
+}))
 
 export const foundTsdocMetadataMessage = (tsdocMetadataPath: string): LocatedMessage => ({
   category: 'console',
@@ -141,12 +153,18 @@ export const foundTsdocMetadataMessage = (tsdocMetadataPath: string): LocatedMes
   position: Option.none(),
 })
 
-export const workingPackageJsonOf = (
+export const workingPackageJsonOf = dual<
+  (sourceFilePath: string) => (graph: AnalysisGraph) => Option.Option<WorkingPackageJson>,
+  (graph: AnalysisGraph, sourceFilePath: string) => Option.Option<WorkingPackageJson>
+>(2, (
   graph: AnalysisGraph,
   sourceFilePath: string,
-): Option.Option<WorkingPackageJson> => PackageIndex.forSourceFile(graph.packageIndex, sourceFilePath)
+): Option.Option<WorkingPackageJson> => PackageIndex.forSourceFile(graph.packageIndex, sourceFilePath))
 
-export const tryFetchPackageMetadata = (
+export const tryFetchPackageMetadata = dual<
+  (sourceFilePath: string) => (graph: AnalysisGraph) => readonly [AnalysisGraph, Option.Option<PackageMetadata>],
+  (graph: AnalysisGraph, sourceFilePath: string) => readonly [AnalysisGraph, Option.Option<PackageMetadata>]
+>(2, (
   graph: AnalysisGraph,
   sourceFilePath: string,
 ): readonly [AnalysisGraph, Option.Option<PackageMetadata>] =>
@@ -182,9 +200,12 @@ export const tryFetchPackageMetadata = (
           ]
         },
       }),
-  })
+  }))
 
-export const isAedocSupportedFor = (ref: AnalysisRef, sourceFilePath: string): Effect.Effect<boolean> =>
+export const isAedocSupportedFor = dual<
+  (sourceFilePath: string) => (ref: AnalysisRef) => Effect.Effect<boolean>,
+  (ref: AnalysisRef, sourceFilePath: string) => Effect.Effect<boolean>
+>(2, (ref: AnalysisRef, sourceFilePath: string): Effect.Effect<boolean> =>
   Ref.modify(ref, (graph) => {
     const [updatedGraph, packageMetadata] = tryFetchPackageMetadata(graph, sourceFilePath)
     return [
@@ -194,4 +215,4 @@ export const isAedocSupportedFor = (ref: AnalysisRef, sourceFilePath: string): E
       }),
       updatedGraph,
     ]
-  })
+  }))

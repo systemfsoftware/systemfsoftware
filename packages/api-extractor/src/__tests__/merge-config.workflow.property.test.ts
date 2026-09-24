@@ -12,8 +12,8 @@ const isJsonRecord = (value: Schema.Json | undefined): value is JsonRecord =>
     Match.orElse(() => false),
   )
 
-const mergedOf = (base: JsonRecord, derived: JsonRecord): JsonRecord =>
-  Match.value(Result.merge(mergeConfig(MergeConfig.make({ base, derived })))).pipe(
+const mergedOf = (merge: typeof mergeConfig, base: JsonRecord, derived: JsonRecord): JsonRecord =>
+  Match.value(merge(MergeConfig.make({ base, derived })).pipe(Result.merge)).pipe(
     Match.tag('ConfigMerged', (merged): JsonRecord => merged.merged),
     Match.tag('ConfigReplaced', (replaced): JsonRecord => replaced.derived),
     Match.exhaustive,
@@ -31,23 +31,27 @@ const preservesDeeperPaths = (
     Object.keys(derived).every(recurse)
 }
 
-it.prop('∀a,b_DeeperPaths_≡Preserved', [
-  Schema.Record(Schema.String, Schema.Json),
-  Schema.Record(Schema.String, Schema.Json),
-], ([base, derived]) => preservesDeeperPaths(base, derived, mergedOf(base, derived)))
+it.prop('∀a,b_DeeperPaths_≡Preserved', {
+  of: [Schema.Record(Schema.String, Schema.Json), Schema.Record(Schema.String, Schema.Json)],
+  subject: mergeConfig,
+}, (subject, [base, derived]) => preservesDeeperPaths(base, derived, mergedOf(subject, base, derived)))
 
 it.prop(
   '∀a_Merge_≡Idempotent',
-  [Schema.Record(Schema.String, Schema.Json)],
-  ([record]) => Equal.equals(mergedOf(record, record), record),
+  { of: [Schema.Record(Schema.String, Schema.Json)], subject: mergeConfig },
+  (subject, [record]) => Equal.equals(mergedOf(subject, record, record), record),
 )
 
 it.prop(
   '∀a,b,c_FlatValues_≡Associative',
-  [
-    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])),
-    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])),
-    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])),
-  ],
-  ([a, b, c]) => Equal.equals(mergedOf(mergedOf(a, b), c), mergedOf(a, mergedOf(b, c))),
+  {
+    of: [
+      Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])),
+      Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])),
+      Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean])),
+    ],
+    subject: mergeConfig,
+  },
+  (subject, [a, b, c]) =>
+    Equal.equals(mergedOf(subject, mergedOf(subject, a, b), c), mergedOf(subject, a, mergedOf(subject, b, c))),
 )

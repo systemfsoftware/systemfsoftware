@@ -1,5 +1,6 @@
 import { HashMap, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
@@ -155,7 +156,10 @@ const translatedOf = (
 const mappedTo = (raw: MessagePosition, nearest: MappingItem): string =>
   resolve(dirname(raw.sourceFilePath), nearest.source)
 
-export const locate = (index: SourceMapIndex, raw: MessagePosition): Option.Option<MessagePosition> =>
+export const locate = dual<
+  (raw: MessagePosition) => (index: SourceMapIndex) => Option.Option<MessagePosition>,
+  (index: SourceMapIndex, raw: MessagePosition) => Option.Option<MessagePosition>
+>(2, (index: SourceMapIndex, raw: MessagePosition): Option.Option<MessagePosition> =>
   Option.flatMap(
     HashMap.get(index.mapTextByDtsPath, raw.sourceFilePath),
     (mapText) =>
@@ -169,4 +173,4 @@ export const locate = (index: SourceMapIndex, raw: MessagePosition): Option.Opti
             Option.flatMap(HashMap.get(index.originalTextByPath, mappedTo(raw, nearest)), (originalText) =>
               Option.some(translatedOf(raw, nearest, originalText, mappedTo(raw, nearest)))),
         )),
-  )
+  ))

@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -153,12 +154,23 @@ const dispatchExpansion = (
     Match.exhaustive,
   )
 
-export const expandTokens = (
-  value: string,
-  context: TokenContext,
-  configPath: string,
-  join: JoinSegments = defaultJoin,
-): Result.Result<string, UnresolvedTokenError> => dispatchExpansion(value.trim(), context, configPath, join)
+export const expandTokens = dual<
+  (
+    context: TokenContext,
+    configPath: string,
+    join?: JoinSegments,
+  ) => (value: string) => Result.Result<string, UnresolvedTokenError>,
+  (
+    value: string,
+    context: TokenContext,
+    configPath: string,
+    join?: JoinSegments,
+  ) => Result.Result<string, UnresolvedTokenError>
+>(
+  (args) => typeof args[0] === 'string',
+  (value, context, configPath, join = defaultJoin): Result.Result<string, UnresolvedTokenError> =>
+    dispatchExpansion(value.trim(), context, configPath, join),
+)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
@@ -172,32 +184,31 @@ if (import.meta.vitest !== void 0) {
     unscopedPackageName: normalizeAngleFree(ctx.unscopedPackageName).trim(),
   })
 
+  const TokenContextSchema = S.Struct({
+    projectFolder: S.String,
+    packageName: S.String,
+    unscopedPackageName: S.String,
+  })
+
   it.prop(
     '∀scoped_UnscopedStripsScope_≡Stripped',
-    [S.String, S.String],
-    ([rawScope, rawName]) => {
+    { of: [S.String, S.String], subject: unscopedPackageName },
+    (subject, [rawScope, rawName]) => {
       const scope = normalizeAngleFree(rawScope).replaceAll('/', '')
       const name = normalizeAngleFree(rawName).replaceAll('/', '')
       const scoped = `@${scope}/${name}`
-      const matches = unscopedPackageName(scoped) === name
-      const plain = unscopedPackageName(name) === name
+      const matches = subject(scoped) === name
+      const plain = subject(name) === name
       return matches && plain
     },
   )
 
   it.prop(
     '∀b_ExpandPackageToken_≡CtxConcat',
-    [
-      S.String,
-      S.Struct({
-        projectFolder: S.String,
-        packageName: S.String,
-        unscopedPackageName: S.String,
-      }),
-    ],
-    ([rawBody, ctx]) => {
+    { of: [S.String, TokenContextSchema], subject: expandTokens },
+    (subject, [rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody).trim()
-      return Result.match(expandTokens(`<packageName>${body}`, tightContext(ctx), 'config.json'), {
+      return Result.match(subject(`<packageName>${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: (expanded) => expanded === tightContext(ctx).packageName + body,
         onFailure: () => false,
       })
@@ -206,12 +217,12 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀b_ExpandFolderToken_≡Joined',
-    [S.String, S.String],
-    ([rawFolder, rawRest]) => {
+    { of: [S.String, S.String], subject: expandTokens },
+    (subject, [rawFolder, rawRest]) => {
       const folder = normalizeAngleFree(rawFolder).trim()
       const rest = normalizeAngleFree(rawRest).trim()
       const context: TokenContext = { projectFolder: folder, packageName: 'pkg', unscopedPackageName: 'pkg' }
-      return Result.match(expandTokens(`${PROJECT_FOLDER_TOKEN}${rest}`, context, 'config.json'), {
+      return Result.match(subject(`${PROJECT_FOLDER_TOKEN}${rest}`, context, 'config.json'), {
         onSuccess: (expanded) => expanded === defaultJoin(folder, rest),
         onFailure: () => false,
       })
@@ -220,17 +231,10 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀b_ExpandLookupToken_≡Refused',
-    [
-      S.String,
-      S.Struct({
-        projectFolder: S.String,
-        packageName: S.String,
-        unscopedPackageName: S.String,
-      }),
-    ],
-    ([rawBody, ctx]) => {
+    { of: [S.String, TokenContextSchema], subject: expandTokens },
+    (subject, [rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody).trim()
-      return Result.match(expandTokens(`${LOOKUP_TOKEN}${body}`, tightContext(ctx), 'config.json'), {
+      return Result.match(subject(`${LOOKUP_TOKEN}${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: () => false,
         onFailure: (err) => err.token === LOOKUP_TOKEN && err.configPath === 'config.json',
       })
@@ -239,17 +243,10 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀body_StrayOpen_≡NamesOpenBracket',
-    [
-      S.String,
-      S.Struct({
-        projectFolder: S.String,
-        packageName: S.String,
-        unscopedPackageName: S.String,
-      }),
-    ],
-    ([rawBody, ctx]) => {
+    { of: [S.String, TokenContextSchema], subject: expandTokens },
+    (subject, [rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody)
-      return Result.match(expandTokens(`<${body}`, tightContext(ctx), 'config.json'), {
+      return Result.match(subject(`<${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: () => false,
         onFailure: (err) => err.token === '<' && err.configPath === 'config.json',
       })
@@ -258,17 +255,10 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀body_StrayClose_≡NamesCloseBracket',
-    [
-      S.String,
-      S.Struct({
-        projectFolder: S.String,
-        packageName: S.String,
-        unscopedPackageName: S.String,
-      }),
-    ],
-    ([rawBody, ctx]) => {
+    { of: [S.String, TokenContextSchema], subject: expandTokens },
+    (subject, [rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody)
-      return Result.match(expandTokens(`>${body}`, tightContext(ctx), 'config.json'), {
+      return Result.match(subject(`>${body}`, tightContext(ctx), 'config.json'), {
         onSuccess: () => false,
         onFailure: (err) => err.token === '>' && err.configPath === 'config.json',
       })
@@ -277,20 +267,13 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀b_Expansion_≡Idempotent',
-    [
-      S.String,
-      S.Struct({
-        projectFolder: S.String,
-        packageName: S.String,
-        unscopedPackageName: S.String,
-      }),
-    ],
-    ([rawBody, ctx]) => {
+    { of: [S.String, TokenContextSchema], subject: expandTokens },
+    (subject, [rawBody, ctx]) => {
       const body = normalizeAngleFree(rawBody).trim()
       const context = tightContext(ctx)
-      return Result.match(expandTokens(`<packageName>${body}`, context, 'config.json'), {
+      return Result.match(subject(`<packageName>${body}`, context, 'config.json'), {
         onSuccess: (expanded) =>
-          Result.match(expandTokens(expanded, context, 'config.json'), {
+          Result.match(subject(expanded, context, 'config.json'), {
             onSuccess: (again) => again === expanded,
             onFailure: () => false,
           }),

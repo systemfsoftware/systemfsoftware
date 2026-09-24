@@ -1,4 +1,5 @@
 import { Data, Match, Option } from 'effect'
+import { dual } from 'effect/Function'
 
 import type { AstSymbolRef } from './ast-entity.js'
 
@@ -80,5 +81,11 @@ const fieldsOf = (astImport: AstImport): AstImportFields => ({
 export const withoutTypeOnlyEverywhere = (astImport: AstImport): AstImport =>
   new AstImport({ ...fieldsOf(astImport), isTypeOnlyEverywhere: false })
 
-export const withAstSymbolRef = (astImport: AstImport, astSymbolRef: AstSymbolRef): AstImport =>
-  new AstImport({ ...fieldsOf(astImport), astSymbolRef: Option.some(astSymbolRef) })
+export const withAstSymbolRef = dual<
+  (astSymbolRef: AstSymbolRef) => (astImport: AstImport) => AstImport,
+  (astImport: AstImport, astSymbolRef: AstSymbolRef) => AstImport
+>(
+  2,
+  (astImport: AstImport, astSymbolRef: AstSymbolRef): AstImport =>
+    new AstImport({ ...fieldsOf(astImport), astSymbolRef: Option.some(astSymbolRef) }),
+)

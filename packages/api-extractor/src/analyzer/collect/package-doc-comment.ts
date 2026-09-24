@@ -1,6 +1,7 @@
 import type * as tsdoc from '@microsoft/tsdoc'
 import { Data, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
@@ -60,7 +61,10 @@ const warningLogOf = (sourceFile: ts.SourceFile, log: MessageLog, statement: ts.
     },
   )
 
-export const findPackageDocComment = (
+export const findPackageDocComment = dual<
+  (log: MessageLog) => (sourceFile: ts.SourceFile) => readonly [MessageLog, Option.Option<ts.TextRange>],
+  (sourceFile: ts.SourceFile, log: MessageLog) => readonly [MessageLog, Option.Option<ts.TextRange>]
+>(2, (
   sourceFile: ts.SourceFile,
   log: MessageLog,
 ): readonly [MessageLog, Option.Option<ts.TextRange>] => {
@@ -74,4 +78,4 @@ export const findPackageDocComment = (
     Arr.reduce(sourceFile.statements, log, withWarnings),
     leading,
   ]
-}
+})

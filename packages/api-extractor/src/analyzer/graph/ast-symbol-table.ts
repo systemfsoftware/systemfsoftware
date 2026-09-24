@@ -1,6 +1,7 @@
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Ref from 'effect/Ref'
 import * as ts from 'typescript'
@@ -475,7 +476,10 @@ const proceedFetch = (
       }),
   )
 
-export const fetchAstSymbol = (
+export const fetchAstSymbol = dual<
+  (options: IFetchAstSymbolOptions) => (ref: AnalysisRef) => Effect.Effect<Option.Option<AstSymbolRef>, ExtractorError>,
+  (ref: AnalysisRef, options: IFetchAstSymbolOptions) => Effect.Effect<Option.Option<AstSymbolRef>, ExtractorError>
+>(2, (
   ref: AnalysisRef,
   options: IFetchAstSymbolOptions,
 ): Effect.Effect<Option.Option<AstSymbolRef>, ExtractorError> =>
@@ -495,7 +499,7 @@ export const fetchAstSymbol = (
             Match.exhaustive,
           ),
       }),
-  )
+  ))
 
 const hasEntityByNode = (graph: AnalysisGraph, node: ts.Node): boolean =>
   HashMap.has(graph.entitiesByNode, getNodeId(node))
@@ -1074,22 +1078,28 @@ const analyzeAstNamespaceImport = (
       ),
   )
 
-export const analyze = (ref: AnalysisRef, astEntityRef: AstEntityRef): Effect.Effect<void, ExtractorError> =>
-  Match.value(astEntityRef).pipe(
-    Match.tag(
-      'AstSymbolRef',
-      (symbolRef) =>
-        Effect.flatMap(astSymbolRecordOf(ref, symbolRef.symbolId), (astSymbol) => analyzeAstSymbol(ref, astSymbol)),
+export const analyze = dual<
+  (astEntityRef: AstEntityRef) => (ref: AnalysisRef) => Effect.Effect<void, ExtractorError>,
+  (ref: AnalysisRef, astEntityRef: AstEntityRef) => Effect.Effect<void, ExtractorError>
+>(
+  2,
+  (ref: AnalysisRef, astEntityRef: AstEntityRef): Effect.Effect<void, ExtractorError> =>
+    Match.value(astEntityRef).pipe(
+      Match.tag(
+        'AstSymbolRef',
+        (symbolRef) =>
+          Effect.flatMap(astSymbolRecordOf(ref, symbolRef.symbolId), (astSymbol) => analyzeAstSymbol(ref, astSymbol)),
+      ),
+      Match.tag(
+        'AstNamespaceImportRef',
+        (namespaceRef) =>
+          Effect.flatMap(
+            namespaceImportRecordOf(ref, namespaceRef.symbolId),
+            (astNamespaceImport) => analyzeAstNamespaceImport(ref, astNamespaceImport),
+          ),
+      ),
+      Match.orElse(() => Effect.void),
     ),
-    Match.tag(
-      'AstNamespaceImportRef',
-      (namespaceRef) =>
-        Effect.flatMap(
-          namespaceImportRecordOf(ref, namespaceRef.symbolId),
-          (astNamespaceImport) => analyzeAstNamespaceImport(ref, astNamespaceImport),
-        ),
-    ),
-    Match.orElse(() => Effect.void),
-  )
+)
 
 export const astSymbolTable: IAstSymbolTable = { fetchAstSymbol, analyze }

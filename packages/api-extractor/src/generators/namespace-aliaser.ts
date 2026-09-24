@@ -1,5 +1,6 @@
 import { HashSet } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 
 export type NamespaceMemberKind = 'namespace' | 'both' | 'type' | 'value'
@@ -49,12 +50,22 @@ const aliasWalkOf = (namespaceName: string) => (walk: AliasWalk, member: Namespa
   }
 }
 
-export const planNamespaceAliases = (
+export const planNamespaceAliases = dual<
+  (
+    members: readonly NamespaceMember[],
+    reservedNames: HashSet.HashSet<string>,
+  ) => (namespaceName: string) => readonly NamespaceAlias[],
+  (
+    namespaceName: string,
+    members: readonly NamespaceMember[],
+    reservedNames: HashSet.HashSet<string>,
+  ) => readonly NamespaceAlias[]
+>(3, (
   namespaceName: string,
   members: readonly NamespaceMember[],
   reservedNames: HashSet.HashSet<string>,
 ): readonly NamespaceAlias[] =>
-  Arr.reduce(members, { taken: reservedNames, aliases: [] } satisfies AliasWalk, aliasWalkOf(namespaceName)).aliases
+  Arr.reduce(members, { taken: reservedNames, aliases: [] } satisfies AliasWalk, aliasWalkOf(namespaceName)).aliases)
 
 export const formatAliasDeclarations = (alias: NamespaceAlias): readonly string[] =>
   Match.value(alias.kind).pipe(
@@ -68,11 +79,17 @@ export const formatAliasDeclarations = (alias: NamespaceAlias): readonly string[
     Match.exhaustive,
   )
 
-export const formatAliasExportClause = (alias: NamespaceAlias, isSafeName: (name: string) => boolean): string =>
-  `${alias.aliasName} as ${
-    Match.value(isSafeName(alias.memberName)).pipe(
-      Match.when(true, () => alias.memberName),
-      Match.when(false, () => JSON.stringify(alias.memberName)),
-      Match.exhaustive,
-    )
-  }`
+export const formatAliasExportClause = dual<
+  (isSafeName: (name: string) => boolean) => (alias: NamespaceAlias) => string,
+  (alias: NamespaceAlias, isSafeName: (name: string) => boolean) => string
+>(
+  2,
+  (alias: NamespaceAlias, isSafeName: (name: string) => boolean): string =>
+    `${alias.aliasName} as ${
+      Match.value(isSafeName(alias.memberName)).pipe(
+        Match.when(true, () => alias.memberName),
+        Match.when(false, () => JSON.stringify(alias.memberName)),
+        Match.exhaustive,
+      )
+    }`,
+)

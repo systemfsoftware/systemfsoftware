@@ -1,5 +1,6 @@
 import { Chunk, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
@@ -228,6 +229,7 @@ const checkIncompatible = (
           ', but its signature references "' + check.localName +
           '" which is marked as ' + ReleaseTag.getTagName(check.referencedReleaseTag),
         declarationId,
+        undefined,
       ),
     })),
     Match.exhaustive,
@@ -254,6 +256,7 @@ const warnForgottenExport = (
             ExtractorMessageId.ForgottenExport,
             'The symbol "' + localName + '" needs to be exported by the entry point ' + entryPointFilenameOf(graph),
             declarationId,
+            undefined,
           ),
         })),
         Match.exhaustive,
@@ -411,6 +414,7 @@ const reportMixedReleaseTags = (
         ExtractorMessageId.DifferentReleaseTags,
         'This symbol has another declaration with a different release tag',
         symbolId,
+        undefined,
       )),
     Match.when(false, () => state.collected),
     Match.exhaustive,
@@ -424,6 +428,7 @@ const reportMixedReleaseTags = (
         'Mixed release tags are not allowed for "' + localNameOfSymbolId(graph, symbolId) +
           '" because one of its declarations is marked as @internal',
         symbolId,
+        undefined,
       )),
     Match.when(false, () => mixedState),
     Match.exhaustive,
@@ -515,7 +520,10 @@ const validateEntity = (
     ),
   )
 
-export const validateAnalysis = (collected: CollectedAnalysis, graph: AnalysisGraph): CollectedAnalysis => {
+export const validateAnalysis = dual<
+  (graph: AnalysisGraph) => (collected: CollectedAnalysis) => CollectedAnalysis,
+  (collected: CollectedAnalysis, graph: AnalysisGraph) => CollectedAnalysis
+>(2, (collected: CollectedAnalysis, graph: AnalysisGraph): CollectedAnalysis => {
   const parser = new tsdoc.TSDocParser(graph.tsdocConfiguration)
   return Arr.reduce(
     Chunk.toReadonlyArray(collected.entities),
@@ -527,4 +535,4 @@ export const validateAnalysis = (collected: CollectedAnalysis, graph: AnalysisGr
         Match.exhaustive,
       ),
   ).collected
-}
+})

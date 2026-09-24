@@ -1,15 +1,14 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
-import * as Result from 'effect/Result'
 
 import { filePresent, searchUpwards } from './config/folder-walk.js'
 import { ConfigFileNotFound } from './errors/config.schema.js'
+import { InternalInvariantError } from './errors/internal-invariant.schema.js'
 import { LocateConfig } from './locate-config.schema.js'
-import { type ConfigLocationDecision, ConfigSearch, resolveConfigLocation } from './resolve-config-location.workflow.js'
+import { ConfigSearch, resolveConfigLocation } from './resolve-config-location.workflow.js'
 
 const CONFIG_FILE_NAME = 'api-extractor.json'
 const CONFIG_FOLDER_NAME = 'config'
@@ -41,16 +40,13 @@ const readCandidate = (
     return new ConfigSearch({ startFolder: request.startFolder, foundPath: Option.getOrUndefined(found) })
   })
 
-const writeLocation = (
-  outcome: Result.Result<ConfigLocationDecision, never>,
-  search: ConfigSearch,
-): Effect.Effect<string, ConfigFileNotFound> =>
-  Match.value(Result.merge(outcome)).pipe(
-    Match.tag('ConfigLocated', ({ filePath }) => Effect.succeed(filePath)),
-    Match.tag('ConfigNotLocated', () => Effect.fail(new ConfigFileNotFound({ filePath: search.startFolder }))),
-    Match.exhaustive,
-  )
-
 export const locateConfig = Sandwich.named('api_extractor.locate_config')(readCandidate)
   .decide(resolveConfigLocation)
-  .write(writeLocation)
+  .write({
+    ConfigLocated: (located) => Effect.succeed(located.filePath),
+    ConfigNotLocated: (_notLocated, search) => Effect.fail(new ConfigFileNotFound({ filePath: search.startFolder })),
+    CommandRejected: (rejected) =>
+      Effect.die(
+        new InternalInvariantError({ message: 'The config search command failed to decode', cause: rejected }),
+      ),
+  })

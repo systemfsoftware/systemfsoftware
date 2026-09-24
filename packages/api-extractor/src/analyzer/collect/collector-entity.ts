@@ -1,7 +1,9 @@
 import { Chunk, Data, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
+import type { Ordering } from 'effect/Ordering'
 
 import { type AstEntityRef, AstEntityRefEquivalence } from '../graph/ast-entity.js'
 
@@ -38,16 +40,22 @@ const hasConsumableParent = (
     isNonEmpty(entry[1]) &&
     Option.exists(views(entry[0]), () => consumableOf(views, entry[0])))
 
-export const consumableOf = (
+export const consumableOf = dual<
+  (ref: AstEntityRef) => (views: (ref: AstEntityRef) => Option.Option<ConsumableView>) => boolean,
+  (views: (ref: AstEntityRef) => Option.Option<ConsumableView>, ref: AstEntityRef) => boolean
+>(2, (
   views: (ref: AstEntityRef) => Option.Option<ConsumableView>,
   ref: AstEntityRef,
 ): boolean =>
   Option.match(views(ref), {
     onNone: () => false,
     onSome: (view) => isNonEmpty(view.exportedNames) || hasConsumableParent(views, view),
-  })
+  }))
 
-export const firstExportingConsumableParentOf = (
+export const firstExportingConsumableParentOf = dual<
+  (ref: AstEntityRef) => (views: (ref: AstEntityRef) => Option.Option<ConsumableView>) => Option.Option<AstEntityRef>,
+  (views: (ref: AstEntityRef) => Option.Option<ConsumableView>, ref: AstEntityRef) => Option.Option<AstEntityRef>
+>(2, (
   views: (ref: AstEntityRef) => Option.Option<ConsumableView>,
   ref: AstEntityRef,
 ): Option.Option<AstEntityRef> =>
@@ -60,7 +68,7 @@ export const firstExportingConsumableParentOf = (
           Option.exists(views(entry[0]), () => consumableOf(views, entry[0])),
       ),
       (entry) => entry[0],
-    ))
+    )))
 
 export const singleExportNameOf = (view: ConsumableView): Option.Option<string> =>
   Match.value(Chunk.size(view.exportedNames)).pipe(
@@ -87,9 +95,12 @@ export const collectorEntitySortKeyOf = (
   entity: ConsumableView & { readonly nameForEmit: Option.Option<string> },
 ): string => sortKeyIgnoringUnderscore(Option.getOrElse(entity.nameForEmit, () => entity.localName))
 
-export const CollectorEntityOrder: Order.Order<CollectorEntity> = Order.mapInput(
-  Order.String,
-  collectorEntitySortKeyOf,
-)
+export const CollectorEntityOrder: {
+  (that: CollectorEntity): (self: CollectorEntity) => Ordering
+  (self: CollectorEntity, that: CollectorEntity): Ordering
+} = dual(2, Order.mapInput(Order.String, collectorEntitySortKeyOf))
 
-export const sameEntityRef = (left: AstEntityRef, right: AstEntityRef): boolean => AstEntityRefEquivalence(left, right)
+export const sameEntityRef = dual<
+  (right: AstEntityRef) => (left: AstEntityRef) => boolean,
+  (left: AstEntityRef, right: AstEntityRef) => boolean
+>(2, (left: AstEntityRef, right: AstEntityRef): boolean => AstEntityRefEquivalence(left, right))

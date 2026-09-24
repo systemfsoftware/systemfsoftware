@@ -1,6 +1,7 @@
 import * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as ts from 'typescript'
@@ -115,6 +116,7 @@ const checkForBrokenLink = (
                 ExtractorMessageId.UnresolvedLink,
                 'The @link reference could not be resolved: ' + reason,
                 declarationId,
+                undefined,
               ),
             onSuccess: () => collected,
           })),
@@ -279,6 +281,7 @@ const resolveInheritDoc = (
         ExtractorMessageId.UnresolvedInheritDocReference,
         'The @inheritDoc reference could not be resolved: ' + reason,
         declarationId,
+        undefined,
       ),
     onSuccess: (referencedAstDeclaration) => {
       const analyzed = analyzeApiItem(graph, parser, collected, referencedAstDeclaration.declarationId)
@@ -309,6 +312,7 @@ const applyInheritDocTag = (
         ExtractorMessageId.UnresolvedInheritDocBase,
         'The @inheritDoc tag needs a TSDoc declaration reference; signature matching is not supported yet',
         declarationId,
+        undefined,
       ),
     onSome: (declarationReference) =>
       Match.value(refersToWorkingPackage(graph, Option.some(declarationReference))).pipe(
@@ -374,6 +378,7 @@ const analyzeApiItem = (
             'The @inheritDoc tag for "' + localNameOfDeclarationId(graph, declarationId) +
               '" refers to its own declaration',
             declarationId,
+            undefined,
           )),
         Match.when(VisitorState.Unvisited, () => visitDeclaration(graph, parser, ensured.collected, declarationId)),
         Match.exhaustive,
@@ -393,7 +398,10 @@ const enhanceSymbol = (
     (state, astDeclaration) => analyzeApiItem(graph, parser, state, astDeclaration.declarationId),
   )
 
-export const enhanceDocComments = (collected: CollectedAnalysis, graph: AnalysisGraph): CollectedAnalysis => {
+export const enhanceDocComments = dual<
+  (graph: AnalysisGraph) => (collected: CollectedAnalysis) => CollectedAnalysis,
+  (collected: CollectedAnalysis, graph: AnalysisGraph) => CollectedAnalysis
+>(2, (collected: CollectedAnalysis, graph: AnalysisGraph): CollectedAnalysis => {
   const parser = new tsdoc.TSDocParser(graph.tsdocConfiguration)
   return Arr.reduce(
     Chunk.toReadonlyArray(collected.entities),
@@ -409,4 +417,4 @@ export const enhanceDocComments = (collected: CollectedAnalysis, graph: Analysis
         Match.orElse(() => state),
       ),
   )
-}
+})

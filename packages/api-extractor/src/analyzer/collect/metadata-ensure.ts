@@ -1,6 +1,7 @@
 import * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
@@ -319,6 +320,7 @@ const detectAncillaryForSetter = (
         ExtractorMessageId.MissingGetter,
         'The property "'.concat(setterLocalName, '" has a setter but no getter.'),
         setterId,
+        undefined,
       )
     }),
     Match.exhaustive,
@@ -379,6 +381,7 @@ const preapprovedUnsupported = (
     'The @preapproved tag cannot be applied to "'.concat(localName, '"') +
       ' because it is not a supported declaration type',
     astDeclaration.declarationId,
+    undefined,
   )
 
 const preapprovedForContainer = (
@@ -399,6 +402,7 @@ const preapprovedForContainer = (
         'The @preapproved tag cannot be applied to "'.concat(localName, '"') +
           ' without an @internal release tag',
         astDeclaration.astSymbolId,
+        undefined,
       )
       return resolveOf(withIssue, draft)
     }),
@@ -457,6 +461,7 @@ const scanModifiers = (
         ExtractorMessageId.ExtraReleaseTag,
         'The doc comment should not contain more than one release tag',
         astDeclaration.declarationId,
+        undefined,
       )),
     Match.when(false, () => collected),
     Match.exhaustive,
@@ -546,6 +551,7 @@ const missingReleaseTagIssue = (
         '"'.concat(entityLocalName, '" is part of the package\'s API, but it is missing ') +
           'a release tag (@alpha, @beta, @public, or @internal)',
         astDeclaration.astSymbolId,
+        undefined,
       )),
     Match.exhaustive,
   )
@@ -673,6 +679,7 @@ const ancillaryApiItemPhase = (
               'The doc comment for the property "'.concat(setterSymbolLocalName, '"') +
                 ' must appear on the getter, not the setter.',
               astDeclaration.declarationId,
+              undefined,
             )
           }),
           Match.when(false, () => collected),
@@ -739,7 +746,19 @@ const storeSymbolMetadata = (
   }
 }
 
-export const ensureSymbolMetadata = (
+export const ensureSymbolMetadata = dual<
+  (
+    graph: AnalysisGraph,
+    parser: tsdoc.TSDocParser,
+    symbolId: SymbolId,
+  ) => (collected: CollectedAnalysis) => CollectedAnalysis,
+  (
+    collected: CollectedAnalysis,
+    graph: AnalysisGraph,
+    parser: tsdoc.TSDocParser,
+    symbolId: SymbolId,
+  ) => CollectedAnalysis
+>(4, (
   collected: CollectedAnalysis,
   graph: AnalysisGraph,
   parser: tsdoc.TSDocParser,
@@ -761,9 +780,21 @@ export const ensureSymbolMetadata = (
         },
       })),
     Match.exhaustive,
-  )
+  ))
 
-export const ensureApiItemMetadata = (
+export const ensureApiItemMetadata = dual<
+  (
+    graph: AnalysisGraph,
+    parser: tsdoc.TSDocParser,
+    declarationId: NodeId,
+  ) => (collected: CollectedAnalysis) => EnsuredMetadata,
+  (
+    collected: CollectedAnalysis,
+    graph: AnalysisGraph,
+    parser: tsdoc.TSDocParser,
+    declarationId: NodeId,
+  ) => EnsuredMetadata
+>(4, (
   collected: CollectedAnalysis,
   graph: AnalysisGraph,
   parser: tsdoc.TSDocParser,
@@ -775,4 +806,4 @@ export const ensureApiItemMetadata = (
       const ensured = ensureSymbolMetadata(collected, graph, parser, astDeclaration.astSymbolId)
       return { collected: ensured, metadata: apiItemMetadataOf(ensured, declarationId) }
     },
-  })
+  }))

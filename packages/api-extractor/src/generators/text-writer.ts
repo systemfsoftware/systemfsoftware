@@ -1,5 +1,6 @@
 import { Chunk } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
@@ -108,7 +109,10 @@ const writeLines = (writer: TextWriter, message: string): TextWriter =>
     return writeLinePart(afterBreak, linePart.replace(/[\r]/g, ''))
   })
 
-export const write = (writer: TextWriter, message: string): TextWriter =>
+export const write = dual<
+  (message: string) => (writer: TextWriter) => TextWriter,
+  (writer: TextWriter, message: string) => TextWriter
+>(2, (writer: TextWriter, message: string): TextWriter =>
   Match.value(message.length === 0).pipe(
     Match.when(true, () => writer),
     Match.orElse(() =>
@@ -117,25 +121,25 @@ export const write = (writer: TextWriter, message: string): TextWriter =>
         Match.orElse(() => writeLines(writer, message)),
       )
     ),
-  )
+  ))
 
-export const writeLine = (writer: TextWriter, message: string = ''): TextWriter => writeNewLine(write(writer, message))
+export const writeLine = dual<
+  (message?: string) => (writer: TextWriter) => TextWriter,
+  (writer: TextWriter, message?: string) => TextWriter
+>((args) => typeof args[0] !== 'string', (writer, message = ''): TextWriter => writeNewLine(write(writer, message)))
 
-export const increaseIndent = (writer: TextWriter, indentPrefix?: string): TextWriter => ({
+export const increaseIndent = dual<
+  (indentPrefix?: string) => (writer: TextWriter) => TextWriter,
+  (writer: TextWriter, indentPrefix?: string) => TextWriter
+>((args) => typeof args[0] !== 'string', (writer, indentPrefix): TextWriter => ({
   ...writer,
   indentStack: Arr.append(writer.indentStack, indentPrefix ?? writer.defaultIndentPrefix),
-})
+}))
 
 export const decreaseIndent = (writer: TextWriter): TextWriter => ({
   ...writer,
   indentStack: Arr.dropRight(writer.indentStack, 1),
 })
-
-export const indentScope = (
-  writer: TextWriter,
-  scope: (writer: TextWriter) => TextWriter,
-  indentPrefix?: string,
-): TextWriter => decreaseIndent(scope(increaseIndent(writer, indentPrefix)))
 
 export const ensureNewLine = (writer: TextWriter): TextWriter => {
   const lastCharacter = peekLastCharacter(writer)

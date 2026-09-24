@@ -58,7 +58,8 @@ export class RoutedSuppressed extends Schema.TaggedClass<RoutedSuppressed>()('Ro
   readonly [RoutingDecisionTypeId] = RoutingDecisionTypeId
 }
 
-export type RoutingDecision = RoutedToReport | RoutedToConsole | RoutedSuppressed
+export const RoutingDecision = Schema.Union([RoutedToReport, RoutedToConsole, RoutedSuppressed])
+export type RoutingDecision = typeof RoutingDecision.Type
 
 const levelOrNone = (command: RouteExtractorMessage) =>
   Option.getOrElse(Option.fromNullishOr(command.logLevel), () => 'none' as const)
@@ -106,7 +107,10 @@ const routeCommand = (command: RouteExtractorMessage): RoutingDecision =>
     Match.exhaustive,
   )
 
-export const routeExtractorMessage = Workflow.total(
-  RouteExtractorMessage,
-  (command: RouteExtractorMessage): Result.Result<RoutingDecision, never> => Result.succeed(routeCommand(command)),
-)
+export const routeExtractorMessage = Workflow.make({
+  command: RouteExtractorMessage,
+  decision: RoutingDecision,
+  error: Schema.Never,
+  decide: (command: RouteExtractorMessage): Result.Result<RoutingDecision, never> =>
+    Result.succeed(routeCommand(command)),
+})

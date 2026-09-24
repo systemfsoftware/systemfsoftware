@@ -1,6 +1,7 @@
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
@@ -203,10 +204,30 @@ const getModuleSymbolFromSourceFile = (
       ),
   )
 
-export const isImportableAmbientSourceFile = (graph: AnalysisGraph, sourceFile: ts.SourceFile): boolean =>
-  HashSet.has(graph.importableAmbientSourceFiles, getNodeId(sourceFile))
+export const isImportableAmbientSourceFile = dual<
+  (sourceFile: ts.SourceFile) => (graph: AnalysisGraph) => boolean,
+  (graph: AnalysisGraph, sourceFile: ts.SourceFile) => boolean
+>(
+  2,
+  (graph: AnalysisGraph, sourceFile: ts.SourceFile): boolean =>
+    HashSet.has(graph.importableAmbientSourceFiles, getNodeId(sourceFile)),
+)
 
-export const fetchAstModuleFromSourceFile = (
+export const fetchAstModuleFromSourceFile = dual<
+  (
+    ref: AnalysisRef,
+    sourceFile: ts.SourceFile,
+    moduleReference: Option.Option<IAstModuleReference>,
+    isExternal: boolean,
+  ) => (table: IAstSymbolTable) => Effect.Effect<AstModule, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    sourceFile: ts.SourceFile,
+    moduleReference: Option.Option<IAstModuleReference>,
+    isExternal: boolean,
+  ) => Effect.Effect<AstModule, ExtractorError>
+>(5, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   sourceFile: ts.SourceFile,
@@ -221,7 +242,7 @@ export const fetchAstModuleFromSourceFile = (
           onSome: (astModule) => Effect.succeed(astModule),
           onNone: () => createAstModule(table, ref, sourceFile, moduleSymbol, moduleReference, isExternal),
         })),
-  )
+  ))
 
 const createAstModule = (
   table: IAstSymbolTable,
@@ -255,7 +276,7 @@ const createAstModule = (
         ),
       onSome: () => crawlExternalModuleExports(table, ref, astModule, moduleSymbol),
     })
-    yield* Match.value(isExternalModule(astModule)).pipe(
+    yield* Match.value(astModule.pipe(isExternalModule)).pipe(
       Match.when(true, () => externalCrawl),
       Match.when(false, () => crawlLocalModuleExports(table, ref, moduleSymbol, astModule)),
       Match.exhaustive,
@@ -393,12 +414,22 @@ const exportEntriesOf = (moduleSymbol: ts.Symbol): ReadonlyArray<readonly [ts.Sy
       Arr.map(Array.from(exports.entries()), (entry): readonly [ts.Symbol, ts.__String] => [entry[1], entry[0]]),
   })
 
-export const fetchAstModuleExportInfo = (
+export const fetchAstModuleExportInfo = dual<
+  (
+    ref: AnalysisRef,
+    entryPointAstModule: AstModule,
+  ) => (table: IAstSymbolTable) => Effect.Effect<AstModuleExportInfo, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    entryPointAstModule: AstModule,
+  ) => Effect.Effect<AstModuleExportInfo, ExtractorError>
+>(3, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   entryPointAstModule: AstModule,
 ): Effect.Effect<AstModuleExportInfo, ExtractorError> =>
-  Match.value(isExternalModule(entryPointAstModule)).pipe(
+  Match.value(entryPointAstModule.pipe(isExternalModule)).pipe(
     Match.when(
       true,
       () => Effect.die(invariantDefect('fetchAstModuleExportInfo() is not supported for external modules')),
@@ -426,7 +457,7 @@ export const fetchAstModuleExportInfo = (
             ),
         }))),
     Match.exhaustive,
-  )
+  ))
 
 const collectAllExportsRecursive = (
   table: IAstSymbolTable,
@@ -437,7 +468,7 @@ const collectAllExportsRecursive = (
   Match.value(HashSet.has(accumulator.visitedAstModules, astModule.moduleSymbolId)).pipe(
     Match.when(true, (): Effect.Effect<ExportAccumulator, ExtractorError> => Effect.succeed(accumulator)),
     Match.when(false, () =>
-      Match.value(isExternalModule(astModule)).pipe(
+      Match.value(astModule.pipe(isExternalModule)).pipe(
         Match.when(true, (): Effect.Effect<ExportAccumulator, ExtractorError> =>
           Effect.succeed({
             ...withVisitedModule(accumulator, astModule.moduleSymbolId),
@@ -544,7 +575,7 @@ const analyzeCollectedEntity = (
             Option.match(moduleOf(graph, astNamespaceImport.astModuleId), {
               onNone: () => Effect.void,
               onSome: (astModule) =>
-                Match.value(isExternalModule(astModule)).pipe(
+                Match.value(astModule.pipe(isExternalModule)).pipe(
                   Match.when(true, () => Effect.void),
                   Match.when(false, () => table.analyze(ref, astEntityRef)),
                   Match.exhaustive,
@@ -573,13 +604,25 @@ const foldStarModules = (
     )
   })
 
-export const tryGetExportOfAstModule = (
+export const tryGetExportOfAstModule = dual<
+  (
+    ref: AnalysisRef,
+    exportName: string,
+    astModule: AstModule,
+  ) => (table: IAstSymbolTable) => Effect.Effect<Option.Option<AstEntityRef>, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    exportName: string,
+    astModule: AstModule,
+  ) => Effect.Effect<Option.Option<AstEntityRef>, ExtractorError>
+>(4, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   exportName: string,
   astModule: AstModule,
 ): Effect.Effect<Option.Option<AstEntityRef>, ExtractorError> =>
-  tryGetExportOfAstModuleRecursive(table, ref, exportName, astModule, HashSet.empty())
+  tryGetExportOfAstModuleRecursive(table, ref, exportName, astModule, HashSet.empty()))
 
 const tryGetExportOfAstModuleRecursive = (
   table: IAstSymbolTable,
@@ -718,51 +761,78 @@ const symbolValueFor = (
     Match.orElse(() => Effect.succeedNone),
   )
 
-export const getExportOfAstModule = (
+export const getExportOfAstModule = dual<
+  (
+    ref: AnalysisRef,
+    exportName: string,
+    astModule: AstModule,
+  ) => (table: IAstSymbolTable) => Effect.Effect<AstEntityRef, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    exportName: string,
+    astModule: AstModule,
+  ) => Effect.Effect<AstEntityRef, ExtractorError>
+>(4, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   exportName: string,
   astModule: AstModule,
 ): Effect.Effect<AstEntityRef, ExtractorError> =>
-  Effect.flatMap(
-    tryGetExportOfAstModuleRecursive(table, ref, exportName, astModule, HashSet.empty()),
-    (astEntityRef) =>
-      Option.match(astEntityRef, {
-        onSome: (entityRef) => Effect.succeed(entityRef),
-        onNone: () =>
-          Effect.flatMap(Ref.get(ref), (graph) =>
+  Effect.flatMap(Ref.get(ref), (graph) =>
+    Effect.flatMap(
+      tryGetExportOfAstModuleRecursive(table, ref, exportName, astModule, HashSet.empty()),
+      (astEntityRef) =>
+        Option.match(astEntityRef, {
+          onSome: (entityRef) => Effect.succeed(entityRef),
+          onNone: () =>
             Effect.die(
               invariantDefect(
                 `Unable to analyze the export ${JSON.stringify(exportName)} in\n` +
                   Option.getOrElse(Option.map(sourceFileOfModule(graph, astModule), (file) => file.fileName), () => ''),
               ),
-            )),
-      }),
-  )
+            ),
+        }),
+    )))
 
-export const fetchReferencedAstEntity = (
+export const fetchReferencedAstEntity = dual<
+  (
+    ref: AnalysisRef,
+    symbol: ts.Symbol,
+    referringModuleIsExternal: boolean,
+  ) => (table: IAstSymbolTable) => Effect.Effect<Option.Option<AstEntityRef>, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    symbol: ts.Symbol,
+    referringModuleIsExternal: boolean,
+  ) => Effect.Effect<Option.Option<AstEntityRef>, ExtractorError>
+>(4, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   symbol: ts.Symbol,
   referringModuleIsExternal: boolean,
 ): Effect.Effect<Option.Option<AstEntityRef>, ExtractorError> =>
-  Match.value((symbol.flags & ts.SymbolFlags.FunctionScopedVariable) !== 0).pipe(
-    Match.when(true, (): Effect.Effect<Option.Option<AstEntityRef>, ExtractorError> => Effect.succeedNone),
-    Match.when(false, () =>
-      Match.value(referringModuleIsExternal).pipe(
-        Match.when(true, () =>
-          Effect.flatMap(Ref.get(ref), (graph) =>
-            table.fetchAstSymbol(ref, {
-              followedSymbol: TypeScriptHelpers.followAliases(symbol, graph.typeChecker),
-              isExternal: true,
-              includeNominalAnalysis: false,
-              addIfMissing: true,
-            }))),
-        Match.when(false, () => followReferencedAliasChain(table, ref, symbol)),
+  Effect.flatMap(
+    Ref.get(ref),
+    (graph) =>
+      Match.value((symbol.flags & ts.SymbolFlags.FunctionScopedVariable) !== 0).pipe(
+        Match.when(true, (): Effect.Effect<Option.Option<AstEntityRef>, ExtractorError> => Effect.succeedNone),
+        Match.when(false, () =>
+          Match.value(referringModuleIsExternal).pipe(
+            Match.when(true, () =>
+              table.fetchAstSymbol(ref, {
+                followedSymbol: TypeScriptHelpers.followAliases(symbol, graph.typeChecker),
+                isExternal: true,
+                includeNominalAnalysis: false,
+                addIfMissing: true,
+              })),
+            Match.when(false, () => followReferencedAliasChain(table, ref, symbol)),
+            Match.exhaustive,
+          )),
         Match.exhaustive,
-      )),
-    Match.exhaustive,
-  )
+      ),
+  ))
 
 const followReferencedAliasChain = (
   table: IAstSymbolTable,
@@ -1334,7 +1404,19 @@ const fetchSpecifierAstModule = (
       }),
   )
 
-export const fetchAstImport = (
+export const fetchAstImport = dual<
+  (
+    ref: AnalysisRef,
+    importSymbol: Option.Option<ts.Symbol>,
+    options: IAstImportOptions,
+  ) => (table: IAstSymbolTable) => Effect.Effect<AstImport, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    importSymbol: Option.Option<ts.Symbol>,
+    options: IAstImportOptions,
+  ) => Effect.Effect<AstImport, ExtractorError>
+>(4, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   importSymbol: Option.Option<ts.Symbol>,
@@ -1395,9 +1477,21 @@ export const fetchAstImport = (
             ),
         ),
     }))
-}
+})
 
-export const fetchReferencedAstEntityFromImportTypeNode = (
+export const fetchReferencedAstEntityFromImportTypeNode = dual<
+  (
+    ref: AnalysisRef,
+    node: ts.ImportTypeNode,
+    referringModuleIsExternal: boolean,
+  ) => (table: IAstSymbolTable) => Effect.Effect<Option.Option<AstEntityRef>, ExtractorError>,
+  (
+    table: IAstSymbolTable,
+    ref: AnalysisRef,
+    node: ts.ImportTypeNode,
+    referringModuleIsExternal: boolean,
+  ) => Effect.Effect<Option.Option<AstEntityRef>, ExtractorError>
+>(4, (
   table: IAstSymbolTable,
   ref: AnalysisRef,
   node: ts.ImportTypeNode,
@@ -1445,7 +1539,7 @@ export const fetchReferencedAstEntityFromImportTypeNode = (
             onSome: (symbol) => followImportTypeAliasChain(table, ref, symbol, referringModuleIsExternal),
           })
         }),
-    }))
+    })))
 
 const followImportTypeAliasChain = (
   table: IAstSymbolTable,

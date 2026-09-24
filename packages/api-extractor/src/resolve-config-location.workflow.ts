@@ -23,13 +23,16 @@ export class ConfigNotLocated extends Schema.TaggedClass<ConfigNotLocated>()('Co
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export type ConfigLocationDecision = ConfigLocated | ConfigNotLocated
+export const ConfigLocationDecision = Schema.Union([ConfigLocated, ConfigNotLocated])
+export type ConfigLocationDecision = typeof ConfigLocationDecision.Type
 
-export const resolveConfigLocation = Workflow.total(
-  ConfigSearch,
-  (search): Result.Result<ConfigLocationDecision, never> =>
+export const resolveConfigLocation = Workflow.make({
+  command: ConfigSearch,
+  decision: ConfigLocationDecision,
+  error: Schema.Never,
+  decide: (search: ConfigSearch): Result.Result<ConfigLocationDecision, never> =>
     Option.match(Option.fromNullishOr(search.foundPath), {
       onNone: () => Result.succeed(new ConfigNotLocated({})),
       onSome: (filePath) => Result.succeed(new ConfigLocated({ filePath })),
     }),
-)
+})

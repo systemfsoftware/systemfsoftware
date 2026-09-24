@@ -1,5 +1,6 @@
 import { Chunk, HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Order from 'effect/Order'
 
@@ -488,13 +489,26 @@ const finishReport = (report: ReportState): RenderedApiReport => {
   }
 }
 
-export const areEquivalentApiFileContents = (actualFileContent: string, expectedFileContent: string): boolean => {
+export const areEquivalentApiFileContents = dual<
+  (expectedFileContent: string) => (actualFileContent: string) => boolean,
+  (actualFileContent: string, expectedFileContent: string) => boolean
+>(2, (actualFileContent: string, expectedFileContent: string): boolean => {
   const normalizedActual = actualFileContent.replace(/\s+/g, ' ')
   const normalizedExpected = expectedFileContent.replace(/\s+/g, ' ')
   return normalizedActual === normalizedExpected
-}
+})
 
-export const generateReviewFileContent = (
+export const generateReviewFileContent = dual<
+  (
+    reportVariant: ApiReportVariant,
+    handled: HashSet.HashSet<number>,
+  ) => (snapshot: Snapshot.AnalysisSnapshot) => Result.Result<RenderedApiReport, RenderFailure>,
+  (
+    snapshot: Snapshot.AnalysisSnapshot,
+    reportVariant: ApiReportVariant,
+    handled: HashSet.HashSet<number>,
+  ) => Result.Result<RenderedApiReport, RenderFailure>
+>(3, (
   snapshot: Snapshot.AnalysisSnapshot,
   reportVariant: ApiReportVariant,
   handled: HashSet.HashSet<number>,
@@ -522,4 +536,4 @@ export const generateReviewFileContent = (
       finishReport,
     )
   })
-}
+})

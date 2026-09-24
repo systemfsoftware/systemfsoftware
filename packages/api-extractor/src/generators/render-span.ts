@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
@@ -25,7 +26,10 @@ interface SortedWalk {
   readonly taken: number
 }
 
-export const writeSpan = (
+export const writeSpan = dual<
+  (plan: SpanPlan.SpanPlan, writer: TextWriter.TextWriter) => (tree: SpanTree.SpanTree) => TextWriter.TextWriter,
+  (tree: SpanTree.SpanTree, plan: SpanPlan.SpanPlan, writer: TextWriter.TextWriter) => TextWriter.TextWriter
+>(3, (
   tree: SpanTree.SpanTree,
   plan: SpanPlan.SpanPlan,
   writer: TextWriter.TextWriter,
@@ -34,11 +38,17 @@ export const writeSpan = (
     writer,
     separatorOverride: Option.none(),
     docComment: 'inactive',
-  }).writer
+  }).writer)
 
 /** Standalone render of one span subtree: the counterpart of the legacy `getModifiedText()`. */
-export const renderText = (tree: SpanTree.SpanTree, plan: SpanPlan.SpanPlan): string =>
-  TextWriter.getText(writeSpan(tree, plan, TextWriter.make({ trimLeadingSpaces: true })))
+export const renderText = dual<
+  (plan: SpanPlan.SpanPlan) => (tree: SpanTree.SpanTree) => string,
+  (tree: SpanTree.SpanTree, plan: SpanPlan.SpanPlan) => string
+>(
+  2,
+  (tree: SpanTree.SpanTree, plan: SpanPlan.SpanPlan): string =>
+    TextWriter.getText(writeSpan(tree, plan, TextWriter.make({ trimLeadingSpaces: true }))),
+)
 
 const withWriter = (state: RenderState, writer: TextWriter.TextWriter): RenderState => ({ ...state, writer })
 
@@ -186,7 +196,7 @@ const writeSortedChildren = (
     tree.children,
     { state: { ...state }, taken: 0 } satisfies SortedWalk,
     (walk, child) =>
-      Match.value(Option.isSome(SpanPlan.sortKeyOf(plan, child))).pipe(
+      Match.value(SpanPlan.sortKeyOf(plan, child).pipe(Option.isSome)).pipe(
         Match.when(false, () => ({
           taken: walk.taken,
           state: writeModifiedSpan(child, plan, { ...walk.state, separatorOverride: Option.none() }),

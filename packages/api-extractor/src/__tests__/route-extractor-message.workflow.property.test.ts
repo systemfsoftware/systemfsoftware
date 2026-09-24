@@ -53,6 +53,6 @@ const referenceDestination = (command: RouteExtractorMessage): string =>
 
 it.prop(
   '∀cmd_Routing_≡RuleLookup',
-  [RouteExtractorMessage],
-  ([command]) => destinationOf(Result.merge(routeExtractorMessage(command))) === referenceDestination(command),
+  { of: [RouteExtractorMessage], subject: routeExtractorMessage },
+  (subject, [command]) => destinationOf(subject(command).pipe(Result.merge)) === referenceDestination(command),
 )

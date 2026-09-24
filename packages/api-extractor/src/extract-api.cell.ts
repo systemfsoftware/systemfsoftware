@@ -11,6 +11,7 @@ import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
+import * as Schema from 'effect/Schema'
 import { minimatch } from 'minimatch'
 
 import { collectAnalysis } from './analyzer/collect/collect-analysis.js'
@@ -33,7 +34,9 @@ import {
   BaselinePresent,
   chooseExtraction,
   DecideExtraction,
-  type ExtractionDecision,
+  ExtractionDecision,
+  ExtractionFailed,
+  ExtractionPassed,
   FolderAbsent,
   type FolderEvidence,
   FolderPresent,
@@ -108,6 +111,22 @@ export interface ExtractionSnapshot {
   readonly reportRenders: readonly RenderedApiReport[]
   readonly sourceMapIndex: SourceMapIndex
 }
+
+/**
+ * The read phase's output: the encoded `DecideExtraction` command the library decodes for the
+ * decision, joined to the analysis snapshot the write phase executes against. The snapshot holds
+ * the analysis, the rendered reports and the message view, which no schema encodes, and the write
+ * plan needs that same snapshot, so the read passes it through whole.
+ */
+type ExtractionRead = DecideExtractionCommand & { readonly snapshot: ExtractionSnapshot }
+
+/** The encoded `DecideExtraction` command the read phase hands the library to decode. */
+type DecideExtractionCommand = (typeof DecideExtraction)['Encoded']
+
+/** The encoded extraction verdicts a write handler receives; the library encodes the decision before dispatch. */
+type ExtractionVerdict =
+  | (typeof ExtractionPassed)['Encoded']
+  | (typeof ExtractionFailed)['Encoded']
 
 interface AnalysisInputs {
   readonly config: ExtractorConfig
@@ -405,7 +424,6 @@ const optionalCompilerFolder = (
 ): { readonly typescriptCompilerFolder?: string } => folder === undefined ? {} : { typescriptCompilerFolder: folder }
 
 const compilerOptionsOf = (request: ExtractionRequest): CompilerStateOptions => ({
-  projectFolder: request.config.projectFolder,
   tsconfigFilePath: request.config.tsconfigFilePath,
   mainEntryPointFilePath: request.config.mainEntryPointFilePath,
   skipLibCheck: request.config.skipLibCheck,
@@ -734,7 +752,7 @@ const renderReportsOf = (
   )
 }
 
-const decideExtractionOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
+const extractionCommandOf = (snapshot: ExtractionSnapshot): DecideExtractionCommand => {
   const log = Snapshot.messageLog(snapshot.analysis)
   const reports = Arr.map(Arr.zip(snapshot.reports, snapshot.reportRenders), ([plan, render]) =>
     new ReportEvidence({
@@ -746,7 +764,8 @@ const decideExtractionOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
       baseline: plan.baseline,
       folder: plan.folder,
     }))
-  return new DecideExtraction({
+  return {
+    _tag: 'DecideExtraction',
     localBuild: snapshot.request.options.localBuild === true,
     printApiReportDiff: snapshot.request.options.printApiReportDiff === true,
     residue: {
@@ -754,13 +773,20 @@ const decideExtractionOf = (snapshot: ExtractionSnapshot): DecideExtraction => {
       warnings: snapshot.view.warningCount(log, log.handled),
     },
     reports,
-  })
+  }
 }
 
-const decodeSnapshot = Sandwich.pure(
-  (snapshot: ExtractionSnapshot): Result.Result<DecideExtraction, never> =>
-    Result.succeed(decideExtractionOf(snapshot)),
-)
+const readDecideExtraction = (
+  request: ExtractionRequest,
+): Effect.Effect<
+  ExtractionRead,
+  ExtractorError | PlatformError,
+  FileSystem.FileSystem | Path.Path | TypeScriptCompiler
+> =>
+  Effect.map(
+    readAnalysis(request),
+    (snapshot): ExtractionRead => ({ ...extractionCommandOf(snapshot), snapshot }),
+  )
 
 const emitLine = (level: LogLevel, text: string): WriteStep => ({ _tag: 'EmitLine', level, text })
 
@@ -963,23 +989,36 @@ const executeStep = (
     Match.exhaustive,
   )
 
-const writeOutcome = (
-  outcome: Result.Result<ExtractionDecision, never>,
-  snapshot: ExtractionSnapshot,
+/** Decodes the encoded verdict back to the decision the write plan carries; the encode it reverses cannot fail. */
+const decisionOf = (verdict: ExtractionVerdict): Effect.Effect<ExtractionDecision> =>
+  Result.match(Schema.decodeResult(ExtractionDecision)(verdict), {
+    onSuccess: Effect.succeed,
+    onFailure: (issue) =>
+      Effect.die(
+        new InternalInvariantError({ message: 'The encoded extraction verdict did not decode', cause: issue }),
+      ),
+  })
+
+const writeExtraction = (
+  verdict: ExtractionVerdict,
+  read: ExtractionRead,
 ): Effect.Effect<ExtractionDecision, PlatformError, FileSystem.FileSystem | MessageWriter> =>
   Effect.gen(function*() {
+    const decision = yield* decisionOf(verdict)
     const fs = yield* FileSystem.FileSystem
     const writer = yield* MessageWriter
-    const decision = Result.merge(outcome)
-    yield* Effect.forEach(writePlanOf(snapshot, decision).steps, (step) => executeStep(fs, writer, step), {
+    yield* Effect.forEach(writePlanOf(read.snapshot, decision).steps, (step) => executeStep(fs, writer, step), {
       concurrency: 1,
       discard: true,
     })
     return decision
   })
 
-export const extractApi = Sandwich.named('api_extractor.extract_api')(readAnalysis)
-  .decode(decodeSnapshot)
+export const extractApi = Sandwich.named('api_extractor.extract_api')(readDecideExtraction)
   .decide(chooseExtraction)
-  .encode(Sandwich.pure(Result.succeed))
-  .write(writeOutcome)
+  .write({
+    ExtractionPassed: writeExtraction,
+    ExtractionFailed: writeExtraction,
+    CommandRejected: (rejected) =>
+      Effect.die(new InternalInvariantError({ message: 'The extraction command failed to decode', cause: rejected })),
+  })

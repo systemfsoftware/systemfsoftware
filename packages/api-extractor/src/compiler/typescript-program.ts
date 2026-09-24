@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
@@ -9,7 +10,6 @@ import type { TsCompilerLoadError, TsConfigReadError } from '../errors/index.js'
 import type { CompilerHostOptions, CompilerLoadOptions, TypeScriptCompiler } from './typescript-compiler.service.js'
 
 export interface CompilerStateOptions {
-  readonly projectFolder: string
   readonly tsconfigFilePath: string
   readonly mainEntryPointFilePath: string
   readonly additionalEntryPoints?: readonly string[]
@@ -72,21 +72,27 @@ export const collectAnalysisFiles = (filePaths: readonly string[]): readonly str
   Arr.dedupeWith(filePaths, (left, right) => left.toUpperCase() === right.toUpperCase()).filter(isDeclarationFile)
 
 /** The inputs a program compiles: the tsconfig's file names plus the run's entry points. */
-export const analysisInputs = (
+export const analysisInputs = dual<
+  (tsconfigFileNames: readonly string[]) => (options: CompilerStateOptions) => readonly string[],
+  (options: CompilerStateOptions, tsconfigFileNames: readonly string[]) => readonly string[]
+>(2, (
   options: CompilerStateOptions,
   tsconfigFileNames: readonly string[],
 ): readonly string[] => [
   ...tsconfigFileNames,
   options.mainEntryPointFilePath,
   ...(options.additionalEntryPoints ?? []),
-]
+])
 
 /**
  * The compiler options the program runs with: the tsconfig's options without the output
  * settings this engine never emits through, and `skipLibCheck` forced on when the run asks for
  * it and the tsconfig did not already ask.
  */
-export const shapeCompilerOptions = (
+export const shapeCompilerOptions = dual<
+  (skipLibCheck: boolean | undefined) => (options: Ts.CompilerOptions) => Ts.CompilerOptions,
+  (options: Ts.CompilerOptions, skipLibCheck: boolean | undefined) => Ts.CompilerOptions
+>(2, (
   options: Ts.CompilerOptions,
   skipLibCheck: boolean | undefined,
 ): Ts.CompilerOptions => {
@@ -96,10 +102,9 @@ export const shapeCompilerOptions = (
     Match.when(false, () => cleaned),
     Match.exhaustive,
   )
-}
+})
 
 const compilerLoadOptionsOf = (options: CompilerStateOptions): CompilerLoadOptions => ({
-  projectFolder: options.projectFolder,
   typescriptCompilerFolder: options.typescriptCompilerFolder,
 })
 
@@ -116,7 +121,15 @@ const compilerHostOptionsOf = (
  * and the program over the analysis files. Pure sequencing over the compiler port — every sys
  * call behind it lives in the driver that provides the port.
  */
-export const loadCompilerState = (
+export const loadCompilerState = dual<
+  (
+    options: CompilerStateOptions,
+  ) => (compiler: TypeScriptCompiler) => Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError>,
+  (
+    compiler: TypeScriptCompiler,
+    options: CompilerStateOptions,
+  ) => Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError>
+>(2, (
   compiler: TypeScriptCompiler,
   options: CompilerStateOptions,
 ): Effect.Effect<CompilerState, TsConfigReadError | TsCompilerLoadError> =>
@@ -133,4 +146,4 @@ export const loadCompilerState = (
       typeChecker: program.getTypeChecker(),
       entryPoints: analysisFiles,
     }
-  })
+  }))

@@ -1,6 +1,7 @@
 import * as tsdoc from '@microsoft/tsdoc'
 import { Chunk, HashMap, HashSet, Option } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as ts from 'typescript'
@@ -368,7 +369,17 @@ const resolveRootMember = (
     Match.exhaustive,
   )
 
-export const resolveDeclarationReference = (
+export const resolveDeclarationReference = dual<
+  (
+    context: ReferenceResolutionContext,
+    declarationReference: tsdoc.DocDeclarationReference,
+  ) => (graph: AnalysisGraph) => Result.Result<AstDeclaration, string>,
+  (
+    graph: AnalysisGraph,
+    context: ReferenceResolutionContext,
+    declarationReference: tsdoc.DocDeclarationReference,
+  ) => Result.Result<AstDeclaration, string>
+>(3, (
   graph: AnalysisGraph,
   context: ReferenceResolutionContext,
   declarationReference: tsdoc.DocDeclarationReference,
@@ -386,4 +397,4 @@ export const resolveDeclarationReference = (
         Match.exhaustive,
       )),
     Match.exhaustive,
-  )
+  ))

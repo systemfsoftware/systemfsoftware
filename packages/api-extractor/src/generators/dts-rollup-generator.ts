@@ -1,5 +1,6 @@
 import { Chunk, HashMap, HashSet, Option, Result } from 'effect'
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as ts from 'typescript'
 
@@ -73,7 +74,7 @@ const classifyNamespaceMember = (
         onNone: () =>
           internalInvariantOf('Missing AstImport for an AstImportRef'),
         onSome: (astImport) =>
-          Match.value(isNamespaceImportKind(astImport)).pipe(
+          Match.value(astImport.pipe(isNamespaceImportKind)).pipe(
             Match.when(true, (): Result.Result<NamespaceMemberKind, RenderFailure> =>
               Result.succeed('namespace')),
             Match.when(false, (): Result.Result<NamespaceMemberKind, RenderFailure> =>
@@ -821,7 +822,10 @@ export interface RenderedDtsRollup {
   readonly log: MessageLog
 }
 
-export const generateTypingsFileContent = (
+export const generateTypingsFileContent = dual<
+  (dtsKind: DtsRollupKind) => (snapshot: Snapshot.AnalysisSnapshot) => Result.Result<RenderedDtsRollup, RenderFailure>,
+  (snapshot: Snapshot.AnalysisSnapshot, dtsKind: DtsRollupKind) => Result.Result<RenderedDtsRollup, RenderFailure>
+>(2, (
   snapshot: Snapshot.AnalysisSnapshot,
   dtsKind: DtsRollupKind,
 ): Result.Result<RenderedDtsRollup, RenderFailure> => {
@@ -865,4 +869,4 @@ export const generateTypingsFileContent = (
       log: Snapshot.messageLog(state.snapshot),
     }),
   )
-}
+})

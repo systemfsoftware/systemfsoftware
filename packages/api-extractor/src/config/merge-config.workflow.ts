@@ -30,7 +30,8 @@ export class ConfigReplaced extends Schema.TaggedClass<ConfigReplaced>()('Config
   readonly [MergeConfigTypeId] = MergeConfigTypeId
 }
 
-export type MergeConfigDecision = ConfigMerged | ConfigReplaced
+export const MergeConfigDecision = Schema.Union([ConfigMerged, ConfigReplaced])
+export type MergeConfigDecision = typeof MergeConfigDecision.Type
 
 export class MergeConfig extends Schema.TaggedClass<MergeConfig>()('MergeConfig', {
   base: Schema.Record(Schema.String, Schema.Json),
@@ -93,7 +94,9 @@ const decideMerge = (command: MergeConfig): MergeConfigDecision =>
     Match.exhaustive,
   )
 
-export const mergeConfig = Workflow.total(
-  MergeConfig,
-  (command: MergeConfig): Result.Result<MergeConfigDecision, never> => Result.succeed(decideMerge(command)),
-)
+export const mergeConfig = Workflow.make({
+  command: MergeConfig,
+  decision: MergeConfigDecision,
+  error: Schema.Never,
+  decide: (command: MergeConfig): Result.Result<MergeConfigDecision, never> => Result.succeed(decideMerge(command)),
+})

@@ -26,6 +26,6 @@ const admitsSearch = (search: ConfigSearch, decision: ConfigLocationDecision): b
 
 it.prop(
   '∀s_ConfigLocation_≡FoundPath',
-  [ConfigSearch],
-  ([search]) => admitsSearch(search, Result.merge(resolveConfigLocation(search))),
+  { of: [ConfigSearch], subject: resolveConfigLocation },
+  (subject, [search]) => admitsSearch(search, subject(search).pipe(Result.merge)),
 )

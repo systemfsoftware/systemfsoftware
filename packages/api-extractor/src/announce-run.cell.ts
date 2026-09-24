@@ -5,17 +5,22 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
-import * as Result from 'effect/Result'
 
 import { admits, formatConsoleLine } from './collector/message-router.js'
 import type { LogLevel } from './collector/message-router.schema.js'
-import { AnnounceRun, resolveVerbosity, type VerbosityDecision } from './collector/resolve-verbosity.workflow.js'
+import {
+  AnnounceRun,
+  resolveVerbosity,
+  VerbosityDiagnostics,
+  VerbosityNormal,
+  VerbositySilent,
+  VerbosityVerbose,
+} from './collector/resolve-verbosity.workflow.js'
 import type { Verbosity } from './collector/verbosity.schema.js'
 import {
   type ConfigReadError,
   decodeExtractorConfig,
   decodeJsonRecord,
-  type ExtractorConfig,
   type MutableJsonRecord,
   type RawConfigLink,
   type RawConfigRead,
@@ -25,6 +30,7 @@ import {
 import { filePresent, searchUpwards } from './config/folder-walk.js'
 import { CircularConfigExtendsError, ConfigFileNotFound, ConfigJsonSyntaxError } from './errors/config.schema.js'
 import type { ExtractorError } from './errors/index.js'
+import { InternalInvariantError } from './errors/internal-invariant.schema.js'
 import type { ExtractionRequest, ExtractorRunInput } from './extraction-request.js'
 import { MessageWriter } from './message-writer.service.js'
 import { extractorVersion } from './version.js'
@@ -35,15 +41,6 @@ const PACKAGE_FILE_NAME = 'package.json'
 const bannerText = (version: string): string => `api-extractor ${version} - https://api-extractor.com/`
 
 const configPathText = (configFilePath: string): string => `Using configuration from ${configFilePath}`
-
-const verbosityOf = (outcome: Result.Result<VerbosityDecision, never>): Verbosity =>
-  Match.value(Result.merge(outcome)).pipe(
-    Match.tag('VerbosityDiagnostics', (): Verbosity => 'diagnostics'),
-    Match.tag('VerbosityVerbose', (): Verbosity => 'verbose'),
-    Match.tag('VerbositySilent', (): Verbosity => 'silent'),
-    Match.tag('VerbosityNormal', (): Verbosity => 'normal'),
-    Match.exhaustive,
-  )
 
 const emitAdmitted = (
   writer: MessageWriter,
@@ -164,15 +161,18 @@ const readChain = (
   })
 
 /**
- * What the read phase hands on. The Sandwich gives `write` the read snapshot and the encode
- * output only, and both the verbosity command and the request the extraction cell consumes
- * carry the configuration — so the snapshot carries it, decoded here by the pure decoder in
- * `config/extractor-config.js` and nowhere else.
+ * What the read phase hands on: the encoded `AnnounceRun` command the library decodes for the
+ * decision. The command carries the configuration and the run options, so a write handler reads
+ * the request it builds straight off it, and no separate decode step is needed.
  */
-interface AnnounceRead {
-  readonly input: ExtractorRunInput
-  readonly config: ExtractorConfig
-}
+type AnnounceRead = (typeof AnnounceRun)['Encoded']
+
+/** The encoded verbosity verdicts a write handler receives; the library encodes the decision before dispatch. */
+type VerbosityVerdict =
+  | (typeof VerbosityDiagnostics)['Encoded']
+  | (typeof VerbosityVerbose)['Encoded']
+  | (typeof VerbositySilent)['Encoded']
+  | (typeof VerbosityNormal)['Encoded']
 
 const readAnnouncement = (
   input: ExtractorRunInput,
@@ -180,35 +180,37 @@ const readAnnouncement = (
   Effect.gen(function*() {
     const read = yield* readChain(input)
     const config = yield* Effect.fromResult(decodeExtractorConfig(read))
-    return { input, config }
+    return {
+      _tag: 'AnnounceRun',
+      cliFlags: input.options.cliFlags ?? {},
+      configQuiet: config.quiet,
+      config,
+      options: input.options,
+    }
   })
 
-const decodeAnnouncement = Sandwich.pure(
-  (read: AnnounceRead): Result.Result<AnnounceRun, ExtractorError> =>
-    Result.succeed(
-      new AnnounceRun({
-        cliFlags: read.input.options.cliFlags ?? {},
-        configQuiet: read.config.quiet,
-        config: read.config,
-        options: read.input.options,
-      }),
-    ),
-)
-
-const writeAnnouncement = (
-  outcome: Result.Result<VerbosityDecision, never>,
-  read: AnnounceRead,
-): Effect.Effect<ExtractionRequest, PlatformError, MessageWriter> =>
+/** One write handler per verbosity verdict: emit the admitted banner lines, then hand on the request. */
+const announceWith = (
+  verbosity: Verbosity,
+): (
+  verdict: VerbosityVerdict,
+  command: AnnounceRead,
+) => Effect.Effect<ExtractionRequest, PlatformError, MessageWriter> =>
+(_verdict, command) =>
   Effect.gen(function*() {
     const writer = yield* MessageWriter
-    const verbosity = verbosityOf(outcome)
     yield* emitAdmitted(writer, verbosity, 'info', bannerText(extractorVersion))
-    yield* emitAdmitted(writer, verbosity, 'info', configPathText(read.config.configFilePath))
-    return { config: read.config, options: read.input.options, verbosity }
+    yield* emitAdmitted(writer, verbosity, 'info', configPathText(command.config.configFilePath))
+    return { config: command.config, options: command.options, verbosity }
   })
 
 export const announceRun = Sandwich.named('api_extractor.announce_run')(readAnnouncement)
-  .decode(decodeAnnouncement)
   .decide(resolveVerbosity)
-  .encode(Sandwich.pure(Result.succeed))
-  .write(writeAnnouncement)
+  .write({
+    VerbosityDiagnostics: announceWith('diagnostics'),
+    VerbosityVerbose: announceWith('verbose'),
+    VerbositySilent: announceWith('silent'),
+    VerbosityNormal: announceWith('normal'),
+    CommandRejected: (rejected) =>
+      Effect.die(new InternalInvariantError({ message: 'The announce command failed to decode', cause: rejected })),
+  })

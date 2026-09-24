@@ -33,6 +33,6 @@ const precedenceModel = (command: AnnounceRun): Verbosity =>
 
 it.prop(
   '∀cmd_ResolveVerbosity_≡PrecedenceModel',
-  [AnnounceRun],
-  ([command]) => tagOfDecision(Result.merge(resolveVerbosity(command))) === precedenceModel(command),
+  { of: [AnnounceRun], subject: resolveVerbosity },
+  (subject, [command]) => tagOfDecision(subject(command).pipe(Result.merge)) === precedenceModel(command),
 )

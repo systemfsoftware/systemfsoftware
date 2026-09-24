@@ -44,14 +44,6 @@ interface RequireFrom {
   resolve: (specifier: string) => string
 }
 
-/**
- * Resolves TypeScript from the package under analysis, mirroring upstream: the engine must
- * analyze with the consumer's own compiler (whose standard library — and therefore
- * global-name set — matches the one that generated the package's committed reports), not with
- * whatever copy the engine itself shipped with.
- */
-const consumerEntryCandidates = ['typescript/lib/typescript.js', 'typescript'] as const
-
 const folderEntryCandidates = ['.'] as const
 
 const requireFrom = (packageJsonPath: string): RequireFrom =>
@@ -82,19 +74,27 @@ const compilerOf = (
   modulePath: string,
 ): Effect.Effect<typeof Ts, TsCompilerLoadError> => Effect.fromOption(found, () => refusal(modulePath))
 
-const loadCompilerFromFolder = (folderPackageJsonPath: string): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+/**
+ * A `typescriptCompilerFolder` is validated but never adopted: the program must be compiled with
+ * the engine's own compiler, because the analyzer walks the statically imported `typescript` and
+ * node and symbol ids do not carry across two compiler module instances. The folder's only
+ * remaining effect is its standard library location, which `makeHost` applies to the host.
+ */
+const assertCompilerFolder = (folderPackageJsonPath: string): Effect.Effect<void, TsCompilerLoadError> =>
   Effect.flatMap(
     Effect.sync(() => firstCompiler(requireFrom(folderPackageJsonPath), folderEntryCandidates)),
     (found) =>
-      compilerOf(found, (modulePath) => {
-        return new TsCompilerLoadError({
-          modulePath,
-          message: 'No usable TypeScript compiler package found in this folder',
-        })
-      }, folderPackageJsonPath),
+      Effect.asVoid(
+        compilerOf(found, (modulePath) => {
+          return new TsCompilerLoadError({
+            modulePath,
+            message: 'No usable TypeScript compiler package found in this folder',
+          })
+        }, folderPackageJsonPath),
+      ),
   )
 
-const loadEngineBundledFallback = (): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
+const loadEngineCompiler = (): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
   Effect.flatMap(
     Effect.tryPromise({
       // The compiler loads lazily so importing this driver stays free of it until a run needs it.
@@ -115,22 +115,6 @@ const loadEngineBundledFallback = (): Effect.Effect<typeof Ts, TsCompilerLoadErr
             message: 'The loaded module does not expose the TypeScript compiler API',
           }),
       ),
-  )
-
-const bundledCompilerRefusal = (): TsCompilerLoadError =>
-  new TsCompilerLoadError({
-    modulePath: 'typescript',
-    message: 'Unable to load the TypeScript compiler',
-  })
-
-const loadCompilerFromConsumer = (consumerPackageJsonPath: string): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
-  Effect.flatMap(
-    Effect.sync(() => firstCompiler(requireFrom(consumerPackageJsonPath), consumerEntryCandidates)),
-    (found) =>
-      Effect.matchEffect(Effect.fromOption(found, bundledCompilerRefusal), {
-        onFailure: () => loadEngineBundledFallback(),
-        onSuccess: Effect.succeed,
-      }),
   )
 
 const diagnosticText = (typescript: typeof Ts, diagnostic: Ts.Diagnostic): string =>
@@ -212,8 +196,9 @@ export const layer: Layer.Layer<TypeScriptCompiler> = Layer.provide(
       const path = yield* Path.Path
       const loadCompiler = (options: CompilerLoadOptions): Effect.Effect<typeof Ts, TsCompilerLoadError> =>
         Option.match(Option.fromNullishOr(options.typescriptCompilerFolder), {
-          onNone: () => loadCompilerFromConsumer(path.join(options.projectFolder, 'package.json')),
-          onSome: (folder) => loadCompilerFromFolder(path.join(folder, 'package.json')),
+          onNone: () => loadEngineCompiler(),
+          onSome: (folder) =>
+            Effect.flatMap(assertCompilerFolder(path.join(folder, 'package.json')), () => loadEngineCompiler()),
         })
       const readTsconfig = (
         typescript: typeof Ts,

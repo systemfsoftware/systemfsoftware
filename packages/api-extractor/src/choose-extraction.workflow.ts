@@ -115,7 +115,8 @@ export class ExtractionFailed extends Schema.TaggedClass<ExtractionFailed>()('Ex
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export type ExtractionDecision = ExtractionPassed | ExtractionFailed
+export const ExtractionDecision = Schema.Union([ExtractionPassed, ExtractionFailed])
+export type ExtractionDecision = typeof ExtractionDecision.Type
 
 const outcomeIdentity = (evidence: ReportEvidence) => ({
   variant: evidence.variant,
@@ -212,9 +213,11 @@ const passes = (command: DecideExtraction, errorCount: number, warningCount: num
     Match.exhaustive,
   )
 
-export const chooseExtraction = Workflow.total(
-  DecideExtraction,
-  (command): Result.Result<ExtractionDecision, never> => {
+export const chooseExtraction = Workflow.make({
+  command: DecideExtraction,
+  decision: ExtractionDecision,
+  error: Schema.Never,
+  decide: (command: DecideExtraction): Result.Result<ExtractionDecision, never> => {
     const outcomes = Arr.map(command.reports, (evidence) => outcomeOf(evidence, command.localBuild))
     const errorCount = errorCountOf(command, outcomes)
     const warningCount = warningCountOf(command, outcomes)
@@ -226,4 +229,4 @@ export const chooseExtraction = Workflow.total(
       ),
     )
   },
-)
+})

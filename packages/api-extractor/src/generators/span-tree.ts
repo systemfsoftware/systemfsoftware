@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import { dual } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -139,17 +140,35 @@ export const preordered = (tree: SpanTree): ReadonlyArray<SpanTree> => [tree, ..
 export const index = (tree: SpanTree): HashMap.HashMap<NodeId, SpanTree> =>
   Arr.reduce(preordered(tree), HashMap.empty<NodeId, SpanTree>(), (ids, span) => HashMap.set(ids, span.id, span))
 
-export const parentOf = (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>): Option.Option<SpanTree> =>
-  Option.flatMap(tree.parentId, (parentId) => HashMap.get(ids, parentId))
+export const parentOf = dual<
+  (ids: HashMap.HashMap<NodeId, SpanTree>) => (tree: SpanTree) => Option.Option<SpanTree>,
+  (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>) => Option.Option<SpanTree>
+>(
+  2,
+  (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>): Option.Option<SpanTree> =>
+    Option.flatMap(tree.parentId, (parentId) => HashMap.get(ids, parentId)),
+)
 
-export const nextSiblingOf = (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>): Option.Option<SpanTree> =>
-  Option.flatMap(parentOf(tree, ids), (parent) =>
-    Option.flatMap(
-      Arr.findFirstIndex(parent.children, (child) => child.id === tree.id),
-      (position) => Arr.get(parent.children, position + 1),
-    ))
+export const nextSiblingOf = dual<
+  (ids: HashMap.HashMap<NodeId, SpanTree>) => (tree: SpanTree) => Option.Option<SpanTree>,
+  (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>) => Option.Option<SpanTree>
+>(
+  2,
+  (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>): Option.Option<SpanTree> =>
+    Option.flatMap(parentOf(tree, ids), (parent) =>
+      Option.flatMap(
+        Arr.findFirstIndex(parent.children, (child) => child.id === tree.id),
+        (position) => Arr.get(parent.children, position + 1),
+      )),
+)
 
-export const findFirstParent = (
+export const findFirstParent = dual<
+  (
+    ids: HashMap.HashMap<NodeId, SpanTree>,
+    guard: (node: ts.Node) => boolean,
+  ) => (tree: SpanTree) => Option.Option<SpanTree>,
+  (tree: SpanTree, ids: HashMap.HashMap<NodeId, SpanTree>, guard: (node: ts.Node) => boolean) => Option.Option<SpanTree>
+>(3, (
   tree: SpanTree,
   ids: HashMap.HashMap<NodeId, SpanTree>,
   guard: (node: ts.Node) => boolean,
@@ -162,4 +181,4 @@ export const findFirstParent = (
         onSome: (parent) => findFirstParent(parent, ids, guard),
       })),
     Match.exhaustive,
-  )
+  ))

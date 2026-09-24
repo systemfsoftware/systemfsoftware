@@ -59,7 +59,9 @@ export const runFlagsConfig = {
     Flag.withDefault(false),
   ),
   typescriptCompilerFolder: Flag.String('typescript-compiler-folder').pipe(
-    Flag.withDescription('Path to an alternate TypeScript compiler package to use'),
+    Flag.withDescription(
+      "Folder of an installed TypeScript package whose system typings (e.g. lib.dom.d.ts) replace the bundled compiler's; analysis still uses the bundled compiler",
+    ),
     Flag.optional,
   ),
 }

@@ -881,6 +881,7 @@ const detectAncillaryForSetter = (
               ExtractorMessageId.MissingGetter,
               'The property "'.concat(setterSymbol.localName, '" has a setter but no getter.'),
               setterId,
+              undefined,
             ))),
           Match.exhaustive,
         )
@@ -958,6 +959,7 @@ const preapprovedForContainer = (
           'The @preapproved tag cannot be applied to "'.concat(localName, '"') +
             ' without an @internal release tag',
           astDeclaration.astSymbolId,
+          undefined,
         ),
         (nextState) => resolveOf(nextState, draft),
       )),
@@ -980,6 +982,7 @@ const preapprovedUnsupported = (
         'The @preapproved tag cannot be applied to "'.concat(localName, '"') +
           ' because it is not a supported declaration type',
         astDeclaration.declarationId,
+        undefined,
       ),
       draft,
     ),
@@ -1035,6 +1038,7 @@ const scanModifiers = (
               ExtractorMessageId.ExtraReleaseTag,
               'The doc comment should not contain more than one release tag',
               astDeclaration.declarationId,
+              undefined,
             ),
           )),
         Match.when(false, () => Effect.succeed(state)),
@@ -1065,6 +1069,7 @@ const scanModifiers = (
 }
 
 const fetchApiItemMetadataInto = (
+  graph: AnalysisGraph,
   ref: AnalysisRef,
   parser: tsdoc.TSDocParser,
   state: CollectState,
@@ -1079,19 +1084,15 @@ const fetchApiItemMetadataInto = (
     Match.when(
       false,
       () =>
-        Effect.flatMap(
-          Ref.get(ref),
-          (graph) =>
-            Effect.flatMap(requireAstDeclaration(graph, declarationId), (astDeclaration) =>
-              Effect.flatMap(
-                fetchSymbolMetadataInto(ref, parser, state, astDeclaration.astSymbolId),
-                (nextState) =>
-                  Effect.map(requireApiItemMetadata(nextState, declarationId), (metadata) => {
-                    const found: readonly [CollectState, ApiItemMetadata] = [nextState, metadata]
-                    return found
-                  }),
-              )),
-        ),
+        Effect.flatMap(requireAstDeclaration(graph, declarationId), (astDeclaration) =>
+          Effect.flatMap(
+            fetchSymbolMetadataInto(ref, parser, state, astDeclaration.astSymbolId),
+            (nextState) =>
+              Effect.map(requireApiItemMetadata(nextState, declarationId), (metadata) => {
+                const found: readonly [CollectState, ApiItemMetadata] = [nextState, metadata]
+                return found
+              }),
+          )),
     ),
     Match.exhaustive,
   )
@@ -1134,6 +1135,7 @@ const missingReleaseTagGate = (
           '"'.concat(entityLocalName, '" is part of the package\'s API, but it is missing ') +
             'a release tag (@alpha, @beta, @public, or @internal)',
           astDeclaration.astSymbolId,
+          undefined,
         )),
       Match.exhaustive,
     )
@@ -1157,7 +1159,7 @@ const mainApiItemPhase = (
     })
     const effective: EffectiveRelease = yield* Option.match(astDeclaration.parentDeclarationId, {
       onSome: (parentDeclarationId) =>
-        Effect.map(fetchApiItemMetadataInto(ref, parser, scanned.state, parentDeclarationId), (fetched) => {
+        Effect.map(fetchApiItemMetadataInto(graph, ref, parser, scanned.state, parentDeclarationId), (fetched) => {
           const effectiveReleaseTag = Match.value(scanned.draft.declaredReleaseTag === ReleaseTag.None).pipe(
             Match.when(true, () => fetched[1].effectiveReleaseTag),
             Match.when(false, () => scanned.draft.declaredReleaseTag),
@@ -1250,6 +1252,7 @@ const ancillaryApiItemPhase = (
               'The doc comment for the property "'.concat(setterSymbolLocalName, '"') +
                 ' must appear on the getter, not the setter.',
               astDeclaration.declarationId,
+              undefined,
             )
           }),
           Match.when(false, () => state),
@@ -1496,7 +1499,7 @@ const nonExternalSourceFilesOf = (
       Option.match(HashMap.get(graph.modules, moduleSymbolId), {
         onNone: () => accumulated,
         onSome: (astModule) =>
-          Match.value(isExternalModule(astModule)).pipe(
+          Match.value(astModule.pipe(isExternalModule)).pipe(
             Match.when(true, () => accumulated),
             Match.when(false, () =>
               Option.match(HashMap.get(graph.declarationValues, astModule.sourceFileId), {
