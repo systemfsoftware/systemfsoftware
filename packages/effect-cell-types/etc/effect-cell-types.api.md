@@ -10,6 +10,16 @@ export namespace Cell {
 }
 
 // @public (undocumented)
+export namespace Handle {
+    export { Definition$1 as Definition, Handle, Of$1 as Of, make$2 as make };
+}
+
+// @public (undocumented)
+export namespace Resource {
+    export { ArgumentsOf, Combinator, Definition, Dual, Of, Projection, Resource, make$1 as make };
+}
+
+// @public (undocumented)
 export namespace Sandwich {
     export { Cell, CommandRejected, DEFAULT_DURATION_BOUNDARIES, DecidedChain, ExcessHandlers, HandlerForNoVariant, HandlerRecord, Handlers, NamedCellOptions, Phases, ReadChain, ReadNotEncoded, ValidOperationName, WrittenCell, WrittenFrom, named };
 }

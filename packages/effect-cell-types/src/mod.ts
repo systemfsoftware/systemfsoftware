@@ -1,3 +1,5 @@
 export * as Cell from './Cell.js'
+export * as Handle from './Handle.js'
+export * as Resource from './Resource.js'
 export * as Sandwich from './Sandwich.js'
 export * as Workflow from './Workflow.js'
