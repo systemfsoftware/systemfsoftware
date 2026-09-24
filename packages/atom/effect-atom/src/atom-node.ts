@@ -6,7 +6,7 @@ import * as Pipeable from 'effect/Pipeable'
 import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
 import * as Result from './async-result.js'
-import type * as Atom from './atom-modules.js'
+import type * as Atom from './atom.blueprint.js'
 import { decideNodeFate, type NodeLifetimeInput } from './internal/node-lifetime.js'
 import type { NodeFate } from './internal/node-lifetime.schema.js'
 import type { RegistryImpl } from './registry-engine.js'
@@ -171,12 +171,12 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
 
 function nodeLifetimeInput<A>(node: NodeImpl<A>): NodeLifetimeInput {
   return {
-    keepAlive: node.atom.keepAlive,
+    keepAlive: node.atom.spec.keepAlive,
     listenerCount: node.listeners.size,
     childCount: node.children.size,
     isLive: node.state !== 0,
     isWaiting: isWaitingForInitial(node._value),
-    idleTTL: node.atom.idleTTL,
+    idleTTL: node.atom.spec.idleTTL,
     defaultIdleTTL: node.registry.defaultIdleTTL,
   }
 }
@@ -430,7 +430,7 @@ function invalidateOutsideCollect<A>(node: NodeImpl<A>): void {
 }
 
 function shouldSkipLazyInvalidate<A>(node: NodeImpl<A>): boolean {
-  if (node.atom.lazy === false) {
+  if (node.atom.spec.lazy === false) {
     return false
   }
   return isIdleWithoutActiveChildren(node)
@@ -577,7 +577,7 @@ function childSignalsActive(
 }
 
 function childIsLive(child: AnyNode): boolean {
-  if (child.atom.lazy === false) {
+  if (child.atom.spec.lazy === false) {
     return true
   }
   return child.listeners.size > 0

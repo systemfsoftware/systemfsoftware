@@ -9,50 +9,65 @@
  *
  * @since 4.0.0
  */
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import { dual, type LazyArg } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import * as Pipeable from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as Result from './async-result.js'
 import type { Failure, Success } from './async-result.js'
-import type * as Atom from './atom-modules.js'
-import { engine, refusalLog, RegistryImpl, TypeId } from './registry-engine.js'
+import type * as Atom from './atom.blueprint.js'
+import { RegistryImpl } from './registry-engine.js'
 
-export { TypeId }
 export { Current } from './current-registry.service.js'
 
 type AnyValue<A = unknown> = A
 
 /**
- * Returns `true` when the value has the registry type id.
+ * The identity every registry handle carries.
  *
  * @since 4.0.0
  */
-export const isRegistry = (u: unknown): u is Registry => hasProperty(u, TypeId)
+export const TypeId: unique symbol = Symbol.for('~effect-atom/atom/Registry')
+
+/**
+ * @since 4.0.0
+ */
+export type TypeId = typeof TypeId
+
+const RegistryDef = Handle.make<Record<never, never>, RegistryImpl>()(TypeId)
 
 /**
  * A handle to a running registry.
  *
  * **Details**
  *
- * The handle is a pipeable record carrying only the registry type id; every
- * operation is a `dual` function in this module that forwards to the engine
- * behind the handle. One engine stores atom nodes, coordinates reads, writes,
- * refreshes, subscriptions, and disposal.
+ * The handle is a pipeable record minted by the registry kind; its data is
+ * empty and its private slot holds the engine. Every operation is a `dual`
+ * function in this module that forwards to the engine behind the handle. One
+ * engine stores atom nodes, coordinates reads, writes, refreshes,
+ * subscriptions, and disposal.
  *
  * @since 4.0.0
  */
-export interface Registry extends Pipeable.Pipeable {
-  readonly [TypeId]: TypeId
-  readonly [engine]: RegistryImpl
-}
+export type Registry = Handle.Handle<TypeId, Record<never, never>, RegistryImpl>
+
+/**
+ * Returns `true` when the value is a registry handle.
+ *
+ * @since 4.0.0
+ */
+export const isRegistry = RegistryDef.is
+
+const engineOf = (self: Registry): RegistryImpl => RegistryDef.slot(self)
+
+const mintRegistry = (engine: RegistryImpl): Registry => RegistryDef.make({}, engine)
 
 /**
  * A registry node for a single atom.
@@ -102,9 +117,10 @@ export const make = (
   options?: RegistryMakeOptions,
 ): Registry => {
   if (options === undefined) {
-    return new RegistryImpl().handle
+    return new RegistryImpl(mintRegistry).handle
   }
   return new RegistryImpl(
+    mintRegistry,
     options.initialValues,
     options.scheduleTask,
     options.timeoutResolution,
@@ -147,7 +163,7 @@ export const recordRefusal: {
   (refusal: PreloadRefused): (self: Registry) => void
   (self: Registry, refusal: PreloadRefused): void
 } = dual(2, (self: Registry, refusal: PreloadRefused): void => {
-  refusalLog(self).entries.push(refusal)
+  engineOf(self).refusals().entries.push(refusal)
 })
 
 /**
@@ -155,7 +171,10 @@ export const recordRefusal: {
  *
  * @since 4.0.0
  */
-export const refusals = (self: Registry): ReadonlyArray<PreloadRefused> => [...refusalLog(self).entries]
+export const refusals = (self: Registry): ReadonlyArray<PreloadRefused> => {
+  const engine = engineOf(self)
+  return [...engine.refusals().entries]
+}
 
 /**
  * Creates a layer that provides a registry for the given service tag,
@@ -195,7 +214,7 @@ export const layer: {
  *
  * @since 4.0.0
  */
-export const getNodes = (self: Registry): ReadonlyMap<Atom.Atom | string, Node> => self[engine].getNodes()
+export const getNodes = (self: Registry): ReadonlyMap<Atom.Atom | string, Node> => engineOf(self).getNodes()
 
 /**
  * Reads the current value of an atom.
@@ -207,7 +226,7 @@ export const get: {
   <A>(self: Registry, atom: Atom.Atom<A>): A
 } = dual(
   (args) => isRegistry(args[0]),
-  <A>(self: Registry, atom: Atom.Atom<A>): A => self[engine].get(atom),
+  <A>(self: Registry, atom: Atom.Atom<A>): A => engineOf(self).get(atom),
 )
 
 /**
@@ -220,7 +239,7 @@ export const getRaw: {
   <A>(self: Registry, atom: Atom.Atom<A>): Option.Option<A>
 } = dual(
   (args) => isRegistry(args[0]),
-  <A>(self: Registry, atom: Atom.Atom<A>): Option.Option<A> => self[engine].getRaw(atom),
+  <A>(self: Registry, atom: Atom.Atom<A>): Option.Option<A> => engineOf(self).getRaw(atom),
 )
 
 /**
@@ -233,7 +252,7 @@ export const set: {
   <R, W>(self: Registry, atom: Atom.Writable<R, W>, value: W): void
 } = dual(
   (args) => isRegistry(args[0]),
-  <R, W>(self: Registry, atom: Atom.Writable<R, W>, value: W): void => self[engine].set(atom, value),
+  <R, W>(self: Registry, atom: Atom.Writable<R, W>, value: W): void => engineOf(self).set(atom, value),
 )
 
 /**
@@ -247,7 +266,7 @@ export const setSerializable: {
   <T = unknown>(self: Registry, key: string, encoded: T): void
 } = dual(
   (args) => isRegistry(args[0]),
-  <T = unknown>(self: Registry, key: string, encoded: T): void => self[engine].setSerializable(key, encoded),
+  <T = unknown>(self: Registry, key: string, encoded: T): void => engineOf(self).setSerializable(key, encoded),
 )
 
 /**
@@ -260,7 +279,7 @@ export const setInitialValue: {
   <A>(self: Registry, atom: Atom.Atom<A>, value: A): void
 } = dual(
   (args) => isRegistry(args[0]),
-  <A>(self: Registry, atom: Atom.Atom<A>, value: A): void => self[engine].setInitialValue(atom, value),
+  <A>(self: Registry, atom: Atom.Atom<A>, value: A): void => engineOf(self).setInitialValue(atom, value),
 )
 
 /**
@@ -279,7 +298,7 @@ export const modify: {
     self: Registry,
     atom: Atom.Writable<R, W>,
     f: (_: R) => [returnValue: A, nextValue: W],
-  ): A => self[engine].modify(atom, f),
+  ): A => engineOf(self).modify(atom, f),
 )
 
 /**
@@ -292,7 +311,7 @@ export const update: {
   <R, W>(self: Registry, atom: Atom.Writable<R, W>, f: (_: R) => W): void
 } = dual(
   (args) => isRegistry(args[0]),
-  <R, W>(self: Registry, atom: Atom.Writable<R, W>, f: (_: R) => W): void => self[engine].update(atom, f),
+  <R, W>(self: Registry, atom: Atom.Writable<R, W>, f: (_: R) => W): void => engineOf(self).update(atom, f),
 )
 
 /**
@@ -305,7 +324,7 @@ export const refresh: {
   <A>(self: Registry, atom: Atom.Atom<A>): void
 } = dual(
   (args) => isRegistry(args[0]),
-  <A>(self: Registry, atom: Atom.Atom<A>): void => self[engine].refresh(atom),
+  <A>(self: Registry, atom: Atom.Atom<A>): void => engineOf(self).refresh(atom),
 )
 
 /**
@@ -327,7 +346,7 @@ export const subscribe: {
   (args) => isRegistry(args[0]),
   <A>(self: Registry, atom: Atom.Atom<A>, f: (_: A) => void, options?: {
     readonly immediate?: boolean
-  }): () => void => self[engine].subscribe(atom, f, options),
+  }): () => void => engineOf(self).subscribe(atom, f, options),
 )
 
 /**
@@ -341,7 +360,7 @@ export const scheduleTimer: {
   (self: Registry, f: () => void, delayMillis: number): () => void
 } = dual(
   (args) => isRegistry(args[0]),
-  (self: Registry, f: () => void, delayMillis: number): () => void => self[engine].scheduleTimer(f, delayMillis),
+  (self: Registry, f: () => void, delayMillis: number): () => void => engineOf(self).scheduleTimer(f, delayMillis),
 )
 
 /**
@@ -349,14 +368,14 @@ export const scheduleTimer: {
  *
  * @since 4.0.0
  */
-export const reset = (self: Registry): void => self[engine].reset()
+export const reset = (self: Registry): void => engineOf(self).reset()
 
 /**
  * Disposes the registry: pending work stops and further reads fail.
  *
  * @since 4.0.0
  */
-export const dispose = (self: Registry): void => self[engine].dispose()
+export const dispose = (self: Registry): void => engineOf(self).dispose()
 
 /**
  * Returns the value this registry stores under `key`, creating it with `make`
@@ -370,7 +389,7 @@ export const storage: {
   <I, A>(self: Registry, key: Context.Key<I, A>, make: LazyArg<A>): A
 } = dual(
   3,
-  <I, A>(self: Registry, key: Context.Key<I, A>, make: LazyArg<A>): A => self[engine].storageFor(key, make),
+  <I, A>(self: Registry, key: Context.Key<I, A>, make: LazyArg<A>): A => engineOf(self).storageFor(key, make),
 )
 
 // -----------------------------------------------------------------------------
@@ -400,7 +419,7 @@ export const toStream: {
           return Effect.die(new Error('Expected a current fiber when converting an atom to a stream'))
         }
         const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-        const cancel = self[engine].subscribe(atom, (value) => Queue.offerUnsafe(queue, value), {
+        const cancel = engineOf(self).subscribe(atom, (value) => Queue.offerUnsafe(queue, value), {
           immediate: true,
         })
         return Scope.addFinalizer(scope, Effect.sync(cancel))
@@ -496,7 +515,7 @@ function subscribeUntilSettled<A, E>(
   suspendOnWaiting: boolean,
   resume: (effect: Effect.Effect<A, E>) => void,
 ): Effect.Effect<void> {
-  const cancel = self[engine].subscribe(atom, (value) => {
+  const cancel = engineOf(self).subscribe(atom, (value) => {
     onSubscribedResult(value, suspendOnWaiting, resume, cancel)
   })
   return Effect.sync(cancel)
@@ -521,7 +540,7 @@ function getResultCallback<A, E>(
   suspendOnWaiting: boolean,
   resume: (effect: Effect.Effect<A, E>) => void,
 ): void | Effect.Effect<void> {
-  const result = self[engine].get(atom)
+  const result = engineOf(self).get(atom)
   if (Result.isInitial(result)) {
     return subscribeUntilSettled(self, atom, suspendOnWaiting, resume)
   }
@@ -572,7 +591,7 @@ export const mount: {
   2,
   <A>(self: Registry, atom: Atom.Atom<A>) =>
     Effect.acquireRelease(
-      Effect.sync(() => self[engine].mount(atom)),
+      Effect.sync(() => engineOf(self).mount(atom)),
       (release) => Effect.sync(release),
     ),
 )
@@ -593,6 +612,6 @@ export const batch: {
 } = dual(
   (args) => isRegistry(args[0]),
   (self: Registry, f: () => void): void => {
-    self[engine].batchOn(f)
+    engineOf(self).batchOn(f)
   },
 )

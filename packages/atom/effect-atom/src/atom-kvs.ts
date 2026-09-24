@@ -3,16 +3,17 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as KeyValueStore from 'effect/unstable/persistence/KeyValueStore'
 import * as AsyncResult from './async-result.js'
-import { writable } from './atom-core.resource.js'
+import type { AtomResultFn } from './atom-constructors.js'
 import {
   type Atom,
   type AtomContext,
-  type AtomResultFn,
   type AtomRuntime,
-  type Top,
   type Writable,
+  writable,
   type WriteContext,
-} from './atom.resource.js'
+} from './atom.blueprint.js'
+
+type Top<A = unknown> = A
 
 function readKvs<S extends Schema.ConstraintCodec<Top, Top>, Mode extends 'sync' | 'async'>(
   get: AtomContext,

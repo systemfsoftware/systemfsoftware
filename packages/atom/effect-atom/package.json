@@ -46,6 +46,9 @@
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local"
   },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^"
+  },
   "peerDependencies": {
     "effect": "catalog:peers"
   },

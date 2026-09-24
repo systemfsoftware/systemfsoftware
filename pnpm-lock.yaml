@@ -478,6 +478,10 @@ importers:
   omp/plugins/omp-typescript-discipline: {}
 
   packages/atom/effect-atom:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect-cell-types
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -581,6 +585,9 @@ importers:
       '@systemfsoftware/effect-atom':
         specifier: workspace:^
         version: link:../effect-atom
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect-cell-types
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'

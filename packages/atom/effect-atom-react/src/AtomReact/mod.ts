@@ -27,4 +27,4 @@ export {
   scheduleTask,
   useRegistry,
 } from '../registry-context.js'
-export { make, type ScopedAtom, TypeId } from '../scoped-atom.resource.js'
+export { make, type ScopedAtom, TypeId } from '../scoped-atom.blueprint.js'

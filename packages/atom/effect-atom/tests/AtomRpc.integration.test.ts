@@ -351,8 +351,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
               keptUser,
               registry,
               callsMade: () => callCount,
-              idleTTL: user.idleTTL,
-              keepAlive: keptUser.keepAlive,
+              idleTTL: user.spec.idleTTL,
+              keepAlive: keptUser.spec.keepAlive,
             }
           })),
         When('the user is read and the page is reloaded')('result', (s) =>

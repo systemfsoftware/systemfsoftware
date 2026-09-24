@@ -5,22 +5,30 @@ import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import type { NoInfer } from 'effect/Types'
 import * as AsyncResult from './async-result.js'
-import { isAtom, isWritable, readable, removeTtl, transform, type With, writable } from './atom-core.resource.js'
 import {
   type AnyAtom,
   type AnyResult,
-  type Atom,
-  type AtomContext,
   type AtomResultFn,
-  copyAtomWithProto,
   fn,
   type FnContext,
   state,
   type Top,
+} from './atom-constructors.js'
+import {
+  type Atom,
+  type AtomContext,
+  autoDispose,
+  isAtom,
+  isWritable,
+  readable,
+  setIdleTTL,
+  transform,
   type Type,
+  type With,
   type WithoutSerializable,
   type Writable,
-} from './atom.resource.js'
+  writable,
+} from './atom.blueprint.js'
 
 function familyUnsupported(): boolean {
   const flags = [
@@ -110,28 +118,13 @@ function copyWithFallback<R extends Atom<AnyResult>, A2, E2>(
 }
 
 function atomRefresh<A>(self: Atom<A>): (refresh: <B>(atom: Atom<B>) => void) => void {
-  if (self.refresh === undefined) {
+  const refresh = self.spec.refresh
+  if (refresh === undefined) {
     return function(refresh) {
       refresh(self)
     }
   }
-  return self.refresh
-}
-
-export function stackLabel(): string {
-  const stack = new Error().stack
-  if (stack === undefined) {
-    return ''
-  }
-  return stackLine(stack)
-}
-
-function stackLine(stack: string): string {
-  const line = stack.split('\n')[5]
-  if (line === undefined) {
-    return ''
-  }
-  return line
+  return refresh
 }
 
 function mapResultValue(
@@ -662,96 +655,6 @@ export const withFallback: {
 })
 
 /**
- * Allows a reactive value to be disposed of when it is not in use.
- *
- * **Details**
- *
- * Atoms have this behavior by default, so use this to undo `keepAlive` on a copied atom.
- *
- * @since 4.0.0
- */
-export const autoDispose = <A extends Atom<Top>>(self: A): A =>
-  copyAtomWithProto(self, {
-    keepAlive: false,
-  })
-
-/**
- * Sets whether an atom should be lazy.
- *
- * **Details**
- *
- * Lazy atoms defer recomputation while they have no active listeners or active
- * non-lazy dependents, rebuilding the next time their value is observed.
- *
- * @since 4.0.0
- */
-export const setLazy: {
-  (lazy: boolean): <A extends Atom<Top>>(self: A) => A
-  <A extends Atom<Top>>(self: A, lazy: boolean): A
-} = dual(2, <A extends Atom<Top>>(self: A, lazy: boolean) =>
-  copyAtomWithProto(self, {
-    lazy,
-  }))
-
-/**
- * Returns a copy of an atom that uses a custom equality function to detect
- * value changes.
- *
- * **Details**
- *
- * When an atom's value is rebuilt or written, the registry compares the new
- * value against the current one to decide whether dependents and listeners
- * should be notified. By default the comparison uses `Object.is`, so a
- * structurally equal but referentially distinct value still triggers
- * notifications. Providing an equality function lets the atom skip updates
- * when the new value is equal to the current one.
- *
- * **Example** (Comparing values structurally)
- *
- * ```ts
- * import { Atom } from "@systemfsoftware/effect-atom"
- *
- * const point = Atom.make({ x: 0, y: 0 }).pipe(
- *   Atom.withEquality<{ x: number; y: number }>((a, b) => a.x === b.x && a.y === b.y)
- * )
- * point.equals({ x: 1, y: 2 }, { x: 1, y: 2 }) // => true
- * ```
- *
- * @since 4.0.0
- */
-export const withEquality: {
-  <T extends Atom<Top>>(equals: (value: Type<T>, next: Type<T>) => boolean): (self: T) => T
-  <T extends Atom<Top>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T
-} = dual(
-  2,
-  <T extends Atom<Top>>(self: T, equals: (value: Type<T>, next: Type<T>) => boolean): T =>
-    copyAtomWithProto(self, {
-      equals,
-    }),
-)
-
-/**
- * Attaches a diagnostic label to an atom.
- *
- * **Details**
- *
- * The label is used for inspection and debugging metadata and does not change the
- * atom's read or write behavior.
- *
- * @since 4.0.0
- */
-export const withLabel: {
-  (name: string): <A extends Atom<Top>>(self: A) => A
-  <A extends Atom<Top>>(self: A, name: string): A
-} = dual<
-  (name: string) => <A extends Atom<Top>>(self: A) => A,
-  <A extends Atom<Top>>(self: A, name: string) => A
->(2, (self, name) =>
-  copyAtomWithProto(self, {
-    label: [name, stackLabel()],
-  }))
-
-/**
  * Pairs an atom with an initial value for registry initialization.
  *
  * **When to use**
@@ -978,9 +881,12 @@ const shouldRevalidateSWR = <A, E>(
  */
 export const optimistic = <A>(self: Atom<A>): Writable<A, Atom<AsyncResult.Result<A, Top>>> => {
   let counter = 0
-  const writeAtom = removeTtl(state<readonly [number, Atom<AsyncResult.Result<A, Top>> | undefined]>(
-    [counter, undefined] as const,
-  ))
+  const writeAtom = setIdleTTL(
+    state<readonly [number, Atom<AsyncResult.Result<A, Top>> | undefined]>(
+      [counter, undefined] as const,
+    ),
+    0,
+  )
   return writable(
     (get) => readOptimistic(get, self, writeAtom),
     (ctx, atom) => ctx.set(writeAtom, [++counter, atom]),
@@ -1029,6 +935,6 @@ export const optimisticFn: {
       | ((set: (result: NoInfer<W>) => void) => AtomResultFn<OW, XA, XE>)
   },
 ): AtomResultFn<OW, XA, XE> => {
-  const transition = removeTtl(AsyncResult.initial<W, Top>().pipe(state<AsyncResult.Result<W, Top>>))
+  const transition = setIdleTTL(AsyncResult.initial<W, Top>().pipe(state<AsyncResult.Result<W, Top>>), 0)
   return fn((arg: OW, get) => runOptimisticFn(self, options, transition, arg, get))
 })

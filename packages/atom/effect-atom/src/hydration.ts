@@ -21,12 +21,23 @@ import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 import * as AsyncResult from './async-result.js'
-import * as Atom from './atom-modules.js'
+import { isSerializable } from './atom.blueprint.js'
+import type * as Atom from './atom.blueprint.js'
 import { DehydratedAtomValue as DehydratedAtomValueSchema } from './dehydrated-atom.schema.js'
 import * as Registry from './registry.handle.js'
 
 type AnyAtom<A = unknown> = Atom.Atom<A>
 type AnyValue<A = unknown> = A
+
+const isEncodingCodec = (u: unknown): u is Schema.ConstraintEncoder<AnyValue> => Schema.isSchema(u)
+
+const encodingCodecOf = (serializer: Atom.SerializableSpec): Schema.ConstraintEncoder<AnyValue> | undefined => {
+  const codec = serializer.codecJson
+  if (isEncodingCodec(codec) === false) {
+    return undefined
+  }
+  return codec
+}
 
 /**
  * Marker interface for entries in a dehydrated atom registry state.
@@ -163,13 +174,13 @@ const dehydrateNode = (
   now: number,
   arr: DehydratedAtomValue[],
 ): void => {
-  if (!Atom.isSerializable(node.atom)) {
+  if (isSerializable(node.atom) === false) {
     return
   }
   dehydrateSerializable(
     registry,
     node.atom,
-    node.atom[Atom.SerializableTypeId],
+    node.atom.spec.serializable,
     node.value(),
     key,
     encodeInitialResultMode,
@@ -188,7 +199,7 @@ const shouldSkipInitial = (
   return isInitial
 }
 
-type Serializer = Atom.Serializable<Schema.Unknown>[typeof Atom.SerializableTypeId]
+type Serializer = Atom.SerializableSpec
 
 const dehydrateSerializable = (
   registry: Registry.Registry,
@@ -212,11 +223,24 @@ const encodeOrRefuse = (
   serializer: Serializer,
   value: AnyValue,
 ): Option.Option<AnyValue> => {
-  const exit = Schema.encodeUnknownExit(serializer.codecJson)(value)
+  const codec = encodingCodecOf(serializer)
+  if (codec === undefined) {
+    return Option.none()
+  }
+  return encodeWithCodec(registry, serializer.key, codec, value)
+}
+
+const encodeWithCodec = (
+  registry: Registry.Registry,
+  key: string,
+  codec: Schema.ConstraintEncoder<AnyValue>,
+  value: AnyValue,
+): Option.Option<AnyValue> => {
+  const exit = Schema.encodeUnknownExit(codec)(value)
   if (Exit.isSuccess(exit)) {
     return Option.some(exit.value)
   }
-  refuseEncode(registry, serializer.key, exit.cause)
+  refuseEncode(registry, key, exit.cause)
   return Option.none()
 }
 

@@ -1,28 +1,105 @@
 /**
  * React helpers for creating Atom instances that belong to one component
- * subtree. `make` returns a scoped atom with a provider, context, and `use`
- * accessor. Each provider creates its own Atom once, so different subtrees can
- * use the same scoped atom definition without sharing state.
+ * subtree. `make` returns a scoped atom — a cold blueprint whose targets are a
+ * provider, a context, and a `use` accessor. Each provider creates its own
+ * Atom once, so different subtrees can use the same scoped atom definition
+ * without sharing state.
  *
  * @since 4.0.0
  */
 'use client'
 
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import * as React from 'react'
 import { type AnyAtom } from './registry-context.js'
 
+type Top<A = unknown> = A
+
 /**
- * Type identifier for ScopedAtom, stored as the computed property key and
- * marker value on `ScopedAtom` objects.
+ * The identity every scoped atom carries.
  *
  * @since 4.0.0
  */
-export type TypeId = '~@effect/atom-react/ScopedAtom'
-
-export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
+export const TypeId: unique symbol = Symbol.for('~@effect/atom-react/ScopedAtom')
 
 /**
- * Scoped Atom interface with a provider-backed instance.
+ * @since 4.0.0
+ */
+export type TypeId = typeof TypeId
+
+/**
+ * The type index of a scoped atom: the atom it hands back through `use` and the
+ * input its factory accepts.
+ *
+ * @since 4.0.0
+ */
+export interface ScopedAtomIndex {
+  readonly Atom: Top
+  readonly Input: Top
+}
+
+type FieldOf<X, K extends keyof ScopedAtomIndex> = (X & ScopedAtomIndex)[K]
+
+/**
+ * The `use` accessor of a scoped atom: a hook returning the atom the nearest
+ * provider created.
+ *
+ * @since 4.0.0
+ */
+export interface ScopedAtomUse extends Blueprint.Target {
+  readonly target: () => FieldOf<this['Index'], 'Atom'>
+}
+
+type ProviderOf<X> = [FieldOf<X, 'Input'>] extends [never]
+  ? React.FC<{ readonly children?: React.ReactNode | undefined }>
+  : React.FC<{ readonly children?: React.ReactNode | undefined; readonly value: FieldOf<X, 'Input'> }>
+
+/**
+ * The provider component of a scoped atom, taking a `value` prop when the
+ * factory expects input.
+ *
+ * @since 4.0.0
+ */
+export interface ScopedAtomProvider extends Blueprint.Target {
+  readonly target: ProviderOf<this['Index']>
+}
+
+/**
+ * The React context a scoped atom's provider writes the created atom into.
+ *
+ * @since 4.0.0
+ */
+export interface ScopedAtomContext extends Blueprint.Target {
+  readonly target: React.Context<FieldOf<this['Index'], 'Atom'> | undefined>
+}
+
+/**
+ * The operations and targets every scoped atom carries.
+ *
+ * @since 4.0.0
+ */
+export interface ScopedAtomOps {
+  readonly use: ScopedAtomUse
+  readonly Provider: ScopedAtomProvider
+  readonly Context: ScopedAtomContext
+}
+
+/**
+ * The cold description one scoped atom carries. The provider and context are
+ * stored with their atom type erased; the `use`, `Provider`, and `Context`
+ * targets read them back typed by the scoped atom.
+ *
+ * @since 4.0.0
+ */
+export interface ScopedAtomSpec {
+  readonly factory: (() => AnyAtom) | ((input: never) => AnyAtom)
+  readonly use: () => AnyAtom
+  readonly Provider: Top
+  readonly Context: Top
+}
+
+/**
+ * Scoped Atom: a blueprint with a provider-backed instance.
  *
  * **Example** (Providing and reading a scoped atom)
  *
@@ -49,13 +126,19 @@ export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
  *
  * @since 4.0.0
  */
-export interface ScopedAtom<A extends AnyAtom, Input = never> {
-  readonly [TypeId]: TypeId
-  use(): A
-  Provider: [Input] extends [never] ? React.FC<{ readonly children?: React.ReactNode | undefined }>
-    : React.FC<{ readonly children?: React.ReactNode | undefined; readonly value: Input }>
-  Context: React.Context<A | undefined>
-}
+export type ScopedAtom<A extends AnyAtom, Input = never> = Blueprint.Blueprint<
+  TypeId,
+  ScopedAtomSpec,
+  ScopedAtomOps,
+  { readonly Atom: A; readonly Input: Input }
+>
+
+/**
+ * A scoped atom with its atom type and factory input erased.
+ *
+ * @since 4.0.0
+ */
+export type AnyScopedAtom = ScopedAtom<AnyAtom, Top>
 
 function hasNoParameters<A extends AnyAtom, Input>(
   factory: (() => A) | ((input: Input) => A),
@@ -82,6 +165,15 @@ function createScopedAtom<A extends AnyAtom, Input>(
   }
   return createScopedAtomFromInput(factory, value)
 }
+
+const ScopedAtoms = Blueprint.make<ScopedAtomSpec, ScopedAtomIndex>()(TypeId).operations<ScopedAtomOps>()({
+  operations: {},
+  targets: {
+    use: (self: AnyScopedAtom) => self.spec.use,
+    Provider: (self: AnyScopedAtom) => self.spec.Provider,
+    Context: (self: AnyScopedAtom) => self.spec.Context,
+  },
+})
 
 /**
  * Creates a ScopedAtom from a factory function.
@@ -145,17 +237,12 @@ export const make = <A extends AnyAtom, Input = never>(
   }
 
   const Provider: React.FC<{ readonly children?: React.ReactNode | undefined; readonly value?: Input }> = (props) => {
-    const atom = React.useRef<A | null>(null)
-    if (atom.current === null) {
+    const atom = React.useRef<A | undefined>(undefined)
+    if (atom.current === undefined) {
       atom.current = createScopedAtom(f, props.value)
     }
     return React.createElement(Context.Provider, { value: atom.current }, props.children)
   }
 
-  return {
-    [TypeId]: TypeId,
-    use,
-    Provider,
-    Context,
-  }
+  return ScopedAtoms.of<{ readonly Atom: A; readonly Input: Input }>({ factory: f, use, Provider, Context })
 }

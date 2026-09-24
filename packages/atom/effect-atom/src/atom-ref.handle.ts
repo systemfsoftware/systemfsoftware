@@ -9,52 +9,39 @@
  *
  * @since 4.0.0
  */
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import * as Equal from 'effect/Equal'
 import type { Equal as EqualType } from 'effect/Equal'
 import { dual } from 'effect/Function'
 import * as Hash from 'effect/Hash'
 import * as Pipeable from 'effect/Pipeable'
-import { hasProperty } from 'effect/Predicate'
 
-type AnyReadonlyRef<A = unknown> = ReadonlyRef<A>
+type Top<A = unknown> = A
 type AnyValue<A = unknown> = A
+
 /**
- * The literal type used to identify `AtomRef` values.
+ * The identity every ref handle carries.
  *
  * @since 4.0.0
  */
-export type TypeId = '~effect/reactivity/AtomRef'
+export const TypeId: unique symbol = Symbol.for('~effect/reactivity/AtomRef')
 
 /**
  * The runtime type id used to identify `AtomRef` values.
  *
  * @since 4.0.0
  */
-export const TypeId: TypeId = '~effect/reactivity/AtomRef'
+export type TypeId = typeof TypeId
 
 /**
- * Module-private slot holding the state behind a ref handle.
- */
-const engine: unique symbol = Symbol('~effect/reactivity/AtomRef/engine')
-
-/**
- * A read-only reactive reference.
- *
- * **Details**
- *
- * It is a minimal handle record: the type id, a stable identity key, and a
- * module-private slot holding the state behind it. The current value, the
- * subscriptions, and the derived views are reached through the `dual`
- * functions in this module, never through methods on the handle.
- *
- * Equality and hashing are based on the current value.
+ * The protocol data every ref handle carries: equality and hashing are decided
+ * by the current value of the ref.
  *
  * @since 4.0.0
  */
-export interface ReadonlyRef<A> extends EqualType, Pipeable.Pipeable {
-  readonly [TypeId]: TypeId
-  readonly [engine]: ReadonlyRefEngine<A>
-  readonly key: symbol
+export interface RefProtocol {
+  readonly [Equal.symbol]: (that: EqualType) => boolean
+  readonly [Hash.symbol]: () => number
 }
 
 /**
@@ -71,21 +58,6 @@ export interface ReadonlyRefEngine<A> {
 }
 
 /**
- * A mutable reactive reference.
- *
- * **Details**
- *
- * The whole value can be replaced, updated from the current value, and
- * mutable references to nested properties can be created. All of that is
- * reached through the `dual` functions in this module.
- *
- * @since 4.0.0
- */
-export interface AtomRef<A> extends ReadonlyRef<A> {
-  readonly [engine]: AtomRefEngine<A>
-}
-
-/**
  * The internal machinery behind a mutable ref handle.
  *
  * @since 4.0.0
@@ -94,20 +66,6 @@ export interface AtomRefEngine<A> extends ReadonlyRefEngine<A> {
   set(value: A): void
   update(f: (value: A) => A): void
   prop<K extends keyof A>(prop: K): AtomRef<A[K]>
-}
-
-/**
- * A reactive collection of mutable item references.
- *
- * **Details**
- *
- * Items can be added and removed and the raw item values can be listed. Every
- * collection operation is a `dual` function in this module.
- *
- * @since 4.0.0
- */
-export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
-  readonly [engine]: CollectionEngine<A>
 }
 
 /**
@@ -123,11 +81,119 @@ export interface CollectionEngine<A> extends ReadonlyRefEngine<readonly AtomRef<
 }
 
 /**
+ * The slot a read-only ref handle carries: its engine typed by the value the
+ * handle is indexed at.
+ *
+ * @since 4.0.0
+ */
+export interface ReadonlyRefSlot extends Handle.Indexed {
+  readonly slot: ReadonlyRefEngine<this['Index']>
+}
+
+/**
+ * The slot a mutable ref handle carries: its engine typed by the value the
+ * handle is indexed at.
+ *
+ * @since 4.0.0
+ */
+export interface AtomRefSlot extends Handle.Indexed {
+  readonly slot: AtomRefEngine<this['Index']>
+}
+
+/**
+ * The item type of the item-ref array a collection handle is indexed at.
+ */
+type ItemOf<X> = X extends readonly AtomRef<infer A>[] ? A : never
+
+/**
+ * The slot a collection handle carries: its engine typed by the item type of
+ * the item-ref array the handle is indexed at. A collection is indexed at the
+ * refs it carries, so it stays a `ReadonlyRef` of those refs.
+ *
+ * @since 4.0.0
+ */
+export interface CollectionSlot extends Handle.Indexed {
+  readonly slot: CollectionEngine<ItemOf<this['Index']>>
+}
+
+const Refs = Handle.make<RefProtocol, ReadonlyRefSlot, Top>()(TypeId)
+
+const MutableRefs = Handle.make<RefProtocol, AtomRefSlot, Top>()(TypeId)
+
+const Collections = Handle.make<RefProtocol, CollectionSlot, Top>()(TypeId)
+
+/**
+ * A read-only reactive reference.
+ *
+ * **Details**
+ *
+ * It is a handle value: the protocol record minted by the kind, carrying
+ * equality and hashing by the current value and a private slot holding the
+ * engine behind it. The current value, the subscriptions, and the derived views
+ * are reached through the `dual` functions in this module, never through methods
+ * on the handle. The handle value itself is the ref's identity.
+ *
+ * Equality and hashing are based on the current value.
+ *
+ * @since 4.0.0
+ */
+export type ReadonlyRef<A> = Handle.Handle<typeof TypeId, RefProtocol, ReadonlyRefSlot, A>
+
+/**
+ * A mutable reactive reference.
+ *
+ * **Details**
+ *
+ * The whole value can be replaced, updated from the current value, and
+ * mutable references to nested properties can be created. All of that is
+ * reached through the `dual` functions in this module.
+ *
+ * @since 4.0.0
+ */
+export type AtomRef<A> = Handle.Handle<typeof TypeId, RefProtocol, AtomRefSlot, A>
+
+/**
+ * A reactive collection of mutable item references.
+ *
+ * **Details**
+ *
+ * A collection is indexed at the item refs it carries, so it is a
+ * `ReadonlyRef` of those refs: reading or subscribing to it reports the current
+ * refs. Items can be added and removed and the raw item values can be listed.
+ * Every collection operation is a `dual` function in this module.
+ *
+ * @since 4.0.0
+ */
+export type Collection<A> = Handle.Handle<typeof TypeId, RefProtocol, CollectionSlot, readonly AtomRef<A>[]>
+
+/**
+ * Returns `true` when a value is a reactive reference.
+ *
+ * @since 4.0.0
+ */
+export const isReadonlyRef = Refs.is
+
+const refProtocol = <A>(self: ReadonlyRefEngine<A>): RefProtocol => ({
+  [Equal.symbol]: (that) => isReadonlyRef(that) && self.equals(that),
+  [Hash.symbol]: () => self.hash(),
+})
+
+const mintReadonlyRef = <A>(self: ReadonlyRefEngine<A>): ReadonlyRef<A> => Refs.make<A>(refProtocol(self), self)
+
+const mintAtomRef = <A>(self: AtomRefEngine<A>): AtomRef<A> => MutableRefs.make<A>(refProtocol(self), self)
+
+const mintCollection = <A>(self: CollectionEngine<A>): Collection<A> =>
+  Collections.make<readonly AtomRef<A>[]>(refProtocol(self), self)
+
+const collectionEngineOf = <A>(self: Collection<A>): CollectionEngine<A> =>
+  Collections.slot<readonly AtomRef<A>[]>(self)
+
+/**
  * Creates a mutable reactive reference initialized with the supplied value.
  *
  * @since 4.0.0
  */
-export const make = <A>(value: A): AtomRef<A> => new AtomRefEngineImpl(value).handle
+export const make = <A>(value: A): AtomRef<A> => mintAtomRef(new AtomRefEngineImpl(value))
 
 /**
  * Creates a reactive collection from an iterable of initial item values.
@@ -139,14 +205,14 @@ export const make = <A>(value: A): AtomRef<A> => new AtomRefEngineImpl(value).ha
  *
  * @since 4.0.0
  */
-export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items).handle
+export const collection = <A>(items: Iterable<A>): Collection<A> => mintCollection(new CollectionImpl(items))
 
 /**
  * Reads the current value of a reactive reference.
  *
  * @since 4.0.0
  */
-export const get = <A>(self: ReadonlyRef<A>): A => self[engine].value()
+export const get = <A>(self: ReadonlyRef<A>): A => Refs.slot<A>(self).value()
 
 /**
  * Replaces the whole value of a mutable reactive reference. Equal values leave
@@ -158,7 +224,7 @@ export const set: {
   <A>(value: A): (self: AtomRef<A>) => AtomRef<A>
   <A>(self: AtomRef<A>, value: A): AtomRef<A>
 } = dual(2, <A>(self: AtomRef<A>, value: A): AtomRef<A> => {
-  self[engine].set(value)
+  MutableRefs.slot<A>(self).set(value)
   return self
 })
 
@@ -172,7 +238,7 @@ export const update: {
   <A>(f: (value: A) => A): (self: AtomRef<A>) => AtomRef<A>
   <A>(self: AtomRef<A>, f: (value: A) => A): AtomRef<A>
 } = dual(2, <A>(self: AtomRef<A>, f: (value: A) => A): AtomRef<A> => {
-  self[engine].update(f)
+  MutableRefs.slot<A>(self).update(f)
   return self
 })
 
@@ -185,7 +251,7 @@ export const update: {
 export const subscribe: {
   <A>(f: (a: A) => void): (self: ReadonlyRef<A>) => () => void
   <A>(self: ReadonlyRef<A>, f: (a: A) => void): () => void
-} = dual(2, <A>(self: ReadonlyRef<A>, f: (a: A) => void): () => void => self[engine].subscribe(f))
+} = dual(2, <A>(self: ReadonlyRef<A>, f: (a: A) => void): () => void => Refs.slot<A>(self).subscribe(f))
 
 /**
  * Creates a read-only reactive reference derived from the current value.
@@ -195,7 +261,7 @@ export const subscribe: {
 export const map: {
   <A, B>(f: (a: A) => B): (self: ReadonlyRef<A>) => ReadonlyRef<B>
   <A, B>(self: ReadonlyRef<A>, f: (a: A) => B): ReadonlyRef<B>
-} = dual(2, <A, B>(self: ReadonlyRef<A>, f: (a: A) => B): ReadonlyRef<B> => self[engine].map(f))
+} = dual(2, <A, B>(self: ReadonlyRef<A>, f: (a: A) => B): ReadonlyRef<B> => Refs.slot<A>(self).map(f))
 
 /**
  * Creates a mutable reactive reference to one property of the current value.
@@ -205,7 +271,7 @@ export const map: {
 export const prop: {
   <A, K extends keyof A>(prop: K): (self: AtomRef<A>) => AtomRef<A[K]>
   <A, K extends keyof A>(self: AtomRef<A>, prop: K): AtomRef<A[K]>
-} = dual(2, <A, K extends keyof A>(self: AtomRef<A>, prop: K): AtomRef<A[K]> => self[engine].prop(prop))
+} = dual(2, <A, K extends keyof A>(self: AtomRef<A>, prop: K): AtomRef<A[K]> => MutableRefs.slot<A>(self).prop(prop))
 
 /**
  * Appends an item to the end of a reactive collection.
@@ -216,7 +282,7 @@ export const push: {
   <A>(item: A): (self: Collection<A>) => Collection<A>
   <A>(self: Collection<A>, item: A): Collection<A>
 } = dual(2, <A>(self: Collection<A>, item: A): Collection<A> => {
-  self[engine].push(item)
+  collectionEngineOf(self).push(item)
   return self
 })
 
@@ -229,7 +295,7 @@ export const insertAt: {
   <A>(index: number, item: A): (self: Collection<A>) => Collection<A>
   <A>(self: Collection<A>, index: number, item: A): Collection<A>
 } = dual(3, <A>(self: Collection<A>, index: number, item: A): Collection<A> => {
-  self[engine].insertAt(index, item)
+  collectionEngineOf(self).insertAt(index, item)
   return self
 })
 
@@ -243,7 +309,7 @@ export const remove: {
   <A>(ref: AtomRef<A>): (self: Collection<A>) => Collection<A>
   <A>(self: Collection<A>, ref: AtomRef<A>): Collection<A>
 } = dual(2, <A>(self: Collection<A>, ref: AtomRef<A>): Collection<A> => {
-  self[engine].remove(ref)
+  collectionEngineOf(self).remove(ref)
   return self
 })
 
@@ -252,22 +318,7 @@ export const remove: {
  *
  * @since 4.0.0
  */
-export const toArray = <A>(self: Collection<A>): A[] => self[engine].toArray()
-
-const isReadonlyRef = (u: unknown): u is AnyReadonlyRef => hasProperty(u, TypeId)
-
-/**
- * Builds the handle record of one ref engine: the type id, the module-private
- * slot, the identity key, piping, and value-based equality and hashing.
- */
-const refHandle = <A, E extends ReadonlyRefEngine<A>>(self: E): ReadonlyRef<A> & { readonly [engine]: E } => ({
-  [TypeId]: TypeId,
-  [engine]: self,
-  key: Symbol(TypeId),
-  ...Pipeable.Prototype,
-  [Equal.symbol]: (that: EqualType): boolean => isReadonlyRef(that) && self.equals(that),
-  [Hash.symbol]: (): number => self.hash(),
-})
+export const toArray = <A>(self: Collection<A>): A[] => collectionEngineOf(self).toArray()
 
 const isArrayWithProp = <A, K extends keyof A>(value: A, _prop: K): value is A & Array<A[K]> => Array.isArray(value)
 
@@ -360,12 +411,10 @@ const unlinkListener = <A>(self: Listeners<A>, listener: Listener<A>): void => {
 class ValueRefEngine<A> extends Pipeable.Class implements ReadonlyRefEngine<A>, Listeners<A> {
   current: A
   listeners: Listener<A> | null = null
-  readonly handle: ReadonlyRef<A>
 
   constructor(value: A) {
     super()
     this.current = value
-    this.handle = refHandle(this)
   }
 
   value(): A {
@@ -373,7 +422,7 @@ class ValueRefEngine<A> extends Pipeable.Class implements ReadonlyRefEngine<A>, 
   }
 
   equals(that: EqualType): boolean {
-    return isReadonlyRef(that) && Equal.equals(this.current, that[engine].value())
+    return isReadonlyRef(that) && Equal.equals(this.current, Refs.slot(that).value())
   }
 
   hash(): number {
@@ -403,18 +452,11 @@ class ValueRefEngine<A> extends Pipeable.Class implements ReadonlyRefEngine<A>, 
   }
 
   map<B>(f: (a: A) => B): ReadonlyRef<B> {
-    return new MapRefEngine(this, f).handle
+    return mintReadonlyRef(new MapRefEngine(this, f))
   }
 }
 
 class AtomRefEngineImpl<A> extends ValueRefEngine<A> implements AtomRefEngine<A> {
-  override readonly handle: AtomRef<A>
-
-  constructor(value: A) {
-    super(value)
-    this.handle = refHandle(this)
-  }
-
   set(value: A) {
     if (Equal.equals(value, this.current)) {
       return
@@ -428,12 +470,11 @@ class AtomRefEngineImpl<A> extends ValueRefEngine<A> implements AtomRefEngine<A>
   }
 
   prop<K extends keyof A>(prop: K): AtomRef<A[K]> {
-    return new PropRefEngine(this, prop).handle
+    return mintAtomRef(new PropRefEngine(this, prop))
   }
 }
 
 class MapRefEngine<A, B> extends Pipeable.Class implements ReadonlyRefEngine<B> {
-  readonly handle: ReadonlyRef<B>
   readonly parent: ReadonlyRefEngine<A>
   readonly transform: (a: A) => B
 
@@ -441,7 +482,6 @@ class MapRefEngine<A, B> extends Pipeable.Class implements ReadonlyRefEngine<B> 
     super()
     this.parent = parent
     this.transform = transform
-    this.handle = refHandle(this)
   }
 
   value(): B {
@@ -449,7 +489,7 @@ class MapRefEngine<A, B> extends Pipeable.Class implements ReadonlyRefEngine<B> 
   }
 
   equals(that: EqualType): boolean {
-    return isReadonlyRef(that) && Equal.equals(this.value(), that[engine].value())
+    return isReadonlyRef(that) && Equal.equals(this.value(), Refs.slot(that).value())
   }
 
   hash(): number {
@@ -469,12 +509,11 @@ class MapRefEngine<A, B> extends Pipeable.Class implements ReadonlyRefEngine<B> 
   }
 
   map<C>(f: (a: B) => C): ReadonlyRef<C> {
-    return new MapRefEngine(this, f).handle
+    return mintReadonlyRef(new MapRefEngine(this, f))
   }
 }
 
 class PropRefEngine<A, K extends keyof A> extends Pipeable.Class implements AtomRefEngine<A[K]> {
-  readonly handle: AtomRef<A[K]>
   private previous: A[K]
   readonly parent: AtomRefEngine<A>
   readonly _prop: K
@@ -484,11 +523,10 @@ class PropRefEngine<A, K extends keyof A> extends Pipeable.Class implements Atom
     this.parent = parent
     this._prop = _prop
     this.previous = parent.value()[_prop]
-    this.handle = refHandle(this)
   }
 
   equals(that: EqualType): boolean {
-    return isReadonlyRef(that) && Equal.equals(this.value(), that[engine].value())
+    return isReadonlyRef(that) && Equal.equals(this.value(), Refs.slot(that).value())
   }
 
   hash(): number {
@@ -511,11 +549,11 @@ class PropRefEngine<A, K extends keyof A> extends Pipeable.Class implements Atom
   }
 
   map<C>(f: (a: A[K]) => C): ReadonlyRef<C> {
-    return new MapRefEngine(this, f).handle
+    return mintReadonlyRef(new MapRefEngine(this, f))
   }
 
   prop<CK extends keyof A[K]>(prop: CK): AtomRef<A[K][CK]> {
-    return new PropRefEngine(this, prop).handle
+    return mintAtomRef(new PropRefEngine(this, prop))
   }
 
   set(value: A[K]): void {
@@ -552,7 +590,6 @@ class PropRefEngine<A, K extends keyof A> extends Pipeable.Class implements Atom
 }
 
 class CollectionImpl<A> extends ValueRefEngine<readonly AtomRef<A>[]> implements CollectionEngine<A> {
-  override readonly handle: Collection<A>
   private readonly linked = new Set<CollectionItemEngine<A>>()
   private items: AtomRef<A>[] = []
 
@@ -562,7 +599,6 @@ class CollectionImpl<A> extends ValueRefEngine<readonly AtomRef<A>[]> implements
 
   constructor(items: Iterable<A>) {
     super([])
-    this.handle = refHandle<readonly AtomRef<A>[], CollectionEngine<A>>(this)
     for (const item of items) {
       this.items.push(this.makeRef(item))
     }
@@ -571,7 +607,7 @@ class CollectionImpl<A> extends ValueRefEngine<readonly AtomRef<A>[]> implements
   makeRef(value: A): AtomRef<A> {
     const itemEngine = new CollectionItemEngine<A>(value, this)
     this.linked.add(itemEngine)
-    return itemEngine.handle
+    return mintAtomRef(itemEngine)
   }
 
   itemChanged(itemEngine: CollectionItemEngine<A>) {
@@ -600,16 +636,17 @@ class CollectionImpl<A> extends ValueRefEngine<readonly AtomRef<A>[]> implements
   }
 
   unlink(ref: AtomRef<A>) {
-    const itemEngine = ref[engine]
+    const itemEngine = MutableRefs.slot<A>(ref)
     if (isCollectionItemEngine(itemEngine)) {
       this.linked.delete(itemEngine)
     }
   }
 
   toArray(): A[] {
-    return this.items.map((ref) => ref[engine].value())
+    return this.items.map((ref) => Refs.slot<A>(ref).value())
   }
 }
+
 const isCollectionItemEngine = <A>(itemEngine: AtomRefEngine<A>): itemEngine is CollectionItemEngine<A> =>
   itemEngine instanceof CollectionItemEngine
 

@@ -1,5 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Context, Effect, Layer, pipe } from 'effect'
+import { Context, Effect, Layer, pipe, Schema } from 'effect'
 import { describe, expect, it } from 'tstyche'
 
 class NotRegistry extends Context.Service<NotRegistry, number>()(
@@ -9,6 +9,9 @@ class NotRegistry extends Context.Service<NotRegistry, number>()(
 declare const registry: Atom.Registry.Registry
 declare const count: Atom.Atom<number>
 declare const ref: Atom.Ref.AtomRef<number>
+declare const draft: Atom.Writable<number, string>
+declare const loading: Atom.Atom<Atom.AsyncResult.Result<number, string>>
+declare const writeContext: Atom.WriteContext<number>
 
 describe('Atom.make', () => {
   it('a plain initial value makes a writable atom of that value', () => {
@@ -48,5 +51,68 @@ describe('dual operations', () => {
     expect(Atom.Ref.set(ref, 1)).type.toBe<Atom.Ref.AtomRef<number>>()
     expect(Atom.Ref.set(1)).type.toBe<(self: Atom.Ref.AtomRef<number>) => Atom.Ref.AtomRef<number>>()
     expect(pipe(ref, Atom.Ref.set(1))).type.toBe<Atom.Ref.AtomRef<number>>()
+  })
+})
+
+describe('an atom is a blueprint', () => {
+  it('a configuration step keeps the writable variant in the method, data-first, and piped forms', () => {
+    expect(draft.keepAlive()).type.toBe<Atom.Writable<number, string>>()
+    expect(Atom.keepAlive(draft)).type.toBe<Atom.Writable<number, string>>()
+    expect(pipe(draft, Atom.keepAlive)).type.toBe<Atom.Writable<number, string>>()
+    expect(Atom.setIdleTTL(draft, '1 second')).type.toBe<Atom.Writable<number, string>>()
+    expect(pipe(draft, Atom.setIdleTTL('1 second'))).type.toBe<Atom.Writable<number, string>>()
+    expect(pipe(count, Atom.setLazy(false), Atom.withLabel('count'))).type.toBe<Atom.Atom<number>>()
+  })
+
+  it('an equality step types its callback by the atom value and refuses another value type', () => {
+    expect(
+      pipe(
+        count,
+        Atom.withEquality((value, next) => {
+          expect(value).type.toBe<number>()
+          return value === next
+        }),
+      ),
+    ).type.toBe<Atom.Atom<number>>()
+    expect(Atom.withEquality).type.toBeCallableWith(count, (value: number, next: number) => value === next)
+    expect(Atom.withEquality).type.not.toBeCallableWith(count, (value: string, next: string) => value === next)
+  })
+
+  it('a server value is typed by the atom value, and the initial server value needs an AsyncResult atom', () => {
+    expect(pipe(draft, Atom.withServerValue((get) => get(count) + 1))).type.toBe<Atom.Writable<number, string>>()
+    expect(Atom.withServerValue).type.toBeCallableWith(count, () => 1)
+    expect(Atom.withServerValue).type.not.toBeCallableWith(count, () => 'one')
+    expect(pipe(loading, Atom.withServerValueInitial)).type.toBe<
+      Atom.Atom<Atom.AsyncResult.Result<number, string>>
+    >()
+  })
+
+  it('serialization adds the schema to the atom it configures', () => {
+    expect(Atom.serializable(draft, { key: 'draft', schema: Schema.Finite })).type.toBe<
+      Atom.Writable<number, string> & Atom.Serializable<typeof Schema.Finite>
+    >()
+    expect(pipe(count, Atom.serializable({ key: 'count', schema: Schema.Finite }))).type.toBe<
+      Atom.Atom<number> & Atom.Serializable<typeof Schema.Finite>
+    >()
+  })
+
+  it('the read and write targets are typed by the atom', () => {
+    expect(count.read).type.toBe<(get: Atom.AtomContext) => number>()
+    expect(draft.write).type.toBe<(ctx: Atom.WriteContext<number>, value: string) => void>()
+    expect(draft.write).type.toBeCallableWith(writeContext, 'text')
+    expect(draft.write).type.not.toBeCallableWith(writeContext, 1)
+  })
+
+  it('a writable atom stands in for an atom of its value, never the reverse', () => {
+    expect<Atom.Writable<number, string>>().type.toBeAssignableTo<Atom.Atom<number>>()
+    expect<Atom.Atom<1>>().type.toBeAssignableTo<Atom.Atom<number>>()
+    expect<Atom.Atom<number>>().type.not.toBeAssignableTo<Atom.Writable<number>>()
+    expect<Atom.Atom<number>>().type.not.toBeAssignableTo<Atom.Atom<string>>()
+  })
+
+  it('a derived atom keeps the write input of a writable source', () => {
+    expect(Atom.transform(draft, (get, self) => get(self) > 0)).type.toBe<Atom.Writable<boolean, string>>()
+    expect(pipe(count, Atom.transform((get, self) => String(get(self))))).type.toBe<Atom.Atom<string>>()
+    expect<Atom.Type<typeof draft>>().type.toBe<number>()
   })
 })

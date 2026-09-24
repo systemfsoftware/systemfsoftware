@@ -387,14 +387,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               return { first, second }
             }),
         ),
-        When('the two pieces are compared and their identities are read')('result', (s) =>
+        When('the two pieces are compared by identity and by value')('result', (s) =>
           Effect.sync(() => ({
-            firstKey: s.ctx.first.key,
-            secondKey: s.ctx.second.key,
+            sameIdentity: Object.is(s.ctx.first, s.ctx.second),
             equal: Equal.equals(s.ctx.first, s.ctx.second),
           }))),
         Then('each piece has its own identity while equal values still compare as equal')((s) => {
-          expect(s.result.firstKey).not.toBe(s.result.secondKey)
+          expect(s.result.sameIdentity).toBe(false)
           expect(s.result.equal).toBe(true)
         }),
       ),

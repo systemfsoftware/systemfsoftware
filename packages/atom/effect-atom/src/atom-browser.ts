@@ -12,8 +12,8 @@ import * as Context from 'effect/Context'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import { readable, transform, writable } from './atom-core.resource.js'
-import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './atom-modules.js'
+import { readable, transform, writable } from './atom.blueprint.js'
+import type { Atom, Type, With, WithoutSerializable, Writable, WriteContext } from './atom.blueprint.js'
 import type { RegistryImpl } from './registry-engine.js'
 import * as Registry from './registry.handle.js'
 
@@ -64,7 +64,7 @@ export const makeRefreshOnSignal = <S>(signal: Atom<S>) => {
   function refreshOnSignal<A extends AnyAtom>(self: A): WithoutSerializable<A>
   function refreshOnSignal<A extends AnyAtom, V extends Type<A>>(
     self: A & Atom<V>,
-  ): [A & Atom<V>] extends [Writable<infer _, infer RW>] ? Writable<V, RW> : Atom<V> {
+  ): With<A & Atom<V>, V> {
     return transform(self, (get) => {
       get.once(signal)
       get.subscribe(signal, () => get.refresh(self))
@@ -275,7 +275,7 @@ interface SearchParamCoordinator {
 }
 
 class SearchParamUpdates extends Context.Service<SearchParamUpdates, SearchParamCoordinator>()(
-  '@systemfsoftware/effect-atom/atom-browser.resource/SearchParamUpdates',
+  '@systemfsoftware/effect-atom/atom-browser/SearchParamUpdates',
 ) {}
 
 const makeSearchParamCoordinator = (registry: Registry.Registry): SearchParamCoordinator => ({

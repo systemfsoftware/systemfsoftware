@@ -1382,7 +1382,7 @@ Feature('Deriving values from other values on a page')
         When('the value is read and its name is asked for')('readings', (s) =>
           Effect.sync(() => ({
             value: Atom.Registry.get(s.ctx.page, s.ctx.named),
-            name: s.ctx.named.label?.[0],
+            name: s.ctx.named.spec.label?.[0],
           }))),
         Then('the value works normally and keeps the name it was given')((s) => {
           expect(s.readings.value).toBe(0)

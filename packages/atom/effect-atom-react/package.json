@@ -45,7 +45,8 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@systemfsoftware/effect-atom": "workspace:^"
+    "@systemfsoftware/effect-atom": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "peerDependencies": {
     "effect": "catalog:peers",

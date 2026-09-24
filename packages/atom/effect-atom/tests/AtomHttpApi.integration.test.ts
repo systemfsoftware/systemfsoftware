@@ -376,8 +376,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               profile,
               keptProfile,
               registry,
-              idleTTL: profile.idleTTL,
-              keepAlive: keptProfile.keepAlive,
+              idleTTL: profile.spec.idleTTL,
+              keepAlive: keptProfile.spec.keepAlive,
             }
           })),
         When('the profile is read, the page is reloaded, and the profile is read again')(

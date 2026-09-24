@@ -6,10 +6,8 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import { constTrue, constVoid, dual, pipe } from 'effect/Function'
-import type { Inspectable } from 'effect/Inspectable'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import type { Pipeable } from 'effect/Pipeable'
 import * as Predicate from 'effect/Predicate'
 import * as Pull from 'effect/Pull'
 import type { ReadonlyRecord } from 'effect/Record'
@@ -20,39 +18,29 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
 import * as AsyncResult from './async-result.js'
-import { AtomProto, isAtom, readable, removeTtl, TypeId, writable, WritableTypeId } from './atom-core.resource.js'
+import {
+  type Atom,
+  type AtomContext,
+  type AtomRuntime,
+  isAtom,
+  keepAlive,
+  readable,
+  runtime,
+  setIdleTTL,
+  withReactivityOn,
+  type Writable,
+  writable,
+  type WriteContext,
+} from './atom.blueprint.js'
 import { Current } from './current-registry.service.js'
 import type { RegistryImpl } from './registry-engine.js'
 import * as Registry from './registry.handle.js'
 
-/**
- * Reactive value read by a registry, with metadata controlling caching, laziness, refresh behavior, and initial value targeting.
- *
- * @since 4.0.0
- */
-export interface Atom<A = unknown> extends Pipeable, Inspectable {
-  readonly [TypeId]: TypeId
-  readonly keepAlive: boolean
-  readonly lazy: boolean
-  readonly read: (get: AtomContext) => A
-  equals(value: A, next: A): boolean
-  readonly refresh?: ((f: <A>(atom: Atom<A>) => void) => void) | undefined
-  readonly label?: readonly [name: string, stack: string]
-  readonly idleTTL?: number
-  readonly initialValueTarget?: Atom<A>
-}
 export type Top<A = unknown> = A
 export type AnyAtom<A = unknown> = Atom<A>
 type AnyAtomResultFn<Arg = unknown, A = unknown, E = unknown> = AtomResultFn<Arg, A, E>
 export type AnyResult<A = unknown, E = unknown> = AsyncResult.Result<A, E>
 type AnyReactivityKeys<K = unknown> = readonly K[] | ReadonlyRecord<string, readonly K[]>
-
-/**
- * Extracts the value type produced by an `Atom`.
- *
- * @since 4.0.0
- */
-export type Type<T extends AnyAtom> = T extends Atom<infer A> ? A : never
 
 /**
  * Extracts the success value type from an atom whose value is an `AsyncResult`.
@@ -75,205 +63,57 @@ export type PullSuccess<T extends AnyAtom> = T extends Atom<PullResult<infer A, 
  */
 export type Failure<T extends AnyAtom> = T extends Atom<AsyncResult.Result<infer _, infer E>> ? E : never
 
-/**
- * Returns an atom type without serializable metadata, preserving `Writable` read and write types when the input atom is writable.
- *
- * @since 4.0.0
- */
-export type WithoutSerializable<T extends AnyAtom> = T extends Writable<infer R, infer W> ? Writable<R, W>
-  : Atom<Type<T>>
-
-/**
- * Atom that can also be written to, using a `WriteContext` and an input value to update reactive state.
- *
- * @since 4.0.0
- */
-export interface Writable<R, W = R> extends Atom<R> {
-  readonly [WritableTypeId]: WritableTypeId
-  readonly write: (ctx: WriteContext<R>, value: W) => void
-}
-
-/**
- * Context passed to atom read functions for reading dependencies, awaiting `AsyncResult` or `Option` values, managing subscriptions and finalizers, refreshing atoms, and updating writable atoms.
- *
- * @since 4.0.0
- */
-export interface AtomContext {
-  <A>(atom: Atom<A>): A
-  get<A>(this: AtomContext, atom: Atom<A>): A
-  result<A, E>(this: AtomContext, atom: Atom<AsyncResult.Result<A, E>>, options?: {
-    readonly suspendOnWaiting?: boolean | undefined
-  }): Effect.Effect<A, E>
-  resultOnce<A, E>(this: AtomContext, atom: Atom<AsyncResult.Result<A, E>>, options?: {
-    readonly suspendOnWaiting?: boolean | undefined
-  }): Effect.Effect<A, E>
-  once<A>(this: AtomContext, atom: Atom<A>): A
-  addFinalizer(this: AtomContext, f: () => void): void
-  mount<A>(this: AtomContext, atom: Atom<A>): void
-  refresh<A>(this: AtomContext, atom: Atom<A>): void
-  refreshSelf(this: AtomContext): void
-  self<A>(this: AtomContext): Option.Option<A>
-  setSelf<A>(this: AtomContext, a: A): void
-  set<R, W>(this: AtomContext, atom: Writable<R, W>, value: W): void
-  setResult<A, E, W>(this: AtomContext, atom: Writable<AsyncResult.Result<A, E>, W>, value: W): Effect.Effect<A, E>
-  some<A>(this: AtomContext, atom: Atom<Option.Option<A>>): Effect.Effect<A>
-  someOnce<A>(this: AtomContext, atom: Atom<Option.Option<A>>): Effect.Effect<A>
-  stream<A>(this: AtomContext, atom: Atom<A>, options?: {
-    readonly withoutInitialValue?: boolean
-    readonly bufferSize?: number
-  }): Stream.Stream<A>
-  streamResult<A, E>(this: AtomContext, atom: Atom<AsyncResult.Result<A, E>>, options?: {
-    readonly withoutInitialValue?: boolean
-    readonly bufferSize?: number
-  }): Stream.Stream<A, E>
-  subscribe<A>(this: AtomContext, atom: Atom<A>, f: (_: A) => void, options?: {
-    readonly immediate?: boolean
-  }): void
-  isFn?: boolean | undefined
-  readonly registry: RegistryImpl
-}
-
-/**
- * Context passed to writable atom write functions for reading atoms, refreshing or setting the current atom, and writing to other writable atoms.
- *
- * @since 4.0.0
- */
-export interface WriteContext<A> {
-  readonly registry: Registry.Registry
-  get<T>(this: WriteContext<A>, atom: Atom<T>): T
-  refreshSelf(this: WriteContext<A>): void
-  setSelf(this: WriteContext<A>, a: A): void
-  set<R, W>(this: WriteContext<A>, atom: Writable<R, W>, value: W): void
-}
-
 type FnOptions<Init = unknown, Key = unknown> = {
   readonly initialValue?: Init
   readonly reactivityKeys?: AnyReactivityKeys<Key> | undefined
   readonly concurrent?: boolean | undefined
 }
 
-function runtimeFn<R, ER, Arg>(
-  this: AtomRuntime<R, ER>,
-): {
-  <E, A>(
-    fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
-    options?: FnOptions,
-  ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
-  <E, A>(
-    fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
-    options?: FnOptions,
-  ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
-}
-function runtimeFn<R, ER, E, A, Arg = void>(
-  this: AtomRuntime<R, ER>,
-  fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
-  options?: FnOptions,
-): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
-function runtimeFn<R, ER, E, A, Arg = void>(
-  this: AtomRuntime<R, ER>,
-  fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
-  options?: FnOptions,
-): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
-function runtimeFn<R, ER, Arg, A, E>(
-  this: AtomRuntime<R, ER>,
-  fn?: (arg: Arg, get: FnContext) =>
-    | Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>
-    | Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
-  options?: FnOptions,
-): Top {
-  if (fn === undefined) {
-    return <Arg2, A2, E2>(
-      fn2: (arg: Arg2, get: FnContext) =>
-        | Effect.Effect<A2, E2, Scope.Scope | R | Current | Reactivity.Reactivity>
-        | Stream.Stream<A2, E2, Current | Reactivity.Reactivity | R>,
-      curriedOptions?: FnOptions,
-    ) => makeFnRuntime(this, fn2, curriedOptions)
-  }
-  return makeFnRuntime(this, fn, options)
-}
-
-const RuntimeProto: {
-  atom: {
-    <R, ER, A, E>(
-      this: AtomRuntime<R, ER>,
-      create: (get: AtomContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
-      options?: {
-        readonly initialValue?: A
-        readonly uninterruptible?: boolean | undefined
-      },
-    ): Atom<AsyncResult.Result<A, E | ER>>
-    <R, ER, A, E>(
-      this: AtomRuntime<R, ER>,
-      effect: Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
-      options?: {
-        readonly initialValue?: A
-        readonly uninterruptible?: boolean | undefined
-      },
-    ): Atom<AsyncResult.Result<A, E | ER>>
-    <R, ER, A, E>(
-      this: AtomRuntime<R, ER>,
-      create: (get: AtomContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
-      options?: {
-        readonly initialValue?: A
-      },
-    ): Atom<AsyncResult.Result<A, E | ER | Cause.NoSuchElementError>>
-    <R, ER, A, E>(
-      this: AtomRuntime<R, ER>,
-      stream: Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
-      options?: {
-        readonly initialValue?: A
-      },
-    ): Atom<AsyncResult.Result<A, E | ER | Cause.NoSuchElementError>>
-  }
-  fn: {
-    <R, ER, Arg>(
-      this: AtomRuntime<R, ER>,
-    ): {
-      <E, A>(
-        fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
-        options?: FnOptions,
-      ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
-      <E, A>(
-        fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
-        options?: FnOptions,
-      ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
-    }
-    <R, ER, E, A, Arg = void>(
-      this: AtomRuntime<R, ER>,
+function membersFn<R, ER>(self: () => AtomRuntime<R, ER>): RuntimeMembers<R, ER>['fn'] {
+  function fn<Arg>(): {
+    <E, A>(
       fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
       options?: FnOptions,
     ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
-    <R, ER, E, A, Arg = void>(
-      this: AtomRuntime<R, ER>,
+    <E, A>(
       fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
       options?: FnOptions,
     ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
   }
-  pull: <R, ER, A, E>(
-    this: AtomRuntime<R, ER>,
+  function fn<E, A, Arg = void>(
+    fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>,
+    options?: FnOptions,
+  ): AtomResultFn<Arg, A, E | ER> | AnyAtomResultFn
+  function fn<E, A, Arg = void>(
+    fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
+    options?: FnOptions,
+  ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AnyAtomResultFn
+  function fn(
+    fnOrUndefined?: (arg: Top, get: FnContext) =>
+      | Effect.Effect<Top, Top, Scope.Scope | R | Current | Reactivity.Reactivity>
+      | Stream.Stream<Top, Top, Current | Reactivity.Reactivity | R>,
+    options?: FnOptions,
+  ): Top {
+    if (fnOrUndefined === undefined) {
+      return <Arg2, A2, E2>(
+        fn2: (arg: Arg2, get: FnContext) =>
+          | Effect.Effect<A2, E2, Scope.Scope | R | Current | Reactivity.Reactivity>
+          | Stream.Stream<A2, E2, Current | Reactivity.Reactivity | R>,
+        curriedOptions?: FnOptions,
+      ) => makeFnRuntime(self(), fn2, curriedOptions)
+    }
+    return makeFnRuntime(self(), fnOrUndefined, options)
+  }
+  return fn
+}
+
+function makeRuntimeMembers<R, ER>(
+  self: () => AtomRuntime<R, ER>,
+  factory: RuntimeFactory,
+  layer: Atom<Layer.Layer<R, ER, Top>>,
+): RuntimeMembers<R, ER> {
+  function atom<A, E>(
     create:
-      | ((get: AtomContext) => Stream.Stream<A, E, R | Current | Reactivity.Reactivity>)
-      | Stream.Stream<A, E, R | Current | Reactivity.Reactivity>,
-    options?: {
-      readonly disableAccumulation?: boolean
-      readonly initialValue?: readonly A[]
-    },
-  ) => Writable<PullResult<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>, void>
-  subscriptionRef: <R, ER, A, E>(
-    this: AtomRuntime<R, ER>,
-    create:
-      | Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | R | Current | Reactivity.Reactivity>
-      | ((get: AtomContext) => Effect.Effect<
-        SubscriptionRef.SubscriptionRef<A>,
-        E,
-        Scope.Scope | R | Current | Reactivity.Reactivity
-      >),
-  ) => Writable<AsyncResult.Result<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>, A>
-} = {
-  ...AtomProto,
-  atom<R, ER, A, E>(
-    this: AtomRuntime<R, ER>,
-    arg:
       | ((get: AtomContext) => Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>)
       | Effect.Effect<A, E, Scope.Scope | R | Current | Reactivity.Reactivity>
       | ((get: AtomContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>)
@@ -284,50 +124,46 @@ const RuntimeProto: {
     },
   ): Atom<AsyncResult.Result<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>> {
     return readable<AsyncResult.Result<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>>((get) =>
-      readRuntimeAtom(get, this, arg, options)
+      readRuntimeAtom(get, self(), create, options)
     )
-  },
-
-  fn: runtimeFn,
-
-  pull<R, ER, A, E>(
-    this: AtomRuntime<R, ER>,
+  }
+  function pull<A, E>(
     create:
-      | ((get: AtomContext) => Stream.Stream<A, E, Current | Reactivity.Reactivity | R>)
-      | Stream.Stream<A, E, Current | Reactivity.Reactivity | R>,
+      | ((get: AtomContext) => Stream.Stream<A, E, R | Current | Reactivity.Reactivity>)
+      | Stream.Stream<A, E, R | Current | Reactivity.Reactivity>,
     options?: {
       readonly disableAccumulation?: boolean
       readonly initialValue?: readonly A[]
     },
   ): Writable<PullResult<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>, void> {
-    const pullSignal = removeTtl(state(0))
+    const pullSignal = setIdleTTL(state(0), 0)
     const pullAtom = readable<PullResult<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>>((get) =>
-      readRuntimePull(get, this, pullSignal, create, options)
+      readRuntimePull(get, self(), pullSignal, create, options)
     )
     return makeStreamPull(pullSignal, pullAtom)
-  },
-
-  subscriptionRef<R, ER, A, E>(
-    this: AtomRuntime<R, ER>,
+  }
+  function subscriptionRef<A, E>(
     create:
       | Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | R | Current | Reactivity.Reactivity>
-      | ((
-        get: AtomContext,
-      ) => Effect.Effect<
+      | ((get: AtomContext) => Effect.Effect<
         SubscriptionRef.SubscriptionRef<A>,
         E,
         Scope.Scope | R | Current | Reactivity.Reactivity
       >),
   ): Writable<AsyncResult.Result<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>, A> {
-    const refAtom = removeTtl(readable<
-      | SubscriptionRef.SubscriptionRef<A>
-      | AsyncResult.Result<SubscriptionRef.SubscriptionRef<A> | Context.Context<R>, E | ER>
-    >((get) => readRuntimeRefAtom(get, this, create)))
+    const refAtom = setIdleTTL(
+      readable<
+        | SubscriptionRef.SubscriptionRef<A>
+        | AsyncResult.Result<SubscriptionRef.SubscriptionRef<A> | Context.Context<R>, E | ER>
+      >((get) => readRuntimeRefAtom(get, self(), create)),
+      0,
+    )
     return makeSubRef(
       refAtom,
-      (get, ref) => readRuntimeSubRef(get, this, ref),
+      (get, ref) => readRuntimeSubRef(get, self(), ref),
     )
-  },
+  }
+  return { factory, layer, atom, fn: membersFn(self), pull, subscriptionRef }
 }
 
 const makeFnRuntime = <R, ER, Arg, A, E>(
@@ -672,7 +508,7 @@ function asReadableAtom<A = unknown>(
  * registry memoizes its own layer builds.
  */
 function makeRegistryMemoMap(): Atom<Layer.MemoMap> {
-  return removeTtl(make(() => Layer.makeMemoMapUnsafe()))
+  return setIdleTTL(make(() => Layer.makeMemoMapUnsafe()), 0)
 }
 
 function contextMemoMap(
@@ -701,7 +537,7 @@ function resolveContextMemoMap(
 function makeReactivityAtom(
   resolveMemoMap: (get: AtomContext) => Layer.MemoMap,
 ): Atom<AsyncResult.Result<Reactivity.Reactivity>> {
-  return removeTtl(
+  return setIdleTTL(
     make((get) =>
       Effect.contextWith((services: Context.Context<Scope.Scope>) =>
         Layer.buildWithMemoMap(Reactivity.layer, resolveMemoMap(get), Context.get(services, Scope.Scope))
@@ -709,29 +545,8 @@ function makeReactivityAtom(
         Effect.map(Context.get(Reactivity.Reactivity)),
       )
     ),
+    0,
   )
-}
-
-/**
- * Builds the combinator that refreshes an atom whenever the supplied keys change
- * in the `Reactivity` service the supplied atom resolves to.
- */
-function makeWithReactivity(
-  reactivityAtom: Atom<AsyncResult.Result<Reactivity.Reactivity>>,
-): (
-  keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
-) => <A extends Atom<Top>>(atom: A) => A {
-  return (keys) => <A extends Atom<Top>>(atom: A): A => {
-    const read = (get: AtomContext): Top => {
-      const store = AsyncResult.getOrThrow(get(reactivityAtom))
-      get.addFinalizer(store.registerUnsafe(keys, () => {
-        get.refresh(atom)
-      }))
-      get.subscribe(atom, (value) => get.setSelf(value))
-      return get.once(atom)
-    }
-    return { ...atom, read }
-  }
 }
 
 const defaultReactivityMemoMap: Atom<Layer.MemoMap> = makeRegistryMemoMap()
@@ -902,11 +717,14 @@ function resultFnFibersAtom<A, E>(
   if (resultFnConcurrent(options) === false) {
     return undefined
   }
-  return removeTtl(readable((get) => {
-    const fibers = new Set<Fiber.Fiber<A, E>>()
-    get.addFinalizer(() => fibers.forEach((f) => f.interruptUnsafe()))
-    return fibers
-  }))
+  return setIdleTTL(
+    readable((get) => {
+      const fibers = new Set<Fiber.Fiber<A, E>>()
+      get.addFinalizer(() => fibers.forEach((f) => f.interruptUnsafe()))
+      return fibers
+    }),
+    0,
+  )
 }
 
 function readResultFn<Arg, A, E, R0>(
@@ -1108,20 +926,6 @@ function addPullCancel(cancels: Set<() => void>, cancel: (() => void) | undefine
     return
   }
   cancels.add(cancel)
-}
-
-function assignCustomPrototype(copy: object, prototype: object | null): void {
-  if (hasCustomPrototype(prototype) === false) {
-    return
-  }
-  Object.setPrototypeOf(copy, prototype)
-}
-
-function hasCustomPrototype(prototype: object | null): boolean {
-  if (prototype === null) {
-    return false
-  }
-  return prototype !== Object.prototype
 }
 
 /**
@@ -1538,11 +1342,11 @@ function interruptForkedFiber<A, E>(
 // -----------------------------------------------------------------------------
 
 /**
- * Atom that builds a `Context` from a `Layer` and exposes constructors for atoms, functions, pulls, and subscription refs that run with that context.
+ * The members a runtime atom exposes: its factory, its layer, and the constructors for atoms, functions, pulls, and subscription refs that run with its services.
  *
  * @since 4.0.0
  */
-export interface AtomRuntime<R, ER = never> extends Atom<AsyncResult.Result<Context.Context<R>, ER>> {
+export interface RuntimeMembers<R, ER> {
   readonly factory: RuntimeFactory
 
   readonly layer: Atom<Layer.Layer<R, ER, Top>>
@@ -1690,22 +1494,18 @@ export function context(options?: {
     globalLayer = Layer.provideMerge(globalLayer, Layer.orDie(Layer.provide(layer, Reactivity.layer)))
   }
   const reactivityAtom = makeReactivityAtom(resolveMemoMap)
-  const withReactivity = makeWithReactivity(reactivityAtom)
+  const withReactivity = (keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>) =>
+    withReactivityOn(keys, reactivityAtom)
   const factoryFn = function makeRuntime<R, E, RIn = never>(
     create:
       | Layer.Layer<R, E, RIn>
       | ((get: AtomContext) => Layer.Layer<R, E, RIn>),
   ): AtomRuntime<R, E> {
     const layerAtom = keepAlive(runtimeLayerAtom(create, globalLayer))
-    const self: AtomRuntime<R, E> = {
-      ...AtomProto,
-      ...RuntimeProto,
-      keepAlive: false,
-      lazy: true,
-      refresh: undefined,
-      factory,
-      layer: layerAtom,
-      read(get: AtomContext) {
+    let runtimeValue: AtomRuntime<R, E>
+    const members = makeRuntimeMembers<R, E>(() => runtimeValue, factory, layerAtom)
+    runtimeValue = runtime({
+      read: (get) => {
         const layer = get(layerAtom)
         const built = Effect.flatMap(
           Effect.scope,
@@ -1713,8 +1513,9 @@ export function context(options?: {
         )
         return effect(get, built, { uninterruptible: true })
       },
-    }
-    return self
+      members,
+    })
+    return runtimeValue
   }
   const factory = assignRuntimeFactory(factoryFn, memoMap, addGlobalLayer, withReactivity)
   return factory
@@ -1750,7 +1551,7 @@ function assignRuntimeFactory(
  */
 export const withReactivity: (
   keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
-) => <A extends Atom<Top>>(atom: A) => A = makeWithReactivity(defaultReactivityAtom)
+) => <A extends Atom<Top>>(atom: A) => A = (keys) => withReactivityOn(keys, defaultReactivityAtom)
 
 // -----------------------------------------------------------------------------
 // constructors - stream
@@ -2042,7 +1843,7 @@ function applyFnSync(
 const makeFnSync = <Arg, A>(f: (arg: Arg, get: FnContext) => A, options?: {
   readonly initialValue?: A
 }): Writable<Option.Option<A> | A, Arg> => {
-  const argAtom = removeTtl(state<[number, Arg | undefined]>([0, undefined]))
+  const argAtom = setIdleTTL(state<[number, Arg | undefined]>([0, undefined]), 0)
   const hasInitialValue = options?.initialValue !== undefined
   return writable(function(get) {
     get.isFn = true
@@ -2060,7 +1861,7 @@ const makeFnSync = <Arg, A>(f: (arg: Arg, get: FnContext) => A, options?: {
  *
  * @since 4.0.0
  */
-export interface AtomResultFn<Arg, A, E = never> extends Writable<AsyncResult.Result<A, E>, Arg | Reset | Interrupt> {}
+export type AtomResultFn<Arg, A, E = never> = Writable<AsyncResult.Result<A, E>, Arg | Reset | Interrupt>
 
 /**
  * Defines the control symbol that can be written to an `AtomResultFn` to reset it to its initial state.
@@ -2265,7 +2066,7 @@ function makeResultFn<Arg, E, A, R0 = never>(
     readonly concurrent?: boolean | undefined
   },
 ) {
-  const argAtom = removeTtl(state<readonly [number, Option.Option<Arg | Interrupt>]>([0, Option.none()]))
+  const argAtom = setIdleTTL(state<readonly [number, Option.Option<Arg | Interrupt>]>([0, Option.none()]), 0)
   const initialValue = resultFromOptions<A, E>(options)
   const fibersAtom = resultFnFibersAtom<A, E>(options)
 
@@ -2325,7 +2126,7 @@ export const pull: {
       readonly disableAccumulation?: boolean | undefined
     },
   ): Writable<PullResult<A, E>, void> => {
-    const pullSignal = removeTtl(state(0))
+    const pullSignal = setIdleTTL(state(0), 0)
     const pullAtom = readable(makeRead((get) => makeStreamPullEffect(get, pullSignal, create, options)))
     return makeStreamPull(pullSignal, pullAtom)
   },
@@ -2400,25 +2201,6 @@ const makeStreamPull = <A, E>(
 ): Writable<PullResult<A, E>, void> =>
   writable(pullAtom.read, function(ctx) {
     ctx.set(pullSignal, ctx.get(pullSignal) + 1)
-  })
-
-export const copyAtomWithProto: {
-  <P extends object>(patch: P): <A extends object>(self: A) => A & P
-  <A extends object, P extends object>(self: A, patch: P): A & P
-} = dual(2, <A extends object, P extends object>(self: A, patch: P): A & P => {
-  const copy = Object.assign({}, self, patch)
-  assignCustomPrototype(copy, Reflect.getPrototypeOf(self))
-  return copy
-})
-
-/**
- * Returns a copy of an atom that remains cached and mounted even when no subscribers are using it.
- *
- * @since 4.0.0
- */
-export const keepAlive = <A extends Atom<Top>>(self: A): A =>
-  copyAtomWithProto(self, {
-    keepAlive: true,
   })
 
 /**

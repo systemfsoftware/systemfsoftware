@@ -6,63 +6,28 @@ import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import { MixedScheduler, type Scheduler, type SchedulerDispatcher } from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
-import type * as Atom from './atom-modules.js'
 import { batchRunner, type BatchState, makeBatchState, NodeImpl } from './atom-node.js'
+import type * as Atom from './atom.blueprint.js'
 import { hostScheduleTimer, makeHostNow } from './internal/host-timer.js'
 import type { Node, PreloadRefused, Registry } from './registry.handle.js'
 
 type AnyValue<A = unknown> = A
 
-/**
- * The literal type used to identify registry values.
- *
- * @since 4.0.0
- */
-export type TypeId = '~effect-atom/atom/Registry'
-
-/**
- * The runtime type id used to identify registry values.
- *
- * @since 4.0.0
- */
-export const TypeId: TypeId = '~effect-atom/atom/Registry'
-
-/**
- * Module-private slot holding the engine behind a registry handle.
- */
-export const engine: unique symbol = Symbol('~effect-atom/atom/Registry/engine')
-
 class Refusals extends Context.Service<Refusals, { readonly entries: Array<PreloadRefused> }>()(
   '@systemfsoftware/effect-atom/registry-engine/Refusals',
 ) {}
-
-/**
- * Returns the mutable refusal log stored on one registry engine.
- */
-export const refusalLog = (self: Registry): { readonly entries: Array<PreloadRefused> } =>
-  self[engine].storageFor(Refusals, () => ({ entries: [] }))
 // -----------------------------------------------------------------------------
 // internal
 // -----------------------------------------------------------------------------
 
 const constImmediate = { immediate: true }
 
-const SerializableTypeId: Atom.SerializableTypeId = '~effect-atom/atom/Atom/Serializable'
-
-interface SerializableAtom {
-  readonly [SerializableTypeId]: {
-    readonly key: string
-    readonly codecJson: Schema.ConstraintCodec<AnyValue, AnyValue>
-    readonly decode: (encoded: AnyValue) => AnyValue
-  }
-}
-const isSerializableAtom = (atom: Atom.Atom): atom is Atom.Atom & SerializableAtom => SerializableTypeId in atom
-
 function atomKey<A>(atom: Atom.Atom<A>): Atom.Atom<A> | string {
-  if (isSerializableAtom(atom)) {
-    return atom[SerializableTypeId].key
+  const serializable = atom.spec.serializable
+  if (serializable === undefined) {
+    return atom
   }
-  return atom
+  return serializable.key
 }
 
 /**
@@ -127,12 +92,12 @@ function setEachInitialValue(
   }
 }
 
-function resolveInitialValueTarget<A>(atom: Atom.Atom<A>): Atom.Atom<A> {
-  let target = atom
-  while (target.initialValueTarget !== undefined) {
-    target = target.initialValueTarget
+function resolveInitialValueTarget(atom: Atom.Atom): Atom.Atom {
+  const target = atom.spec.initialValueTarget
+  if (target === undefined) {
+    return atom
   }
-  return target
+  return resolveInitialValueTarget(target)
 }
 
 function valueOptionIfForAtom<A>(atom: Atom.Atom<A>, node: NodeImpl): Option.Option<A> {
@@ -142,22 +107,44 @@ function valueOptionIfForAtom<A>(atom: Atom.Atom<A>, node: NodeImpl): Option.Opt
   return node.valueOption()
 }
 
+const isDecodingCodec = (u: unknown): u is Schema.ConstraintDecoder<AnyValue> => Schema.isSchema(u)
+
+const decodingCodecOf = (serializer: Atom.SerializableSpec): Schema.ConstraintDecoder<AnyValue> | undefined => {
+  const codec = serializer.codecJson
+  if (isDecodingCodec(codec) === false) {
+    return undefined
+  }
+  return codec
+}
+
 function applyDecodedSerializable(
   registry: RegistryImpl,
   node: NodeImpl,
-  atom: Atom.Atom & SerializableAtom,
+  serializer: Atom.SerializableSpec,
   encoded: AnyValue,
 ): void {
-  const exit = Schema.decodeUnknownExit(atom[SerializableTypeId].codecJson)(encoded)
-  if (Exit.isFailure(exit)) {
-    recordRefusalOn(registry, atom[SerializableTypeId].key, exit.cause)
+  const codec = decodingCodecOf(serializer)
+  if (codec === undefined) {
     return
   }
-  assignDecodedSerializable(registry, node, atom, exit.value)
+  applyDecodedExit(registry, node, serializer.key, Schema.decodeUnknownExit(codec)(encoded))
+}
+
+function applyDecodedExit(
+  registry: RegistryImpl,
+  node: NodeImpl,
+  key: string,
+  exit: Exit.Exit<AnyValue, Schema.SchemaError>,
+): void {
+  if (Exit.isFailure(exit)) {
+    recordRefusalOn(registry, key, exit.cause)
+    return
+  }
+  assignDecodedSerializable(registry, node, exit.value)
 }
 
 function recordRefusalOn(registry: RegistryImpl, key: string, cause: Cause.Cause<Schema.SchemaError>): void {
-  refusalLog(registry.handle).entries.push({ key, issue: formatSchemaError(cause) })
+  registry.refusals().entries.push({ key, issue: formatSchemaError(cause) })
 }
 
 function formatSchemaError(cause: Cause.Cause<Schema.SchemaError>): string {
@@ -171,11 +158,10 @@ function formatSchemaError(cause: Cause.Cause<Schema.SchemaError>): string {
 function assignDecodedSerializable(
   registry: RegistryImpl,
   node: NodeImpl,
-  atom: Atom.Atom,
   decoded: AnyValue,
 ): void {
-  const target = resolveInitialValueTarget(atom)
-  if (target === atom) {
+  const target = resolveInitialValueTarget(node.atom)
+  if (target === node.atom) {
     node.setValue(decoded)
     return
   }
@@ -187,11 +173,11 @@ function applySerializableValue(
   node: NodeImpl,
   encoded: AnyValue,
 ): void {
-  const atom = node.atom
-  if (isSerializableAtom(atom) === false) {
+  const serializer = node.atom.spec.serializable
+  if (serializer === undefined) {
     return
   }
-  applyDecodedSerializable(registry, node, atom, encoded)
+  applyDecodedSerializable(registry, node, serializer, encoded)
 }
 
 function notifyIfImmediate<A>(
@@ -220,14 +206,14 @@ function hearIfChanged<A>(node: NodeImpl<A>, lastSeen: { value: A }, f: (_: A) =
 }
 
 function atomIdleTtlIsActive(registry: RegistryImpl, atom: Atom.Atom): boolean {
-  if (atom.idleTTL === 0) {
+  if (atom.spec.idleTTL === 0) {
     return false
   }
   return hasIdleTtl(registry, atom)
 }
 
 function hasIdleTtl(registry: RegistryImpl, atom: Atom.Atom): boolean {
-  if (atom.idleTTL !== undefined) {
+  if (atom.spec.idleTTL !== undefined) {
     return true
   }
   return registry.defaultIdleTTL !== undefined
@@ -326,10 +312,11 @@ function applyPreloadedSerializable(
 }
 
 function atomLabel<A>(atom: Atom.Atom<A>): string {
-  if (atom.label === undefined) {
+  const label = atom.spec.label
+  if (label === undefined) {
     return 'unknown'
   }
-  return atom.label[0]
+  return label[0]
 }
 
 function throwIfDisposed<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
@@ -339,7 +326,7 @@ function throwIfDisposed<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
 }
 
 function scheduleRemovalUnlessKeepAlive<A>(registry: RegistryImpl, atom: Atom.Atom<A>): void {
-  if (atom.keepAlive) {
+  if (atom.spec.keepAlive) {
     return
   }
   registry.scheduleAtomRemoval(atom)
@@ -382,10 +369,10 @@ function evictNodeIfIdle(registry: RegistryImpl, node: NodeImpl): void {
 }
 
 function idleTtlOf(atom: Atom.Atom, defaultIdleTTL: number | undefined): number | undefined {
-  if (atom.idleTTL === undefined) {
+  if (atom.spec.idleTTL === undefined) {
     return defaultIdleTTL
   }
-  return atom.idleTTL
+  return atom.spec.idleTTL
 }
 
 function remainingAfterSweep(
@@ -487,6 +474,7 @@ export class RegistryImpl extends Pipeable.Class {
   onNodeRemoved?: ((node: Node) => void) | undefined
 
   constructor(
+    mint: (engine: RegistryImpl) => Registry,
     initialValues?: Iterable<readonly [Atom.Atom, AnyValue]>,
     scheduleTask?: (cb: () => void) => () => void,
     timeoutResolution?: number,
@@ -495,7 +483,7 @@ export class RegistryImpl extends Pipeable.Class {
     scheduleTimer?: (f: () => void, delayMillis: number) => () => void,
   ) {
     super()
-    this.handle = { [TypeId]: TypeId, [engine]: this, ...Pipeable.Prototype }
+    this.handle = mint(this)
     this.batch = makeBatchState()
     this.scheduler = new MixedScheduler('sync', scheduleTask)
     this.schedulerAsync = new MixedScheduler('async', scheduleTask)
@@ -526,6 +514,10 @@ export class RegistryImpl extends Pipeable.Class {
     const created = make()
     this.storage = Context.add(this.storage, key, created)
     return created
+  }
+
+  refusals(): { readonly entries: Array<PreloadRefused> } {
+    return this.storageFor(Refusals, () => ({ entries: [] }))
   }
 
   getNodes() {
@@ -578,11 +570,12 @@ export class RegistryImpl extends Pipeable.Class {
   }
 
   refresh = <A>(atom: Atom.Atom<A>): void => {
-    if (atom.refresh !== undefined) {
-      atom.refresh(this.refresh)
-    } else {
+    const custom = atom.spec.refresh
+    if (custom === undefined) {
       this.invalidateAtom(atom)
+      return
     }
+    custom(this.refresh)
   }
 
   subscribe<A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: { readonly immediate?: boolean }): () => void {
@@ -605,7 +598,7 @@ export class RegistryImpl extends Pipeable.Class {
   }
 
   atomHasTtl(atom: Atom.Atom): boolean {
-    if (atom.keepAlive) {
+    if (atom.spec.keepAlive) {
       return false
     }
     return atomIdleTtlIsActive(this, atom)
