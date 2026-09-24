@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Match, Schema } from 'effect'
 import { plantedDriver, plantedLayer } from './__fixtures__/planted-process-medium.js'
 import { mediumLayer, processDriver, referenceLayer, spawnerLayer } from './__fixtures__/process-fixtures.js'

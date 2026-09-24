@@ -1,7 +1,7 @@
-import { expect } from '@effect/vitest'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Stream } from 'effect'
 import { observeSocketChild } from './__fixtures__/socket-supervision.fixture.js'
 

@@ -1,5 +1,5 @@
-import { it } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
+import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Result } from 'effect'
 import { ProjectTrace, projectTrace, type TraceProjection } from '../project-trace.workflow.js'
 import type { ObservedCommand, ObservedStep } from '../Trace.schema.js'

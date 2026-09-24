@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Exit, Layer, Ref, Scope } from 'effect'
 import { Sharding, Singleton } from 'effect/unstable/cluster'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'

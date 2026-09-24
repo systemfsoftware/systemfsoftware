@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Match } from 'effect'
 import { SharedChannelMedium, SharedChannelMediumLayer } from './__fixtures__/shared-channel-medium.js'
 

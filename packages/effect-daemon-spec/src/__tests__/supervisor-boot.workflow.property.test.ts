@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Array as Arr, Match, Result } from 'effect'
 import { initialStateOf } from '../kernel/initial-supervisor-state.js'
 import {

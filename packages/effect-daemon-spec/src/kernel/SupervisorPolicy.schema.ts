@@ -253,7 +253,7 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and a static import would enter the published
   // module graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const decodePolicy = Schema.decodeResult(SupervisionPolicy)
 

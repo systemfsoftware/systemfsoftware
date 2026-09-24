@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Duration, Effect, Exit, Fiber, Match, Ref, Scope } from 'effect'
 import { TestClock } from 'effect/testing'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'

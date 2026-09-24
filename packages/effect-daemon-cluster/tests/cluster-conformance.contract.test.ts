@@ -1,7 +1,7 @@
-import { expect } from '@effect/vitest'
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Match } from 'effect'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 

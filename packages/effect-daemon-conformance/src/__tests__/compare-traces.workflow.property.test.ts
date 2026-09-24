@@ -1,5 +1,5 @@
-import { it } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
+import { it } from '@systemfsoftware/vitest'
 import { Match, Option } from 'effect'
 import { Index, NonEmptyTrace, StartSwapCase } from '../../tests/__fixtures__/conformance-fixtures.schema.js'
 import type { TraceComparison } from '../compare-traces.workflow.js'
