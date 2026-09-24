@@ -1,6 +1,6 @@
 ---
 name: systemfsoftware
-last_updated: 2026-09-23
+last_updated: 2026-09-24
 ---
 
 # systemfsoftware Strategy
@@ -17,7 +17,12 @@ never claimed by process.
 Any code that needs to be fixed but can regress without the compiler, an Oxlint rule, or a mutation
 test failing is an automatic F. Every doctrine rule ships as an executable mechanism that re-fires
 deterministically — compiler types, AST plugins, property laws, or non-autoregressive decision models —
-never as prose instructions or conversational opinions a model must recall.
+never as prose instructions or conversational opinions a model must recall. Every change boils the
+ocean: it eliminates its whole class across the entire stack in one wave, counted in classes deleted
+rather than lines added, and every package is the frontier of its category or is deleted. Humans state
+intent as laws that gates prove on the real artifact, fast enough to run after every edit, over code
+parallel by construction — one agent's depth is what licenses running many fearlessly, and that is
+what makes the ocean boilable.
 
 ## Users
 
@@ -31,10 +36,15 @@ humans write intent, machines write and verify code.
 - No LLM-as-judge review products. Gates are deterministic mechanisms, not model opinions: AST linters,
   type checks, and ~35ms non-autoregressive forward passes (Jev DecisionModel) with tri-state thresholding
   (Match $\ge 0.80$, Miss $\le 0.50$, Uncertain $0.50-0.80$), never conversational prompts, chat reviews, or
-  uncalibrated text-streaming opinions.
+  uncalibrated text-streaming opinions. Models may hunt for defects as finders but never gate a merge;
+  a finding counts only once it lands as a re-firing mechanism.
+- No wrapped capabilities outside Effect core. What Effect core ships is kept unless the owner directs
+  otherwise; anything else the stack needs is owned — forked or rewritten — and taken past the category
+  leader, never depended on or matched at parity.
 
 _Resist a change when:_ it trades the mechanism for reach or judgment — wider adoption without
-a gate, or a model's conversational opinion in place of an executable command that fails.
+a gate, or a model's conversational opinion in place of an executable command that fails — or
+fixes one instance where the whole class should go.
 
 ## Key metrics
 
