@@ -166,13 +166,12 @@ const reservationEventsOf = (
 ): readonly InventoryReservationEvents[] =>
   Arr.getSomes([stockReservedOf(decision, now), backorderRecordedOf(decision, now)])
 
-/** A held order reserves nothing, so it charges nothing; every granted or backordered unit costs one. */
 const chargedAmountOf = (decision: FulfillmentDecision): Option.Option<Money> =>
   Match.value(decision).pipe(
-    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', 'Backordered', ({ allocations }) =>
+    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', ({ allocations }) =>
       Option.some(moneyOf(Arr.reduce(allocations, 0, (total, allocation) =>
         total + allocation.quantity)))),
-    Match.tag('CreditHold', () =>
+    Match.tag('Backordered', 'CreditHold', () =>
       Option.none<Money>()),
     Match.exhaustive,
   )
