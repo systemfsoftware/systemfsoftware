@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Equal, Fiber, Layer } from 'effect'
+import { Deferred, Effect, Equal, Fiber, Layer } from 'effect'
 import { expect } from 'vitest'
 import { answeredOperation, failReportOf, operationsOfRun, passReportOf } from './__fixtures__/checkReports.js'
 import type { LockOperation } from './__fixtures__/checkReports.js'
@@ -41,8 +41,11 @@ const pinnedModel = {
 const recordedWithInterruption = Effect.gen(function*() {
   const recording = yield* Conformance.recording<LockCommand, boolean | void>()
   yield* recording.record(0, tryAcquire(), Effect.succeed(true))
-  const worker = yield* Effect.forkChild(recording.record(1, tryAcquire(), Effect.never))
-  yield* Effect.yieldNow
+  const invoked = yield* Deferred.make<void>()
+  const worker = yield* Effect.forkChild(
+    recording.record(1, tryAcquire(), Effect.andThen(Deferred.succeed(invoked, undefined), Effect.never)),
+  )
+  yield* Deferred.await(invoked)
   yield* Fiber.interrupt(worker)
   return yield* recording.operations
 })
