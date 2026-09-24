@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Scope } from 'effect'
-import { expect } from 'vitest'
 import { settled, terminatedIn, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
 const Feature = makeFeature({ it, layer })
@@ -177,7 +177,7 @@ Feature('Starting a child on a medium whose start fails')
               Match.tag('ChildTerminated', (terminated) => terminated.childId === 'document'),
               Match.orElse(() => false),
             ))
-          expect(Option.isSome(ending)).toBe(true)
+          expect(ending).toSatisfy(Option.isSome)
           expect(Option.getOrThrow(ending).event).toMatchObject({
             _tag: 'ChildTerminated',
             reason: { _tag: 'Abnormal', report: { _tag: 'CauseReport' } },
@@ -224,7 +224,7 @@ Feature('Starting a child on a medium whose start fails')
             return yield* settled(watching)
           })),
         Then('the supervisor gave up and terminated')(({ trace }) => {
-          expect(terminatedIn(trace)).toBe(true)
+          expect(trace).toSatisfy(terminatedIn)
         }),
         And('the refused child was reported abnormally terminated, never started')(({ trace }) => {
           const endings = Arr.filter(trace, (entry) =>
@@ -238,11 +238,12 @@ Feature('Starting a child on a medium whose start fails')
               Match.orElse(() => false),
             ))
           expect(endings.length).toBeGreaterThan(0)
-          expect(Arr.some(trace, (entry) =>
+          const claimedStarted = Arr.filter(trace, (entry) =>
             Match.value(entry.event).pipe(
               Match.tag('ChildStarted', (started) => started.childId === 'document'),
               Match.orElse(() => false),
-            ))).toBe(false)
+            ))
+          expect(claimedStarted).toEqual([])
         }),
       ),
     )

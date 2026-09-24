@@ -1,11 +1,11 @@
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
+import { expect } from '@effect/vitest'
 import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer } from 'effect'
 import { Sandbox } from 'microsandbox'
-import { expect } from 'vitest'
 import { ABNORMAL_EXIT_CODE, childScriptWorkload } from './__fixtures__/child-script.js'
 import { featureNameOf, kvmGate } from './__fixtures__/kvm-gate.js'
 

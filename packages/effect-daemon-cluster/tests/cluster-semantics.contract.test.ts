@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Exit, Layer, Ref, Scope } from 'effect'
 import { Sharding, Singleton } from 'effect/unstable/cluster'
-import { expect } from 'vitest'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 
 const Feature = makeFeature({ it, layer })
@@ -38,7 +38,7 @@ Feature('Keeping one active owner per singleton name')
             }),
         ),
         Then('the registration is accepted even though the work failed')((s) => {
-          expect(Exit.isSuccess(s.attempted.registration)).toBe(true)
+          expect(s.attempted.registration).toEqual(Exit.void)
         }),
         And('the failing work ran exactly once')((s) =>
           Effect.gen(function*() {
@@ -46,7 +46,7 @@ Feature('Keeping one active owner per singleton name')
           })
         ),
         And('the name stays taken so it cannot be registered a second time')((s) => {
-          expect(Exit.isFailure(s.attempted.repeated)).toBe(true)
+          expect(s.attempted.repeated).toSatisfy(Exit.isFailure)
         }),
       ),
     )
@@ -75,7 +75,7 @@ Feature('Keeping one active owner per singleton name')
             const repeated = yield* s.sharding
               .registerSingleton('orders/finishing', Effect.void)
               .pipe(Effect.provideService(Scope.Scope, scope), Effect.exit)
-            expect(Exit.isFailure(repeated)).toBe(true)
+            expect(repeated).toSatisfy(Exit.isFailure)
           })
         ),
         And('closing the registration releases the name')((s) =>
@@ -85,7 +85,7 @@ Feature('Keeping one active owner per singleton name')
             const reacquired = yield* s.sharding
               .registerSingleton('orders/finishing', Effect.void)
               .pipe(Effect.provideService(Scope.Scope, scope), Effect.exit)
-            expect(Exit.isSuccess(reacquired)).toBe(true)
+            expect(reacquired).toEqual(Exit.void)
           })
         ),
       ),
@@ -113,7 +113,7 @@ Feature('Keeping one active owner per singleton name')
             }),
         ),
         Then('the name was taken while the layer was open')((s) => {
-          expect(Exit.isFailure(s.held.whileHeld)).toBe(true)
+          expect(s.held.whileHeld).toSatisfy(Exit.isFailure)
         }),
         And('the name can be registered again after the layer closes')((s) =>
           Effect.gen(function*() {
@@ -121,7 +121,7 @@ Feature('Keeping one active owner per singleton name')
             const reacquired = yield* s.sharding
               .registerSingleton('orders/layered', Effect.void)
               .pipe(Effect.provideService(Scope.Scope, scope), Effect.exit)
-            expect(Exit.isSuccess(reacquired)).toBe(true)
+            expect(reacquired).toEqual(Exit.void)
           })
         ),
       ),

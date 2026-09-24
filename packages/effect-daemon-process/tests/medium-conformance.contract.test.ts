@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Match, Schema } from 'effect'
-import { expect } from 'vitest'
 import { plantedDriver, plantedLayer } from './__fixtures__/planted-process-medium.js'
 import { mediumLayer, processDriver, referenceLayer, spawnerLayer } from './__fixtures__/process-fixtures.js'
 
@@ -57,8 +57,8 @@ Feature('Proving a medium against the reference', { timeout: 240_000 })
           expect(s.report.results.map(labelOf)).toEqual(
             Conformance.Scenarios.map((scripted) => `${scripted.name}: conform`),
           )
-          expect(comparedEverywhere(s.report)).toBe(true)
-          expect(Conformance.isConforming(s.report)).toBe(true)
+          expect(s.report).toSatisfy(comparedEverywhere)
+          expect(namedMediums(s.report)).toEqual([])
         }),
       ),
     )
@@ -72,7 +72,7 @@ Feature('Proving a medium against the reference', { timeout: 240_000 })
         ),
         When('the whole scenario catalogue runs on both')('report', (s) => s.proof),
         Then('the proof fails and names that medium')((s) => {
-          expect(Conformance.isConforming(s.report)).toBe(false)
+          expect(namedMediums(s.report)).not.toEqual([])
           expect(namedMediums(s.report)).toContain('process-planted')
           expect(namedMediums(s.report)).not.toContain(processDriver.name)
         }),

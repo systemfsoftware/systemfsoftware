@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Match } from 'effect'
-import { expect } from 'vitest'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 
 const Feature = makeFeature({ it, layer })

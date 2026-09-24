@@ -1,7 +1,6 @@
-import { it } from '@effect/vitest'
+import { describe, expect, it } from '@effect/vitest'
 import { Deferred, Duration, Effect, Exit, Fiber, Match, Ref, Result, Scope } from 'effect'
 import { TestClock } from 'effect/testing'
-import { describe, expect } from 'vitest'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 import * as FiberMedium from '../Supervisor/FiberMedium.js'
 
@@ -44,7 +43,7 @@ describe('the termination reason a fiber child reports', () => {
       const { started } = yield* startInChildScope(Effect.die('boom'))
       const reason = yield* FiberMedium.medium.report(started)
       expect(causeOf(reason)).toContain('boom')
-      expect(causeOf(reason) === '').toBe(false)
+      expect(causeOf(reason)).not.toBe('')
     }))
 
   it.effect('Should_ReportShutdown_When_TheChildIsInterrupted', () =>

@@ -213,15 +213,6 @@ const encodedFromDraft = (draft: PolicyGenerated) => ({
   childDeclarations: Arr.map(draft.childSeeds, (seed, index) => encodedDeclarationOf(seed, index)),
 })
 
-const decodesAsDrawn = (draft: PolicyGenerated): boolean => {
-  const encoded = encodedFromDraft(draft)
-  const decoded = Schema.decodeResult(SupervisionPolicy)(encoded)
-  return Option.match(policyRefusalOf(encoded), {
-    onNone: () => Result.isSuccess(decoded),
-    onSome: () => Result.isFailure(decoded),
-  })
-}
-
 const refuseSeedOf = (kind: string, significantBit: boolean): ChildSeed => ({
   restartType: kind === 'permanent' ? 'permanent' : 'transient',
   significantBit,
@@ -247,22 +238,6 @@ const refusedWhenDrawn = (
     Match.exhaustive,
   )
 
-const refusesDrawn = (kind: string, significantBit: boolean, autoShutdown: AutoShutdown): boolean => {
-  const draft = {
-    strategy: 'one_for_one' as const,
-    intensity: 1 as const,
-    periodMillis: 100 as const,
-    autoShutdown,
-    coolDown: { _tag: 'NoCoolDown' } as const,
-    backoff: { baseMillis: 0 as const, multiplier: 2 as const, capMillis: 0 as const },
-    dynamic: { _tag: 'NoDynamicChildren' } as const,
-    livenessTickMillis: 10 as const,
-    childSeeds: [refuseSeedOf(kind, significantBit)],
-  }
-  return Result.isFailure(Schema.decodeResult(SupervisionPolicy)(encodedFromDraft(draft))) ===
-    refusedWhenDrawn(kind, significantBit, autoShutdown)
-}
-
 export class SupervisionPolicy extends Schema.Class<SupervisionPolicy>('SupervisionPolicy')(
   Schema.Struct(policyFields).check(Schema.makeFilter(policyIsDecodable, { message: POLICY_REFUSAL_MESSAGE })),
   {
@@ -280,11 +255,50 @@ if (import.meta.vitest !== void 0) {
   // module graph.
   const { it } = await import('@effect/vitest')
 
-  it.prop('∀d_PolicyDecode_≡Refusal', [PolicyGenerated], ([draft]) => decodesAsDrawn(draft))
+  const decodePolicy = Schema.decodeResult(SupervisionPolicy)
+
+  const decodesAsDrawn = (decode: typeof decodePolicy, draft: PolicyGenerated): boolean => {
+    const encoded = encodedFromDraft(draft)
+    const decoded = decode(encoded)
+    return Option.match(policyRefusalOf(encoded), {
+      onNone: () => Result.isSuccess(decoded),
+      onSome: () => Result.isFailure(decoded),
+    })
+  }
+
+  const refusesDrawn = (
+    decode: typeof decodePolicy,
+    kind: string,
+    significantBit: boolean,
+    autoShutdown: AutoShutdown,
+  ): boolean => {
+    const draft = {
+      strategy: 'one_for_one' as const,
+      intensity: 1 as const,
+      periodMillis: 100 as const,
+      autoShutdown,
+      coolDown: { _tag: 'NoCoolDown' } as const,
+      backoff: { baseMillis: 0 as const, multiplier: 2 as const, capMillis: 0 as const },
+      dynamic: { _tag: 'NoDynamicChildren' } as const,
+      livenessTickMillis: 10 as const,
+      childSeeds: [refuseSeedOf(kind, significantBit)],
+    }
+    return Result.isFailure(decode(encodedFromDraft(draft))) ===
+      refusedWhenDrawn(kind, significantBit, autoShutdown)
+  }
+
+  it.prop(
+    '∀d_PolicyDecode_≡Refusal',
+    { of: [PolicyGenerated], subject: decodePolicy },
+    (subject, [draft]) => decodesAsDrawn(subject, draft),
+  )
 
   it.prop(
     '∀k_PolicyViolation_=Refusal',
-    [Schema.Literals(['never', 'permanent', 'transient']), Schema.Boolean, AutoShutdown],
-    ([kind, significantBit, autoShutdown]) => refusesDrawn(kind, significantBit, autoShutdown),
+    {
+      of: [Schema.Literals(['never', 'permanent', 'transient']), Schema.Boolean, AutoShutdown],
+      subject: decodePolicy,
+    },
+    (subject, [kind, significantBit, autoShutdown]) => refusesDrawn(subject, kind, significantBit, autoShutdown),
   )
 }

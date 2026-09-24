@@ -33,7 +33,10 @@ import { BackoffSchedule, RestartStrategy, RestartType, SupervisionPolicy } from
 import type { ChildDeclaration, CoolDownSetting, DynamicKind } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
 import type { ChildInstance, ChildStatus } from '../kernel/SupervisorState.schema.js'
-import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import { TerminationReason } from '../kernel/TerminationReport.schema.js'
+
+type Interpret = typeof interpretSupervisionEvent
+type Evolve = typeof evolveSupervisor
 
 const CeilingWithinQuadraticFoldBudget = Ceiling.pipe(Schema.check(Schema.isLessThanOrEqualTo(32)))
 
@@ -181,21 +184,22 @@ const unbornEvent = (
 const stepOf = (state: SupervisorState, event: SupervisionEvent): SupervisionStep =>
   new SupervisionStep({ state, event })
 
-const decidedOf = (step: SupervisionStep): SupervisionDecision => Result.getOrThrow(interpretSupervisionEvent(step))
+const decidedOf = (interpret: Interpret, step: SupervisionStep): SupervisionDecision =>
+  Result.getOrThrow(interpret(step))
 
-const evolvedOf = (state: SupervisorState, decision: SupervisionDecision): SupervisorState =>
-  Result.getOrThrow(evolveSupervisor(new SupervisionEvolution({ state, decision })))
+const evolvedOf = (evolve: Evolve, state: SupervisorState, decision: SupervisionDecision): SupervisorState =>
+  Result.getOrThrow(evolve(new SupervisionEvolution({ state, decision })))
 
 type Folded = {
   readonly state: SupervisorState
   readonly decisions: ReadonlyArray<SupervisionDecision>
 }
 
-const folded = (state: SupervisorState, events: ReadonlyArray<SupervisionEvent>): Folded => {
+const folded = (interpret: Interpret, state: SupervisorState, events: ReadonlyArray<SupervisionEvent>): Folded => {
   const seed: Folded = { state, decisions: [] }
   return Arr.reduce(events, seed, (acc, event) => {
-    const decision = decidedOf(stepOf(acc.state, event))
-    return { state: evolvedOf(acc.state, decision), decisions: Arr.append(acc.decisions, decision) }
+    const decision = decidedOf(interpret, stepOf(acc.state, event))
+    return { state: evolvedOf(evolveSupervisor, acc.state, decision), decisions: Arr.append(acc.decisions, decision) }
   })
 }
 
@@ -416,10 +420,32 @@ const otpGroup = (strategy: RestartStrategy, failedIndex: number, total: number)
     Match.exhaustive,
   )
 
+/** A known live restart: the abnormal exit of one permanent child, driven at `at`. */
+const knownRestartOf = (interpret: Interpret, strategy: RestartStrategy, at: EventTime): SupervisionDecision => {
+  const policy = policyWith({ strategy, childDeclarations: [declaredChild('c0', 'permanent', false)] })
+  const state = runningOf(coreWith(policy, [childOf('c0', 5, 'ready')], []))
+  return decidedOf(interpret, stepOf(state, terminatedEvent('c0', 5, at, abnormalOf('boom'))))
+}
+
+/** A decision's core is stamped with the instant it was driven by — an input a constant cannot echo. */
+const stampedBy = (decision: SupervisionDecision, at: EventTime): boolean =>
+  Match.value(coreOf(decision)).pipe(
+    Match.tag('Some', ({ value }) => sameSeq(textOf(value.restartStamps), textOf([at]))),
+    Match.tag('None', () => false),
+    Match.exhaustive,
+  )
+
+/** A terminating decision carries the reason it was driven by, so the reason is conserved. */
+const reasonEchoedBy = (decision: SupervisionDecision, reason: TerminationReason): boolean =>
+  Match.value(decision).pipe(
+    Match.tag('Terminate', (terminated) => Schema.toEquivalence(TerminationReason)(terminated.reason, reason)),
+    Match.orElse(() => false),
+  )
+
 it.prop(
   '∀s_RestartSet_=OtpGroup',
-  [RestartStrategy, RestartType, RestartType, RestartType, EventTime],
-  ([strategy, first, second, third, at]) => {
+  { of: [RestartStrategy, RestartType, RestartType, RestartType, EventTime], subject: interpretSupervisionEvent },
+  (subject, [strategy, first, second, third, at]) => {
     const typeAt = (index: number): RestartType =>
       Match.value(index).pipe(
         Match.when(0, () => first),
@@ -446,6 +472,7 @@ it.prop(
     const state = runningOf(coreWith(policyWith({ strategy, childDeclarations: declarations }), tree, []))
     const failed = childAt(1)
     const decision = decidedOf(
+      subject,
       stepOf(state, terminatedEvent(failed.childId, failed.generation, at, abnormalOf('boom'))),
     )
 
@@ -486,14 +513,14 @@ it.prop(
 
 it.prop(
   '∀r_TransientExit_⊥Restart',
-  [Schema.Literals(['Normal', 'Shutdown']), EventTime],
-  ([tag, at]) => {
+  { of: [Schema.Literals(['Normal', 'Shutdown']), EventTime], subject: interpretSupervisionEvent },
+  (subject, [tag, at]) => {
     const policy = policyWith({
       strategy: 'one_for_one',
       childDeclarations: [declaredChild('c0', 'transient', false)],
     })
     const state = runningOf(coreWith(policy, [childOf('c0', 2, 'ready')], [at]))
-    const decision = decidedOf(stepOf(state, terminatedEvent('c0', 2, at, { _tag: tag })))
+    const decision = decidedOf(subject, stepOf(state, terminatedEvent('c0', 2, at, { _tag: tag })))
 
     return Match.value(decision).pipe(
       Match.tag('Continue', (continued) =>
@@ -507,8 +534,8 @@ it.prop(
 
 it.prop(
   '∀n_Exhaustion_=LimitPlus1',
-  [Intensity, EventTime],
-  ([intensity, at0]) => {
+  { of: [Intensity, EventTime], subject: interpretSupervisionEvent },
+  (subject, [intensity, at0]) => {
     const t0 = at0
     const policy = policyWith({
       strategy: 'one_for_one',
@@ -518,11 +545,11 @@ it.prop(
     const terminationAt = (index: number): SupervisionEvent =>
       terminatedEvent('c0', index, t0 + index, abnormalOf('boom'))
     const start = runningOf(coreWith(policy, [childOf('c0', 0, 'ready')], []))
-    const outcome = folded(start, Arr.makeBy(intensity + 1, terminationAt))
+    const outcome = folded(subject, start, Arr.makeBy(intensity + 1, terminationAt))
 
     const tolerated = Arr.every(Arr.take(outcome.decisions, intensity), isRestartFamily)
     const exhausted = isStopChildren(lastDecisionOf(outcome))
-    const confirmed = folded(outcome.state, [stoppedEvent('c0', intensity + 1, t0 + intensity + 1)])
+    const confirmed = folded(subject, outcome.state, [stoppedEvent('c0', intensity + 1, t0 + intensity + 1)])
     const finalized = Match.value(lastDecisionOf(confirmed)).pipe(
       Match.tag('Terminate', (terminated) => terminatorCountOf(terminated.commands) === 1),
       Match.orElse(() => false),
@@ -534,8 +561,8 @@ it.prop(
 
 it.prop(
   '∀m_CoolDown_=Rearm',
-  [PositiveMillis, EventTime],
-  ([millis, at0]) => {
+  { of: [PositiveMillis, EventTime], subject: interpretSupervisionEvent },
+  (subject, [millis, at0]) => {
     const t0 = at0
     const policy = policyWith({
       strategy: 'one_for_one',
@@ -544,13 +571,13 @@ it.prop(
       childDeclarations: [declaredChild('c0', 'permanent', false)],
     })
     const start = runningOf(coreWith(policy, [childOf('c0', 0, 'ready')], []))
-    const first = folded(start, [terminatedEvent('c0', 0, t0, abnormalOf('boom'))])
-    const second = folded(first.state, [terminatedEvent('c0', 1, t0 + 1, abnormalOf('boom'))])
+    const first = folded(subject, start, [terminatedEvent('c0', 0, t0, abnormalOf('boom'))])
+    const second = folded(subject, first.state, [terminatedEvent('c0', 1, t0 + 1, abnormalOf('boom'))])
 
     const armed = isCoolDown(lastDecisionOf(second)) &&
       deadlineIs(coolDownDeadlineOf(commandsOf(lastDecisionOf(second))), t0 + 1 + millis)
 
-    const resumed = folded(second.state, [supervisorTimerEvent('cool_down', t0 + 1 + millis)])
+    const resumed = folded(subject, second.state, [supervisorTimerEvent('cool_down', t0 + 1 + millis)])
     const restarted = Match.value(lastDecisionOf(resumed)).pipe(
       Match.tag('StartChildren', (decision) =>
         Match.value(coreOf(decision)).pipe(
@@ -563,7 +590,7 @@ it.prop(
       Match.orElse(() => false),
     )
 
-    const afterReset = folded(resumed.state, [
+    const afterReset = folded(subject, resumed.state, [
       terminatedEvent('c0', 2, t0 + 1 + millis + 1, abnormalOf('boom')),
     ])
 
@@ -573,8 +600,8 @@ it.prop(
 
 it.prop(
   '∀g_WindowPrune_≡Period',
-  [PositiveMillis, EventTime],
-  ([gap, at0]) => {
+  { of: [PositiveMillis, EventTime], subject: interpretSupervisionEvent },
+  (subject, [gap, at0]) => {
     const t0 = at0
     const policy = policyWith({
       strategy: 'one_for_one',
@@ -582,8 +609,8 @@ it.prop(
       childDeclarations: [declaredChild('c0', 'permanent', false)],
     })
     const start = runningOf(coreWith(policy, [childOf('c0', 0, 'ready')], []))
-    const first = folded(start, [terminatedEvent('c0', 0, t0, abnormalOf('boom'))])
-    const second = folded(first.state, [terminatedEvent('c0', 1, t0 + gap, abnormalOf('boom'))])
+    const first = folded(subject, start, [terminatedEvent('c0', 0, t0, abnormalOf('boom'))])
+    const second = folded(subject, first.state, [terminatedEvent('c0', 1, t0 + gap, abnormalOf('boom'))])
 
     return isStopChildren(lastDecisionOf(second)) === (gap <= PERIOD_MILLIS)
   },
@@ -591,8 +618,8 @@ it.prop(
 
 it.prop(
   '∀g_OneForAll_=OneStamp',
-  [EventTime, Generation],
-  ([at, generation]) => {
+  { of: [EventTime, Generation], subject: interpretSupervisionEvent },
+  (subject, [at, generation]) => {
     const gen = generation
     const policy = policyWith({
       strategy: 'one_for_all',
@@ -604,6 +631,7 @@ it.prop(
     })
     const children = Arr.map(['c0', 'c1', 'c2'], (childId) => childOf(childId, gen, 'ready'))
     const decision = decidedOf(
+      subject,
       stepOf(runningOf(coreWith(policy, children, [])), terminatedEvent('c1', gen, at, abnormalOf('boom'))),
     )
     const stamped = Match.value(coreOf(decision)).pipe(
@@ -620,20 +648,20 @@ it.prop(
 
 it.prop(
   '∀s_AnySignificant_=Shutdown',
-  [EventTime],
-  ([at]) => {
+  { of: [EventTime, Generation], subject: interpretSupervisionEvent },
+  (subject, [at, gen]) => {
     const policy = policyWith({
       strategy: 'one_for_all',
       autoShutdown: 'any_significant',
       childDeclarations: [declaredChild('c0', 'transient', true), declaredChild('c1', 'permanent', false)],
     })
-    const state = runningOf(coreWith(policy, [childOf('c0', 4, 'ready'), childOf('c1', 6, 'ready')], []))
-    const outcome = folded(state, [normalExitOf('c0', 4, at)])
+    const state = runningOf(coreWith(policy, [childOf('c0', gen, 'ready'), childOf('c1', gen, 'ready')], []))
+    const outcome = folded(subject, state, [normalExitOf('c0', gen, at)])
 
     return Match.value(lastDecisionOf(outcome)).pipe(
       Match.tag('StopChildren', (stopped) =>
         sameSeq(stopIdsOf(stopped.commands), ['c1']) &&
-        sameSeq(idSeqOf(stopped.core.children), ['c1']) &&
+        sameSeq(Arr.map(stopped.core.children, labelOf), [`c1:${gen}:stopping`]) &&
         sameSeq(textOf(stopped.core.restartStamps), [])),
       Match.orElse(() => false),
     )
@@ -642,8 +670,8 @@ it.prop(
 
 it.prop(
   '∀s_AllSignificant_=LastOne',
-  [EventTime],
-  ([at]) => {
+  { of: [EventTime], subject: interpretSupervisionEvent },
+  (subject, [at]) => {
     const t0 = at
     const policy = policyWith({
       strategy: 'one_for_one',
@@ -651,8 +679,8 @@ it.prop(
       childDeclarations: [declaredChild('c0', 'transient', true), declaredChild('c1', 'transient', true)],
     })
     const state = runningOf(coreWith(policy, [childOf('c0', 4, 'ready'), childOf('c1', 6, 'ready')], []))
-    const first = folded(state, [normalExitOf('c0', 4, t0)])
-    const second = folded(first.state, [normalExitOf('c1', 6, t0 + 1)])
+    const first = folded(subject, state, [normalExitOf('c0', 4, t0)])
+    const second = folded(subject, first.state, [normalExitOf('c1', 6, t0 + 1)])
 
     return Match.value(lastDecisionOf(first)).pipe(
       Match.tag('Continue', (continued) =>
@@ -665,20 +693,22 @@ it.prop(
 
 it.prop(
   '∀t_EmptyTreeShutdown_=Terminate',
-  [RestartStrategy, EventTime],
-  ([strategy, at]) => {
+  { of: [RestartStrategy, EventTime, Schema.String], subject: interpretSupervisionEvent },
+  (subject, [strategy, at, cause]) => {
     const policy = policyWith({ strategy, childDeclarations: [] })
-    const outcome = folded(runningOf(coreWith(policy, [], [])), [
-      { _tag: 'ShutdownRequested', at, reason: { _tag: 'Shutdown' } },
+    const reason = abnormalOf(cause)
+    const outcome = folded(subject, runningOf(coreWith(policy, [], [])), [
+      { _tag: 'ShutdownRequested', at, reason },
     ])
-    return terminatesOnce(lastDecisionOf(outcome))
+    const decision = lastDecisionOf(outcome)
+    return terminatesOnce(decision) && reasonEchoedBy(decision, reason)
   },
 )
 
 it.prop(
   '∀d_DeadlineMiss_=Abnormal',
-  [RestartStrategy, EventTime, Generation],
-  ([strategy, at, generation]) => {
+  { of: [RestartStrategy, EventTime, Generation], subject: interpretSupervisionEvent },
+  (subject, [strategy, at, generation]) => {
     const gen = generation
     const policy = policyWith({
       strategy,
@@ -688,7 +718,7 @@ it.prop(
     const state = runningOf(
       coreWith(policy, [childOf('c0', gen, 'starting'), childOf('c1', gen, 'ready')], []),
     )
-    const decision = decidedOf(stepOf(state, childTimerEvent('start_deadline', 'c0', gen, at)))
+    const decision = decidedOf(subject, stepOf(state, childTimerEvent('start_deadline', 'c0', gen, at)))
 
     return Match.value(coreOf(decision)).pipe(
       Match.tag('Some', ({ value }) =>
@@ -710,37 +740,46 @@ it.prop(
 
 it.prop(
   '∀g_UnbornIncarnation_=Stale',
-  [
-    RestartStrategy,
-    Generation,
-    EventTime,
-    Schema.Literals(['ChildTerminated', 'ChildReady', 'ChildStopped', 'ProbeResult']),
-  ],
-  ([strategy, generation, at, tag]) => {
+  {
+    of: [
+      RestartStrategy,
+      Generation,
+      EventTime,
+      Schema.Literals(['ChildTerminated', 'ChildReady', 'ChildStopped', 'ProbeResult']),
+    ],
+    subject: evolveSupervisor,
+  },
+  (subject, [strategy, generation, at, tag]) => {
     const policy = policyWith({ strategy, childDeclarations: [declaredChild('c0', 'permanent', false)] })
     const state = runningOf(coreWith(policy, [childOf('c0', generation, 'ready')], []))
-    const decision = decidedOf(stepOf(state, unbornEvent(tag, 'c0', generation + 1, at)))
+    const decision = decidedOf(interpretSupervisionEvent, stepOf(state, unbornEvent(tag, 'c0', generation + 1, at)))
 
-    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(state, decision) === state
+    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(subject, state, decision) === state
   },
 )
 
 it.prop(
   '∀t_UnsolicitedTimer_=Stale',
-  [EventTime, Generation],
-  ([at, generation]) => {
+  { of: [EventTime, Generation], subject: evolveSupervisor },
+  (subject, [at, generation]) => {
     const policy = policyWith({ strategy: 'one_for_one', childDeclarations: [declaredChild('c0', 'permanent', false)] })
     const state = runningOf(coreWith(policy, [childOf('c0', generation, 'ready')], []))
-    const decision = decidedOf(stepOf(state, childTimerEvent('start_deadline', 'c0', generation, at)))
+    const decision = decidedOf(
+      interpretSupervisionEvent,
+      stepOf(state, childTimerEvent('start_deadline', 'c0', generation, at)),
+    )
 
-    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(state, decision) === state
+    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(subject, state, decision) === state
   },
 )
 
 it.prop(
   '∀p_DynamicStopOutsideRunning_=Stale',
-  [Schema.Literals(['Restarting', 'CoolingDown', 'ShuttingDown']), Generation, EventTime],
-  ([phase, generation, at]) => {
+  {
+    of: [Schema.Literals(['Restarting', 'CoolingDown', 'ShuttingDown']), Generation, EventTime],
+    subject: evolveSupervisor,
+  },
+  (subject, [phase, generation, at]) => {
     const policy = policyWith({ strategy: 'one_for_one', childDeclarations: [declaredChild('c0', 'permanent', false)] })
     const core = coreWith(policy, [childOf('c0', generation, 'ready')], [])
     const state: SupervisorState = Match.value(phase).pipe(
@@ -749,16 +788,16 @@ it.prop(
       Match.when('ShuttingDown', () => new ShuttingDown({ core, reason: { _tag: 'Shutdown' } })),
       Match.exhaustive,
     )
-    const decision = decidedOf(stepOf(state, dynamicStopEvent('r0', 'c0', generation, at)))
+    const decision = decidedOf(interpretSupervisionEvent, stepOf(state, dynamicStopEvent('r0', 'c0', generation, at)))
 
-    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(state, decision) === state
+    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(subject, state, decision) === state
   },
 )
 
 it.prop(
   '∀c_DynamicStarts_≤Ceiling',
-  [CeilingWithinQuadraticFoldBudget, EventTime],
-  ([ceiling, at0]) => {
+  { of: [CeilingWithinQuadraticFoldBudget, EventTime], subject: interpretSupervisionEvent },
+  (subject, [ceiling, at0]) => {
     const policy = policyWith({
       strategy: 'one_for_one',
       childDeclarations: [],
@@ -773,7 +812,7 @@ it.prop(
     })
     const requestAt = (index: number): SupervisionEvent => dynamicStartEvent(`r${index}`, at0 + index)
     const requests = Array.from({ length: ceiling + 2 }, (_, index) => requestAt(index))
-    const outcome = folded(runningOf(coreWith(policy, [], [])), requests)
+    const outcome = folded(subject, runningOf(coreWith(policy, [], [])), requests)
 
     const accepted = Arr.filter(outcome.decisions, isStartChildren)
     const refused = Arr.filter(outcome.decisions, isRefusal)
@@ -788,8 +827,8 @@ it.prop(
 
 it.prop(
   '∀d_DynamicIds_⊥Reused',
-  [EventTime, EventTime],
-  ([at0, at1]) => {
+  { of: [EventTime, EventTime], subject: interpretSupervisionEvent },
+  (subject, [at0, at1]) => {
     const policy = policyWith({
       strategy: 'one_for_one',
       childDeclarations: [],
@@ -802,9 +841,9 @@ it.prop(
         probeFailureThreshold: 2,
       },
     })
-    const started = folded(runningOf(coreWith(policy, [], [])), [dynamicStartEvent('r0', at0)])
-    const stopped = folded(started.state, [dynamicStopEvent('r1', 'd0', 0, at1)])
-    const resumed = folded(stopped.state, [dynamicStartEvent('r2', at1 + 1)])
+    const started = folded(subject, runningOf(coreWith(policy, [], [])), [dynamicStartEvent('r0', at0)])
+    const stopped = folded(subject, started.state, [dynamicStopEvent('r1', 'd0', 0, at1)])
+    const resumed = folded(subject, stopped.state, [dynamicStartEvent('r2', at1 + 1)])
 
     const stopAcknowledged = Match.value(lastDecisionOf(stopped)).pipe(
       Match.tag(
@@ -821,8 +860,8 @@ it.prop(
 
 it.prop(
   '∀k_BackoffDelay_=Schedule',
-  [BackoffSchedule, EventTime, RestartCount],
-  ([schedule, at, k]) => {
+  { of: [BackoffSchedule, EventTime, RestartCount], subject: interpretSupervisionEvent },
+  (subject, [schedule, at, k]) => {
     const policy = policyWith({
       strategy: 'one_for_one',
       childDeclarations: [declaredChild('c0', 'permanent', false)],
@@ -830,7 +869,7 @@ it.prop(
     })
     const child: ChildInstance = { ...childOf('c0', 5, 'ready'), consecutiveRestarts: k }
     const state = runningOf(coreWith(policy, [child], []))
-    const decision = decidedOf(stepOf(state, terminatedEvent('c0', 5, at, abnormalOf('boom'))))
+    const decision = decidedOf(subject, stepOf(state, terminatedEvent('c0', 5, at, abnormalOf('boom'))))
     const delay = backoffDelayAt(schedule, k)
 
     return Match.value(delay).pipe(
@@ -861,8 +900,11 @@ it.prop(
 
 it.prop(
   '∀k_ConsecutiveRestarts_=Growing',
-  [PositiveMillis, Schema.Literals([1, 2, 3, 4]), PositiveMillis, EventTime, EventTime],
-  ([base, multiplier, capMillis, at1, at2]) => {
+  {
+    of: [PositiveMillis, Schema.Literals([1, 2, 3, 4]), PositiveMillis, EventTime, EventTime],
+    subject: interpretSupervisionEvent,
+  },
+  (subject, [base, multiplier, capMillis, at1, at2]) => {
     const schedule: BackoffSchedule = { baseMillis: base, multiplier, capMillis }
     const policy = policyWith({
       strategy: 'one_for_one',
@@ -870,10 +912,10 @@ it.prop(
       backoff: schedule,
     })
     const start = runningOf(coreWith(policy, [childOf('c0', 5, 'ready')], []))
-    const first = folded(start, [terminatedEvent('c0', 5, at1, abnormalOf('boom'))])
+    const first = folded(subject, start, [terminatedEvent('c0', 5, at1, abnormalOf('boom'))])
     const firstDelay = backoffDelayAt(schedule, 0)
-    const resumed = folded(first.state, [childTimerEvent('backoff', 'c0', 6, at1 + firstDelay)])
-    const second = folded(resumed.state, [terminatedEvent('c0', 6, at2, abnormalOf('boom'))])
+    const resumed = folded(subject, first.state, [childTimerEvent('backoff', 'c0', 6, at1 + firstDelay)])
+    const second = folded(subject, resumed.state, [terminatedEvent('c0', 6, at2, abnormalOf('boom'))])
     const secondDelay = backoffDelayAt(schedule, 1)
 
     const secondArmed = Match.value(lastDecisionOf(second)).pipe(
@@ -899,8 +941,8 @@ it.prop(
 
 it.prop(
   '∀k_BackoffDelay_=TotalNearMax',
-  [BackoffSchedule, EventTime, PositiveMillis],
-  ([schedule, at, tail]) => {
+  { of: [BackoffSchedule, EventTime, PositiveMillis], subject: interpretSupervisionEvent },
+  (subject, [schedule, at, tail]) => {
     const k = Number.MAX_SAFE_INTEGER - tail
     const policy = policyWith({
       strategy: 'one_for_one',
@@ -909,6 +951,7 @@ it.prop(
     })
     const child: ChildInstance = { ...childOf('c0', 5, 'ready'), consecutiveRestarts: k }
     const decision = decidedOf(
+      subject,
       stepOf(runningOf(coreWith(policy, [child], [])), terminatedEvent('c0', 5, at, abnormalOf('boom'))),
     )
     const delay = backoffDelayAt(schedule, k)
@@ -948,22 +991,28 @@ it.prop(
 
 it.prop(
   '∀d_BucketSequence_=ExecutionOrder',
-  [SupervisionPolicy, SupervisorCore, SupervisionEvent],
-  ([policy, core, event]) => {
+  { of: [SupervisionPolicy, SupervisorCore, SupervisionEvent], subject: interpretSupervisionEvent },
+  (subject, [policy, core, event]) => {
     const state = new Running({ core: { ...core, policy } })
-    const decision = decidedOf(stepOf(state, event))
+    const decision = decidedOf(subject, stepOf(state, event))
+    const known = knownRestartOf(subject, policy.strategy, event.at)
 
-    return ranksAscend(commandsOf(decision))
+    return ranksAscend(commandsOf(decision)) &&
+      ranksAscend(commandsOf(known)) &&
+      stampedBy(known, event.at)
   },
 )
 
 it.prop(
   '∀d_RestartBuckets_=StopsBeforeStarts',
-  [SupervisionPolicy, SupervisorCore, SupervisionEvent],
-  ([policy, core, event]) => {
+  { of: [SupervisionPolicy, SupervisorCore, SupervisionEvent], subject: interpretSupervisionEvent },
+  (subject, [policy, core, event]) => {
     const state = new Running({ core: { ...core, policy } })
-    const decision = decidedOf(stepOf(state, event))
+    const decision = decidedOf(subject, stepOf(state, event))
+    const known = knownRestartOf(subject, policy.strategy, event.at)
 
-    return noStopAfterStart(commandsOf(decision))
+    return noStopAfterStart(commandsOf(decision)) &&
+      noStopAfterStart(commandsOf(known)) &&
+      stampedBy(known, event.at)
   },
 )

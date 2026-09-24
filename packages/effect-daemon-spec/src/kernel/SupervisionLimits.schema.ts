@@ -83,17 +83,13 @@ const nonNegativeLimits: ReadonlyArray<Schema.Codec<number>> = [
 
 const positiveLimits: ReadonlyArray<Schema.Codec<number>> = [PositiveMillis, ProbeThreshold]
 
-const decodedHolds = <E>(decoded: Result.Result<number, E>, accepts: boolean): boolean =>
-  Result.isSuccess(decoded) === accepts
+const decodeNonNegativeLimits = (boundary: number) =>
+  Arr.map(nonNegativeLimits, (schema) => Schema.decodeResult(schema)(boundary))
 
-const nonNegativeDecodes = (boundary: number, schema: Schema.Codec<number>): boolean =>
-  decodedHolds(Schema.decodeResult(schema)(boundary), boundary >= 0)
+const decodePositiveLimits = (boundary: number) =>
+  Arr.map(positiveLimits, (schema) => Schema.decodeResult(schema)(boundary))
 
-const positiveDecodes = (boundary: number, schema: Schema.Codec<number>): boolean =>
-  decodedHolds(Schema.decodeResult(schema)(boundary), boundary >= 1)
-
-const ceilingDecodes = (boundary: number): boolean =>
-  decodedHolds(Schema.decodeResult(Ceiling)(boundary), boundary >= 1 && boundary <= 1_000)
+const decodeCeiling = Schema.decodeResult(Ceiling)
 
 const withinBound = (value: number, minimum: number, maximum: number): boolean => value >= minimum && value <= maximum
 
@@ -116,21 +112,25 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀m_NonNegativeBounds_=Decode',
-    [Schema.Literals([-1, 0, 1, 1_025, Number.MAX_SAFE_INTEGER])],
-    ([boundary]) => Arr.every(nonNegativeLimits, (schema) => nonNegativeDecodes(boundary, schema)),
+    { of: [Schema.Literals([-1, 0, 1, 1_025, Number.MAX_SAFE_INTEGER])], subject: decodeNonNegativeLimits },
+    (subject, [boundary]) => Arr.every(subject(boundary), (decoded) => Result.isSuccess(decoded) === (boundary >= 0)),
   )
 
   it.prop(
     '∀m_PositiveBounds_=Decode',
-    [Schema.Literals([-1, 0, 1, Number.MAX_SAFE_INTEGER])],
-    ([boundary]) => Arr.every(positiveLimits, (schema) => positiveDecodes(boundary, schema)),
+    { of: [Schema.Literals([-1, 0, 1, Number.MAX_SAFE_INTEGER])], subject: decodePositiveLimits },
+    (subject, [boundary]) => Arr.every(subject(boundary), (decoded) => Result.isSuccess(decoded) === (boundary >= 1)),
   )
 
   it.prop(
     '∀c_Ceiling_=OneToThousand',
-    [Schema.Literals([0, 1, 1_000, 1_001])],
-    ([boundary]) => ceilingDecodes(boundary),
+    { of: [Schema.Literals([0, 1, 1_000, 1_001])], subject: decodeCeiling },
+    (subject, [boundary]) => Result.isSuccess(subject(boundary)) === (boundary >= 1 && boundary <= 1_000),
   )
 
-  it.prop('∀m_Generated_=Small', [Millis, PositiveMillis, EventTime, Deadline, RestartCount], generatedStaysSmall)
+  it.prop(
+    '∀m_Generated_=Small',
+    { of: [Millis, PositiveMillis, EventTime, Deadline, RestartCount], subject: generatedStaysSmall },
+    (subject, values) => subject(values) && !subject([60_001, 1, 0, 0, 0] as const),
+  )
 }

@@ -13,6 +13,8 @@ import type { StartChild, SupervisorCommands } from '../kernel/SupervisorCommand
 import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import type { ChildDeclaration, RestartStrategy, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 
+type Decide = typeof interpretSupervisionEvent
+
 const noCommands: SupervisorCommands = { stops: [], starts: [], arms: [], replies: [], terminates: [] }
 
 const shutdownBrutal: ShutdownMode = { _tag: 'Brutal' }
@@ -44,11 +46,12 @@ const declarationsOf = (drawn: DrawnChildren): ReadonlyArray<ChildDeclaration> =
   }))
 
 const bootsTo = (
+  decide: Decide,
   policy: SupervisionPolicy,
   at: EventTime,
 ): SupervisionDecision =>
   Result.getOrThrow(
-    interpretSupervisionEvent(
+    decide(
       new SupervisionStep({
         state: new Running({ core: initialStateOf(policy) }),
         event: { _tag: 'SupervisorStarted', at },
@@ -57,10 +60,11 @@ const bootsTo = (
   )
 
 const bootCommandsOf = (
+  decide: Decide,
   policy: SupervisionPolicy,
   at: EventTime,
 ): SupervisorCommands =>
-  Match.value(bootsTo(policy, at)).pipe(
+  Match.value(bootsTo(decide, policy, at)).pipe(
     Match.tag('StartChildren', (started) => started.commands),
     Match.orElse(() => noCommands),
   )
@@ -69,10 +73,10 @@ const startIdOf = (start: StartChild): string => start.childId
 
 it.prop(
   '∀b_BootStart_=DeclaredOrder',
-  [DrawnChildren, EventTime],
-  ([drawn, at]) => {
+  { of: [DrawnChildren, EventTime], subject: interpretSupervisionEvent },
+  (subject, [drawn, at]) => {
     const ids = Arr.map(drawnChildrenOf(drawn), (child) => child.name)
-    const commands = bootCommandsOf(policyOf('one_for_one', declarationsOf(drawn)), at)
+    const commands = bootCommandsOf(subject, policyOf('one_for_one', declarationsOf(drawn)), at)
     return commands.stops.length === 0 &&
       commands.replies.length === 0 &&
       commands.terminates.length === 0 &&
@@ -82,11 +86,11 @@ it.prop(
 
 it.prop(
   '∀b_BootArm_=StartDeadline',
-  [DrawnChildren, EventTime],
-  ([drawn, at]) => {
+  { of: [DrawnChildren, EventTime], subject: interpretSupervisionEvent },
+  (subject, [drawn, at]) => {
     const ids = Arr.map(drawnChildrenOf(drawn), (child) => child.name)
     if (Arr.dedupe(ids).length !== ids.length) return true
-    const commands = bootCommandsOf(policyOf('rest_for_one', declarationsOf(drawn)), at)
+    const commands = bootCommandsOf(subject, policyOf('rest_for_one', declarationsOf(drawn)), at)
     const deadlineHolds = (arm: (typeof commands.arms)[number]): boolean =>
       Match.value(arm).pipe(
         Match.tag('ArmChildTimer', (timer) => timer.kind === 'start_deadline' && timer.deadline === at + 50),
@@ -99,11 +103,11 @@ it.prop(
 
 it.prop(
   '∀b_BootSeed_=Starting',
-  [DrawnChildren],
-  ([drawn]) => {
+  { of: [DrawnChildren], subject: initialStateOf },
+  (subject, [drawn]) => {
     const ids = Arr.map(drawnChildrenOf(drawn), (child) => child.name)
     if (Arr.dedupe(ids).length !== ids.length) return true
-    const core = initialStateOf(policyOf('one_for_all', declarationsOf(drawn)))
+    const core = subject(policyOf('one_for_all', declarationsOf(drawn)))
     return Arr.join(Arr.map(core.children, (child) => child.childId), '|') === Arr.join(ids, '|') &&
       Arr.every(core.children, (child) => child.status === 'starting' && child.generation === 0) &&
       core.restartStamps.length === 0 &&

@@ -72,9 +72,12 @@ if (import.meta.vitest !== void 0) {
     ...groupStopEntryOf(parts),
   })
 
-  const unknownDraftDecodes = (parts: UnknownDeclarationDraft): boolean =>
-    Result.isSuccess(Schema.decodeUnknownResult(MediumDeclaration)(projectedOf(parts))) ===
-      (carriedPresent(parts) && carriedDecodes(parts))
+  const decodeMediumDeclaration = Schema.decodeUnknownResult(MediumDeclaration)
 
-  it.prop('∀d_DeclarationDecode_≡Presence', [UnknownDeclarationDraft], ([draft]) => unknownDraftDecodes(draft))
+  it.prop(
+    '∀d_DeclarationDecode_≡Presence',
+    { of: [UnknownDeclarationDraft], subject: decodeMediumDeclaration },
+    (subject, [draft]) =>
+      Result.isSuccess(subject(projectedOf(draft))) === (carriedPresent(draft) && carriedDecodes(draft)),
+  )
 }

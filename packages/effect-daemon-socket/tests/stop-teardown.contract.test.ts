@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 import { driveScript, observeSocketChild } from './__fixtures__/socket-supervision.fixture.js'
 
 const Feature = makeFeature({ it, layer })

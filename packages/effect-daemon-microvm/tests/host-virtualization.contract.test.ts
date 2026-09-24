@@ -1,6 +1,6 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 import { featureNameOf, kvmGate, kvmVerdictOf } from './__fixtures__/kvm-gate.js'
 
 const Feature = makeFeature({ it, layer })

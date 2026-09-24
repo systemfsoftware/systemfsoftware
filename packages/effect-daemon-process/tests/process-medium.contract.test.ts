@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer, Scope } from 'effect'
 import { ChildProcess } from 'effect/unstable/process'
-import { expect } from 'vitest'
 import {
   abnormalTerminationsIn,
   awaitProcessGone,

@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Match } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -43,12 +43,6 @@ const divergedAt = (comparison: Conformance.TraceComparison): number =>
     Match.orElse(() => -1),
   )
 
-const conformed = (comparison: Conformance.TraceComparison): boolean =>
-  Match.value(comparison).pipe(
-    Match.tag('TracesConform', () => true),
-    Match.orElse(() => false),
-  )
-
 Feature('Holding a medium to the group-stop guarantee it claims')
   .body(({ scenario }) => {
     scenario(
@@ -71,7 +65,12 @@ Feature('Holding a medium to the group-stop guarantee it claims')
         }),
         And('the same traces conform under the cluster medium')((s) => {
           const comparison = Conformance.compare(s.reference, s.candidate, ClusterMedium.declaration)
-          expect(conformed(comparison)).toBe(true)
+          expect(comparison).toMatchObject({
+            _tag: 'TracesConform',
+            scenario: 'one-for-all-group-stop',
+            medium: 'cluster-atomic',
+            compared: 1,
+          })
         }),
       ),
     )

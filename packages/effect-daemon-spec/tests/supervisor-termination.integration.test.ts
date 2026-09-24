@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Duration, Effect, Match, Queue, Ref } from 'effect'
-import { expect } from 'vitest'
 import { crashingChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
 const Feature = makeFeature({ it, layer })
@@ -141,7 +141,7 @@ Feature('Supervising a supervisor')
             }),
         ),
         Then('every child has finished stopping by the time the parent hears it stopped')(({ observation }) => {
-          expect(reportedStopped('inner')(observation.trace)).toBe(true)
+          expect(observation.trace).toSatisfy(reportedStopped('inner'))
           expect(observation.stopped).toEqual(expect.arrayContaining(['alpha', 'beta']))
           expect(observation.stopped).toHaveLength(2)
         }),

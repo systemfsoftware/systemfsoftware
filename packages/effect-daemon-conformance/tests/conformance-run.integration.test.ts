@@ -1,9 +1,8 @@
-import { it } from '@effect/vitest'
+import { expect, it } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Duration, Effect, Layer, Match } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { LateStopMedium, LateStopMediumLayer } from './__fixtures__/late-stop-medium.js'
 import { PlantedMedium, PlantedMediumLayer } from './__fixtures__/planted-medium.js'
 
@@ -80,7 +79,7 @@ it.effect(
   'The fiber reference conforms on every scenario',
   () =>
     Effect.map(reference, (report) => {
-      expect(Conformance.isConforming(report)).toBe(true)
+      expect(namedMediums(report)).toEqual([])
       expect(report.results.length).toBe(Conformance.Scenarios.length)
       expect(report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
     }),
@@ -91,7 +90,7 @@ it.effect(
   'A medium that reports ready without running its program fails and names itself',
   () =>
     Effect.map(planted, (report) => {
-      expect(Conformance.isConforming(report)).toBe(false)
+      expect(namedMediums(report)).not.toEqual([])
       expect(namedMediums(report)).toContain('planted')
     }),
   60_000,

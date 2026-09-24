@@ -10,10 +10,12 @@ import {
 } from '../kernel/interpret-supervision-event.workflow.js'
 import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
 
+type Evolve = typeof evolveSupervisor
+
 const decidedOf = (step: SupervisionStep): SupervisionDecision => Result.getOrThrow(interpretSupervisionEvent(step))
 
-const evolvedOf = (state: SupervisorState, decision: SupervisionDecision): SupervisorState =>
-  Result.getOrThrow(evolveSupervisor(new SupervisionEvolution({ state, decision })))
+const evolvedOf = (evolve: Evolve, state: SupervisorState, decision: SupervisionDecision): SupervisorState =>
+  Result.getOrThrow(evolve(new SupervisionEvolution({ state, decision })))
 
 const phaseOf = (state: SupervisorState): string =>
   Match.value(state).pipe(
@@ -38,34 +40,47 @@ const expectedPhaseOf = (decision: SupervisionDecision): string =>
     Match.exhaustive,
   )
 
-it.prop('∀e_Evolve_=DecisionPhase', [SupervisionEvolution], ([step]) => {
-  const evolved = evolvedOf(step.state, step.decision)
+it.prop(
+  '∀e_Evolve_=DecisionPhase',
+  { of: [SupervisionEvolution], subject: evolveSupervisor },
+  (subject, [step]) => {
+    const evolved = evolvedOf(subject, step.state, step.decision)
 
-  return Match.value(step.decision).pipe(
-    Match.tag('Stale', () => evolved === step.state),
-    Match.tag('RefuseDynamicStart', () => evolved === step.state),
-    Match.tag('Continue', () => phaseOf(evolved) === phaseOf(step.state)),
-    Match.orElse(() => phaseOf(evolved) === expectedPhaseOf(step.decision)),
-  )
-})
+    return Match.value(step.decision).pipe(
+      Match.tag('Stale', () => evolved === step.state),
+      Match.tag('RefuseDynamicStart', () => evolved === step.state),
+      Match.tag('Continue', () => phaseOf(evolved) === phaseOf(step.state)),
+      Match.orElse(() => phaseOf(evolved) === expectedPhaseOf(step.decision)),
+    )
+  },
+)
 
-it.prop('∀s_FoldStep_=ConsistentPhase', [SupervisionStep], ([step]) => {
-  const decision = decidedOf(step)
-  const evolved = evolvedOf(step.state, decision)
+it.prop(
+  '∀s_FoldStep_=ConsistentPhase',
+  { of: [SupervisionStep], subject: evolveSupervisor },
+  (subject, [step]) => {
+    const decision = decidedOf(step)
+    const evolved = evolvedOf(subject, step.state, decision)
 
-  return Match.value(decision).pipe(
-    Match.tag('Stale', () => evolved === step.state),
-    Match.tag('RefuseDynamicStart', () => evolved === step.state),
-    Match.tag('Continue', () => phaseOf(evolved) === phaseOf(step.state)),
-    Match.orElse(() => phaseOf(evolved) === expectedPhaseOf(decision)),
-  )
-})
+    return Match.value(decision).pipe(
+      Match.tag('Stale', () => evolved === step.state),
+      Match.tag('RefuseDynamicStart', () => evolved === step.state),
+      Match.tag('Continue', () => phaseOf(evolved) === phaseOf(step.state)),
+      Match.orElse(() => phaseOf(evolved) === expectedPhaseOf(decision)),
+    )
+  },
+)
 
-it.prop('∀d_Continue_=SamePhase', [SupervisorState, SupervisorCore], ([state, core]) => {
-  const evolved = evolvedOf(
-    state,
-    new Continue({ core, commands: { stops: [], starts: [], arms: [], replies: [], terminates: [] } }),
-  )
+it.prop(
+  '∀d_Continue_=SamePhase',
+  { of: [SupervisorState, SupervisorCore], subject: evolveSupervisor },
+  (subject, [state, core]) => {
+    const evolved = evolvedOf(
+      subject,
+      state,
+      new Continue({ core, commands: { stops: [], starts: [], arms: [], replies: [], terminates: [] } }),
+    )
 
-  return phaseOf(evolved) === phaseOf(state)
-})
+    return phaseOf(evolved) === phaseOf(state)
+  },
+)

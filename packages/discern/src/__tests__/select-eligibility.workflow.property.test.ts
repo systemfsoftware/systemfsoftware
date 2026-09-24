@@ -5,8 +5,14 @@ import { type EligibilityDecision, EligibilityQuestion, selectEligibility } from
 
 const idsOf = (ids: ReadonlyArray<string>): string => Arr.join(ids, ',')
 
-const decidedOf = (membership: ReadonlyArray<string>, candidates: ReadonlyArray<string>): EligibilityDecision =>
-  Result.match(selectEligibility(new EligibilityQuestion({ membership, candidates })), {
+type Select = typeof selectEligibility
+
+const decidedOf = (
+  select: Select,
+  membership: ReadonlyArray<string>,
+  candidates: ReadonlyArray<string>,
+): EligibilityDecision =>
+  Result.match(select(new EligibilityQuestion({ membership, candidates })), {
     onFailure: (impossible) => impossible,
     onSuccess: (decided) => decided,
   })
@@ -29,35 +35,46 @@ const isDistributionOf = (decided: EligibilityDecision, candidates: ReadonlyArra
     Match.orElse(() => false),
   )
 
+const isTotalOf = (decided: EligibilityDecision, candidates: ReadonlyArray<string>): boolean =>
+  Match.value(decided).pipe(
+    Match.tag(
+      'NoCandidateEligible',
+      (none) => Arr.length(candidates) === 0 && idsOf(none.membership) === idsOf(candidates),
+    ),
+    Match.tag(
+      'SingleCandidateEligible',
+      (single) => Arr.length(candidates) === 1 && single.candidate === candidates[0],
+    ),
+    Match.tag(
+      'CandidateDistribution',
+      (distribution) => Arr.length(candidates) >= 2 && idsOf(distribution.candidates) === idsOf(candidates),
+    ),
+    Match.exhaustive,
+  )
+
 it.prop(
   '∀c_NoCandidates_=NoCandidateEligible',
-  [Schema.Array(Schema.String)],
-  ([membership]) => isNoCandidateOf(decidedOf(membership, []), membership),
+  { of: [Schema.Array(Schema.String)], subject: selectEligibility },
+  (subject, [membership]) => isNoCandidateOf(decidedOf(subject, membership, []), membership),
 )
 
 it.prop(
   '∀c_OneCandidate_=SingleCandidateEligible',
-  [Schema.String],
-  ([candidate]) => isSingleCandidateOf(decidedOf([candidate], [candidate]), candidate),
+  { of: [Schema.String], subject: selectEligibility },
+  (subject, [candidate]) => isSingleCandidateOf(decidedOf(subject, [candidate], [candidate]), candidate),
 )
 
 it.prop(
   '∀c_TwoOrMoreCandidates_=DistributionInOfferOrder',
-  [Schema.String, Schema.String, Schema.Array(Schema.String)],
-  ([first, second, rest]) => {
+  { of: [Schema.String, Schema.String, Schema.Array(Schema.String)], subject: selectEligibility },
+  (subject, [first, second, rest]) => {
     const candidates = [first, second, ...rest]
-    return isDistributionOf(decidedOf(candidates, candidates), candidates)
+    return isDistributionOf(decidedOf(subject, candidates, candidates), candidates)
   },
 )
 
 it.prop(
   '∀c_CandidateCount_=TotalNeverRefuses',
-  [Schema.Array(Schema.String)],
-  ([candidates]) =>
-    Match.value(decidedOf(candidates, candidates)).pipe(
-      Match.tag('NoCandidateEligible', () => true),
-      Match.tag('SingleCandidateEligible', () => true),
-      Match.tag('CandidateDistribution', () => true),
-      Match.orElse(() => false),
-    ),
+  { of: [Schema.Array(Schema.String)], subject: selectEligibility },
+  (subject, [candidates]) => isTotalOf(decidedOf(subject, candidates, candidates), candidates),
 )

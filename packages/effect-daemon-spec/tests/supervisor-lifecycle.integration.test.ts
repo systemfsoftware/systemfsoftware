@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Match, Queue, Ref } from 'effect'
-import { expect } from 'vitest'
 import { crashingChild, neverChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
 const Feature = makeFeature({ it, layer })

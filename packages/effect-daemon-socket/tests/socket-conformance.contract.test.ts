@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer, Match } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
