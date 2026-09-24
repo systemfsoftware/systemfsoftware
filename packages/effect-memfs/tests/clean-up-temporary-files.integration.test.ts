@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, type Scope } from 'effect'
@@ -8,6 +7,11 @@ import * as Error from 'effect/PlatformError'
 const Feature = makeFeature({ it })
 
 const filesystem = Effect.service(FileSystem.FileSystem)
+
+const escaped = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** The scratch path is named at run time; only its asked-for start and end are knowable here. */
+const placedAsAsked = (prefix: string, suffix: string): RegExp => new RegExp(`^${escaped(prefix)}.*${escaped(suffix)}$`)
 
 type Scratch = {
   readonly kind: string
@@ -96,9 +100,9 @@ Feature('Handing back scratch space when the work using it is over')
               )
               return yield* Effect.flip(s.fs.stat(borrowed))
             })),
-          Then('the scratch space it borrowed can no longer be found')((s) => {
+          Then('the scratch space it borrowed can no longer be found')((s, expect) =>
             expect(s.outcome.reason._tag).toBe('NotFound')
-          }),
+          ),
         ),
     )
 
@@ -112,11 +116,12 @@ Feature('Handing back scratch space when the work using it is over')
             Effect.scoped(
               Effect.flatMap(row.borrow(s.fs), (path) => Effect.map(s.fs.stat(path), (info) => ({ path, info }))),
             )),
-          Then('the scratch space is of the kind asked for, in the place asked for')((s) => {
-            expect(s.borrowed.info.type).toBe(row.found)
-            expect(s.borrowed.path).toSatisfy((path: string) => path.startsWith(row.startsWith))
-            expect(s.borrowed.path).toSatisfy((path: string) => path.endsWith(row.endsWith))
-          }),
+          Then('the scratch space is of the kind asked for, in the place asked for')((s, expect) =>
+            expect({ type: s.borrowed.info.type, path: s.borrowed.path }).toEqual({
+              type: row.found,
+              path: expect.stringMatching(placedAsAsked(row.startsWith, row.endsWith)),
+            })
+          ),
         ),
     )
   })

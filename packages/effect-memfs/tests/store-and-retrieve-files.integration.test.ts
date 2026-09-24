@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect } from 'effect'
@@ -27,9 +26,9 @@ Feature('Keeping files in memory instead of on disk')
               () => s.fs.readFile('/notes/list.txt'),
             ),
         ),
-        Then('the shopping list comes back word for word')((s) => {
+        Then('the shopping list comes back word for word')((s, expect) =>
           expect(decode(s.contents)).toBe('milk, bread')
-        }),
+        ),
       ),
     )
 
@@ -38,9 +37,7 @@ Feature('Keeping files in memory instead of on disk')
       Gherkin.Do.pipe(
         Given('a filesystem holding a notes folder')('fs', () => filesystem),
         When('the note it was created with is read')('contents', (s) => s.fs.readFile('/notes/hello.txt')),
-        Then('the note reads as it was handed over')((s) => {
-          expect(decode(s.contents)).toBe('hello')
-        }),
+        Then('the note reads as it was handed over')((s, expect) => expect(decode(s.contents)).toBe('hello')),
       ),
     )
 
@@ -49,9 +46,7 @@ Feature('Keeping files in memory instead of on disk')
       Gherkin.Do.pipe(
         Given('a filesystem holding a notes folder')('fs', () => filesystem),
         When('the notes folder is listed')('entries', (s) => s.fs.readDirectory('/notes')),
-        Then('the listing names the note inside it')((s) => {
-          expect(s.entries).toEqual(['hello.txt'])
-        }),
+        Then('the listing names the note inside it')((s, expect) => expect(s.entries).toEqual(['hello.txt'])),
       ),
     )
 
@@ -60,33 +55,35 @@ Feature('Keeping files in memory instead of on disk')
       Gherkin.Do.pipe(
         Given('a filesystem holding a notes folder')('fs', () => filesystem),
         When('a note that was never saved is read')('outcome', (s) => Effect.flip(s.fs.readFile('/notes/absent.txt'))),
-        Then('the reader is told the file is missing, and which attempt failed')((s) => {
-          expect(s.outcome.reason._tag).toBe('NotFound')
-          expect(s.outcome.reason.method).toBe('readFile')
-        }),
+        Then('the reader is told the file is missing, and which attempt failed')((s, expect) =>
+          expect({ _tag: s.outcome.reason._tag, method: s.outcome.reason.method }).toEqual({
+            _tag: 'NotFound',
+            method: 'readFile',
+          })
+        ),
       ),
     )
 
     scenarioOutline(
       'Creating a folder inside a missing parent <expectation> when creating parents is <permission>',
       [
-        { expectation: 'is turned down', permission: 'refused', parents: false, found: false },
-        { expectation: 'succeeds', permission: 'allowed', parents: true, found: true },
+        { expectation: 'is turned down', permission: 'refused', parents: false, outcome: 'NotFound' },
+        { expectation: 'succeeds', permission: 'allowed', parents: true, outcome: 'Directory' },
       ],
       (row) =>
         Gherkin.Do.pipe(
           Given('a filesystem with no archive folder')('fs', () => filesystem),
-          When('a folder is created beneath the archive folder')('found', (s) =>
+          When('a folder is created beneath the archive folder')('outcome', (s) =>
             Effect.match(
               Effect.flatMap(
                 s.fs.makeDirectory('/archive/2026', { recursive: row.parents }),
                 () => s.fs.stat('/archive/2026'),
               ),
-              { onFailure: () => false, onSuccess: (info) => info.type === 'Directory' },
+              { onFailure: (error) => error.reason._tag, onSuccess: (info) => info.type },
             )),
-          Then('whether the folder now exists matches what was asked for')((s) => {
-            expect(s.found).toBe(row.found)
-          }),
+          Then('whether the folder now exists matches what was asked for')((s, expect) =>
+            expect(s.outcome).toBe(row.outcome)
+          ),
         ),
     )
   })

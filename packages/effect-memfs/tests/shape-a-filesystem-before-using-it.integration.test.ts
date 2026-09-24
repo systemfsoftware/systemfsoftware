@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect } from 'effect'
@@ -78,9 +77,7 @@ Feature('Shaping an in-memory filesystem before using it')
         Gherkin.Do.pipe(
           Given('a filesystem that was shaped in advance')('fs', () => row.obtain),
           When('a note in it is read')('contents', (s) => Effect.map(s.fs.readFile(row.path), decode)),
-          Then('the note reads as it was shaped')((s) => {
-            expect(s.contents).toBe(row.seen)
-          }),
+          Then('the note reads as it was shaped')((s, expect) => expect(s.contents).toBe(row.seen)),
         ),
     )
   })
