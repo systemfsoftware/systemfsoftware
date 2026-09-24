@@ -1,7 +1,7 @@
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer, Result } from 'effect'
 import { TestClock } from 'effect/testing'
@@ -17,7 +17,7 @@ const withLock = <A, E, R>(
     return yield* withLeaderLock(self, options, lock)
   })
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('withLeaderLock Combinator Contract')
   .withLayer(Noop)

@@ -10,9 +10,9 @@ import { createRuleTester } from './_tester.js'
 const ruleTester = createRuleTester()
 
 const FEATURE_IMPORT = `
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import * as Layer from 'effect/Layer'
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const testLayer = Layer.empty
 `
 

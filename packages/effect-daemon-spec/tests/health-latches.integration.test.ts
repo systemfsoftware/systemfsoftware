@@ -4,13 +4,13 @@ import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Latch, Metric, Ref, Result, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Health Latch Lifecycle')
   .withLayer(NoopLayer)

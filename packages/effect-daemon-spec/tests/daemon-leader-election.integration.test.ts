@@ -1,6 +1,6 @@
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import type { LockConfig } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
@@ -11,7 +11,7 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Daemon Leader Election')
   .withLayer(Noop)

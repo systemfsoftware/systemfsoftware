@@ -2,14 +2,14 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { dynamic } from '@systemfsoftware/effect-daemon-spec'
 import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Option, Ref, Result, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { BufferedRef } from './__fixtures__/TestUtils.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Stream Worker Lifecycle')
   .withLayer(NoopLayer)

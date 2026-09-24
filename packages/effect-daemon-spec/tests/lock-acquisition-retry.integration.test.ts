@@ -4,14 +4,14 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const finiteSchedule = Schedule.duration(Duration.millis(1)).pipe(
   Schedule.concat(Schedule.duration(Duration.millis(1))),

@@ -1,6 +1,6 @@
 import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Fiber, Result } from 'effect'
 import { TestClock } from 'effect/testing'
@@ -11,7 +11,7 @@ import {
   mkStatefulLockPrimitive,
 } from './__fixtures__/LockPrimitiveFakes.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Lock Primitive Contract')
   .withScenarioLayer(TestClock.layer())

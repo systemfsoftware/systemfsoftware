@@ -1,12 +1,12 @@
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Ref } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Subscription Worker Lifecycle')
   .withLayer(NoopLayer)
