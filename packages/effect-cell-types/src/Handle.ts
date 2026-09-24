@@ -187,11 +187,14 @@ type IsTop<T> = Top extends T ? true : false
 
 type IsFunction<T> = T extends (...args: never[]) => Top ? true : false
 
-type DriverParts<D> =
-  | D
-  | {
-    [K in keyof D]-?: D[K] extends (...args: never[]) => Top ? never : D[K] extends object ? D[K] : never
-  }[keyof D]
+type IsAny<T> = 0 extends 1 & T ? true : false
+
+type DriverPart<P> = IsAny<P> extends true ? never
+  : P extends (...args: never[]) => Top ? never
+  : P extends object ? P
+  : never
+
+type DriverParts<D> = D | { [K in keyof D]-?: DriverPart<D[K]> }[keyof D]
 
 type Accepts<T, P> = P extends P ? ([P] extends [T] ? true : false) : never
 

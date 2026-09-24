@@ -40,6 +40,7 @@ declare const opaque: Top
 declare const create: (input: Label) => Effect.Effect<Handle.Acquired<Driver, Label>>
 declare const device: Device
 declare const volume: Handle.Handle<'RecordingVolume', { label: string }>
+declare const untypedDriver: Driver & { readonly legacy: PromiseRejectedResult['reason'] }
 
 class Tracer extends Context.Service<Tracer, { readonly span: (name: string) => Effect.Effect<void> }>()('Tracer') {}
 
@@ -72,6 +73,17 @@ describe('Handle.make', () => {
       name: 'Plain',
       create: (_input: Label) =>
         Effect.succeed({ driver: { run: (_line: string) => Effect.void }, data: { meta: opaque } }),
+    })
+  })
+
+  it('Should_JudgeDataByTheTypedParts_When_ADriverMemberIsUntyped', () => {
+    expect(Handle.make).type.toBeCallableWith({
+      name: 'Plain',
+      create: (input: Label) => Effect.succeed({ driver: untypedDriver, data: { meta: input.label.length } }),
+    })
+    expect(Handle.make).type.not.toBeCallableWith({
+      name: 'Plain',
+      create: (_input: Label) => Effect.succeed({ driver: untypedDriver, data: { meta: untypedDriver } }),
     })
   })
 
