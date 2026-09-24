@@ -82,34 +82,46 @@ describe('the readiness a fiber child declares', () => {
 })
 
 describe('the owned shutdown a fiber child accepts', () => {
-  it.effect('Should_InterruptAtOnce_When_Brutal', () =>
+  it.effect('Should_InterruptWithoutWaiting_When_Brutal', () =>
     Effect.gen(function*() {
-      const { started } = yield* startInChildScope(Effect.never)
-      yield* FiberMedium.medium.stop(started, { _tag: 'Brutal' })
+      const entered = yield* Ref.make(false)
+      const slow = yield* Deferred.make<void>()
+      const { started } = yield* startInChildScope(
+        Effect.never.pipe(Effect.onInterrupt(() => Effect.andThen(Ref.set(entered, true), Deferred.await(slow)))),
+      )
+      const stopFiber = yield* Effect.forkScoped(FiberMedium.medium.stop(started, { _tag: 'Brutal' }))
+      yield* Effect.yieldNow
+      expect(yield* Ref.get(entered)).toBe(true)
+      yield* Deferred.succeed(slow, void 0)
+      yield* Fiber.await(stopFiber)
       expect(yield* FiberMedium.medium.probe(started)).toBe(false)
     }))
 
-  it.effect('Should_ForceAfterTheTimeoutElapses_When_GracefulTimesOut', () =>
+  it.effect('Should_GiveUpWaitingAtTheTimeout_When_GracefulOutlivesItsWindow', () =>
     Effect.gen(function*() {
-      const { started } = yield* startInChildScope(Effect.never)
+      const { started } = yield* startInChildScope(
+        Effect.asVoid(Effect.andThen(Deferred.await(yield* Deferred.make<void>()), Effect.never)),
+      )
       const stopFiber = yield* Effect.forkScoped(
         FiberMedium.medium.stop(started, { _tag: 'Graceful', millis: 100 }),
       )
-      yield* Effect.yieldNow
-      expect(stopFiber.pollUnsafe()).toBeUndefined()
       yield* TestClock.adjust(Duration.millis(100))
       yield* Fiber.await(stopFiber)
       expect(yield* FiberMedium.medium.probe(started)).toBe(false)
     }))
 
-  it.effect('Should_WaitForTheChildToFinish_When_Infinity', () =>
+  it.effect('Should_InterruptAndAwaitTheFinalizer_When_Infinity', () =>
     Effect.gen(function*() {
-      const done = yield* Deferred.make<void>()
-      const { started } = yield* startInChildScope(Deferred.await(done))
+      const entered = yield* Ref.make(false)
+      const slow = yield* Deferred.make<void>()
+      const { started } = yield* startInChildScope(
+        Effect.never.pipe(Effect.onInterrupt(() => Effect.andThen(Ref.set(entered, true), Deferred.await(slow)))),
+      )
       const stopFiber = yield* Effect.forkScoped(FiberMedium.medium.stop(started, { _tag: 'Infinity' }))
       yield* Effect.yieldNow
+      expect(yield* Ref.get(entered)).toBe(true)
       expect(stopFiber.pollUnsafe()).toBeUndefined()
-      yield* Deferred.succeed(done, void 0)
+      yield* Deferred.succeed(slow, void 0)
       yield* Fiber.await(stopFiber)
       expect(yield* FiberMedium.medium.probe(started)).toBe(false)
     }))

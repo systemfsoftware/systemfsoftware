@@ -1,13 +1,23 @@
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Match, Option, Scope } from 'effect'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
-import { make, type Medium as MediumShape, type Started, StartedTypeId, type Stopped, stopped } from './Medium.js'
+import {
+  make,
+  type Medium as MediumShape,
+  MediumPort,
+  type Started,
+  StartedTypeId,
+  type Stopped,
+  stopped,
+} from './Medium.js'
 
 export type BareFiberProgram = Effect.Effect<void, never, Scope.Scope>
 
 export type FiberProgram = (ready: Effect.Effect<void>) => BareFiberProgram
 
 export const readyOnStart = (program: BareFiberProgram): FiberProgram => (ready) => Effect.andThen(ready, program)
+
+export const fiberPort = MediumPort<FiberProgram, never, Scope.Scope>('FiberMedium')
 
 const FiberStartedTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/effect-daemon-spec/FiberMedium/Started',
@@ -54,18 +64,21 @@ const closedChild = (self: FiberStarted): Effect.Effect<void> => Scope.close(sel
 
 const forcedChild = (self: FiberStarted): Effect.Effect<void> => Fiber.interrupt(self.fiber)
 
+const departedChild = (self: FiberStarted): Effect.Effect<Exit.Exit<void, never>> => Fiber.await(self.fiber)
+
+const closedOnceWarned = (self: FiberStarted, millis: number): Effect.Effect<void> =>
+  Effect.ignoreCause(
+    Effect.andThen(
+      Effect.timeoutOption(departedChild(self), Duration.millis(millis)),
+      closedChild(self),
+    ),
+  )
+
 const stopOf = (self: FiberStarted, mode: ShutdownMode): Effect.Effect<void> =>
   Match.value(mode).pipe(
     Match.tag('Brutal', () => Effect.andThen(forcedChild(self), closedChild(self))),
-    Match.tag('Graceful', (graceful) =>
-      Effect.andThen(
-        Effect.raceFirst(
-          Fiber.await(self.fiber),
-          Effect.andThen(Effect.sleep(Duration.millis(graceful.millis)), forcedChild(self)),
-        ),
-        closedChild(self),
-      )),
-    Match.tag('Infinity', () => Effect.andThen(Fiber.await(self.fiber), closedChild(self))),
+    Match.tag('Graceful', (graceful) => closedOnceWarned(self, graceful.millis)),
+    Match.tag('Infinity', () => Effect.andThen(forcedChild(self), closedChild(self))),
     Match.exhaustive,
   )
 
@@ -91,6 +104,6 @@ export const medium: MediumShape<FiberProgram, never, Scope.Scope> = make({
   stop: (evidence, mode): Effect.Effect<Stopped, never, Scope.Scope> =>
     Option.match(fiberOf(evidence), {
       onNone: () => Effect.succeed(stopped),
-      onSome: (self) => Effect.map(stopOf(self, mode), () => stopped),
+      onSome: (self) => Effect.as(stopOf(self, mode), stopped),
     }),
 })

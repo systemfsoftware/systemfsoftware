@@ -14,6 +14,16 @@ export type SupervisorTimerTarget = typeof SupervisorTimerTarget.Type
 export const TimerTarget = Schema.Union([ChildTimerTarget, SupervisorTimerTarget])
 export type TimerTarget = typeof TimerTarget.Type
 
+/**
+ * The boot event: the handle enqueues exactly one as its first envelope, so the
+ * declared children start by an ordinary kernel decision rather than by builder
+ * logic. It carries no child identity because it names them all, in declared order.
+ */
+export const SupervisorStarted = Schema.TaggedStruct('SupervisorStarted', {
+  at: EventTime,
+})
+export type SupervisorStarted = typeof SupervisorStarted.Type
+
 export const ChildStarted = Schema.TaggedStruct('ChildStarted', {
   at: EventTime,
   childId: ChildId,
@@ -79,6 +89,7 @@ export const ShutdownRequested = Schema.TaggedStruct('ShutdownRequested', {
 export type ShutdownRequested = typeof ShutdownRequested.Type
 
 export const SupervisionEvent = Schema.Union([
+  SupervisorStarted,
   ChildStarted,
   ChildReady,
   ChildTerminated,

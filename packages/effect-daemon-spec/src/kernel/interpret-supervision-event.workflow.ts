@@ -1138,8 +1138,38 @@ const onShutdownRequested = (state: SupervisorState, reason: TerminationReason):
     Match.exhaustive,
   )
 
+const bootedChildrenOf = (core: SupervisorCore, at: EventTime): SupervisionDecision => {
+  const incarnationOf = (child: ChildInstance): ChildStart => ({
+    childId: child.childId,
+    generation: child.generation,
+  })
+  const deadlineOf = (child: ChildInstance): ArmChildTimer =>
+    deadlineCommandOf(
+      incarnationOf(child),
+      at + kindOfPolicy(core.policy, child.childId).startTimeoutMillis,
+    )
+  return new StartChildren({
+    core,
+    commands: commandsIn({
+      starts: Arr.map(core.children, (child) => startCommandOf(incarnationOf(child))),
+      arms: Arr.map(core.children, deadlineOf),
+    }),
+  })
+}
+
+const onSupervisorStarted = (state: SupervisorState, at: EventTime): SupervisionDecision =>
+  Match.value(state).pipe(
+    Match.tag('Running', ({ core }) => bootedChildrenOf(core, at)),
+    Match.tag('Restarting', () => new Stale({})),
+    Match.tag('CoolingDown', () => new Stale({})),
+    Match.tag('ShuttingDown', () => new Stale({})),
+    Match.tag('Terminated', () => new Stale({})),
+    Match.exhaustive,
+  )
+
 const decided = (state: SupervisorState, event: SupervisionEvent): SupervisionDecision =>
   Match.value(event).pipe(
+    Match.tag('SupervisorStarted', (started) => onSupervisorStarted(state, started.at)),
     Match.tag('ChildStarted', (started) => onChildStarted(state, started.childId, started.generation)),
     Match.tag('ChildReady', (ready) => onChildReady(state, ready.childId, ready.generation, ready.at)),
     Match.tag('ChildTerminated', (terminated) =>
