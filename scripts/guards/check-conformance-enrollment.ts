@@ -1,11 +1,17 @@
 #!/usr/bin/env -S deno run --allow-read
 /**
- * Guard: every package whose PRODUCTION source forks fibers, holds
- * `Queue`/`Deferred`/`Ref`/`Semaphore` state, or acquires scoped resources is
- * inventoried in `scripts/guards/conformance-inventory.json`, and each
- * inventoried package adopts the conformance check that fits it (R29/KTD13).
+ * Guard: every workspace package whose PRODUCTION source forks fibers, holds
+ * `Queue`/`Deferred`/`Ref`/`Semaphore` state, or acquires scoped resources runs
+ * its tests through the shared `@systemfsoftware/vitest-config` `defineConfig`
+ * (R29 enrollment).
  *
- * The R29 set is derived from source, never from a hand-kept list: only a
+ * Coverage is judged inside every vitest run: that config's `defineConfig` adds
+ * a plugin that fails a run when a concurrency-primitive site in the package's
+ * source never executed under a conformance check. The plugin cannot see a
+ * package that never runs vitest through `defineConfig`, so enrollment is the
+ * only thing left for a guard to check.
+ *
+ * The enrolled set is derived from source, never from a hand-kept list: only a
  * package's `src/`, excluding test files (`*.test.ts`, `*.spec.ts`,
  * `*.stories.tsx`, `tests/`, `__tests__/`, `__fixtures__/`) and the trailing
  * in-source `if (import.meta.vitest !== void 0) { ... }` block this repo keeps
@@ -19,35 +25,21 @@
  * Only lowercase members count, so a type position (`Ref.Ref<A>`) is not a
  * value use.
  *
- * The guard fails when:
- *   1. a matched package is missing from the inventory;
- *   2. an inventoried package declares fewer primitives than its source uses;
- *   3. an inventoried package has no `*.conformance.test.ts` anywhere in the
- *      package, unless its entry is a smoke journey (`journey` names the file)
- *      or a harness entry (`harness.selfSuites` names the suites that exercise
- *      it);
- *   4. a named journey or harness self-suite does not exist;
- *   5. the inventory itself is malformed (unknown check, duplicate entry,
- *      entry for a package the workspace does not have).
- *
- * Harness rule: a package that IS conformance or test infrastructure cannot
- * adopt a check the way a consumer can. Its entry is still not silently
- * excluded: it names the check its own primitives implement and lists
- * `harness.selfSuites` — the package's own suites that exercise it — with a
- * `why` reason. The guard verifies those suites exist.
+ * The guard fails for a package whose source holds at least one primitive and:
+ *   1. declares no `test` script that runs `vitest`; or
+ *   2. has no `vitest.config.ts|.mts|.js` that imports `defineConfig` from
+ *      '@systemfsoftware/vitest-config'.
  *
  * Usage:
- *   deno run --allow-read scripts/guards/check-conformance-inventory.ts
- *   deno run --allow-read scripts/guards/check-conformance-inventory.ts --selftest
+ *   deno run --allow-read scripts/guards/check-conformance-enrollment.ts
+ *   deno run --allow-read scripts/guards/check-conformance-enrollment.ts --selftest
  */
 import { dirname, fromFileUrl, join, relative, resolve } from '@std/path'
 import { parse } from '@std/yaml'
 
 export type Primitive = 'fork' | 'queue' | 'deferred' | 'ref' | 'semaphore' | 'scoped'
-export type Check = 'linearizable' | 'sequential' | 'released' | 'smoke-journey'
 
 export const PRIMITIVES: readonly Primitive[] = ['fork', 'queue', 'deferred', 'ref', 'semaphore', 'scoped']
-export const CHECKS: readonly Check[] = ['linearizable', 'sequential', 'released', 'smoke-journey']
 
 export type SourceFile = { readonly path: string; readonly text: string }
 
@@ -61,32 +53,18 @@ export type PrimitiveHit = {
 export type PackageEvidence = {
   readonly name: string
   readonly dir: string
-  /** Package-relative POSIX paths of every file in the package. */
-  readonly files: readonly string[]
+  /** `scripts.test` from the package manifest, if it declares one. */
+  readonly testScript: string | undefined
+  /** Repo-relative path + text of each vitest config the package holds. */
+  readonly vitestConfigs: readonly SourceFile[]
   readonly hits: readonly PrimitiveHit[]
 }
 
-export type InventoryEntry = {
-  readonly name: string
-  readonly primitives: readonly Primitive[]
-  readonly checks: readonly Check[]
-  readonly journey?: string
-  readonly harness?: { readonly why: string; readonly selfSuites: readonly string[] }
-}
-
-export type Inventory = { readonly entries: readonly InventoryEntry[] }
-
-export type ProblemKind =
-  | 'missing-inventory'
-  | 'missing-primitive'
-  | 'missing-check'
-  | 'missing-file'
-  | 'invalid-inventory'
-
 export type Problem = {
-  readonly kind: ProblemKind
   readonly package: string
   readonly detail: string
+  /** First primitive site in the package, as `path:line (token)`. */
+  readonly evidence: string
 }
 
 export type Verdict = { readonly ok: boolean; readonly problems: readonly Problem[] }
@@ -268,215 +246,79 @@ export const detectPrimitives = (files: readonly SourceFile[]): readonly Primiti
 export const primitivesOf = (hits: readonly PrimitiveHit[]): readonly Primitive[] =>
   [...new Set(hits.map((hit) => hit.primitive))].sort()
 
-const isPrimitive = (value: unknown): value is Primitive => PRIMITIVES.includes(value as Primitive)
-const isCheck = (value: unknown): value is Check => CHECKS.includes(value as Check)
-const normalizePath = (path: string): string => path.replace(/\\/g, '/').replace(/^\.\//, '')
+// ---------------------------------------------------------------------------
+// Enrollment
+// ---------------------------------------------------------------------------
 
-const resolveRelative = (path: string): string => {
-  const parts = path.split('/')
-  const stack: string[] = []
-  for (const part of parts) {
-    if (part === '' || part === '.') continue
-    if (part === '..') {
-      if (stack.length === 0) return path
-      stack.pop()
-      continue
-    }
-    stack.push(part)
-  }
-  return stack.join('/')
-}
+/** The shared config whose `defineConfig` installs the conformance gate. */
+export const SHARED_CONFIG_PACKAGE = '@systemfsoftware/vitest-config'
 
-export const parseInventory = (text: string): Inventory => {
-  let doc: unknown
-  try {
-    doc = JSON.parse(text)
-  } catch (cause) {
-    throw new Error(
-      `conformance-inventory.json is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
-    )
-  }
-  const entries = (doc as { entries?: unknown } | null)?.entries
-  if (!Array.isArray(entries)) throw new Error('conformance-inventory.json: `entries` must be an array')
-  return { entries: entries as readonly InventoryEntry[] }
-}
+export const VITEST_CONFIG_FILE = /(?:^|\/)vitest\.config\.(?:ts|mts|js)$/
 
-const evidenceDetail = (pkg: PackageEvidence): string => {
-  const lines: string[] = []
-  for (const primitive of primitivesOf(pkg.hits)) {
-    const shown = pkg.hits.filter((hit) => hit.primitive === primitive).slice(0, 3)
-    for (const hit of shown) lines.push(`${primitive}: ${hit.path}:${hit.line} (${hit.token})`)
-  }
-  return lines.join('\n')
-}
+export const ENROLLMENT_FIX =
+  'run its tests with vitest through defineConfig from @systemfsoftware/vitest-config; that run fails while any primitive site never executes under a conformance check'
 
-export const evaluate = (packages: readonly PackageEvidence[], inventory: Inventory): Verdict => {
+/** True when a manifest `test` script invokes vitest. */
+export const runsVitest = (script: string | undefined): boolean => script !== undefined && /\bvitest\b/.test(script)
+
+/** True when the config source imports `defineConfig` from the shared package. */
+export const usesSharedDefineConfig = (text: string): boolean =>
+  extractBindings(text).some((binding) =>
+    (binding.specifier === SHARED_CONFIG_PACKAGE || binding.specifier.startsWith(`${SHARED_CONFIG_PACKAGE}/`)) &&
+    binding.imported === 'defineConfig'
+  )
+
+export const evaluate = (packages: readonly PackageEvidence[]): Verdict => {
   const problems: Problem[] = []
-  const byName = new Map<string, PackageEvidence>()
-  const rootFiles = new Set<string>()
   for (const pkg of packages) {
-    byName.set(pkg.name, pkg)
-    for (const file of pkg.files) rootFiles.add(`${pkg.dir}/${normalizePath(file)}`)
-  }
-  const entries = new Map<string, InventoryEntry>()
-  for (const raw of inventory.entries) {
-    if (typeof raw !== 'object' || raw === null) {
+    const first = pkg.hits[0]
+    if (first === undefined) continue
+    const evidence = `${first.path}:${first.line} (${first.token})`
+
+    if (!runsVitest(pkg.testScript)) {
       problems.push({
-        kind: 'invalid-inventory',
-        package: '(missing name)',
-        detail: `entry is not an object: ${String(raw)}`,
-      })
-      continue
-    }
-    const entry = raw
-    const name = typeof entry.name === 'string' ? entry.name : String(entry.name)
-    if (entries.has(name)) {
-      problems.push({ kind: 'invalid-inventory', package: name, detail: 'duplicate inventory entry' })
-    }
-    entries.set(name, entry)
-
-    if (!Array.isArray(entry.primitives) || entry.primitives.length === 0) {
-      problems.push({ kind: 'invalid-inventory', package: name, detail: 'names no primitive' })
-    } else {
-      for (const primitive of entry.primitives) {
-        if (!isPrimitive(primitive)) {
-          problems.push({
-            kind: 'invalid-inventory',
-            package: name,
-            detail: `unknown primitive '${String(primitive)}'`,
-          })
-        }
-      }
-    }
-
-    if (!Array.isArray(entry.checks) || entry.checks.length === 0) {
-      problems.push({ kind: 'invalid-inventory', package: name, detail: 'names no check' })
-    } else {
-      for (const check of entry.checks) {
-        if (!isCheck(check)) {
-          problems.push({ kind: 'invalid-inventory', package: name, detail: `unknown check '${String(check)}'` })
-        }
-      }
-      if (entry.checks.includes('smoke-journey') && entry.journey === undefined) {
-        problems.push({ kind: 'invalid-inventory', package: name, detail: "names smoke-journey but no 'journey' path" })
-      }
-    }
-
-    if (entry.harness !== undefined) {
-      const why = typeof entry.harness.why === 'string' ? entry.harness.why.trim() : ''
-      const suites = Array.isArray(entry.harness.selfSuites) ? entry.harness.selfSuites : []
-      if (why.length === 0 || suites.length === 0) {
-        problems.push({
-          kind: 'invalid-inventory',
-          package: name,
-          detail: "harness entry needs a non-empty 'why' and 'selfSuites'",
-        })
-      }
-    }
-  }
-
-  for (const pkg of packages) {
-    if (pkg.hits.length === 0) continue
-    const entry = entries.get(pkg.name)
-    if (entry === undefined) {
-      problems.push({ kind: 'missing-inventory', package: pkg.name, detail: evidenceDetail(pkg) })
-      continue
-    }
-    const declared = Array.isArray(entry.primitives) ? entry.primitives : []
-    const undeclared = primitivesOf(pkg.hits).filter((primitive) => !declared.includes(primitive))
-    if (undeclared.length > 0) {
-      problems.push({
-        kind: 'missing-primitive',
         package: pkg.name,
-        detail: `source uses ${undeclared.join(', ')} but the entry declares ${declared.join(', ') || 'nothing'}`,
+        detail: pkg.testScript === undefined
+          ? 'declares no `test` script in package.json'
+          : `declares \`test\`: ${JSON.stringify(pkg.testScript)} — that script does not run vitest`,
+        evidence,
+      })
+    }
+
+    if (!pkg.vitestConfigs.some((config) => usesSharedDefineConfig(config.text))) {
+      const found = pkg.vitestConfigs.map((config) => config.path)
+      problems.push({
+        package: pkg.name,
+        detail: found.length === 0
+          ? 'has no vitest.config.ts, vitest.config.mts, or vitest.config.js'
+          : `vitest config ${found.join(', ')} does not import defineConfig from '${SHARED_CONFIG_PACKAGE}'`,
+        evidence,
       })
     }
   }
-
-  for (const entry of inventory.entries) {
-    const name = typeof entry.name === 'string' ? entry.name : String(entry.name)
-    const pkg = byName.get(name)
-    if (pkg === undefined) {
-      problems.push({
-        kind: 'invalid-inventory',
-        package: name,
-        detail: 'names a package that is not a workspace package',
-      })
-      continue
-    }
-
-    const checks = Array.isArray(entry.checks) ? entry.checks : []
-    const inPackage = new Set(pkg.files.map(normalizePath))
-
-    if (checks.includes('smoke-journey')) {
-      if (entry.journey === undefined) continue
-      if (!inPackage.has(normalizePath(entry.journey))) {
-        problems.push({
-          kind: 'missing-file',
-          package: name,
-          detail: `smoke journey '${entry.journey}' does not exist in ${pkg.dir}`,
-        })
-      }
-      continue
-    }
-
-    if (entry.harness !== undefined) {
-      const suites = Array.isArray(entry.harness.selfSuites) ? entry.harness.selfSuites : []
-      const absolute = suites.map((suite) => resolveRelative(`${pkg.dir}/${normalizePath(suite)}`))
-      const absent = suites.filter((_, i) => !rootFiles.has(absolute[i] as string))
-      if (absent.length > 0) {
-        problems.push({
-          kind: 'missing-file',
-          package: name,
-          detail: `harness self-suite(s) missing: ${absent.join(', ')}`,
-        })
-      }
-      continue
-    }
-
-    if (!pkg.files.some((file) => file.endsWith('.conformance.test.ts'))) {
-      problems.push({
-        kind: 'missing-check',
-        package: name,
-        detail: `no *.conformance.test.ts anywhere in ${pkg.dir} and no smoke journey`,
-      })
-    }
-  }
-
   return { ok: problems.length === 0, problems }
 }
 
 export const formatDiagnostic = (problems: readonly Problem[], packages: readonly PackageEvidence[]): string => {
   const dirs = new Map(packages.map((pkg) => [pkg.name, pkg.dir]))
   const lines: string[] = []
-  const header: Record<string, string> = {
-    'missing-inventory': 'owns concurrent or stateful behaviour but is missing from the inventory',
-    'missing-primitive': 'is inventoried but the entry under-declares its primitives',
-    'missing-check': 'is inventoried but has no conformance test',
-    'missing-file': 'names a file that does not exist',
-    'invalid-inventory': 'has a malformed inventory entry',
-  }
-  lines.push(`conformance inventory: ${problems.length} problem(s) — R29 is not satisfied`)
+  lines.push(`conformance enrollment: ${problems.length} problem(s) — R29 is not satisfied`)
   lines.push('')
   for (const problem of problems) {
     lines.push(
-      `error[CONFORMANCE-INVENTORY]: ${problem.package} (${dirs.get(problem.package) ?? 'unknown'}) ${
-        header[problem.kind]
-      }`,
+      `error[CONFORMANCE-ENROLLMENT]: ${problem.package} (${dirs.get(problem.package) ?? 'unknown'}) ${problem.detail}`,
     )
-    for (const detail of problem.detail.split('\n')) lines.push(`  --> ${detail}`)
+    lines.push(`  --> evidence: ${problem.evidence}`)
+    lines.push(`  --> fix: ${ENROLLMENT_FIX}`)
   }
   lines.push('')
-  lines.push('Every package whose production source forks fibers, holds `Queue`, `Deferred`, `Ref`, or `Semaphore`')
-  lines.push('state, or acquires scoped resources is inventoried in scripts/guards/conformance-inventory.json, and')
-  lines.push('each inventoried package adopts the check that fits it (R29). The set is derived from source, so the')
-  lines.push('inventory is the only place to satisfy this guard.')
+  lines.push('Coverage is judged inside every vitest run: `defineConfig` from @systemfsoftware/vitest-config adds a')
+  lines.push('plugin that fails a run when a concurrency-primitive site in the package source never executed under a')
+  lines.push('conformance check. A package that does not run vitest through that config is invisible to the plugin,')
+  lines.push('so this guard checks enrollment only.')
   lines.push('')
-  lines.push('remediation:')
-  lines.push('  1. Add the named package to scripts/guards/conformance-inventory.json with every primitive the')
-  lines.push('     evidence shows and the check that fits it (linearizable | sequential | released | smoke-journey).')
-  lines.push('  2. Add the *.conformance.test.ts the entry adopts, or a smoke-journey `journey` path, or — only for')
-  lines.push('     the conformance/test infrastructure itself — a `harness` entry naming the suites that exercise it.')
+  lines.push('remediation: add a `test` script that runs vitest to the package manifest, and a vitest.config.ts that')
+  lines.push(`imports defineConfig from '${SHARED_CONFIG_PACKAGE}'.`)
   return lines.join('\n')
 }
 
@@ -535,23 +377,44 @@ const workspaceDirs = async (root: string): Promise<readonly string[]> => {
   return [...dirs].sort()
 }
 
-const packageName = (manifest: string, fallback: string): string => {
-  const name = (JSON.parse(manifest) as { name?: unknown }).name
+type Manifest = { readonly name?: unknown; readonly scripts?: Record<string, unknown> }
+
+const packageName = (manifest: Manifest, fallback: string): string => {
+  const name = manifest.name
   return typeof name === 'string' && name.length > 0 ? name.replace(/^@[^/]+\//, '') : fallback
+}
+
+const testScriptOf = (manifest: Manifest): string | undefined => {
+  const test = manifest.scripts?.['test']
+  return typeof test === 'string' ? test : undefined
 }
 
 const collect = async (root: string): Promise<readonly PackageEvidence[]> => {
   const packages: PackageEvidence[] = []
   for (const dir of await workspaceDirs(root)) {
     const relDir = relative(root, dir).replace(/\\/g, '/')
-    const name = packageName(await Deno.readTextFile(join(dir, 'package.json')), relDir)
+    const manifest = JSON.parse(await Deno.readTextFile(join(dir, 'package.json'))) as Manifest
+    const name = packageName(manifest, relDir)
     const files = (await walk(dir)).map((file) => relative(dir, file).replace(/\\/g, '/')).sort()
+
     const sources: SourceFile[] = []
+    const vitestConfigs: SourceFile[] = []
     for (const file of files) {
-      if (!file.startsWith('src/') || !isProductionSource(file)) continue
-      sources.push({ path: `${relDir}/${file}`, text: await Deno.readTextFile(join(dir, file)) })
+      const repoPath = `${relDir}/${file}`
+      if (VITEST_CONFIG_FILE.test(file)) {
+        vitestConfigs.push({ path: repoPath, text: await Deno.readTextFile(join(dir, file)) })
+      } else if (file.startsWith('src/') && isProductionSource(file)) {
+        sources.push({ path: repoPath, text: await Deno.readTextFile(join(dir, file)) })
+      }
     }
-    packages.push({ name, dir: relDir, files, hits: detectPrimitives(sources) })
+
+    packages.push({
+      name,
+      dir: relDir,
+      testScript: testScriptOf(manifest),
+      vitestConfigs,
+      hits: detectPrimitives(sources),
+    })
   }
   return packages
 }
@@ -563,136 +426,111 @@ const collect = async (root: string): Promise<readonly PackageEvidence[]> => {
 const selftest = (): number => {
   const hits = (path: string, text: string): readonly PrimitiveHit[] => detectPrimitives([{ path, text }])
 
-  const pkg = (name: string, text: string, extraFiles: readonly string[] = []): PackageEvidence => ({
+  const pkg = (
+    name: string,
+    text: string,
+    options: { readonly testScript?: string; readonly configs?: readonly SourceFile[] } = {},
+  ): PackageEvidence => ({
     name,
     dir: `packages/${name}`,
-    files: ['src/index.ts', ...extraFiles],
+    testScript: options.testScript,
+    vitestConfigs: options.configs ?? [],
     hits: hits(`packages/${name}/src/index.ts`, text),
   })
 
-  const inventory = (entries: readonly unknown[]): Inventory => ({ entries: entries as readonly InventoryEntry[] })
+  const config = (text: string): SourceFile => ({ path: `packages/x/vitest.config.ts`, text })
 
-  const FORKS = `import * as Effect from 'effect/Effect'
-export const go = Effect.fork(Effect.void)
-`
   const REFS = `import * as Ref from 'effect/Ref'
 export const cell = Ref.make(0)
+`
+  const ENROLLED_CONFIG = `import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
+export default defineConfig({ ...sharedConfig })
+`
+  const RAW_CONFIG = `import { defineConfig } from 'vitest/config'
+export default defineConfig({})
 `
 
   const tests: { name: string; run: () => void }[] = [
     {
-      name: 'fails for a package that forks fibers and is missing from the inventory',
+      name: 'fails for a primitive package with no vitest test script',
       run: () => {
-        const verdict = evaluate([pkg('forks', FORKS)], inventory([]))
-        if (verdict.ok) throw new Error('a forking package absent from the inventory must fail')
-        const problem = verdict.problems.find((p) => p.kind === 'missing-inventory')
+        const verdict = evaluate([pkg('stateful', REFS, { configs: [config(ENROLLED_CONFIG)] })])
+        if (verdict.ok) throw new Error('a primitive package with no test script must fail')
+        const problem = verdict.problems.find((p) => p.detail.includes('no `test` script'))
         if (problem === undefined) {
-          throw new Error(`expected missing-inventory, got ${JSON.stringify(verdict.problems)}`)
+          throw new Error(`expected a missing-test-script problem, got ${JSON.stringify(verdict.problems)}`)
         }
-        if (problem.package !== 'forks') throw new Error('the problem must name the package')
-        if (!problem.detail.includes('fork:')) throw new Error('the problem must name the primitive found')
-        if (!problem.detail.includes('packages/forks/src/index.ts:')) {
-          throw new Error('the problem must carry file:line evidence')
+        if (problem.package !== 'stateful') throw new Error('the problem must name the package')
+        if (!problem.evidence.includes('packages/stateful/src/index.ts:')) {
+          throw new Error('the problem must carry path:line evidence')
+        }
+        if (!problem.evidence.includes('Ref.make')) throw new Error('the evidence must name the primitive token')
+      },
+    },
+    {
+      name: 'fails for a primitive package whose config imports defineConfig from vitest/config',
+      run: () => {
+        const verdict = evaluate([pkg('stateful', REFS, { testScript: 'vitest run', configs: [config(RAW_CONFIG)] })])
+        if (verdict.ok) throw new Error("a config importing defineConfig from 'vitest/config' must fail")
+        const problem = verdict.problems.find((p) => p.detail.includes('@systemfsoftware/vitest-config'))
+        if (problem === undefined) {
+          throw new Error(`expected a shared-config problem, got ${JSON.stringify(verdict.problems)}`)
+        }
+        if (problem.package !== 'stateful') throw new Error('the problem must name the package')
+      },
+    },
+    {
+      name: 'fails for a primitive package with no vitest config at all',
+      run: () => {
+        const verdict = evaluate([pkg('stateful', REFS, { testScript: 'vitest run' })])
+        if (verdict.ok) throw new Error('a primitive package with no vitest config must fail')
+        const problem = verdict.problems.find((p) => p.detail.includes('has no vitest.config'))
+        if (problem === undefined) {
+          throw new Error(`expected a missing-config problem, got ${JSON.stringify(verdict.problems)}`)
         }
       },
     },
     {
-      name: 'fails for an inventoried package with no .conformance.test.ts and no smoke-journey entry',
+      name: 'passes for an enrolled package',
       run: () => {
-        const verdict = evaluate(
-          [pkg('stateful', REFS)],
-          inventory([{ name: 'stateful', primitives: ['ref'], checks: ['sequential'] }]),
-        )
-        if (verdict.ok) throw new Error('an inventoried package with no conformance test must fail')
-        const problem = verdict.problems.find((p) => p.kind === 'missing-check')
-        if (problem === undefined) throw new Error(`expected missing-check, got ${JSON.stringify(verdict.problems)}`)
-        if (!problem.detail.includes('.conformance.test.ts')) {
-          throw new Error('the problem must name the missing suffix')
-        }
-      },
-    },
-    {
-      name: 'passes when a matched package is inventoried and holds a .conformance.test.ts',
-      run: () => {
-        const verdict = evaluate(
-          [pkg('stateful', REFS, ['tests/stateful.conformance.test.ts'])],
-          inventory([{ name: 'stateful', primitives: ['ref'], checks: ['sequential'] }]),
-        )
+        const verdict = evaluate([pkg('stateful', REFS, {
+          testScript: 'vitest run --passWithNoTests',
+          configs: [config(ENROLLED_CONFIG)],
+        })])
         if (!verdict.ok) throw new Error(`expected ok, got ${JSON.stringify(verdict.problems)}`)
       },
     },
     {
-      name: 'fails when an inventoried package under-declares its primitives',
+      name: 'passes for a package with no primitive and no tests',
       run: () => {
-        const verdict = evaluate(
-          [pkg('stateful', REFS, ['tests/stateful.conformance.test.ts'])],
-          inventory([{ name: 'stateful', primitives: ['fork'], checks: ['sequential'] }]),
-        )
-        if (verdict.ok) throw new Error('an undeclared primitive must fail')
-        const problem = verdict.problems.find((p) => p.kind === 'missing-primitive')
-        if (problem === undefined || !problem.detail.includes('ref')) {
-          throw new Error(`expected missing-primitive naming ref, got ${JSON.stringify(verdict.problems)}`)
-        }
-      },
-    },
-    {
-      name: 'fails when a smoke-journey entry names a journey that does not exist',
-      run: () => {
-        const verdict = evaluate(
-          [pkg('journey', REFS)],
-          inventory([{ name: 'journey', primitives: ['ref'], checks: ['smoke-journey'], journey: 'examples/boot.ts' }]),
-        )
-        if (verdict.ok) throw new Error('a missing journey file must fail')
-        const problem = verdict.problems.find((p) => p.kind === 'missing-file')
-        if (problem === undefined || !problem.detail.includes('examples/boot.ts')) {
-          throw new Error(`expected missing-file naming the journey, got ${JSON.stringify(verdict.problems)}`)
-        }
-      },
-    },
-    {
-      name: 'passes when a smoke-journey entry names an existing journey',
-      run: () => {
-        const verdict = evaluate(
-          [pkg('journey', REFS, ['examples/boot.ts'])],
-          inventory([{ name: 'journey', primitives: ['ref'], checks: ['smoke-journey'], journey: 'examples/boot.ts' }]),
-        )
+        const verdict = evaluate([pkg('plain', `export const x = 1\n`)])
         if (!verdict.ok) throw new Error(`expected ok, got ${JSON.stringify(verdict.problems)}`)
       },
     },
     {
-      name: 'passes when a harness entry names an existing self-suite, and fails when it does not',
+      name: 'reads vitest-script and shared-defineConfig enrollments from the surfaces they live on',
       run: () => {
-        const entry = {
-          name: 'harness',
-          primitives: ['ref'],
-          checks: ['released'],
-          harness: { why: 'it is the check', selfSuites: ['tests/self.integration.test.ts'] },
+        if (!runsVitest('vitest run --project conformance')) {
+          throw new Error('`vitest run --project conformance` runs vitest')
         }
-        const green = evaluate([pkg('harness', REFS, ['tests/self.integration.test.ts'])], inventory([entry]))
-        if (!green.ok) throw new Error(`expected ok, got ${JSON.stringify(green.problems)}`)
-        const red = evaluate([pkg('harness', REFS)], inventory([entry]))
-        if (red.ok) throw new Error('a missing harness self-suite must fail')
-      },
-    },
-    {
-      name: 'rejects an inventory entry naming an unknown check or a package that is not in the workspace',
-      run: () => {
-        const unknown = evaluate(
-          [pkg('stateful', REFS, ['tests/stateful.conformance.test.ts'])],
-          inventory([{ name: 'stateful', primitives: ['ref'], checks: ['vibes'] }]),
-        )
-        if (!unknown.problems.some((p) => p.kind === 'invalid-inventory' && p.detail.includes('vibes'))) {
-          throw new Error('an unknown check must be rejected')
+        if (runsVitest('jest')) throw new Error('a non-vitest test script is not enrolled')
+        if (runsVitest(undefined)) throw new Error('a missing test script is not enrolled')
+        const aliased = `import { defineConfig as defineVitestConfig } from '@systemfsoftware/vitest-config'
+export default defineVitestConfig({})
+`
+        if (!usesSharedDefineConfig(aliased)) throw new Error('an aliased shared defineConfig import is enrolled')
+        const sharedOnly = `import { sharedConfig } from '@systemfsoftware/vitest-config'
+import { defineConfig } from 'vitest/config'
+export default defineConfig({ ...sharedConfig })
+`
+        if (usesSharedDefineConfig(sharedOnly)) {
+          throw new Error('importing only sharedConfig from the shared package is not enrollment')
         }
-        const ghost = evaluate(
-          [pkg('stateful', REFS, ['tests/stateful.conformance.test.ts'])],
-          inventory([
-            { name: 'stateful', primitives: ['ref'], checks: ['sequential'] },
-            { name: 'ghost', primitives: ['ref'], checks: ['sequential'] },
-          ]),
-        )
-        if (!ghost.problems.some((p) => p.kind === 'invalid-inventory' && p.package === 'ghost')) {
-          throw new Error('an entry for a non-workspace package must be rejected')
+        if (!VITEST_CONFIG_FILE.test('vitest.config.ts')) throw new Error('vitest.config.ts is a vitest config')
+        if (!VITEST_CONFIG_FILE.test('vitest.config.mts')) throw new Error('vitest.config.mts is a vitest config')
+        if (!VITEST_CONFIG_FILE.test('vitest.config.js')) throw new Error('vitest.config.js is a vitest config')
+        if (VITEST_CONFIG_FILE.test('vitest.node.config.js')) {
+          throw new Error('a sibling node config is not the package vitest config')
         }
       },
     },
@@ -779,10 +617,10 @@ export const d = Semaphore.make(1)
   }
 
   if (failures > 0) {
-    console.error(`check-conformance-inventory: selftest FAILED (${failures}/${tests.length})`)
+    console.error(`check-conformance-enrollment: selftest FAILED (${failures}/${tests.length})`)
     return 1
   }
-  console.log(`check-conformance-inventory: selftest ok (${tests.length} tests)`)
+  console.log(`check-conformance-enrollment: selftest ok (${tests.length} tests)`)
   return 0
 }
 
@@ -796,7 +634,6 @@ const main = async (): Promise<number> => {
   if (Deno.args.includes('--selftest')) return selftest()
 
   const root = repoRoot()
-  const inventory = parseInventory(await Deno.readTextFile(join(root, 'scripts/guards/conformance-inventory.json')))
   const packages = await collect(root)
   if (packages.length === 0) {
     throw new Error('no workspace package matched the workspace globs — refusing the empty verdict')
@@ -807,10 +644,10 @@ const main = async (): Promise<number> => {
     throw new Error('the R29 predicate matched no package — refusing the vacuous verdict')
   }
 
-  const verdict = evaluate(packages, inventory)
+  const verdict = evaluate(packages)
   if (verdict.ok) {
     console.log(
-      `conformance inventory: ok — ${matched.length} package(s) own concurrent or stateful behaviour, every one inventoried with the check that fits it`,
+      `conformance enrollment: ok — ${matched.length} package(s) own concurrent or stateful behaviour, every one runs vitest through defineConfig from ${SHARED_CONFIG_PACKAGE}`,
     )
     return 0
   }
@@ -823,7 +660,7 @@ if (import.meta.main) {
   try {
     Deno.exit(await main())
   } catch (err) {
-    console.error(`check-conformance-inventory: error: ${err instanceof Error ? err.message : String(err)}`)
+    console.error(`check-conformance-enrollment: error: ${err instanceof Error ? err.message : String(err)}`)
     Deno.exit(1)
   }
 }

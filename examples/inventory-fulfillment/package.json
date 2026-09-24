@@ -26,6 +26,7 @@
     "@effect/sql-pg": "catalog:",
     "@effect/sql-pglite": "catalog:",
     "@electric-sql/pglite": "catalog:",
+    "@electric-sql/pglite-socket": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/trace-taxonomy": "workspace:^",
     "better-auth": "catalog:",

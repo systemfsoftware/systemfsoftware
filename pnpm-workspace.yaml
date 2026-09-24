@@ -32,6 +32,7 @@ catalog:
   drizzle-kit: 1.0.0-rc.4
   better-auth: 1.7.5
   "@electric-sql/pglite": 0.5.8
+  "@electric-sql/pglite-socket": 0.2.11
   pg: 8.23.0
   "@types/pg": 8.23.1
   tsx: 4.23.13
@@ -49,6 +50,8 @@ catalog:
   oxc-parser: ^0.150.0
   "@oxc-parser/binding-wasm32-wasi": ^0.150.0
   "@oxc-project/types": ^0.150.0
+  magic-string: ^1.4.1
+  tinyglobby: ^0.2.17
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
   "@std/fs": jsr:^1.0.6
@@ -70,6 +73,9 @@ catalog:
   "@vitest/browser": ^5
   "@vitest/browser-playwright": ^5
   playwright: ^1
+  "@systemfsoftware/vitest-config": workspace:^
+  "@systemfsoftware/conformance-spec": workspace:^
+  "@systemfsoftware/effect-gherkin-spec": workspace:^
 catalogMode: prefer
 catalogs:
   peers:
