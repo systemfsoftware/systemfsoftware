@@ -23,7 +23,7 @@
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Predicate } from 'effect'
-import { dual } from 'effect/Function'
+import { dual, identity } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -328,8 +328,6 @@ const idFieldOf = (id: string | undefined, whole: boolean): { readonly id: strin
     Match.exhaustive,
   )
 
-const identityOf = <V>(value: V): V => value
-
 /**
  * The member held under one of the registry's own keys. The key is a member
  * key by construction, so the read is total: it never misses and never yields
@@ -582,7 +580,7 @@ export const registry: {
   ) => {
     const settings = options ?? {}
     return Option.match(Option.fromUndefinedOr(settings.routeBy), {
-      onNone: () => buildRegistry(input, members, input, identityOf, settings),
+      onNone: () => buildRegistry(input, members, input, identity, settings),
       onSome: (routeBy) => buildRegistry(input, members, routeBy.schema, routeBy.select, settings),
     })
   },

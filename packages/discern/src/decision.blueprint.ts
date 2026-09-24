@@ -7,7 +7,7 @@
  * check built at construction, so a missing or malformed answer resolves the
  * leaf to `Uncertain` naming the decision id instead of reaching the caller.
  * Judging an answer against a threshold, band, label, or range is pure
- * resource code (KD7) — never a workflow.
+ * blueprint code (KD7) — never a workflow.
  */
 import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Match, Predicate, Schema } from 'effect'
