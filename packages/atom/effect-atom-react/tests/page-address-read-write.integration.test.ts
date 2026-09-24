@@ -1,5 +1,4 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import { constVoid } from 'effect/Function'
@@ -12,8 +11,8 @@ const Feature = makeFeature({ it, layer })
  * A registry whose deferred address-bar rewrites are held back so a scenario
  * can flush them at a chosen moment.
  */
-const heldBackRegistry = (heldBack: Array<() => void>): AtomRegistry.Registry =>
-  AtomRegistry.make({
+const heldBackRegistry = (heldBack: Array<() => void>): Atom.Registry.Registry =>
+  Atom.Registry.make({
     scheduleTimer: (rewrite) => {
       heldBack.push(rewrite)
       return constVoid
@@ -54,8 +53,8 @@ Feature('Remembering page choices in the address bar')
           'result',
           (s) =>
             Effect.sync(() => {
-              AtomRegistry.set(s.ctx.registry, s.ctx.sizeChoice, '1')
-              AtomRegistry.set(s.ctx.registry, s.ctx.colourChoice, '2')
+              Atom.Registry.set(s.ctx.registry, s.ctx.sizeChoice, '1')
+              Atom.Registry.set(s.ctx.registry, s.ctx.colourChoice, '2')
               for (const rewrite of s.ctx.heldBack) {
                 rewrite()
               }
@@ -97,8 +96,8 @@ Feature('Remembering page choices in the address bar')
           'result',
           (s) =>
             Effect.sync(() => {
-              AtomRegistry.set(s.ctx.firstPage, s.ctx.choice, '1')
-              AtomRegistry.set(s.ctx.secondPage, s.ctx.choice, '2')
+              Atom.Registry.set(s.ctx.firstPage, s.ctx.choice, '1')
+              Atom.Registry.set(s.ctx.secondPage, s.ctx.choice, '2')
               for (const rewrite of s.ctx.firstHeldBack) {
                 rewrite()
               }

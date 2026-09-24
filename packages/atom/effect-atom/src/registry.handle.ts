@@ -22,9 +22,9 @@ import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as Result from './async-result.js'
 import type { Failure, Success } from './async-result.js'
-import type * as Atom from './Atom.js'
-import { runInternalBatch } from './internal/atom-node.js'
-import { engine, refusalLog, RegistryImpl, TypeId } from './internal/registry-engine.js'
+import type * as Atom from './atom-modules.js'
+import { runInternalBatch } from './atom-node.js'
+import { engine, refusalLog, RegistryImpl, TypeId } from './registry-engine.js'
 
 export { TypeId }
 export { Current } from './current-registry.service.js'

@@ -6,10 +6,10 @@ import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import { MixedScheduler, type Scheduler, type SchedulerDispatcher } from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
-import type * as Atom from '../Atom.js'
-import type { Node, PreloadRefused, Registry } from '../registry.handle.js'
+import type * as Atom from './atom-modules.js'
 import { NodeImpl } from './atom-node.js'
-import { hostScheduleTimer, makeHostNow } from './host-timer.js'
+import { hostScheduleTimer, makeHostNow } from './internal/host-timer.js'
+import type { Node, PreloadRefused, Registry } from './registry.handle.js'
 
 type AnyValue<A = unknown> = A
 
@@ -17,7 +17,6 @@ type AnyValue<A = unknown> = A
  * The literal type used to identify registry values.
  *
  * @since 4.0.0
- * @internal
  */
 export type TypeId = '~effect-atom/atom/Registry'
 
@@ -25,25 +24,20 @@ export type TypeId = '~effect-atom/atom/Registry'
  * The runtime type id used to identify registry values.
  *
  * @since 4.0.0
- * @internal
  */
 export const TypeId: TypeId = '~effect-atom/atom/Registry'
 
 /**
  * Module-private slot holding the engine behind a registry handle.
- *
- * @internal
  */
 export const engine: unique symbol = Symbol('~effect-atom/atom/Registry/engine')
 
 class Refusals extends Context.Service<Refusals, { readonly entries: Array<PreloadRefused> }>()(
-  '@systemfsoftware/effect-atom/internal/registry-engine/Refusals',
+  '@systemfsoftware/effect-atom/registry-engine/Refusals',
 ) {}
 
 /**
  * Returns the mutable refusal log stored on one registry engine.
- *
- * @internal
  */
 export const refusalLog = (self: Registry): { readonly entries: Array<PreloadRefused> } =>
   self[engine].storageFor(Refusals, () => ({ entries: [] }))
@@ -456,8 +450,6 @@ function removeNodeFromBucketEntry(
 /**
  * The registry engine: one instance stores atom nodes, coordinates reads,
  * writes, refreshes, subscriptions, and disposal for one registry handle.
- *
- * @internal
  */
 export class RegistryImpl extends Pipeable.Class {
   readonly timeoutResolution: number

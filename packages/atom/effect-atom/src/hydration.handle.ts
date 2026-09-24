@@ -21,7 +21,7 @@ import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 import * as AsyncResult from './async-result.js'
-import * as Atom from './Atom.js'
+import * as Atom from './atom-modules.js'
 import { DehydratedAtomValue as DehydratedAtomValueSchema } from './dehydrated-atom.schema.js'
 import * as Registry from './registry.handle.js'
 

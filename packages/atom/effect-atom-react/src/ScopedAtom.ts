@@ -8,7 +8,7 @@
  */
 'use client'
 
-import type * as Atom from '@systemfsoftware/effect-atom/Atom'
+import type { Atom } from '@systemfsoftware/effect-atom'
 import * as React from 'react'
 
 /**

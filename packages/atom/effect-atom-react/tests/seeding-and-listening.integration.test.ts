@@ -1,5 +1,4 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
@@ -34,7 +33,7 @@ Feature('Seeding and listening to shared values')
             render(
               React.createElement(
                 RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                { value: Atom.Registry.make() },
                 React.createElement(Page),
               ),
             )
@@ -65,14 +64,14 @@ Feature('Seeding and listening to shared values')
               render(
                 React.createElement(
                   RegistryContext.Provider,
-                  { value: AtomRegistry.make() },
+                  { value: Atom.Registry.make() },
                   React.createElement(Page, { id: 'first-balance', seed: 3 }),
                 ),
               )
               render(
                 React.createElement(
                   RegistryContext.Provider,
-                  { value: AtomRegistry.make() },
+                  { value: Atom.Registry.make() },
                   React.createElement(Page, { id: 'second-balance', seed: 8 }),
                 ),
               )
@@ -99,7 +98,7 @@ Feature('Seeding and listening to shared values')
           Effect.sync(() => {
             const volume = Atom.make(3)
             const heard: number[] = []
-            const registry = AtomRegistry.make()
+            const registry = Atom.Registry.make()
             function Listener() {
               useAtomSubscribe(volume, (v) => heard.push(v))
               return null
@@ -112,7 +111,7 @@ Feature('Seeding and listening to shared values')
         When('the value changes once')('heard', (s) =>
           Effect.sync(() => {
             act(() => {
-              AtomRegistry.set(s.ctx.registry, s.ctx.volume, 5)
+              Atom.Registry.set(s.ctx.registry, s.ctx.volume, 5)
             })
             return s.ctx.heard
           })),

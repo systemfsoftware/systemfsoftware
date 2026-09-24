@@ -12,9 +12,9 @@ import * as Context from 'effect/Context'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
-import { readable, transform, writable } from './AtomCore.js'
-import type { RegistryImpl } from './internal/registry-engine.js'
+import { readable, transform, writable } from './atom-core.resource.js'
+import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './atom-modules.js'
+import type { RegistryImpl } from './registry-engine.js'
 import * as Registry from './registry.handle.js'
 
 type AnyAtom<A = unknown> = Atom<A>
@@ -275,7 +275,7 @@ interface SearchParamCoordinator {
 }
 
 class SearchParamUpdates extends Context.Service<SearchParamUpdates, SearchParamCoordinator>()(
-  '@systemfsoftware/effect-atom/Browser/SearchParamUpdates',
+  '@systemfsoftware/effect-atom/atom-browser.resource/SearchParamUpdates',
 ) {}
 
 const makeSearchParamCoordinator = (registry: Registry.Registry): SearchParamCoordinator => ({

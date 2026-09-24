@@ -8,8 +8,7 @@
  * @since 4.0.0
  */
 'use client'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as Registry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import * as React from 'react'
 import { useRegistry } from './RegistryContext.js'
 
@@ -20,22 +19,22 @@ import { useRegistry } from './RegistryContext.js'
  * @since 4.0.0
  */
 export interface HydrationBoundaryProps {
-  state?: Iterable<Hydration.DehydratedAtomValue>
+  state?: Iterable<Atom.Hydration.DehydratedAtomValue>
   children?: React.ReactNode
 }
 
 type PartitionedAtoms = {
-  readonly newAtoms: Array<Hydration.DehydratedAtomValue>
-  readonly existingAtoms: Array<Hydration.DehydratedAtomValue>
+  readonly newAtoms: Array<Atom.Hydration.DehydratedAtomValue>
+  readonly existingAtoms: Array<Atom.Hydration.DehydratedAtomValue>
 }
 
 type AnyMap<K = unknown, V = unknown> = ReadonlyMap<K, V>
 
 function pushPartitionedAtom(
-  newAtoms: Array<Hydration.DehydratedAtomValue>,
-  existingAtoms: Array<Hydration.DehydratedAtomValue>,
+  newAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
+  existingAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
   nodes: AnyMap,
-  dehydratedAtom: Hydration.DehydratedAtomValue,
+  dehydratedAtom: Atom.Hydration.DehydratedAtomValue,
 ): void {
   const existingNode = nodes.get(dehydratedAtom.key)
   if (existingNode === undefined) {
@@ -47,10 +46,10 @@ function pushPartitionedAtom(
 
 function partitionDehydratedAtoms(
   nodes: AnyMap,
-  dehydratedAtoms: Array<Hydration.DehydratedAtomValue>,
+  dehydratedAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
 ): PartitionedAtoms {
-  const newAtoms: Array<Hydration.DehydratedAtomValue> = []
-  const existingAtoms: Array<Hydration.DehydratedAtomValue> = []
+  const newAtoms: Array<Atom.Hydration.DehydratedAtomValue> = []
+  const existingAtoms: Array<Atom.Hydration.DehydratedAtomValue> = []
   for (const dehydratedAtom of dehydratedAtoms) {
     pushPartitionedAtom(newAtoms, existingAtoms, nodes, dehydratedAtom)
   }
@@ -58,18 +57,18 @@ function partitionDehydratedAtoms(
 }
 
 function hydrateNewAtoms(
-  registry: Registry.Registry,
-  newAtoms: Array<Hydration.DehydratedAtomValue>,
+  registry: Atom.Registry.Registry,
+  newAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
 ): void {
   if (newAtoms.length === 0) {
     return
   }
-  Hydration.hydrate(registry, newAtoms)
+  Atom.Hydration.hydrate(registry, newAtoms)
 }
 
 function existingAtomsOrUndefined(
-  existingAtoms: Array<Hydration.DehydratedAtomValue>,
-): Array<Hydration.DehydratedAtomValue> | undefined {
+  existingAtoms: Array<Atom.Hydration.DehydratedAtomValue>,
+): Array<Atom.Hydration.DehydratedAtomValue> | undefined {
   if (existingAtoms.length === 0) {
     return undefined
   }
@@ -77,18 +76,18 @@ function existingAtomsOrUndefined(
 }
 
 function queueHydrationFromState(
-  registry: Registry.Registry,
-  state: Iterable<Hydration.DehydratedAtomValue>,
-): Array<Hydration.DehydratedAtomValue> | undefined {
-  const partitioned = partitionDehydratedAtoms(Registry.getNodes(registry), Array.from(state))
+  registry: Atom.Registry.Registry,
+  state: Iterable<Atom.Hydration.DehydratedAtomValue>,
+): Array<Atom.Hydration.DehydratedAtomValue> | undefined {
+  const partitioned = partitionDehydratedAtoms(Atom.Registry.getNodes(registry), Array.from(state))
   hydrateNewAtoms(registry, partitioned.newAtoms)
   return existingAtomsOrUndefined(partitioned.existingAtoms)
 }
 
 function queueHydration(
-  registry: Registry.Registry,
-  state: Iterable<Hydration.DehydratedAtomValue> | undefined,
-): Array<Hydration.DehydratedAtomValue> | undefined {
+  registry: Atom.Registry.Registry,
+  state: Iterable<Atom.Hydration.DehydratedAtomValue> | undefined,
+): Array<Atom.Hydration.DehydratedAtomValue> | undefined {
   if (state === undefined) {
     return undefined
   }
@@ -110,8 +109,8 @@ function queueHydration(
  * immediately, while values for existing Atoms are deferred until after commit
  * so transition data does not update the current UI before React accepts it.
  *
- * @see `Hydration.dehydrate` for producing dehydrated Atom state
- * @see `Hydration.hydrate` for lower-level non-React hydration
+ * @see `Atom.Hydration.dehydrate` for producing dehydrated Atom state
+ * @see `Atom.Hydration.hydrate` for lower-level non-React hydration
  *
  * @since 4.0.0
  */
@@ -136,7 +135,7 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
   // If the transition is aborted, we will have hydrated any _new_ Atom values, but
   // we throw away the fresh data for any existing ones to avoid unexpectedly
   // updating the UI.
-  const hydrationQueue: Array<Hydration.DehydratedAtomValue> | undefined = React.useMemo(
+  const hydrationQueue: Array<Atom.Hydration.DehydratedAtomValue> | undefined = React.useMemo(
     () => queueHydration(registry, state),
     [registry, state],
   )
@@ -145,7 +144,7 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
     if (hydrationQueue === undefined) {
       return
     }
-    Hydration.hydrate(registry, hydrationQueue)
+    Atom.Hydration.hydrate(registry, hydrationQueue)
   }, [registry, hydrationQueue])
 
   return React.createElement(React.Fragment, {}, children)

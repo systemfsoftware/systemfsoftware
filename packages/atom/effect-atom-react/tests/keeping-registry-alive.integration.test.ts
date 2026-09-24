@@ -1,6 +1,5 @@
+import { Atom } from '@systemfsoftware/effect-atom'
 import { RegistryProvider, useAtomInitialValues, useAtomValue, useRegistry } from '@systemfsoftware/effect-atom-react'
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
@@ -129,7 +128,7 @@ Feature('Keeping a shared registry alive')
         Given('a page under a strict provider that can be re-rendered')('ctx', () =>
           Effect.sync(() => {
             const count = Atom.make(0)
-            const seenRegistries: AtomRegistry.Registry[] = []
+            const seenRegistries: Atom.Registry.Registry[] = []
             let tick: () => void = () => {
               throw new Error('tick called before the page rendered')
             }

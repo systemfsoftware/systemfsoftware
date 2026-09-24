@@ -1,6 +1,4 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
@@ -24,9 +22,9 @@ Feature('Restoring saved page state')
             const temperature = Atom.make(18).pipe(
               Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
             )
-            const savedPage = AtomRegistry.make()
-            AtomRegistry.set(savedPage, temperature, 23)
-            const saved = Hydration.dehydrate(savedPage)
+            const savedPage = Atom.Registry.make()
+            Atom.Registry.set(savedPage, temperature, 23)
+            const saved = Atom.Hydration.dehydrate(savedPage)
             function Page() {
               const value = useAtomValue(temperature)
               return React.createElement('div', { 'data-testid': 'fresh-temperature' }, value)
@@ -34,7 +32,7 @@ Feature('Restoring saved page state')
             render(
               React.createElement(
                 RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                { value: Atom.Registry.make() },
                 React.createElement(HydrationBoundary, { state: saved }, React.createElement(Page)),
               ),
             )
@@ -57,8 +55,8 @@ Feature('Restoring saved page state')
           () =>
             Effect.sync(() => {
               const room = Atom.make(4)
-              const registry = AtomRegistry.make()
-              AtomRegistry.set(registry, room, 4)
+              const registry = Atom.Registry.make()
+              Atom.Registry.set(registry, room, 4)
               function Page() {
                 const value = useAtomValue(room)
                 return React.createElement('div', { 'data-testid': 'plain-room' }, value)

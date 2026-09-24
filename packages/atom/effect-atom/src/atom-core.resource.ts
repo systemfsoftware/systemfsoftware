@@ -4,7 +4,7 @@ import { type Inspectable, NodeInspectSymbol } from 'effect/Inspectable'
 import { pipeArguments } from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
 import type { Mutable } from 'effect/Types'
-import type { Atom, AtomContext, Writable, WriteContext } from './Atom.js'
+import type { Atom, AtomContext, Writable, WriteContext } from './atom.resource.js'
 
 type AnyAtom<A = unknown> = Atom<A>
 type AnyWritable<A = unknown, W = unknown> = Writable<A, W>

@@ -8,10 +8,7 @@
  */
 'use client'
 
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
-import * as Registry from '@systemfsoftware/effect-atom/Registry'
-import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
+import { Atom } from '@systemfsoftware/effect-atom'
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -19,14 +16,14 @@ import { constVoid, dual } from 'effect/Function'
 import * as React from 'react'
 import { useRegistry } from './RegistryContext.js'
 
-function useStore<A>(registry: Registry.Registry, atom: Atom.Atom<A>): A {
+function useStore<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): A {
   const subscribe = React.useMemo(
-    () => (onStoreChange: () => void) => Registry.subscribe(registry, atom, () => onStoreChange()),
+    () => (onStoreChange: () => void) => Atom.Registry.subscribe(registry, atom, () => onStoreChange()),
     [registry, atom],
   )
   return React.useSyncExternalStore(
     subscribe,
-    () => Registry.get(registry, atom),
+    () => Atom.Registry.get(registry, atom),
     () => Atom.getServerValue(atom, registry),
   )
 }
@@ -41,14 +38,14 @@ class InitialValuesSet extends Context.Service<InitialValuesSet, WeakSet<AnyAtom
 ) {}
 
 function initialValuesSetFor(
-  registry: Registry.Registry,
+  registry: Atom.Registry.Registry,
 ): WeakSet<AnyAtom> {
-  return Registry.storage(registry, InitialValuesSet, () => new WeakSet<AnyAtom>())
+  return Atom.Registry.storage(registry, InitialValuesSet, () => new WeakSet<AnyAtom>())
 }
 
 function seedInitialValueIfNew(
   set: WeakSet<AnyAtom>,
-  registry: Registry.Registry,
+  registry: Atom.Registry.Registry,
   atom: AnyAtom,
   value: AnyValue,
 ): void {
@@ -56,11 +53,11 @@ function seedInitialValueIfNew(
     return
   }
   set.add(atom)
-  Registry.setInitialValue(registry, atom, value)
+  Atom.Registry.setInitialValue(registry, atom, value)
 }
 
 function seedInitialValues(
-  registry: Registry.Registry,
+  registry: Atom.Registry.Registry,
   initialValues: Iterable<AnyInitialValue>,
 ): void {
   const set = initialValuesSetFor(registry)
@@ -123,8 +120,8 @@ export const useAtomValue: {
   },
 )
 
-function mountAtom<A>(registry: Registry.Registry, atom: Atom.Atom<A>): void {
-  React.useEffect(() => Registry.subscribe(registry, atom, constVoid, { immediate: true }), [atom, registry])
+function mountAtom<A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): void {
+  React.useEffect(() => Atom.Registry.subscribe(registry, atom, constVoid, { immediate: true }), [atom, registry])
 }
 
 /**
@@ -173,7 +170,7 @@ export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void 
   const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback((value: W) => {
-    Registry.set(registry, atom, value)
+    Atom.Registry.set(registry, atom, value)
   }, [registry, atom])
 }
 
@@ -196,13 +193,13 @@ export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void 
  * @since 4.0.0
  */
 export const useAtomSetResult = <A, E, W>(
-  atom: Atom.Writable<AsyncResult.Result<A, E>, W>,
+  atom: Atom.Writable<Atom.AsyncResult.Result<A, E>, W>,
 ): (value: W) => Effect.Effect<A, E> => {
   const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback((value: W) => {
-    Registry.set(registry, atom, value)
-    return Registry.getResult(registry, atom, { suspendOnWaiting: true })
+    Atom.Registry.set(registry, atom, value)
+    return Atom.Registry.getResult(registry, atom, { suspendOnWaiting: true })
   }, [registry, atom])
 }
 
@@ -223,7 +220,7 @@ export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R
   const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback((f: (previous: R) => W) => {
-    Registry.update(registry, atom, f)
+    Atom.Registry.update(registry, atom, f)
   }, [registry, atom])
 }
 
@@ -249,7 +246,7 @@ export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
   const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback(() => {
-    Registry.refresh(registry, atom)
+    Atom.Registry.refresh(registry, atom)
   }, [registry, atom])
 }
 
@@ -273,7 +270,7 @@ export const useAtom = <R, W>(
   const registry = useRegistry()
   return [
     useStore(registry, atom),
-    React.useCallback((value: W) => Registry.set(registry, atom, value), [registry, atom]),
+    React.useCallback((value: W) => Atom.Registry.set(registry, atom, value), [registry, atom]),
   ]
 }
 
@@ -312,10 +309,10 @@ function includeFailureFrom(options?: {
 }
 
 function promiseMapFor(
-  registry: Registry.Registry,
+  registry: Atom.Registry.Registry,
   suspendOnWaiting: boolean,
 ): AnyPromiseMap {
-  const maps = Registry.storage(registry, AtomPromiseMapsKey, () => ({
+  const maps = Atom.Registry.storage(registry, AtomPromiseMapsKey, () => ({
     suspendOnWaiting: new WeakMap<AnyAtom, Promise<void>>(),
     default: new WeakMap<AnyAtom, Promise<void>>(),
   }))
@@ -323,7 +320,7 @@ function promiseMapFor(
 }
 
 function waitingBlocks<A, E>(
-  result: AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>,
+  result: Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E>,
   suspendOnWaiting: boolean,
 ): boolean {
   if (suspendOnWaiting === false) {
@@ -333,10 +330,10 @@ function waitingBlocks<A, E>(
 }
 
 function resultIsPending<A, E>(
-  result: AsyncResult.Result<A, E>,
+  result: Atom.AsyncResult.Result<A, E>,
   suspendOnWaiting: boolean,
 ): boolean {
-  if (AsyncResult.isInitial(result)) {
+  if (Atom.AsyncResult.isInitial(result)) {
     return true
   }
   return waitingBlocks(result, suspendOnWaiting)
@@ -344,7 +341,7 @@ function resultIsPending<A, E>(
 
 function shouldKeepPending<A, E>(
   settled: boolean,
-  result: AsyncResult.Result<A, E>,
+  result: Atom.AsyncResult.Result<A, E>,
   suspendOnWaiting: boolean,
 ): boolean {
   if (settled) {
@@ -368,12 +365,12 @@ function settleAtomPromise(
 
 function onAtomPromiseResult<A, E>(
   state: { settled: boolean },
-  result: AsyncResult.Result<A, E>,
+  result: Atom.AsyncResult.Result<A, E>,
   suspendOnWaiting: boolean,
   dispose: () => void,
   resolve: () => void,
   map: AnyPromiseMap,
-  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
 ): void {
   if (shouldKeepPending(state.settled, result, suspendOnWaiting)) {
     return
@@ -382,14 +379,14 @@ function onAtomPromiseResult<A, E>(
 }
 
 function createAtomPromise<A, E>(
-  registry: Registry.Registry,
-  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  registry: Atom.Registry.Registry,
+  atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
   map: AnyPromiseMap,
 ): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
   const state = { settled: false }
-  const dispose = Registry.subscribe(registry, atom, (result) => {
+  const dispose = Atom.Registry.subscribe(registry, atom, (result) => {
     onAtomPromiseResult(state, result, suspendOnWaiting, dispose, resolve, map, atom)
   })
   map.set(atom, promise)
@@ -397,8 +394,8 @@ function createAtomPromise<A, E>(
 }
 
 function atomToPromise<A, E>(
-  registry: Registry.Registry,
-  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  registry: Atom.Registry.Registry,
+  atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
 ): Promise<void> {
   const map = promiseMapFor(registry, suspendOnWaiting)
@@ -410,20 +407,20 @@ function atomToPromise<A, E>(
 }
 
 function isReadyResult<A, E>(
-  value: AsyncResult.Result<A, E>,
+  value: Atom.AsyncResult.Result<A, E>,
   suspendOnWaiting: boolean,
-): value is AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
-  if (AsyncResult.isInitial(value)) {
+): value is Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
+  if (Atom.AsyncResult.isInitial(value)) {
     return false
   }
   return waitingBlocks(value, suspendOnWaiting) === false
 }
 
 function atomResultOrSuspend<A, E>(
-  registry: Registry.Registry,
-  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  registry: Atom.Registry.Registry,
+  atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
-): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
+): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
   const value = useStore(registry, atom)
   if (isReadyResult(value, suspendOnWaiting)) {
     return value
@@ -432,12 +429,12 @@ function atomResultOrSuspend<A, E>(
 }
 
 function suspendUntilReady<A, E>(
-  registry: Registry.Registry,
-  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  registry: Atom.Registry.Registry,
+  atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
-): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
+): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
   React.use(atomToPromise(registry, atom, suspendOnWaiting))
-  const current = Registry.get(registry, atom)
+  const current = Atom.Registry.get(registry, atom)
   if (isReadyResult(current, suspendOnWaiting)) {
     return current
   }
@@ -445,11 +442,11 @@ function suspendUntilReady<A, E>(
 }
 
 function failureResultOrThrow<A, E>(
-  result: AsyncResult.Failure<A, E>,
+  result: Atom.AsyncResult.Failure<A, E>,
   options?: {
     readonly includeFailure?: boolean | undefined
   },
-): AsyncResult.Failure<A, E> {
+): Atom.AsyncResult.Failure<A, E> {
   if (includeFailureFrom(options)) {
     return result
   }
@@ -457,12 +454,12 @@ function failureResultOrThrow<A, E>(
 }
 
 function resolveAtomSuspense<A, E>(
-  result: AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>,
+  result: Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E>,
   options?: {
     readonly includeFailure?: boolean | undefined
   },
-): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
-  if (AsyncResult.isFailure(result)) {
+): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> {
+  if (Atom.AsyncResult.isFailure(result)) {
     return failureResultOrThrow(result, options)
   }
   return result
@@ -497,23 +494,23 @@ export const useAtomSuspense: {
       readonly suspendOnWaiting?: boolean | undefined
       readonly includeFailure?: boolean | undefined
     },
-  ): (atom: Atom.Atom<AsyncResult.Result<A, E>>) => AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>
+  ): (atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>) => Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E>
   <A, E>(
-    atom: Atom.Atom<AsyncResult.Result<A, E>>,
+    atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
     options?: {
       readonly suspendOnWaiting?: boolean | undefined
       readonly includeFailure?: boolean | undefined
     },
-  ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E>
+  ): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E>
 } = dual(
   (args) => Atom.isAtom(args[0]),
   <A, E>(
-    atom: Atom.Atom<AsyncResult.Result<A, E>>,
+    atom: Atom.Atom<Atom.AsyncResult.Result<A, E>>,
     options?: {
       readonly suspendOnWaiting?: boolean | undefined
       readonly includeFailure?: boolean | undefined
     },
-  ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> => {
+  ): Atom.AsyncResult.Success<A, E> | Atom.AsyncResult.Failure<A, E> => {
     const registry = useRegistry()
     return resolveAtomSuspense(
       atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
@@ -562,7 +559,7 @@ export const useAtomSubscribe: {
     const fRef = React.useRef(f)
     fRef.current = f
     React.useEffect(
-      () => Registry.subscribe(registry, atom, (value) => fRef.current(value), options),
+      () => Atom.Registry.subscribe(registry, atom, (value) => fRef.current(value), options),
       [registry, atom, options?.immediate],
     )
   },
@@ -573,23 +570,23 @@ export const useAtomSubscribe: {
  *
  * **When to use**
  *
- * Use when a React component should render from an `AtomRef.ReadonlyRef`
+ * Use when a React component should render from an `Atom.Ref.ReadonlyRef`
  * directly instead of reading an atom through the current registry.
  *
  * **Details**
  *
- * The hook subscribes with `AtomRef.subscribe`, triggers re-renders through
- * React state, and returns the current `AtomRef.get(ref)` value.
+ * The hook subscribes with `Atom.Ref.subscribe`, triggers re-renders through
+ * React state, and returns the current `Atom.Ref.get(ref)` value.
  *
  * @see {@link useAtomValue} for reading an `Atom` from the current registry
  * @see {@link useAtomRefPropValue} for reading a property ref value
  *
  * @since 4.0.0
  */
-export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
-  const [, setValue] = React.useState(() => AtomRef.get(ref))
-  React.useEffect(() => AtomRef.subscribe(ref, setValue), [ref])
-  return AtomRef.get(ref)
+export const useAtomRef = <A>(ref: Atom.Ref.ReadonlyRef<A>): A => {
+  const [, setValue] = React.useState(() => Atom.Ref.get(ref))
+  React.useEffect(() => Atom.Ref.subscribe(ref, setValue), [ref])
+  return Atom.Ref.get(ref)
 }
 
 /**
@@ -601,7 +598,7 @@ export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
  *
  * **Details**
  *
- * The hook memoizes `AtomRef.prop(ref, prop)` for the `[ref, prop]`
+ * The hook memoizes `Atom.Ref.prop(ref, prop)` for the `[ref, prop]`
  * dependency pair and returns the property ref so callers can read, set,
  * update, or subscribe to that nested property.
  * @see {@link useAtomRef} for subscribing to an atom ref value
@@ -610,12 +607,12 @@ export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
  * @since 4.0.0
  */
 export const useAtomRefProp: {
-  <A, K extends keyof A>(prop: K): (ref: AtomRef.AtomRef<A>) => AtomRef.AtomRef<A[K]>
-  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]>
+  <A, K extends keyof A>(prop: K): (ref: Atom.Ref.AtomRef<A>) => Atom.Ref.AtomRef<A[K]>
+  <A, K extends keyof A>(ref: Atom.Ref.AtomRef<A>, prop: K): Atom.Ref.AtomRef<A[K]>
 } = dual(
   2,
-  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
-    React.useMemo(() => AtomRef.prop(ref, prop), [ref, prop]),
+  <A, K extends keyof A>(ref: Atom.Ref.AtomRef<A>, prop: K): Atom.Ref.AtomRef<A[K]> =>
+    React.useMemo(() => Atom.Ref.prop(ref, prop), [ref, prop]),
 )
 
 /**
@@ -631,7 +628,7 @@ export const useAtomRefProp: {
  *
  * The hook composes `useAtomRefProp(ref, prop)` with `useAtomRef`, so the
  * property ref is memoized for the `[ref, prop]` pair and then subscribed
- * through `AtomRef.subscribe`.
+ * through `Atom.Ref.subscribe`.
  *
  * @see {@link useAtomRefProp} for returning the property ref directly
  * @see {@link useAtomRef} for subscribing to a whole atom ref value
@@ -639,9 +636,9 @@ export const useAtomRefProp: {
  * @since 4.0.0
  */
 export const useAtomRefPropValue: {
-  <A, K extends keyof A>(prop: K): (ref: AtomRef.AtomRef<A>) => A[K]
-  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K]
+  <A, K extends keyof A>(prop: K): (ref: Atom.Ref.AtomRef<A>) => A[K]
+  <A, K extends keyof A>(ref: Atom.Ref.AtomRef<A>, prop: K): A[K]
 } = dual(
   2,
-  <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): A[K] => useAtomRef(useAtomRefProp(ref, prop)),
+  <A, K extends keyof A>(ref: Atom.Ref.AtomRef<A>, prop: K): A[K] => useAtomRef(useAtomRefProp(ref, prop)),
 )

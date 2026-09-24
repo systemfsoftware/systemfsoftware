@@ -10,7 +10,7 @@
  */
 import { constant, dual } from 'effect/Function'
 import * as AsyncResult from './async-result.js'
-import type { Atom, Type } from './Atom.js'
+import type { Atom, Type } from './atom-modules.js'
 import * as Registry from './registry.handle.js'
 
 type AnyAtom<A = unknown> = Atom<A>

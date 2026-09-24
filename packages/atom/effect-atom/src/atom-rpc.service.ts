@@ -29,7 +29,7 @@ import * as RpcSchema from 'effect/unstable/rpc/RpcSchema'
 import type { SetParameterType, SetReturnType } from 'type-fest'
 import * as AsyncResult from './async-result.js'
 import { schemaCodec } from './async-result.js'
-import * as Atom from './Atom.js'
+import * as Atom from './atom-modules.js'
 
 type AnyAtom<A = unknown> = Atom.Atom<A>
 type ReactivityKey<K = unknown> = readonly K[] | ReadonlyRecord<string, readonly K[]>

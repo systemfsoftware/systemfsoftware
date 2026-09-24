@@ -1,5 +1,4 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
@@ -33,7 +32,11 @@ Feature('Suspending a screen until its value is ready')
               const loaded = Atom.make(source.pipe(Deferred.await))
               function Screen() {
                 const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
-                return React.createElement('div', { 'data-testid': 'arrived-value' }, AsyncResult.getOrThrow(result))
+                return React.createElement(
+                  'div',
+                  { 'data-testid': 'arrived-value' },
+                  Atom.AsyncResult.getOrThrow(result),
+                )
               }
               return renderSuspending(
                 React.createElement(
@@ -75,7 +78,7 @@ Feature('Suspending a screen until its value is ready')
             const loaded = Atom.make(source.pipe(Deferred.await))
             function Screen({ id }: { readonly id: string }) {
               const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
-              return React.createElement('div', { 'data-testid': `${id}-value` }, AsyncResult.getOrThrow(result))
+              return React.createElement('div', { 'data-testid': `${id}-value` }, Atom.AsyncResult.getOrThrow(result))
             }
             return renderSuspending(
               React.createElement(

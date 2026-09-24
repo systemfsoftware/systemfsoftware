@@ -1,5 +1,4 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
@@ -37,7 +36,7 @@ Feature('Scoped atoms that belong to one part of the page')
             render(
               React.createElement(
                 RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                { value: Atom.Registry.make() },
                 React.createElement(Counter.Provider, null, React.createElement(Widget)),
               ),
             )
@@ -77,7 +76,7 @@ Feature('Scoped atoms that belong to one part of the page')
             render(
               React.createElement(
                 RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                { value: Atom.Registry.make() },
                 React.createElement(UserName.Provider, { value: 'Ada' }, React.createElement(Greeting)),
               ),
             )
@@ -114,7 +113,7 @@ Feature('Scoped atoms that belong to one part of the page')
             render(
               React.createElement(
                 RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                { value: Atom.Registry.make() },
                 React.createElement(Page),
               ),
             )
@@ -150,7 +149,7 @@ Feature('Scoped atoms that belong to one part of the page')
               render(
                 React.createElement(
                   RegistryContext.Provider,
-                  { value: AtomRegistry.make() },
+                  { value: Atom.Registry.make() },
                   React.createElement(
                     ErrorBoundary,
                     { fallback: React.createElement('div', { 'data-testid': 'missing-provider' }, 'provider missing') },
