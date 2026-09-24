@@ -21,6 +21,7 @@
 "@systemfsoftware/storybook-gherkin": none
 "@systemfsoftware/trace-spec": none
 "@systemfsoftware/trace-taxonomy": none
+"@systemfsoftware/vitest": none
 ---
 
 Development tooling only. Nothing these packages publish has changed.
