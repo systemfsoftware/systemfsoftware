@@ -29,7 +29,7 @@ Oxlint rules enforcing property-based test laws, test placement, and test naming
 
 ## Enrollment
 
-The rules are turned on by `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set; that aggregate re-exports all nine under the `@systemfsoftware/effect-dmmf/` namespace, so a package extending only `base` already enforces them. `strict` adds three TypeScript rules and nothing from this plugin. Neither preset registers this plugin standalone in `jsPlugins`, so its own `recommended` config is never the thing being loaded.
+`@systemfsoftware/oxlint-config-recommended` loads this plugin in `jsPlugins` and turns on `expect-boolean-predicate` and `expect-from-effect-vitest` at `error` in its default config. The rest of `configs.recommended` is exported from that preset as `rules`, but the default config does not enable it, so those rules fire only in a package that spreads it into its own `rules`.
 
 ## Testing
 

@@ -46,6 +46,12 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   ...testDiscipline.configs.recommended.rules,
 }
 
+const enforcedTestDisciplineRules = ['expect-boolean-predicate', 'expect-from-effect-vitest'] as const
+
+const enforcedRules: NonNullable<OxlintConfig['rules']> = Object.fromEntries(
+  Object.entries(rules).filter(([key]) => enforcedTestDisciplineRules.some((name) => key.endsWith(`/${name}`))),
+)
+
 const testFilePatterns = [
   '**/*.test.ts',
   '**/*.spec.ts',
@@ -97,6 +103,7 @@ const recommendedConfig: OxlintConfig = {
   jsPlugins: [...jsPlugins],
   options: { ...options },
   categories: { correctness: 'error' },
+  rules: { ...enforcedRules },
   ignorePatterns: [...ignorePatterns],
   overrides: [
     ...observerOverrides,
