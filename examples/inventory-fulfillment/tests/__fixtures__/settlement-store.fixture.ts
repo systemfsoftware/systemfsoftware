@@ -59,7 +59,7 @@ export const settlementStoreWorld: Layer.Layer<Persistence.DrizzleSession.Drizzl
   serializationSeamLayer.pipe(Layer.provide(pgliteSession)),
 )
 
-export const seedPostgres = Effect.gen(function*() {
+const seedPostgres = Effect.gen(function*() {
   const db = yield* Persistence.DrizzleSession.DrizzleSession
   const at = DateTime.toDate(DateTime.makeUnsafe('2026-01-01T00:00:00.000Z'))
   yield* db.insert(Persistence.Tables.warehouses).values({ id: 'warehouse-central', region: 'central' })
@@ -109,7 +109,8 @@ export const seedPostgres = Effect.gen(function*() {
     },
   ]).onConflictDoNothing()
 })
-const resetPostgres = Effect.gen(function*() {
+
+export const resetPostgres = Effect.gen(function*() {
   const db = yield* Persistence.DrizzleSession.DrizzleSession
   yield* Effect.orDie(seedPostgres)
   yield* db.delete(Persistence.Tables.auditEvents).pipe(Effect.orDie, Effect.asVoid)

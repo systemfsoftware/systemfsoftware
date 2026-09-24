@@ -137,7 +137,10 @@ const race = Effect.gen(function*() {
   const commits = Arr.filter(outcomes, (tag) => committed[tag] === true).length
   const started = yield* Ref.get(transactions)
   const initialStock = scenario.skus * scenario.lotQuantity
+  const grantable = Math.min(orders, Math.floor(scenario.creditLimit / scenario.quantity))
   const verdicts = [
+    ['every order decided', commits === orders, `decided ${commits} of ${orders}`],
+    ['credit filled exactly', grants === grantable, `granted ${grants}, grantable ${grantable}`],
     [
       'credit limit held',
       after.outstanding <= scenario.creditLimit,

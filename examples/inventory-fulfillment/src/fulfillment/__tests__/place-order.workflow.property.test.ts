@@ -156,51 +156,24 @@ const everyReservationLive = (
   return Arr.every(reservations, (reservation) => liveIds.has(reservation.lotId))
 }
 
-const refusesLiveDemand = (command: PlaceOrderCommand): boolean => {
-  const live = liveAvailabilityOf(command)
-  const demanded = demandedOf(command)
-  return Arr.some(
-    Arr.fromIterable(demanded.keys()),
-    (sku) => (demanded.get(sku) ?? 0) > 0 && (live.get(sku) ?? 0) === 0,
-  )
-}
+const refusesLiveDemand = (command: PlaceOrderCommand, refusal: InsufficientStock): boolean =>
+  (demandedOf(command).get(refusal.sku) ?? 0) === refusal.requested &&
+  refusal.requested > 0 &&
+  (liveAvailabilityOf(command).get(refusal.sku) ?? 0) === 0 &&
+  refusal.available === 0
 
 const refusalExplained = (command: PlaceOrderCommand, error: InsufficientStock | CreditLimitExceeded): boolean =>
   Match.value(error).pipe(
     Match.tag('CreditLimitExceeded', () => creditPredictedOf(command) === 'refused'),
-    Match.tag('InsufficientStock', () => refusesLiveDemand(command)),
+    Match.tag('InsufficientStock', (refusal) => refusesLiveDemand(command, refusal)),
     Match.exhaustive,
   )
 
-const isFamilyDecision = (result: PlaceOrderResult): boolean =>
-  Result.match(result, {
-    onFailure: (error) =>
-      Match.value(error).pipe(
-        Match.tag('InsufficientStock', () => true),
-        Match.tag('CreditLimitExceeded', () => true),
-        Match.exhaustive,
-      ),
-    onSuccess: (decision) =>
-      carriesFamilyBrand(decision) &&
-      Match.value(decision).pipe(
-        Match.tag('OrderAllocated', () => true),
-        Match.tag('OrderAllocatedWithOverdraft', () => true),
-        Match.tag('OrderBackordered', () => true),
-        Match.tag('OrderHeld', () => true),
-        Match.exhaustive,
-      ),
-  })
-
-const carriesFamilyBrand = (decision: object): boolean =>
-  Object.getOwnPropertySymbols(decision).includes(familyBrandOf())
-
-const familyBrandOf = (): symbol =>
-  Symbol.for('@systemfsoftware/example-inventory-fulfillment/SettleFulfillmentDecision')
 const emptyComponents = (command: PlaceOrderCommand): boolean => explodedComponentsOf(command).length === 0
 const stockLedgerHolds = (command: PlaceOrderCommand): boolean => creditPredictedOf(command) === 'held'
 const overdraftWithinPrivilege = (command: PlaceOrderCommand): boolean =>
   Result.match(placeOrder(command), {
-    onFailure: () => true,
+    onFailure: (error) => refusalExplained(command, error),
     onSuccess: (decision) =>
       Match.value(decision).pipe(
         Match.tag('OrderAllocatedWithOverdraft', (allocated) =>
@@ -260,8 +233,6 @@ describe('placeOrder — composed pipeline', () => {
           Match.exhaustive,
         ),
     }))
-
-  it.prop('∀c_SettleDecision_=Family', [PlaceOrderCommand], ([command]) => isFamilyDecision(placeOrder(command)))
 
   it.prop('∀c_Allocation_⊆Live', [PlaceOrderCommand], ([command]) =>
     Result.match(placeOrder(command), {

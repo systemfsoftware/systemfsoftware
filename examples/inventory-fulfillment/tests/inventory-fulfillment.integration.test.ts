@@ -243,7 +243,7 @@ Feature('Inventory fulfillment across the warehouse network')
             const decision = yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 5 }])
             return { decision, reservations: yield* server.inspect.reservations(orderId) }
           })),
-        Then('three units are reserved and two are recorded as backordered')(
+        Then('three units are reserved and charged, and two are recorded as backordered')(
           (s) =>
             Effect.gen(function*() {
               const backordered = yield* S.decodeUnknownEffect(Backordered)(s.outcome.decision)
@@ -252,6 +252,8 @@ Feature('Inventory fulfillment across the warehouse network')
                 backordered.backorderedLines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
               ).toEqual([{ sku: s.catalog.sku, quantity: 2 }])
               expect(s.outcome.reservations.map((row) => row.quantity)).toEqual([3])
+              const server = yield* TestServer
+              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(3)
             }),
         ),
       ),

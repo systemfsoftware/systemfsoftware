@@ -18,10 +18,10 @@ import {
   outstandingOf,
   planOf,
   reservationsOf,
+  resetPostgres,
   SECOND_CUSTOMER,
   SECOND_LOT,
   SECOND_SKU,
-  seedPostgres,
   settleInUnit,
   settlementStoreWorld,
   snapshotInUnit,
@@ -211,7 +211,7 @@ const contendedCharge = Effect.flatMap(Settlement.Store.SettlementStore, (store)
   }))
 
 const retriedOnce = Effect.gen(function*() {
-  yield* seedPostgres
+  yield* resetPostgres
   const store = yield* Settlement.Store.SettlementStore
   const db = yield* Persistence.DrizzleSession.DrizzleSession
   yield* armSeamOnce
@@ -236,7 +236,7 @@ const retriedOnce = Effect.gen(function*() {
   }
 })
 const exhaustedBudgetFails = Effect.gen(function*() {
-  yield* seedPostgres
+  yield* resetPostgres
   const store = yield* Settlement.Store.SettlementStore
   const db = yield* Persistence.DrizzleSession.DrizzleSession
   yield* armSeamAlways
@@ -259,7 +259,7 @@ const exhaustedBudgetFails = Effect.gen(function*() {
 })
 
 const checkedWrite = Effect.gen(function*() {
-  yield* seedPostgres
+  yield* resetPostgres
   const store = yield* Settlement.Store.SettlementStore
   const db = yield* Persistence.DrizzleSession.DrizzleSession
   const attempts = yield* Ref.make(0)

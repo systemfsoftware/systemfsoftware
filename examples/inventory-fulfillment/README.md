@@ -6,8 +6,10 @@ Eight app instances racing 40 orders against one customer with a credit limit of
 
 ```text
 40 orders x 20 units from 8 instances, credit limit 100
-outcomes: AllocatedSplit 5, CreditHold 35
-transactions: 182 for 40 orders (142 re-runs)
+outcomes: CreditHold 35, AllocatedSplit 5
+transactions: 186 for 40 orders (146 re-runs)
+ok   every order decided: decided 40 of 40
+ok   credit filled exactly: granted 5, grantable 5
 ok   credit limit held: outstanding 100 of 100
 ok   every grant charged once: charged 100, grants x quantity 100
 ok   no stock lost or double-sold: on hand 100 + reserved 100 of 200
@@ -117,7 +119,9 @@ pnpm --filter @systemfsoftware/example-inventory-fulfillment race
 ```text
 20 orders x 20 units from 4 instances, credit limit 100
 outcomes: CreditHold 15, AllocatedSplit 5
-transactions: 101 for 20 orders (81 re-runs)
+transactions: 92 for 20 orders (72 re-runs)
+ok   every order decided: decided 20 of 20
+ok   credit filled exactly: granted 5, grantable 5
 ok   credit limit held: outstanding 100 of 100
 ok   every grant charged once: charged 100, grants x quantity 100
 ok   no stock lost or double-sold: on hand 100 + reserved 100 of 200
@@ -136,6 +140,7 @@ Five orders are granted at any instance count; only the re-run count changes. An
 | `PORT`                              | `3000`     | HTTP port                                                                |
 | `SETTLEMENT_RETRY_ATTEMPTS`         | `30`       | Transactions one order may start before it fails with `StoreUnavailable` |
 | `SETTLEMENT_RETRY_BASE_INTERVAL_MS` | `2`        | First backoff between re-runs, doubled with jitter each time             |
+| `SETTLEMENT_RETRY_MAX_INTERVAL_MS`  | `100`      | Longest backoff between re-runs                                          |
 | `INSTANCES`, `ORDERS`               | `2`, `10`  | Race script only: app instances and total orders                         |
 
 A spent retry budget writes nothing: the order fails with `StoreUnavailable`, carrying the last serialization failure as its cause.
