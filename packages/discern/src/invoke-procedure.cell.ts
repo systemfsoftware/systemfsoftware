@@ -4,7 +4,7 @@ import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import { CurrentDepth, MaxDepth } from './procedure-depth.service.js'
-import { type FallbackInvocation, handlerEffectOf, type InvokeOptions } from './procedure.resource.js'
+import { type FallbackInvocation, handlerEffectOf, type InvokeOptions } from './procedure.js'
 import {
   DepthExceededError,
   NoEligibleProcedureError,

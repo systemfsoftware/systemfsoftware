@@ -13,7 +13,7 @@ import { dual } from 'effect/Function'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as Decision from 'effect/unstable/ai/Decision'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { observe } from './decision.resource.js'
+import { observe } from './decision.js'
 import {
   DecisionIdCollisionError,
   InvalidThresholdError,
@@ -29,16 +29,8 @@ import {
   Trace,
 } from './Inspection.schema.js'
 import type { TraceSelection } from './Inspection.schema.js'
-import type {
-  Answers,
-  HandlerResult,
-  NodeCore,
-  Pattern,
-  PatternRefusal,
-  Preview,
-  UncertainContext,
-} from './pattern.resource.js'
-import { distinctNodes, evaluate, preview, reasonOf, statusIs, statusOf } from './pattern.resource.js'
+import type { Answers, HandlerResult, NodeCore, Pattern, PatternRefusal, Preview, UncertainContext } from './pattern.js'
+import { distinctNodes, evaluate, preview, reasonOf, statusIs, statusOf } from './pattern.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
 import type { CaseVerdict } from './select-case.workflow.js'
 import type { PatternResult } from './Verdict.schema.js'

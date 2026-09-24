@@ -3,8 +3,8 @@ import * as Effect from 'effect/Effect'
 import * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { AdmitBudgetCharge, admitBudgetCharge } from './admit-budget-charge.workflow.js'
-import { type Budget, chargeBudget, spent } from './budget.handle.js'
-import type { Provider } from './decision-model.resource.js'
+import { type Budget, chargeBudget, spent } from './budget.js'
+import type { Provider } from './decision-model.js'
 
 export interface BudgetRequest {
   readonly options: DecisionModel.ProviderOptions

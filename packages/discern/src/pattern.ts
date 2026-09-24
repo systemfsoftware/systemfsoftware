@@ -15,7 +15,7 @@ import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
 import type * as Decision from 'effect/unstable/ai/Decision'
-import { hash } from './decision-model.resource.js'
+import { hash } from './decision-model.js'
 import type { PatternAst } from './PatternAst.schema.js'
 import { PatternMatched, PatternMissed, PatternUncertain } from './Verdict.schema.js'
 import type { PatternResult, PatternStatus } from './Verdict.schema.js'
@@ -268,7 +268,7 @@ const keepFirst = (previous: NodeCore | undefined, node: NodeCore): NodeCore => 
  * Collapse decision nodes that repeat exactly (same id and fingerprint), and
  * keep everything else — including a repeated id whose definitions differ, so
  * the observation batch that is built from these nodes can refuse the
- * collision by id (`decisionsOf` in decision.resource.ts). One decision id
+ * collision by id (`decisionsOf` in decision.ts). One decision id
  * must mean one definition, or the recorded observations of the two would be
  * indistinguishable.
  */
@@ -368,7 +368,7 @@ const notPreview = <Input>(self: Pattern<Input>, input: Input): Preview => {
 /**
  * Negation preserves `Uncertain` and swaps `Match` and `Miss`.
  *
- * The public `not` lives in decision.resource.ts, where the classification
+ * The public `not` lives in decision.ts, where the classification
  * reading of `not(node, label)` is decided beside the node's own answer
  * check; this is its pattern half.
  */

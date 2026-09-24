@@ -3,6 +3,7 @@
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-daemon-spec": none
+"@systemfsoftware/discern": none
 "@systemfsoftware/effect-gherkin-spec": none
 "@systemfsoftware/effect-readiness": none
 "@systemfsoftware/effect-schema-extensions": none
