@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
   createPackage,
@@ -41,14 +40,24 @@ Feature('npm-package in-memory file tree and tarball round-trip')
             const extracted = createPackageFromTarballData(s.ctx.tarball)
             return { extractedPadded, extracted }
           })),
-        Then('the extracted package metadata and all byte contents match identically')((s) => {
-          const { extractedPadded, extracted } = s.extracted
-          expect(extractedPadded.packageName).toBe(extracted.packageName)
-          expect(extractedPadded.packageVersion).toBe(extracted.packageVersion)
-          expect(extractedPadded.listFiles('/').sort()).toEqual(extracted.listFiles('/').sort())
-          for (const p of extracted.listFiles('/')) {
-            expect(extractedPadded.tryReadBytes(p)).toEqual(extracted.tryReadBytes(p))
+        Then('the extracted package metadata and all byte contents match identically')((s, expect) => {
+          const files = ['/node_modules/pad-test/index.js', '/node_modules/pad-test/package.json']
+          const asPackage = (pkg: Package) => ({
+            packageName: pkg.packageName,
+            packageVersion: pkg.packageVersion,
+            files: pkg.listFiles('/').sort(),
+            contents: files.map((path) => pkg.tryReadFile(path)),
+          })
+          const expected = {
+            packageName: 'pad-test',
+            packageVersion: '0.0.1',
+            files,
+            contents: ['hi', jsonString({ name: 'pad-test', version: '0.0.1' })],
           }
+          return expect({
+            padded: asPackage(s.extracted.extractedPadded),
+            unpadded: asPackage(s.extracted.extracted),
+          }).toEqual({ padded: expected, unpadded: expected })
         }),
       ),
     )
@@ -64,15 +73,14 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           Effect.sync(() => {
             try {
               createPackageFromTarballData(s.tarball)
-              return { threw: false, message: '' }
+              return { message: undefined }
             } catch (err) {
-              return { threw: true, message: err instanceof Error ? err.message : '' }
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the operation fails complaining of a missing package.json')((s) => {
-          expect(s.attempt.threw).toBe(true)
-          expect(s.attempt.message).toMatch(/package\.json/)
-        }),
+        Then('the operation fails complaining of a missing package.json')((s, expect) =>
+          expect(s.attempt).toMatchObject({ message: 'Package tarball does not contain package/package.json' })
+        ),
       ),
     )
 
@@ -90,15 +98,16 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           Effect.sync(() => {
             try {
               createPackageFromTarballData(s.tarball)
-              return { threw: false, message: '' }
+              return { message: undefined }
             } catch (err) {
-              return { threw: true, message: err instanceof Error ? err.message : '' }
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the operation fails validation with an invalid package.json error')((s) => {
-          expect(s.attempt.threw).toBe(true)
-          expect(s.attempt.message).toMatch(/Invalid package\.json/)
-        }),
+        Then('the operation fails validation with an invalid package.json error')((s, expect) =>
+          expect(s.attempt).toMatchObject({
+            message: 'Invalid package.json in package/package.json: {"version":"1.0.0"}',
+          })
+        ),
       ),
     )
 
@@ -116,15 +125,16 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           Effect.sync(() => {
             try {
               createPackageFromTarballData(s.tarball)
-              return { threw: false, message: '' }
+              return { message: undefined }
             } catch (err) {
-              return { threw: true, message: err instanceof Error ? err.message : '' }
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the operation fails validation with an invalid package.json error')((s) => {
-          expect(s.attempt.threw).toBe(true)
-          expect(s.attempt.message).toMatch(/Invalid package\.json/)
-        }),
+        Then('the operation fails validation with an invalid package.json error')((s, expect) =>
+          expect(s.attempt).toMatchObject({
+            message: 'Invalid package.json in package/package.json: {"name":"missing-version"}',
+          })
+        ),
       ),
     )
 
@@ -146,12 +156,19 @@ Feature('npm-package in-memory file tree and tarball round-trip')
             const tarball = packPackage(s.ctx.pkg)
             return createPackageFromTarballData(tarball)
           })),
-        Then('the extracted package preserves scope in name, version, and file tree')((s) => {
-          expect(s.extracted.packageName).toBe(s.ctx.scoped)
-          expect(s.extracted.packageVersion).toBe('2.0.0')
-          expect(s.extracted).toSatisfy((pkg: Package) => pkg.fileExists(`/node_modules/${s.ctx.scoped}/package.json`))
-          expect(s.extracted).toSatisfy((pkg: Package) => pkg.fileExists(`/node_modules/${s.ctx.scoped}/lib/util.js`))
-        }),
+        Then('the extracted package preserves scope in name, version, and file tree')((s, expect) =>
+          expect({
+            packageName: s.extracted.packageName,
+            packageVersion: s.extracted.packageVersion,
+            manifest: s.extracted.fileExists(`/node_modules/${s.ctx.scoped}/package.json`),
+            util: s.extracted.fileExists(`/node_modules/${s.ctx.scoped}/lib/util.js`),
+          }).toEqual({
+            packageName: s.ctx.scoped,
+            packageVersion: '2.0.0',
+            manifest: true,
+            util: true,
+          })
+        ),
       ),
     )
 
@@ -168,12 +185,14 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           'pkg',
           (s) => Effect.sync(() => createPackage(s.tree, 'demo', '1.0.0')),
         ),
-        Then('both path forms are resolved and read cleanly under node_modules')((s) => {
-          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/relative.js'))
-          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/absolute.js'))
-          expect(s.pkg.tryReadFile('/node_modules/demo/relative.js')).toBe('rel')
-          expect(s.pkg.tryReadFile('/node_modules/demo/absolute.js')).toBe('abs')
-        }),
+        Then('both path forms are resolved and read cleanly under node_modules')((s, expect) =>
+          expect({
+            hasRelative: s.pkg.fileExists('/node_modules/demo/relative.js'),
+            hasAbsolute: s.pkg.fileExists('/node_modules/demo/absolute.js'),
+            relative: s.pkg.tryReadFile('/node_modules/demo/relative.js'),
+            absolute: s.pkg.tryReadFile('/node_modules/demo/absolute.js'),
+          }).toEqual({ hasRelative: true, hasAbsolute: true, relative: 'rel', absolute: 'abs' })
+        ),
       ),
     )
 
@@ -203,11 +222,19 @@ Feature('npm-package in-memory file tree and tarball round-trip')
               existsRootSlash: s.pkg.directoryExists('/node_modules/demo/'),
             })),
         ),
-        Then('the returned file sets and directory existence checks are identical')((s) => {
-          expect(s.results.listA).toEqual(s.results.listASlash)
-          expect(s.results.existsRoot).toBe(true)
-          expect(s.results.existsRootSlash).toBe(true)
-        }),
+        Then('the returned file sets and directory existence checks are identical')((s, expect) =>
+          expect({
+            list: s.results.listA.sort(),
+            listSlash: s.results.listASlash.sort(),
+            existsRoot: s.results.existsRoot,
+            existsRootSlash: s.results.existsRootSlash,
+          }).toEqual({
+            list: ['/node_modules/demo/a/b.js', '/node_modules/demo/a/c.js'],
+            listSlash: ['/node_modules/demo/a/b.js', '/node_modules/demo/a/c.js'],
+            existsRoot: true,
+            existsRootSlash: true,
+          })
+        ),
       ),
     )
 
@@ -232,10 +259,7 @@ Feature('npm-package in-memory file tree and tarball round-trip')
             s.ctx.pkg.tryReadFile('/node_modules/bin-test/text.txt')
             return s.ctx.pkg.tryReadBytes('/node_modules/bin-test/asset.bin')
           })),
-        Then('the raw bytes are preserved without modification')((s) => {
-          expect(s.bytes).toBeInstanceOf(Uint8Array)
-          expect(Array.from(uint8Of(s.bytes))).toEqual(Array.from(s.ctx.binary))
-        }),
+        Then('the raw bytes are preserved without modification')((s, expect) => expect(s.bytes).toEqual(s.ctx.binary)),
       ),
     )
 
@@ -267,13 +291,21 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           'merged',
           (s) => Effect.sync(() => s.ctx.base.withOverlay(s.ctx.other)),
         ),
-        Then('the overlay values win for overlapping files while unique files are retained')((s) => {
-          expect(s.merged.tryReadFile('/node_modules/base/shared.txt')).toBe('other-wins')
-          expect(s.merged.tryReadFile('/node_modules/base/only-base.txt')).toBe('base-only')
-          expect(s.merged.tryReadFile('/node_modules/base/only-other.txt')).toBe('other-only')
-          expect(s.merged.packageName).toBe('base')
-          expect(s.merged.packageVersion).toBe('1.0.0')
-        }),
+        Then('the overlay values win for overlapping files while unique files are retained')((s, expect) =>
+          expect({
+            shared: s.merged.tryReadFile('/node_modules/base/shared.txt'),
+            onlyBase: s.merged.tryReadFile('/node_modules/base/only-base.txt'),
+            onlyOther: s.merged.tryReadFile('/node_modules/base/only-other.txt'),
+            packageName: s.merged.packageName,
+            packageVersion: s.merged.packageVersion,
+          }).toEqual({
+            shared: 'other-wins',
+            onlyBase: 'base-only',
+            onlyOther: 'other-only',
+            packageName: 'base',
+            packageVersion: '1.0.0',
+          })
+        ),
       ),
     )
 
@@ -290,11 +322,12 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           'dirJson',
           (s) => Effect.sync(() => toDirectoryJSON(s.files, 'demo')),
         ),
-        Then('the JSON map retains the paths, string contents, and raw binary buffers')((s) => {
-          expect(s.dirJson['/node_modules/demo/index.js']).toBe('hi')
+        Then('the JSON map retains the paths, string contents, and raw binary buffers')((s, expect) => {
           const bin = uint8Of(s.dirJson['/node_modules/demo/asset.bin'])
-          expect(bin).toBeInstanceOf(Uint8Array)
-          expect(Array.from(bin)).toEqual([1, 2, 3])
+          return expect({
+            index: s.dirJson['/node_modules/demo/index.js'],
+            bytes: Array.from(bin),
+          }).toEqual({ index: 'hi', bytes: [1, 2, 3] })
         }),
       ),
     )

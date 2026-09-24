@@ -1,8 +1,7 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { toDirectoryJSON } from '@systemfsoftware/npm-package'
-import { Effect, Exit, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
@@ -26,9 +25,9 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
             const bytes = yield* s.ctx.fs.readFile('/node_modules/demo/package.json')
             return new TextDecoder().decode(bytes)
           })),
-        Then('the read manifest matches the original JSON exactly')((s) => {
+        Then('the read manifest matches the original JSON exactly')((s, expect) =>
           expect(s.content).toBe(s.ctx.pkgJson)
-        }),
+        ),
       ),
     )
 
@@ -43,12 +42,15 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
           return MemoryFileSystem.make(toDirectoryJSON(tree, 'demo')).effect
         }),
         When('a non-existent file is read from the filesystem')(
-          'exit',
-          (s) => Effect.exit(s.fs.readFile('/node_modules/demo/missing.txt')),
+          'failure',
+          (s) => Effect.flip(s.fs.readFile('/node_modules/demo/missing.txt')),
         ),
-        Then('the filesystem returns a Failure exit indicating missing path')((s) => {
-          expect(s.exit).toSatisfy(Exit.isFailure)
-        }),
+        Then('the filesystem refuses the read and names the missing path')((s, expect) =>
+          expect(s.failure).toMatchObject({
+            _tag: 'PlatformError',
+            reason: { _tag: 'NotFound', pathOrDescriptor: '/node_modules/demo/missing.txt' },
+          })
+        ),
       ),
     )
 
@@ -67,9 +69,9 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
           'readBytes',
           (s) => s.ctx.fs.readFile('/node_modules/demo/data.bin'),
         ),
-        Then('the read bytes are byte-identical to the original buffer')((s) => {
+        Then('the read bytes are byte-identical to the original buffer')((s, expect) =>
           expect(Array.from(s.readBytes)).toEqual(Array.from(s.ctx.binary))
-        }),
+        ),
       ),
     )
 
@@ -85,10 +87,12 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
           'contents',
           (s) => Effect.sync(() => toDirectoryJSON(s.tree, 'demo')),
         ),
-        Then('the prefixed paths remain in place without double-prefixing')((s) => {
-          expect(s.contents['/node_modules/demo/index.js']).toBe('export const x = 1')
-          expect(s.contents).toHaveProperty(['/node_modules/demo/package.json'])
-        }),
+        Then('the prefixed paths remain in place without double-prefixing')((s, expect) =>
+          expect(s.contents).toMatchObject({
+            '/node_modules/demo/index.js': 'export const x = 1',
+            '/node_modules/demo/package.json': jsonString({ name: 'demo', version: '1.0.0' }),
+          })
+        ),
       ),
     )
 
@@ -104,15 +108,16 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
           Effect.sync(() => {
             try {
               toDirectoryJSON(s.tree, 'demo')
-              return { threw: false, message: '' }
+              return { message: undefined }
             } catch (err) {
-              return { threw: true, message: err instanceof Error ? err.message : '' }
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the projection aborts with an unexpected fixture path error')((s) => {
-          expect(s.attempt.threw).toBe(true)
-          expect(s.attempt.message).toMatch(/Unexpected absolute fixture path/)
-        }),
+        Then('the projection aborts with an unexpected fixture path error')((s, expect) =>
+          expect(s.attempt).toMatchObject({
+            message: 'Unexpected absolute fixture path: /node_modules/other/index.js',
+          })
+        ),
       ),
     )
 
@@ -131,9 +136,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
             const bytes = yield* s.fs.readFile('/node_modules/@acme/pkg/package.json')
             return new TextDecoder().decode(bytes)
           })),
-        Then('the contents confirm the scoped package placement')((s) => {
-          expect(s.text).toContain('@acme/pkg')
-        }),
+        Then('the contents confirm the scoped package placement')((s, expect) => expect(s.text).toContain('@acme/pkg')),
       ),
     )
   })
