@@ -58,6 +58,12 @@ export { exec, type ExecResult, isRunningVM, type LogLine, logs, ping, port, typ
 
 export { JobCompletion, JobExited, type JobExitStatus, JobSignaled }
 
+export { PortAllocator, type PortAllocatorShape } from './PortAllocator.js'
+
+export { RuntimeResolver, type RuntimeResolverShape } from './RuntimeResolver.js'
+
+export { SandboxRuntime, type SandboxRuntimeShape } from './SandboxRuntime.js'
+
 export const Port = {
   of: (port: number): ExposedPort => new ExposedPort({ port }),
   tcp: (port: number): ExposedPort => new ExposedPort({ port, probe: { _tag: 'Tcp' } }),

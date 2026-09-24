@@ -1,7 +1,6 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Config, Effect, FileSystem, Option } from 'effect'
 import * as Match from 'effect/Match'
-import type { ResolvedRuntime } from 'microsandbox'
 import {
   AssessVirtualization,
   assessVirtualization,
@@ -15,6 +14,7 @@ import {
 } from './assess-virtualization.workflow.js'
 import { VirtualizationUnsupportedError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
+import { RuntimeResolver } from './RuntimeResolver.js'
 
 const KVM_DEVICE = '/dev/kvm'
 const WINDOWS_VMCOMPUTE = 'C:\\Windows\\System32\\vmcompute.dll'
@@ -76,25 +76,8 @@ const probeCapability = Effect.gen(function*() {
     onNone: () => unsupportedProbe(platform, arch),
   })
 }).pipe(Effect.orDie)
-const announce = (resolved: ResolvedRuntime) =>
-  Effect.logInfo('microsandbox runtime resolved', {
-    'runtime.path': resolved.msbPath,
-    'runtime.origin': resolved.origin,
-  })
 
-const runtimeLoad = (platform: string) =>
-  Effect.tryPromise({
-    try: () => import('microsandbox'),
-    catch: (cause) =>
-      new VirtualizationUnsupportedError({
-        platform,
-        remediation: 'Failed to load microsandbox native runtime',
-        cause,
-      }),
-  }).pipe(
-    Effect.flatMap(({ resolveRuntime }) => Effect.sync(() => resolveRuntime())),
-    Effect.flatMap(announce),
-  )
+const runtimeLoad = (platform: string) => Effect.flatMap(RuntimeResolver, (resolver) => resolver.resolve(platform))
 
 export const probeVirtualization = Sandwich.named('probe_virtualization')((_spec: MicroVMSpec) =>
   Effect.gen(function*() {
