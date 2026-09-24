@@ -2,17 +2,18 @@ import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
 import {
+  BLUEPRINT_ACTUAL,
+  BLUEPRINT_EXPECTED,
+  BLUEPRINT_FIX,
   HANDLE_ACTUAL,
   HANDLE_EXPECTED,
   HANDLE_FIX,
-  RESOURCE_ACTUAL,
-  RESOURCE_EXPECTED,
-  RESOURCE_FIX,
+  RETIRED_FIX,
 } from '../kind-file-construction.config.js'
 import { kindFileConstruction } from '../kind-file-construction.js'
 import {
-  CONTAINER_RESOURCE,
-  CONTAINER_RESOURCE_FILENAME,
+  CONTAINER_BLUEPRINT,
+  CONTAINER_BLUEPRINT_FILENAME,
   RUNNING_CONTAINER_HANDLE,
   RUNNING_CONTAINER_HANDLE_FILENAME,
 } from './_canonical-fixtures.js'
@@ -29,9 +30,14 @@ const ruleTester = new RuleTester({
   },
 })
 
-const resourceError = (name: string) => ({
+const blueprintError = (name: string) => ({
   messageId: 'missingConstruction' as const,
-  data: { name, expected: RESOURCE_EXPECTED, actual: RESOURCE_ACTUAL, fix: RESOURCE_FIX },
+  data: { name, expected: BLUEPRINT_EXPECTED, actual: BLUEPRINT_ACTUAL, fix: BLUEPRINT_FIX },
+})
+
+const retiredError = (name: string) => ({
+  messageId: 'retiredResourceFile' as const,
+  data: { name, fix: RETIRED_FIX },
 })
 
 const handleError = (name: string) => ({
@@ -39,7 +45,7 @@ const handleError = (name: string) => ({
   data: { name, expected: HANDLE_EXPECTED, actual: HANDLE_ACTUAL, fix: HANDLE_FIX },
 })
 
-const PRE_MIGRATION_READINESS_RESOURCE = `import { Effect, Predicate, Schedule } from 'effect'
+const PRE_MIGRATION_READINESS_BLUEPRINT = `import { Effect, Predicate, Schedule } from 'effect'
 import { dual } from 'effect/Function'
 import { probeConditionCell } from './await-condition.cell.js'
 import { AwaitCondition } from './AwaitCondition.schema.js'
@@ -93,17 +99,17 @@ export interface LogLine {
 ruleTester.run('kind-file-construction', kindFileConstruction, {
   valid: [
     {
-      name: 'Should_Pass_When_AResourceFileConstructsThroughANamedImport',
-      code: `import { Resource } from '@systemfsoftware/effect-cell-types'
+      name: 'Should_Pass_When_ABlueprintFileConstructsThroughANamedImport',
+      code: `import { Blueprint } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Container')
-const Container = Resource.make<string>()({ typeId: TypeId, combinators: {}, projections: {} })
+const Container = Blueprint.make<string>()(TypeId).steps({ steps: {}, targets: {} })
 export const make = (image: string) => Container.of(image)`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_TheCanonicalContainerFixtureConstructs',
-      code: CONTAINER_RESOURCE,
-      filename: CONTAINER_RESOURCE_FILENAME,
+      code: CONTAINER_BLUEPRINT,
+      filename: CONTAINER_BLUEPRINT_FILENAME,
     },
     {
       name: 'Should_Pass_When_TheCanonicalRunningContainerFixtureConstructs',
@@ -111,20 +117,20 @@ export const make = (image: string) => Container.of(image)`,
       filename: RUNNING_CONTAINER_HANDLE_FILENAME,
     },
     {
-      name: 'Should_Pass_When_AResourceFileConstructsThroughANamespaceImport',
+      name: 'Should_Pass_When_ABlueprintFileConstructsThroughANamespaceImport',
       code: `import * as CellTypes from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Container')
-const Container = CellTypes.Resource.make<string>()({ typeId: TypeId, combinators: {}, projections: {} })
+const Container = CellTypes.Blueprint.make<string>()(TypeId).steps({ steps: {}, targets: {} })
 export const make = (image: string) => Container.of(image)`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
-      name: 'Should_Pass_When_AResourceFileConstructsThroughAnAliasedComputedMember',
-      code: `import { Resource as Kinds } from '@systemfsoftware/effect-cell-types'
+      name: 'Should_Pass_When_ABlueprintFileConstructsThroughAnAliasedComputedMember',
+      code: `import { Blueprint as Kinds } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Container')
-const Container = Kinds['make']<string>()({ typeId: TypeId, combinators: {}, projections: {} })
+const Container = Kinds['make']<string>()(TypeId).operations<Record<string, never>>()({ operations: {}, targets: {} })
 export const make = (image: string) => Container.of(image)`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_AHandleFileConstructsThroughANamedImport',
@@ -142,17 +148,17 @@ export const isRunningContainer = RunningContainer.is`,
     },
     {
       name: 'Should_Pass_When_ATypeTestFileSkipsTheRule',
-      code: `import { Resource } from '@systemfsoftware/effect-cell-types'
-expect(Resource.make<string>({} as never)).type.toBe<unknown>()`,
-      filename: '/repo/packages/effect-cell-types/test-types/resources-surface.tst.ts',
+      code: `import { Blueprint } from '@systemfsoftware/effect-cell-types'
+expect(Blueprint.make<string>({} as never)).type.toBe<unknown>()`,
+      filename: '/repo/packages/effect-cell-types/test-types/blueprints-surface.tst.ts',
     },
   ],
   invalid: [
     {
-      name: 'Should_Report_When_ThePreMigrationReadinessResourceConstructsNoResource',
-      code: PRE_MIGRATION_READINESS_RESOURCE,
-      filename: '/repo/packages/effect-readiness/src/readiness.resource.ts',
-      errors: [resourceError('readiness.resource.ts')],
+      name: 'Should_Report_When_ThePreMigrationReadinessBlueprintConstructsNoBlueprint',
+      code: PRE_MIGRATION_READINESS_BLUEPRINT,
+      filename: '/repo/packages/effect-readiness/src/readiness.blueprint.ts',
+      errors: [blueprintError('readiness.blueprint.ts')],
     },
     {
       name: 'Should_Report_When_ThePreMigrationRunningVMHandleConstructsNoHandle',
@@ -170,13 +176,22 @@ export const make = (name: string) => Device.make({ name })`,
       errors: [handleError('device.handle.ts')],
     },
     {
-      name: 'Should_Report_When_AResourceFileConstructsOnlyItsHandle',
+      name: 'Should_Report_When_ARetiredResourceFileConstructsOnlyItsHandle',
       code: `import { Handle } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Device')
 const Device = Handle.make<{ readonly name: string }>()(TypeId)
 export const make = (name: string) => Device.make({ name })`,
       filename: '/repo/packages/shop/src/device.resource.ts',
-      errors: [resourceError('device.resource.ts')],
+      errors: [retiredError('device.resource.ts')],
+    },
+    {
+      name: 'Should_Report_When_ARetiredResourceFileMintsThroughTheOldKind',
+      code: `import { Resource } from '@systemfsoftware/effect-cell-types'
+export const TypeId = Symbol.for('~example/shop/Container')
+const Container = Resource.make<string>()(TypeId).steps({ steps: {}, targets: {} })
+export const make = (image: string) => Container.of(image)`,
+      filename: '/repo/packages/shop/src/container.resource.ts',
+      errors: [retiredError('container.resource.ts')],
     },
   ],
 })

@@ -10,8 +10,8 @@ import {
 } from '../kind-record-minted-by-kind.config.js'
 import { kindRecordMintedByKind } from '../kind-record-minted-by-kind.js'
 import {
-  CONTAINER_RESOURCE,
-  CONTAINER_RESOURCE_FILENAME,
+  CONTAINER_BLUEPRINT,
+  CONTAINER_BLUEPRINT_FILENAME,
   RUNNING_CONTAINER_HANDLE,
   RUNNING_CONTAINER_HANDLE_FILENAME,
 } from './_canonical-fixtures.js'
@@ -83,8 +83,8 @@ ruleTester.run('kind-record-minted-by-kind', kindRecordMintedByKind, {
   valid: [
     {
       name: 'Should_Pass_When_TheCanonicalContainerFixtureMintsThroughTheKind',
-      code: CONTAINER_RESOURCE,
-      filename: CONTAINER_RESOURCE_FILENAME,
+      code: CONTAINER_BLUEPRINT,
+      filename: CONTAINER_BLUEPRINT_FILENAME,
     },
     {
       name: 'Should_Pass_When_TheCanonicalRunningContainerFixtureMintsThroughTheKind',
@@ -92,12 +92,12 @@ ruleTester.run('kind-record-minted-by-kind', kindRecordMintedByKind, {
       filename: RUNNING_CONTAINER_HANDLE_FILENAME,
     },
     {
-      name: 'Should_Pass_When_AResourceModuleHoldsNoHandRolledRecord',
-      code: `import { Resource } from '@systemfsoftware/effect-cell-types'
+      name: 'Should_Pass_When_ABlueprintModuleHoldsNoHandRolledRecord',
+      code: `import { Blueprint } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Container')
-const Container = Resource.make<string>()({ typeId: TypeId, combinators: {}, projections: {} })
+const Container = Blueprint.make<string>()(TypeId).steps({ steps: {}, targets: {} })
 export const make = (image: string) => Container.of(image)`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_AHandleModuleHoldsNoHandRolledRecord',
@@ -113,7 +113,7 @@ export const isRunningContainer = RunningContainer.is`,
       code: `const DEFAULTS = { timeoutMs: 30_000 } as const
 export const ready = { ...DEFAULTS, ready: true }
 export const keyed = { ['region']: 'us' }`,
-      filename: '/repo/packages/shop/src/gate.resource.ts',
+      filename: '/repo/packages/shop/src/gate.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_ANonKindFileRollsItsOwnRecord',

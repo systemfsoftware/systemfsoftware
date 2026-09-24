@@ -4,8 +4,8 @@ import * as vitest from 'vitest'
 import { actualOf, EXPECTED, FIX } from '../kind-file-declares-no-service.config.js'
 import { kindFileDeclaresNoService } from '../kind-file-declares-no-service.js'
 import {
-  CONTAINER_RESOURCE,
-  CONTAINER_RESOURCE_FILENAME,
+  CONTAINER_BLUEPRINT,
+  CONTAINER_BLUEPRINT_FILENAME,
   RUNNING_CONTAINER_HANDLE,
   RUNNING_CONTAINER_HANDLE_FILENAME,
 } from './_canonical-fixtures.js'
@@ -36,16 +36,16 @@ export class Stat extends Schema.Class<Stat>()('Stat', { size: Schema.Number }) 
       filename: '/repo/packages/effect-memfs/src/open-file.handle.ts',
     },
     {
-      name: 'Should_Pass_When_AResourceModuleTakesAContextKeyAsAParameter',
+      name: 'Should_Pass_When_ABlueprintModuleTakesAContextKeyAsAParameter',
       code: `import { type Context, Effect, Layer } from 'effect'
 export const layer = <Id>(service: Context.Key<Id, unknown>): Layer.Layer<Id> =>
   Layer.effect(service)(Effect.void)`,
-      filename: '/repo/packages/effect-microsandbox/src/micro-vm.resource.ts',
+      filename: '/repo/packages/effect-microsandbox/src/micro-vm.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_TheCanonicalContainerFixtureDeclaresNoService',
-      code: CONTAINER_RESOURCE,
-      filename: CONTAINER_RESOURCE_FILENAME,
+      code: CONTAINER_BLUEPRINT,
+      filename: CONTAINER_BLUEPRINT_FILENAME,
     },
     {
       name: 'Should_Pass_When_TheCanonicalRunningContainerFixtureDeclaresNoService',
@@ -71,13 +71,13 @@ export class RunningContainer extends Context.Service<RunningContainer, Shape>()
       errors: [serviceError('RunningContainer', 'Context.Service class')],
     },
     {
-      name: 'Should_Report_When_AResourceDeclaresAContextTag',
+      name: 'Should_Report_When_ABlueprintDeclaresAContextTag',
       code: `import { Context } from 'effect'
 export interface Database {
   readonly query: (sql: string) => unknown
 }
 export const Database = Context.Tag('@app/Database')<Database, Database>()`,
-      filename: '/repo/packages/shop/src/database.resource.ts',
+      filename: '/repo/packages/shop/src/database.blueprint.ts',
       errors: [serviceError('Database', 'context identity')],
     },
     {

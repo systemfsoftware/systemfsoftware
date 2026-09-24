@@ -2,18 +2,19 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 
 import {
+  BLUEPRINT_ACTUAL,
+  BLUEPRINT_EXPECTED,
+  BLUEPRINT_FIX,
   HANDLE_ACTUAL,
   HANDLE_EXPECTED,
   HANDLE_FIX,
   meta,
-  RESOURCE_ACTUAL,
-  RESOURCE_EXPECTED,
-  RESOURCE_FIX,
+  RETIRED_FIX,
 } from './kind-file-construction.config.js'
-import { basenameOf, isTypeTestFile, type KindFileKind, kindOfFile } from './kind-file.js'
+import { basenameOf, isRetiredResourceFile, isTypeTestFile, type KindFileKind, kindOfFile } from './kind-file.js'
 import { kindOfConstruction, moduleOriginsOf } from './module-origin.js'
 
-export type MessageIds = 'missingConstruction'
+export type MessageIds = 'missingConstruction' | 'retiredResourceFile'
 
 interface ConstructionCopy {
   readonly expected: string
@@ -22,7 +23,7 @@ interface ConstructionCopy {
 }
 
 const COPY_BY_KIND: Readonly<Record<KindFileKind, ConstructionCopy>> = {
-  resource: { expected: RESOURCE_EXPECTED, actual: RESOURCE_ACTUAL, fix: RESOURCE_FIX },
+  blueprint: { expected: BLUEPRINT_EXPECTED, actual: BLUEPRINT_ACTUAL, fix: BLUEPRINT_FIX },
   handle: { expected: HANDLE_EXPECTED, actual: HANDLE_ACTUAL, fix: HANDLE_FIX },
 }
 
@@ -30,6 +31,17 @@ export const kindFileConstruction = defineRule({
   meta,
   create(context: Context) {
     if (isTypeTestFile(context.filename)) return {}
+    if (isRetiredResourceFile(context.filename)) {
+      return {
+        'Program:exit'(node: ESTree.Program) {
+          context.report({
+            node,
+            messageId: 'retiredResourceFile',
+            data: { name: basenameOf(context.filename), fix: RETIRED_FIX },
+          })
+        },
+      }
+    }
     const kind = kindOfFile(context.filename)
     if (kind === null) return {}
     const copy = COPY_BY_KIND[kind]

@@ -4,15 +4,15 @@ import type { ESTree } from '@oxlint/plugins'
  * The import-origin resolver this plugin's suffix-keyed rules reason through.
  *
  * The defect it closes: matching a callee by the way it is spelled
- * (`Resource.make`) instead of resolving where the identifier comes from. A
+ * (`Blueprint.make`) instead of resolving where the identifier comes from. A
  * namespace import (`import * as CellTypes from
- * '@systemfsoftware/effect-cell-types'`), an alias (`import { Resource as R }`),
- * a destructure (`const { make } = Resource`), and a computed member key
- * (`Resource['make']`) all name the same origin; a same-spelled callee imported
+ * '@systemfsoftware/effect-cell-types'`), an alias (`import { Blueprint as B }`),
+ * a destructure (`const { make } = Blueprint`), and a computed member key
+ * (`Blueprint['make']`) all name the same origin; a same-spelled callee imported
  * from anywhere else resolves to nothing. Keys are origins, never spellings.
  *
  * Resolution is module-scope: the seed is the file's top-level imports plus the
- * aliases they flow through. That is the scope a resource or handle module's
+ * aliases they flow through. That is the scope a blueprint or handle module's
  * kinds live in — they are imports, not parameters.
  */
 
@@ -24,19 +24,19 @@ export const REF_MODULE = 'effect/Ref'
 export const MUTABLE_REF_MODULE = 'effect/MutableRef'
 
 /** The kind a `@systemfsoftware/effect-cell-types` constructor mints. */
-export type CellKind = 'resource' | 'handle'
+export type CellKind = 'blueprint' | 'handle'
 
 export interface ModuleOrigin {
   /** The module specifier exactly as the import declaration writes it. */
   readonly source: string
-  /** The member path the expression denotes (`CellTypes.Resource.make` → `['Resource', 'make']`). */
+  /** The member path the expression denotes (`CellTypes.Blueprint.make` → `['Blueprint', 'make']`). */
   readonly members: readonly string[]
 }
 
 export type ModuleOrigins = ReadonlyMap<string, ModuleOrigin>
 
 const CELL_KIND_BY_MEMBER_PATH: Readonly<Record<string, CellKind>> = {
-  'Resource.make': 'resource',
+  'Blueprint.make': 'blueprint',
   'Handle.make': 'handle',
 }
 
@@ -143,7 +143,7 @@ export const moduleOriginsOf = (program: ESTree.Program): ModuleOrigins => {
 
 export const originOf = (node: ESTree.Node, origins: ModuleOrigins): ModuleOrigin | null => resolveNode(node, origins)
 
-/** The dotted member path an origin denotes (`['Resource', 'make']` → `'Resource.make'`). */
+/** The dotted member path an origin denotes (`['Blueprint', 'make']` → `'Blueprint.make'`). */
 export const memberPathOf = (origin: ModuleOrigin): string => origin.members.join('.')
 
 /** The callee at the root of a call chain: `Handle.make<D>()(TypeId)` → `Handle.make`. */
@@ -158,9 +158,16 @@ export const kindOfOrigin = (origin: ModuleOrigin | null): CellKind | null => {
   return CELL_KIND_BY_MEMBER_PATH[memberPathOf(origin)] ?? null
 }
 
-/** The kind a call constructs, resolved through the import — never through the callee's spelling. */
+const constructionKindOf = (node: ESTree.Node, origins: ModuleOrigins): CellKind | null => {
+  const direct = kindOfOrigin(originOf(calleeRootOf(node), origins))
+  if (direct !== null) return direct
+  if (node.type === 'CallExpression') return constructionKindOf(node.callee, origins)
+  if (node.type === 'MemberExpression') return constructionKindOf(node.object, origins)
+  return null
+}
+
 export const kindOfConstruction = (node: ESTree.Node, origins: ModuleOrigins): CellKind | null =>
-  kindOfOrigin(originOf(calleeRootOf(node), origins))
+  constructionKindOf(node, origins)
 
 export const isModuleMember = (
   node: ESTree.Node,

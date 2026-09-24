@@ -14,8 +14,8 @@ import {
 } from '../kind-file-holds-no-module-state.config.js'
 import { kindFileHoldsNoModuleState } from '../kind-file-holds-no-module-state.js'
 import {
-  CONTAINER_RESOURCE,
-  CONTAINER_RESOURCE_FILENAME,
+  CONTAINER_BLUEPRINT,
+  CONTAINER_BLUEPRINT_FILENAME,
   RUNNING_CONTAINER_HANDLE,
   RUNNING_CONTAINER_HANDLE_FILENAME,
 } from './_canonical-fixtures.js'
@@ -40,12 +40,12 @@ const stateError = (name: string, actual: string, fix: string) => ({
 ruleTester.run('kind-file-holds-no-module-state', kindFileHoldsNoModuleState, {
   valid: [
     {
-      name: 'Should_Pass_When_AResourceModuleHoldsOnlyImmutableDefinitions',
-      code: `import { Resource } from '@systemfsoftware/effect-cell-types'
+      name: 'Should_Pass_When_ABlueprintModuleHoldsOnlyImmutableDefinitions',
+      code: `import { Blueprint } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Container')
-const Container = Resource.make<string>()({ typeId: TypeId, combinators: {}, projections: {} })
+const Container = Blueprint.make<string>()(TypeId).steps({ steps: {}, targets: {} })
 export const make = (image: string) => Container.of(image)`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_AHandleModuleHoldsOnlyImmutableDefinitions',
@@ -58,8 +58,8 @@ export const isRunningContainer = RunningContainer.is`,
     },
     {
       name: 'Should_Pass_When_TheCanonicalContainerFixtureHoldsNoModuleState',
-      code: CONTAINER_RESOURCE,
-      filename: CONTAINER_RESOURCE_FILENAME,
+      code: CONTAINER_BLUEPRINT,
+      filename: CONTAINER_BLUEPRINT_FILENAME,
     },
     {
       name: 'Should_Pass_When_TheCanonicalRunningContainerFixtureHoldsNoModuleState',
@@ -70,7 +70,7 @@ export const isRunningContainer = RunningContainer.is`,
       name: 'Should_Pass_When_ModuleConstsStayUnmutated',
       code: `const DEFAULTS = { timeoutMs: 30_000, pollMs: 250 } as const
 export const withTimeout = (timeoutMs: number) => ({ ...DEFAULTS, timeoutMs })`,
-      filename: '/repo/packages/shop/src/gate.resource.ts',
+      filename: '/repo/packages/shop/src/gate.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_CollectionsAndRefsAreMintedInsideOperations',
@@ -87,20 +87,20 @@ export const make = (limit: number) =>
   seen = input
   return seen
 }`,
-      filename: '/repo/packages/shop/src/gate.resource.ts',
+      filename: '/repo/packages/shop/src/gate.blueprint.ts',
     },
   ],
   invalid: [
     {
-      name: 'Should_Report_When_AResourceFileHoldsAModuleLevelLet',
+      name: 'Should_Report_When_ABlueprintFileHoldsAModuleLevelLet',
       code: `export let leases = 0`,
-      filename: '/repo/packages/shop/src/pool.resource.ts',
+      filename: '/repo/packages/shop/src/pool.blueprint.ts',
       errors: [stateError('leases', REBINDING_ACTUAL, REBINDING_FIX)],
     },
     {
-      name: 'Should_Report_When_AResourceFileHoldsAModuleLevelVar',
+      name: 'Should_Report_When_ABlueprintFileHoldsAModuleLevelVar',
       code: `export var attempts = 0`,
-      filename: '/repo/packages/shop/src/gate.resource.ts',
+      filename: '/repo/packages/shop/src/gate.blueprint.ts',
       errors: [stateError('attempts', REBINDING_ACTUAL, REBINDING_FIX)],
     },
     {
@@ -110,10 +110,10 @@ export const make = (limit: number) =>
       errors: [stateError('cache', COLLECTION_ACTUAL_OF('new WeakMap()'), COLLECTION_FIX)],
     },
     {
-      name: 'Should_Report_When_AResourceFileHoldsAModuleLevelRef',
+      name: 'Should_Report_When_ABlueprintFileHoldsAModuleLevelRef',
       code: `import * as Ref from 'effect/Ref'
 const open = Ref.make(false)`,
-      filename: '/repo/packages/shop/src/gate.resource.ts',
+      filename: '/repo/packages/shop/src/gate.blueprint.ts',
       errors: [stateError('open', REF_ACTUAL, REF_FIX)],
     },
     {
@@ -129,7 +129,7 @@ const drivers = MutableRef.make([] as const)`,
 export const enqueue = (item: string): void => {
   pending.push(item)
 }`,
-      filename: '/repo/packages/shop/src/pool.resource.ts',
+      filename: '/repo/packages/shop/src/pool.blueprint.ts',
       errors: [stateError('pending', MUTATED_LITERAL_ACTUAL_OF('pending.push() is called'), MUTATED_LITERAL_FIX)],
     },
     {

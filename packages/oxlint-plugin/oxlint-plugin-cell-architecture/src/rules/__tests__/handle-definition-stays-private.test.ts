@@ -82,12 +82,12 @@ export const DeviceName = 'device'`,
       filename: '/repo/packages/shop/src/device.handle.ts',
     },
     {
-      name: 'Should_Pass_When_AResourceFileExportsAResourceBinding',
-      code: `import { Resource } from '@systemfsoftware/effect-cell-types'
+      name: 'Should_Pass_When_ABlueprintFileExportsABlueprintBinding',
+      code: `import { Blueprint } from '@systemfsoftware/effect-cell-types'
 export const TypeId = Symbol.for('~example/shop/Container')
-const Container = Resource.make<string>()({ typeId: TypeId, combinators: {}, projections: {} })
+const Container = Blueprint.make<string>()(TypeId).steps({ steps: {}, targets: {} })
 export const make = (image: string) => Container.of(image)`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_ANonKindFileExportsAHandleMakeBinding',

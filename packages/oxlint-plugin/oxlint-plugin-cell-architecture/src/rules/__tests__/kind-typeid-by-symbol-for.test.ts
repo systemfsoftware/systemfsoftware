@@ -13,8 +13,8 @@ import {
 } from '../kind-typeid-by-symbol-for.config.js'
 import { kindTypeIdBySymbolFor } from '../kind-typeid-by-symbol-for.js'
 import {
-  CONTAINER_RESOURCE,
-  CONTAINER_RESOURCE_FILENAME,
+  CONTAINER_BLUEPRINT,
+  CONTAINER_BLUEPRINT_FILENAME,
   RUNNING_CONTAINER_HANDLE,
   RUNNING_CONTAINER_HANDLE_FILENAME,
 } from './_canonical-fixtures.js'
@@ -48,10 +48,10 @@ const extraSymbolError = (call: string) => ({
 ruleTester.run('kind-typeid-by-symbol-for', kindTypeIdBySymbolFor, {
   valid: [
     {
-      name: 'Should_Pass_When_AResourceModuleBrandsItselfWithSymbolFor',
+      name: 'Should_Pass_When_ABlueprintModuleBrandsItselfWithSymbolFor',
       code: `export const TypeId = Symbol.for('~example/shop/Container')
 export type TypeId = typeof TypeId`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
     },
     {
       name: 'Should_Pass_When_AHandleModuleBrandsItselfWithSymbolFor',
@@ -61,8 +61,8 @@ export type TypeId = typeof TypeId`,
     },
     {
       name: 'Should_Pass_When_TheCanonicalContainerFixtureBrandsWithSymbolFor',
-      code: CONTAINER_RESOURCE,
-      filename: CONTAINER_RESOURCE_FILENAME,
+      code: CONTAINER_BLUEPRINT,
+      filename: CONTAINER_BLUEPRINT_FILENAME,
     },
     {
       name: 'Should_Pass_When_TheCanonicalRunningContainerFixtureBrandsWithSymbolFor',
@@ -80,7 +80,7 @@ export type TypeId = typeof TypeId`,
       name: 'Should_Report_When_ThePreMigrationMicroVMKeepsAStringTypeId',
       code: `const TypeId = '~systemfsoftware/microvm/MicroVM'
 export type TypeId = typeof TypeId`,
-      filename: '/repo/packages/effect-microsandbox/src/micro-vm.resource.ts',
+      filename: '/repo/packages/effect-microsandbox/src/micro-vm.blueprint.ts',
       errors: [notSymbolForError(UNEXPORTED_TYPEID_ACTUAL)],
     },
     {
@@ -110,9 +110,9 @@ export type TypeId = typeof TypeId`,
       errors: [notSymbolForError(STRING_TYPEID_ACTUAL_OF('TypeId', '~example/shop/Device'))],
     },
     {
-      name: 'Should_Report_When_AResourceModuleHasNoTypeIdAtAll',
+      name: 'Should_Report_When_ABlueprintModuleHasNoTypeIdAtAll',
       code: `export const make = (image: string) => ({ image })`,
-      filename: '/repo/packages/shop/src/container.resource.ts',
+      filename: '/repo/packages/shop/src/container.blueprint.ts',
       errors: [notSymbolForError(MISSING_TYPEID_ACTUAL)],
     },
     {

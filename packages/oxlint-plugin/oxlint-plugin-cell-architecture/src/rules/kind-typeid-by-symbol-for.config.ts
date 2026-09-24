@@ -23,7 +23,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      "A *.resource.ts / *.handle.ts file exports its TypeId declared as Symbol.for('<literal>') and declares no other Symbol(...)/Symbol.for(...) call.",
+      "A *.blueprint.ts / *.handle.ts file exports its TypeId declared as Symbol.for('<literal>') and declares no other Symbol(...)/Symbol.for(...) call.",
   },
   schema: [],
   messages: {
