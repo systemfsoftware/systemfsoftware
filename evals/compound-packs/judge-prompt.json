@@ -1,0 +1,6 @@
+{
+  "criterion": "On this task, can one change satisfy both rules?",
+  "passDefinition": "Pass when one change can satisfy both rules on this task.",
+  "failDefinition": "Fail when no single change can satisfy both rules on this task.",
+  "fewShotPairIds": []
+}
