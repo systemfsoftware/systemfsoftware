@@ -2,13 +2,13 @@ import * as AtomRpc from '@systemfsoftware/effect-atom/AtomRpc'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import * as RpcTest from 'effect/unstable/rpc/RpcTest'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Group = RpcGroup.make(
   Rpc.make('getUser', {

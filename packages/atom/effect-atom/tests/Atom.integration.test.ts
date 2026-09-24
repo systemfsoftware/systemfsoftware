@@ -1,13 +1,37 @@
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, SubscriptionRef } from 'effect'
+import { TestClock } from 'effect/testing'
 import { KeyValueStore } from 'effect/unstable/persistence'
-import { expect, vi } from 'vitest'
+import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const waitForValue = <A, W>(
+  registry: Registry.Registry,
+  atom: Atom.Writable<A, W> | Atom.Atom<A>,
+  holds: (value: A) => boolean,
+): Effect.Effect<A> =>
+  Effect.callback((resume) => {
+    const handle: { unsubscribe?: () => void } = {}
+    handle.unsubscribe = registry.subscribe(
+      atom,
+      (value) => {
+        if (!holds(value)) return
+        resume(Effect.succeed(value))
+        handle.unsubscribe?.()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(() => handle.unsubscribe?.())
+  })
 
+const waitForSettled = <A, E, W>(
+  registry: Registry.Registry,
+  atom: Atom.Writable<Result.Result<A, E>, W> | Atom.Atom<Result.Result<A, E>>,
+): Effect.Effect<Result.Result<A, E>> =>
+  waitForValue(registry, atom, (value) => Result.isNotInitial(value) && !Result.isWaiting(value))
+const Feature = makeFeature({ it })
 Feature('Deriving values from other values on a page')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
@@ -182,13 +206,11 @@ Feature('Deriving values from other values on a page')
             }),
         ),
         When('the change is made and the rejection arrives')('readings', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             const before = s.ctx.page.get(s.ctx.optimisticValue)
             s.ctx.page.set(s.ctx.save, 99)
             const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const afterRejection = s.ctx.page.get(s.ctx.optimisticValue)
             return { before, whilePending, afterRejection }
           })),
@@ -232,13 +254,11 @@ Feature('Deriving values from other values on a page')
             }),
         ),
         When('the change is made and the store accepts it')('readings', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             s.ctx.page.set(s.ctx.save, 99)
             const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
@@ -253,64 +273,70 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a value that only updates after things quiet down')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const base = Atom.make(0)
             const quieted = base.pipe(Atom.debounce(100))
             const page = Registry.make()
             page.mount(quieted)
             return { page, base, quieted }
           })),
-        When('several edits happen in quick succession, then things go quiet')('readings', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.set(s.ctx.base, 1)
-            s.ctx.page.set(s.ctx.base, 2)
-            s.ctx.page.set(s.ctx.base, 3)
-            const duringBurst = s.ctx.page.get(s.ctx.quieted)
-            vi.advanceTimersByTime(150)
-            const afterQuiet = s.ctx.page.get(s.ctx.quieted)
-            vi.useRealTimers()
-            return { duringBurst, afterQuiet }
-          })),
-        Then('nothing changed during the burst, and the final edit arrived once it was quiet')((s) => {
+        When('several edits happen in quick succession, then things go quiet')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              s.ctx.page.set(s.ctx.base, 1)
+              s.ctx.page.set(s.ctx.base, 2)
+              s.ctx.page.set(s.ctx.base, 3)
+              const duringBurst = s.ctx.page.get(s.ctx.quieted)
+              yield* TestClock.adjust('150 millis')
+              const afterQuiet = s.ctx.page.get(s.ctx.quieted)
+              return { duringBurst, afterQuiet }
+            }),
+        ),
+        Then('the quieted reader still showed 0 during the burst')((s) => {
           expect(s.readings.duringBurst).toBe(0)
+        }),
+        And('it shows the final edit 3 once things went quiet')((s) => {
           expect(s.readings.afterQuiet).toBe(3)
         }),
       ),
     )
     scenario(
-      'A value with a short custom timer is cleaned up even when the page default is long',
+      'A counter with its own 10 millis cleanup restarts even though the page default is long',
       Gherkin.Do.pipe(
-        Given('a value with its own short cleanup timer on a page with a long default')('ctx', () =>
-          Effect.sync(() => {
-            vi.useFakeTimers()
-            let starts = 0
-            const value = Atom.make(Effect.sync(() => {
-              starts++
-              return 1
-            })).pipe(Atom.setIdleTTL(10))
-            const page = Registry.make({ defaultIdleTTL: 10_000, timeoutResolution: 10 })
-            return { page, value, starts: () => starts }
-          })),
-        When('the value is read, its short timer runs out, and it is read again')('readings', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.get(s.ctx.value)
-            vi.advanceTimersByTime(100)
-            s.ctx.page.get(s.ctx.value)
-            const starts = s.ctx.starts()
-            vi.useRealTimers()
-            return { starts }
-          })),
-        Then('the value was cleaned up on its own schedule and started over')((s) => {
+        Given('a counter with its own 10 millis cleanup on a page whose default is long')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              let starts = 0
+              const value = Atom.make(Effect.sync(() => {
+                starts++
+                return 1
+              })).pipe(Atom.setIdleTTL(10))
+              const page = Registry.make({ defaultIdleTTL: 10_000, timeoutResolution: 10 })
+              return { page, value, starts: () => starts }
+            }),
+        ),
+        When('Ada reads the counter, leaves it alone for 100 millis, and reads it again')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              s.ctx.page.get(s.ctx.value)
+              yield* TestClock.adjust('100 millis')
+              s.ctx.page.get(s.ctx.value)
+              const starts = s.ctx.starts()
+              return { starts }
+            }),
+        ),
+        Then('the counter restarted on its own short schedule')((s) => {
           expect(s.readings.starts).toBe(2)
         }),
       ),
     )
     scenario(
-      'A family member nobody uses is cleaned up while the family lives on',
+      'A member nobody checks is cleaned up while the family lives on',
       Gherkin.Do.pipe(
-        Given('a family of values with a short cleanup timer')('ctx', () =>
+        Given('a family of counters with a short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let starts = 0
             const family = Atom.family((id: number) =>
               Atom.make(Effect.callback<number>((resume) => {
@@ -321,16 +347,18 @@ Feature('Deriving values from other values on a page')
             const page = Registry.make({ defaultIdleTTL: 10 })
             return { page, family, starts: () => starts }
           })),
-        When('one member is read, the timer runs out, and it is read again')('readings', (s) =>
-          Effect.sync(() => {
-            const first = s.ctx.page.get(s.ctx.family(7))
-            vi.advanceTimersByTime(100)
-            const second = s.ctx.page.get(s.ctx.family(7))
-            const starts = s.ctx.starts()
-            vi.useRealTimers()
-            return { first, second, starts }
-          })),
-        Then('the member was cleaned up and recreated on demand')((s) => {
+        When('Ada reads member 7, leaves it alone for 100 millis, and reads it again')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              const first = s.ctx.page.get(s.ctx.family(7))
+              yield* TestClock.adjust('100 millis')
+              const second = s.ctx.page.get(s.ctx.family(7))
+              const starts = s.ctx.starts()
+              return { first, second, starts }
+            }),
+        ),
+        Then('the member was rebuilt on demand after cleanup')((s) => {
           expect(s.readings.starts).toBe(2)
         }),
       ),
@@ -348,14 +376,10 @@ Feature('Deriving values from other values on a page')
         When('the reader pulls until the feed finishes')('final', (s) =>
           Effect.gen(function*() {
             s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+            return yield* waitForValue(s.ctx.page, s.ctx.feed, (value) => Result.isSuccess(value) && value.value.done)
           })),
         Then('every update arrived in order and the feed is marked finished')((s) => {
           expect(Result.isSuccess(s.final)).toBe(true)
@@ -380,9 +404,9 @@ Feature('Deriving values from other values on a page')
         When('the reference changes twice')('readings', (s) =>
           Effect.gen(function*() {
             yield* SubscriptionRef.set(s.ctx.ref, 5)
-            const first = s.ctx.page.get(s.ctx.view)
+            const first = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 5)
             yield* SubscriptionRef.set(s.ctx.ref, 9)
-            const second = s.ctx.page.get(s.ctx.view)
+            const second = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 9)
             return { first, second }
           })),
         Then('the view tracked both changes')((s) => {
@@ -410,19 +434,12 @@ Feature('Deriving values from other values on a page')
         When('the value is changed and a fresh page reads it')('readings', (s) =>
           Effect.gen(function*() {
             s.ctx.page.mount(s.ctx.remembered)
-            yield* Effect.yieldNow
             s.ctx.page.set(s.ctx.remembered, 42)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForValue(s.ctx.page, s.ctx.remembered, (value) => value === 42)
             const freshPage = Registry.make()
             freshPage.mount(s.ctx.remembered)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return { onFreshPage: freshPage.get(s.ctx.remembered) }
+            const onFreshPage = yield* waitForValue(freshPage, s.ctx.remembered, (value) => value === 42)
+            return { onFreshPage }
           })),
         Then('the fresh page sees the remembered value')((s) => {
           expect(s.readings.onFreshPage).toBe(42)
@@ -455,11 +472,10 @@ Feature('Deriving values from other values on a page')
       ),
     )
     scenario(
-      'A value past its stale time refreshes itself when read again',
+      'A price past its fresh time refreshes itself when Ada checks it again',
       Gherkin.Do.pipe(
-        Given('a stored value that goes stale quickly')('ctx', () =>
+        Given('a price the store refreshes quickly, read once at 1')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let stored = 1
             const source = Atom.make(Effect.sync(() => stored))
             const staleAware = source.pipe(Atom.swr({ staleTime: 100 }))
@@ -472,23 +488,24 @@ Feature('Deriving values from other values on a page')
               },
             }
           })),
-        When('the value goes stale, the store changes, and the value is read again')(
+        When('the store moves to 2, 200 millis pass, and Ada checks the price again')(
           'readings',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               s.ctx.page.get(s.ctx.staleAware)
               s.ctx.page.refresh(s.ctx.staleAware)
               const fresh = s.ctx.page.get(s.ctx.staleAware)
               s.ctx.setStored(2)
-              vi.advanceTimersByTime(200)
+              yield* TestClock.adjust('200 millis')
               s.ctx.page.get(s.ctx.staleAware)
               const revalidated = s.ctx.page.get(s.ctx.staleAware)
-              vi.useRealTimers()
               return { fresh, revalidated }
             }),
         ),
-        Then('the first read was fresh, and the stale read refreshed to the new value')((s) => {
+        Then('the first check showed 1')((s) => {
           expect(Result.isSuccess(s.readings.fresh) && s.readings.fresh.value === 1).toBe(true)
+        }),
+        And('the check after the wait refreshed to 2')((s) => {
           expect(Result.isSuccess(s.readings.revalidated) && s.readings.revalidated.value === 2).toBe(true)
         }),
       ),
@@ -545,9 +562,7 @@ Feature('Deriving values from other values on a page')
             const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterConfirmation = yield* waitForSettled(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
         Then('the change reported itself in flight, then settled on the stored value')((s) => {
@@ -702,9 +717,7 @@ Feature('Deriving values from other values on a page')
               s.ctx.page.set(s.ctx.task, void 0)
               const restarted = s.ctx.page.get(s.ctx.task)
               s.ctx.latch.openUnsafe()
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const finished = s.ctx.page.get(s.ctx.task)
+              const finished = yield* waitForValue(s.ctx.page, s.ctx.task, (value) => Result.isSuccess(value))
               return { before, running, interrupted, reset, restarted, finished }
             }),
         ),
@@ -746,9 +759,7 @@ Feature('Deriving values from other values on a page')
               const started = s.ctx.latches().length
               const finishedBefore = s.ctx.done()
               s.ctx.latches().forEach((latch) => latch.openUnsafe())
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
+              yield* waitForValue(s.ctx.page, s.ctx.task, () => s.ctx.done() === 3)
               const finishedAfter = s.ctx.done()
               const after = s.ctx.page.get(s.ctx.task)
               return { before, during, started, finishedBefore, finishedAfter, after }
@@ -781,9 +792,7 @@ Feature('Deriving values from other values on a page')
             Effect.gen(function*() {
               const before = s.ctx.page.get(s.ctx.value)
               yield* Deferred.succeed(s.ctx.gate, 1)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const after = s.ctx.page.get(s.ctx.value)
+              const after = yield* waitForSettled(s.ctx.page, s.ctx.value)
               return { before, after }
             }),
         ),
@@ -814,10 +823,7 @@ Feature('Deriving values from other values on a page')
               s.ctx.page.set(s.ctx.count, 1)
               const during = s.ctx.page.get(s.ctx.count)
               yield* Deferred.succeed(s.ctx.gate, 1)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const after = s.ctx.page.get(s.ctx.count)
+              const after = yield* waitForSettled(s.ctx.page, s.ctx.count)
               return { before, during, after }
             }),
         ),
@@ -846,16 +852,11 @@ Feature('Deriving values from other values on a page')
             Effect.gen(function*() {
               const before = s.ctx.page.get(s.ctx.value)
               yield* Deferred.succeed(s.ctx.gate, 5)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.value)
+              const loaded = yield* waitForSettled(s.ctx.page, s.ctx.value)
               s.ctx.page.refresh(s.ctx.value)
-              const afterRefresh = s.ctx.page.get(s.ctx.value)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const settled = s.ctx.page.get(s.ctx.value)
+              const afterRefresh = yield* waitForSettled(s.ctx.page, s.ctx.value)
+              const settled = yield* waitForValue(s.ctx.page, s.ctx.value, (value) =>
+                Result.isSuccess(value) && !value.waiting && value.value === 5)
               return { before, loaded, afterRefresh, settled }
             }),
         ),
@@ -890,13 +891,9 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.gen(function*() {
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const emptyResult = s.ctx.page.get(s.ctx.empty)
-              const failingResult = s.ctx.page.get(s.ctx.failing)
-              const streamedResult = s.ctx.page.get(s.ctx.streamed)
+              const emptyResult = yield* waitForSettled(s.ctx.page, s.ctx.empty)
+              const failingResult = yield* waitForSettled(s.ctx.page, s.ctx.failing)
+              const streamedResult = yield* waitForSettled(s.ctx.page, s.ctx.streamed)
               return { emptyResult, failingResult, streamedResult }
             }),
         ),
@@ -928,14 +925,9 @@ Feature('Deriving values from other values on a page')
         ),
         When('the feed is pulled twice')('result', (s) =>
           Effect.gen(function*() {
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+            return yield* waitForValue(s.ctx.page, s.ctx.feed, (value) =>
+              Result.isSuccess(value) && !value.value.done && value.value.items.length >= 2)
           })),
         Then('the second batch replaced the first instead of joining it')((s) => {
           expect(Result.isSuccess(s.result)).toBe(true)
@@ -956,13 +948,10 @@ Feature('Deriving values from other values on a page')
             page.mount(feed)
             return { page, feed }
           })),
-        When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
-          Effect.gen(function*() {
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
-          })),
+        When('the feed is read after its batch has had a chance to arrive')(
+          'result',
+          (s) => waitForSettled(s.ctx.page, s.ctx.feed),
+        ),
         Then('the feed reports that there was nothing to show')((s) => {
           expect(Result.isFailure(s.result)).toBe(true)
         }),
@@ -978,13 +967,10 @@ Feature('Deriving values from other values on a page')
             page.mount(feed)
             return { page, feed }
           })),
-        When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
-          Effect.gen(function*() {
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
-          })),
+        When('the feed is read after its batch has had a chance to arrive')(
+          'result',
+          (s) => waitForSettled(s.ctx.page, s.ctx.feed),
+        ),
         Then('the feed reports the failure')((s) => {
           expect(Result.isFailure(s.result)).toBe(true)
         }),
@@ -1008,12 +994,8 @@ Feature('Deriving values from other values on a page')
               s.ctx.page.set(s.ctx.feed, void 0)
               s.ctx.page.set(s.ctx.feed, void 0)
               yield* Deferred.succeed(s.ctx.gate, 7)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              return s.ctx.page.get(s.ctx.feed)
+              return yield* waitForValue(s.ctx.page, s.ctx.feed, (value) =>
+                Result.isSuccess(value) && [...value.value.items].length === 3)
             }),
         ),
         Then('every batch that was asked for arrived once the signal came')((s) => {
@@ -1046,27 +1028,22 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.gen(function*() {
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const viewBefore = s.ctx.page.get(s.ctx.view)
-              const effectBefore = s.ctx.page.get(s.ctx.effectView)
-              const functionBefore = s.ctx.page.get(s.ctx.functionView)
-              const brokenBefore = s.ctx.page.get(s.ctx.brokenView)
+              const viewBefore = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 0)
+              const effectBefore = yield* waitForValue(s.ctx.page, s.ctx.effectView, (value) =>
+                Result.isResult(value) && Result.isSuccess(value))
+              const functionBefore = yield* waitForValue(s.ctx.page, s.ctx.functionView, (value) =>
+                Result.isResult(value) && Result.isSuccess(value))
+              const brokenBefore = yield* waitForValue(s.ctx.page, s.ctx.brokenView, (value) =>
+                Result.isResult(value) && Result.isFailure(value))
               s.ctx.page.set(s.ctx.view, 5)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const viewWritten = s.ctx.page.get(s.ctx.view)
+              const viewWritten = yield* waitForValue(s.ctx.page, s.ctx.view, (value) =>
+                value === 5)
               s.ctx.page.set(s.ctx.effectView, 3)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const effectWritten = s.ctx.page.get(s.ctx.effectView)
+              const effectWritten = yield* waitForValue(s.ctx.page, s.ctx.effectView, (value) =>
+                Result.isResult(value) && Result.isSuccess(value))
               yield* SubscriptionRef.set(s.ctx.ref, 9)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const viewChanged = s.ctx.page.get(s.ctx.view)
+              const viewChanged = yield* waitForValue(s.ctx.page, s.ctx.view, (value) =>
+                value === 9)
               return { viewBefore, effectBefore, functionBefore, brokenBefore, viewWritten, effectWritten, viewChanged }
             }),
         ),
@@ -1137,26 +1114,16 @@ Feature('Deriving values from other values on a page')
             s.ctx.page.set(s.ctx.reactiveStream, 3)
             const reactiveStreamResult = s.ctx.page.get(s.ctx.reactiveStream)
             s.ctx.page.mount(s.ctx.feed)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const feedResult = s.ctx.page.get(s.ctx.feed)
+            const feedResult = yield* waitForSettled(s.ctx.page, s.ctx.feed)
             s.ctx.page.mount(s.ctx.streamed)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const streamedResult = s.ctx.page.get(s.ctx.streamed)
+            const streamedResult = yield* waitForSettled(s.ctx.page, s.ctx.streamed)
             s.ctx.page.mount(s.ctx.refView)
             s.ctx.page.mount(s.ctx.refFromFunction)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const refResult = s.ctx.page.get(s.ctx.refView)
-            const refFunctionResult = s.ctx.page.get(s.ctx.refFromFunction)
+            const refResult = yield* waitForValue(s.ctx.page, s.ctx.refView, (value) =>
+              Result.isResult(value) && Result.isSuccess(value) && value.value === 0)
+            const refFunctionResult = yield* waitForValue(s.ctx.page, s.ctx.refFromFunction, (value) =>
+              Result.isResult(value) && Result.isSuccess(value) && value.value === 0)
             return {
               countResult,
               doubledResult,
@@ -1297,13 +1264,12 @@ Feature('Deriving values from other values on a page')
       ),
     )
     scenario(
-      'A saved derived value restores the value it was derived from, until the derived value refreshes',
+      'Ada restores a saved copy, and the value returns to its own refresh schedule once it runs out',
       Gherkin.Do.pipe(
-        Given('a page with a derived value that refreshes on its own schedule, saved under a key')(
+        Given('a count that refreshes itself every 1000 millis, saved under a key')(
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(0)
               const derived = base.pipe(Atom.withRefresh(1000))
               const saved = derived.pipe(Atom.serializable({ key: 'derived', schema: Schema.Finite }))
@@ -1312,21 +1278,22 @@ Feature('Deriving values from other values on a page')
               return { page, saved, unmount }
             }),
         ),
-        When('the saved copy arrives, the value is read, then its refresh schedule runs out and it is read again')(
+        When('Ada restores 99, reads it, then 2000 millis pass and she reads it again')(
           'readings',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               s.ctx.page.setSerializable('derived', 99)
               const restored = s.ctx.page.get(s.ctx.saved)
-              vi.advanceTimersByTime(2000)
+              yield* TestClock.adjust('2000 millis')
               const afterRefresh = s.ctx.page.get(s.ctx.saved)
               s.ctx.unmount()
-              vi.useRealTimers()
               return { restored, afterRefresh }
             }),
         ),
-        Then('the derived value was restored from the saved copy, then returned to its own schedule')((s) => {
+        Then('the restored value showed 99')((s) => {
           expect(s.readings.restored).toBe(99)
+        }),
+        And('it returned to its own schedule showing 0 after the refresh ran out')((s) => {
           expect(s.readings.afterRefresh).toBe(0)
         }),
       ),
@@ -1426,47 +1393,50 @@ Feature('Deriving values from other values on a page')
       ),
     )
     scenario(
-      'A value past its fresh time refreshes when the page regains attention, and one set to always refresh does too',
+      'A stale price and an always-refreshing price both refresh to 2 when Ada returns',
       Gherkin.Do.pipe(
-        Given('a page with two values that refresh on attention, one only when stale')('ctx', () =>
-          Effect.sync(() => {
-            vi.useFakeTimers()
-            let stored = 1
-            const source = Atom.make(Effect.sync(() => stored))
-            const focus = Atom.make(0)
-            const onFocus = source.pipe(Atom.swr({ staleTime: 100, revalidateOnFocus: true, focusSignal: focus }))
-            const alwaysOnFocus = source.pipe(
-              Atom.swr({ staleTime: 100, revalidateOnFocus: 'always', focusSignal: focus }),
-            )
-            const page = Registry.make()
-            return {
-              page,
-              onFocus,
-              alwaysOnFocus,
-              focus,
-              setStored: (n: number) => {
-                stored = n
-              },
-            }
-          })),
-        When('the values are read, they go stale, the store changes, and the page regains attention')(
+        Given('two prices fed by one store at 1, one refreshing only when stale and one on every return')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              let stored = 1
+              const source = Atom.make(Effect.sync(() => stored))
+              const focus = Atom.make(0)
+              const onFocus = source.pipe(Atom.swr({ staleTime: 100, revalidateOnFocus: true, focusSignal: focus }))
+              const alwaysOnFocus = source.pipe(
+                Atom.swr({ staleTime: 100, revalidateOnFocus: 'always', focusSignal: focus }),
+              )
+              const page = Registry.make()
+              return {
+                page,
+                onFocus,
+                alwaysOnFocus,
+                focus,
+                setStored: (n: number) => {
+                  stored = n
+                },
+              }
+            }),
+        ),
+        When('Ada checks both, the store moves to 2, 200 millis pass, and she returns')(
           'readings',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               const first = s.ctx.page.get(s.ctx.onFocus)
               const firstAlways = s.ctx.page.get(s.ctx.alwaysOnFocus)
               s.ctx.setStored(2)
-              vi.advanceTimersByTime(200)
+              yield* TestClock.adjust('200 millis')
               s.ctx.page.set(s.ctx.focus, 1)
               const revalidated = s.ctx.page.get(s.ctx.onFocus)
               const revalidatedAlways = s.ctx.page.get(s.ctx.alwaysOnFocus)
-              vi.useRealTimers()
               return { first, firstAlways, revalidated, revalidatedAlways }
             }),
         ),
-        Then('both values refreshed to the new store value when attention returned')((s) => {
+        Then('both prices showed 1 on the first check')((s) => {
           expect(Result.isSuccess(s.readings.first) && s.readings.first.value === 1).toBe(true)
           expect(Result.isSuccess(s.readings.firstAlways) && s.readings.firstAlways.value === 1).toBe(true)
+        }),
+        And('both refreshed to 2 when Ada returned')((s) => {
           expect(Result.isSuccess(s.readings.revalidated) && s.readings.revalidated.value === 2).toBe(true)
           expect(Result.isSuccess(s.readings.revalidatedAlways) && s.readings.revalidatedAlways.value === 2).toBe(true)
         }),
@@ -1587,17 +1557,14 @@ Feature('Deriving values from other values on a page')
             s.ctx.page.set(s.ctx.save, 99)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
             const before2 = s.ctx.page.get(s.ctx.optimistic2)
             s.ctx.page.set(s.ctx.save2, 99)
             const whilePending2 = s.ctx.page.get(s.ctx.optimistic2)
             s.ctx.setStored2(99)
             s.ctx.latch2.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation2 = s.ctx.page.get(s.ctx.optimistic2)
+            const afterConfirmation2 = yield* waitForValue(s.ctx.page, s.ctx.optimistic2, (value) =>
+              Result.isSuccess(value) && !value.waiting && value.value === 99)
             return { before, whilePending, afterConfirmation, before2, whilePending2, afterConfirmation2 }
           })),
         Then('each change showed its progress, then settled on the confirmed value')((s) => {
@@ -1627,7 +1594,11 @@ Feature('Deriving values from other values on a page')
             const save = optimisticValue.pipe(
               Atom.optimisticFn({
                 reducer: (_current, update: number) => update,
-                fn: Atom.fn((n: number) => Effect.succeed(n)),
+                fn: Atom.fn((n: number) =>
+                  Effect.sync(() => {
+                    stored = n
+                  })
+                ),
               }),
               Atom.keepAlive,
             )
@@ -1636,17 +1607,11 @@ Feature('Deriving values from other values on a page')
               page,
               optimisticValue,
               save,
-              setStored: (n: number) => {
-                stored = n
-              },
             }
           })),
         When('the change is made and the store accepts it right away')('readings', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             s.ctx.page.set(s.ctx.save, 99)
-            s.ctx.setStored(99)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
             return { afterConfirmation }
           })),
@@ -1696,11 +1661,7 @@ Feature('Deriving values from other values on a page')
             Effect.gen(function*() {
               const whileLoading = s.ctx.page.get(s.ctx.remembered)
               yield* Deferred.succeed(s.ctx.gate, void 0)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.remembered)
+              const loaded = yield* waitForValue(s.ctx.page, s.ctx.remembered, (value) => value === 42)
               const stored = s.ctx.storage.get('known-key')
               return { whileLoading, loaded, stored }
             }),
@@ -1754,11 +1715,7 @@ Feature('Deriving values from other values on a page')
           Effect.gen(function*() {
             s.ctx.page.set(s.ctx.remembered, 99)
             yield* Deferred.succeed(s.ctx.gate, void 0)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.remembered)
+            return yield* waitForValue(s.ctx.page, s.ctx.remembered, (value) => value === 99)
           })),
         Then('the written value wins over the slower store read')((s) => {
           expect(s.value).toBe(99)
@@ -1809,13 +1766,10 @@ Feature('Deriving values from other values on a page')
             Effect.gen(function*() {
               const whileLoading = s.ctx.page.get(s.ctx.remembered)
               yield* Deferred.succeed(s.ctx.gate, void 0)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.remembered)
+              const loaded = yield* waitForSettled(s.ctx.page, s.ctx.remembered)
               s.ctx.page.set(s.ctx.remembered, 99)
-              const afterWrite = s.ctx.page.get(s.ctx.remembered)
+              const afterWrite = yield* waitForValue(s.ctx.page, s.ctx.remembered, (value) =>
+                Result.isSuccess(value) && value.value === 99)
               const stored = s.ctx.storage.get('fresh-key')
               return { whileLoading, loaded, afterWrite, stored }
             }),
@@ -1944,13 +1898,12 @@ Feature('Deriving values from other values on a page')
       ),
     )
     scenario(
-      'A value that was about to update is cleaned up without firing its pending update',
+      'A quieted count Ada releases before it fires stays at its source instead of firing the pending update',
       Gherkin.Do.pipe(
-        Given('a page with a value that waits for quiet, one with a pending update, and one without')(
+        Given('a count starting at 0 with two quieted readers mounted')(
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(0)
               const withPending = base.pipe(Atom.debounce(100))
               const quiet = base.pipe(Atom.debounce(100))
@@ -1960,24 +1913,21 @@ Feature('Deriving values from other values on a page')
               return { page, base, withPending, stopPending, stopQuiet }
             }),
         ),
-        When('the source changes, then both quieted values are released, then time passes')(
+        When('Ada edits the count, releases both quieted readers, and 200 millis pass')(
           'readings',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               s.ctx.page.set(s.ctx.base, 1)
               s.ctx.stopPending()
               s.ctx.stopQuiet()
-              vi.advanceTimersByTime(200)
+              yield* TestClock.adjust('200 millis')
               const after = s.ctx.page.get(s.ctx.withPending)
-              vi.useRealTimers()
               return { after }
             }),
         ),
-        Then('no pending update fired after the values were released, and the value started over from its source')(
-          (s) => {
-            expect(s.readings.after).toBe(0)
-          },
-        ),
+        Then('no pending update fired after the release')((s) => {
+          expect(s.readings.after).toBe(0)
+        }),
       ),
     )
   })

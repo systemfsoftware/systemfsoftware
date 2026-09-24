@@ -1,10 +1,9 @@
 import { AtomRef } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
-
+const Feature = makeFeature({ it })
 Feature('Keeping a piece of shared local state in sync across several parts of the page')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
