@@ -497,12 +497,6 @@ export interface Kernel {
   resolveTarget(target: FiberTarget): AnyFiber | undefined
   /** Interrupts one fiber (R5). Its finalizers run as later steps. */
   interrupt(fiber: AnyFiber): void
-  /**
-   * Stops recording real-timer escapes until the run ends. The await path
-   * yields to the host clock to let file and socket waits settle; those
-   * yields are the kernel's own machinery, never the program escaping (R2).
-   */
-  pauseEscapes(): void
 }
 
 /** @internal */
@@ -820,9 +814,6 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     resolveTarget: (target: FiberTarget): AnyFiber | undefined => unfinished(targetFiber(target)),
     interrupt: (fiber: AnyFiber): void => {
       methodOf(fiber, 'interruptUnsafe')?.call(fiber)
-    },
-    pauseEscapes: (): void => {
-      escapes.length = 0
     },
   }
   restoreHooks = acquireHooks(kernel)
