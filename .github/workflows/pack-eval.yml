@@ -1,0 +1,136 @@
+name: Pack Eval
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      packs:
+        description: "Space-separated pack directories (default: the PACK_EVAL_PACKS variable)"
+        required: false
+        default: ""
+      dataset:
+        description: Dataset directory
+        required: false
+        default: evals/compound-packs
+      selector_model:
+        description: "OpenRouter model id for the selector (default: the PACK_EVAL_SELECTOR_MODEL variable)"
+        required: false
+        default: ""
+
+concurrency:
+  group: pack-eval-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    name: Evaluate packs
+    if: github.event_name != 'schedule' || github.repository == 'systemfsoftware/systemfsoftware'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PACKS: ${{ inputs.packs || vars.PACK_EVAL_PACKS }}
+      DATASET: ${{ inputs.dataset || 'evals/compound-packs' }}
+      SELECTOR_MODEL: ${{ inputs.selector_model || vars.PACK_EVAL_SELECTOR_MODEL }}
+      CLI: evals/pack-eval/dist/main.mjs
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install
+        uses: ./.github/actions/install-deps
+
+      - name: Build pack-eval
+        run: corepack pnpm --filter @systemfsoftware/pack-eval build
+
+      - name: Require configuration
+        run: |
+          if [ -z "$PACKS" ] || [ -z "$SELECTOR_MODEL" ]; then
+            printf '::error title=pack-eval not configured::Set the PACK_EVAL_PACKS and PACK_EVAL_SELECTOR_MODEL repository variables, or pass packs and selector_model on dispatch.\n'
+            exit 1
+          fi
+
+      - name: Compute the fingerprint
+        id: fingerprint
+        run: |
+          pack_flags=()
+          for pack in $PACKS; do pack_flags+=(--pack "$pack"); done
+          digest=$(node "$CLI" fingerprint "${pack_flags[@]}" --dataset "$DATASET" \
+            --code-root evals/pack-eval --lockfile pnpm-lock.yaml --selector-model "$SELECTOR_MODEL" | tail -n 1)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "fingerprint $digest"
+
+      - name: Look up the done marker
+        id: marker
+        uses: actions/cache/restore@v6
+        with:
+          path: .pack-eval/done
+          key: pack-eval-done-${{ steps.fingerprint.outputs.digest }}
+          lookup-only: true
+
+      - name: Report unchanged fingerprint
+        if: steps.marker.outputs.cache-hit == 'true'
+        run: echo "fingerprint unchanged (${{ steps.fingerprint.outputs.digest }}); nothing evaluated" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore the answer cache
+        if: steps.marker.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: .pack-eval/cache
+          key: pack-eval-answers-${{ github.run_id }}
+          restore-keys: pack-eval-answers-
+
+      - name: Evaluate
+        id: evaluate
+        if: steps.marker.outputs.cache-hit != 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          pack_flags=()
+          for pack in $PACKS; do pack_flags+=(--pack "$pack"); done
+          set +e
+          node "$CLI" evaluate "${pack_flags[@]}" --dataset "$DATASET" --work-dir .pack-eval \
+            --report .pack-eval/report.json --selector-model "$SELECTOR_MODEL" > .pack-eval-card.md
+          code=$?
+          set -e
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          cat .pack-eval-card.md
+
+      - name: Append the card to the summary
+        if: always() && steps.evaluate.outcome == 'success'
+        run: cat .pack-eval-card.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the JSON report
+        if: always() && steps.evaluate.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pack-eval-report-${{ github.run_number }}
+          path: .pack-eval/report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Save the answer cache
+        if: always() && steps.evaluate.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: .pack-eval/cache
+          key: pack-eval-answers-${{ github.run_id }}
+
+      - name: Save the done marker
+        if: steps.evaluate.outputs.exit == '0' || steps.evaluate.outputs.exit == '1'
+        run: mkdir -p .pack-eval/done && echo "${{ steps.fingerprint.outputs.digest }}" > .pack-eval/done/fingerprint
+
+      - name: Store the done marker
+        if: steps.evaluate.outputs.exit == '0' || steps.evaluate.outputs.exit == '1'
+        uses: actions/cache/save@v6
+        with:
+          path: .pack-eval/done
+          key: pack-eval-done-${{ steps.fingerprint.outputs.digest }}
+
+      - name: Fail on a contradiction or a refused run
+        if: steps.evaluate.outputs.exit != '' && steps.evaluate.outputs.exit != '0'
+        run: |
+          printf '::error title=pack-eval exit %s::See the card in the run summary for the named file, label, or failing pair.\n' "${{ steps.evaluate.outputs.exit }}"
+          exit "${{ steps.evaluate.outputs.exit }}"
