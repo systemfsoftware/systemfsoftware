@@ -1,8 +1,11 @@
 /**
  * The kernel instance (KTD2): it supplies Effect's `Scheduler`, wraps the fiber
  * resume methods, and observes `Ref` and `Deferred` field access. The hooks are
- * installed once per process and dispatch to the one running kernel; every other
- * piece of state lives on the instance, so each run owns its own kernel.
+ * acquired for the lifetime of one run and restored when the run releases them:
+ * the patched wrappers close over their kernel, a fiber's `currentDispatcher`
+ * carries that kernel's dispatcher, and a module-private slot on the patched
+ * fiber prototype marks the one active run for the concurrency guard. No
+ * module-level mutable state survives a release.
  *
  * The hooks read Effect runtime internals, which the plan allows only inside this
  * package (R17). They are pinned to `effect` 4.0.0-rc.116 and fail loudly when a
@@ -10,16 +13,21 @@
  */
 import { Deferred, Effect, Ref, Scheduler } from 'effect'
 
-import type { AnyFiber } from './Deadlock.js'
-import type { Escape } from './EscapeRecorder.js'
+import { makeRunClocks } from './clocks.js'
+import type { RunClocks } from './clocks.js'
+import type { AnyFiber } from './deadlock.js'
+import type { Escape } from './escapeRecorder.js'
+import { claimRun, isRunLive, releaseRun } from './runMark.js'
 
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
 
 /** An index into the kernel's pending task list: the schedule's unit of choice. */
+/** @internal */
 export type Decision = number
 
 /** What the schedule can pick at one step, handed to a `choose` callback. */
+/** @internal */
 export interface ChoiceOption {
   readonly fiberId: number | undefined
   /** The zero-preemption choice (Effect's dispatcher order). */
@@ -30,12 +38,14 @@ export interface ChoiceOption {
   readonly forced: boolean
 }
 
+/** @internal */
 export interface Choice {
   /** Zero-based index of this step among the explored decisions. */
   readonly index: number
   readonly options: ReadonlyArray<ChoiceOption>
 }
 
+/** @internal */
 export interface StepRecord {
   /** One-based step index. */
   readonly step: number
@@ -56,6 +66,7 @@ export interface StepRecord {
   readonly visible: boolean
 }
 
+/** @internal */
 export interface Task {
   readonly owner: AnyFiber | undefined
   readonly run: () => void
@@ -64,6 +75,7 @@ export interface Task {
   readonly step: number
 }
 
+/** @internal */
 export interface StepInput {
   readonly choice: Decision
   readonly options: number
@@ -71,6 +83,7 @@ export interface StepInput {
 }
 
 /** Which fiber an interruption names (R5). */
+/** @internal */
 export type FiberTarget = 'root' | 'lastRan' | number
 
 /**
@@ -78,6 +91,7 @@ export type FiberTarget = 'root' | 'lastRan' | number
  * between steps, and while the loop drains microtasks. `step` is the controlled
  * execution of one task.
  */
+/** @internal */
 export type Phase = 'paused' | 'step'
 
 type MethodFunction = (this: AnyFiber, ...args: ReadonlyArray<Field>) => Field
@@ -89,8 +103,6 @@ const CURRENT_FIBER = '~effect/Fiber/currentFiber'
 // reaching into another fiber's task.
 const FIBER_METHODS = ['addObserver', 'interruptUnsafe', 'pollUnsafe', 'evaluate'] as const
 
-export type FiberMethod = (typeof FIBER_METHODS)[number]
-
 const REF_FIELDS = ['ref'] as const
 const DEFERRED_FIELDS = ['effect', 'resumes'] as const
 
@@ -98,7 +110,7 @@ const isFiberLike = (candidate: Field): candidate is AnyFiber => typeof candidat
 const isHostObject = (candidate: Field): candidate is object => typeof candidate === 'object'
 const isMethod = (candidate: Field): candidate is MethodFunction => typeof candidate === 'function'
 
-const fieldOf = (target: object, key: string): Field => Reflect.get(target, key)
+const fieldOf = (target: object, key: string | symbol): Field => Reflect.get(target, key)
 
 const methodOf = (target: object, name: string): MethodFunction | undefined => {
   const candidate: Field = fieldOf(target, name)
@@ -112,57 +124,155 @@ const protoOf = (value: object): object => {
   return isHostObject(proto) ? proto : Object.prototype
 }
 
-const currentFiber = (): AnyFiber | undefined => {
-  const current: Field = Reflect.get(globalThis, CURRENT_FIBER)
-  return isFiberLike(current) ? current : undefined
+const fiberPrototype = (): object => protoOf(Effect.runFork(Effect.void))
+
+// ---------------------------------------------------------------------------
+// Hook acquisition and release
+// ---------------------------------------------------------------------------
+
+const captureDescriptor = (proto: object, field: string): PropertyDescriptor | undefined => {
+  const descriptor: Field = Reflect.getOwnPropertyDescriptor(proto, field)
+  return isHostObject(descriptor) ? descriptor : undefined
 }
 
-// ---------------------------------------------------------------------------
-// The one-time global hooks
-// ---------------------------------------------------------------------------
+const descriptorEntryOf = (
+  proto: object,
+  field: string,
+): readonly [string, PropertyDescriptor] | undefined => {
+  const descriptor = captureDescriptor(proto, field)
+  return descriptor === undefined ? undefined : [field, descriptor]
+}
 
-let installed = false
-let live: Kernel | undefined
+const captureDescriptors = (
+  proto: object,
+  fields: ReadonlyArray<string>,
+): ReadonlyArray<readonly [string, PropertyDescriptor]> =>
+  fields
+    .map((field) => descriptorEntryOf(proto, field))
+    .filter((entry): entry is readonly [string, PropertyDescriptor] => entry !== undefined)
 
-export const currentKernel = (): Kernel | undefined => live
+const restoreDescriptor = (proto: object, entry: readonly [string, PropertyDescriptor]): void => {
+  Reflect.defineProperty(proto, entry[0], entry[1])
+}
 
-/**
- * `Ref` and `Deferred` keep their state in own data fields, so a getter on the
- * prototype only takes effect for instances created after it is defined: the
- * class-field assignment then goes through the setter and every later read
- * through the getter. Instances created before installation are simply
- * unobserved. The value moves into a symbol slot so behaviour is unchanged.
- */
-const interceptField = (proto: object, field: string): void => {
+const restoreDescriptors = (
+  proto: object,
+  captured: ReadonlyArray<readonly [string, PropertyDescriptor]>,
+): void => {
+  for (const entry of captured) restoreDescriptor(proto, entry)
+}
+
+const patchMethod = (
+  proto: object,
+  entry: readonly [string, MethodFunction],
+  kernel: Kernel,
+): void => {
+  Reflect.defineProperty(proto, entry[0], {
+    configurable: true,
+    value: function(this: AnyFiber, ...args: ReadonlyArray<Field>): Field {
+      return dispatchFiberCall(this, entry[0], entry[1], args, kernel)
+    },
+    writable: true,
+  })
+}
+
+const patchMethods = (
+  proto: object,
+  originals: ReadonlyArray<readonly [string, MethodFunction]>,
+  kernel: Kernel,
+): void => {
+  for (const entry of originals) patchMethod(proto, entry, kernel)
+}
+
+const restoreMethod = (proto: object, entry: readonly [string, MethodFunction]): void => {
+  Reflect.defineProperty(proto, entry[0], { configurable: true, value: entry[1], writable: true })
+}
+
+const restoreMethods = (
+  proto: object,
+  originals: ReadonlyArray<readonly [string, MethodFunction]>,
+): void => {
+  for (const entry of originals) restoreMethod(proto, entry)
+}
+
+const missingMethod = (name: string): never => {
+  throw new Error(`effect-sim-kernel: FiberImpl.${name} is missing on the pinned Effect version`)
+}
+
+const originalMethodOf = (proto: object, name: string): MethodFunction => {
+  const original = methodOf(proto, name)
+  return original === undefined ? missingMethod(name) : original
+}
+
+const originalOf = (
+  proto: object,
+  name: string,
+): readonly [string, MethodFunction] => [name, originalMethodOf(proto, name)]
+
+const originalMethodsOf = (proto: object): ReadonlyArray<readonly [string, MethodFunction]> =>
+  FIBER_METHODS.map((name) => originalOf(proto, name))
+
+const interceptField = (proto: object, field: string, guard: (target: object) => void): void => {
   const slot = Symbol(field)
-  Object.defineProperty(proto, field, {
+  Reflect.defineProperty(proto, field, {
     configurable: true,
     get(this: Record<symbol, Field>): Field {
-      live?.observeShared(this)
+      guard(this)
       return this[slot]
     },
     set(this: Record<symbol, Field>, value: Field): void {
-      live?.observeShared(this)
+      guard(this)
       this[slot] = value
     },
   })
 }
 
-const interceptFields = (proto: object, fields: ReadonlyArray<string>): void => {
-  for (const field of fields) interceptField(proto, field)
+const interceptFields = (
+  proto: object,
+  fields: ReadonlyArray<string>,
+  guard: (target: object) => void,
+): void => {
+  for (const field of fields) interceptField(proto, field, guard)
 }
 
-const resumingKernel = (fiber: AnyFiber, kernel: Kernel | undefined): Kernel | undefined =>
-  kernel === undefined ? undefined : resumableKernel(fiber, kernel)
+/**
+ * Claims the hooks for one run: the fiber methods and the `Ref` and `Deferred`
+ * fields are patched with closures over this kernel, and the live run is
+ * marked. The returned restore undoes both and runs exactly once, at release.
+ */
+const acquireHooks = (kernel: Kernel): () => void => {
+  if (isRunLive()) {
+    throw new Error('effect-sim-kernel: a kernel run is already active — one kernel owns the global hooks at a time')
+  }
+  const fiberProto = fiberPrototype()
+  const originals = originalMethodsOf(fiberProto)
+  const refProto = protoOf(Ref.makeUnsafe(0))
+  const deferredProto = protoOf(Deferred.makeUnsafe())
+  const capturedRef = captureDescriptors(refProto, REF_FIELDS)
+  const capturedDeferred = captureDescriptors(deferredProto, DEFERRED_FIELDS)
+  const guard = (target: object): void => {
+    if (kernel.running) kernel.observeShared(target)
+  }
+  claimRun(kernel)
+  patchMethods(fiberProto, originals, kernel)
+  interceptFields(refProto, REF_FIELDS, guard)
+  interceptFields(deferredProto, DEFERRED_FIELDS, guard)
+  return () => {
+    releaseRun()
+    restoreMethods(fiberProto, originals)
+    restoreDescriptors(refProto, capturedRef)
+    restoreDescriptors(deferredProto, capturedDeferred)
+  }
+}
 
-const resumableKernel = (fiber: AnyFiber, kernel: Kernel): Kernel | undefined =>
-  isResumableBy(fiber, kernel) ? kernel : undefined
+// ---------------------------------------------------------------------------
+// Dispatch through the instance
+// ---------------------------------------------------------------------------
 
-const isResumableBy = (fiber: AnyFiber, kernel: Kernel): boolean =>
-  fiber.pollUnsafe() === undefined && dispatcherOf(fiber) === kernel.dispatcher
-
-const isOtherFiber = (running: AnyFiber | undefined, fiber: AnyFiber): boolean =>
-  running !== undefined && running !== fiber
+const currentFiber = (): AnyFiber | undefined => {
+  const current: Field = Reflect.get(globalThis, CURRENT_FIBER)
+  return isFiberLike(current) ? current : undefined
+}
 
 const applyOriginal = (
   original: MethodFunction,
@@ -170,28 +280,20 @@ const applyOriginal = (
   args: ReadonlyArray<Field>,
 ): Field => Reflect.apply(original, fiber, args)
 
-const dispatchEvaluate = (
-  fiber: AnyFiber,
-  kernel: Kernel | undefined,
-  original: MethodFunction,
-  args: ReadonlyArray<Field>,
-): Field => {
-  const active = resumingKernel(fiber, kernel)
-  if (active !== undefined) {
-    // A Promise or microtask resuming a kernel fiber while no step is running
-    // would execute it inline, outside every decision: queue it as a kernel task
-    // so it becomes the next step's scheduling choice (R36). The root fiber's
-    // first slice runs before `start()` claims the hooks, so it stays inline,
-    // the way Effect itself would run it.
-    active.resumeExternally(fiber, () => applyOriginal(original, fiber, args))
-    return undefined
+const isOtherFiber = (running: AnyFiber | undefined, fiber: AnyFiber): boolean =>
+  running !== undefined && running !== fiber
+
+const noteOtherFiberWork = (fiber: AnyFiber, kernel: Kernel): void => {
+  // A fiber reaching into another fiber's task is shared work.
+  if (isOtherFiber(currentFiber(), fiber)) {
+    kernel.observeShared(fiber)
+    kernel.observeGlobalWork()
   }
-  return dispatchObserved(fiber, kernel, original, args)
 }
 
 const dispatchObserved = (
   fiber: AnyFiber,
-  kernel: Kernel | undefined,
+  kernel: Kernel,
   original: MethodFunction,
   args: ReadonlyArray<Field>,
 ): Field => {
@@ -199,55 +301,51 @@ const dispatchObserved = (
   return applyOriginal(original, fiber, args)
 }
 
-const dispatchFiberCall = (
+const isResumableBy = (fiber: AnyFiber, kernel: Kernel): boolean =>
+  fiber.pollUnsafe() === undefined && dispatcherOf(fiber) === kernel.dispatcher
+
+const isResumingRun = (fiber: AnyFiber, kernel: Kernel): boolean => kernel.running && isResumableBy(fiber, kernel)
+
+const resumeExternallyThrough = (
   fiber: AnyFiber,
-  method: FiberMethod,
+  kernel: Kernel,
   original: MethodFunction,
   args: ReadonlyArray<Field>,
+): undefined => {
+  // A Promise or microtask resuming a kernel fiber while no step is running
+  // would execute it inline, outside every decision: queue it as a kernel task
+  // so it becomes the next step's scheduling choice (R36). The root fiber's
+  // first slice runs before `start` claims the run, so it stays inline, the way
+  // Effect itself would run it.
+  kernel.resumeExternally(fiber, () => applyOriginal(original, fiber, args))
+  return undefined
+}
+
+const dispatchEvaluate = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field => {
+  if (isResumingRun(fiber, kernel)) return resumeExternallyThrough(fiber, kernel, original, args)
+  return dispatchObserved(fiber, kernel, original, args)
+}
+
+const dispatchFiberCall = (
+  fiber: AnyFiber,
+  method: string,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+  kernel: Kernel,
 ): Field => (method === 'evaluate'
-  ? dispatchEvaluate(fiber, live, original, args)
-  : dispatchObserved(fiber, live, original, args))
-
-const noteOtherFiberWork = (fiber: AnyFiber, kernel: Kernel | undefined): void => {
-  // A fiber reaching into another fiber's task is shared work.
-  if (isOtherFiber(currentFiber(), fiber)) observeOtherWork(kernel, fiber)
-}
-
-const observeOtherWork = (kernel: Kernel | undefined, fiber: AnyFiber): void => {
-  if (kernel === undefined) return
-  kernel.observeShared(fiber)
-  kernel.observeGlobalWork()
-}
-
-const override = (proto: object, method: FiberMethod): void => {
-  const original = methodOf(proto, method)
-  if (original === undefined) {
-    throw new Error(`effect-sim-kernel: FiberImpl.${method} is missing on the pinned Effect version`)
-  }
-  Object.defineProperty(proto, method, {
-    configurable: true,
-    value: function(this: AnyFiber, ...args: ReadonlyArray<Field>): Field {
-      return dispatchFiberCall(this, method, original, args)
-    },
-  })
-}
-
-const overrideAll = (proto: object): void => {
-  for (const method of FIBER_METHODS) override(proto, method)
-}
-
-const installHooks = (): void => {
-  if (installed) return
-  installed = true
-  interceptFields(protoOf(Ref.makeUnsafe(0)), REF_FIELDS)
-  interceptFields(protoOf(Deferred.makeUnsafe()), DEFERRED_FIELDS)
-  overrideAll(protoOf(Effect.runFork(Effect.void)))
-}
+  ? dispatchEvaluate(fiber, kernel, original, args)
+  : dispatchObserved(fiber, kernel, original, args))
 
 // ---------------------------------------------------------------------------
 // The kernel
 // ---------------------------------------------------------------------------
 
+/** @internal */
 export interface Kernel {
   readonly pending: ReadonlyArray<Task>
   readonly fibers: ReadonlySet<AnyFiber>
@@ -260,7 +358,13 @@ export interface Kernel {
   readonly phase: Phase
   /** When false, decisions stay on Effect's order until `beginExploration` (R15). */
   readonly exploring: boolean
-  /** Claims the global hooks for this run and remembers the root fiber. */
+  /** The clocks this run owns: the virtual root clock and its test clocks (R2, R37). */
+  readonly clocks: RunClocks
+  /** The root fiber once `start` claimed the run; undefined before it. */
+  readonly root: AnyFiber | undefined
+  /** Whether `start` has claimed the run; gates wrapper interception. */
+  readonly running: boolean
+  /** Marks the run as claimed and remembers the root fiber. */
   start(root: AnyFiber): void
   release(): void
   /** From here on, the schedule may deviate from Effect's order (R15). */
@@ -271,24 +375,31 @@ export interface Kernel {
   resumeExternally(fiber: AnyFiber, run: () => void): void
   observeShared(target: object): void
   observeGlobalWork(): void
+  /** Records a primitive the run reached without observing it (pruning seam). */
+  unobserved(name: string): void
+  /** Drains the recorded names; each run's records are read once. */
+  takeUnobserved(): ReadonlyArray<string>
   resolveTarget(target: FiberTarget): AnyFiber | undefined
   /** Interrupts one fiber (R5). Its finalizers run as later steps. */
   interrupt(fiber: AnyFiber): void
 }
 
+/** @internal */
 export interface MakeKernelOptions {
   /** When false, decisions stay on Effect's order until `beginExploration`. */
   readonly exploring: boolean
 }
 
+/** @internal */
 export const makeKernel = (options: MakeKernelOptions): Kernel => {
-  installHooks()
   const pending: Array<Task> = []
   const fibers = new Set<AnyFiber>()
   const steps: Array<StepRecord> = []
   const decisions: Array<Decision> = []
   const escapes: Array<Escape> = []
   const touches = new Set<object>()
+  const unobservedNames = new Set<string>()
+  const clocks = makeRunClocks()
   /**
    * The limit starts at one operation so every adjacent primitive is separated
    * by a step; after the kernel itself slices a fiber, its next slice gets two,
@@ -306,6 +417,8 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   let lastRan: AnyFiber | undefined = undefined
   let forcing: AnyFiber | undefined = undefined
   let root: AnyFiber | undefined = undefined
+  let running = false
+  let restoreHooks: (() => void) | undefined = undefined
 
   const taskAt = (index: Decision): Task | undefined => pending[index]
   const stepOn = (task: Task | undefined): number => (task === undefined ? -1 : task.step)
@@ -313,13 +426,13 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   const isForcedTask = (task: Task | undefined): boolean => task !== undefined && task.forced
   const laterThan = (best: Decision, index: Decision): boolean => stepAt(index) > stepAt(best)
 
+  const keepsBest = (best: Decision, index: Decision, task: Task | undefined): boolean =>
+    !isForcedTask(task) || !laterThan(best, index)
+
   const laterForced = (best: Decision, index: Decision, task: Task | undefined): Decision => {
     if (keepsBest(best, index, task)) return best
     return index
   }
-
-  const keepsBest = (best: Decision, index: Decision, task: Task | undefined): boolean =>
-    !isForcedTask(task) || !laterThan(best, index)
 
   const latestForcedIndex = (): Decision => {
     let best = -1
@@ -481,6 +594,12 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
 
   const unfinished = (fiber: AnyFiber | undefined): AnyFiber | undefined => isUnfinished(fiber) ? fiber : undefined
 
+  const release = (): void => {
+    running = false
+    if (restoreHooks !== undefined) restoreHooks()
+    restoreHooks = undefined
+  }
+
   const kernel: Kernel = {
     pending,
     fibers,
@@ -489,19 +608,24 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     escapes,
     scheduler,
     dispatcher,
+    clocks,
     get phase(): Phase {
       return phase
     },
     get exploring(): boolean {
       return exploring
     },
+    get root(): AnyFiber | undefined {
+      return root
+    },
+    get running(): boolean {
+      return running
+    },
     start: (started: AnyFiber): void => {
       root = started
-      live = kernel
+      running = true
     },
-    release: (): void => {
-      live = undefined
-    },
+    release,
     beginExploration: (): void => {
       exploring = true
     },
@@ -517,10 +641,19 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     observeGlobalWork: (): void => {
       if (phase === 'step') globalWorkThisStep = true
     },
+    unobserved: (name: string): void => {
+      unobservedNames.add(name)
+    },
+    takeUnobserved: (): ReadonlyArray<string> => {
+      const found = [...unobservedNames].sort()
+      unobservedNames.clear()
+      return found
+    },
     resolveTarget: (target: FiberTarget): AnyFiber | undefined => unfinished(targetFiber(target)),
     interrupt: (fiber: AnyFiber): void => {
       methodOf(fiber, 'interruptUnsafe')?.call(fiber)
     },
   }
+  restoreHooks = acquireHooks(kernel)
   return kernel
 }

@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { beginExploration, runKernel } from '@systemfsoftware/effect-sim-kernel'
+import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Deferred, Effect, Exit, Fiber, Layer } from 'effect'
 import { expect } from 'vitest'
 import {
@@ -92,7 +92,7 @@ const interruptedProgram = (receipts: Array<string>) =>
 const bodyProgram = Effect.gen(function*() {
   yield* Effect.forkChild(Effect.never)
   yield* Effect.yieldNow
-  yield* beginExploration
+  yield* Kernel.beginExploration
   yield* Effect.yieldNow
   return yield* Effect.never
 })
@@ -105,11 +105,11 @@ Feature('Running Effect programs again under a chosen schedule')
       Gherkin.Do.pipe(
         Given('a race between a fiber waiting on a finished task and a fiber that yields once first')(
           'defaultRun',
-          () => Effect.promise(() => runKernel(raceProgram)),
+          () => Effect.promise(() => Kernel.run(raceProgram)),
         ),
         When('the schedule takes one deviation at the first contention')(
           'deviatedRun',
-          () => Effect.promise(() => runKernel(raceProgram, { choose: deviateAtFirstChoice })),
+          () => Effect.promise(() => Kernel.run(raceProgram, { choose: deviateAtFirstChoice })),
         ),
         Then('the yielding fiber writes last on the default schedule')((s) => {
           expect(completedValueOf(s.defaultRun)).toEqual(['waiting fiber', 'yielding fiber'])
@@ -125,7 +125,7 @@ Feature('Running Effect programs again under a chosen schedule')
       Gherkin.Do.pipe(
         Given('a program that sets a real timer while its work runs')(
           'run',
-          () => Effect.promise(() => runKernel(timerProgram)),
+          () => Effect.promise(() => Kernel.run(timerProgram)),
         ),
         Then('the run fails because the timer escaped the controlled schedule')((s) => {
           expect(escapeOf(s.run).timer).toBe('setTimeout')
@@ -141,7 +141,7 @@ Feature('Running Effect programs again under a chosen schedule')
       Gherkin.Do.pipe(
         Given('a fiber waiting for in-process work, beside a fiber that yields first')(
           'run',
-          () => Effect.promise(() => runKernel(microtaskProgram)),
+          () => Effect.promise(() => Kernel.run(microtaskProgram)),
         ),
         Then('the woken fiber finishes once the schedule picks it')((s) => {
           expect(completedValueOf(s.run)).toEqual(['woken by in-process work'])
@@ -157,7 +157,7 @@ Feature('Running Effect programs again under a chosen schedule')
       Gherkin.Do.pipe(
         Given('two fibers whose handoffs each wait for the other to move first')(
           'run',
-          () => Effect.promise(() => runKernel(deadlockedProgram)),
+          () => Effect.promise(() => Kernel.run(deadlockedProgram)),
         ),
         Then('the run fails as a deadlock naming the fibers it waits on')((s) => {
           expect(deadlockOf(s.run).suspended.length).toBeGreaterThanOrEqual(2)
@@ -175,7 +175,7 @@ Feature('Running Effect programs again under a chosen schedule')
       Gherkin.Do.pipe(
         Given('a race that has already run, with its schedule recorded')(
           'firstRun',
-          () => Effect.promise(() => runKernel(raceProgram)),
+          () => Effect.promise(() => Kernel.run(raceProgram)),
         ),
         When('the recorded schedule runs the race twice more')(
           'replays',
@@ -204,9 +204,9 @@ Feature('Running Effect programs again under a chosen schedule')
           'receipts',
           () => Effect.succeed<Array<string>>([]),
         ),
-        When('the schedule interrupts it after the seventh step')(
+        When('the schedule interrupts it after the eleventh step')(
           'run',
-          (s) => Effect.promise(() => runKernel(interruptedProgram(s.receipts), { interrupt: { atStep: 7 } })),
+          (s) => Effect.promise(() => Kernel.run(interruptedProgram(s.receipts), { interrupt: { atStep: 11 } })),
         ),
         Then('the cleanup ran')((s) => {
           expect(s.receipts).toEqual(['cleanup ran'])
@@ -224,7 +224,7 @@ Feature('Running Effect programs again under a chosen schedule')
           'attempt',
           () =>
             Effect.gen(function*() {
-              const stalled = runKernel(Effect.never)
+              const stalled = Kernel.run(Effect.never)
               const rejected = attemptConcurrentRun(Effect.void)
               const stalledResult = yield* Effect.promise(() => stalled)
               return { rejected, stalledResult }
@@ -250,8 +250,10 @@ Feature('Running Effect programs again under a chosen schedule')
           'runs',
           (s) =>
             Effect.gen(function*() {
-              const pinned = yield* Effect.promise(() => runKernel(s.program, { explore: 'body', choose: alwaysLast }))
-              const explored = yield* Effect.promise(() => runKernel(s.program, { explore: 'all', choose: alwaysLast }))
+              const pinned = yield* Effect.promise(() => Kernel.run(s.program, { explore: 'body', choose: alwaysLast }))
+              const explored = yield* Effect.promise(() =>
+                Kernel.run(s.program, { explore: 'all', choose: alwaysLast })
+              )
               return { pinned, explored }
             }),
         ),

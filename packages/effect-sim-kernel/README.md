@@ -13,18 +13,18 @@ pnpm add @systemfsoftware/effect-sim-kernel effect
 ## Usage
 
 ```ts
-import { runKernel } from '@systemfsoftware/effect-sim-kernel'
+import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect } from 'effect'
 
 const program = Effect.gen(function*() {
   // any Effect program, any wrappers
 })
 
-const result = await runKernel(program)
+const result = await Kernel.run(program)
 // { _tag: "Completed", exit, steps, decisions }
 ```
 
-`runKernel` returns the program's `Exit`, the decisions the schedule took, and a per-step record of which fiber ran. A failing run returns `_tag: "Failed"` with a structured `failure`:
+`Kernel.run` is dual: `program.pipe(Kernel.run(options))` is the same run. It returns the program's `Exit`, the decisions the schedule took, and a per-step record of which fiber ran. A failing run returns `_tag: "Failed"` with a structured `failure`:
 
 - `Escape` — the program reached a real timer; the failure names the timer and the call site.
 - `Blocked` — the run waits on something outside the process (a real timer, a file, a socket).
@@ -36,7 +36,7 @@ const result = await runKernel(program)
 The zero-preemption schedule is Effect's own dispatcher order: continue the fiber the kernel sliced last, then a fiber woken by in-process work, then the oldest task. A **deviation** from that order costs one preemption.
 
 ```ts
-await runKernel(program, {
+await Kernel.run(program, {
   // replay a recorded schedule exactly (decisions from a previous run)
   path: previous.decisions,
   // or choose beyond the recorded path (PCT, bounded search)
@@ -54,19 +54,35 @@ Promises and `queueMicrotask` that settle inside the process run between kernel 
 
 ## One kernel at a time
 
-The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed once and dispatch to the running kernel. A second `runKernel` started while one is active throws immediately instead of sharing the hooks.
+The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed for the lifetime of one run and restored at its release. A second `Kernel.run` started while one is active throws immediately instead of sharing the hooks.
 
 ## Exploration boundary
 
 Harnesses that build their environment inside a scenario can keep that setup out of the explored prefix:
 
 ```ts
-import { beginExploration, runKernel } from '@systemfsoftware/effect-sim-kernel'
+import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 
-await runKernel(program, { explore: 'body' })
+await Kernel.run(program, { explore: 'body' })
 ```
 
-Decisions before `beginExploration` stay on Effect's order and are not recorded.
+Decisions before `Kernel.beginExploration` stay on Effect's order and are not recorded.
+
+## Test time
+
+Every clock the program can reach is the kernel's virtual root clock: time moves only when nothing can run, no in-process wait reaches a real timer, and a program that touches one fails the run.
+
+Where a suite would provide `TestClock.layer()`, the harness provides the kernel's test clock instead. Programs keep calling Effect's `TestClock` API — `TestClock.adjust` and `setTime` reach the kernel's clock through the `Clock` service — but they suspend the caller: the kernel moves time only when nothing can run, firing due sleeps in timestamp order with everything they wake run to a stop before the next batch.
+
+```ts
+import { Kernel } from '@systemfsoftware/effect-sim-kernel'
+import { TestClock } from 'effect/testing'
+
+await Kernel.run(program.pipe(Effect.provide(Kernel.TestClock.layer)))
+
+// inside the program:
+yield* TestClock.adjust('91 seconds')
+```
 
 ## Pinned Effect version
 

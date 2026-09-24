@@ -10,14 +10,17 @@ import type { Fiber } from 'effect'
 type Field<A = unknown> = A
 
 /** The process resources that can call back into the program from outside. */
+/** @internal */
 export type WaitKind = 'RealTimer' | 'File' | 'Socket' | 'Other'
 
+/** @internal */
 export interface SuspendedFiber {
   readonly id: number
   readonly frames: ReadonlyArray<string>
 }
 
-/** Effect numbers fibers; this alias keeps those reads nameable. */
+// Effect numbers fibers; this alias keeps those reads nameable.
+/** @internal */
 export type AnyFiber<A = unknown, E = unknown> = Fiber.Fiber<A, E>
 
 interface HostProcess {
@@ -45,6 +48,7 @@ const bump = (counts: Map<string, number>, resource: string): void => {
 }
 
 /** A snapshot of the process resources alive right now, by resource kind. */
+/** @internal */
 export const resourceCounts = (): ReadonlyMap<string, number> => {
   const counts = new Map<string, number>()
   for (const resource of resourceNames()) bump(counts, resource)
@@ -64,6 +68,7 @@ const appendExtra = (
 }
 
 /** Resource kinds that appeared since `before`, as `"<kind> x<count>"` entries. */
+/** @internal */
 export const newResources = (before: ReadonlyMap<string, number>): ReadonlyArray<string> => {
   const appeared: Array<string> = []
   for (const entry of resourceCounts()) appendExtra(appeared, before, entry)
@@ -93,6 +98,7 @@ const isNamed = (family: WaitKind): boolean => family !== 'Other'
  * What a set of newly appeared resources can wake. Files and sockets name
  * themselves first; a leftover kind is still named, through `resources`.
  */
+/** @internal */
 export const waitKindOf = (resources: ReadonlyArray<string>): WaitKind => {
   const named = resources.map(familyOf).find(isNamed)
   return named ?? 'Other'
@@ -157,6 +163,7 @@ const collectSuspended = (suspended: Array<SuspendedFiber>, fiber: AnyFiber): vo
  * Every unfinished fiber the kernel ran, innermost frame first. Fibers that
  * already exited are not suspended, so they are left out.
  */
+/** @internal */
 export const describeSuspended = (fibers: Iterable<AnyFiber>): ReadonlyArray<SuspendedFiber> => {
   const suspended: Array<SuspendedFiber> = []
   for (const fiber of fibers) collectSuspended(suspended, fiber)

@@ -3,27 +3,31 @@
  * by a caller-supplied decision path, a `choose` callback, or Effect's own
  * dispatcher order — runs it to its next yield, and drains in-process
  * microtasks after every step so a Promise-woken fiber becomes the next
- * scheduling choice. At quiescence it names what the run waits on, and a
- * deadlock report lists every suspended fiber with its frames.
+ * scheduling choice. At quiescence the kernel settles its clocks (R37), and
+ * when nothing can move it names what the run waits on; a deadlock report
+ * lists every suspended fiber with its frames.
  *
  * The loop is written as explicit Promise chains on purpose: the kernel has to
  * run outside Effect's runtime to control scheduling, and every `.then` is one
  * microtask checkpoint — exactly the in-process work R36 hands to the kernel.
  */
-import { Effect, Exit } from 'effect'
+import { Clock, Effect, Exit } from 'effect'
 
-import { describeSuspended, newResources, resourceCounts, waitKindOf } from './Deadlock.js'
-import type { AnyFiber, SuspendedFiber, WaitKind } from './Deadlock.js'
-import { installEscapeRecorder } from './EscapeRecorder.js'
-import type { Escape, TimerName } from './EscapeRecorder.js'
-import { currentKernel, makeKernel } from './Kernel.js'
-import type { Task } from './Kernel.js'
-import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord } from './Kernel.js'
+import { stepClocks } from './clocks.js'
+import { describeSuspended, newResources, resourceCounts, waitKindOf } from './deadlock.js'
+import type { AnyFiber, SuspendedFiber, WaitKind } from './deadlock.js'
+import { installEscapeRecorder } from './escapeRecorder.js'
+import type { Escape, TimerName } from './escapeRecorder.js'
+import { makeKernel } from './kernel.js'
+import type { Task } from './kernel.js'
+import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord } from './kernel.js'
+import { currentKernel } from './runMark.js'
 
 /**
  * The discriminant tags of the run outcome; the variants inherit them because
  * an `Exit` cannot travel through a schema.
  */
+/** @internal */
 export const runOutcomeTags = {
   completed: { _tag: 'Completed' },
   failed: { _tag: 'Failed' },
@@ -33,12 +37,15 @@ export const runOutcomeTags = {
   runaway: { _tag: 'Runaway' },
 } as const
 
+/** @internal */
 export type RunCompleted<A, E> = RunHistory & typeof runOutcomeTags.completed & {
   readonly exit: Exit.Exit<A, E>
 }
 
+/** @internal */
 export type RunFailed = RunHistory & typeof runOutcomeTags.failed & { readonly failure: RunFailure }
 
+/** @internal */
 export interface RunHistory {
   /** Which fiber ran at each step, in order (R3). */
   readonly steps: ReadonlyArray<StepRecord>
@@ -46,30 +53,37 @@ export interface RunHistory {
   readonly decisions: ReadonlyArray<Decision>
 }
 
+/** @internal */
 export type RunResult<A, E> = RunCompleted<A, E> | RunFailed
 
 /** Why a run failed, with what a report needs to name it. */
+/** @internal */
 export type EscapeFailure = typeof runOutcomeTags.escape & {
   readonly timer: TimerName
   readonly site: string
 }
 
+/** @internal */
 export type BlockedFailure = typeof runOutcomeTags.blocked & {
   readonly on: WaitKind
   readonly resources: ReadonlyArray<string>
 }
 
+/** @internal */
 export type DeadlockFailure = typeof runOutcomeTags.deadlock & {
   readonly suspended: ReadonlyArray<SuspendedFiber>
 }
 
+/** @internal */
 export type RunawayFailure = typeof runOutcomeTags.runaway & {
   readonly steps: number
   readonly pending: number
 }
 
+/** @internal */
 export type RunFailure = EscapeFailure | BlockedFailure | DeadlockFailure | RunawayFailure
 
+/** @internal */
 export interface Interruption {
   /** The one-based step after whose task the fiber is interrupted. */
   readonly atStep: number
@@ -77,6 +91,7 @@ export interface Interruption {
   readonly target?: FiberTarget
 }
 
+/** @internal */
 export interface RunOptions {
   /**
    * The decisions to take, one per explored step (R4). A shorter path falls
@@ -102,9 +117,9 @@ export interface RunOptions {
   /** Microtask checkpoints drained once nothing is pending. */
   readonly quiescenceTurns?: number
   /**
-   * Called once nothing in the process can run or wake a fiber (seam for the
-   * kernel clock, R37, and live I/O waits, R16). Returning true continues the
-   * run; returning false classifies the stall.
+   * Called once nothing in the process can run or wake a fiber after the
+   * kernel's clocks had their quiescent move (seam for live I/O waits, R16).
+   * Returning true continues the run; returning false classifies the stall.
    */
   readonly onQuiescent?: () => boolean
 }
@@ -125,16 +140,11 @@ interface Drive<A, E> {
  * Marks the point in a program where exploration may begin (R15). Under
  * `explore: 'body'`, every decision before it stays on Effect's order.
  */
+/** @internal */
 export const beginExploration: Effect.Effect<void> = Effect.sync(() => {
   const kernel = currentKernel()
   if (kernel !== undefined) kernel.beginExploration()
 })
-
-const assertIdle = (): void => {
-  if (currentKernel() !== undefined) {
-    throw new Error('effect-sim-kernel: a kernel run is already active — one kernel owns the global hooks at a time')
-  }
-}
 
 /** One microtask checkpoint: already-queued callbacks run before this resumes. */
 const turn = <T>(value: T): Promise<T> => Promise.resolve().then(() => value)
@@ -300,23 +310,35 @@ const drive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
   iteration(state).then((halted) => continued(state, halted))
 
 /**
- * Runs one Effect program under one kernel, driven by the decision path or
- * chooser in `options`, and returns its exit, the decisions taken, and a
- * per-step record of which fiber ran. A second run started while one is active
- * fails immediately instead of sharing the global hooks.
+ * Runs one Effect program under one kernel (R2: every clock the program can
+ * reach is the kernel's virtual root clock; R37: at quiescence the kernel
+ * settles its test clocks, then advances the root clock). Driven by the
+ * decision path or chooser in `options`, it returns the exit, the decisions
+ * taken, and a per-step record of which fiber ran. A second run started while
+ * one is active fails immediately instead of sharing the global hooks.
  */
+/** @internal */
 export const runKernel = <A, E>(
   program: Effect.Effect<A, E>,
   options: RunOptions = {},
 ): Promise<RunResult<A, E>> => {
-  assertIdle()
   const kernel = makeKernel({ exploring: options.explore !== 'body' })
   const restore = installEscapeRecorder((escape) => {
     kernel.escapes.push(escape)
   })
-  const root = Effect.runFork(program, { scheduler: kernel.scheduler })
+  const userSeam = options.onQuiescent
+  const root = Effect.runFork(
+    Effect.provideService(program, Clock.Clock, kernel.clocks.clock),
+    { scheduler: kernel.scheduler },
+  )
   kernel.start(root)
-  return drive<A, E>({ kernel, root, options, before: resourceCounts(), guard: 0 }).finally(() => {
+  return drive<A, E>({
+    kernel,
+    root,
+    options: { ...options, onQuiescent: () => stepClocks(kernel.clocks) || seamOffersProgress(userSeam) },
+    before: resourceCounts(),
+    guard: 0,
+  }).finally(() => {
     restore()
     kernel.release()
   })

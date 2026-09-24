@@ -8,10 +8,12 @@
 /** A value read from code this package does not own, narrowed by predicates. */
 type Field<A = unknown> = A
 
+/** @internal */
 export type TimerName = 'setTimeout' | 'setInterval' | 'setImmediate'
 
 const TIMER_NAMES: ReadonlyArray<TimerName> = ['setTimeout', 'setInterval', 'setImmediate']
 
+/** @internal */
 export interface Escape {
   readonly timer: TimerName
   readonly site: string
@@ -68,6 +70,7 @@ const reinstall = (originals: ReadonlyMap<TimerName, TimerFunction>): void => {
  * restore function; a run installs the recorder at its start and restores it in
  * its `finally`, so nothing outside a run is ever observed.
  */
+/** @internal */
 export const installEscapeRecorder = (report: Report): () => void => {
   const originals = capturedTimers()
   for (const [name, original] of originals) {
