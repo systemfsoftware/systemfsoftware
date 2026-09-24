@@ -110,19 +110,43 @@ export type Checked<A> = Positive<A> & { readonly not: Negative<A> }
 type Matcher = object
 
 /**
- * The asymmetric matchers that name what a value must be, and the statics the fork refuses by name.
+ * The asymmetric matchers vitest builds: each names what a value must be, and only vitest reads the result.
  *
  * @internal
  */
-export interface Shapes {
+export interface Matchers {
   readonly objectContaining: <T = Opaque>(expected: V.DeeplyAllowMatchers<T>) => Matcher
   readonly arrayContaining: <T = Opaque>(expected: Array<V.DeeplyAllowMatchers<T>>) => Matcher
   readonly stringContaining: (expected: string) => Matcher
   readonly stringMatching: (expected: string | RegExp) => Matcher
   readonly closeTo: (expected: number, precision?: number) => Matcher
-  readonly any: (constructor: Opaque) => Matcher
   /** Accepts an Effect Schema directly, or any Standard Schema. */
   readonly schemaMatching: (schema: Opaque) => Matcher
+}
+
+/**
+ * `expect.not.<matcher>`: the four asymmetric matchers whose negation states an absence honestly.
+ *
+ * @internal
+ */
+export type NegatedMatchers = Pick<
+  Matchers,
+  'objectContaining' | 'arrayContaining' | 'stringContaining' | 'stringMatching'
+>
+
+/**
+ * The asymmetric matchers that name what a value must be, the same matchers negated, and the statics the fork
+ * refuses by name.
+ *
+ * @internal
+ */
+export interface Shapes extends Matchers {
+  readonly any: (constructor: Opaque) => Matcher
+  /**
+   * `expect.not.<matcher>`, forwarded to vitest's own negated statics (`@vitest/expect/dist/index.d.ts:172`
+   * declares `not: AsymmetricMatchersContaining`); only the four honest absences are exposed.
+   */
+  readonly not: NegatedMatchers
   readonly anything: StaticRefusal<(typeof refusedText)['anything']>
   readonly poll: StaticRefusal<(typeof refusedText)['poll']>
   readonly soft: StaticRefusal<(typeof refusedText)['soft']>
@@ -314,6 +338,13 @@ const toStandardSchema = (schema: Opaque): Opaque =>
 
 const standardSchemaOf = (schema: Opaque): Matcher => asMatcher(V.expect.schemaMatching(toStandardSchema(schema)))
 
+const notShapes: NegatedMatchers = {
+  stringContaining: V.expect.not.stringContaining,
+  objectContaining: V.expect.not.objectContaining,
+  arrayContaining: V.expect.not.arrayContaining,
+  stringMatching: V.expect.not.stringMatching,
+}
+
 const shapes: Shapes = {
   objectContaining: V.expect.objectContaining,
   arrayContaining: V.expect.arrayContaining,
@@ -322,6 +353,7 @@ const shapes: Shapes = {
   closeTo: V.expect.closeTo,
   any: V.expect.any,
   schemaMatching: standardSchemaOf,
+  not: notShapes,
   anything: refusing(refusedText.anything),
   poll: refusing(refusedText.poll),
   soft: refusing(refusedText.soft),
