@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Array as Arr, Result, Schema } from 'effect'
 
 /**

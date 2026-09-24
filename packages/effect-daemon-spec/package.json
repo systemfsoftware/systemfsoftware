@@ -29,7 +29,7 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-daemon-spec.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json",
@@ -51,8 +51,8 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.testing.json",
-    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.testing.json",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local",
     "attw": "attw --pack ."
   },
   "dependencies": {
@@ -100,7 +100,7 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/effect-daemon-spec.d.ts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json",

@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Array as Arr, Match, Option, Result, Schema, SchemaAST, SchemaGetter } from 'effect'
 import { Ceiling, ChildId, Intensity, Millis, PositiveMillis, ProbeThreshold } from './SupervisionLimits.schema.js'
 
