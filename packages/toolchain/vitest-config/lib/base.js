@@ -109,15 +109,18 @@ const packageExemption = guardExemptions[packageName]
 export const guardSetupFiles = packageExemption?.projects === '*' ? [] : [guardSetupFile(process.cwd(), packageName)]
 
 /**
- * A test block with `guardSetupFiles` and the conformance handoff added on top of its own setup files,
- * each at most once. `guard` is false for an exempt project, which still takes the handoff.
+ * A test block with the conformance handoff added on top of its own setup files, each at most once.
+ * `guard` true adds `guardSetupFiles`; false removes them, even when the block inherited them by
+ * spreading `sharedConfig`, because an exempt project or a root whose projects inherit it with
+ * `extends: true` must not carry the guard.
  *
  * @param {TestConfig | undefined} test
  * @param {boolean} guard
  * @returns {TestConfig}
  */
 const withSetupFiles = (test, guard) => {
-  const own = test?.setupFiles === undefined ? [] : [test.setupFiles].flat()
+  const own = (test?.setupFiles === undefined ? [] : [test.setupFiles].flat())
+    .filter((file) => guard || !guardSetupFiles.includes(file))
   return {
     ...test,
     setupFiles: [...new Set([...own, ...(guard ? guardSetupFiles : []), CONFORMANCE_SETUP])],
@@ -138,10 +141,9 @@ const isExemptProject = (test) => {
 }
 
 /**
- * An inline project gets the setup files itself: vitest does not carry the root's setup files into
- * `test.projects`, and a project without them records sites but never hands them to the reporter. A
- * project the exemption table names is the one exception: the runner that registers its tests is not
- * vitest's, so it takes the handoff without the guard.
+ * An inline project gets the setup files itself. A project the exemption table names is the one
+ * exception: the runner that registers its tests is not vitest's, so it takes the handoff without the
+ * guard.
  *
  * @param {unknown} project
  * @returns {unknown}
@@ -153,16 +155,17 @@ const projectWithSetup = (project) => {
 }
 
 /**
- * Vitest's `defineConfig` with the conformance coverage gate added to the
- * config's own plugins and its per-test handoff and the guard added to the root and every
- * inline project, so no package config can leave either out by setting `plugins`
- * or `setupFiles` after spreading `sharedConfig`.
+ * Vitest's `defineConfig` with the conformance coverage gate added to the config's own plugins, and
+ * its per-test handoff and the guard added to every block that runs tests: the root when the config
+ * has no projects, otherwise each inline project. The root of a config with projects runs no tests of
+ * its own, and a project with `extends: true` inherits the root's setup files, so a guard on that root
+ * would reach an exempt project.
  * @param {ViteUserConfig} config
  * @returns {ViteUserConfig}
  */
 export const defineConfig = (config) => {
-  const test = withSetupFiles(config.test, true)
   const projects = config.test?.projects
+  const test = withSetupFiles(config.test, projects === undefined)
   return defineVitestConfig({
     ...config,
     plugins: [...(config.plugins ?? []), conformanceCoverage()],
