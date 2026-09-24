@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { Layer } from 'effect'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 
 import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'
@@ -43,7 +43,7 @@ const removeOnlyCheck = (implementation: Layer.Layer<Collections>, sequences: nu
     ...sequenceRunsOf(sequences, operations, 0),
   })
 
-Feature('Keeping a generated command sequence in step with a pure model')
+Feature('Keeping a run of commands in step with a pure model')
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -51,21 +51,25 @@ Feature('Keeping a generated command sequence in step with a pure model')
       'An insertion at the end that loses the element fails the sequence at that insertion',
       Gherkin.Do.pipe(
         Given('a collection that loses an element inserted at the end')(
+          'collection',
+          () => Effect.succeed(endIndexDroppingCollection),
+        ),
+        When('the check runs eight sequences of twenty commands from seed 42')(
           'checked',
-          () => collectionCheck(endIndexDroppingCollection, 8, 20, 42),
+          (s) => collectionCheck(s.collection, 8, 20, 42),
         ),
         Then('the run is rejected at the first step the model no longer explains')((s) => {
           const failed = failReportOf(s.checked)
           expect(failed.failure.judgement.problem).toBe('model-diverged')
           expect(failed.failure.judgement.step).toBe(collectionOracle.firstDivergence(failed.failure.operations))
         }),
-        Then('the rejected step is the insertion at the end that lost the element')((s) => {
+        And('the rejected step is the insertion at the end that lost the element')((s) => {
           const failed = failReportOf(s.checked)
           expect(collectionOracle.endIndexInsertion(failed.failure.operations, failed.failure.judgement.step)).toBe(
             true,
           )
         }),
-        Then('the report names the step where the model diverged')((s) => {
+        And('the report names the step where the model diverged')((s) => {
           const failed = failReportOf(s.checked)
           expect(Conformance.render(s.checked)).toContain(
             `the model diverged at step ${failed.failure.judgement.step}`,
@@ -75,13 +79,17 @@ Feature('Keeping a generated command sequence in step with a pure model')
     )
 
     scenario(
-      'A faithful collection keeps a thousand generated sequences in step with the model',
+      'A faithful collection keeps a thousand sequences in step with the model',
       Gherkin.Do.pipe(
         Given('a collection that keeps every element it is given')(
-          'checked',
-          () => collectionCheck(correctCollection, 1000, 10),
+          'collection',
+          () => Effect.succeed(correctCollection),
         ),
-        Then('every generated sequence is explained by the model')((s) => {
+        When('the check runs a thousand sequences of ten commands')(
+          'checked',
+          (s) => collectionCheck(s.collection, 1000, 10),
+        ),
+        Then('every sequence is explained by the model')((s) => {
           expect(passReportOf(s.checked).histories).toBe(1000)
         }),
       ),
@@ -90,16 +98,20 @@ Feature('Keeping a generated command sequence in step with a pure model')
     scenario(
       'A failing sequence of forty commands shrinks to the shortest sequence that still diverges',
       Gherkin.Do.pipe(
-        Given('a collection that loses an element inserted at the end, driven by one forty-command sequence')(
-          'checked',
-          () => collectionCheck(endIndexDroppingCollection, 1, 40, 1),
+        Given('a collection that loses an element inserted at the end')(
+          'collection',
+          () => Effect.succeed(endIndexDroppingCollection),
         ),
-        Then('the reported sequence is far shorter than the forty commands that were generated')((s) => {
+        When('the check runs a single sequence of forty commands from seed 1')(
+          'checked',
+          (s) => collectionCheck(s.collection, 1, 40, 1),
+        ),
+        Then('the reported sequence is far shorter than the forty commands that were drawn')((s) => {
           const failed = failReportOf(s.checked)
           expect(failed.failure.operations.length).toBeGreaterThan(0)
           expect(failed.failure.operations.length).toBeLessThan(40)
         }),
-        Then('the reported sequence still ends at the step the model diverged')((s) => {
+        And('the reported sequence still ends at the step the model diverged')((s) => {
           const failed = failReportOf(s.checked)
           expect(failed.failure.judgement.step).toBe(failed.failure.operations.length)
           expect(failed.failure.judgement.problem).toBe('model-diverged')
@@ -110,11 +122,15 @@ Feature('Keeping a generated command sequence in step with a pure model')
     scenario(
       'A removal from an empty collection is passed over rather than judged a divergence',
       Gherkin.Do.pipe(
-        Given('a faithful collection whose only generated command is a removal, starting empty')(
-          'checked',
-          () => removeOnlyCheck(correctCollection, 20, 10),
+        Given('a faithful collection whose only command is a removal, starting empty')(
+          'collection',
+          () => Effect.succeed(correctCollection),
         ),
-        Then('every sequence passes because no command may run yet')((s) => {
+        When('the check runs twenty sequences of ten commands, each a removal')(
+          'checked',
+          (s) => removeOnlyCheck(s.collection, 20, 10),
+        ),
+        Then('every sequence passes because no removal may run yet')((s) => {
           expect(passReportOf(s.checked).histories).toBe(20)
         }),
       ),

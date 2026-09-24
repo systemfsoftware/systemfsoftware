@@ -1,6 +1,6 @@
 import { NodeFileSystem } from '@effect/platform-node'
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FileSystem, Layer, Path } from 'effect'
 import { expect } from 'vitest'
 
@@ -18,7 +18,7 @@ Feature('Proving an interrupted program leaves nothing held')
       Gherkin.Do.pipe(
         Given('a lock program that claims the lock first and registers its release only after a later step succeeds')(
           'holder',
-          () => Effect.as(Effect.succeed(successPathLock()), successPathLock()),
+          () => Effect.succeed(successPathLock()),
         ),
         When('the check stops the holder at every step and asks a fresh caller for the lock after each stop')(
           'checked',
@@ -27,10 +27,10 @@ Feature('Proving an interrupted program leaves nothing held')
         Then('the check reports the stop that left the lock held')((s) => {
           expect(failReportOf(s.checked).failure.judgement.problem).toBe('interruption-left-held')
         }),
-        Then('the report names the step after the lock was claimed')((s) => {
+        And('the report names the step after the lock was claimed')((s) => {
           expect(failReportOf(s.checked).failure.judgement.step).toBeGreaterThan(0)
         }),
-        Then('the rendered report names the release and the step')((s) => {
+        And('the rendered report names the release and the step')((s) => {
           const text = Conformance.render(s.checked)
           expect(text).toContain('the release failed')
           expect(text).toContain('at step')
@@ -43,7 +43,7 @@ Feature('Proving an interrupted program leaves nothing held')
       Gherkin.Do.pipe(
         Given('a lock program that registers its release in the same step it claims the lock')(
           'holder',
-          () => Effect.as(Effect.succeed(releasingLock()), releasingLock()),
+          () => Effect.succeed(releasingLock()),
         ),
         When('the check stops the holder at every step and asks a fresh caller for the lock after each stop')(
           'checked',
@@ -52,7 +52,7 @@ Feature('Proving an interrupted program leaves nothing held')
         Then('the lock passes after every interruption')((s) => {
           expect(passReportOf(s.checked).histories).toBeGreaterThan(0)
         }),
-        Then('the report states how many interruptions were tried')((s) => {
+        And('the report states how many interruptions were tried')((s) => {
           const passing = passReportOf(s.checked)
           expect(Conformance.render(s.checked)).toContain(String(passing.histories))
         }),
@@ -61,12 +61,15 @@ Feature('Proving an interrupted program leaves nothing held')
 
     scenario(
       'A file created before its removal is registered is left behind when the holder stops in between',
+      { scenarioLayer: Layer.merge(NodeFileSystem.layer, Path.layer) },
       Gherkin.Do.pipe(
         Given('a program that creates a report file first and registers its removal only after a later step succeeds')(
           'holder',
           () =>
-            Effect.flatMap(FileSystem.FileSystem, (fileSystem) => tempFileReport(fileSystem)).pipe(
-              Effect.provide(Layer.merge(NodeFileSystem.layer, Path.layer)),
+            Effect.flatMap(
+              FileSystem.FileSystem,
+              (fileSystem) =>
+                Effect.acquireRelease(tempFileReport(fileSystem), (resource) => Effect.orDie(resource.cleanup)),
             ),
         ),
         When('the check stops the holder at every step and looks for the file on disk after each stop')(
@@ -76,9 +79,6 @@ Feature('Proving an interrupted program leaves nothing held')
         Then('the check reports the stop that left the file behind')((s) => {
           expect(failReportOf(s.checked).failure.judgement.problem).toBe('interruption-left-held')
         }),
-        Then('the leftover directory is removed')((s) =>
-          s.holder.cleanup.pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, Path.layer)))
-        ),
       ),
     )
   })

@@ -1,5 +1,5 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Equal, Fiber, Layer } from 'effect'
 import { expect } from 'vitest'
@@ -50,28 +50,46 @@ const recordedWithInterruption = Effect.gen(function*() {
 Feature('Proving concurrent callers against a pure model')
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
-  .body(({ scenario }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'Both callers hold the lock when acquiring happens in two separate steps',
       Gherkin.Do.pipe(
         Given('a lock whose holder is checked in one step and set in a later step')(
+          'lock',
+          () => Effect.succeed(twoStepLock),
+        ),
+        When('the check runs two callers through every order their calls to acquire can interleave')(
           'checked',
-          () => lockCheck(twoStepLock),
+          (s) => lockCheck(s.lock),
         ),
         Then('the history is rejected because no sequential order explains it')((s) => {
           expect(failReportOf(s.checked).failure.judgement.problem).toBe('no-sequential-order')
         }),
-        Then('the failing schedule shrinks to a single departure from the ordinary order')((s) => {
+        And('the failing schedule shrinks to a single departure from the ordinary order')((s) => {
           expect(failReportOf(s.checked).failure.deviations).toBe(1)
         }),
-        Then('both callers observed the lock as free at the same moment')((s) => {
+        And('both callers observed the lock as free at the same moment')((s) => {
           const holders = failReportOf(s.checked).failure.operations.filter(
             (operation) => operation.response === true,
           )
           expect(holders.length).toBe(2)
           expect(new Set(holders.map((operation) => operation.worker)).size).toBe(2)
         }),
-        Then('the report names the shrunk schedule and what each caller observed')((s) => {
+      ),
+    )
+
+    scenario(
+      'The rejected history is reported with the shrunk schedule and what each caller observed',
+      Gherkin.Do.pipe(
+        Given('a lock whose holder is checked in one step and set in a later step')(
+          'lock',
+          () => Effect.succeed(twoStepLock),
+        ),
+        When('the check runs two callers through every order their calls to acquire can interleave')(
+          'checked',
+          (s) => lockCheck(s.lock),
+        ),
+        Then("the report spells out the shrunk schedule and both callers' observations")((s) => {
           const text = Conformance.render(s.checked)
           expect(text).toContain('no sequential order explains this history')
           expect(text).toContain('deviation')
@@ -83,49 +101,64 @@ Feature('Proving concurrent callers against a pure model')
     )
 
     scenario(
-      'A correct lock keeps every generated schedule in step with the model',
+      'A correct lock keeps every interleaving in step with the model',
       Gherkin.Do.pipe(
         Given('a lock whose holder is checked and set in a single atomic step')(
-          'checked',
-          () => lockCheck(atomicLock),
+          'lock',
+          () => Effect.succeed(atomicLock),
         ),
-        Then('every explored schedule matches some sequential order of the model')((s) => {
+        When('the check runs two callers through every order their calls to acquire can interleave')(
+          'checked',
+          (s) => lockCheck(s.lock),
+        ),
+        Then('every interleaving is explained by some sequential order of the model')((s) => {
           expect(passReportOf(s.checked).histories).toBeGreaterThan(1)
         }),
       ),
     )
 
-    scenario(
-      'A finished answer may not contradict a later caller, while overlapping callers may commute',
-      Gherkin.Do.pipe(
-        Given('a history where the second caller also observed the lock as free after the first kept it')(
-          'contradicting',
-          () => Effect.succeed(Conformance.order(lockModel, contradictingHistory)),
+    scenarioOutline(
+      'A finished answer never contradicts a later caller, and overlapping calls commute: <case>',
+      [
+        {
+          case: 'the second caller also saw the lock as free after the first had taken it',
+          history: contradictingHistory,
+          expectedOrder: undefined,
+        },
+        {
+          case: 'two callers overlapped and one of them took the lock',
+          history: commutingHistory,
+          expectedOrder: [0, 1],
+        },
+      ] as const,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a recorded history of two callers asking the same lock for its holder')(
+            'history',
+            () => Effect.succeed(row.history),
+          ),
+          When('the model lines the recorded calls up into a sequential order')(
+            'explained',
+            (s) => Effect.sync(() => Conformance.order(lockModel, s.history)),
+          ),
+          Then('the calls are explained by the order the callers finished in, or not at all')((s) => {
+            expect(s.explained).toEqual(row.expectedOrder)
+          }),
         ),
-        Given('a history where two callers overlapped and the lock stayed with one of them')(
-          'commuting',
-          () => Effect.succeed(Conformance.order(lockModel, commutingHistory)),
-        ),
-        Then('no sequential order explains the contradicting history')((s) => {
-          expect(s.contradicting).toBeUndefined()
-        }),
-        Then('the overlapping history is explained by the caller who finished first')((s) => {
-          expect(s.commuting).toEqual([0, 1])
-        }),
-      ),
     )
 
     scenario(
       'A model pinned to a single object for its whole life is refused before anything runs',
       Gherkin.Do.pipe(
-        Given('a model whose state is the very same object every time it is read')(
-          'refused',
-          () => Effect.flip(lockCheck(atomicLock, pinnedModel)),
+        Given('a correct lock and a model whose state is the very same object every time it is read')(
+          'subject',
+          () => Effect.succeed({ lock: atomicLock, model: pinnedModel }),
         ),
+        When('the check is started')('refused', (s) => Effect.flip(lockCheck(s.subject.lock, s.subject.model))),
         Then('the refusal names the state itself as the problem')((s) => {
           expect(s.refused.problem).toBe('state-not-structural')
         }),
-        Then('the refusal explains that the state must compare by structure')((s) => {
+        And('the refusal explains that the state must compare by structure')((s) => {
           expect(s.refused.detail).toContain('compare by structure')
         }),
       ),
@@ -134,16 +167,20 @@ Feature('Proving concurrent callers against a pure model')
     scenario(
       'A caller interrupted mid-command leaves every earlier recorded step in place',
       Gherkin.Do.pipe(
-        Given('a caller whose second command never answers while the first one finished')(
-          'recording',
-          () => Effect.promise(() => Kernel.run(recordedWithInterruption)),
+        Given('a caller that asks for the lock twice, its second call never answering')(
+          'program',
+          () => Effect.succeed(recordedWithInterruption),
         ),
-        Then('the finished command keeps its answer in the history')((s) => {
+        When('the caller is interrupted while its second call is still running')(
+          'recording',
+          (s) => Effect.promise(() => Kernel.run(s.program)),
+        ),
+        Then('the finished call keeps its answer in the history')((s) => {
           const operations = operationsOfRun(s.recording)
           expect(operations[0]?.worker).toBe(0)
           expect(operations[0]?.response).toBe(true)
         }),
-        Then('the interrupted command keeps its invocation without an answer')((s) => {
+        And('the interrupted call keeps its invocation without an answer')((s) => {
           const operations = operationsOfRun(s.recording)
           expect(operations[1]?.worker).toBe(1)
           expect(operations[1]?.answered).toBeUndefined()
