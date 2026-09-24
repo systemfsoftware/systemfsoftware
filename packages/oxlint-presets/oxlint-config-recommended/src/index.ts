@@ -96,6 +96,7 @@ const recommendedConfig: OxlintConfig = {
   plugins: [...plugins],
   jsPlugins: [...jsPlugins],
   options: { ...options },
+  rules: { ...rules },
   categories: { correctness: 'error' },
   ignorePatterns: [...ignorePatterns],
   overrides: [
