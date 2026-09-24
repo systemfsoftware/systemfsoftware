@@ -273,13 +273,12 @@ const shrunkReport = <C, S, R, E, REnv>(
   specification: Specification<C, S, R, E, REnv>,
   implementation: Layer.Layer<REnv, E>,
   assignments: ReadonlyArray<ReadonlyArray<C>>,
-  bound: Kernel.Bound,
 ): Effect.Effect<Report<C, R>> =>
   Effect.flatMap(
     shrunkCommands(specification, implementation, assignments),
     (reduced) =>
       Effect.flatMap(searchedOutcome(specification, implementation, unflattened(reduced)), (searched) =>
-        reducedSearchReport(specification, implementation, unflattened(reduced), searched, bound)),
+        reducedSearchReport(specification, implementation, unflattened(reduced), searched, searched.bound)),
   )
 
 const passing = (bound: Kernel.Bound): Report<never, never> => ({
@@ -302,7 +301,7 @@ const reportedFailures = <C, S, R, E, REnv>(
   const first = failures[0]
   return first === undefined
     ? Effect.succeed(passing(bound))
-    : shrunkReport(specification, implementation, assignments, bound)
+    : shrunkReport(specification, implementation, assignments)
 }
 
 const reportedOutcome = <C, S, R, E, REnv>(

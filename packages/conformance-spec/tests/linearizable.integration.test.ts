@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Deferred, Effect, Equal, Fiber, Layer } from 'effect'
+import { Deferred, Effect, Equal, Exit, Fiber, Layer } from 'effect'
 import { expect } from 'vitest'
 import { answeredOperation, failReportOf, operationsOfRun, passReportOf } from './__fixtures__/checkReports.js'
 import type { LockOperation } from './__fixtures__/checkReports.js'
@@ -37,6 +37,44 @@ const pinnedModel = {
   initial: pinnedState,
   step: stepLock,
 }
+
+/** The calls the report shows, laid out per caller the way the check drew them. */
+const assignmentOfHistory = (
+  operations: ReadonlyArray<LockOperation>,
+): ReadonlyArray<ReadonlyArray<LockCommand>> => {
+  const byWorker = new Map<number, Array<LockCommand>>()
+  operations.forEach((operation) => {
+    const mine = byWorker.get(operation.worker) ?? []
+    mine.push(operation.command)
+    byWorker.set(operation.worker, mine)
+  })
+  return [...byWorker.keys()]
+    .sort((left, right) => left - right)
+    .map((worker) => byWorker.get(worker) ?? [])
+}
+
+const recordedOver = (
+  assignments: ReadonlyArray<ReadonlyArray<LockCommand>>,
+): Effect.Effect<ReadonlyArray<LockOperation>, never, Locks> =>
+  Effect.gen(function*() {
+    const recording = yield* Conformance.recording<LockCommand, boolean | void>()
+    const workers = yield* Effect.forEach(
+      assignments,
+      (commands, worker) =>
+        Effect.forkChild(
+          Effect.forEach(
+            commands,
+            (command) => recording.record(worker, command, runLockCommand(command)),
+            { concurrency: 1 },
+          ).pipe(Effect.asVoid),
+        ),
+    )
+    yield* Effect.forEach(workers, (worker) => Fiber.join(worker), { concurrency: 1 })
+    return yield* recording.operations
+  })
+
+const unexplained = (result: Kernel.RunResult<ReadonlyArray<LockOperation>, never>): boolean =>
+  !('exit' in result) || Exit.isFailure(result.exit) || Conformance.order(lockModel, result.exit.value) === undefined
 
 const recordedWithInterruption = Effect.gen(function*() {
   const recording = yield* Conformance.recording<LockCommand, boolean | void>()
@@ -187,6 +225,39 @@ Feature('Proving concurrent callers against a pure model')
           const operations = operationsOfRun(s.recording)
           expect(operations[1]?.worker).toBe(1)
           expect(operations[1]?.answered).toBeUndefined()
+        }),
+      ),
+    )
+
+    scenario(
+      'The rejected history is reported with the effort spent exploring it after shrinking',
+      Gherkin.Do.pipe(
+        Given('a lock whose holder is checked in one step and set in a later step')(
+          'lock',
+          () => Effect.succeed(twoStepLock),
+        ),
+        When('the check runs two callers through every order their calls to acquire can interleave')(
+          'checked',
+          (s) => lockCheck(s.lock),
+        ),
+        Then('the report names the calls both callers saw and still cannot be explained')((s) => {
+          const failed = failReportOf(s.checked)
+          expect(failed.failure.judgement.problem).toBe('no-sequential-order')
+          expect(failed.failure.operations.length).toBeGreaterThan(0)
+        }),
+        And('the effort it reports is the effort a fresh exploration of just those calls takes')((s) => {
+          const failed = failReportOf(s.checked)
+          return Effect.map(
+            Effect.promise(() =>
+              Kernel.search(
+                Effect.provide(recordedOver(assignmentOfHistory(failed.failure.operations)), s.lock),
+                { isFailure: unexplained },
+              )
+            ),
+            (fresh) => {
+              expect(failed.failure.bound).toEqual(fresh.bound)
+            },
+          )
         }),
       ),
     )
