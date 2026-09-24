@@ -1,5 +1,5 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Equal, Exit, Fiber, Hash, Layer, Schema } from 'effect'
+import { Effect, Equal, Exit, Fiber, Hash, Layer, Predicate, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import { Arbitrary } from 'effect/unstable/arbitrary'
 
@@ -27,9 +27,6 @@ export interface Specification<C, S, R, E, REnv> {
   readonly seed?: number
   readonly preemptions?: number
   readonly maxSchedules?: number
-  readonly timeoutMs?: number
-  /** The wall-clock bound for the search, supplied by the caller (R19). */
-  readonly now?: () => number
 }
 
 export { ModelError }
@@ -133,8 +130,6 @@ const searchOptionsOf = <C, S, R, E, REnv>(
 ): Kernel.SearchOptions<ReadonlyArray<Operation<C, R>>, E> => ({
   ...firstDefined(specification.preemptions, (preemptions) => ({ preemptions })),
   ...firstDefined(specification.maxSchedules, (maxSchedules) => ({ maxSchedules })),
-  ...firstDefined(specification.timeoutMs, (timeoutMs) => ({ timeoutMs })),
-  ...firstDefined(specification.now, (now) => ({ now })),
   isFailure: failsWhen(specification.model),
 })
 
@@ -269,7 +264,7 @@ const reducedSearchReport = <C, S, R, E, REnv>(
 ): Effect.Effect<Report<C, R>> => {
   const overBudget = overBudgetOf(searched)
   if (overBudget !== undefined) {
-    return Effect.succeed({ _tag: 'OverBudget', limit: overBudget.limit, bound: overBudget.bound })
+    return Effect.succeed({ _tag: 'OverBudget', bound: overBudget.bound })
   }
   return reducedFailures(specification, implementation, assignments, searched.failures, bound)
 }
@@ -295,7 +290,7 @@ const passing = (bound: Kernel.Bound): Report<never, never> => ({
 
 const overBudgetOf = <A, E>(
   searched: Kernel.SearchReport<A, E>,
-): Kernel.OverBudgetOutcome<A, E> | undefined => ('limit' in searched ? searched : undefined)
+): Kernel.OverBudgetOutcome<A, E> | undefined => (Predicate.isTagged(searched, 'OverBudget') ? searched : undefined)
 
 const reportedFailures = <C, S, R, E, REnv>(
   specification: Specification<C, S, R, E, REnv>,
@@ -318,7 +313,7 @@ const reportedOutcome = <C, S, R, E, REnv>(
 ): Effect.Effect<Report<C, R>> => {
   const overBudget = overBudgetOf(searched)
   if (overBudget !== undefined) {
-    return Effect.succeed({ _tag: 'OverBudget', limit: overBudget.limit, bound: overBudget.bound })
+    return Effect.succeed({ _tag: 'OverBudget', bound: overBudget.bound })
   }
   return reportedFailures(specification, implementation, assignments, searched.failures, searched.bound)
 }

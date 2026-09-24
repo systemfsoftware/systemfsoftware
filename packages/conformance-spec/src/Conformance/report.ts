@@ -69,7 +69,6 @@ export interface IncompleteReport extends IncompleteTag {
 }
 
 export interface OverBudget extends OverBudgetTag {
-  readonly limit: Kernel.BudgetLimit
   readonly bound: Kernel.Bound
 }
 
@@ -150,6 +149,6 @@ export const render = <C, R>(report: Report<C, R>): string =>
         `bound: ${boundText(incomplete.incomplete.bound)}`,
       ].join('\n')),
     Match.tag('OverBudget', (overBudget) =>
-      `the search exhausted its ${overBudget.limit} before covering every schedule: ${boundText(overBudget.bound)}`),
+      `the search exhausted its schedule budget before covering every schedule: ${boundText(overBudget.bound)}`),
     Match.exhaustive,
   )
