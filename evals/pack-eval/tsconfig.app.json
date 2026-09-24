@@ -23,7 +23,6 @@
   ],
   "exclude": [
     "src/main.ts",
-    "src/drivers/**",
     "src/**/__tests__/**",
     "src/**/*.test.ts"
   ]

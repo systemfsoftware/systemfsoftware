@@ -19,8 +19,7 @@
     "outDir": "node_modules/.cache/tsc/entry"
   },
   "include": [
-    "src/main.ts",
-    "src/drivers"
+    "src/main.ts"
   ],
   "references": [
     {
