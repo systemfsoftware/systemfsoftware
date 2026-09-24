@@ -1,6 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { createPackage, Package } from '@systemfsoftware/npm-package'
-import { expect } from '@systemfsoftware/vitest'
+import { createPackage } from '@systemfsoftware/npm-package'
 import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -21,10 +20,12 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
           'pkg',
           (s) => Effect.sync(() => createPackage(s.tree, 'demo', '1.0.0')),
         ),
-        Then('the prefixed path is accessible and preserves its contents')((s) => {
-          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/index.d.ts'))
-          expect(s.pkg.readFile('/node_modules/demo/index.d.ts')).toBe('export declare const x: number')
-        }),
+        Then('the prefixed path is accessible and preserves its contents')((s, expect) =>
+          expect({
+            exists: s.pkg.fileExists('/node_modules/demo/index.d.ts'),
+            content: s.pkg.readFile('/node_modules/demo/index.d.ts'),
+          }).toEqual({ exists: true, content: 'export declare const x: number' })
+        ),
       ),
     )
 
@@ -40,15 +41,16 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
           Effect.sync(() => {
             try {
               createPackage(s.tree, 'demo', '1.0.0')
-              return { threw: false, message: '' }
+              return { message: undefined }
             } catch (err) {
-              return { threw: true, message: err instanceof Error ? err.message : '' }
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the package constructor halts with an unexpected path error')((s) => {
-          expect(s.attempt.threw).toBe(true)
-          expect(s.attempt.message).toMatch(/Unexpected absolute fixture path/)
-        }),
+        Then('the package constructor halts with an unexpected path error')((s, expect) =>
+          expect(s.attempt).toMatchObject({
+            message: 'Unexpected absolute fixture path: /node_modules/other/index.d.ts',
+          })
+        ),
       ),
     )
 
@@ -63,15 +65,14 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
           Effect.sync(() => {
             try {
               createPackage(s.tree, 'demo', '1.0.0')
-              return { threw: false, message: '' }
+              return { message: undefined }
             } catch (err) {
-              return { threw: true, message: err instanceof Error ? err.message : '' }
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('initialization fails with a missing manifest error')((s) => {
-          expect(s.attempt.threw).toBe(true)
-          expect(s.attempt.message).toMatch(/Must contain package\.json/)
-        }),
+        Then('initialization fails with a missing manifest error')((s, expect) =>
+          expect(s.attempt).toMatchObject({ message: 'Must contain package.json' })
+        ),
       ),
     )
 
@@ -91,10 +92,12 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
           'pkg',
           (s) => Effect.sync(() => createPackage(s.ctx.tree, 'demo', '1.0.0')),
         ),
-        Then('reading the file yields the decoded text identically')((s) => {
-          expect(s.pkg.readFile('/node_modules/demo/index.d.ts')).toBe(s.ctx.content)
-          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/index.d.ts'))
-        }),
+        Then('reading the file yields the decoded text identically')((s, expect) =>
+          expect({
+            content: s.pkg.readFile('/node_modules/demo/index.d.ts'),
+            exists: s.pkg.fileExists('/node_modules/demo/index.d.ts'),
+          }).toEqual({ content: s.ctx.content, exists: true })
+        ),
       ),
     )
 
@@ -113,12 +116,14 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
           'pkg',
           (s) => Effect.sync(() => createPackage(s.tree, 'demo', '1.0.0')),
         ),
-        Then('the explicit arguments govern identity and mounting location')((s) => {
-          expect(s.pkg.packageName).toBe('demo')
-          expect(s.pkg.packageVersion).toBe('1.0.0')
-          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/package.json'))
-          expect(s.pkg).not.toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/other/package.json'))
-        }),
+        Then('the explicit arguments govern identity and mounting location')((s, expect) =>
+          expect({
+            packageName: s.pkg.packageName,
+            packageVersion: s.pkg.packageVersion,
+            ownManifest: s.pkg.fileExists('/node_modules/demo/package.json'),
+            foreignManifest: s.pkg.fileExists('/node_modules/other/package.json'),
+          }).toEqual({ packageName: 'demo', packageVersion: '1.0.0', ownManifest: true, foreignManifest: false })
+        ),
       ),
     )
   })

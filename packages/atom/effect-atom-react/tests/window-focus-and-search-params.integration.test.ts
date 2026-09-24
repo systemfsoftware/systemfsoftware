@@ -11,7 +11,7 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect, vi } from '@systemfsoftware/vitest'
+import { vi } from '@systemfsoftware/vitest'
 import { act, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -59,9 +59,12 @@ const readLog = () => {
   }
 }
 
-const waitUntilRegistryEmpties = (registry: Atom.Registry.Registry) =>
+const waitUntilRegistryEmpties = (registry: Atom.Registry.Registry): Promise<void> =>
   vi.waitFor(() => {
-    expect(Atom.Registry.getNodes(registry).size).toBe(0)
+    const held = Atom.Registry.getNodes(registry).size
+    if (held !== 0) {
+      throw new Error(`the registry still holds ${held} values`)
+    }
   })
 
 function FocusFollowingValue({ atom }: { readonly atom: Atom.Atom<number> }) {
@@ -122,11 +125,16 @@ Feature('Keeping on-screen values in step with the browser page')
               act(() => {
                 announceThePageCameIntoView()
               })
-              return { changed: s.ctx.focusedValue.textContent !== before }
+              return { after: s.ctx.focusedValue.textContent, before }
             })),
-          Then(`the widget ${row.outcome}`)((s) => {
-            expect(s.seen.changed).toBe(row.readAgain)
-          }),
+          Then(`the widget ${row.outcome}`)((s, expect) =>
+            expect(s.seen).toSatisfy(
+              (seen) => (seen.after !== seen.before) === row.readAgain,
+              row.readAgain
+                ? 'the page turned into view, so the widget read its value again'
+                : 'the page turned out of view, so the widget kept its last value',
+            )
+          ),
         ),
     )
 
@@ -155,9 +163,7 @@ Feature('Keeping on-screen values in step with the browser page')
               )
               return { page: screen.getByTestId('address-following-value').textContent }
             })),
-          Then(`the page shows ${row.shown}`)((s) => {
-            expect(s.shown.page).toBe(row.shown)
-          }),
+          Then(`the page shows ${row.shown}`)((s, expect) => expect(s.shown.page).toBe(row.shown)),
         ),
     )
 
@@ -222,12 +228,18 @@ Feature('Keeping on-screen values in step with the browser page')
               }
             }),
         ),
-        Then('neither widget read its value again')((s) => {
-          expect(s.observed.attending.focus).toBeGreaterThan(0)
-          expect(s.observed.attending.address).toBeGreaterThan(0)
-          expect(s.observed.afterLeaving.focus).toBe(s.observed.attending.focus)
-          expect(s.observed.afterLeaving.address).toBe(s.observed.attending.address)
-        }),
+        Then('neither widget read its value again')((s, expect) =>
+          expect({ afterLeaving: s.observed.afterLeaving, attending: s.observed.attending }).toMatchObject({
+            afterLeaving: {
+              address: s.observed.attending.address,
+              focus: s.observed.attending.focus,
+            },
+            attending: {
+              address: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              focus: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            },
+          })
+        ),
       ),
     )
   })

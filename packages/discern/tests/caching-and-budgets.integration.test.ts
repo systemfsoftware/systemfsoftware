@@ -1,7 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Result, Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import {
   type AnswerFor,
   answering,
@@ -113,14 +112,23 @@ Feature('Reusing answers without paying twice')
             const secondRun = yield* withProvider(s.policy('same'), model.model, [Discern.Model.caching(s.cache)])
             return { firstRun, secondRun }
           })),
-        Then('the second review reuses the recorded answer but still runs its own handler')((s) =>
+        Then('the second review reuses the recorded answer but still runs its own handler')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdicts.firstRun).toBe('block')
-            expect(s.verdicts.secondRun).toBe('block')
-            expect(model.calls()).toBe(1)
-            expect(s.counter.count()).toBe(2)
-          })
+            return {
+              firstRun: s.verdicts.firstRun,
+              secondRun: s.verdicts.secondRun,
+              modelCalls: model.calls(),
+              handlerRuns: s.counter.count(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              firstRun: 'block',
+              secondRun: 'block',
+              modelCalls: 1,
+              handlerRuns: 2,
+            })
+          ))
         ),
       ),
     )
@@ -143,13 +151,21 @@ Feature('Reusing answers without paying twice')
               return { first, second }
             }),
         ),
-        Then('the second run asks only about the question it lacks')((s) =>
+        Then('the second run asks only about the question it lacks')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdicts.first).toBe('a')
-            expect(s.verdicts.second).toBe('both')
-            expect(model.asked()).toStrictEqual([['a'], ['b']])
-          })
+            return {
+              firstRun: s.verdicts.first,
+              secondRun: s.verdicts.second,
+              asked: model.asked(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              firstRun: 'a',
+              secondRun: 'both',
+              asked: [['a'], ['b']],
+            })
+          ))
         ),
       ),
     )
@@ -169,13 +185,22 @@ Feature('Reusing answers without paying twice')
             ]))
             return { first, second, third }
           })),
-        Then('the first two pass, the third is refused, and the spend is reported')((s) =>
+        Then('the first two pass, the third is refused, and the spend is reported')((s, expect) =>
           Effect.gen(function*() {
-            expect(s.outcomes.first).toBe('block')
-            expect(s.outcomes.second).toBe('block')
-            expect(s.outcomes.third).toSatisfy(Discern.Model.isBudgetExceeded)
-            expect(yield* Discern.Model.spent(s.spend)).toStrictEqual({ decisions: 2, calls: 2 })
-          })
+            return {
+              first: s.outcomes.first,
+              second: s.outcomes.second,
+              third: s.outcomes.third,
+              spent: yield* Discern.Model.spent(s.spend),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              first: 'block',
+              second: 'block',
+              third: { _tag: 'AiError', module: 'Discern', method: 'budgeted' },
+              spent: { decisions: 2, calls: 2 },
+            })
+          ))
         ),
       ),
     )
@@ -200,12 +225,20 @@ Feature('Reusing answers without paying twice')
               return { firstRun, secondRun }
             }),
         ),
-        Then('only the first review drew from the allowance')((s) =>
+        Then('only the first review drew from the allowance')((s, expect) =>
           Effect.gen(function*() {
-            expect(s.verdicts.firstRun).toBe('block')
-            expect(s.verdicts.secondRun).toBe('block')
-            expect(yield* Discern.Model.spent(s.spend)).toStrictEqual({ decisions: 1, calls: 1 })
-          })
+            return {
+              firstRun: s.verdicts.firstRun,
+              secondRun: s.verdicts.secondRun,
+              spent: yield* Discern.Model.spent(s.spend),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              firstRun: 'block',
+              secondRun: 'block',
+              spent: { decisions: 1, calls: 1 },
+            })
+          ))
         ),
       ),
     )
@@ -224,17 +257,26 @@ Feature('Reusing answers without paying twice')
             const model = yield* CountingModel
             return yield* withProvider(s.program('x'), model.model, [Discern.Model.recording(s.store)])
           })),
-        Then('the whole program replays from the one recording')((s) =>
+        Then('the whole program replays from the one recording')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdict).toBe('risky/later')
-            expect(model.calls()).toBe(2)
-            expect(yield* Discern.Model.size(s.store)).toBe(2)
+            const recorded = {
+              verdict: s.verdict,
+              modelCalls: model.calls(),
+              storedObservations: yield* Discern.Model.size(s.store),
+            }
             const taken = yield* Discern.Model.snapshot(s.store)
             const replayed = yield* Effect.provide(s.program('x'), Discern.Model.replayLayer(taken))
-            expect(replayed).toBe('risky/later')
-            expect(model.calls()).toBe(2)
-          })
+            return { ...recorded, replayed, modelCallsAfterReplay: model.calls() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              verdict: 'risky/later',
+              modelCalls: 2,
+              storedObservations: 2,
+              replayed: 'risky/later',
+              modelCallsAfterReplay: 2,
+            })
+          ))
         ),
       ),
     )
@@ -262,14 +304,26 @@ Feature('Reusing answers without paying twice')
             ])
             return { first, second }
           })),
-        Then('the reordered question is asked again instead of reusing the answer')((s) =>
+        Then('the reordered question is asked again instead of reusing the answer')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(safeFirst.fingerprint).not.toBe(breakingFirst.fingerprint)
-            expect(s.verdicts.first).toBe('ok')
-            expect(s.verdicts.second).toBe('ok')
-            expect(model.calls()).toBe(2)
-          })
+            return {
+              firstFingerprint: safeFirst.fingerprint,
+              secondFingerprint: breakingFirst.fingerprint,
+              firstRun: s.verdicts.first,
+              secondRun: s.verdicts.second,
+              modelCalls: model.calls(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toSatisfy(
+              (observed) =>
+                observed.firstFingerprint !== observed.secondFingerprint &&
+                observed.firstRun === 'ok' &&
+                observed.secondRun === 'ok' &&
+                observed.modelCalls === 2,
+              'the reordered answers are a different question (distinct fingerprints), and both runs still answer ok on two model calls',
+            )
+          ))
         ),
       ),
     )
@@ -286,13 +340,21 @@ Feature('Reusing answers without paying twice')
             const second = yield* withProvider(s.policy({ b: 2, a: 1 }), model.model, [Discern.Model.caching(s.cache)])
             return { first, second }
           })),
-        Then('the second order is served from the first answer')((s) =>
+        Then('the second order is served from the first answer')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdicts.first).toBe('yes')
-            expect(s.verdicts.second).toBe('yes')
-            expect(model.calls()).toBe(1)
-          })
+            return {
+              firstRun: s.verdicts.first,
+              secondRun: s.verdicts.second,
+              modelCalls: model.calls(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              firstRun: 'yes',
+              secondRun: 'yes',
+              modelCalls: 1,
+            })
+          ))
         ),
       ),
     )
@@ -308,9 +370,12 @@ Feature('Reusing answers without paying twice')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Model.BudgetSpend)(s.payload)),
         ),
-        Then('the unreadable count is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unreadable count is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["decisions"\]/) },
+          })
+        ),
       ),
     )
 
@@ -325,9 +390,12 @@ Feature('Reusing answers without paying twice')
           'outcome',
           (s) => Effect.succeed(Schema.decodeResult(Discern.Model.BudgetLimits)(s.payload)),
         ),
-        Then('the endless allowance is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the endless allowance is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["decisions"\]/) },
+          })
+        ),
       ),
     )
   })

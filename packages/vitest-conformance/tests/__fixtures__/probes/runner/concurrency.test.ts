@@ -1,23 +1,30 @@
-import { describe, expect, it } from '@systemfsoftware/vitest'
+import { describe, it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
-const interleavedFailure = (actual: string, expected: string) =>
-  Effect.gen(function*() {
-    yield* Effect.yieldNow
-    yield* Effect.yieldNow
-    yield* Effect.sync(() => expect(actual).toEqual(expected))
-  })
+const observedMarker = (which: string): string => `${which}-marker`
 
 describe('interleaved concurrent failures', () => {
-  it.effect('Should_ReportOnlyItsFailure_When_FirstTestFails', () =>
-    interleavedFailure('first-marker', 'first-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_FirstTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect(observedMarker('first')).toEqual('first-expected-marker')
+  })
 
-  it.effect('Should_ReportOnlyItsFailure_When_SecondTestFails', () =>
-    interleavedFailure('second-marker', 'second-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_SecondTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect(observedMarker('second')).toEqual('second-expected-marker')
+  })
 
-  it.effect('Should_ReportOnlyItsFailure_When_ThirdTestFails', () =>
-    interleavedFailure('third-marker', 'third-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_ThirdTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect(observedMarker('third')).toEqual('third-expected-marker')
+  })
 
-  it.effect('Should_ReportOnlyItsFailure_When_FourthTestFails', () =>
-    interleavedFailure('fourth-marker', 'fourth-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_FourthTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect(observedMarker('fourth')).toEqual('fourth-expected-marker')
+  })
 })

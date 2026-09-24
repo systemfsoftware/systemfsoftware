@@ -1,7 +1,20 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Cause, Context, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Scope, Stream } from 'effect'
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  HashSet,
+  Latch,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from 'effect'
 import { TestClock } from 'effect/testing'
 
 const Feature = makeFeature({ it })
@@ -17,9 +30,12 @@ class VisitLog extends Context.Service<VisitLog, { readonly visits: Array<string
   '@systemfsoftware/effect-atom/tests/Registry.integration.test/VisitLog',
 ) {}
 
-/** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
-const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
-  Atom.AsyncResult.isInitial(reading) || Atom.AsyncResult.isWaiting(reading)
+/** The names of the values a page still holds, out of the values a scenario names. */
+const heldNames = (
+  nodes: Iterable<Atom.Atom | string>,
+  named: Readonly<Record<string, Atom.Atom | string>>,
+): ReadonlyArray<string> =>
+  [...nodes].map((node) => Object.entries(named).find(([, atom]) => atom === node)?.[0] ?? 'unnamed').sort()
 
 Feature('Keeping a value that is still loading available to every reader')
   .withLayer(Layer.empty)
@@ -53,13 +69,13 @@ Feature('Keeping a value that is still loading available to every reader')
               return { firstReading, secondReading, readingAfterCleanup, started }
             }),
         ),
-        Then('the work only ever started once, and every reader still sees it loading')(
-          (s) => {
-            expect(s.result.started).toBe(1)
-            expect(s.result.firstReading).toSatisfy(isLoading)
-            expect(s.result.secondReading).toSatisfy(isLoading)
-            expect(s.result.readingAfterCleanup).toSatisfy(isLoading)
-          },
+        Then('the work only ever started once, and every reader still sees it loading')((s, expect) =>
+          expect(s.result).toMatchObject({
+            started: 1,
+            firstReading: { _tag: 'Initial', waiting: true },
+            secondReading: { _tag: 'Initial', waiting: true },
+            readingAfterCleanup: { _tag: 'Initial', waiting: true },
+          })
         ),
       ),
     )
@@ -91,9 +107,7 @@ Feature('Keeping a value that is still loading available to every reader')
               return { firstReading, secondReading, started }
             }),
         ),
-        Then('the value is still available and its work only ran once')((s) => {
-          expect(s.res.started).toBe(1)
-        }),
+        Then('the value is still available and its work only ran once')((s, expect) => expect(s.res.started).toBe(1)),
       ),
     )
     scenario(
@@ -135,16 +149,16 @@ Feature('Keeping a value that is still loading available to every reader')
             return {
               before,
               after,
-              hasFirst: HashSet.has(keys, s.ctx.first),
-              hasSecond: HashSet.has(keys, s.ctx.second),
+              held: heldNames(keys, {
+                first: s.ctx.first,
+                second: s.ctx.second,
+                switching: s.ctx.switching,
+              }),
             }
           })),
-        Then('the abandoned source is gone and the followed one stays')((s) => {
-          expect(s.nodes.before).toBe('first')
-          expect(s.nodes.after).toBe('second')
-          expect(s.nodes.hasFirst).toBe(false)
-          expect(s.nodes.hasSecond).toBe(true)
-        }),
+        Then('the abandoned source is gone and the followed one stays')((s, expect) =>
+          expect(s.nodes).toEqual({ before: 'first', after: 'second', held: ['second', 'switching'] })
+        ),
       ),
     )
     scenario(
@@ -186,10 +200,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return { first, settled }
             }),
         ),
-        Then('the reader waited and received the fresh answer')((s) => {
-          expect(s.answer.first).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.answer.settled).toBe(2)
-        }),
+        Then('the reader waited and received the fresh answer')(
+          (s, expect) => expect(s.answer).toMatchObject({ first: { _tag: 'Success', value: 1 }, settled: 2 }),
+        ),
       ),
     )
     scenario(
@@ -208,9 +221,9 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.subscribe(s.ctx.page, s.ctx.value, (v) => heard.push(v), { immediate: true })
             return heard
           })),
-        Then('the listener heard the current value without waiting for a change')((s) => {
-          expect(s.heard).toEqual([5])
-        }),
+        Then('the listener heard the current value without waiting for a change')(
+          (s, expect) => expect(s.heard).toEqual([5]),
+        ),
       ),
     )
     scenario(
@@ -229,12 +242,9 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.get(s.ctx.page, s.ctx.second)
             yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
+            return { held: heldNames(keys, { first: s.ctx.first, second: s.ctx.second }) }
           })),
-        Then('both are gone')((s) => {
-          expect(s.nodes.hasFirst).toBe(false)
-          expect(s.nodes.hasSecond).toBe(false)
-        }),
+        Then('both are gone')((s, expect) => expect(s.nodes).toEqual({ held: [] })),
       ),
     )
     scenario(
@@ -265,10 +275,11 @@ Feature('Keeping a value that is still loading available to every reader')
               return { afterFirstWindow, afterSecondWindow }
             }),
         ),
-        Then('the value survived the first window and was swept only after being left alone')((s) => {
-          expect(s.readings.afterFirstWindow).toBe(1)
-          expect(s.readings.afterSecondWindow).toBe(2)
-        }),
+        Then('the value survived the first window and was swept only after being left alone')(
+          (s, expect) =>
+            expect({ afterFirstWindow: s.readings.afterFirstWindow, afterSecondWindow: s.readings.afterSecondWindow })
+              .toEqual({ afterFirstWindow: 1, afterSecondWindow: 2 }),
+        ),
       ),
     )
     scenario(
@@ -290,11 +301,9 @@ Feature('Keeping a value that is still loading available to every reader')
               ),
             )
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            return { hasValue: HashSet.has(keys, s.ctx.value) }
+            return { held: heldNames(keys, { value: s.ctx.value }) }
           })),
-        Then('the value is gone')((s) => {
-          expect(s.nodes.hasValue).toBe(false)
-        }),
+        Then('the value is gone')((s, expect) => expect(s.nodes).toEqual({ held: [] })),
       ),
     )
     scenario(
@@ -330,9 +339,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return { heard }
             }),
         ),
-        Then('the stream delivered the current value first and then the change')((s) => {
-          expect(s.heard.heard).toEqual([1, 2])
-        }),
+        Then('the stream delivered the current value first and then the change')(
+          (s, expect) => expect(s.heard.heard).toEqual([1, 2]),
+        ),
       ),
     )
     scenario(
@@ -375,11 +384,12 @@ Feature('Keeping a value that is still loading available to every reader')
             }),
         ),
         Then('the loading state was skipped, duplicates were dropped, and the failure surfaced')(
-          (s) => {
-            expect(s.outcome.heard).toEqual([1, 2])
-            expect(s.outcome.afterDuplicate).toBe(2)
-            expect(s.outcome.exit).toSatisfy(Exit.isFailure)
-          },
+          (s, expect) =>
+            expect({
+              heard: s.outcome.heard,
+              afterDuplicate: s.outcome.afterDuplicate,
+              exit: Exit.findError(s.outcome.exit),
+            }).toEqual({ heard: [1, 2], afterDuplicate: 2, exit: Result.succeed('boom') }),
         ),
       ),
     )
@@ -402,9 +412,9 @@ Feature('Keeping a value that is still loading available to every reader')
             const exit = yield* Effect.exit(Fiber.join(fiber))
             return { exit }
           })),
-        Then('the stream failed immediately with the failure')((s) => {
-          expect(s.outcome.exit).toSatisfy(Exit.isFailure)
-        }),
+        Then('the stream failed immediately with the failure')(
+          (s, expect) => expect(Exit.findError(s.outcome.exit)).toEqual(Result.succeed('boom')),
+        ),
       ),
     )
     scenario(
@@ -442,10 +452,13 @@ Feature('Keeping a value that is still loading available to every reader')
             const exit = yield* Effect.exit(Fiber.join(failureFiber))
             return { chunk: heard, exit }
           })),
-        Then('the settled stream delivered its value and the failed one failed')((s) => {
-          expect(s.outcome.chunk).toEqual([3])
-          expect(s.outcome.exit).toSatisfy(Exit.isFailure)
-        }),
+        Then('the settled stream delivered its value and the failed one failed')(
+          (s, expect) =>
+            expect({ chunk: s.outcome.chunk, exit: Exit.findError(s.outcome.exit) }).toEqual({
+              chunk: [3],
+              exit: Result.succeed('boom'),
+            }),
+        ),
       ),
     )
     scenario(
@@ -462,9 +475,7 @@ Feature('Keeping a value that is still loading available to every reader')
             const immediate = yield* Atom.Registry.getResult(s.ctx.page, s.ctx.settled)
             return { immediate }
           })),
-        Then('the reader heard the settled value without waiting')((s) => {
-          expect(s.answer.immediate).toBe(10)
-        }),
+        Then('the reader heard the settled value without waiting')((s, expect) => expect(s.answer.immediate).toBe(10)),
       ),
     )
     scenario(
@@ -505,11 +516,14 @@ Feature('Keeping a value that is still loading available to every reader')
               return { waited, waitedThrough, waitedPastFlicker }
             }),
         ),
-        Then('every reader waited only for the final settled value')((s) => {
-          expect(s.answers.waited).toBe(20)
-          expect(s.answers.waitedThrough).toBe(2)
-          expect(s.answers.waitedPastFlicker).toBe(30)
-        }),
+        Then('every reader waited only for the final settled value')(
+          (s, expect) =>
+            expect({
+              waited: s.answers.waited,
+              waitedThrough: s.answers.waitedThrough,
+              waitedPastFlicker: s.answers.waitedPastFlicker,
+            }).toEqual({ waited: 20, waitedThrough: 2, waitedPastFlicker: 30 }),
+        ),
       ),
     )
     scenario(
@@ -532,9 +546,7 @@ Feature('Keeping a value that is still loading available to every reader')
             })
             return { heard }
           })),
-        Then('the listener heard only the final value once')((s) => {
-          expect(s.heard.heard).toEqual([4])
-        }),
+        Then('the listener heard only the final value once')((s, expect) => expect(s.heard.heard).toEqual([4])),
       ),
     )
     scenario(
@@ -565,10 +577,11 @@ Feature('Keeping a value that is still loading available to every reader')
             }),
         ),
         Then('the listener on the second registry heard the new value before that batch finished, and only once')(
-          (s) => {
-            expect(s.heard.heardWhileBatching).toEqual([[2]])
-            expect(s.heard.heard).toEqual([2])
-          },
+          (s, expect) =>
+            expect({ whileBatching: s.heard.heardWhileBatching, after: s.heard.heard }).toEqual({
+              whileBatching: [[2]],
+              after: [2],
+            }),
         ),
       ),
     )
@@ -597,9 +610,9 @@ Feature('Keeping a value that is still loading available to every reader')
             })
             return { value: Atom.Registry.get(s.ctx.page, s.ctx.selfInvalidating) }
           })),
-        Then('the value was rebuilt once and settled on the newer source value')((s) => {
-          expect(s.result.value).toBe(1)
-        }),
+        Then('the value was rebuilt once and settled on the newer source value')(
+          (s, expect) => expect(s.result.value).toBe(1),
+        ),
       ),
     )
     scenario(
@@ -625,10 +638,10 @@ Feature('Keeping a value that is still loading available to every reader')
               derived: Atom.Registry.get(s.ctx.page, s.ctx.derived),
             }
           })),
-        Then('both were rebuilt in dependency order and kept their values')((s) => {
-          expect(s.result.source).toBe(1)
-          expect(s.result.derived).toBe(1)
-        }),
+        Then('both were rebuilt in dependency order and kept their values')(
+          (s, expect) =>
+            expect({ source: s.result.source, derived: s.result.derived }).toEqual({ source: 1, derived: 1 }),
+        ),
       ),
     )
     scenario(
@@ -656,9 +669,7 @@ Feature('Keeping a value that is still loading available to every reader')
             })
             return { value: Atom.Registry.get(s.ctx.page, s.ctx.selfRefreshing) }
           })),
-        Then('the refresh happened without leaving the value behind')((s) => {
-          expect(s.result.value).toBe(0)
-        }),
+        Then('the refresh happened without leaving the value behind')((s, expect) => expect(s.result.value).toBe(0)),
       ),
     )
     scenario(
@@ -677,10 +688,9 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.setInitialValue(s.ctx.page, s.ctx.value, 10)
             return { heard, read: Atom.Registry.get(s.ctx.page, s.ctx.value) }
           })),
-        Then('the listener heard the preloaded value and the first read returned it')((s) => {
-          expect(s.result.heard).toEqual([10])
-          expect(s.result.read).toBe(10)
-        }),
+        Then('the listener heard the preloaded value and the first read returned it')(
+          (s, expect) => expect({ heard: s.result.heard, read: s.result.read }).toEqual({ heard: [10], read: 10 }),
+        ),
       ),
     )
     scenario(
@@ -698,9 +708,7 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.setInitialValue(s.ctx.page, s.ctx.value, 7)
             return { read: Atom.Registry.get(s.ctx.page, s.ctx.value) }
           })),
-        Then('the built value now holds the new initial value')((s) => {
-          expect(s.result.read).toBe(7)
-        }),
+        Then('the built value now holds the new initial value')((s, expect) => expect(s.result.read).toBe(7)),
       ),
     )
     scenario(
@@ -719,9 +727,7 @@ Feature('Keeping a value that is still loading available to every reader')
             })
             return { read: Atom.Registry.get(s.ctx.page, s.ctx.fresh) }
           })),
-        Then('the value kept the initial value set inside the batch')((s) => {
-          expect(s.result.read).toBe(5)
-        }),
+        Then('the value kept the initial value set inside the batch')((s, expect) => expect(s.result.read).toBe(5)),
       ),
     )
     scenario(
@@ -742,10 +748,10 @@ Feature('Keeping a value that is still loading available to every reader')
               source: Atom.Registry.get(s.ctx.page, s.ctx.source),
             }
           })),
-        Then('the initial value was routed through to the source and flowed back')((s) => {
-          expect(s.result.derived).toBe(7)
-          expect(s.result.source).toBe(7)
-        }),
+        Then('the initial value was routed through to the source and flowed back')(
+          (s, expect) =>
+            expect({ derived: s.result.derived, source: s.result.source }).toEqual({ derived: 7, source: 7 }),
+        ),
       ),
     )
     scenario(
@@ -763,9 +769,7 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.setSerializable(s.ctx.page, 'direct-key', 9)
             return { read: Atom.Registry.get(s.ctx.page, s.ctx.direct) }
           })),
-        Then('the existing value was replaced by the stored one')((s) => {
-          expect(s.result.read).toBe(9)
-        }),
+        Then('the existing value was replaced by the stored one')((s, expect) => expect(s.result.read).toBe(9)),
       ),
     )
     scenario(
@@ -788,10 +792,10 @@ Feature('Keeping a value that is still loading available to every reader')
               source: Atom.Registry.get(s.ctx.page, s.ctx.source),
             }
           })),
-        Then('the stored value became the source initial value and flowed through')((s) => {
-          expect(s.result.derived).toBe(7)
-          expect(s.result.source).toBe(7)
-        }),
+        Then('the stored value became the source initial value and flowed through')(
+          (s, expect) =>
+            expect({ derived: s.result.derived, source: s.result.source }).toEqual({ derived: 7, source: 7 }),
+        ),
       ),
     )
     scenario(
@@ -812,10 +816,10 @@ Feature('Keeping a value that is still loading available to every reader')
             const rebuilt = Atom.Registry.get(s.ctx.page, s.ctx.direct)
             return { stored, rebuilt }
           })),
-        Then('the stored value was applied to the never-read value and then rebuilt from its definition')((s) => {
-          expect(s.result.stored).toBe(9)
-          expect(s.result.rebuilt).toBe(2)
-        }),
+        Then('the stored value was applied to the never-read value and then rebuilt from its definition')(
+          (s, expect) =>
+            expect({ stored: s.result.stored, rebuilt: s.result.rebuilt }).toEqual({ stored: 9, rebuilt: 2 }),
+        ),
       ),
     )
     scenario(
@@ -848,10 +852,13 @@ Feature('Keeping a value that is still loading available to every reader')
               return { defaultRead, preloadedRead }
             }),
         ),
-        Then('both reads went through the provided registries')((s) => {
-          expect(s.reads.defaultRead).toBe(1)
-          expect(s.reads.preloadedRead).toBe(9)
-        }),
+        Then('both reads went through the provided registries')(
+          (s, expect) =>
+            expect({ defaultRead: s.reads.defaultRead, preloadedRead: s.reads.preloadedRead }).toEqual({
+              defaultRead: 1,
+              preloadedRead: 9,
+            }),
+        ),
       ),
     )
     scenario(
@@ -878,10 +885,9 @@ Feature('Keeping a value that is still loading available to every reader')
             }
             return { remaining, message }
           })),
-        Then('the registry is empty and reading through it throws')((s) => {
-          expect(s.result.remaining).toBe(0)
-          expect(s.result.message).toContain('disposed')
-        }),
+        Then('the registry is empty and reading through it throws')(
+          (s, expect) => expect(s.result).toEqual({ remaining: 0, message: expect.stringContaining('disposed') }),
+        ),
       ),
     )
     scenario(
@@ -909,16 +915,12 @@ Feature('Keeping a value that is still loading available to every reader')
             return {
               before,
               after,
-              hasDerived: HashSet.has(keys, s.ctx.derived),
-              hasSource: HashSet.has(keys, s.ctx.source),
+              held: heldNames(keys, { derived: s.ctx.derived, source: s.ctx.source }),
             }
           })),
-        Then('the source was swept in the same pass right after the derived value')((s) => {
-          expect(s.result.before).toBe('valid')
-          expect(s.result.after).toBe('removed')
-          expect(s.result.hasDerived).toBe(false)
-          expect(s.result.hasSource).toBe(false)
-        }),
+        Then('the source was swept in the same pass right after the derived value')(
+          (s, expect) => expect(s.result).toEqual({ before: 'valid', after: 'removed', held: [] }),
+        ),
       ),
     )
     scenario(
@@ -939,16 +941,12 @@ Feature('Keeping a value that is still loading available to every reader')
               Atom.Registry.subscribe(s.ctx.page, s.ctx.source, () => {})
               yield* TestClock.adjust('100 millis')
               const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-              return {
-                hasDerived: HashSet.has(keys, s.ctx.derived),
-                hasSource: HashSet.has(keys, s.ctx.source),
-              }
+              return { held: heldNames(keys, { derived: s.ctx.derived, source: s.ctx.source }) }
             }),
         ),
-        Then('the derived value is gone while the source stays because someone still listens')((s) => {
-          expect(s.result.hasDerived).toBe(false)
-          expect(s.result.hasSource).toBe(true)
-        }),
+        Then('the derived value is gone while the source stays because someone still listens')(
+          (s, expect) => expect(s.result).toEqual({ held: ['source'] }),
+        ),
       ),
     )
     scenario(
@@ -969,17 +967,13 @@ Feature('Keeping a value that is still loading available to every reader')
             yield* TestClock.adjust('100 millis')
             const afterSecondWindow = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
             return {
-              hasDerivedAfterFirst: HashSet.has(afterFirstWindow, s.ctx.derived),
-              hasDerivedAfterSecond: HashSet.has(afterSecondWindow, s.ctx.derived),
-              hasSourceAfterFirst: HashSet.has(afterFirstWindow, s.ctx.source),
-              hasSourceAfterSecond: HashSet.has(afterSecondWindow, s.ctx.source),
+              afterFirst: heldNames(afterFirstWindow, { derived: s.ctx.derived, source: s.ctx.source }),
+              afterSecond: heldNames(afterSecondWindow, { derived: s.ctx.derived, source: s.ctx.source }),
             }
           })),
-        Then('the child is swept first and the parent is swept in its own later window')((s) => {
-          expect(s.result.hasDerivedAfterFirst).toBe(false)
-          expect(s.result.hasSourceAfterFirst).toBe(true)
-          expect(s.result.hasSourceAfterSecond).toBe(false)
-        }),
+        Then('the child is swept first and the parent is swept in its own later window')(
+          (s, expect) => expect(s.result).toEqual({ afterFirst: ['source'], afterSecond: [] }),
+        ),
       ),
     )
     scenario(
@@ -1001,12 +995,11 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.get(s.ctx.page, s.ctx.second)
             yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
+            return { held: heldNames(keys, { first: s.ctx.first, second: s.ctx.second }) }
           })),
-        Then('both are swept only after being left alone again')((s) => {
-          expect(s.result.hasFirst).toBe(false)
-          expect(s.result.hasSecond).toBe(false)
-        }),
+        Then('both are swept only after being left alone again')(
+          (s, expect) => expect(s.result).toEqual({ held: [] }),
+        ),
       ),
     )
     scenario(
@@ -1034,12 +1027,11 @@ Feature('Keeping a value that is still loading available to every reader')
               ),
             )
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            return { before, hasValue: HashSet.has(keys, s.ctx.value) }
+            return { before, held: heldNames(keys, { value: s.ctx.value }) }
           })),
-        Then('the listener built the value, and it was removed once the listener left')((s) => {
-          expect(s.result.before).toBe('valid')
-          expect(s.result.hasValue).toBe(false)
-        }),
+        Then('the listener built the value, and it was removed once the listener left')(
+          (s, expect) => expect(s.result).toEqual({ before: 'valid', held: [] }),
+        ),
       ),
     )
     scenario(
@@ -1065,10 +1057,9 @@ Feature('Keeping a value that is still loading available to every reader')
             Atom.Registry.refresh(s.ctx.page, s.ctx.root)
             return { state: node.currentState(), value: Atom.Registry.get(s.ctx.page, s.ctx.root) }
           })),
-        Then('the lazy value rebuilt immediately')((s) => {
-          expect(s.result.state).toBe('valid')
-          expect(s.result.value).toBe(1)
-        }),
+        Then('the lazy value rebuilt immediately')(
+          (s, expect) => expect({ state: s.result.state, value: s.result.value }).toEqual({ state: 'valid', value: 1 }),
+        ),
       ),
     )
     scenario(
@@ -1111,11 +1102,12 @@ Feature('Keeping a value that is still loading available to every reader')
             }),
         ),
         Then('the root stayed stale until a new reader came, then rebuilt and cleared the skipped invalidation')(
-          (s) => {
-            expect(s.result.afterRefresh).toBe('stale')
-            expect(s.result.finalState).toBe('valid')
-            expect(s.result.value).toBe(1)
-          },
+          (s, expect) =>
+            expect({
+              afterRefresh: s.result.afterRefresh,
+              finalState: s.result.finalState,
+              value: s.result.value,
+            }).toEqual({ afterRefresh: 'stale', finalState: 'valid', value: 1 }),
         ),
       ),
     )
@@ -1157,15 +1149,16 @@ Feature('Keeping a value that is still loading available to every reader')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
             return {
               value,
-              hasFirst: HashSet.has(keys, s.ctx.first),
-              hasSecond: HashSet.has(keys, s.ctx.second),
+              held: heldNames(keys, {
+                first: s.ctx.first,
+                second: s.ctx.second,
+                switching: s.ctx.switching,
+              }),
             }
           })),
-        Then('the abandoned source is kept because it is still in use, and the new one is followed')((s) => {
-          expect(s.nodes.value).toBe(2)
-          expect(s.nodes.hasFirst).toBe(true)
-          expect(s.nodes.hasSecond).toBe(true)
-        }),
+        Then('the abandoned source is kept because it is still in use, and the new one is followed')((s, expect) =>
+          expect(s.nodes).toEqual({ value: 2, held: ['first', 'second', 'switching'] })
+        ),
       ),
     )
     scenario(
@@ -1285,14 +1278,24 @@ Feature('Keeping a value that is still loading available to every reader')
               }
             }),
         ),
-        Then('the forked reads settled and the invalidated value stopped all scheduled work')((s) => {
-          expect(s.result.settledValue).toBe(5)
-          expect(s.result.resumedValue).toBe(7)
-          expect(s.result.optionValue).toBe(1)
-          expect(s.result.throughWaiting).toBe(3)
-          expect(s.result.throughNone).toBe(5)
-          expect(s.result.state).toBe('stale')
-        }),
+        Then('the forked reads settled and the invalidated value stopped all scheduled work')(
+          (s, expect) =>
+            expect({
+              settledValue: s.result.settledValue,
+              resumedValue: s.result.resumedValue,
+              optionValue: s.result.optionValue,
+              throughWaiting: s.result.throughWaiting,
+              throughNone: s.result.throughNone,
+              state: s.result.state,
+            }).toEqual({
+              settledValue: 5,
+              resumedValue: 7,
+              optionValue: 1,
+              throughWaiting: 3,
+              throughNone: 5,
+              state: 'stale',
+            }),
+        ),
       ),
     )
     scenario(
@@ -1317,14 +1320,13 @@ Feature('Keeping a value that is still loading available to every reader')
             s.ctx.early.advance(200)
             s.ctx.late.advance(50)
             return {
-              first: Atom.Registry.getNodes(s.ctx.first).has(s.ctx.value),
-              second: Atom.Registry.getNodes(s.ctx.second).has(s.ctx.value),
+              firstPage: heldNames(Atom.Registry.getNodes(s.ctx.first).keys(), { value: s.ctx.value }),
+              secondPage: heldNames(Atom.Registry.getNodes(s.ctx.second).keys(), { value: s.ctx.value }),
             }
           })),
-        Then('the first page has let the value go while the second still holds it')((s) => {
-          expect(s.held.first).toBe(false)
-          expect(s.held.second).toBe(true)
-        }),
+        Then('the first page has let the value go while the second still holds it')(
+          (s, expect) => expect(s.held).toEqual({ firstPage: [], secondPage: ['value'] }),
+        ),
       ),
     )
     scenario(
@@ -1355,9 +1357,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return s.ctx.heard
             }),
         ),
-        Then('the listeners hear only the second group, once each')((s) => {
-          expect(s.heard).toEqual(['counter 3', 'doubled 6'])
-        }),
+        Then('the listeners hear only the second group, once each')(
+          (s, expect) => expect(s.heard).toEqual(['counter 3', 'doubled 6']),
+        ),
       ),
     )
     scenario(
@@ -1385,9 +1387,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return heard
             }),
         ),
-        Then('the immediate listener hears the start value once, and both hear the change once')((s) => {
-          expect(s.heard).toEqual(['immediate 0', 'group ended', 'listener 2', 'immediate 2'])
-        }),
+        Then('the immediate listener hears the start value once, and both hear the change once')(
+          (s, expect) => expect(s.heard).toEqual(['immediate 0', 'group ended', 'listener 2', 'immediate 2']),
+        ),
       ),
     )
     scenario(
@@ -1417,9 +1419,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return result
             }),
         ),
-        Then('the counter still reads 1 and the total shows 1')((s) => {
-          expect(s.result).toEqual({ counter: 1, total: 1 })
-        }),
+        Then('the counter still reads 1 and the total shows 1')(
+          (s, expect) => expect(s.result).toEqual({ counter: 1, total: 1 }),
+        ),
       ),
     )
     scenario(
@@ -1447,9 +1449,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return { heard, doubled: Atom.Registry.get(s.ctx.page, s.ctx.doubled) }
             }),
         ),
-        Then('the listener hears 2 and the doubled counter reads 2')((s) => {
-          expect(s.result).toEqual({ heard: [2], doubled: 2 })
-        }),
+        Then('the listener hears 2 and the doubled counter reads 2')(
+          (s, expect) => expect(s.result).toEqual({ heard: [2], doubled: 2 }),
+        ),
       ),
     )
     scenario(
@@ -1478,9 +1480,7 @@ Feature('Keeping a value that is still loading available to every reader')
               return s.ctx.computed.times
             }),
         ),
-        Then('it has never been computed')((s) => {
-          expect(s.times).toBe(0)
-        }),
+        Then('it has never been computed')((s, expect) => expect(s.times).toBe(0)),
       ),
     )
     scenario(
@@ -1504,9 +1504,7 @@ Feature('Keeping a value that is still loading available to every reader')
               return counter
             }),
         ),
-        Then('the counter reads its starting 0 again')((s) => {
-          expect(s.counter).toBe(0)
-        }),
+        Then('the counter reads its starting 0 again')((s, expect) => expect(s.counter).toBe(0)),
       ),
     )
     scenario(
@@ -1522,18 +1520,26 @@ Feature('Keeping a value that is still loading available to every reader')
                 const second = yield* SecondRegistry
                 Atom.Registry.set(first, s.ctx.value, 11)
                 return {
-                  sameRegistry: first === second,
+                  first,
+                  second,
                   onFirst: Atom.Registry.get(first, s.ctx.value),
                   onSecond: Atom.Registry.get(second, s.ctx.value),
                 }
               }),
             ),
         ),
-        Then('the registries are different, and only the first one shows the new value')((s) => {
-          expect(s.seen.sameRegistry).toBe(false)
-          expect(s.seen.onFirst).toBe(11)
-          expect(s.seen.onSecond).toBe(0)
-        }),
+        Then('the registries are different, and only the first one shows the new value')(
+          (s, expect) =>
+            expect({
+              first: s.seen.first,
+              second: s.seen.second,
+              onFirst: s.seen.onFirst,
+              onSecond: s.seen.onSecond,
+            }).toSatisfy(
+              ({ first, second, onFirst, onSecond }) => first !== second && onFirst === 11 && onSecond === 0,
+              'the two registries are different, and only the first one shows the new value',
+            ),
+        ),
       ),
     )
     scenario(
@@ -1563,9 +1569,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return { message }
             }),
           )),
-        Then('the read failed, and the failure said the registry is gone')((s) => {
-          expect(s.afterwards.message).toContain('disposed')
-        }),
+        Then('the read failed, and the failure said the registry is gone')(
+          (s, expect) => expect(s.afterwards.message).toContain('disposed'),
+        ),
       ),
     )
     scenarioOutline(
@@ -1657,10 +1663,13 @@ Feature('Keeping a value that is still loading available to every reader')
                 curried: row.curried(s.ctx.second.registry, s.ctx.second.value),
               })),
           ),
-          Then('both answers match, and they are the expected one')((s) => {
-            expect(s.answers.direct).toBe(row.expected)
-            expect(s.answers.curried).toBe(row.expected)
-          }),
+          Then('both answers match, and they are the expected one')(
+            (s, expect) =>
+              expect({ direct: s.answers.direct, curried: s.answers.curried }).toEqual({
+                direct: row.expected,
+                curried: row.expected,
+              }),
+          ),
         ),
     )
     scenario(
@@ -1682,11 +1691,9 @@ Feature('Keeping a value that is still loading available to every reader')
               return { firstBeforeClose: [...firstBeforeClose], second, firstAfterClose }
             }),
         ),
-        Then('the first page remembered its visit, the second saw none, and the closed page forgot it')((s) => {
-          expect(s.notes.firstBeforeClose).toEqual(['home'])
-          expect(s.notes.second).toEqual([])
-          expect(s.notes.firstAfterClose).toEqual([])
-        }),
+        Then('the first page remembered its visit, the second saw none, and the closed page forgot it')(
+          (s, expect) => expect(s.notes).toEqual({ firstBeforeClose: ['home'], second: [], firstAfterClose: [] }),
+        ),
       ),
     )
   })

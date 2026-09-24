@@ -1,10 +1,9 @@
 import { NodeFileSystem } from '@effect/platform-node'
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, FileSystem, Layer, Path } from 'effect'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, FileSystem, Layer, Path, Schema } from 'effect'
 
-import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'
+import { passReportOf } from './__fixtures__/checkReports.js'
 import { releasingLock, successPathLock, tempFileReport } from './__fixtures__/Resources.js'
 
 const Feature = makeFeature({ it })
@@ -24,17 +23,26 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
           'checked',
           (s) => Conformance.released(s.holder.program, s.holder.check),
         ),
-        Then('the check reports the stop that left the lock held')((s) => {
-          expect(failReportOf(s.checked).failure.judgement.problem).toBe('interruption-left-held')
-        }),
-        And('the report names the step after the lock was claimed')((s) => {
-          expect(failReportOf(s.checked).failure.judgement.step).toBeGreaterThan(0)
-        }),
-        And('the rendered report names the release and the step')((s) => {
-          const text = Conformance.render(s.checked)
-          expect(text).toContain('the release failed')
-          expect(text).toContain('at step')
-        }),
+        Then(
+          'the check reports the stop that left the lock held, naming the failed release and the step after the claim',
+        )(
+          (s, expect) =>
+            expect({
+              report: s.checked,
+              rendered: Conformance.render(s.checked),
+            }).toMatchObject({
+              report: {
+                _tag: 'Fail',
+                failure: {
+                  judgement: {
+                    problem: 'interruption-left-held',
+                    step: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+                  },
+                },
+              },
+              rendered: expect.stringMatching(/the release failed[\s\S]*at step/),
+            }),
+        ),
       ),
     )
 
@@ -49,12 +57,15 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
           'checked',
           (s) => Conformance.released(s.holder.program, s.holder.check),
         ),
-        Then('the lock passes after every interruption')((s) => {
-          expect(passReportOf(s.checked).histories).toBeGreaterThan(0)
-        }),
-        And('the report states how many interruptions were tried')((s) => {
+        Then('the lock passes after every interruption, and the report states how many were tried')((s, expect) => {
           const passing = passReportOf(s.checked)
-          expect(Conformance.render(s.checked)).toContain(String(passing.histories))
+          return expect({ report: s.checked, rendered: Conformance.render(s.checked) }).toMatchObject({
+            report: {
+              _tag: 'Pass',
+              histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            },
+            rendered: expect.stringContaining(String(passing.histories)),
+          })
         }),
       ),
     )
@@ -76,9 +87,12 @@ Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
           'checked',
           (s) => Conformance.released(s.holder.program, s.holder.check),
         ),
-        Then('the check reports the stop that left the file behind')((s) => {
-          expect(failReportOf(s.checked).failure.judgement.problem).toBe('interruption-left-held')
-        }),
+        Then('the check reports the stop that left the file behind')((s, expect) =>
+          expect(s.checked).toMatchObject({
+            _tag: 'Fail',
+            failure: { judgement: { problem: 'interruption-left-held' } },
+          })
+        ),
       ),
     )
   })

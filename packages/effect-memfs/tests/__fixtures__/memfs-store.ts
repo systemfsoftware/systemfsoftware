@@ -1,4 +1,3 @@
-import { Conformance } from '@systemfsoftware/conformance-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Data, Effect, Exit, Match, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -71,22 +70,4 @@ export const noScratchLeft = (path: string): Effect.Effect<void, ScratchLeft, Fi
   Effect.flatMap(
     entriesUnder(path),
     (entries) => entries.length === 0 ? Effect.void : Effect.fail(new ScratchLeft({ path, entries })),
-  )
-
-export class CheckRejected extends Data.TaggedError('CheckRejected')<{ readonly report: string }> {}
-
-export const passedHistories = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new CheckRejected({ report: Conformance.render(report) })
-    }),
-  )
-
-export const rejection = <C, R>(report: Conformance.Report<C, R>): string =>
-  Match.value(report).pipe(
-    Match.tag('Pass', () => {
-      throw new CheckRejected({ report: 'the check passed where it had to fail' })
-    }),
-    Match.orElse(() => Conformance.render(report)),
   )

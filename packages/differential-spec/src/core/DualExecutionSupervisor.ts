@@ -1,15 +1,10 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { recordAssertion } from '@systemfsoftware/vitest'
+import type { Asserted, Check, Expect } from '@systemfsoftware/vitest'
 import { Cause, Effect, Exit, Fiber, Function } from 'effect'
 import * as fc from 'fast-check'
 
-import { DisparityError } from './DisparityError.schema.js'
 import { formatDisparity, renderExit, renderUnknown } from './DisparityReporter.js'
 
-/**
- * How many generated inputs a check runs. Every case runs on the simulation
- * kernel, which bounds it in steps, so the check has no wall-clock limit.
- */
 export interface DualExecutionSupervisorOptions {
   readonly runBudget?: number
   readonly hostBound?: HostBound
@@ -149,17 +144,32 @@ const isFailedWithCounterexample = <Input>(
   details: fc.RunDetails<[Input, number]>,
 ): details is FailedCase<Input> => details.failed && details.counterexample !== null
 
-const inconclusiveReport = <Input>(details: fc.RunDetails<[Input, number]>): DisparityError =>
-  new DisparityError({
-    report: formatDisparity({
-      input: '(inconclusive run — no counterexample produced)',
-      outputA: '(not executed)',
-      outputB: '(not executed)',
-      trace:
-        `seed ${details.seed}, runs ${details.numRuns}, skipped ${details.numSkips}, interrupted ${details.interrupted}`,
-      reproSnippet: 'loosen the arbitrary so draws stop skipping, or raise runBudget',
-    }),
-  })
+export interface DifferentialReport {
+  readonly holds: boolean
+  readonly report: string
+}
+
+const held: DifferentialReport = { holds: true, report: '' }
+
+const disparate = (report: string): DifferentialReport => ({ holds: false, report })
+
+const reportCheckImpl = (report: DifferentialReport, expect: Expect): Check =>
+  expect(report, report.report).toEqual(held)
+
+export const reportCheck: {
+  (expect: Expect): (report: DifferentialReport) => Check
+  (report: DifferentialReport, expect: Expect): Check
+} = Function.dual(2, reportCheckImpl)
+
+const inconclusiveReport = <Input>(details: fc.RunDetails<[Input, number]>): DifferentialReport =>
+  disparate(formatDisparity({
+    input: '(inconclusive run — no counterexample produced)',
+    outputA: '(not executed)',
+    outputB: '(not executed)',
+    trace:
+      `seed ${details.seed}, runs ${details.numRuns}, skipped ${details.numSkips}, interrupted ${details.interrupted}`,
+    reproSnippet: 'raise runBudget, or loosen the arbitrary so draws stop skipping',
+  }))
 
 type FollowUp<Input, Err = unknown> = { readonly ok: true; readonly value: Input } | {
   readonly ok: false
@@ -178,16 +188,14 @@ const transformThrewReport = <Input, E = unknown>(
   details: FailedCase<Input>,
   input: Input,
   error: E,
-): DisparityError =>
-  new DisparityError({
-    report: formatDisparity({
-      input,
-      outputA: '(input transform threw while re-running the minimal counterexample)',
-      outputB: renderUnknown(error),
-      trace: `seed ${details.seed}, path ${details.counterexamplePath}`,
-      reproSnippet: reproOf(details.seed, details.counterexamplePath),
-    }),
-  })
+): DifferentialReport =>
+  disparate(formatDisparity({
+    input,
+    outputA: '(input transform threw while re-running the minimal counterexample)',
+    outputB: renderUnknown(error),
+    trace: `seed ${details.seed}, path ${details.counterexamplePath}`,
+    reproSnippet: reproOf(details.seed, details.counterexamplePath),
+  }))
 
 interface DisparitySides {
   readonly outputA: string
@@ -217,17 +225,15 @@ const disparityOf = <Input, Described, OutputA, OutputB, E>(
   described: Described,
   schedule: string,
   shrunk: Kernel.ShrinkOutcome<Exits<OutputA, OutputB, E>, never>,
-): DisparityError => {
+): DifferentialReport => {
   const sides = renderedSidesOf(outcomeOf(shrunk.result))
-  return new DisparityError({
-    report: formatDisparity({
-      input: described,
-      outputA: sides.outputA,
-      outputB: sides.outputB,
-      trace: scheduleTraceOf(details, schedule, shrunk),
-      reproSnippet: reproOf(details.seed, details.counterexamplePath),
-    }),
-  })
+  return disparate(formatDisparity({
+    input: described,
+    outputA: sides.outputA,
+    outputB: sides.outputB,
+    trace: scheduleTraceOf(details, schedule, shrunk),
+    reproSnippet: reproOf(details.seed, details.counterexamplePath),
+  }))
 }
 
 interface Comparison<Input, Described, OutputA, OutputB, E> {
@@ -271,22 +277,20 @@ const contradictionReport = <Input, Described, OutputA, OutputB, E>(
   details: FailedCase<Input>,
   described: Described,
   runs: CaseRuns<OutputA, OutputB, E>,
-): DisparityError => {
+): DifferentialReport => {
   const order = renderedSidesOf(outcomeOf(runs.order))
   const seeded = renderedSidesOf(outcomeOf(runs.seeded))
   const thrown = details.errorInstance === null
     ? ''
     : ` the generated case threw: ${renderThrown(details.errorInstance)}`
-  return new DisparityError({
-    report: formatDisparity({
-      input: described,
-      outputA: `replayed order run: ${order.outputA} | seeded run: ${seeded.outputA}`,
-      outputB: `replayed order run: ${order.outputB} | seeded run: ${seeded.outputB}`,
-      trace:
-        `fc seed ${details.seed}, path "${details.counterexamplePath}"; the generated case replayed without a disagreement.${thrown}`,
-      reproSnippet: reproOf(details.seed, details.counterexamplePath),
-    }),
-  })
+  return disparate(formatDisparity({
+    input: described,
+    outputA: `replayed order run: ${order.outputA} | seeded run: ${seeded.outputA}`,
+    outputB: `replayed order run: ${order.outputB} | seeded run: ${seeded.outputB}`,
+    trace:
+      `fc seed ${details.seed}, path "${details.counterexamplePath}"; the generated case replayed without a disagreement.${thrown}`,
+    reproSnippet: reproOf(details.seed, details.counterexamplePath),
+  }))
 }
 
 const SEARCH_SCHEDULE = 'search with 1 preemption'
@@ -297,7 +301,7 @@ const searchedReportOf = <Input, Described, OutputA, OutputB, E>(
   described: Described,
   program: DualProgram<OutputA, OutputB, E>,
   found: Kernel.SearchFailure<Exits<OutputA, OutputB, E>, never>,
-): Promise<DisparityError> =>
+): Promise<DifferentialReport> =>
   Kernel.shrink(program, {
     path: found.path,
     isFailure: (run: DualRun<OutputA, OutputB, E>) => disagrees(run, comparison.oracle),
@@ -310,7 +314,7 @@ const caseReportOf = <Input, Described, OutputA, OutputB, E>(
   seed: number,
   program: DualProgram<OutputA, OutputB, E>,
   runs: CaseRuns<OutputA, OutputB, E>,
-): Promise<DisparityError> => {
+): Promise<DifferentialReport> => {
   const attempt = disagreementOf(runs, seed, comparison.oracle)
   if (attempt === undefined) return Promise.resolve(contradictionReport(details, described, runs))
   return Kernel.shrink(program, {
@@ -325,7 +329,7 @@ const shrunkReportOf = <Input, Described, OutputA, OutputB, E>(
   described: Described,
   seed: number,
   program: DualProgram<OutputA, OutputB, E>,
-): Promise<DisparityError> =>
+): Promise<DifferentialReport> =>
   caseRunsOf(program, seed).then((runs) =>
     Kernel.search(program, {
       preemptions: 1,
@@ -342,7 +346,7 @@ const counterexampleReport = <Input, Described, OutputA, OutputB, E>(
   details: FailedCase<Input>,
   input: Input,
   seed: number,
-): Promise<DisparityError> => {
+): Promise<DifferentialReport> => {
   const followUp = followUpOf(comparison.secondInput, input)
   if (!followUp.ok) return Promise.resolve(transformThrewReport(details, input, followUp.error))
   const program = runDualImpl(comparison.targetA, comparison.targetB, input, followUp.value)
@@ -353,7 +357,7 @@ const counterexampleReport = <Input, Described, OutputA, OutputB, E>(
 const failureReportOf = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
   details: fc.RunDetails<[Input, number]>,
-): Promise<DisparityError> => {
+): Promise<DifferentialReport> => {
   if (!isFailedWithCounterexample(details)) return Promise.resolve(inconclusiveReport(details))
   const [input, seed] = details.counterexample
   return counterexampleReport(comparison, details, input, seed)
@@ -363,35 +367,28 @@ const isReported = <Input>(details: fc.RunDetails<[Input, number]>): boolean => 
 
 const checked = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
-): Promise<DisparityError | undefined> => {
+): Promise<DifferentialReport> => {
   const property = fc.asyncProperty(
     comparison.arb,
     fc.nat(),
     (input: Input, seed: number) => caseHolds(comparison, input, seed),
   )
   return fc.check(property, toFcParameters<Input>(comparison.options)).then((details) =>
-    isReported(details) ? failureReportOf(comparison, details) : undefined
+    isReported(details) ? failureReportOf(comparison, details) : held
   )
 }
 
-const fromOutcome = (failure: DisparityError | undefined): Effect.Effect<void, DisparityError> =>
-  failure === undefined ? Effect.sync(recordAssertion) : Effect.fail(failure)
-
 const supervised = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
-): Effect.Effect<void, DisparityError> =>
-  Effect.flatMap(
-    Effect.promise(() => checked(comparison)),
-    fromOutcome,
-  )
+): Effect.Effect<DifferentialReport, never> => Effect.promise(() => checked(comparison))
 
-const runDifferentialWithShrinkImpl = <Input, OutputA, OutputB, E>(
+const differentialReportImpl = <Input, OutputA, OutputB, E>(
   targetA: (input: Input) => Effect.Effect<OutputA, E>,
   targetB: (input: Input) => Effect.Effect<OutputB, E>,
   arb: fc.Arbitrary<Input>,
   oracle: (outputA: OutputA, outputB: OutputB) => boolean,
   options?: DualExecutionSupervisorOptions,
-): Effect.Effect<void, DisparityError> =>
+): Effect.Effect<DifferentialReport, never> =>
   supervised({
     targetA,
     targetB,
@@ -402,34 +399,65 @@ const runDifferentialWithShrinkImpl = <Input, OutputA, OutputB, E>(
     options,
   })
 
-export const runDifferentialWithShrink: {
+export const differentialReport: {
   <Input, OutputA, OutputB, E>(
     targetB: (input: Input) => Effect.Effect<OutputB, E>,
     arb: fc.Arbitrary<Input>,
     oracle: (outputA: OutputA, outputB: OutputB) => boolean,
     options?: DualExecutionSupervisorOptions,
-  ): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<void, DisparityError>
+  ): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<DifferentialReport, never>
   <Input, OutputA, OutputB, E>(
     targetA: (input: Input) => Effect.Effect<OutputA, E>,
     targetB: (input: Input) => Effect.Effect<OutputB, E>,
     arb: fc.Arbitrary<Input>,
     oracle: (outputA: OutputA, outputB: OutputB) => boolean,
     options?: DualExecutionSupervisorOptions,
-  ): Effect.Effect<void, DisparityError>
-} = Function.dual((args: IArguments) => typeof args[3] === 'function', runDifferentialWithShrinkImpl)
+  ): Effect.Effect<DifferentialReport, never>
+} = Function.dual((args: IArguments) => typeof args[3] === 'function', differentialReportImpl)
+
+const runDifferentialWithShrinkImpl = <Input, OutputA, OutputB, E>(
+  targetA: (input: Input) => Effect.Effect<OutputA, E>,
+  targetB: (input: Input) => Effect.Effect<OutputB, E>,
+  arb: fc.Arbitrary<Input>,
+  oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+  expect: Expect,
+  options?: DualExecutionSupervisorOptions,
+): Effect.Effect<void, never, Asserted> =>
+  Effect.flatMap(
+    differentialReportImpl(targetA, targetB, arb, oracle, options),
+    (report) => reportCheckImpl(report, expect),
+  )
+
+export const runDifferentialWithShrink: {
+  <Input, OutputA, OutputB, E>(
+    targetB: (input: Input) => Effect.Effect<OutputB, E>,
+    arb: fc.Arbitrary<Input>,
+    oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+    expect: Expect,
+    options?: DualExecutionSupervisorOptions,
+  ): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<void, never, Asserted>
+  <Input, OutputA, OutputB, E>(
+    targetA: (input: Input) => Effect.Effect<OutputA, E>,
+    targetB: (input: Input) => Effect.Effect<OutputB, E>,
+    arb: fc.Arbitrary<Input>,
+    oracle: (outputA: OutputA, outputB: OutputB) => boolean,
+    expect: Expect,
+    options?: DualExecutionSupervisorOptions,
+  ): Effect.Effect<void, never, Asserted>
+} = Function.dual((args: IArguments) => typeof args[1] === 'function', runDifferentialWithShrinkImpl)
 
 const metamorphicDescription = <Input>(
   seed: Input,
   followUp: Input,
 ): { readonly seed: Input; readonly followUp: Input } => ({ seed, followUp })
 
-const runMetamorphicWithShrinkImpl = <Input, Output, E>(
+const metamorphicReportImpl = <Input, Output, E>(
   system: (input: Input) => Effect.Effect<Output, E>,
   arb: fc.Arbitrary<Input>,
   transformInput: (input: Input) => Input,
   relation: (outputA: Output, outputB: Output) => boolean,
   options?: DualExecutionSupervisorOptions,
-): Effect.Effect<void, DisparityError> =>
+): Effect.Effect<DifferentialReport, never> =>
   supervised({
     targetA: system,
     targetB: system,
@@ -440,18 +468,49 @@ const runMetamorphicWithShrinkImpl = <Input, Output, E>(
     options,
   })
 
-export const runMetamorphicWithShrink: {
+export const metamorphicReport: {
   <Input, Output, E>(
     arb: fc.Arbitrary<Input>,
     transformInput: (input: Input) => Input,
     relation: (outputA: Output, outputB: Output) => boolean,
     options?: DualExecutionSupervisorOptions,
-  ): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<void, DisparityError>
+  ): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<DifferentialReport, never>
   <Input, Output, E>(
     system: (input: Input) => Effect.Effect<Output, E>,
     arb: fc.Arbitrary<Input>,
     transformInput: (input: Input) => Input,
     relation: (outputA: Output, outputB: Output) => boolean,
     options?: DualExecutionSupervisorOptions,
-  ): Effect.Effect<void, DisparityError>
-} = Function.dual((args: IArguments) => typeof args[3] === 'function', runMetamorphicWithShrinkImpl)
+  ): Effect.Effect<DifferentialReport, never>
+} = Function.dual((args: IArguments) => typeof args[3] === 'function', metamorphicReportImpl)
+
+const runMetamorphicWithShrinkImpl = <Input, Output, E>(
+  system: (input: Input) => Effect.Effect<Output, E>,
+  arb: fc.Arbitrary<Input>,
+  transformInput: (input: Input) => Input,
+  relation: (outputA: Output, outputB: Output) => boolean,
+  expect: Expect,
+  options?: DualExecutionSupervisorOptions,
+): Effect.Effect<void, never, Asserted> =>
+  Effect.flatMap(
+    metamorphicReportImpl(system, arb, transformInput, relation, options),
+    (report) => reportCheckImpl(report, expect),
+  )
+
+export const runMetamorphicWithShrink: {
+  <Input, Output, E>(
+    arb: fc.Arbitrary<Input>,
+    transformInput: (input: Input) => Input,
+    relation: (outputA: Output, outputB: Output) => boolean,
+    expect: Expect,
+    options?: DualExecutionSupervisorOptions,
+  ): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<void, never, Asserted>
+  <Input, Output, E>(
+    system: (input: Input) => Effect.Effect<Output, E>,
+    arb: fc.Arbitrary<Input>,
+    transformInput: (input: Input) => Input,
+    relation: (outputA: Output, outputB: Output) => boolean,
+    expect: Expect,
+    options?: DualExecutionSupervisorOptions,
+  ): Effect.Effect<void, never, Asserted>
+} = Function.dual((args: IArguments) => typeof args[0] === 'function', runMetamorphicWithShrinkImpl)

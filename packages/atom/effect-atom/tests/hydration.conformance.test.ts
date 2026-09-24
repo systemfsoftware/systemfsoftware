@@ -5,6 +5,9 @@ import { Context, Deferred, Effect, Fiber, Layer, Match, Option, Ref, Schema } f
 
 import { HydrationCommand, hydrationModel } from './__fixtures__/hydration.model.js'
 
+/** The budget the sequential check is given: every one of these histories is checked. */
+const HYDRATION_ROUNDS = 50
+
 const Feature = makeFeature({ it })
 
 interface HydrationPages {
@@ -85,14 +88,6 @@ const hydrationCheck = (
     operations: spec.operations,
   })
 
-const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
-    }),
-  )
-
 Feature('Saving a still-loading value and filling it in on a reloaded page', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -105,11 +100,12 @@ Feature('Saving a still-loading value and filling it in on a reloaded page', { t
         ),
         When('fifty rounds of saving, reloading, finishing the value, and reading it are replayed')(
           'report',
-          (s) => hydrationCheck(s.subject, { sequences: 50, operations: 8 }),
+          (s) => hydrationCheck(s.subject, { sequences: HYDRATION_ROUNDS, operations: 8 }),
         ),
-        Then('the reloaded page shows the value loading until it finishes, then shows the finished value')((s) => {
-          passHistories(s.report)
-        }),
+        Then('the reloaded page shows the value loading until it finishes, then shows the finished value')((
+          s,
+          expect,
+        ) => expect(s.report).toMatchObject({ _tag: 'Pass', histories: HYDRATION_ROUNDS })),
       ),
     )
   })

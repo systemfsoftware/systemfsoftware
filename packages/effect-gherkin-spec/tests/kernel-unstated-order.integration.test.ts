@@ -1,8 +1,10 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { KernelCase } from '@systemfsoftware/effect-spec-runtime'
-import { afterAll, expect, vi } from '@systemfsoftware/vitest'
+import { afterAll, vi } from '@systemfsoftware/vitest'
+import { captureRunBinding } from '@systemfsoftware/vitest/integration'
 import { Effect, Fiber } from 'effect'
+import type * as Scope from 'effect/Scope'
 import type { SavedBasket } from './__fixtures__/clerk-shelf.fixture.js'
 import { Shelf, shelfLayer } from './__fixtures__/clerk-shelf.fixture.js'
 
@@ -27,31 +29,36 @@ const shelveBothAtOnce = (baskets: TwoBaskets): Effect.Effect<void, never, Shelf
     yield* Fiber.join(second)
   })
 
-const lastBasketIs = (owner: string): Effect.Effect<void, never, Shelf> =>
-  Effect.gen(function*() {
-    const shelf = yield* Shelf
-    const top = yield* shelf.reopen
-    expect(top.owner).toBe(owner)
-  })
+const readBackTopBasket = (owner: string): Effect.Effect<string, string, Shelf> =>
+  Shelf.pipe(
+    Effect.flatMap((shelf) => shelf.reopen),
+    Effect.flatMap((top) =>
+      top.owner === owner ? Effect.succeed(top.owner) : Effect.fail(`the top basket belongs to ${top.owner}`)
+    ),
+  )
 
-const shelvingScenario = (owner: string): Effect.Effect<object, StepError, Shelf> =>
+/**
+ * The spec under exploration: it fails whenever the drawn order does not leave the named clerk's
+ * basket on top. Its last step carries the order-dependence, because a program a test hands to the
+ * kernel has no runner-provided check callback for a Then to read.
+ */
+const shelvingSpec = (owner: string) =>
   Gherkin.Do.pipe(
     Given('two clerks with full baskets')('baskets', () => Effect.succeed(twoBaskets())),
     When('both clerks shelve at once')('shelved', (s) => shelveBothAtOnce(s.baskets)),
-    Then(`the top basket belongs to ${owner}, who happened to shelve last`)(() => lastBasketIs(owner)),
+    When(`the top basket is read back and must belong to ${owner}`)('top', () => readBackTopBasket(owner)),
   )
 
-const caseProgramOf = (owner: string): Effect.Effect<object, StepError> =>
-  KernelCase.caseProgram(shelvingScenario(owner), shelfLayer)
 const messageOfRejection = <U = unknown>(rejection: U): string => rejection instanceof Error ? rejection.message : ''
 
-const reportOfProgram = (program: Effect.Effect<object, StepError>): Effect.Effect<string> =>
-  Effect.promise(() =>
-    KernelCase.explore(program).then(
-      () => '',
-      messageOfRejection,
+const reportOfSpec = (owner: string) =>
+  Effect.gen(function*() {
+    const binding = yield* captureRunBinding
+    const body: Effect.Effect<object, StepError, Shelf | Scope.Scope> = binding.bind(shelvingSpec(owner))
+    return yield* Effect.promise(() =>
+      KernelCase.explore(KernelCase.caseProgram(body, shelfLayer)).then(() => '', messageOfRejection)
     )
-  )
+  })
 
 const replayOfReport = (report: string): string => {
   const replay = /CONFORMANCE_REPLAY="([^"]+)"/u.exec(report)?.[1]
@@ -73,15 +80,16 @@ Feature('Two clerks shelve without an agreed order')
       'A spec where two clerks shelve with no agreed order fails and names the order the run took',
       { live: observeTheRunner },
       Gherkin.Do.pipe(
-        Given('a spec where two clerks shelve with no agreed order')(
-          'program',
-          () => Effect.succeed(caseProgramOf('the second clerk')),
+        Given('a spec where two clerks shelve with no agreed order')('report', () => reportOfSpec('the second clerk')),
+        Then('the failure names the schedule and a replay path')((s, expect) =>
+          expect({
+            schedule: /schedule: seed \d+/u.exec(s.report)?.[0],
+            replay: /CONFORMANCE_REPLAY="[^"]+"/u.exec(s.report)?.[0],
+          }).toMatchObject({
+            schedule: expect.stringMatching(/^schedule: seed \d+$/u),
+            replay: expect.stringMatching(/^CONFORMANCE_REPLAY="seed=\d+;path=\d+(,\d+)*"$/u),
+          })
         ),
-        When('the spec is run')('report', (s) => reportOfProgram(s.program)),
-        Then('the failure names the order the run took')((s) => {
-          expect(s.report).toMatch(/schedule: seed \d+/u)
-          expect(s.report).toMatch(/CONFORMANCE_REPLAY="seed=\d+;path=\d+(,\d+)*"/u)
-        }),
       ),
     )
 
@@ -92,7 +100,7 @@ Feature('Two clerks shelve without an agreed order')
         Given('the failure report of a spec where two clerks shelve with no agreed order')(
           'report',
           () =>
-            Effect.map(reportOfProgram(caseProgramOf('the second clerk')), (failure) => ({
+            Effect.map(reportOfSpec('the second clerk'), (failure) => ({
               failure,
               replay: replayOfReport(failure),
             })),
@@ -102,12 +110,18 @@ Feature('Two clerks shelve without an agreed order')
             yield* Effect.sync(() => {
               vi.stubEnv('CONFORMANCE_REPLAY', s.report.replay)
             })
-            return yield* reportOfProgram(caseProgramOf('the second clerk'))
+            return yield* reportOfSpec('the second clerk')
           })),
-        Then('the repeated run fails on the same assertion')((s) => {
-          expect(s.report.replay).toMatch(/^seed=\d+;path=\d+(,\d+)*$/u)
-          expect(firstLineOf(s.repeated)).toBe(firstLineOf(s.report.failure))
-        }),
+        Then('the repeated run fails on the same assertion')((s, expect) =>
+          expect({
+            replay: s.report.replay,
+            repeatedFirstLine: firstLineOf(s.repeated),
+            failureFirstLine: firstLineOf(s.report.failure),
+          }).toMatchObject({
+            replay: expect.stringMatching(/^seed=\d+;path=\d+(,\d+)*$/u),
+            repeatedFirstLine: firstLineOf(s.report.failure),
+          })
+        ),
       ),
     )
 
@@ -115,22 +129,26 @@ Feature('Two clerks shelve without an agreed order')
       'Two specs where two clerks shelve with no agreed order each report their own failure',
       { live: observeTheRunner },
       Gherkin.Do.pipe(
-        Given('two specs whose top baskets disagree')('programs', () =>
+        Given('two specs whose top baskets disagree')('specs', () =>
           Effect.succeed({
-            namesTheSecond: caseProgramOf('the second clerk'),
-            namesTheFirst: caseProgramOf('the first clerk'),
+            namesTheSecond: reportOfSpec('the second clerk'),
+            namesTheFirst: reportOfSpec('the first clerk'),
           })),
         When('both specs are run')('reports', (s) =>
           Effect.gen(function*() {
-            const second = yield* reportOfProgram(s.programs.namesTheSecond)
-            const first = yield* reportOfProgram(s.programs.namesTheFirst)
+            const second = yield* s.specs.namesTheSecond
+            const first = yield* s.specs.namesTheFirst
             return { second, first }
           })),
-        Then('each spec reports its own failing order')((s) => {
-          expect(s.reports.second).toMatch(/CONFORMANCE_REPLAY="/u)
-          expect(s.reports.first).toMatch(/CONFORMANCE_REPLAY="/u)
-          expect(s.reports.second).not.toBe(s.reports.first)
-        }),
+        Then('each spec reports its own failing order')((s, expect) =>
+          expect({ second: s.reports.second, first: s.reports.first }).toSatisfy(
+            ({ first, second }) =>
+              second !== first &&
+              /CONFORMANCE_REPLAY="/u.test(second) &&
+              /CONFORMANCE_REPLAY="/u.test(first),
+            'each spec names its own failing order with a replay path',
+          )
+        ),
       ),
     )
   })

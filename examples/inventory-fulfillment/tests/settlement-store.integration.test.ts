@@ -1,7 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { Fulfillment, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
-import { expect } from '@systemfsoftware/vitest'
-import { Cause, Effect, Exit, Option, Ref, Result, Schema as S } from 'effect'
+import { Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
+import { Cause, Effect, Exit, Option, Ref, Result } from 'effect'
 import {
   acrossStores,
   armSeamAlways,
@@ -31,8 +30,6 @@ const Feature = makeFeature({ it })
 
 type SettlementStore = Settlement.Store.SettlementStore
 type OrderSnapshot = Settlement.Unit.OrderSnapshot
-
-const StoreUnavailable = Fulfillment.Decision.StoreUnavailable
 
 const FIRST_ORDER: OrderInput = {
   orderId: 'order-first',
@@ -326,15 +323,12 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => acrossStores(readAfterWrite),
         ),
-        Then('the charge, the new balance, the moved stock and the owner show up, either way')((s) => {
-          const expected = {
-            outstandingBalance: 9,
-            lotQuantity: 7,
-            owner: Option.some(FIRST_CUSTOMER),
-          }
-          expect(s.outcome.memory).toEqual(expected)
-          expect(s.outcome.postgres).toEqual(expected)
-        }),
+        Then('the charge, the new balance, the moved stock and the owner show up, either way')((s, expect) =>
+          expect(s.outcome).toEqual({
+            memory: { outstandingBalance: 9, lotQuantity: 7, owner: Option.some(FIRST_CUSTOMER) },
+            postgres: { outstandingBalance: 9, lotQuantity: 7, owner: Option.some(FIRST_CUSTOMER) },
+          })
+        ),
       ),
     )
 
@@ -345,11 +339,12 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => acrossStores(settleWithoutCharge),
         ),
-        Then('the stock moves while the account balance stays put, either way')((s) => {
-          const expected = { outstandingBalance: 0, lotQuantity: 7 }
-          expect(s.outcome.memory).toEqual(expected)
-          expect(s.outcome.postgres).toEqual(expected)
-        }),
+        Then('the stock moves while the account balance stays put, either way')((s, expect) =>
+          expect(s.outcome).toEqual({
+            memory: { outstandingBalance: 0, lotQuantity: 7 },
+            postgres: { outstandingBalance: 0, lotQuantity: 7 },
+          })
+        ),
       ),
     )
 
@@ -357,11 +352,17 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
       'Reading twice does not move anything',
       Gherkin.Do.pipe(
         Given('two customers with clean accounts and a stocked warehouse')('outcome', () => acrossStores(repeatedRead)),
-        Then('both reads see the same account and the same stock')((s) => {
-          expect(s.outcome.memory.second).toEqual(s.outcome.memory.first)
-          expect(s.outcome.postgres.second).toEqual(s.outcome.postgres.first)
-          expect(s.outcome.postgres.after).toEqual(s.outcome.memory.after)
-        }),
+        Then('both reads see the same account and the same stock')((s, expect) =>
+          expect({
+            memorySecond: s.outcome.memory.second,
+            postgresSecond: s.outcome.postgres.second,
+            postgresAfter: s.outcome.postgres.after,
+          }).toEqual({
+            memorySecond: s.outcome.memory.first,
+            postgresSecond: s.outcome.postgres.first,
+            postgresAfter: s.outcome.memory.after,
+          })
+        ),
       ),
     )
 
@@ -374,9 +375,9 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
             const backward = yield* acrossStores(committedFinalState(SECOND_ORDER, FIRST_ORDER))
             return { forward, backward }
           })),
-        Then('both stores end in the same state whichever settlement commits first')((s) => {
-          expect(s.outcome.forward).toEqual(s.outcome.backward)
-        }),
+        Then('both stores end in the same state whichever settlement commits first')((s, expect) =>
+          expect(s.outcome.backward).toEqual(s.outcome.forward)
+        ),
       ),
     )
 
@@ -387,16 +388,12 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => acrossStores(refusedSecondSettle),
         ),
-        Then('the second settle fails and the first settlement still stands, either way')((s) => {
-          const expected = {
-            refused: true,
-            outstandingBalance: 9,
-            lotQuantity: 7,
-            owner: Option.some(FIRST_CUSTOMER),
-          }
-          expect(s.outcome.memory).toEqual(expected)
-          expect(s.outcome.postgres).toEqual(expected)
-        }),
+        Then('the second settle fails and the first settlement still stands, either way')((s, expect) =>
+          expect(s.outcome).toEqual({
+            memory: { refused: true, outstandingBalance: 9, lotQuantity: 7, owner: Option.some(FIRST_CUSTOMER) },
+            postgres: { refused: true, outstandingBalance: 9, lotQuantity: 7, owner: Option.some(FIRST_CUSTOMER) },
+          })
+        ),
       ),
     )
 
@@ -407,19 +404,28 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => acrossStores(failedUnitWritesNothing),
         ),
-        Then('the failed unit leaves the account and the stock alone, and the rerun commits once')((s) => {
-          const expected = {
-            failed: true,
-            pristineBalance: 0,
-            pristineLot: 10,
-            rerunCommitted: true,
-            finalBalance: 9,
-            finalLot: 7,
-            owner: Option.some(FIRST_CUSTOMER),
-          }
-          expect(s.outcome.memory).toEqual(expected)
-          expect(s.outcome.postgres).toEqual(expected)
-        }),
+        Then('the failed unit leaves the account and the stock alone, and the rerun commits once')((s, expect) =>
+          expect(s.outcome).toEqual({
+            memory: {
+              failed: true,
+              pristineBalance: 0,
+              pristineLot: 10,
+              rerunCommitted: true,
+              finalBalance: 9,
+              finalLot: 7,
+              owner: Option.some(FIRST_CUSTOMER),
+            },
+            postgres: {
+              failed: true,
+              pristineBalance: 0,
+              pristineLot: 10,
+              rerunCommitted: true,
+              finalBalance: 9,
+              finalLot: 7,
+              owner: Option.some(FIRST_CUSTOMER),
+            },
+          })
+        ),
       ),
     )
 
@@ -430,11 +436,13 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => Effect.provide(contendedCharge, Settlement.Memory.layer(contendedMemorySeed())),
         ),
-        Then('exactly one order charges and the other settles without one')((s) => {
-          expect([s.outcome.first, s.outcome.second].filter((charged) => charged)).toHaveLength(1)
-          expect(s.outcome.outstandingBalance).toBe(60)
-          expect(s.outcome.lotQuantity).toBe(40)
-        }),
+        Then('exactly one order charges and the other settles without one')((s, expect) =>
+          expect({
+            charged: [s.outcome.first, s.outcome.second].sort((left, right) => Number(left) - Number(right)),
+            outstandingBalance: s.outcome.outstandingBalance,
+            lotQuantity: s.outcome.lotQuantity,
+          }).toEqual({ charged: [false, true], outstandingBalance: 60, lotQuantity: 40 })
+        ),
       ),
     )
 
@@ -445,13 +453,15 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => Effect.provide(retriedOnce, Settlement.Drizzle.layer(exhaustedBudget)),
         ),
-        Then('the unit commits exactly once: one charge, one reservation, one audit row')((s) => {
-          expect(s.outcome.committed).toBe(true)
-          expect(s.outcome.tries).toBe(2)
-          expect(s.outcome.outstandingBalance).toBe(9)
-          expect(s.outcome.reservationCount).toBe(1)
-          expect(s.outcome.auditCount).toBe(1)
-        }),
+        Then('the unit commits exactly once: one charge, one reservation, one audit row')((s, expect) =>
+          expect(s.outcome).toEqual({
+            committed: true,
+            tries: 2,
+            outstandingBalance: 9,
+            reservationCount: 1,
+            auditCount: 1,
+          })
+        ),
       ),
     )
 
@@ -462,18 +472,23 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => Effect.provide(exhaustedBudgetFails, Settlement.Drizzle.layer(exhaustedBudget)),
         ),
-        Then('the order fails as unavailable naming the serialization failure, having written nothing')((s) => {
-          expect(s.outcome.settled).toSatisfy(Result.isFailure)
-          const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : undefined
-          expect(failure).toSatisfy(S.is(StoreUnavailable))
-          const states = failure === undefined
-            ? []
-            : Settlement.Drizzle.sqlStatesOf(failure)
-          expect(states).toContain('40001')
-          expect(s.outcome.tries).toBe(3)
-          expect(s.outcome.outstandingBalance).toBe(0)
-          expect(s.outcome.reservationCount).toBe(0)
-          expect(s.outcome.auditCount).toBe(0)
+        Then('the order fails as unavailable naming the serialization failure, having written nothing')((s, expect) => {
+          const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : null
+          return expect({
+            failure,
+            sqlStates: failure === null ? [] : Settlement.Drizzle.sqlStatesOf(failure),
+            tries: s.outcome.tries,
+            outstandingBalance: s.outcome.outstandingBalance,
+            reservationCount: s.outcome.reservationCount,
+            auditCount: s.outcome.auditCount,
+          }).toMatchObject({
+            failure: { _tag: 'StoreUnavailable', cause: expect.any(Error) },
+            sqlStates: ['40001'],
+            tries: 3,
+            outstandingBalance: 0,
+            reservationCount: 0,
+            auditCount: 0,
+          })
         }),
       ),
     )
@@ -485,12 +500,17 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => Effect.provide(checkedWrite, Settlement.Drizzle.layer(exhaustedBudget)),
         ),
-        Then('the unit fails as unavailable on its first attempt and the stock is untouched')((s) => {
-          expect(s.outcome.settled).toSatisfy(Result.isFailure)
-          const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : undefined
-          expect(failure).toSatisfy(S.is(StoreUnavailable))
-          expect(s.outcome.tries).toBe(1)
-          expect(s.outcome.outstandingBalance).toBe(0)
+        Then('the unit fails as unavailable on its first attempt and the stock is untouched')((s, expect) => {
+          const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : null
+          return expect({
+            failure,
+            tries: s.outcome.tries,
+            outstandingBalance: s.outcome.outstandingBalance,
+          }).toMatchObject({
+            failure: { _tag: 'StoreUnavailable', cause: expect.any(Error) },
+            tries: 1,
+            outstandingBalance: 0,
+          })
         }),
       ),
     )
@@ -502,16 +522,38 @@ Feature('Settlement stores keep their promises in memory and in Postgres', { tim
           'outcome',
           () => acrossStores(keptUnitAfterItsEnd),
         ),
-        Then('reading and settling through it both stop before touching the store, and nothing is written')((s) => {
-          expect(markerOf(s.outcome.memory.readDefects)).toContain(endedUnit)
-          expect(markerOf(s.outcome.memory.settleDefects)).toContain(endedUnit)
-          expect(markerOf(s.outcome.postgres.readDefects)).toContain(endedUnit)
-          expect(markerOf(s.outcome.postgres.settleDefects)).toContain(endedUnit)
-          expect(s.outcome.memory.outstandingBalance).toBe(0)
-          expect(s.outcome.memory.lotQuantity).toBe(10)
-          expect(s.outcome.postgres.outstandingBalance).toBe(0)
-          expect(s.outcome.postgres.lotQuantity).toBe(10)
-        }),
+        Then('reading and settling through it both stop before touching the store, and nothing is written')((
+          s,
+          expect,
+        ) =>
+          expect({
+            memory: {
+              readStopped: markerOf(s.outcome.memory.readDefects),
+              settleStopped: markerOf(s.outcome.memory.settleDefects),
+              outstandingBalance: s.outcome.memory.outstandingBalance,
+              lotQuantity: s.outcome.memory.lotQuantity,
+            },
+            postgres: {
+              readStopped: markerOf(s.outcome.postgres.readDefects),
+              settleStopped: markerOf(s.outcome.postgres.settleDefects),
+              outstandingBalance: s.outcome.postgres.outstandingBalance,
+              lotQuantity: s.outcome.postgres.lotQuantity,
+            },
+          }).toEqual({
+            memory: {
+              readStopped: [endedUnit],
+              settleStopped: [endedUnit],
+              outstandingBalance: 0,
+              lotQuantity: 10,
+            },
+            postgres: {
+              readStopped: [endedUnit],
+              settleStopped: [endedUnit],
+              outstandingBalance: 0,
+              lotQuantity: 10,
+            },
+          })
+        ),
       ),
     )
   })

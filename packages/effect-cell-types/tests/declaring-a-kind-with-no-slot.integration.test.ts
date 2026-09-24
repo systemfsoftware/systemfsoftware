@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
@@ -21,9 +20,9 @@ Feature('Declaring a kind that carries no slot')
           () => Effect.succeed(PlainRecord.make({ tag: 'alpha' })),
         ),
         When('its own symbols are listed')('symbols', (s) => Effect.succeed(Object.getOwnPropertySymbols(s.plain))),
-        Then('the record carries nothing but its kind brand')((s) => {
+        Then('the record carries nothing but its kind brand')((s, expect) =>
           expect(s.symbols).toEqual([PlainRecordTypeId])
-        }),
+        ),
       ),
     )
   })

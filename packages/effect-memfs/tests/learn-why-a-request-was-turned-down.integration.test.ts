@@ -1,6 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Error from 'effect/PlatformError'
@@ -203,10 +202,12 @@ Feature('Learning why the filesystem turned a request down')
             Effect.tap(filesystem, (fs) => fs.chmod('/notes/locked.txt', 0o000))),
           When('the request is made')('refusal', (s) =>
             Effect.flip(row.attempt(s.fs))),
-          Then('the refusal names what went wrong and which request it was')((s) => {
-            expect(s.refusal.reason._tag).toBe(row.reason)
-            expect(s.refusal.reason.method).toBe(row.method)
-          }),
+          Then('the refusal names what went wrong and which request it was')((s, expect) =>
+            expect({ _tag: s.refusal.reason._tag, method: s.refusal.reason.method }).toEqual({
+              _tag: row.reason,
+              method: row.method,
+            })
+          ),
         ),
     )
   })

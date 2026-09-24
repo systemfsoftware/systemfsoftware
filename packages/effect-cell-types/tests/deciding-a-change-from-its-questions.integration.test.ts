@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -57,13 +56,13 @@ Feature('Deciding what to do with a change from the questions asked about it')
               decide,
             ) => [decide(breakingChange), decide(riskyChange), decide(quietChange), decide.cases]),
           )),
-        Then('every decision blocks, scores, and approves them in turn after weighing two cases')((s) => {
+        Then('every decision blocks, scores, and approves them in turn after weighing two cases')((s, expect) =>
           expect(s.outcomes).toEqual([
             ['block', 42, 'approve', 2],
             ['block', 42, 'approve', 2],
             ['block', 42, 'approve', 2],
           ])
-        }),
+        ),
       ),
     )
 
@@ -87,9 +86,9 @@ Feature('Deciding what to do with a change from the questions asked about it')
               concat(s.lists.flagging, s.lists.blocking),
             ].map((joined) => [joined.orElse(() => 'approve')(riskyChange), joined.spec.cases.length])),
         ),
-        Then('each joined list flags the risky change after weighing both cases')((s) => {
+        Then('each joined list flags the risky change after weighing both cases')((s, expect) =>
           expect(s.outcomes).toEqual([['flag', 2], ['flag', 2], ['flag', 2]])
-        }),
+        ),
       ),
     )
 
@@ -103,14 +102,14 @@ Feature('Deciding what to do with a change from the questions asked about it')
             ask(s.question, quietChange, { onUnsure: () => 'escalate' }),
             pipe(impact, ask(breakingChange)),
           ])),
-        Then('the bare question is refused and the others settle')((s) => {
+        Then('the bare question is refused and the others settle')((s, expect) =>
           expect([s.outcomes[0]._tag, s.outcomes[0].question, s.outcomes[1], s.outcomes[2]]).toEqual([
             'Unsure',
             'owner',
             'escalate',
             'breaking',
           ])
-        }),
+        ),
       ),
     )
 
@@ -124,13 +123,13 @@ Feature('Deciding what to do with a change from the questions asked about it')
             short: pipe(s.question, above(5)).holds(quietChange),
             named: [s.question.above(5).id, impact.labels, isQuestion(impact), isQuestion(breakingChange)],
           })),
-        Then('only the long change passes, and the impact question names its two labels')((s) => {
+        Then('only the long change passes, and the impact question names its two labels')((s, expect) =>
           expect(s.verdicts).toEqual({
             long: true,
             short: false,
             named: ['size above 5', ['breaking', 'minor'], true, false],
           })
-        }),
+        ),
       ),
     )
   })

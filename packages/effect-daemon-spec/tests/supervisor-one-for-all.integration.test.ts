@@ -4,8 +4,7 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForAll } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -67,15 +66,11 @@ Feature('OneForAll Strategy')
             const bAfter = yield* Ref.get(s.counters.b)
             return { aBefore, bBefore, aAfter, bAfter }
           })),
-        Then('child A count increased after restart')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toBeGreaterThan(s.result.aBefore)
-          })
-        ),
-        And('child B count increased (restarted together with A)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.bAfter).toBeGreaterThan(s.result.bBefore)
-          })
+        Then('both children restarted, so each tick count grew')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ aAfter, aBefore, bAfter, bBefore }) => aAfter > aBefore && bAfter > bBefore,
+            'child A and child B each ticked more after the oneForAll restart than before it',
+          )
         ),
       ),
     )
@@ -142,10 +137,8 @@ Feature('OneForAll Strategy')
               return { aBefore, aAfter }
             }),
         ),
-        Then('inner child count increased after subtree restart')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toBeGreaterThan(s.result.aBefore)
-          })
+        Then('inner child count increased after subtree restart')((s, expect) =>
+          expect(s.result.aAfter).toBeGreaterThan(s.result.aBefore)
         ),
       ),
     )
@@ -208,15 +201,11 @@ Feature('OneForAll Strategy')
             const bAfter = yield* Ref.get(s.counters.b)
             return { aBefore, bBefore, aAfter, bAfter }
           })),
-        Then('child A count increased despite not failing')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toBeGreaterThan(s.result.aBefore)
-          })
-        ),
-        And('child B count increased after restart')((s) =>
-          Effect.sync(() => {
-            expect(s.result.bAfter).toBeGreaterThan(s.result.bBefore)
-          })
+        Then('both children ticked more, A despite never failing')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ aAfter, aBefore, bAfter, bBefore }) => aAfter > aBefore && bAfter > bBefore,
+            'child A ticked more although it never failed, and child B ticked more after its restart',
+          )
         ),
       ),
     )

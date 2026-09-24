@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Queue } from 'effect'
 import { sweepLostWakeups } from './__fixtures__/queueFixtures.js'
 import type { Take } from './__fixtures__/queueFixtures.js'
@@ -31,9 +30,9 @@ Feature('A waiting reader receives a message offered to its queue')
             'stranded',
             (s) => Effect.promise(() => sweepLostWakeups(s.take)),
           ),
-          Then('no reader is left waiting beside a message already in its queue')((s) => {
+          Then('no reader is left waiting beside a message already in its queue')((s, expect) =>
             expect(s.stranded).toEqual([])
-          }),
+          ),
         ),
     )
   })

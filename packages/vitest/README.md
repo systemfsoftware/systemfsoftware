@@ -1,8 +1,8 @@
 # @systemfsoftware/vitest
 
-A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packages/vitest) whose defaults make the lazy test a good test. Write the obvious thing and you get a fresh build of your services, a second run that catches leaked state, virtual time, checks that stop the test at its next step, and properties refuted against a constant impostor. Write the slop form and the refusal names the rewrite.
+A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packages/vitest) whose defaults make the lazy test a good test. `expect` is the parameter of the test's own body, every check is yielded, and one observed state gets one check. Write the obvious thing and you also get a fresh build of your services, a second run that catches leaked state, virtual time, and properties refuted against a constant impostor. Write the slop form and the refusal names the rewrite.
 
-Everything upstream exports is still exported: `it`, `test`, `it.effect`, `it.live`, `it.scoped`, `it.each`, `it.layer`, `layer`, `describe`, `expect`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods`, `describeWrapped`, and `export * from "vitest"`. Two things do differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower — both are listed under [Compatibility](#compatibility-with-effectvitest). On top of that surface the fork adds six things: `owned`, `recordAssertion`, `captureRunBinding`, `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `layer`, `it.layer`, `flakyTest`, `it.prop`, `it.effect`, `it.live`, `describeWrapped` and `it` itself also take a data-last form (`it.effect(body, timeout?)(name)`, `layer(options)(L)`, `flakyTest(timeout?)(effect)`), so they pipe.
+Everything upstream exports is still exported except what the callback parameter replaces. `it`, `test`, `it.live`, `it.each`, `it.layer`, `layer`, `describe`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods` and `describeWrapped` are here; `expect` and `assert` are not; `it.effect`, `it.scoped` and `it.scopedLive` are refusals carrying the generator rewrite; and the Vitest values the fork keeps are re-exported by name — the list is under [Compatibility](#compatibility-with-effectvitest). Two things differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower. On top of that surface the fork adds `@systemfsoftware/vitest/integration` (`step`, `captureRunBinding`), `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe.
 
 The defaults are forced, not opted into. Every package in this workspace imports `@systemfsoftware/vitest` by its own name, and published packages peer on it directly — nothing resolves through an alias to the upstream specifier.
 
@@ -25,7 +25,7 @@ npm install -D @systemfsoftware/vitest
 ## Quick start
 
 ```ts
-import { expect, it, layer } from '@systemfsoftware/vitest'
+import { it, layer } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 class Store extends Context.Service<Store, Ref.Ref<ReadonlyArray<string>>>()('Store') {
@@ -33,16 +33,55 @@ class Store extends Context.Service<Store, Ref.Ref<ReadonlyArray<string>>>()('St
 }
 
 layer(Store.layer)('store', (it) => {
-  it.effect('starts from an empty store', () =>
-    Effect.gen(function*() {
-      const store = yield* Store
-      const items = yield* Ref.get(store)
-      expect(items).toEqual([])
-    }))
+  it('starts from an empty store', function*({ expect }) {
+    const store = yield* Store
+    const items = yield* Ref.get(store)
+    yield* expect(items).toEqual([])
+  })
 })
 ```
 
-The layer is built fresh for the test, and the test runs twice on two different builds. A test that only passes the first time is a test that leaked state.
+A test body is a generator, and the runner drives it: `yield*` a service, an Effect or a check. The layer is built fresh for the test, and the test runs twice on two different builds — a test that only passes the first time is a test that leaked state.
+
+## Checks
+
+`expect` is not importable. The only one in reach is the `{ expect }` the body receives, so a check is bound to its test by construction. Every matcher returns a **check**: an `Effect` that needs the runner's `Asserted` service, which is why it has to be yielded.
+
+```ts
+it('ships a pending order', function*({ expect }) {
+  const order = yield* shop.place(items)
+  yield* expect(order).toMatchObject({ id: 1, status: 'Pending' })
+})
+```
+
+- **One check per observed state.** A second check before the body's next non-check step — and a check inside a loop — is refused with `assert the state once` and the rewrite. A `yield*` of anything that is not a check opens a new observed state, so `yield* TestClock.adjust('3 seconds')` between two checks is a second state.
+- **A check that fails stops the test there.** The generator is returned, so `finally` blocks and scope finalizers still run, and the report carries the diff.
+- **A body that yields no check is refused** at the test name (compile time) and at run time; a check that is written but never yielded is refused as `written but never yielded`.
+- **`toEqual` compares with Effect `Equal`**, so two structurally equal values of different references are equal.
+- **The vocabulary is curated.** `toEqual`, `toStrictEqual`, `toBe`, `toContain`, `toMatch`, `toMatchObject`, `toThrow(X)`, `toSatisfy(fn, why)`, the call-ordering matchers, the ordered comparisons, and `objectContaining`/`arrayContaining`/`stringMatching`/`closeTo`/`any`/`schemaMatching` are kept. Everything weak is refused by name (see [Refusals](#refusals)), and a `boolean` actual is a type error — a boolean can only report `expected false to be true`.
+
+### The guard
+
+A check is the only way to assert, and the guard is what makes that true rather than advisory. `@systemfsoftware/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers. The shared Vitest config loads it into every test project, inline projects included, so no import is needed. A project stays out only when vitest-config's exemption table names it together with the foreign runner that registers its tests (oxlint's `RuleTester`, Storybook's plugin). A package outside that table that cannot resolve `@systemfsoftware/vitest/guard` fails at config load rather than running unguarded. Under it:
+
+- **a raw `vitest` `expect` (or `assert`) is refused**, even beside a real check: "✗ an expect imported from vitest ran; take it from the test callback: it(name, function\* ({ expect }) { ... })";
+- **a test registered with `vitest`'s own `it`/`test` is refused**: "✗ this test was registered with vitest's it; import it from @systemfsoftware/vitest".
+
+## Lanes
+
+```ts
+import { describe, it, layer } from '@systemfsoftware/vitest'
+
+it(name, function*({ expect }) { /* virtual time */ })
+it.live(name, function*({ expect }) { /* the real clock */ })
+it.each(rows)(name, function*(row, { expect }) { /* Vitest's it.for order */ })
+layer(Service.layer)((it) => { it(name, function*({ expect }) { ... }) })
+describe('a block', (it) => { ... })
+```
+
+`it`, `test`, `it.live`, `it.each`, `it.only`, `it.skip`, `it.skipIf`, `it.runIf`, `it.fails`, `it.layer`, `layer` and `describeWrapped` all take a generator body. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe. `it.prop`, `it.effect.prop`, `it.law` and `flakyTest` are unchanged from #512.
+
+The habit lanes are refusals, not aliases: `it.effect`, `it.scoped` and `it.scopedLive` are compile-time errors and run-time throws carrying the generator rewrite. `it.effect.prop` still runs properties. `beforeEach` and `afterEach` are refused too — build what a test needs inside it; services come fresh per test from `layer`.
 
 ## Layers
 
@@ -60,60 +99,62 @@ That is how a module-level counter, a shared cache, or a process-global histogra
 
 ## Concurrency and shuffle
 
-Tests inside a block run concurrently and in shuffled order, and each concurrent test keeps its own failure list and assertion counts. Concurrency is what makes a cross-test leak reproducible: two tests that interleave are two tests whose state must not be shared. Nothing else pins their order.
+Tests inside a block run concurrently and in shuffled order, and each concurrent test keeps its own failure list and check counts. Concurrency is what makes a cross-test leak reproducible: two tests that interleave are two tests whose state must not be shared. Nothing else pins their order.
 
 A failure in a shuffled block names the seed the run used. Pass that seed back with `--sequence.seed=<seed>` and the same order replays, so an order-dependent failure stops being intermittent.
 
-## Checks
-
-`expect` records softly within one Effect step. Every failed check in the step is reported, and before any of the test's fibers takes its next step after a failed check, that fiber is interrupted — the step after a failed check never runs its side effects, which would only act on a state already known wrong. A child fiber is interrupted too. Anything thrown after a failed check is reported as `AfterFailedExpect`, most likely caused by the failure above it.
-
-`toEqual` compares with Effect `Equal`, so two values that are structurally equal but different references are equal. A test that asserts nothing fails: the code under test returned something, so assert on it. A testing library whose checks are Effect-native can count them through `recordAssertion()`.
-
 ## Virtual time
 
-Effect bodies run on virtual time that advances only when the test's fibers are idle. `Effect.sleep("3 seconds")` returns without waiting; on a deadline tie the background sleepers wake before the test fiber; fractional-millisecond schedules work.
+Test bodies run on virtual time that advances only when the test's fibers are idle. `Effect.sleep("3 seconds")` returns without waiting; on a deadline tie the background sleepers wake before the test fiber; fractional-millisecond schedules work.
 
 ```ts
-import { expect, it } from '@systemfsoftware/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Clock, Effect } from 'effect'
 
-it.effect('three seconds pass at once', () =>
-  Effect.gen(function*() {
-    const before = yield* Clock.currentTimeMillis
-    yield* Effect.sleep('3 seconds')
-    const after = yield* Clock.currentTimeMillis
-    expect(after - before).toEqual(3000)
-  }))
+it('three seconds pass at once', function*({ expect }) {
+  const before = yield* Clock.currentTimeMillis
+  yield* Effect.sleep('3 seconds')
+  const after = yield* Clock.currentTimeMillis
+  yield* expect(after - before).toEqual(3000)
+})
 ```
 
 `TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@systemfsoftware/vitest/TestClock`, through the shared Vitest config's `effect/TestClock` alias.
 
 ## Refusals
 
-Each refusal states its rewrite, in the same words at compile time and at run time:
+Each refusal states its rewrite, in the same words at compile time (a `this` type, an argument union, or the test name) and at run time:
 
-| Refused                                                                                                               | The rewrite in the message                                                                                               |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `expect(x).toBeDefined()`, `.toBeTruthy()`, `.toBeFalsy()`, and the negated `.not.toBeNull()`, `.not.toBeUndefined()` | Assert the value: `toEqual(expected)`; for a key that must exist: `toHaveProperty(key)`                                  |
-| `beforeEach` / `afterEach`                                                                                            | Build what a test needs inside it; services come fresh per test from `layer(Service.layer)((it) => { ... })`             |
-| an `async` test body                                                                                                  | Return the Effect instead: `it.effect(name, () => Effect.gen(function* () { ... }))`                                     |
-| an Effect body that needs a service nothing provides                                                                  | Pipe the body through `Effect.provide(Service.layer)`, or write the tests inside `layer(Service.layer)((it) => { ... })` |
-| the positional `it.prop(name, [arbitraries], predicate)`                                                              | Name the function under test and pass a budget: `it.prop(name, { of, subject, runs }, holds)`                            |
-| a test with no assertion (at run time only)                                                                           | Assert on what the code returned: `expect(actual).toEqual(expected)`                                                     |
+| Refused                                                                       | The rewrite in the message                                                                                                           |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `toBeDefined`, `toBeTruthy`, `toBeFalsy`, `not.toBeNull`, `not.toBeUndefined` | Assert the value: `yield* expect(actual).toEqual(expected)`                                                                          |
+| `toHaveLength`                                                                | Assert the contents: `toEqual([...])`; only some of them: `toEqual(expect.arrayContaining([...]))`                                   |
+| `toHaveProperty`                                                              | Assert the shape once: `toMatchObject({ key: value, ... })`                                                                          |
+| `toBeInstanceOf`, `toBeTypeOf`                                                | Assert the value: `toEqual(expected)`; only its shape: `toEqual(expect.schemaMatching(Schema))`                                      |
+| `toHaveBeenCalled`, `toHaveBeenCalledTimes`                                   | `toHaveBeenCalledExactlyOnceWith(...args)`, or `expect(spy.mock.calls).toEqual([[...], [...]])`                                      |
+| every snapshot matcher                                                        | State the expected value: `toEqual(expected)`; for a throw: `toThrow(MyError)`                                                       |
+| `expect.anything`, `.resolves`, `.rejects`, `expect.poll`, `expect.soft`      | Name what the value must be, yield the Effect, or let virtual time pass                                                              |
+| `toThrow()`, `toThrowError()`, `toSatisfy(fn)`, `toMatchObject({})`           | Name the error, the reason, or the fields: `toThrow(MyError)`, `toSatisfy(predicate, "why")`, `toMatchObject({ status: "Pending" })` |
+| a `boolean` actual                                                            | Pass the two values instead: `expect(a).toEqual(b)`; a predicate: `toSatisfy(predicate, "what must hold")`                           |
+| a second check on one state                                                   | Assert the state once: `toMatchObject({...})`, `expect({ a, b }).toEqual({...})`, or `it.each` for several inputs                    |
+| a check written but never yielded                                             | Yield it: `yield* expect(actual).toEqual(expected)`                                                                                  |
+| a body that yields no check                                                   | Yield one from the test's own `expect`                                                                                               |
+| a sync body, an `async` body, a body returning an Effect                      | Pass the generator itself: `it(name, function* ({ expect }) { ... })`                                                                |
+| `it.effect` / `it.scoped` / `it.scopedLive`                                   | `it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) })`                                  |
+| `beforeEach` / `afterEach`                                                    | Build what a test needs inside it; services come fresh per test from `layer(Service.layer)((it) => { ... })`                         |
+| a body that needs a service nothing provides                                  | Write the test inside `layer(Service.layer)((it) => { ... })`; every test gets its own fresh build                                   |
+| the positional `it.prop(name, [arbitraries], predicate)`                      | Name the function under test and pass a budget: `it.prop(name, { of, subject, runs }, holds)`                                        |
 
-A presence refusal reads exactly like this:
+A named refusal reads exactly like this:
 
-> ✗ toBeDefined passes for almost any value the code returns. Assert the value: toEqual(expected); for a key that must exist: toHaveProperty(key).
-
-`expect(<boolean>)` is a type error — a boolean can only report `expected false to be true`. Pass the two values instead: `expect(a).toEqual(b)`, which uses Effect `Equal`, or a predicate: `expect(value).toSatisfy(predicate)`. A boolean the code under test returned stays legal. `toBe` on primitives, `toBeTypeOf` and `toBeInstanceOf` are not refused.
+> ✗ toHaveLength checks how many, not which. Assert the contents: toEqual([...]); only some of them: toEqual(expect.arrayContaining([...])).
 
 ## Properties
 
 A property names the function under test. It runs `runs` times; omit `runs` and the run's configured default applies:
 
 ```ts
-import { expect, it } from '@systemfsoftware/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Schema as S } from 'effect'
 
 const sort = (xs: ReadonlyArray<number>): ReadonlyArray<number> => [...xs].sort((a, b) => a - b)
@@ -171,31 +212,38 @@ A class fails only when a sequential statistical test is confident its share is 
 
 ## For testing libraries
 
-A library that registers tests for its users wires in with two calls.
-
-`owned(effect)` marks a region where `expect` throws instead of recording softly, so the enclosing Effect sees a failed check as a failure in its cause:
+A library takes the test's `expect` by parameter and ends in a check:
 
 ```ts
-import { owned } from '@systemfsoftware/vitest'
+import type { Check, Expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
-// A library wraps the user's step; a failed check inside fails the step.
-export const runStep = <A, E, R>(step: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => owned(step)
+export const runContract = (expect: Expect) =>
+  Effect.gen(function*() {
+    const report = yield* reportOf()
+    yield* expect(report).toMatchObject({ holds: true })
+  })
 ```
 
-`recordAssertion()` counts an Effect-native check as an assertion, so a test whose only judgement is the library's own passes the no-assertion gate:
+A flow that asserts at several points marks each point with `step` from `@systemfsoftware/vitest/integration`, so every phase opens its own observed state and each gets one check:
 
 ```ts
-import { recordAssertion } from '@systemfsoftware/vitest'
+import { step } from '@systemfsoftware/vitest/integration'
 import { Effect } from 'effect'
 
-export const recordVerdict = (): Effect.Effect<void> => Effect.sync(recordAssertion)
+export const runPipeline = (expect: Expect) =>
+  Effect.gen(function*() {
+    yield* step(yield* phaseOne())
+    yield* expect(yield* phaseOne()).toMatchObject({ ok: true })
+    yield* step(yield* phaseTwo())
+    yield* expect(yield* phaseTwo()).toMatchObject({ ok: true })
+  })
 ```
 
-`captureRunBinding` is the test's run binding. `bind` re-provides it to an effect a library runs on a runtime of its own — its own scheduler, a worker, a simulation kernel — so the checks inside it count as that test's assertions, report softly, and see the same `owned` regions as the test. Capture it from the test's own fiber and bind the effect before handing it to the other runtime:
+`captureRunBinding` — from `@systemfsoftware/vitest/integration` — is the test's run binding. Capture it inside the test, then `bind` the effect before handing it to a runtime of your own — its own scheduler, a worker, a simulation kernel — so its checks count as that test's assertions. `bind` provides what a check reads off the test's own fiber (the ledger, and the running task context) and the bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know the ledger. Every run of a bound effect opens its own observed state, so a runtime that re-runs it — a kernel's baseline and its seeded replays — checks each run once; two checks inside one run are still refused:
 
 ```ts
-import { captureRunBinding } from '@systemfsoftware/vitest'
+import { captureRunBinding } from '@systemfsoftware/vitest/integration'
 import { Effect } from 'effect'
 
 export const runOnOwnScheduler = <A, E>(
@@ -207,7 +255,7 @@ export const runOnOwnScheduler = <A, E>(
   })
 ```
 
-`VitestTestContext` is the running Vitest `TestContext` under the key `vitestTestContextKey`, provided on every test the fork runs. A library that carries its own view of the task context builds it on that key, so a case lane and a property lane read the same context:
+`VitestTestContext` is the running Vitest `TestContext` under the key `vitestTestContextKey`, provided on every test the fork runs — every generator lane, both property lanes, and each `it.each` row. A library that carries its own view of the task context builds it on that key, so a case lane and a property lane read the same context:
 
 ```ts
 import { vitestTestContextKey } from '@systemfsoftware/vitest'
@@ -218,16 +266,20 @@ export const TaskRef = Context.Reference<{ annotate?: (message: string) => void 
 })
 ```
 
+There is no `owned`, no `recordAssertion` and no `@systemfsoftware/vitest/utils`: a library reports through the caller's check, and the one-check rule is what keeps a verdict a verdict.
+
 ## Compatibility with @effect/vitest
 
-Everything upstream exports is still exported, and the fork adds behaviour rather than removing bindings: example tests, `it.each`, `toStrictEqual` and the other Vitest bindings stay. It is not a drop-in, though, in one behaviour and four accepted-input types:
+This is a fork of the surface, not a superset of it. What changed:
 
-- `describe` is the fork's lawful collector (R4), not upstream's: it forces the fork's concurrency and shuffle defaults and hands its body the fork's methods. Vitest's own collector — one test at a time, in declaration order — stays reachable as `import { describe } from 'vitest'`.
-- `deepStrictEqual`, `notDeepStrictEqual`, `strictEqual` and `assertEquals` take no message argument. A data-last dual has to repeat its data-first twin parameter for parameter, so a trailing string cannot be told from an expected value; the message is refused rather than silently dropped.
-- `skipIf` and `runIf` take a `boolean` condition where upstream took `unknown`, and `each` cases must be objects (`T extends object`). An `unknown` or `any` condition is refused by this repo's lint.
-- `assertTrue` takes a `boolean` where upstream took `unknown`, for the same reason.
+- **No `expect` and no `assert`**, from this package or from its `vitest` re-export; the callback parameter replaces both (and the guard refuses a raw one).
+- **No `it.effect`, `it.scoped`, `it.scopedLive`, `owned`, `recordAssertion`, `@systemfsoftware/vitest/utils`, or `@systemfsoftware/vitest/refusals`.** `it.effect.prop` remains. `it.live` is a generator body on the real clock.
+- **`export * from "vitest"` is gone.** The Vitest values the fork keeps — `vi`, `expectTypeOf`, `assertType`, `beforeAll`, `afterAll`, `onTestFailed`, `onTestFinished`, `inject`, `recordArtifact`, `vitest` — are re-exported explicitly, so a refused value cannot arrive through a star export.
+- **A test body is a generator**, so a sync, `async` or Effect-returning body is refused with the rewrite.
+- **`describe` is the fork's lawful collector** (forced concurrency and shuffle, the fork's methods), not upstream's. Vitest's own collector stays reachable as `import { describe } from 'vitest'`.
+- **`skipIf` and `runIf` take a `boolean`**, where upstream took `unknown`; an `unknown` or `any` condition is refused by this repo's lint.
 
-What else differs is what runs by default, what `expect` refuses, and what `toEqual` means — that is why the fork is imported under its own name rather than aliasing upstream.
+What else differs is what runs by default, what a check refuses, and what `toEqual` means — that is why the fork is imported under its own name rather than aliasing upstream.
 
 This package is part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
 

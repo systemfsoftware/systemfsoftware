@@ -6,9 +6,8 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Cause, Duration, Effect, Layer, Option, Ref, Schedule } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Cause, Duration, Effect, Layer, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -70,25 +69,15 @@ Feature('Per-supervisor reporter hooks')
             const local = yield* Ref.get(s.localRestarts)
             return { globalRestarts, local }
           })),
-        Then('the global reporter recorded one restart for the supervisor')((s) =>
-          Effect.sync(() => {
-            const g = s.result.globalRestarts.filter((r) => r.name === 'hook-restart-sup')
-            expect(g).toHaveLength(1)
+        Then(
+          'the global reporter recorded exactly one restart for the supervisor and the local hook the same cause',
+        )((s, expect) => {
+          const globalCauses = s.result.globalRestarts.map((r) => r.cause)
+          return expect({ globalCount: globalCauses.length, local: s.result.local }).toEqual({
+            globalCount: 1,
+            local: globalCauses,
           })
-        ),
-        And('the supervisor-local restart hook recorded the same restart cause')((s) =>
-          Effect.sync(() => {
-            const gOpt = Option.fromNullishOr(
-              s.result.globalRestarts.find((r) => r.name === 'hook-restart-sup'),
-            )
-            expect(gOpt).toSatisfy(Option.isSome)
-            expect(s.result.local).toHaveLength(1)
-            if (Option.isNone(gOpt)) {
-              throw new Error('expected global restart entry for hook-restart-sup')
-            }
-            expect(s.result.local[0]).toBe(gOpt.value.cause)
-          })
-        ),
+        }),
       ),
     )
 
@@ -137,25 +126,15 @@ Feature('Per-supervisor reporter hooks')
             const local = yield* Ref.get(s.localExhaustions)
             return { globalExhaustions, local }
           })),
-        Then('the global reporter recorded one exhaustion for the supervisor')((s) =>
-          Effect.sync(() => {
-            const g = s.result.globalExhaustions.filter((e) => e.name === 'hook-exhaust-sup')
-            expect(g).toHaveLength(1)
+        Then(
+          'the global reporter recorded exactly one exhaustion for the supervisor and the local hook the same cause',
+        )((s, expect) => {
+          const globalCauses = s.result.globalExhaustions.map((e) => e.cause)
+          return expect({ globalCount: globalCauses.length, local: s.result.local }).toEqual({
+            globalCount: 1,
+            local: globalCauses,
           })
-        ),
-        And('the supervisor-local exhaustion hook recorded the same exhaustion cause')((s) =>
-          Effect.sync(() => {
-            const gOpt = Option.fromNullishOr(
-              s.result.globalExhaustions.find((e) => e.name === 'hook-exhaust-sup'),
-            )
-            expect(gOpt).toSatisfy(Option.isSome)
-            expect(s.result.local).toHaveLength(1)
-            if (Option.isNone(gOpt)) {
-              throw new Error('expected global exhaustion entry for hook-exhaust-sup')
-            }
-            expect(s.result.local[0]).toBe(gOpt.value.cause)
-          })
-        ),
+        }),
       ),
     )
   })

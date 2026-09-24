@@ -2,8 +2,7 @@ import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Layer, Result } from 'effect'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
@@ -33,11 +32,7 @@ Feature('withLeaderLock Combinator Contract')
           'result',
           () => withLock(Effect.succeed(42), { key: 'task', mode: 'required' }),
         ),
-        Then('the result is 42')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toBe(42)
-          })
-        ),
+        Then('the result is 42')((s, expect) => expect(s.result).toBe(42)),
       ),
     )
 
@@ -48,11 +43,7 @@ Feature('withLeaderLock Combinator Contract')
           'result',
           () => withLock(Effect.succeed(42), { key: 'task', mode: 'optional' }),
         ),
-        Then('the result is 42')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toBe(42)
-          })
-        ),
+        Then('the result is 42')((s, expect) => expect(s.result).toBe(42)),
       ),
     )
 
@@ -75,12 +66,15 @@ Feature('withLeaderLock Combinator Contract')
           'error',
           () => Effect.result(withLock(Effect.succeed(42), { key: 'task', mode: 'required' })),
         ),
-        Then('the call fails because the lock could not be acquired for key "task"')((s) =>
-          Effect.sync(() => {
-            expect(s.error).toEqual(Result.fail(LeaderLockNotAcquired.make({ key: 'task' })))
-          })
+        Then(
+          'the call fails because the lock could not be acquired for key "task", and the holder fiber is interrupted',
+        )(
+          (s, expect) =>
+            Effect.gen(function*() {
+              yield* Fiber.interrupt(s.holder)
+              yield* expect(s.error).toEqual(Result.fail(LeaderLockNotAcquired.make({ key: 'task' })))
+            }),
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
       ),
     )
 
@@ -103,12 +97,12 @@ Feature('withLeaderLock Combinator Contract')
           'result',
           () => withLock(Effect.succeed(42), { key: 'task', mode: 'optional' }),
         ),
-        Then('the result is undefined (void)')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toBeUndefined()
+        Then('the result is undefined (void), and the holder fiber is interrupted')((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.holder)
+            yield* expect(s.result).toBeUndefined()
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
       ),
     )
 
@@ -119,10 +113,8 @@ Feature('withLeaderLock Combinator Contract')
           'error',
           () => Effect.result(withLock(Effect.fail('boom'), { key: 'task', mode: 'required' })),
         ),
-        Then('the call fails with the original "boom" value')((s) =>
-          Effect.sync(() => {
-            expect(s.error).toEqual(Result.fail('boom'))
-          })
+        Then('the call fails with the original "boom" value')((s, expect) =>
+          expect(s.error).toEqual(Result.fail('boom'))
         ),
       ),
     )

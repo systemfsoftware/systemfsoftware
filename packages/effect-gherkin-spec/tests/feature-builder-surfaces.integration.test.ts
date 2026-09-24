@@ -1,12 +1,5 @@
-/**
- * Feature builder surfaces — layer, live declaration, and scope.
- *
- * One Feature drives withLayer + live + withScope together so the
- * layered live path is exercised as a consumer would call it.
- */
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Clock, Context, Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -26,9 +19,7 @@ Feature('Feature builder — live clock with a shared layer')
       'A shared service is available inside the scenario',
       Gherkin.Do.pipe(
         Given('the widget is in the environment')('label', () => Widget.pipe(Effect.map((w) => w.label))),
-        Then('the label is the shared one')((s) => {
-          expect(s.label).toBe('shared')
-        }),
+        Then('the label is the shared one')((s, expect) => expect(s.label).toBe('shared')),
       ),
     )
 
@@ -36,18 +27,16 @@ Feature('Feature builder — live clock with a shared layer')
       'The current wall-clock time is a finite number',
       Gherkin.Do.pipe(
         Given('the current time')('now', () => Clock.currentTimeMillis),
-        Then('the time is a finite number')((s) => {
-          expect(s.now).toSatisfy(Number.isFinite)
-        }),
+        Then('the time is a finite number')((s, expect) =>
+          expect(s.now).toSatisfy(Number.isFinite, 'the wall clock reads a finite number')
+        ),
       ),
     )
 
     scenario(
       'A scoped token is available inside the scenario',
       scope.pipe(
-        Then('the token is present')((s) => {
-          expect(s.token).toBe('scoped')
-        }),
+        Then('the token is present')((s, expect) => expect(s.token).toBe('scoped')),
       ),
     )
   })

@@ -1,7 +1,6 @@
-import { Conformance } from '@systemfsoftware/conformance-spec'
 import { capture, feature, Given, Then, When } from '@systemfsoftware/storybook-gherkin'
 import type { PlayContext, StepFn } from '@systemfsoftware/storybook-gherkin'
-import { Data, Effect, Match } from 'effect'
+import { Effect } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { screen, userEvent } from 'storybook/test'
 import { aliceGreeting } from './greeting-story.model.js'
@@ -76,18 +75,3 @@ export const playedOnce = (staged: StagedVisit): Effect.Effect<void, never, Scop
  */
 export const everyStepSettled = (staged: StagedVisit): Effect.Effect<void> =>
   Effect.asVoid(Effect.promise(() => Promise.allSettled(staged.handedToStorybook)))
-
-export class CheckRejected
-  extends Data.TaggedError('@systemfsoftware/storybook-gherkin/tests/__fixtures__/story-leave.fixture/CheckRejected')<{
-    readonly report: string
-  }>
-{}
-
-/** The check's own bound, and the only way past a report that did not pass. */
-export const passOf = (report: Conformance.Report<never, never>): Conformance.Pass =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed),
-    Match.orElse(() => {
-      throw new CheckRejected({ report: Conformance.render(report) })
-    }),
-  )

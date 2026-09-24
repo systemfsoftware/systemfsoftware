@@ -1,7 +1,21 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Clock, Context, Effect, Exit, Fiber, Layer, Match, Option, Ref, Scheduler, Scope, Stream } from 'effect'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import {
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Match,
+  Option,
+  Ref,
+  Scheduler,
+  Schema,
+  Scope,
+  Stream,
+} from 'effect'
 
 import {
   ContextStreamCommand,
@@ -301,14 +315,6 @@ const lifetimeCheck = (
     operations: spec.operations,
   })
 
-const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
-    }),
-  )
-
 interface StreamHandle {
   readonly registry: Atom.Registry.Registry
   readonly value: Atom.Writable<number>
@@ -539,13 +545,11 @@ const runsReleasedTogether = (handle: RunHandle): Effect.Effect<void> =>
     }
   })
 
-const passReleases = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
-    }),
-  )
+/** The budget the sequential check is given: every one of these histories is checked. */
+const SUBSCRIPTION_ROUNDS = 50
+const LIFETIME_ROUNDS = 60
+const STREAM_ROUNDS = 50
+const CONTEXT_STREAM_ROUNDS = 50
 
 Feature('A registry that keeps readers, writers, listeners, and idle entries consistent', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -566,9 +570,9 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
             'report',
             (s) => registryCheck(s.subject, { fibers: row.callers, operations: row.operations }),
           ),
-          Then(`every interleaving matches ${row.writers} taking turns one after the other`)((s) => {
-            passHistories(s.report)
-          }),
+          Then(`every interleaving matches ${row.writers} taking turns one after the other`)((s, expect) =>
+            expect(s.report).toMatchObject({ _tag: 'Pass' })
+          ),
         ),
     )
 
@@ -583,12 +587,11 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           'report',
           (s) => derivedCheck(s.subject, { fibers: 2, operations: 2 }),
         ),
-        Then('the reader only ever shows 0, 2, or 4')((s) => {
-          passHistories(s.report)
-        }),
-        And('every interleaving matches Ada and Bo taking turns one after the other')((s) => {
-          passHistories(s.report)
-        }),
+        Then(
+          'the reader only ever shows 0, 2, or 4, and every interleaving matches Ada and Bo taking turns one after the other',
+        )(
+          (s, expect) => expect(s.report).toMatchObject({ _tag: 'Pass' }),
+        ),
       ),
     )
 
@@ -601,11 +604,11 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
         ),
         When('the listener subscribes and fifty rounds of writes arrive')(
           'report',
-          (s) => subscriptionCheck(s.subject, { sequences: 50, operations: 8 }),
+          (s) => subscriptionCheck(s.subject, { sequences: SUBSCRIPTION_ROUNDS, operations: 8 }),
         ),
-        Then('every write is heard exactly once, in the order it happened')((s) => {
-          passHistories(s.report)
-        }),
+        Then('every write is heard exactly once, in the order it happened')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: SUBSCRIPTION_ROUNDS })
+        ),
       ),
     )
 
@@ -620,14 +623,11 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           'sixty rounds of mounting, letting the reader leave, waiting past the keep-alive, and checking the entry are run',
         )(
           'report',
-          (s) => lifetimeCheck(s.subject, { sequences: 60, operations: 12 }),
+          (s) => lifetimeCheck(s.subject, { sequences: LIFETIME_ROUNDS, operations: 12 }),
         ),
-        Then('a released entry is gone once the wait passes')((s) => {
-          passHistories(s.report)
-        }),
-        And('a held entry is never gone')((s) => {
-          passHistories(s.report)
-        }),
+        Then('a released entry is gone once the wait passes, and a held entry is never gone')(
+          (s, expect) => expect(s.report).toMatchObject({ _tag: 'Pass', histories: LIFETIME_ROUNDS }),
+        ),
       ),
     )
 
@@ -640,11 +640,11 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
         ),
         When('fifty rounds of setting the value and reading it as a stream are replayed')(
           'report',
-          (s) => streamCheck(s.subject, { sequences: 50, operations: 10 }),
+          (s) => streamCheck(s.subject, { sequences: CONTEXT_STREAM_ROUNDS, operations: 10 }),
         ),
-        Then('every read starts at the value the registry currently holds')((s) => {
-          passHistories(s.report)
-        }),
+        Then('every read starts at the value the registry currently holds')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: STREAM_ROUNDS })
+        ),
       ),
     )
 
@@ -657,11 +657,11 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
         ),
         When('fifty rounds of settling the result and reading the stream are replayed')(
           'report',
-          (s) => contextStreamCheck(s.subject, { sequences: 50, operations: 8 }),
+          (s) => contextStreamCheck(s.subject, { sequences: STREAM_ROUNDS, operations: 8 }),
         ),
-        Then('the reader hears the settled value each time')((s) => {
-          passHistories(s.report)
-        }),
+        Then('the reader hears the settled value each time')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: CONTEXT_STREAM_ROUNDS })
+        ),
       ),
     )
 
@@ -680,9 +680,9 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
               probe: stillSubscribed(s.held.captured, s.held.value, 'a streamed value'),
             }),
         ),
-        Then('nobody is left subscribed to the value')((s) => {
-          passReleases(s.checked)
-        }),
+        Then('nobody is left subscribed to the value')((s, expect) =>
+          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+        ),
       ),
     )
 
@@ -701,9 +701,9 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
               probe: stillSubscribed(s.held.captured, s.held.value, 'a held value'),
             }),
         ),
-        Then('nobody is left subscribed to the value')((s) => {
-          passReleases(s.checked)
-        }),
+        Then('nobody is left subscribed to the value')((s, expect) =>
+          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+        ),
       ),
     )
 
@@ -721,9 +721,9 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
               probe: registryDisposed(s.provided.captured),
             }),
         ),
-        Then('the provided registry no longer answers')((s) => {
-          passReleases(s.checked)
-        }),
+        Then('the provided registry no longer answers')((s, expect) =>
+          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+        ),
       ),
     )
 
@@ -735,16 +735,15 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
           'checked',
           (s) => Conformance.released(forkedRuns(s.runs), { probe: runsReleasedTogether(s.runs) }),
         ),
-        Then('nothing is left running once the owner lets go')((s) => {
-          passReleases(s.checked)
-        }),
-        And('at least one run started, so the release proves something')((s) =>
-          Effect.gen(function*() {
-            const started = yield* Ref.get(s.runs.started)
-            if (started < 1) {
-              return yield* Effect.die(new Error('no run ever started, so the release proves nothing'))
-            }
-          })
+        Then(
+          'nothing is left running once the owner lets go, and at least one run started so the release proves something',
+        )(
+          (s, expect) =>
+            Effect.map(Ref.get(s.runs.started), (started) =>
+              expect({ report: s.checked, started }).toMatchObject({
+                report: { _tag: 'Pass' },
+                started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              })),
         ),
       ),
     )

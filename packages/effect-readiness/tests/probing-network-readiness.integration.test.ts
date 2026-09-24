@@ -1,7 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Match } from 'effect'
+import { Effect } from 'effect'
 import { GuestService } from './__fixtures__/guest-service.fixture.js'
 import { scenarioEnvironment } from './__fixtures__/readiness-environment.fixture.js'
 
@@ -27,13 +26,6 @@ const targetOfMappedGuest = Effect.gen(function*() {
 const awaitOver = (target: Readiness.ProbeTargetBlueprint, condition: Readiness.Condition) =>
   target.awaitCondition(condition)
 
-const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boolean =>
-  Match.value(verdict).pipe(
-    Match.tag('Satisfied', () => true),
-    Match.tag('TimedOut', () => false),
-    Match.exhaustive,
-  )
-
 Feature('Probing guest network services for readiness')
   .live('scenarios probe a real guest service over loopback sockets the kernel cannot observe')
   .withScenarioLayer(scenarioEnvironment)
@@ -46,9 +38,9 @@ Feature('Probing guest network services for readiness')
           'verdict',
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
-        Then('the check reports the service is ready')(({ verdict }) => {
-          expect(verdict).toSatisfy(reportedReady)
-        }),
+        Then('the check reports the service is ready')((state, expect) =>
+          expect(state.verdict).toMatchObject({ _tag: 'Satisfied' })
+        ),
       ),
     )
 
@@ -68,9 +60,9 @@ Feature('Probing guest network services for readiness')
           'verdict',
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
-        Then('the check gives up without reporting the service ready')(({ verdict }) => {
-          expect(verdict).not.toSatisfy(reportedReady)
-        }),
+        Then('the check gives up without reporting the service ready')((state, expect) =>
+          expect(state.verdict).toMatchObject({ _tag: 'TimedOut' })
+        ),
       ),
     )
 
@@ -82,19 +74,19 @@ Feature('Probing guest network services for readiness')
           'verdict',
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
-        Then('the check gives up without opening any host connection')(({ verdict }) => {
-          expect(verdict).not.toSatisfy(reportedReady)
-        }),
+        Then('the check gives up without opening any host connection')((state, expect) =>
+          expect(state.verdict).toMatchObject({ _tag: 'TimedOut' })
+        ),
       ),
     )
 
     scenarioOutline(
-      'An HTTP wait reporting <ready> when the service answers <description>',
+      'An HTTP wait reporting <verdict> when the service answers <description>',
       [
-        { answer: 'HTTP/1.0 200 OK', description: 'a success status', ready: true },
-        { answer: 'HTTP/1.0 503 Service Unavailable', description: 'a server error', ready: false },
-        { answer: 'NOT_HTTP_MALFORMED_GARBAGE\r\n\r\n', description: 'a malformed status line', ready: false },
-        { answer: 'HTTP/1.1 200 OK\r\n', description: 'truncated headers without final crlf', ready: true },
+        { answer: 'HTTP/1.0 200 OK', description: 'a success status', verdict: 'Satisfied' },
+        { answer: 'HTTP/1.0 503 Service Unavailable', description: 'a server error', verdict: 'TimedOut' },
+        { answer: 'NOT_HTTP_MALFORMED_GARBAGE\r\n\r\n', description: 'a malformed status line', verdict: 'TimedOut' },
+        { answer: 'HTTP/1.1 200 OK\r\n', description: 'truncated headers without final crlf', verdict: 'Satisfied' },
       ] as const,
       (row) =>
         Gherkin.Do.pipe(
@@ -111,9 +103,9 @@ Feature('Probing guest network services for readiness')
             'verdict',
             ({ target }) => awaitOver(target, Readiness.Wait.forHttp('/health', GUEST_PORT)),
           ),
-          Then('the check reports readiness matching <ready>')(({ verdict }) => {
-            expect(reportedReady(verdict)).toEqual(row.ready)
-          }),
+          Then('the check reports readiness matching <verdict>')((state, expect) =>
+            expect(state.verdict).toMatchObject({ _tag: row.verdict })
+          ),
         ),
     )
   })

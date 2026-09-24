@@ -1,6 +1,5 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FileSystem, Layer } from 'effect'
 import { startVitest } from 'vitest/node'
 import type { Reporter, RunnerTestFile } from 'vitest/node'
@@ -111,65 +110,83 @@ Feature('Reporting where a broken trace spec leaves its evidence')
     scenario(
       'A settlement missing its charge names where its graph was written',
       Gherkin.Do.pipe(
-        Given('the deliberately broken parent-child spec was run through the real runner')(
-          'outcome',
-          () => runVitestOn('annotation-failure.fixture.ts'),
+        Given('the deliberately broken parent-child spec')(
+          'fixture',
+          () => Effect.succeed('annotation-failure.fixture.ts'),
         ),
-        Then('the failing case carries an annotation naming the written trace')((s) => {
-          expect(s.outcome.annotations).toSatisfy(
-            (annotations: ReadonlyArray<string>) =>
-              annotations.some((message) => message.includes('artifacts/traces/')),
+        When('the spec is run through the real runner')('outcome', (s) => runVitestOn(s.fixture)),
+        Then('the failing case carries an annotation naming the written trace, and fails on the disparity itself')((
+          s,
+          expect,
+        ) =>
+          expect({
+            annotations: s.outcome.annotations,
+            failed: s.outcome.failedTests,
+            failure: s.outcome.errorMessages.join('\n'),
+          }).toSatisfy(
+            (report) =>
+              report.annotations.some((message) => message.includes('artifacts/traces/')) &&
+              report.failed === 1 &&
+              report.failure.includes('credit.charge') &&
+              report.failure.includes('artifacts/traces/'),
+            'the failing case carries an annotation naming its dump and fails on the disparity report',
           )
-        }),
-        And('the failing case failed on the disparity itself')((s) => {
-          expect(s.outcome.failedTests).toBe(1)
-          expect(s.outcome.errorNames.filter((name) => name.includes('TraceDisparityError'))).toHaveLength(1)
-        }),
+        ),
       ),
     )
 
     scenario(
       'A generated input that breaks its spec shrinks to the smallest failing value',
       Gherkin.Do.pipe(
-        Given('the deliberately duplicated-span spec was run through the real runner')(
-          'outcome',
-          () => runFixtureCountingDumps('prop-shrink-failure.fixture.ts'),
+        Given('the spec whose generated draws duplicate a span')(
+          'fixture',
+          () => Effect.succeed('prop-shrink-failure.fixture.ts'),
         ),
-        Then('the failing case names its smallest failing input')((s) => {
-          expect(s.outcome.errorMessages.join('\n')).toContain('Property falsified')
-          expect(s.outcome.errorMessages.join('\n')).toContain('Shrunk input: [')
-          expect(s.outcome.dumps).toBe(1)
-          expect(s.outcome.annotations.join('\n')).toContain('artifacts/traces/')
-        }),
-        And('the failing run wrote its evidence exactly once')((s) => {
-          expect(s.outcome.dumps).toBe(1)
-        }),
-        And('the failing case failed on the falsified draw itself')((s) => {
-          expect(s.outcome.failedTests).toBe(1)
-        }),
+        When('the spec is run through the real runner and its dumps counted')(
+          'outcome',
+          (s) => runFixtureCountingDumps(s.fixture),
+        ),
+        Then('the failing case names its smallest failing input, wrote one dump and failed on the falsified draw')((
+          s,
+          expect,
+        ) =>
+          expect({
+            messages: s.outcome.errorMessages.join('\n'),
+            annotations: s.outcome.annotations.join('\n'),
+            dumps: s.outcome.dumps,
+            failed: s.outcome.failedTests,
+          }).toSatisfy(
+            (report) =>
+              report.messages.includes('Property falsified') &&
+              report.messages.includes('Shrunk input: [') &&
+              report.dumps === 1 &&
+              report.annotations.includes('artifacts/traces/') &&
+              report.failed === 1,
+            'the falsified draw failed once, shrank to its smallest input and left one annotated dump',
+          )
+        ),
       ),
     )
 
     scenario(
       'A case whose trace store is unreachable or still receiving blames the store, not the behaviour',
       Gherkin.Do.pipe(
-        Given('a spec whose trace store refuses every read, and one whose trace never finishes, was run')(
-          'outcome',
-          () => runVitestOn('observation-failure.fixture.ts'),
+        Given('a spec whose trace store refuses every read, and one whose trace never finishes')(
+          'fixture',
+          () => Effect.succeed('observation-failure.fixture.ts'),
         ),
-        Then('both cases fail')((s) => {
-          expect(s.outcome.failedTests).toBe(2)
-        }),
-        And('the unreachable store is reported as unreachable, naming the store it tried')((s) => {
-          expect(s.outcome.errorNames.filter((name) => name.includes('TransportObservationError'))).toHaveLength(1)
-          expect(s.outcome.errorSources).toContain('http://tempo.invalid/api/v2/traces')
-        }),
-        And('the unfinished trace is reported as unfinished, and neither is blamed on the behaviour')((s) => {
-          expect(s.outcome.errorNames.filter((name) => name.includes('IncompleteObservationError'))).toHaveLength(1)
-          expect(s.outcome.errorNames).not.toSatisfy(
-            (names: ReadonlyArray<string>) => names.some((name) => name.includes('StimulusFailure')),
-          )
-        }),
+        When('both specs are run through the real runner')('outcome', (s) => runVitestOn(s.fixture)),
+        Then('both cases fail, naming the store and the unfinished trace, never the behaviour')((s, expect) =>
+          expect({
+            failed: s.outcome.failedTests,
+            names: s.outcome.errorNames,
+            sources: s.outcome.errorSources,
+          }).toEqual({
+            failed: 2,
+            names: ['TransportObservationError', 'IncompleteObservationError'],
+            sources: ['http://tempo.invalid/api/v2/traces', ''],
+          })
+        ),
       ),
     )
   })

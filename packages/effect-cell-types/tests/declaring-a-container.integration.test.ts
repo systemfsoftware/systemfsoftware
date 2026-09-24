@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -24,14 +23,22 @@ Feature('Declaring a container and the running instance it becomes')
             byPipe: pipe(s.base, withPort(6379)),
             byCall: withPort(s.base, 6379),
           })),
-        Then('all three describe redis:7 listening on 6379')((s) => {
-          expect(s.configured.byMethod.spec.ports).toEqual([6379])
-          expect(s.configured.byPipe.spec).toEqual(s.configured.byMethod.spec)
-          expect(s.configured.byCall.spec).toEqual(s.configured.byMethod.spec)
-        }),
-        Then('the container it started from still has no ports')((s) => {
-          expect(s.base.spec.ports).toEqual([])
-        }),
+        Then('all three describe redis:7 listening on 6379 and the container they came from still has no ports')((
+          s,
+          expect,
+        ) =>
+          expect({
+            byMethodPorts: s.configured.byMethod.spec.ports,
+            byPipe: s.configured.byPipe.spec,
+            byCall: s.configured.byCall.spec,
+            basePorts: s.base.spec.ports,
+          }).toEqual({
+            byMethodPorts: [6379],
+            byPipe: s.configured.byMethod.spec,
+            byCall: s.configured.byMethod.spec,
+            basePorts: [],
+          })
+        ),
       ),
     )
 
@@ -46,9 +53,7 @@ Feature('Declaring a container and the running instance it becomes')
           'answer',
           (s) => Effect.flatMap(s.container.scoped, exec('ping')),
         ),
-        Then('the instance answers through its driver')((s) => {
-          expect(s.answer).toBe(4)
-        }),
+        Then('the instance answers through its driver')((s, expect) => expect(s.answer).toBe(4)),
       ),
     )
 
@@ -60,10 +65,9 @@ Feature('Declaring a container and the running instance it becomes')
           () => Effect.succeed(running({ id: 'redis', driver: countingDriver })),
         ),
         When('its visible fields are listed')('fields', (s) => Effect.succeed(Object.keys(s.instance).sort())),
-        Then('only its name and pipe are visible')((s) => {
-          expect(s.fields).toEqual(['id', 'pipe'])
-          expect(s.instance.id).toBe('redis')
-        }),
+        Then('only its name and pipe are visible')((s, expect) =>
+          expect({ fields: s.fields, id: s.instance.id }).toEqual({ fields: ['id', 'pipe'], id: 'redis' })
+        ),
       ),
     )
 
@@ -80,9 +84,9 @@ Feature('Declaring a container and the running instance it becomes')
             lookalike: isContainer(s.candidates.lookalike),
             realAsRunning: isRunningContainer(s.candidates.real),
           })),
-        Then('only the real container is recognised, and never as a running instance')((s) => {
+        Then('only the real container is recognised, and never as a running instance')((s, expect) =>
           expect(s.verdicts).toEqual({ real: true, lookalike: false, realAsRunning: false })
-        }),
+        ),
       ),
     )
 
@@ -97,10 +101,12 @@ Feature('Declaring a container and the running instance it becomes')
             return Effect.map(configured.run, (folder) => ({ configured, folder }))
           },
         ),
-        Then('the job has no ports and ran in /srv')((s) => {
-          expect(s.outcome.configured.spec.ports).toEqual([])
-          expect(s.outcome.folder).toBe('/srv')
-        }),
+        Then('the job has no ports and ran in /srv')((s, expect) =>
+          expect({ ports: s.outcome.configured.spec.ports, folder: s.outcome.folder }).toEqual({
+            ports: [],
+            folder: '/srv',
+          })
+        ),
       ),
     )
   })

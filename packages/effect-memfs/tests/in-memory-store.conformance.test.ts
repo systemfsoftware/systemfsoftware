@@ -1,22 +1,17 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Effect, Layer, type Scope, Stream } from 'effect'
+import { Effect, Layer, Schema, type Scope, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
 import { FileCommand, storeModel } from './__fixtures__/file-system.model.js'
-import {
-  CheckRejected,
-  noScratchLeft,
-  noWatchLeftOpen,
-  passedHistories,
-  SharedLetterCommand,
-  storeResponse,
-} from './__fixtures__/memfs-store.js'
+import { noScratchLeft, noWatchLeftOpen, SharedLetterCommand, storeResponse } from './__fixtures__/memfs-store.js'
 
 const Feature = makeFeature({ it })
 
 const unprivilegedModel = storeModel(false)
+
+const budgetedHistories = 1000
 
 const startWatchingInbox = Effect.flatMap(
   Effect.service(MemoryFileSystem.Watcher),
@@ -79,14 +74,13 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
               commands: FileCommand,
               model: unprivilegedModel,
               run: storeResponse,
-              sequences: 1000,
+              sequences: budgetedHistories,
               operations: 10,
             }),
         ),
-        Then('every run gets the answers a real filesystem would give')((s) => {
-          const judged = passedHistories(s.report)
-          if (judged !== 1000) throw new CheckRejected({ report: `${judged} runs were judged, not 1000` })
-        }),
+        Then('every run gets the answers a real filesystem would give')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
+        ),
       ),
     )
 
@@ -109,9 +103,12 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
               preemptions: 2,
             }),
         ),
-        Then('every interleaving matches Ada and Bo taking turns one after the other')((s) => {
-          passedHistories(s.report)
-        }),
+        Then('every interleaving matches Ada and Bo taking turns one after the other')((s, expect) =>
+          expect(s.report).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
 
@@ -129,9 +126,12 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
               probe: Effect.provide(noWatchLeftOpen, s.store),
             }),
         ),
-        Then('no watch is left open after any stop')((s) => {
-          passedHistories(s.report)
-        }),
+        Then('no watch is left open after any stop')((s, expect) =>
+          expect(s.report).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
 
@@ -149,9 +149,12 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
               probe: Effect.provide(noWatchLeftOpen, s.store),
             }),
         ),
-        Then('no watch is left open after any stop')((s) => {
-          passedHistories(s.report)
-        }),
+        Then('no watch is left open after any stop')((s, expect) =>
+          expect(s.report).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
 
@@ -174,9 +177,12 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 0 }
                 probe: Effect.provide(noScratchLeft(scratchRoot), s.store),
               }),
           ),
-          Then('the scratch folder holds nothing left behind after any stop')((s) => {
-            passedHistories(s.report)
-          }),
+          Then('the scratch folder holds nothing left behind after any stop')((s, expect) =>
+            expect(s.report).toMatchObject({
+              _tag: 'Pass',
+              histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            })
+          ),
         ),
     )
   })

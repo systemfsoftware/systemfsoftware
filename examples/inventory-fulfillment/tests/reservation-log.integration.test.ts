@@ -1,6 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Reservation } from '@systemfsoftware/example-inventory-fulfillment'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import {
   acrossLogs,
@@ -15,6 +14,35 @@ import {
 const Feature = makeFeature({ it })
 
 type StoreUnavailable = Fulfillment.Decision.StoreUnavailable
+
+const OCCURRED_AT_MILLIS = Date.parse('2026-01-01T00:00:00.000Z')
+
+const FIRST_VIEW: ReservationView = {
+  found: true,
+  orderId: FIRST_ORDER,
+  customerId: 'customer-one',
+  allocations: [
+    { warehouseId: 'warehouse-central', lotId: 'lot-kettle-a', sku: 'sku-kettle', quantity: 2 },
+    { warehouseId: 'warehouse-central', lotId: 'lot-teapot-a', sku: 'sku-teapot', quantity: 1 },
+  ],
+  occurredAtMillis: OCCURRED_AT_MILLIS,
+}
+
+const SECOND_VIEW: ReservationView = {
+  found: true,
+  orderId: SECOND_ORDER,
+  customerId: 'customer-two',
+  allocations: [{ warehouseId: 'warehouse-north', lotId: 'lot-mug-a', sku: 'sku-mug', quantity: 3 }],
+  occurredAtMillis: OCCURRED_AT_MILLIS,
+}
+
+const ABSENT_VIEW: ReservationView = {
+  found: false,
+  orderId: '',
+  customerId: '',
+  allocations: [],
+  occurredAtMillis: 0,
+}
 
 const askedAboutEachOrder: Effect.Effect<
   {
@@ -65,27 +93,12 @@ Feature('The reservation log keeps its word in memory and in Postgres', { timeou
       'A reservation the log holds is found by its order',
       Gherkin.Do.pipe(
         Given('two orders with reservations in the log')('answers', () => acrossLogs(askedAboutEachOrder)),
-        Then('each written order comes back with its allocations and a missing order comes back empty')((s) => {
-          expect(s.answers.memory.first).toEqual({
-            found: true,
-            orderId: FIRST_ORDER,
-            customerId: 'customer-one',
-            allocations: [
-              { warehouseId: 'warehouse-central', lotId: 'lot-kettle-a', sku: 'sku-kettle', quantity: 2 },
-              { warehouseId: 'warehouse-central', lotId: 'lot-teapot-a', sku: 'sku-teapot', quantity: 1 },
-            ],
-            occurredAtMillis: Date.parse('2026-01-01T00:00:00.000Z'),
+        Then('each written order comes back with its allocations and a missing order comes back empty')((s, expect) =>
+          expect(s.answers).toEqual({
+            memory: { first: FIRST_VIEW, second: SECOND_VIEW, missing: ABSENT_VIEW },
+            postgres: { first: FIRST_VIEW, second: SECOND_VIEW, missing: ABSENT_VIEW },
           })
-          expect(s.answers.memory.second).toEqual({
-            found: true,
-            orderId: SECOND_ORDER,
-            customerId: 'customer-two',
-            allocations: [{ warehouseId: 'warehouse-north', lotId: 'lot-mug-a', sku: 'sku-mug', quantity: 3 }],
-            occurredAtMillis: Date.parse('2026-01-01T00:00:00.000Z'),
-          })
-          expect(s.answers.memory.missing.found).toBe(false)
-          expect(s.answers.postgres).toEqual(s.answers.memory)
-        }),
+        ),
       ),
     )
 
@@ -93,11 +106,12 @@ Feature('The reservation log keeps its word in memory and in Postgres', { timeou
       'Asking the log twice about the same order changes nothing',
       Gherkin.Do.pipe(
         Given('two orders with reservations in the log')('answers', () => acrossLogs(askedTwiceAboutOneOrder)),
-        Then('both answers are the same reservation')((s) => {
-          expect(s.answers.memory.first).toEqual(s.answers.memory.second)
-          expect(s.answers.postgres.first).toEqual(s.answers.postgres.second)
-          expect(s.answers.postgres.first).toEqual(s.answers.memory.first)
-        }),
+        Then('both answers are the same reservation')((s, expect) =>
+          expect(s.answers).toEqual({
+            memory: { first: FIRST_VIEW, second: FIRST_VIEW },
+            postgres: { first: FIRST_VIEW, second: FIRST_VIEW },
+          })
+        ),
       ),
     )
 
@@ -105,12 +119,12 @@ Feature('The reservation log keeps its word in memory and in Postgres', { timeou
       'Orders that share nothing can be asked about in either order',
       Gherkin.Do.pipe(
         Given('two orders with reservations in the log')('answers', () => acrossLogs(askedInBothOrders)),
-        Then('the answers come back the same whichever order was asked')((s) => {
-          expect(s.answers.memory.forward[0]).toEqual(s.answers.memory.backward[1])
-          expect(s.answers.memory.forward[1]).toEqual(s.answers.memory.backward[0])
-          expect(s.answers.postgres.forward).toEqual(s.answers.memory.forward)
-          expect(s.answers.postgres.backward).toEqual(s.answers.memory.backward)
-        }),
+        Then('the answers come back the same whichever order was asked')((s, expect) =>
+          expect(s.answers).toEqual({
+            memory: { forward: [FIRST_VIEW, SECOND_VIEW], backward: [SECOND_VIEW, FIRST_VIEW] },
+            postgres: { forward: [FIRST_VIEW, SECOND_VIEW], backward: [SECOND_VIEW, FIRST_VIEW] },
+          })
+        ),
       ),
     )
   })

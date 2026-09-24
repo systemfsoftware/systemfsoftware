@@ -1,12 +1,12 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Inventory } from '@systemfsoftware/example-inventory-fulfillment'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Option } from 'effect'
+import { Effect, Option, Result, Schema as S } from 'effect'
 import {
   acrossInventoryStores,
   CENTRAL_WAREHOUSE,
   inventoryStoreWorld,
   NORTH_WAREHOUSE,
+  type StockLotView,
   type StockView,
   stockViewOf,
   walkStock,
@@ -79,13 +79,56 @@ const oneWarehouseWalked: Effect.Effect<
     return { central, north }
   }))
 
-const EVERY_LOT_IN_ORDER = [
-  'lot-kettle-a',
-  'lot-kettle-b',
-  'lot-mug-a',
-  'lot-teapot-a',
-  'lot-teapot-north',
-]
+const KETTLE_A: StockLotView = {
+  warehouseId: CENTRAL_WAREHOUSE,
+  region: 'central',
+  lotId: 'lot-kettle-a',
+  sku: 'sku-kettle',
+  quantityOnHand: 5,
+  version: 1,
+}
+const KETTLE_B: StockLotView = {
+  warehouseId: CENTRAL_WAREHOUSE,
+  region: 'central',
+  lotId: 'lot-kettle-b',
+  sku: 'sku-kettle',
+  quantityOnHand: 6,
+  version: 2,
+}
+const TEAPOT_A: StockLotView = {
+  warehouseId: CENTRAL_WAREHOUSE,
+  region: 'central',
+  lotId: 'lot-teapot-a',
+  sku: 'sku-teapot',
+  quantityOnHand: 7,
+  version: 3,
+}
+const MUG_A: StockLotView = {
+  warehouseId: NORTH_WAREHOUSE,
+  region: 'north',
+  lotId: 'lot-mug-a',
+  sku: 'sku-mug',
+  quantityOnHand: 8,
+  version: 4,
+}
+const TEAPOT_NORTH: StockLotView = {
+  warehouseId: NORTH_WAREHOUSE,
+  region: 'north',
+  lotId: 'lot-teapot-north',
+  sku: 'sku-teapot',
+  quantityOnHand: 9,
+  version: 5,
+}
+
+const CENTRAL_LISTING: StockView = { lots: [KETTLE_A, KETTLE_B, TEAPOT_A], nextCursor: null }
+const NORTH_LISTING: StockView = { lots: [MUG_A, TEAPOT_NORTH], nextCursor: null }
+const CATALOGUE_LISTING: StockView = { lots: [KETTLE_A, KETTLE_B, MUG_A, TEAPOT_A, TEAPOT_NORTH], nextCursor: null }
+const FIRST_PAGE: StockView = {
+  lots: [KETTLE_A, KETTLE_B],
+  nextCursor: Result.getOrThrow(
+    S.encodeResult(Inventory.Schema.StockCursor)({ sku: 'sku-kettle', lotId: 'lot-kettle-b' }),
+  ),
+}
 
 Feature('The stock catalogue reads the same in memory and in Postgres', { timeout: 120_000 })
   .withScenarioLayer(inventoryStoreWorld)
@@ -95,12 +138,12 @@ Feature('The stock catalogue reads the same in memory and in Postgres', { timeou
       'Reading the same page of stock twice shows the same lots',
       Gherkin.Do.pipe(
         Given('two warehouses stocked with five lots')('readings', () => acrossInventoryStores(firstPageReadTwice)),
-        Then('both readings show the same first page')((s) => {
-          expect(s.readings.memory.first).toEqual(s.readings.memory.second)
-          expect(s.readings.postgres.first).toEqual(s.readings.memory.first)
-          expect(s.readings.memory.first.lots.map((lot) => lot.lotId)).toEqual(['lot-kettle-a', 'lot-kettle-b'])
-          expect(s.readings.memory.first.nextCursor).toBeTypeOf('string')
-        }),
+        Then('both readings show the same first page')((s, expect) =>
+          expect(s.readings).toEqual({
+            memory: { first: FIRST_PAGE, second: FIRST_PAGE },
+            postgres: { first: FIRST_PAGE, second: FIRST_PAGE },
+          })
+        ),
       ),
     )
 
@@ -108,13 +151,18 @@ Feature('The stock catalogue reads the same in memory and in Postgres', { timeou
       'Two warehouses can be listed in either order',
       Gherkin.Do.pipe(
         Given('two warehouses stocked with five lots')('listings', () => acrossInventoryStores(bothWarehousesListed)),
-        Then('the two listings come back the same whichever warehouse was listed first')((s) => {
-          expect(s.listings.memory.centralThenNorth[0]).toEqual(s.listings.memory.northThenCentral[1])
-          expect(s.listings.memory.centralThenNorth[1]).toEqual(s.listings.memory.northThenCentral[0])
-          expect(s.listings.postgres.centralThenNorth[0]).toEqual(s.listings.postgres.northThenCentral[1])
-          expect(s.listings.postgres.centralThenNorth[1]).toEqual(s.listings.postgres.northThenCentral[0])
-          expect(s.listings.postgres.centralThenNorth).toEqual(s.listings.memory.centralThenNorth)
-        }),
+        Then('the two listings come back the same whichever warehouse was listed first')((s, expect) =>
+          expect(s.listings).toEqual({
+            memory: {
+              centralThenNorth: [CENTRAL_LISTING, NORTH_LISTING],
+              northThenCentral: [NORTH_LISTING, CENTRAL_LISTING],
+            },
+            postgres: {
+              centralThenNorth: [CENTRAL_LISTING, NORTH_LISTING],
+              northThenCentral: [NORTH_LISTING, CENTRAL_LISTING],
+            },
+          })
+        ),
       ),
     )
 
@@ -122,23 +170,16 @@ Feature('The stock catalogue reads the same in memory and in Postgres', { timeou
       'Paging the whole catalogue in small steps reaches every lot once, in a stable order',
       Gherkin.Do.pipe(
         Given('two warehouses stocked with five lots')('walks', () => acrossInventoryStores(wholeCatalogueWalked)),
-        Then('every page size lists the same lots in the same order, each exactly once')((s) => {
-          const walks = s.walks.memory.walks
-          expect(walks[0]?.lots.map((lot) => lot.lotId)).toEqual(EVERY_LOT_IN_ORDER)
-          expect(walks[1]).toEqual(walks[0])
-          expect(walks[2]).toEqual(walks[0])
-          expect(walks[3]).toEqual(walks[0])
-          expect(walks[0]?.nextCursor).toBeNull()
-          expect(walks[0]?.lots[0]).toEqual({
-            warehouseId: CENTRAL_WAREHOUSE,
-            region: 'central',
-            lotId: 'lot-kettle-a',
-            sku: 'sku-kettle',
-            quantityOnHand: 5,
-            version: 1,
+        Then('every page size lists the same lots in the same order, each exactly once')((s, expect) =>
+          expect(s.walks).toEqual({
+            memory: {
+              walks: [CATALOGUE_LISTING, CATALOGUE_LISTING, CATALOGUE_LISTING, CATALOGUE_LISTING],
+            },
+            postgres: {
+              walks: [CATALOGUE_LISTING, CATALOGUE_LISTING, CATALOGUE_LISTING, CATALOGUE_LISTING],
+            },
           })
-          expect(s.walks.postgres.walks).toEqual(walks)
-        }),
+        ),
       ),
     )
 
@@ -146,23 +187,18 @@ Feature('The stock catalogue reads the same in memory and in Postgres', { timeou
       "Paging a single warehouse reaches exactly that warehouse's lots",
       Gherkin.Do.pipe(
         Given('two warehouses stocked with five lots')('walks', () => acrossInventoryStores(oneWarehouseWalked)),
-        Then('every page size lists only the lots of the warehouse asked about')((s) => {
-          expect(s.walks.memory.central.map((walk) => walk.lots.map((lot) => lot.lotId))).toEqual([
-            ['lot-kettle-a', 'lot-kettle-b', 'lot-teapot-a'],
-            ['lot-kettle-a', 'lot-kettle-b', 'lot-teapot-a'],
-            ['lot-kettle-a', 'lot-kettle-b', 'lot-teapot-a'],
-            ['lot-kettle-a', 'lot-kettle-b', 'lot-teapot-a'],
-          ])
-          expect(s.walks.memory.north.map((walk) => walk.lots.map((lot) => lot.lotId))).toEqual([
-            ['lot-mug-a', 'lot-teapot-north'],
-            ['lot-mug-a', 'lot-teapot-north'],
-            ['lot-mug-a', 'lot-teapot-north'],
-            ['lot-mug-a', 'lot-teapot-north'],
-          ])
-          expect(s.walks.postgres.central).toEqual(s.walks.memory.central)
-          expect(s.walks.postgres.north).toEqual(s.walks.memory.north)
-          expect(s.walks.memory.north.map((walk) => walk.nextCursor)).toEqual([null, null, null, null])
-        }),
+        Then('every page size lists only the lots of the warehouse asked about')((s, expect) =>
+          expect(s.walks).toEqual({
+            memory: {
+              central: [CENTRAL_LISTING, CENTRAL_LISTING, CENTRAL_LISTING, CENTRAL_LISTING],
+              north: [NORTH_LISTING, NORTH_LISTING, NORTH_LISTING, NORTH_LISTING],
+            },
+            postgres: {
+              central: [CENTRAL_LISTING, CENTRAL_LISTING, CENTRAL_LISTING, CENTRAL_LISTING],
+              north: [NORTH_LISTING, NORTH_LISTING, NORTH_LISTING, NORTH_LISTING],
+            },
+          })
+        ),
       ),
     )
   })

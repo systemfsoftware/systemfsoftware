@@ -56,6 +56,22 @@ Both builders take `.on(arbitrary, options)` with:
 
 A check has no wall-clock limit. Each generated input runs on the simulation kernel, which bounds every run in steps. A target that touches the host — a real file, socket, or timer — does work the kernel cannot bound that way, so such a check declares `hostBound` instead: the wall-clock bound it needs, and the host work that bound exists for.
 
+## Outside the builders
+
+The builders register one test per call. To drive a run inside your own test — a Gherkin step, a `Suite` case, or any generator body — take `expect` from the test callback and end in the run's one check:
+
+```ts
+import { runDifferentialWithShrink } from '@systemfsoftware/differential-spec'
+import { it } from '@systemfsoftware/vitest'
+import * as fc from 'fast-check'
+
+it('the two totals agree for every generated amount', function*({ expect }) {
+  yield* runDifferentialWithShrink(reference, candidate, fc.integer(), (a, b) => a === b, expect)
+})
+```
+
+A run answers a `DifferentialReport`: `holds` is whether the relation held, and `report` names the counterexample, both sides, the seed and the reproduction snippet when it did not. `differentialReport`/`metamorphicReport` answer that report as a value, and `reportCheck(report, expect)` is the one check over it — a conclusive pass is the check passing, and a disparity fails it with the report as its message.
+
 ## Notes
 
 - Every comparison runs both sides on the simulation kernel under explored schedules, and a failure report names the schedule that produced it. `name` becomes the test's name.

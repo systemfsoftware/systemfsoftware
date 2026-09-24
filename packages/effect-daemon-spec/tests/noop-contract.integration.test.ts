@@ -3,7 +3,6 @@ import { LeaderLock, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Fiber, Layer } from 'effect'
 
 const withLock = <A, E, R>(
@@ -32,11 +31,7 @@ Feature('Noop Contract')
           'result',
           () => withLock(Effect.succeed('always'), { key: 'any-key', mode: 'required' }),
         ),
-        Then('the result is "always"')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toBe('always')
-          })
-        ),
+        Then('the result is "always"')((s, expect) => expect(s.result).toBe('always')),
         When('a second concurrent call with the same key also succeeds')('concurrent', () =>
           Effect.gen(function*() {
             const a = yield* Effect.forkChild(
@@ -49,12 +44,7 @@ Feature('Noop Contract')
             const rb = yield* Fiber.join(b)
             return { a: ra, b: rb }
           })),
-        And('both effects ran')((s) =>
-          Effect.sync(() => {
-            expect(s.concurrent.a).toBe('first')
-            expect(s.concurrent.b).toBe('second')
-          })
-        ),
+        And('both effects ran')((s, expect) => expect(s.concurrent).toEqual({ a: 'first', b: 'second' })),
       ),
     )
   })

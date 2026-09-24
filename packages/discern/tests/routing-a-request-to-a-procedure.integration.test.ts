@@ -1,8 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Layer } from 'effect'
-import * as Schema from 'effect/Schema'
+import { Effect, Equal, Layer } from 'effect'
 import {
   type AnswerFor,
   answering,
@@ -127,9 +125,7 @@ Feature('Routing a request to the procedure that handles it')
       Gherkin.Do.pipe(
         Given('a procedure for locating code')('procedure', () => Effect.succeed(find)),
         When('a request is handed to the procedure directly')('answer', (s) => s.procedure.run('retries')),
-        Then('the procedure body answers by itself')(({ answer }) => {
-          expect(answer).toBe('found:retries')
-        }),
+        Then('the procedure body answers by itself')(({ answer }, expect) => expect(answer).toBe('found:retries')),
       ),
     )
 
@@ -146,9 +142,9 @@ Feature('Routing a request to the procedure that handles it')
               return yield* withProvider(s.registry.invoke('check my tests'), model.model)
             }),
         ),
-        Then('the request reaches the procedure that finds test gaps')(({ answer }) => {
+        Then('the request reaches the procedure that finds test gaps')(({ answer }, expect) =>
           expect(answer).toBe('gaps:check my tests')
-        }),
+        ),
       ),
     )
 
@@ -162,12 +158,19 @@ Feature('Routing a request to the procedure that handles it')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.route('where is auth'), model.model)
           })),
-        Then('the leader travels with its probability, its lead, and the full ranking')(({ route }) => {
+        Then('the leader travels with its probability, its lead, and the full ranking')(({ route }, expect) => {
           const matched = matchedRouteOf(route)
-          expect(matched.id).toBe('find')
-          expect(matched.probability).toBe(0.8)
-          expect(Math.round(matched.margin * 100) / 100).toBe(0.65)
-          expect(matched.ranked.map((candidate) => candidate.id)).toStrictEqual(['find', 'review', 'test-gaps'])
+          return expect({
+            id: matched.id,
+            probability: matched.probability,
+            roundedMargin: Math.round(matched.margin * 100) / 100,
+            ranked: matched.ranked.map((candidate) => candidate.id),
+          }).toEqual({
+            id: 'find',
+            probability: 0.8,
+            roundedMargin: 0.65,
+            ranked: ['find', 'review', 'test-gaps'],
+          })
         }),
       ),
     )
@@ -191,12 +194,9 @@ Feature('Routing a request to the procedure that handles it')
               model.model,
             )
           })),
-        Then('every example is judged correctly, with nothing left uncertain')(({ report }) => {
-          if (Schema.is(Discern.EvalReport)(report)) {
-            expect(report.metrics.accuracy).toBe(1)
-            expect(report.metrics.uncertain).toBe(0)
-          }
-        }),
+        Then('every example is judged correctly, with nothing left uncertain')(({ report }, expect) =>
+          expect(report.metrics).toMatchObject({ accuracy: 1, uncertain: 0 })
+        ),
       ),
     )
 
@@ -216,17 +216,23 @@ Feature('Routing a request to the procedure that handles it')
               Discern.Model.recording(s.observations),
             ])
           })),
-        Then('the recording keeps routing and the audit in separate folders')((s) =>
+        Then('the recording keeps routing and the audit in separate folders')((s, expect) =>
           Effect.gen(function*() {
-            expect(s.answer).toBe('risky:deploy on friday')
             const tree = Discern.Model.tree(yield* Discern.Model.snapshot(s.observations), 'invoke')
-            expect(tree.observations).toStrictEqual([])
-            expect(
-              tree.children.map((
+            return {
+              answer: s.answer,
+              observations: tree.observations,
+              children: tree.children.map((
                 child,
               ) => [child.name, child.observations.map((observation) => observation.decisionId)]),
-            ).toStrictEqual([['route', [auditRegistry.decision.id]], ['audit', ['risk']]])
-          })
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              answer: 'risky:deploy on friday',
+              observations: [],
+              children: [['route', [auditRegistry.decision.id]], ['audit', ['risk']]],
+            })
+          ))
         ),
       ),
     )
@@ -247,18 +253,23 @@ Feature('Routing a request to the procedure that handles it')
               Discern.Model.recording(s.observations),
             ])
           })),
-        Then('the whole invocation replays without asking the model again')((s) =>
+        Then('the whole invocation replays without asking the model again')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.answer).toBe('now:prod is down')
-            expect(model.calls()).toBe(2)
+            const recorded = { answer: s.answer, modelCalls: model.calls() }
             const replayed = yield* Effect.provide(
               s.registry.invoke('prod is down'),
               Discern.Model.replayLayer(yield* Discern.Model.snapshot(s.observations)),
             )
-            expect(replayed).toBe('now:prod is down')
-            expect(model.calls()).toBe(2)
-          })
+            return { ...recorded, replayed, modelCallsAfterReplay: model.calls() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              answer: 'now:prod is down',
+              modelCalls: 2,
+              replayed: 'now:prod is down',
+              modelCallsAfterReplay: 2,
+            })
+          ))
         ),
       ),
     )
@@ -268,10 +279,12 @@ Feature('Routing a request to the procedure that handles it')
       Gherkin.Do.pipe(
         Given('a registry of two code procedures')('registry', () => Effect.succeed(code)),
         When('the member held under a name is read')('found', (s) => Effect.sync(() => s.registry.get('find'))),
-        Then('the member under that name is the one the registry holds')((s) => {
-          expect(s.found).toBe(find)
-          expect(s.registry.ids).toStrictEqual(['find', 'review', 'test-gaps'])
-        }),
+        Then('the member under that name is the one the registry holds')((s, expect) =>
+          expect({ found: s.found, ids: s.registry.ids }).toSatisfy(
+            (observed) => observed.found === find && Equal.equals(observed.ids, ['find', 'review', 'test-gaps']),
+            'the registry hands back the very member it holds, and lists every member id in registration order',
+          )
+        ),
       ),
     )
 
@@ -288,10 +301,12 @@ Feature('Routing a request to the procedure that handles it')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.invoke('x'), model.model)
           })),
-        Then('the awkwardly named procedure is offered and chosen')((s) => {
-          expect(s.registry.decision.labels).toStrictEqual(['__proto__', 'find'])
-          expect(s.answer).toBe('odd')
-        }),
+        Then('the awkwardly named procedure is offered and chosen')((s, expect) =>
+          expect({ labels: s.registry.decision.labels, answer: s.answer }).toEqual({
+            labels: ['__proto__', 'find'],
+            answer: 'odd',
+          })
+        ),
       ),
     )
 
@@ -310,12 +325,18 @@ Feature('Routing a request to the procedure that handles it')
             const right = yield* withProvider(s.registry.route('right'), model.model)
             return [left, right]
           })),
-        Then('the model was offered "ab" and "c" for the first, and "a" and "bc" for the second')((s) =>
+        Then('the model was offered "ab" and "c" for the first, and "a" and "bc" for the second')((s, expect) =>
           Effect.gen(function*() {
             const sight = yield* RoutingSight
-            expect(sight.offered()).toStrictEqual([['ab', 'c'], ['a', 'bc']])
-            expect(s.routes.map((route) => matchedRouteOf(route).id)).toStrictEqual(['ab', 'a'])
-          })
+            return {
+              offered: sight.offered(),
+              chosen: s.routes.map((route) => matchedRouteOf(route).id),
+            }
+          }).pipe(
+            Effect.map((answer) =>
+              expect(answer).toEqual({ offered: [['ab', 'c'], ['a', 'bc']], chosen: ['ab', 'a'] })
+            ),
+          )
         ),
       ),
     )

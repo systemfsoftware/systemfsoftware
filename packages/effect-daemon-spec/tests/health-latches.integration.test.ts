@@ -4,9 +4,8 @@ import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Deferred, Duration, Effect, Latch, Metric, Ref, Result, Schedule, Stream } from 'effect'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Deferred, Duration, Effect, Latch, Metric, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
@@ -31,21 +30,24 @@ Feature('Health Latch Lifecycle')
             })
             return yield* run.worker(worker)
           })),
-        Then('ready is still closed')((s) =>
-          s.health.ready.await.pipe(
-            Effect.timeout('0 millis'),
-            Effect.result,
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
-              })
-            ),
-            Effect.asVoid,
-          )
-        ),
-        And('healthy is open')((s) => s.health.healthy.await),
-        And('once the gate opens, ready opens')((s) =>
-          Effect.andThen(Deferred.succeed(s.gate, undefined), s.health.ready.await)
+        Then('ready is still closed and healthy is open, and ready opens once the gate opens')((s, expect) =>
+          Effect.gen(function*() {
+            const ready = yield* s.health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            const healthy = yield* s.health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            const readyAfterGate = yield* Effect.andThen(Deferred.succeed(s.gate, undefined), s.health.ready.await)
+              .pipe(
+                Effect.timeout('30 seconds'),
+                Effect.result,
+              )
+            yield* expect({ healthy, ready, readyAfterGate }).toEqual({
+              healthy: expect.objectContaining({ _tag: 'Success', success: undefined }),
+              ready: expect.objectContaining({
+                _tag: 'Failure',
+                failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+              }),
+              readyAfterGate: expect.objectContaining({ _tag: 'Success', success: undefined }),
+            })
+          })
         ),
       ),
     )
@@ -64,7 +66,13 @@ Feature('Health Latch Lifecycle')
             })
             return yield* run.worker(worker)
           })),
-        Then('paused is open')((s) => s.health.paused.await),
+        Then('paused is open')((s, expect) =>
+          s.health.paused.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success', success: undefined })),
+          )
+        ),
       ),
     )
 
@@ -93,21 +101,24 @@ Feature('Health Latch Lifecycle')
               return yield* run.supervisor(sup)
             }),
         ),
-        Then('ready is still closed')((s) =>
-          s.health.ready.await.pipe(
-            Effect.timeout('0 millis'),
-            Effect.result,
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
-              })
-            ),
-            Effect.asVoid,
-          )
-        ),
-        And('healthy is open')((s) => s.health.healthy.await),
-        And('once the gate opens, ready opens')((s) =>
-          Effect.andThen(Deferred.succeed(s.gate, undefined), s.health.ready.await)
+        Then('ready is still closed and healthy is open, and ready opens once the gate opens')((s, expect) =>
+          Effect.gen(function*() {
+            const ready = yield* s.health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            const healthy = yield* s.health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            const readyAfterGate = yield* Effect.andThen(Deferred.succeed(s.gate, undefined), s.health.ready.await)
+              .pipe(
+                Effect.timeout('30 seconds'),
+                Effect.result,
+              )
+            yield* expect({ healthy, ready, readyAfterGate }).toEqual({
+              healthy: expect.objectContaining({ _tag: 'Success', success: undefined }),
+              ready: expect.objectContaining({
+                _tag: 'Failure',
+                failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+              }),
+              readyAfterGate: expect.objectContaining({ _tag: 'Success', success: undefined }),
+            })
+          })
         ),
       ),
     )
@@ -133,7 +144,13 @@ Feature('Health Latch Lifecycle')
             })
             return yield* run.supervisor(sup)
           })),
-        Then('paused is open')((s) => s.health.paused.await),
+        Then('paused is open')((s, expect) =>
+          s.health.paused.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success', success: undefined })),
+          )
+        ),
       ),
     )
 
@@ -160,11 +177,11 @@ Feature('Health Latch Lifecycle')
             const sp = yield* Metric.value(gp)
             return { sr, sh, sp }
           })),
-        Then('ready gauge is zero and healthy and paused are one')((s) =>
-          Effect.sync(() => {
-            expect(s.out.sr.value).toBe(0)
-            expect(s.out.sh.value).toBe(1)
-            expect(s.out.sp.value).toBe(1)
+        Then('ready gauge is zero and healthy and paused are one')((s, expect) =>
+          expect({ healthy: s.out.sh.value, paused: s.out.sp.value, ready: s.out.sr.value }).toEqual({
+            healthy: 1,
+            paused: 1,
+            ready: 0,
           })
         ),
       ),
@@ -189,11 +206,7 @@ Feature('Health Latch Lifecycle')
             const st = yield* Metric.value(gr)
             return { st }
           })),
-        Then('ready gauge is one')((s) =>
-          Effect.sync(() => {
-            expect(s.out.st.value).toBe(1)
-          })
-        ),
+        Then('ready gauge is one')((s, expect) => expect(s.out.st.value).toBe(1)),
       ),
     )
 
@@ -224,19 +237,16 @@ Feature('Health Latch Lifecycle')
             const health = yield* run.supervisor(sup).pipe(Effect.provide(NoopLayer))
             yield* TestClock.adjust(Duration.seconds(2))
             const st = yield* Metric.value(gh)
-            const healthyClosed = yield* health.healthy.await.pipe(
-              Effect.timeout('0 millis'),
-              Effect.match({
-                onFailure: () => true,
-                onSuccess: () => false,
-              }),
-            )
-            return { st, healthyClosed }
+            const healthy = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            return { st, healthy }
           })),
-        Then('healthy gauge is zero and latch is closed')((s) =>
-          Effect.sync(() => {
-            expect(s.out.healthyClosed).toEqual(true)
-            expect(s.out.st.value).toBe(0)
+        Then('healthy gauge is zero and the healthy latch is closed')((s, expect) =>
+          expect({ gauge: s.out.st.value, healthy: s.out.healthy }).toEqual({
+            gauge: 0,
+            healthy: expect.objectContaining({
+              _tag: 'Failure',
+              failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+            }),
           })
         ),
       ),
@@ -261,9 +271,9 @@ Feature('Health Latch Lifecycle')
             const count = yield* Ref.get(s.counterRef)
             return { health, count }
           })),
-        Then('the worker has completed at least one tick')((s) => {
+        Then('the worker has completed at least one tick')((s, expect) =>
           expect(s.result.count).toBeGreaterThanOrEqual(1)
-        }),
+        ),
       ),
     )
 
@@ -305,7 +315,13 @@ Feature('Health Latch Lifecycle')
             yield* TestClock.adjust(Duration.millis(10))
             return { health }
           })),
-        Then('the supervisor ready latch opens')((s) => s.result.health.ready.await),
+        Then('the supervisor ready latch opens')((s, expect) =>
+          s.result.health.ready.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success', success: undefined })),
+          )
+        ),
       ),
     )
     scenario(
@@ -348,12 +364,15 @@ Feature('Health Latch Lifecycle')
             yield* TestClock.adjust(Duration.millis(10))
             return yield* Ref.get(s.ctx.starts)
           })),
-        Then('the child does not restart until the supervisor is resumed')((s) =>
+        Then('the child does not restart until the supervisor is resumed')((s, expect) =>
           Effect.gen(function*() {
-            expect(s.startsWhilePaused).toBe(1)
             yield* s.ctx.health.paused.open
             yield* TestClock.adjust(Duration.millis(10))
-            expect(yield* Ref.get(s.ctx.starts)).toBeGreaterThan(1)
+            const startsAfterResume = yield* Ref.get(s.ctx.starts)
+            yield* expect({ startsAfterResume, startsWhilePaused: s.startsWhilePaused }).toSatisfy(
+              (observed) => observed.startsWhilePaused === 1 && observed.startsAfterResume > 1,
+              'the child started exactly once while the supervisor was paused and started again after it resumed',
+            )
           })
         ),
       ),

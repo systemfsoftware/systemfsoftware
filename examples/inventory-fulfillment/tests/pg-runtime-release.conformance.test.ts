@@ -1,9 +1,10 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Persistence, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
-import { ConfigProvider, Context, Effect, Layer, Match, Ref } from 'effect'
+import { ConfigProvider, Context, Effect, Layer, Ref } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { Pool } from 'pg'
+import { atLeastOne } from './__fixtures__/conformance-bounds.schema.js'
 
 const Feature = makeFeature({ it })
 
@@ -37,14 +38,6 @@ const noOpenPool = (cell: Ref.Ref<PoolState>): Effect.Effect<void, { readonly re
     if (!state.pool.ending) return yield* Effect.fail({ reason: 'the database pool is still open' })
   })
 
-const passing = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (pass) => pass.histories),
-    Match.orElse(() => {
-      throw new Error(`expected the service to let go of its pool, but the check read: ${Conformance.render(report)}`)
-    }),
-  )
-
 Feature('Letting go of the database pool when the service stops early', { timeout: 120_000 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -59,14 +52,16 @@ Feature('Letting go of the database pool when the service stops early', { timeou
               probe: noOpenPool(s.cell),
             }),
         ),
-        Then('no database pool is left open after any stop')((s) => {
-          passing(s.checked)
-        }),
-        And('the probe saw an open pool at least once')((s) => {
-          if (Ref.getUnsafe(s.cell).observed === 0) {
-            throw new Error('no probe ever saw an open pool, so the release proves nothing')
-          }
-        }),
+        Then('no database pool is left open after any stop, and the probe saw an open pool at least once')(
+          (s, expect) =>
+            expect({
+              report: s.checked,
+              probesThatSawAnOpenPool: Ref.getUnsafe(s.cell).observed,
+            }).toMatchObject({
+              report: { _tag: 'Pass', histories: expect.schemaMatching(atLeastOne) },
+              probesThatSawAnOpenPool: expect.schemaMatching(atLeastOne),
+            }),
+        ),
       ),
     )
   })

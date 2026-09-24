@@ -2,8 +2,7 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect } from 'effect'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
@@ -64,17 +63,15 @@ Feature('Supervisor boot topology')
               }
             }),
           )),
-        Then('the outer supervisor health names outer with one child')((s) =>
-          Effect.sync(() => {
-            expect(s.topology.outerName).toBe('outer')
-            expect(s.topology.outerChildren).toBe(1)
-          })
-        ),
-        And('the inner supervisor health names inner with the two leaves')((s) =>
-          Effect.sync(() => {
-            expect(s.topology.innerName).toBe('inner')
-            expect(s.topology.innerChildren).toBe(2)
-            expect(s.topology.leafNames).toEqual(['leaf-a', 'leaf-b'])
+        Then(
+          'the outer supervisor health names outer with one child, and the inner names inner with the two leaves',
+        )((s, expect) =>
+          expect(s.topology).toMatchObject({
+            outerName: 'outer',
+            outerChildren: 1,
+            innerName: 'inner',
+            innerChildren: 2,
+            leafNames: ['leaf-a', 'leaf-b'],
           })
         ),
       ),

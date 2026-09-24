@@ -1,18 +1,7 @@
-import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Graph, Observation, RemoteObservation } from '@systemfsoftware/trace-spec'
-import { Array as Arr, Context, Data, Duration, Effect, Layer, Match, Ref, Result, Schema } from 'effect'
+import { Array as Arr, Context, Duration, Effect, Layer, Match, Ref, Result, Schema } from 'effect'
 
 import type { TraceCommand, TraceResponse } from './trace-store.model.js'
-
-export class CheckRejected extends Data.TaggedError('CheckRejected')<{ readonly report: string }> {}
-
-export const passedRuns = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (pass) => pass.histories),
-    Match.orElse(() => {
-      throw new CheckRejected({ report: Conformance.render(report) })
-    }),
-  )
 
 interface Held {
   readonly trace: string

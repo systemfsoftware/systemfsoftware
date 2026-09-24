@@ -1,6 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Option, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Error from 'effect/PlatformError'
@@ -211,9 +210,7 @@ Feature('Reading and writing an open file from a position that moves')
         Gherkin.Do.pipe(
           Given('a note of five letters')('fs', () => filesystem),
           When('the note is opened and worked through')('seen', (s) => Effect.scoped(row.observe(s.fs))),
-          Then('what the note shows afterwards matches the work')((s) => {
-            expect(s.seen).toBe(row.seen)
-          }),
+          Then('what the note shows afterwards matches the work')((s, expect) => expect(s.seen).toBe(row.seen)),
         ),
     )
 
@@ -224,10 +221,12 @@ Feature('Reading and writing an open file from a position that moves')
         Gherkin.Do.pipe(
           Given('a note of five letters')('fs', () => filesystem),
           When('the note is used that way')('refusal', (s) => Effect.flip(row.attempt(s.fs))),
-          Then('the refusal names what went wrong and which use it was')((s) => {
-            expect(s.refusal.reason._tag).toBe(row.reason)
-            expect(s.refusal.reason.method).toBe(row.method)
-          }),
+          Then('the refusal names what went wrong and which use it was')((s, expect) =>
+            expect({ _tag: s.refusal.reason._tag, method: s.refusal.reason.method }).toEqual({
+              _tag: row.reason,
+              method: row.method,
+            })
+          ),
         ),
     )
   })

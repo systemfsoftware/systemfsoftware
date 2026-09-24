@@ -1,7 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, RemoteObservation } from '@systemfsoftware/trace-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Array as Arr, Cause, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Result, Schema } from 'effect'
+import { Array as Arr, Duration, Effect, Fiber, Layer, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 
 const Feature = makeFeature({ it })
@@ -88,31 +87,10 @@ const buildWith = (options: RemoteObservation.Options) =>
     ),
   )
 
-const constructionRefused = (
-  outcome: Exit.Exit<ReadonlyArray<Graph.SpanRecord>, Observation.ObservationFailure>,
-): boolean => Exit.isFailure(outcome) && Cause.hasDies(outcome.cause)
-
-const failureOf = (reading: Reading): Option.Option<Observation.ObservationFailure> =>
-  Result.isFailure(reading.outcome) ? Option.some(reading.outcome.failure) : Option.none()
-
-const isAbsentFailure = Schema.is(Observation.EmptyObservationError)
-
-const isUnfinishedFailure = Schema.is(Observation.IncompleteObservationError)
-
-const reportsAbsence = (reading: Reading): boolean => Option.exists(failureOf(reading), isAbsentFailure)
-
-const reportsUnfinished = (reading: Reading): boolean => Option.exists(failureOf(reading), isUnfinishedFailure)
-
-const namedTrace = (reading: Reading): string =>
-  Option.match(failureOf(reading), { onNone: () => '', onSome: (failure) => failure.traceId })
-
-const countedSpans = (reading: Reading): number =>
-  Option.match(failureOf(reading), {
-    onNone: () => 0,
-    onSome: (failure) => (isUnfinishedFailure(failure) ? failure.spanCount : 0),
-  })
-
-const spanIdsOf = (spans: ReadonlyArray<Graph.SpanRecord>): ReadonlyArray<string> => spans.map((span) => span.spanId)
+const refusedBeforeRead = {
+  _tag: 'Failure',
+  cause: { reasons: [{ _tag: 'Die' }] },
+} as const
 
 const growingSpan = (index: number): Graph.SpanRecord => ({ ...checkout, spanId: `growing-span-${index}` })
 
@@ -133,10 +111,9 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.late.script, s.late.options)),
-        Then('the reader answers with both spans, never the checkout span alone')((s) => {
-          expect(s.reading.outcome).toSatisfy(Result.isSuccess)
-          expect(spanIdsOf(Result.getOrThrow(s.reading.outcome))).toStrictEqual([CHECKOUT_SPAN_ID, PAYMENT_SPAN_ID])
-        }),
+        Then('the reader answers with both spans, never the checkout span alone')((s, expect) =>
+          expect(s.reading.outcome).toMatchObject({ success: [checkout, payment] })
+        ),
       ),
     )
 
@@ -152,10 +129,11 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.barren.script, s.barren.options)),
-        Then('the reader reports the trace as absent and names the trace it was asked for')((s) => {
-          expect(s.reading).toSatisfy(reportsAbsence)
-          expect(namedTrace(s.reading)).toBe(TRACE_ID)
-        }),
+        Then('the reader reports the trace as absent and names the trace it was asked for')((s, expect) =>
+          expect(s.reading).toMatchObject({
+            outcome: { _tag: 'Failure', failure: { _tag: 'EmptyObservationError', traceId: TRACE_ID } },
+          })
+        ),
       ),
     )
 
@@ -171,10 +149,20 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.refusing.script, s.refusing.options)),
-        Then("the reader hands back the store's refusal as it happened, having asked exactly once")((s) => {
-          expect(failureOf(s.reading)).toStrictEqual(Option.some(outage))
-          expect(s.reading.served).toBe(1)
-        }),
+        Then("the reader hands back the store's refusal as it happened, having asked exactly once")((s, expect) =>
+          expect(s.reading).toMatchObject({
+            served: 1,
+            outcome: {
+              _tag: 'Failure',
+              failure: {
+                _tag: 'TransportObservationError',
+                traceId: outage.traceId,
+                source: outage.source,
+                detail: outage.detail,
+              },
+            },
+          })
+        ),
       ),
     )
 
@@ -190,10 +178,11 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.growing.script, s.growing.options)),
-        Then('the reader reports the trace as unfinished, counting every span the store served')((s) => {
-          expect(s.reading).toSatisfy(reportsUnfinished)
-          expect(countedSpans(s.reading)).toBe(5)
-        }),
+        Then('the reader reports the trace as unfinished, counting every span the store served')((s, expect) =>
+          expect(s.reading).toMatchObject({
+            outcome: { _tag: 'Failure', failure: { _tag: 'IncompleteObservationError', spanCount: 5 } },
+          })
+        ),
       ),
     )
 
@@ -209,11 +198,12 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.stalled.script, s.stalled.options)),
-        Then('the reader reports the trace as unfinished with the one span it saw, after asking twice')((s) => {
-          expect(s.reading).toSatisfy(reportsUnfinished)
-          expect(countedSpans(s.reading)).toBe(1)
-          expect(s.reading.served).toBe(2)
-        }),
+        Then('the reader reports the trace as unfinished with the one span it saw, after asking twice')((s, expect) =>
+          expect(s.reading).toMatchObject({
+            served: 2,
+            outcome: { _tag: 'Failure', failure: { _tag: 'IncompleteObservationError', spanCount: 1 } },
+          })
+        ),
       ),
     )
 
@@ -229,10 +219,11 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.sparse.script, s.sparse.options)),
-        Then('the reader reports the trace as unfinished, counting every span the store served')((s) => {
-          expect(s.reading).toSatisfy(reportsUnfinished)
-          expect(countedSpans(s.reading)).toBe(4)
-        }),
+        Then('the reader reports the trace as unfinished, counting every span the store served')((s, expect) =>
+          expect(s.reading).toMatchObject({
+            outcome: { _tag: 'Failure', failure: { _tag: 'IncompleteObservationError', spanCount: 4 } },
+          })
+        ),
       ),
     )
 
@@ -248,10 +239,12 @@ Feature('Reading a finished trace back from a remote store')
             ),
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.spaced.script, s.spaced.options)),
-        Then('the reader asks the store once and reports the trace as unfinished')((s) => {
-          expect(s.reading.served).toBe(1)
-          expect(s.reading).toSatisfy(reportsUnfinished)
-        }),
+        Then('the reader asks the store once and reports the trace as unfinished')((s, expect) =>
+          expect(s.reading).toMatchObject({
+            served: 1,
+            outcome: { _tag: 'Failure', failure: { _tag: 'IncompleteObservationError' } },
+          })
+        ),
       ),
     )
 
@@ -267,12 +260,9 @@ Feature('Reading a finished trace back from a remote store')
             ]),
         ),
         When('the reader is built with each of them')('builds', (s) => Effect.forEach(s.impatient, buildWith)),
-        Then('every one of them is refused before the store is asked')((s) => {
-          expect(s.builds).toSatisfy(
-            (builds: ReadonlyArray<Exit.Exit<ReadonlyArray<Graph.SpanRecord>, Observation.ObservationFailure>>) =>
-              builds.every(constructionRefused),
-          )
-        }),
+        Then('every one of them is refused before the store is asked')((s, expect) =>
+          expect(s.builds).toMatchObject([refusedBeforeRead, refusedBeforeRead])
+        ),
       ),
     )
   })

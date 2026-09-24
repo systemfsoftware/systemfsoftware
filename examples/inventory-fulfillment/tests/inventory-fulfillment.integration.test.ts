@@ -1,6 +1,5 @@
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
-import { expect } from '@systemfsoftware/vitest'
 import { DateTime, Effect, Encoding, Result, Schema as S } from 'effect'
 import {
   AllocatedSplit,
@@ -10,7 +9,6 @@ import {
   DuplicateOrder,
   Forbidden,
   InsufficientStock,
-  StoreUnavailable,
   submitRequest,
   TestServer,
   TestServerLayer,
@@ -105,6 +103,18 @@ const classifyCreditOutcome = (decision: FulfillmentDecision): Effect.Effect<Cre
 const lotIdsOf = (view: StockView): readonly string[] =>
   view.partitions.flatMap((partition) => partition.lots.map((lot) => lot.lotId))
 
+const lotAt = (ids: readonly string[], index: number): string => {
+  const id = ids[index]
+  if (id === undefined) throw new Error(`the listing has no lot at position ${index}`)
+  return id
+}
+
+/**
+ * The refusal a page key nobody issued earns: the JSON string the token could not be read as, named at the cursor
+ * field, and never a store failure. The message carries the offending payload, so the claim is stated as a pattern.
+ */
+const PAGE_KEY_REFUSAL = /^(?=[\s\S]*JSON string)(?=[\s\S]*cursor)(?![\s\S]*StoreUnavailable)[\s\S]*$/
+
 interface StockPageRequest {
   readonly warehouseId: string
   readonly limit: number
@@ -166,21 +176,23 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             ]),
         ),
         Then('the fulfillment routes six units from the first warehouse and four from the second')(
-          (s) =>
-            Effect.gen(function*() {
-              const split = yield* S.decodeUnknownEffect(AllocatedSplit)(s.decision)
-              expect(
-                split.allocations.map((allocation) => ({
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const split = yield* S.decodeUnknownEffect(AllocatedSplit)(s.decision)
+                return split.allocations.map((allocation) => ({
                   warehouseId: allocation.warehouseId,
                   sku: allocation.sku,
                   quantity: allocation.quantity,
-                })),
-              ).toEqual([
-                { warehouseId: s.catalog.east, sku: s.catalog.skuA, quantity: 6 },
-                { warehouseId: s.catalog.west, sku: s.catalog.skuA, quantity: 4 },
-                { warehouseId: s.catalog.west, sku: s.catalog.skuB, quantity: 5 },
-              ])
-            }),
+                }))
+              }),
+              (observed) =>
+                expect(observed).toEqual([
+                  { warehouseId: s.catalog.east, sku: s.catalog.skuA, quantity: 6 },
+                  { warehouseId: s.catalog.west, sku: s.catalog.skuA, quantity: 4 },
+                  { warehouseId: s.catalog.west, sku: s.catalog.skuB, quantity: 5 },
+                ]),
+            ),
         ),
       ),
     )
@@ -205,18 +217,25 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
           (s) => placeOrder(s.customer, uniqueId('order'), [{ sku: s.catalog.sku, quantity: 7 }]),
         ),
         Then('the whole order is reserved from that warehouse')(
-          (s) =>
-            Effect.gen(function*() {
-              const server = yield* TestServer
-              const split = yield* S.decodeUnknownEffect(AllocatedSplit)(s.decision)
-              expect(
-                split.allocations.map((allocation) => ({
-                  warehouseId: allocation.warehouseId,
-                  quantity: allocation.quantity,
-                })),
-              ).toEqual([{ warehouseId: s.catalog.warehouse, quantity: 7 }])
-              expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(0)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const split = yield* S.decodeUnknownEffect(AllocatedSplit)(s.decision)
+                return {
+                  allocations: split.allocations.map((allocation) => ({
+                    warehouseId: allocation.warehouseId,
+                    quantity: allocation.quantity,
+                  })),
+                  stockOnHand: (yield* server.inspect.stock(s.catalog.lot)).quantityOnHand,
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({
+                  allocations: [{ warehouseId: s.catalog.warehouse, quantity: 7 }],
+                  stockOnHand: 0,
+                }),
+            ),
         ),
       ),
     )
@@ -244,17 +263,29 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             return { decision, reservations: yield* server.inspect.reservations(orderId) }
           })),
         Then('three units are reserved without a charge, and two are recorded as backordered')(
-          (s) =>
-            Effect.gen(function*() {
-              const backordered = yield* S.decodeUnknownEffect(Backordered)(s.outcome.decision)
-              expect(backordered.allocations.map((allocation) => allocation.quantity)).toEqual([3])
-              expect(
-                backordered.backorderedLines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
-              ).toEqual([{ sku: s.catalog.sku, quantity: 2 }])
-              expect(s.outcome.reservations.map((row) => row.quantity)).toEqual([3])
-              const server = yield* TestServer
-              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(0)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const backordered = yield* S.decodeUnknownEffect(Backordered)(s.outcome.decision)
+                return {
+                  allocatedQuantities: backordered.allocations.map((allocation) => allocation.quantity),
+                  backorderedLines: backordered.backorderedLines.map((line) => ({
+                    sku: line.sku,
+                    quantity: line.quantity,
+                  })),
+                  reservedQuantities: s.outcome.reservations.map((row) => row.quantity),
+                  outstandingBalance: (yield* server.inspect.credit(s.customer.userId)).outstandingBalance,
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({
+                  allocatedQuantities: [3],
+                  backorderedLines: [{ sku: s.catalog.sku, quantity: 2 }],
+                  reservedQuantities: [3],
+                  outstandingBalance: 0,
+                }),
+            ),
         ),
       ),
     )
@@ -280,14 +311,19 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
           (s) => placeOrder(s.customer, uniqueId('order'), [{ sku: s.catalog.sku, quantity: 600 }]),
         ),
         Then('the order is held for a five hundred unit downpayment and no stock is reserved')(
-          (s) =>
-            Effect.gen(function*() {
-              const server = yield* TestServer
-              const held = yield* S.decodeUnknownEffect(CreditHold)(s.decision)
-              expect(held.shortfall).toBe(500)
-              expect(held.requiredDownpayment).toBe(500)
-              expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(600)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const held = yield* S.decodeUnknownEffect(CreditHold)(s.decision)
+                return {
+                  shortfall: held.shortfall,
+                  requiredDownpayment: held.requiredDownpayment,
+                  stockOnHand: (yield* server.inspect.stock(s.catalog.lot)).quantityOnHand,
+                }
+              }),
+              (observed) => expect(observed).toEqual({ shortfall: 500, requiredDownpayment: 500, stockOnHand: 600 }),
+            ),
         ),
       ),
     )
@@ -313,14 +349,20 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
           (s) => placeOrder(s.customer, uniqueId('order'), [{ sku: s.catalog.sku, quantity: 600 }]),
         ),
         Then('the order is allocated and the overdraft is recorded')(
-          (s) =>
-            Effect.gen(function*() {
-              const server = yield* TestServer
-              const overdraft = yield* S.decodeUnknownEffect(AllocatedWithOverdraft)(s.decision)
-              expect(overdraft.overdraftAmount).toBe(500)
-              expect(overdraft.allocations.map((allocation) => allocation.quantity)).toEqual([600])
-              expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(0)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const overdraft = yield* S.decodeUnknownEffect(AllocatedWithOverdraft)(s.decision)
+                return {
+                  overdraftAmount: overdraft.overdraftAmount,
+                  allocationQuantities: overdraft.allocations.map((allocation) => allocation.quantity),
+                  stockOnHand: (yield* server.inspect.stock(s.catalog.lot)).quantityOnHand,
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({ overdraftAmount: 500, allocationQuantities: [600], stockOnHand: 0 }),
+            ),
         ),
       ),
     )
@@ -344,13 +386,18 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             return yield* Effect.flip(client.submitOrder(payload))
           })),
         Then('the refusal names the item and the missing quantity')(
-          (s) =>
-            Effect.gen(function*() {
-              const insufficient = yield* S.decodeUnknownEffect(InsufficientStock)(s.refusal)
-              expect(insufficient.sku).toBe(s.catalog.sku)
-              expect(insufficient.requested).toBe(4)
-              expect(insufficient.available).toBe(0)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const insufficient = yield* S.decodeUnknownEffect(InsufficientStock)(s.refusal)
+                return {
+                  sku: insufficient.sku,
+                  requested: insufficient.requested,
+                  available: insufficient.available,
+                }
+              }),
+              (observed) => expect(observed).toEqual({ sku: s.catalog.sku, requested: 4, available: 0 }),
+            ),
         ),
       ),
     )
@@ -404,13 +451,21 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             }),
         ),
         Then('exactly one order is fulfilled and stock never goes negative')(
-          (s) =>
-            Effect.gen(function*() {
-              const server = yield* TestServer
-              expect(s.tags.filter((tag) => tag === 'AllocatedSplit')).toHaveLength(1)
-              expect(s.tags.filter((tag) => tag === 'InsufficientStock')).toHaveLength(1)
-              expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(0)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                return {
+                  outcomeTags: [...s.tags].sort(),
+                  stockOnHand: (yield* server.inspect.stock(s.catalog.lot)).quantityOnHand,
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({
+                  outcomeTags: ['AllocatedSplit', 'InsufficientStock'],
+                  stockOnHand: 0,
+                }),
+            ),
         ),
       ),
     )
@@ -439,16 +494,30 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             return { decision, orderId }
           })),
         Then('the retry fulfills the order, charges once, and reserves the stock')(
-          (s) =>
-            Effect.gen(function*() {
-              const server = yield* TestServer
-              const split = yield* S.decodeUnknownEffect(AllocatedSplit)(s.outcome.decision)
-              expect(split.allocations.map((allocation) => allocation.quantity)).toEqual([2])
-              expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(3)
-              expect((yield* server.inspect.reservations(s.outcome.orderId)).map((row) => row.quantity)).toEqual([2])
-              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(2)
-              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(1)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const split = yield* S.decodeUnknownEffect(AllocatedSplit)(s.outcome.decision)
+                return {
+                  allocatedQuantities: split.allocations.map((allocation) => allocation.quantity),
+                  stockOnHand: (yield* server.inspect.stock(s.catalog.lot)).quantityOnHand,
+                  reservedQuantities: (yield* server.inspect.reservations(s.outcome.orderId)).map((row) =>
+                    row.quantity
+                  ),
+                  outstandingBalance: (yield* server.inspect.credit(s.customer.userId)).outstandingBalance,
+                  auditTags: yield* server.inspect.auditTags(s.outcome.orderId),
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({
+                  allocatedQuantities: [2],
+                  stockOnHand: 3,
+                  reservedQuantities: [2],
+                  outstandingBalance: 2,
+                  auditTags: ['AllocatedSplit'],
+                }),
+            ),
         ),
       ),
     )
@@ -482,15 +551,27 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             return { orderId, failure }
           })),
         Then('the order is refused as unavailable and nothing is written')(
-          (s) =>
-            Effect.gen(function*() {
-              const server = yield* TestServer
-              expect(s.outcome.failure).toSatisfy(S.is(StoreUnavailable))
-              expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(5)
-              expect(yield* server.inspect.reservations(s.outcome.orderId)).toHaveLength(0)
-              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(0)
-              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(0)
-            }),
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                return {
+                  failure: s.outcome.failure,
+                  stockOnHand: (yield* server.inspect.stock(s.catalog.lot)).quantityOnHand,
+                  reservations: yield* server.inspect.reservations(s.outcome.orderId),
+                  auditTags: yield* server.inspect.auditTags(s.outcome.orderId),
+                  outstandingBalance: (yield* server.inspect.credit(s.customer.userId)).outstandingBalance,
+                }
+              }),
+              (observed) =>
+                expect(observed).toMatchObject({
+                  failure: { _tag: 'StoreUnavailable', cause: expect.any(Error) },
+                  stockOnHand: 5,
+                  reservations: [],
+                  auditTags: [],
+                  outstandingBalance: 0,
+                }),
+            ),
         ),
       ),
     )
@@ -546,20 +627,29 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               }
             }),
         ),
-        Then('the cross-caller read and the anonymous order are both denied')(
-          (s) =>
-            Effect.gen(function*() {
-              const forbidden = yield* S.decodeUnknownEffect(Forbidden)(s.attempts.crossCaller)
-              expect(forbidden.resource).toBe(s.attempts.ownerOrder)
-              const unauthorized = yield* S.decodeUnknownEffect(Unauthorized)(s.attempts.anonymous)
-              expect(unauthorized._tag).toBe('Unauthorized')
-            }),
-        ),
-        And('each customer still reads their own reservation')(
-          (s) => {
-            expect(s.attempts.owned.customerId).toBe(s.customers.other.userId)
-            expect(s.attempts.owned.orderId).toBe(s.attempts.otherOrder)
-          },
+        Then(
+          'the cross-caller read and the anonymous order are both denied, and each customer still reads their own reservation',
+        )(
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const forbidden = yield* S.decodeUnknownEffect(Forbidden)(s.attempts.crossCaller)
+                const unauthorized = yield* S.decodeUnknownEffect(Unauthorized)(s.attempts.anonymous)
+                return {
+                  forbiddenResource: forbidden.resource,
+                  unauthorizedTag: unauthorized._tag,
+                  ownedCustomerId: s.attempts.owned.customerId,
+                  ownedOrderId: s.attempts.owned.orderId,
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({
+                  forbiddenResource: s.attempts.ownerOrder,
+                  unauthorizedTag: 'Unauthorized',
+                  ownedCustomerId: s.customers.other.userId,
+                  ownedOrderId: s.attempts.otherOrder,
+                }),
+            ),
         ),
       ),
     )
@@ -602,11 +692,23 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               return yield* S.decodeUnknownEffect(DuplicateOrder)(refusal)
             }),
         ),
-        And('the original reservation is the only one recorded')((s) =>
-          Effect.gen(function*() {
-            const server = yield* TestServer
-            expect(yield* server.inspect.reservations(s.order.orderId)).toHaveLength(1)
-          })
+        And('the original reservation is the only one recorded')(
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const reservations = yield* server.inspect.reservations(s.order.orderId)
+                return reservations.map((row) => ({
+                  orderId: row.orderId,
+                  customerId: row.customerId,
+                  quantity: row.quantity,
+                }))
+              }),
+              (observed) =>
+                expect(observed).toEqual([
+                  { orderId: s.order.orderId, customerId: s.customer.userId, quantity: 2 },
+                ]),
+            ),
         ),
       ),
     )
@@ -657,14 +759,30 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               return yield* S.decodeUnknownEffect(Forbidden)(refusal)
             }),
         ),
-        Then('the refusal names the order and the other customer is charged nothing')((s) =>
-          Effect.gen(function*() {
-            const server = yield* TestServer
-            expect(s.refusal.resource).toBe(s.order.orderId)
-            expect(yield* server.inspect.reservations(s.order.orderId)).toHaveLength(1)
-            expect(yield* server.inspect.auditTags(s.order.orderId)).toHaveLength(1)
-            expect((yield* server.inspect.credit(s.customers.other.userId)).outstandingBalance).toBe(0)
-          })
+        Then('the refusal names the order and the other customer is charged nothing')(
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                return {
+                  refusalResource: s.refusal.resource,
+                  reservations: (yield* server.inspect.reservations(s.order.orderId)).map((row) => ({
+                    orderId: row.orderId,
+                    customerId: row.customerId,
+                    quantity: row.quantity,
+                  })),
+                  auditTags: yield* server.inspect.auditTags(s.order.orderId),
+                  outstandingBalance: (yield* server.inspect.credit(s.customers.other.userId)).outstandingBalance,
+                }
+              }),
+              (observed) =>
+                expect(observed).toEqual({
+                  refusalResource: s.order.orderId,
+                  reservations: [{ orderId: s.order.orderId, customerId: s.customers.owner.userId, quantity: 2 }],
+                  auditTags: ['AllocatedSplit'],
+                  outstandingBalance: 0,
+                }),
+            ),
         ),
       ),
     )
@@ -695,17 +813,26 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
             })
             return { first, second }
           })),
-        Then('the first page holds four lots and offers a way to continue')((s) => {
-          expect(lotIdsOf(s.pages.first)).toHaveLength(4)
-          expect(s.pages.first.nextCursor).toBeTypeOf('string')
-        }),
-        And('the next page holds the one remaining lot and closes the listing')((s) => {
-          const firstIds = lotIdsOf(s.pages.first)
-          const secondIds = lotIdsOf(s.pages.second)
-          expect(secondIds).toHaveLength(1)
-          expect([...secondIds, ...firstIds].sort()).toEqual([...s.catalog.lots].sort())
-          expect(s.pages.second.nextCursor).toBeNull()
-        }),
+        Then(
+          'the first page holds four lots and offers a way to continue, and the next page holds the one remaining lot and closes the listing',
+        )(
+          (s, expect) => {
+            const pageOrder = [...s.catalog.lots].sort()
+            return expect({
+              firstPage: lotIdsOf(s.pages.first),
+              firstPageContinuation: s.pages.first.nextCursor === null
+                ? null
+                : positionOf(s.pages.first.nextCursor),
+              secondPage: lotIdsOf(s.pages.second),
+              secondCursor: s.pages.second.nextCursor,
+            }).toEqual({
+              firstPage: pageOrder.slice(0, 4),
+              firstPageContinuation: { sku: s.catalog.sku, lotId: lotAt(pageOrder, 3) },
+              secondPage: pageOrder.slice(4),
+              secondCursor: null,
+            })
+          },
+        ),
       ),
     )
 
@@ -717,17 +844,18 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
           Effect.gen(function*() {
             const sku = uniqueId('sku')
             const warehouse = uniqueId('warehouse')
+            const lots = [uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot')]
             yield* provisionStock(
               warehouse,
               'central',
-              [uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot')].map((id) => ({
+              lots.map((id) => ({
                 id,
                 sku,
                 warehouseId: warehouse,
                 quantity: 1,
               })),
             )
-            return { warehouse }
+            return { warehouse, lots }
           })),
         When('they ask for the next page with a page key nobody issued')('refusal', (s) =>
           Effect.gen(function*() {
@@ -742,25 +870,43 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               s.customer.cookie,
             )
           })),
-        Then('the refusal names the page key and never blames the store')((s) => {
-          expect(s.refusal).toHaveLength(1)
-          const defect = s.refusal[0]?.exit.cause[0]?.defect ?? ''
-          expect(defect).toContain('JSON string')
-          expect(defect).toContain('cursor')
-          expect(defect).not.toContain('StoreUnavailable')
-        }),
-        And('the listing itself still pages through every lot and closes')((s) =>
-          Effect.gen(function*() {
-            const first = yield* listStockPage(s.customer, { warehouseId: s.catalog.warehouse, limit: 4 })
-            const second = yield* listStockPage(s.customer, {
-              warehouseId: s.catalog.warehouse,
-              limit: 4,
-              cursor: first.nextCursor === null ? undefined : positionOf(first.nextCursor),
-            })
-            expect(lotIdsOf(first)).toHaveLength(4)
-            expect(lotIdsOf(second)).toHaveLength(1)
-            expect(second.nextCursor).toBeNull()
-          })
+        Then(
+          'the refusal names the page key and never blames the store, and the listing itself still pages through every lot and closes',
+        )(
+          (s, expect) => {
+            const pageOrder = [...s.catalog.lots].sort()
+            return Effect.map(
+              Effect.gen(function*() {
+                const first = yield* listStockPage(s.customer, { warehouseId: s.catalog.warehouse, limit: 4 })
+                const second = yield* listStockPage(s.customer, {
+                  warehouseId: s.catalog.warehouse,
+                  limit: 4,
+                  cursor: first.nextCursor === null ? undefined : positionOf(first.nextCursor),
+                })
+                return {
+                  refusals: s.refusal,
+                  firstPage: lotIdsOf(first),
+                  secondPage: lotIdsOf(second),
+                  secondCursor: second.nextCursor,
+                }
+              }),
+              (observed) =>
+                expect(observed).toMatchObject({
+                  refusals: [
+                    {
+                      _tag: 'Exit',
+                      exit: {
+                        _tag: 'Failure',
+                        cause: [{ _tag: 'Die', defect: expect.stringMatching(PAGE_KEY_REFUSAL) }],
+                      },
+                    },
+                  ],
+                  firstPage: pageOrder.slice(0, 4),
+                  secondPage: pageOrder.slice(4),
+                  secondCursor: null,
+                }),
+            )
+          },
         ),
       ),
     )
@@ -807,15 +953,16 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               return yield* Effect.forEach([contested, sibling], classifyCreditOutcome)
             }),
         ),
-        Then('exactly one order is allocated and the other is held for the shortfall')((s) => {
-          expect(s.outcomes.filter((outcome) => outcome.tag === 'AllocatedSplit')).toHaveLength(1)
-          const held = s.outcomes.filter(
-            (outcome): outcome is CreditHoldOutcome => outcome.tag === 'CreditHold',
-          )
-          expect(held).toHaveLength(1)
-          expect(held[0]?.shortfall).toBe(60)
-          expect(held[0]?.requiredDownpayment).toBe(60)
-        }),
+        Then('exactly one order is allocated and the other is held for the shortfall')(
+          (s, expect) =>
+            expect({
+              allocated: s.outcomes.filter((outcome) => outcome.tag === 'AllocatedSplit'),
+              held: s.outcomes.filter((outcome): outcome is CreditHoldOutcome => outcome.tag === 'CreditHold'),
+            }).toMatchObject({
+              allocated: [{ tag: 'AllocatedSplit' }],
+              held: [{ tag: 'CreditHold', shortfall: 60, requiredDownpayment: 60 }],
+            }),
+        ),
       ),
     )
 
@@ -859,22 +1006,33 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
               return yield* Effect.forEach([contested, sibling], classifyCreditOutcome)
             }),
         ),
-        Then('the customer never owes more than the credit allows')((s) =>
-          Effect.gen(function*() {
-            const server = yield* TestServer
-            const credit = yield* server.inspect.credit(s.customer.userId)
-            expect(credit.outstandingBalance).toBeLessThanOrEqual(credit.creditLimit + credit.overdraftPrivilege)
-          })
+        Then(
+          'the customer never owes more than the credit allows, with one order fulfilled and the other held for credit',
+        )(
+          (s, expect) =>
+            Effect.map(
+              Effect.gen(function*() {
+                const server = yield* TestServer
+                const credit = yield* server.inspect.credit(s.customer.userId)
+                return {
+                  outstandingBalance: credit.outstandingBalance,
+                  creditLimit: credit.creditLimit,
+                  overdraftPrivilege: credit.overdraftPrivilege,
+                  outcomes: [...s.outcomes].sort((left, right) => left.tag.localeCompare(right.tag)),
+                }
+              }),
+              (observed) =>
+                expect(observed).toMatchObject({
+                  outstandingBalance: expect.schemaMatching(S.Int.pipe(S.check(S.isLessThanOrEqualTo(60)))),
+                  creditLimit: 60,
+                  overdraftPrivilege: 0,
+                  outcomes: [
+                    { tag: 'AllocatedSplit' },
+                    { tag: 'CreditHold', shortfall: 20, requiredDownpayment: 20 },
+                  ],
+                }),
+            ),
         ),
-        And('one order is fulfilled and the other is held for credit')((s) => {
-          expect(s.outcomes.filter((outcome) => outcome.tag === 'AllocatedSplit')).toHaveLength(1)
-          const held = s.outcomes.filter(
-            (outcome): outcome is CreditHoldOutcome => outcome.tag === 'CreditHold',
-          )
-          expect(held).toHaveLength(1)
-          expect(held[0]?.shortfall).toBe(20)
-          expect(held[0]?.requiredDownpayment).toBe(20)
-        }),
       ),
     )
   })

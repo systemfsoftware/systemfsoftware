@@ -1,9 +1,8 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Layer } from 'effect'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, Layer, Schema } from 'effect'
 
-import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'
+import { failReportOf } from './__fixtures__/checkReports.js'
 import {
   CollectionCommand,
   collectionModel,
@@ -19,6 +18,24 @@ import {
 } from './__fixtures__/Stores.js'
 
 const Feature = makeFeature({ it })
+
+const thousandSequences = 1000
+const twentySequences = 20
+const fortyOperations = 40
+
+const divergedAtEndInsertion = (step: number | undefined) =>
+  Schema.makeFilter((operations) =>
+    Array.isArray(operations) && collectionOracle.endIndexInsertion(operations, step)
+      ? undefined
+      : 'the divergent step is the insertion at the end that lost the element'
+  )
+
+const shrunkBelow = (drawn: number) =>
+  Schema.makeFilter((operations) =>
+    Array.isArray(operations) && operations.length > 0 && operations.length < drawn
+      ? undefined
+      : `the reported sequence is empty or not shorter than the ${drawn} commands drawn`
+  )
 
 const sequenceRunsOf = (sequences: number, operations: number, seed: number) => ({ sequences, operations, seed })
 
@@ -58,24 +75,31 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
           'checked',
           (s) => collectionCheck(s.collection, 8, 20, 42),
         ),
-        Then('the run is rejected at the first step the model no longer explains')((s) => {
-          const failed = failReportOf(s.checked)
-          expect(failed.failure.judgement.problem).toBe('model-diverged')
-          expect(failed.failure.judgement.step).toBe(collectionOracle.firstDivergence(failed.failure.operations))
-        }),
-        And('the rejected step is the insertion at the end that lost the element')((s) => {
-          const failed = failReportOf(s.checked)
-          const operations = failed.failure.operations
-          expect(operations).toSatisfy((drawn: typeof operations) =>
-            collectionOracle.endIndexInsertion(drawn, failed.failure.judgement.step)
-          )
-        }),
-        And('the report names the step where the model diverged')((s) => {
-          const failed = failReportOf(s.checked)
-          expect(Conformance.render(s.checked)).toContain(
-            `the model diverged at step ${failed.failure.judgement.step}`,
-          )
-        }),
+        Then(
+          'the run is rejected at the first step the model no longer explains, the insertion at the end that lost the element',
+        )(
+          (s, expect) => {
+            const failure = failReportOf(s.checked).failure
+            const step = failure.judgement.step
+            return expect({
+              report: s.checked,
+              operations: failure.operations,
+              rendered: Conformance.render(s.checked),
+            }).toMatchObject({
+              report: {
+                _tag: 'Fail',
+                failure: {
+                  judgement: {
+                    problem: 'model-diverged',
+                    step: collectionOracle.firstDivergence(failure.operations),
+                  },
+                },
+              },
+              operations: expect.schemaMatching(Schema.Unknown.pipe(Schema.check(divergedAtEndInsertion(step)))),
+              rendered: expect.stringContaining(`the model diverged at step ${step}`),
+            })
+          },
+        ),
       ),
     )
 
@@ -88,11 +112,14 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
         ),
         When('the check runs a thousand sequences of ten commands')(
           'checked',
-          (s) => collectionCheck(s.collection, 1000, 10),
+          (s) => collectionCheck(s.collection, thousandSequences, 10),
         ),
-        Then('every sequence is explained by the model')((s) => {
-          expect(passReportOf(s.checked).histories).toBe(1000)
-        }),
+        Then('every sequence is explained by the model')((s, expect) =>
+          expect(s.checked).toMatchObject({
+            _tag: 'Pass',
+            histories: thousandSequences,
+          })
+        ),
       ),
     )
 
@@ -105,18 +132,26 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
         ),
         When('the check runs a single sequence of forty commands from seed 1')(
           'checked',
-          (s) => collectionCheck(s.collection, 1, 40, 1),
+          (s) => collectionCheck(s.collection, 1, fortyOperations, 1),
         ),
-        Then('the reported sequence is far shorter than the forty commands that were drawn')((s) => {
-          const failed = failReportOf(s.checked)
-          expect(failed.failure.operations.length).toBeGreaterThan(0)
-          expect(failed.failure.operations.length).toBeLessThan(40)
-        }),
-        And('the reported sequence still ends at the step the model diverged')((s) => {
-          const failed = failReportOf(s.checked)
-          expect(failed.failure.judgement.step).toBe(failed.failure.operations.length)
-          expect(failed.failure.judgement.problem).toBe('model-diverged')
-        }),
+        Then(
+          'the reported sequence is far shorter than the forty commands that were drawn and still ends at the divergence',
+        )(
+          (s, expect) => {
+            const failure = failReportOf(s.checked).failure
+            const count = failure.operations.length
+            return expect({
+              report: s.checked,
+              operations: failure.operations,
+            }).toMatchObject({
+              report: {
+                _tag: 'Fail',
+                failure: { judgement: { problem: 'model-diverged', step: count } },
+              },
+              operations: expect.schemaMatching(Schema.Unknown.pipe(Schema.check(shrunkBelow(fortyOperations)))),
+            })
+          },
+        ),
       ),
     )
 
@@ -129,11 +164,14 @@ Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
         ),
         When('the check runs twenty sequences of ten commands, each a removal')(
           'checked',
-          (s) => removeOnlyCheck(s.collection, 20, 10),
+          (s) => removeOnlyCheck(s.collection, twentySequences, 10),
         ),
-        Then('every sequence passes because no removal may run yet')((s) => {
-          expect(passReportOf(s.checked).histories).toBe(20)
-        }),
+        Then('every sequence passes because no removal may run yet')((s, expect) =>
+          expect(s.checked).toMatchObject({
+            _tag: 'Pass',
+            histories: twentySequences,
+          })
+        ),
       ),
     )
   })

@@ -1,12 +1,15 @@
-import { Gherkin, Given, StageTypeId, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, But, Gherkin, Given, StageTypeId, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type {
+  AssertionStateRefused,
   FeatureFn,
   GherkinEffect,
   GivenStage,
   InitialStage,
   StepError,
+  ThenStage,
   WhenStage,
 } from '@systemfsoftware/effect-gherkin-spec'
+import type { Asserted } from '@systemfsoftware/vitest/integration'
 import { Effect } from 'effect'
 import { describe, expect, it } from 'tstyche'
 
@@ -27,7 +30,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         GherkinEffect<
           Omit<InitialStage, typeof StageTypeId> & Record<'count', number> & GivenStage,
           StepError,
-          never
+          Asserted
         >
       >()
     })
@@ -45,8 +48,9 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       const givenStep = Given('setup')('count', () => Effect.succeed(10))
       const thenPipeline = Gherkin.Do.pipe(
         Given('prior setup')('seed', () => Effect.succeed(1)),
-        Then('verification')((s) => {
+        Then('verification')((s, exp) => {
           expect(s.seed).type.toBe<number>()
+          return exp(s.seed).toBe(1)
         }),
       )
       expect(givenStep).type.toBeCallableWith(Gherkin.Do)
@@ -65,13 +69,13 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       const whenStep = When('subsequent action')('metric', () => Effect.succeed(100))
       const thenPipeline = Gherkin.Do.pipe(
         Given('setup')('count', () => Effect.succeed(10)),
-        Then('first check')(() => {}),
+        Then('first check')((_s, exp) => exp(10).toBe(10)),
       )
       expect(whenStep).type.toBeCallableWith(thenPipeline)
     })
 
     it('Should_AcceptAThenStepAndTransitionToThenStage_When_AppliedAfterAWhenStep', () => {
-      const thenStep = Then('verify outcome')(() => {})
+      const thenStep = Then('verify outcome')((_s, exp) => exp(10).toBe(10))
       const whenPipeline = Gherkin.Do.pipe(
         When('action')('status', () => Effect.succeed('active')),
       )
@@ -82,7 +86,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       const pipeline = Gherkin.Do.pipe(
         Given('user identity')('id', () => Effect.succeed('usr_42')),
         When('profile loaded')('name', () => Effect.succeed('Alice')),
-        Then('attributes match')((s) => {
+        Then('attributes match')((s, exp) => {
           expect(s).type.toBe<
             & Omit<InitialStage, typeof StageTypeId>
             & Record<'id', string>
@@ -91,9 +95,34 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
           >()
           expect(s.id).type.toBe<string>()
           expect(s.name).type.toBe<string>()
+          return exp(s.id).toBe('usr_42')
         }),
       )
       void pipeline
+    })
+
+    it('Should_RejectAnAssertionStep_When_ItsBodyReturnsNoCheck', () => {
+      const thenPipeline = Gherkin.Do.pipe(
+        Given('setup')('seed', () => Effect.succeed(1)),
+        Then('verify outcome')((s, exp) => exp(s.seed).toBe(1)),
+      )
+      expect(thenPipeline).type.toBe<
+        GherkinEffect<
+          & Omit<Omit<InitialStage, typeof StageTypeId> & Record<'seed', number> & GivenStage, typeof StageTypeId>
+          & ThenStage,
+          StepError,
+          Asserted
+        >
+      >()
+      expect(Then('verify outcome')).type.not.toBeCallableWith((_s: object) => void 0)
+      expect(And('verify outcome')).type.not.toBeCallableWith((_s: object) => void 0)
+      expect(But('verify outcome')).type.not.toBeCallableWith((_s: object) => void 0)
+    })
+
+    it('Should_PublishTheSecondAssertionStepRefusal_When_AStateWouldBeAssertedTwice', () => {
+      expect<AssertionStateRefused>().type.toBe<
+        '✗ a second assertion step on the same state. Assert it once in one Then: Then(text)((s, expect) => expect({ a: s.a, b: s.b }).toEqual({...})).'
+      >()
     })
   })
 
@@ -103,7 +132,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         const concluded = Gherkin.Do.pipe(
           Given('inventory in stock')('count', () => Effect.succeed(10)),
           When('order placed')('status', () => Effect.succeed('placed')),
-          Then('inventory decremented')(() => {}),
+          Then('inventory decremented')((_s, exp) => exp(10).toBe(10)),
         )
         expect(scenario).type.toBeCallableWith('Order placed successfully', concluded)
       })
@@ -114,7 +143,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         )
         const concluded = Gherkin.Do.pipe(
           Given('inventory in stock')('count', () => Effect.succeed(10)),
-          Then('inventory confirmed')(() => {}),
+          Then('inventory confirmed')((_s, exp) => exp(10).toBe(10)),
         )
         expect(scenario).type.toBeCallableWith('Order confirmed', concluded)
         expect(scenario).type.not.toBeCallableWith('Incomplete order setup', givenOnly)
@@ -128,7 +157,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         const concluded = Gherkin.Do.pipe(
           Given('inventory in stock')('count', () => Effect.succeed(10)),
           When('order placed')('status', () => Effect.succeed('placed')),
-          Then('order processed')(() => {}),
+          Then('order processed')((_s, exp) => exp(10).toBe(10)),
         )
         expect(scenario).type.toBeCallableWith('Order placed with verification', concluded)
         expect(scenario).type.not.toBeCallableWith('Order placed without check', whenOnly)
@@ -138,15 +167,15 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         const intermediateWhen = Gherkin.Do.pipe(
           Given('order initialized')('count', () => Effect.succeed(10)),
           When('first payment attempted')('status', () => Effect.succeed('pending')),
-          Then('status is pending')(() => {}),
+          Then('status is pending')((_s, exp) => exp(10).toBe(10)),
           When('second payment confirmed')('metric', () => Effect.succeed(100)),
         )
         const fullyConcluded = Gherkin.Do.pipe(
           Given('order initialized')('count', () => Effect.succeed(10)),
           When('first payment attempted')('status', () => Effect.succeed('pending')),
-          Then('status is pending')(() => {}),
+          Then('status is pending')((_s, exp) => exp(10).toBe(10)),
           When('second payment confirmed')('metric', () => Effect.succeed(100)),
-          Then('order complete')(() => {}),
+          Then('order complete')((_s, exp) => exp(10).toBe(10)),
         )
         expect(scenario).type.toBeCallableWith('Full multi-action payment flow', fullyConcluded)
         expect(scenario).type.not.toBeCallableWith('Dangling multi-action payment', intermediateWhen)
@@ -154,7 +183,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
 
       it('Should_RejectAPlainObjectLiteral_When_ItIsPassedAsAScenarioPipeline', () => {
         const validConcluded = Gherkin.Do.pipe(
-          Then('outcome verified')(() => {}),
+          Then('outcome verified')((_s, exp) => exp(10).toBe(10)),
         )
         const plainObject = { result: true }
         expect(scenario).type.toBeCallableWith('Valid pipeline', validConcluded)

@@ -1,4 +1,3 @@
-export * from './core/DisparityError.schema.js'
 export * from './core/DisparityReporter.js'
 export * from './core/DualExecutionSupervisor.js'
 export * from './core/RelationalOracle.js'

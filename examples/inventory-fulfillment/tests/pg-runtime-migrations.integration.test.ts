@@ -30,7 +30,7 @@ const writeAndReadWarehouse = (databaseUrl: string): Effect.Effect<ReadonlyArray
     ),
   ).pipe(Effect.provide(options(databaseUrl)))
 
-Feature('Starting the app database root against a real postgres socket')
+Feature('Starting the app database root against a real postgres socket', { timeout: 120_000 })
   .withScenarioLayer(PgSocketServerLive)
   .live('the app database root opens a real node-postgres socket to PGlite, which the simulation kernel cannot run')
   .body(({ scenario }) => {
@@ -42,11 +42,11 @@ Feature('Starting the app database root against a real postgres socket')
           'rows',
           (s) => writeAndReadWarehouse(s.server.databaseUrl),
         ),
-        Then('the warehouse is read back from the migrated table')((s) => {
-          if (!s.rows.some((row) => row.id === 'warehouse-release-check' && row.region === 'north')) {
-            throw new Error('the migrated warehouses table did not return the written row')
-          }
-        }),
+        Then('the warehouse is read back from the migrated table')((s, expect) =>
+          expect(s.rows.map((row) => ({ id: row.id, region: row.region }))).toEqual([
+            { id: 'warehouse-release-check', region: 'north' },
+          ])
+        ),
       ),
     )
   })

@@ -5,12 +5,12 @@ import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import { Gherkin, type ScopeMap } from './DoNotation.js'
 import {
+  type BackgroundEffect,
   createOutlineFnNoFresh,
   createOutlineFnWithFresh,
   createScenarioNoFresh,
   createScenarioWithFresh,
   type FeatureBody,
-  type ScenarioBody,
 } from './FeatureRuntime.js'
 import type { StepError } from './StepError.schema.js'
 
@@ -159,7 +159,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       deps,
       configOf(name, describeMode, suiteOpts, live),
       (register) => {
-        let bg: ScenarioBody<never> | null = null
+        let bg: BackgroundEffect<never> | null = null
         const scenario = createScenarioNoFresh<never>(register, () => bg)
         const scenarioOutline = createOutlineFnNoFresh<never>(register, () => bg)
         body({
@@ -193,7 +193,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       configOf(name, describeMode, suiteOpts, live),
       featureScenarioLayer,
       (register) => {
-        let bg: ScenarioBody<RFresh | RFreshReq> | null = null
+        let bg: BackgroundEffect<RFresh | RFreshReq> | null = null
         const scenario = createScenarioWithFresh<never, RFresh, RFreshReq>(register, () => bg)
         const scenarioOutline = createOutlineFnWithFresh<never, RFresh, RFreshReq>(register, () => bg)
         body({
@@ -223,7 +223,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       configOf(name, describeMode, suiteOpts, live),
       { layer: layerDef },
       (register) => {
-        let bg: ScenarioBody<RShared> | null = null
+        let bg: BackgroundEffect<RShared> | null = null
         const scenario = createScenarioNoFresh<RShared>(register, () => bg)
         const scenarioOutline = createOutlineFnNoFresh<RShared>(register, () => bg)
         body({
@@ -255,7 +255,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       { layer: layerDef },
       featureScenarioLayer,
       (register) => {
-        let bg: ScenarioBody<RShared | RFresh | RFreshReq> | null = null
+        let bg: BackgroundEffect<RShared | RFresh | RFreshReq> | null = null
         const scenario = createScenarioWithFresh<RShared, RFresh, RFreshReq>(register, () => bg)
         const scenarioOutline = createOutlineFnWithFresh<RShared, RFresh, RFreshReq>(register, () => bg)
         body({

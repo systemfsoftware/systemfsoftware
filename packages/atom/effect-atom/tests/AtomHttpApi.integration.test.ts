@@ -1,6 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
@@ -29,10 +28,6 @@ const waitForSettled = <A, E, W>(
     )
     return Effect.sync(unsubscribe)
   })
-
-/** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
-const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
-  Atom.AsyncResult.isInitial(reading) || Atom.AsyncResult.isWaiting(reading)
 
 /**
  * A test double that answers every request through the same preprocess and
@@ -121,9 +116,9 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
-        Then('the fresh page shows the profile without fetching it a second time')((s) => {
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('the fresh page shows the profile without fetching it a second time')(
+          (s, expect) => expect(s.result.calls).toBe(1),
+        ),
       ),
     )
     scenario(
@@ -148,10 +143,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               secondReading: Atom.Registry.get(s.ctx.registry, s.ctx.profile),
             })),
         ),
-        Then('both parts agree the profile is still loading, not a stale or broken value')((s) => {
-          expect(s.result.firstReading).toSatisfy(isLoading)
-          expect(s.result.secondReading).toSatisfy(isLoading)
-        }),
+        Then('both parts agree the profile is still loading, not a stale or broken value')((s, expect) =>
+          expect(s.result).toMatchObject({
+            firstReading: { _tag: 'Initial', waiting: true },
+            secondReading: { _tag: 'Initial', waiting: true },
+          })
+        ),
       ),
     )
     scenario(
@@ -185,12 +182,13 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the created record is reported')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.outcome)) {
-            expect(s.outcome.value).toEqual({ id: 1, name: 'grace' })
-          }
-        }),
+        Then('the created record is reported')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, value: Atom.AsyncResult.value(s.outcome) }).toEqual({
+              tag: 'Success',
+              value: Option.some({ id: 1, name: 'grace' }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -224,9 +222,18 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             yield* waitForSettled(s.ctx.registry, s.ctx.create, Atom.AsyncResult.isFailure)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the submission is reported as failed')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
-        }),
+        Then('the submission is reported as failed')(
+          (s, expect) =>
+            expect(s.outcome).toMatchObject({
+              _tag: 'Failure',
+              cause: {
+                reasons: [{
+                  _tag: 'Die',
+                  defect: { _tag: 'HttpClientError', reason: { _tag: 'DecodeError', response: { status: 500 } } },
+                }],
+              },
+            }),
+        ),
       ),
     )
     scenario(
@@ -255,10 +262,10 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             unmount()
             return outcome
           })),
-        Then('the profile is reported from the derived client')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
-          expect(s.ctx.callsMade()).toBe(1)
-        }),
+        Then('the profile is reported from the derived client')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, calls: s.ctx.callsMade() }).toEqual({ tag: 'Success', calls: 1 }),
+        ),
       ),
     )
     scenario(
@@ -311,11 +318,14 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             unmount()
             return { first, second, calls }
           })),
-        Then('the submission ran and the watched profile was fetched again')((s) => {
-          expect(s.readings.first).toSatisfy(Atom.AsyncResult.isSuccess)
-          expect(s.readings.second).toSatisfy(Atom.AsyncResult.isSuccess)
-          expect(s.readings.calls).toBe(3)
-        }),
+        Then('the submission ran and the watched profile was fetched again')(
+          (s, expect) =>
+            expect({ first: s.readings.first._tag, second: s.readings.second._tag, calls: s.readings.calls }).toEqual({
+              first: 'Success',
+              second: 'Success',
+              calls: 3,
+            }),
+        ),
       ),
     )
     scenario(
@@ -349,12 +359,9 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the raw response is reported')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.outcome)) {
-            expect(s.outcome.value).toMatchObject({ status: 200 })
-          }
-        }),
+        Then('the raw response is reported')(
+          (s, expect) => expect(s.outcome).toMatchObject({ _tag: 'Success', value: { status: 200 } }),
+        ),
       ),
     )
     scenario(
@@ -406,11 +413,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             }),
         ),
         Then('the first profile keeps its retention and the second stays alive, and reload still shows the profile')(
-          (s) => {
-            expect(s.ctx.idleTTL).toBe(60_000)
-            expect(s.ctx.keepAlive).toBe(true)
-            expect(s.result.secondReading).toSatisfy(Atom.AsyncResult.isSuccess)
-          },
+          (s, expect) =>
+            expect({
+              idleTTL: s.ctx.idleTTL,
+              keepAlive: s.ctx.keepAlive,
+              secondReading: s.result.secondReading._tag,
+            }).toEqual({ idleTTL: 60_000, keepAlive: true, secondReading: 'Success' }),
         ),
       ),
     )
@@ -448,10 +456,13 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the submission is reported as a defect rather than a normal failure')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(Atom.AsyncResult.error(s.outcome)).toEqual(Option.none())
-        }),
+        Then('the submission is reported as a defect rather than a normal failure')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, error: Atom.AsyncResult.error(s.outcome) }).toEqual({
+              tag: 'Failure',
+              error: Option.none(),
+            }),
+        ),
       ),
     )
     scenario(
@@ -488,10 +499,13 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the submission is reported as a normal failure with the described error')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(Atom.AsyncResult.error(s.outcome)).toEqual(Option.some({ message: 'nope' }))
-        }),
+        Then('the submission is reported as a normal failure with the described error')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, error: Atom.AsyncResult.error(s.outcome) }).toEqual({
+              tag: 'Failure',
+              error: Option.some({ message: 'nope' }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -549,11 +563,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             }),
         ),
         Then('each runtime factory reports only the extra service it was given itself, and the request is answered')(
-          (s) => {
-            expect(Atom.AsyncResult.getOrThrow(s.readings.firstGreeting)).toBe('first')
-            expect(Atom.AsyncResult.getOrThrow(s.readings.secondGreeting)).toBe('second')
-            expect(s.readings.profile).toSatisfy(Atom.AsyncResult.isSuccess)
-          },
+          (s, expect) =>
+            expect({
+              firstGreeting: Atom.AsyncResult.getOrThrow(s.readings.firstGreeting),
+              secondGreeting: Atom.AsyncResult.getOrThrow(s.readings.secondGreeting),
+              profile: s.readings.profile._tag,
+            }).toEqual({ firstGreeting: 'first', secondGreeting: 'second', profile: 'Success' }),
         ),
       ),
     )

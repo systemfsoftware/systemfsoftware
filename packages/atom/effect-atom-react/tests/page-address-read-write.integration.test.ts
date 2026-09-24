@@ -1,6 +1,6 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect, vi } from '@systemfsoftware/vitest'
+import { vi } from '@systemfsoftware/vitest'
 import * as Effect from 'effect/Effect'
 import { constVoid } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -64,11 +64,14 @@ Feature('Remembering page choices in the address bar')
               return { writtenAddresses }
             }),
         ),
-        Then('the address bar is rewritten once and carries both choices')((s) => {
-          expect(s.result.writtenAddresses).toHaveLength(1)
-          expect(s.result.writtenAddresses[0]).toContain('size=1')
-          expect(s.result.writtenAddresses[0]).toContain('colour=2')
-        }),
+        Then('the address bar is rewritten once and carries both choices')((s, expect) =>
+          expect(s.result.writtenAddresses).toSatisfy(
+            (addresses) =>
+              addresses.length === 1 &&
+              addresses.every((address) => address.includes('size=1') && address.includes('colour=2')),
+            'exactly one address rewrite, carrying the chosen size and the chosen colour',
+          )
+        ),
       ),
     )
     scenario(
@@ -107,10 +110,14 @@ Feature('Remembering page choices in the address bar')
               return { writtenAddresses }
             }),
         ),
-        Then('the address bar carries only the choice the first page recorded itself')((s) => {
-          expect(s.result.writtenAddresses).toHaveLength(1)
-          expect(s.result.writtenAddresses[0]).toContain('size=1')
-        }),
+        Then('the address bar carries only the choice the first page recorded itself')((s, expect) =>
+          expect(s.result.writtenAddresses).toSatisfy(
+            (addresses) =>
+              addresses.length === 1 &&
+              addresses.every((address) => address.includes('size=1') && !address.includes('size=2')),
+            "exactly one address rewrite, carrying the first page's choice and not the other page's",
+          )
+        ),
       ),
     )
   })

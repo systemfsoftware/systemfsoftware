@@ -1,6 +1,5 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, MutableRef, Option } from 'effect'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -108,15 +107,24 @@ Feature('Nesting registries and bounding how deep routing may recurse')
               Discern.Model.recording(s.observations),
             ])
           })),
-        Then('each level asked separately, and the inner question is filed under the group')((s) =>
+        Then('each level asked separately, and the inner question is filed under the group')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.answer).toBe('reviewed:is this diff safe')
-            expect(model.asked()).toStrictEqual([['top-route'], ['code-route']])
             const tree = Discern.Model.tree(yield* Discern.Model.snapshot(s.observations), 'top')
-            expect(tree.children.map((child) => child.name)).toStrictEqual(['route', 'code'])
-            expect(tree.children.at(1)?.children.map((child) => child.name)).toStrictEqual(['route'])
-          })
+            return {
+              answer: s.answer,
+              asked: model.asked(),
+              childNames: tree.children.map((child) => child.name),
+              grandchildNames: tree.children.at(1)?.children.map((child) => child.name),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              answer: 'reviewed:is this diff safe',
+              asked: [['top-route'], ['code-route']],
+              childNames: ['route', 'code'],
+              grandchildNames: ['route'],
+            })
+          ))
         ),
       ),
     )
@@ -136,12 +144,16 @@ Feature('Nesting registries and bounding how deep routing may recurse')
               withProvider(Discern.Procedure.withMaxDepth(3)(s.registry.invoke('x')), model.model),
             )
           })),
-        Then('routing stops at the third level instead of recursing forever')((s) =>
+        Then('routing stops at the third level instead of recursing forever')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.refused).toMatchObject({ _tag: 'DepthExceededError', limit: 3 })
-            expect(model.calls()).toBe(3)
-          })
+            return { refused: s.refused, modelCalls: model.calls() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              refused: { _tag: 'DepthExceededError', limit: 3 },
+              modelCalls: 3,
+            })
+          ))
         ),
       ),
     )
@@ -159,9 +171,9 @@ Feature('Nesting registries and bounding how deep routing may recurse')
               model.model,
             )
           })),
-        Then('both siblings answer, each having used its own single level')(({ answers }) => {
-          expect(answers).toStrictEqual(['found:a', 'found:b'])
-        }),
+        Then('both siblings answer, each having used its own single level')(({ answers }, expect) =>
+          expect(answers).toEqual(['found:a', 'found:b'])
+        ),
       ),
     )
 
@@ -172,9 +184,9 @@ Feature('Nesting registries and bounding how deep routing may recurse')
           'refusal',
           () => Effect.succeed(refusalOf(() => Discern.Procedure.registry(Request, { solo }))),
         ),
-        Then('the build is refused, naming what went wrong')((s) => {
+        Then('the build is refused, naming what went wrong')((s, expect) =>
           expect(s.refusal.message).toContain('at least two labels')
-        }),
+        ),
       ),
     )
   })

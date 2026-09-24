@@ -9,7 +9,7 @@ permissions:
 jobs:
   check:
     name: the gate (pnpm check:ci)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 45
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"

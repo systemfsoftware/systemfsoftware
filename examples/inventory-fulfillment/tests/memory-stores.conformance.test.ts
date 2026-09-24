@@ -1,8 +1,8 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
-import { passedRuns } from './__fixtures__/conformance-report.fixture.js'
 import {
+  budgetedHistories,
   inventoryReadLayer,
   inventoryReadSpec,
   reservationReadLayer,
@@ -26,9 +26,11 @@ Feature('Reading the in-memory stores')
           'checked',
           (s) => Conformance.sequential(s.store, inventoryReadSpec),
         ),
-        Then('every lot comes back in sku then lot order, each exactly once')((s) => {
-          passedRuns(s.checked)
-        }),
+        Then('every lot comes back in sku then lot order, each exactly once')((s, expect) =>
+          expect({ report: s.checked }).toMatchObject({
+            report: { _tag: 'Pass', histories: budgetedHistories },
+          })
+        ),
       ),
     )
 
@@ -43,9 +45,11 @@ Feature('Reading the in-memory stores')
           'checked',
           (s) => Conformance.sequential(s.store, reservationReadSpec),
         ),
-        Then("each lookup answers with that order's own allocations, or nothing")((s) => {
-          passedRuns(s.checked)
-        }),
+        Then("each lookup answers with that order's own allocations, or nothing")((s, expect) =>
+          expect({ report: s.checked }).toMatchObject({
+            report: { _tag: 'Pass', histories: budgetedHistories },
+          })
+        ),
       ),
     )
   })

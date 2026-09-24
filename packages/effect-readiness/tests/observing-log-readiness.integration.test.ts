@@ -1,7 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
-import { Duration, Effect, Fiber, Match } from 'effect'
+import { Duration, Effect, Fiber } from 'effect'
 import { TestClock } from 'effect/testing'
 import {
   DynamicLogStream,
@@ -16,20 +15,6 @@ const TIGHT_WAIT = { timeoutMs: 400, pollMs: 25 } as const
 const target = Readiness.target([], TIGHT_WAIT)
 
 const awaitOver = (condition: Readiness.Condition) => target.awaitCondition(condition)
-
-const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boolean =>
-  Match.value(verdict).pipe(
-    Match.tag('Satisfied', () => true),
-    Match.tag('TimedOut', () => false),
-    Match.exhaustive,
-  )
-
-const reportedLogFailure = (error: Readiness.LogSourceError | Readiness.ProbeInputInvalid): boolean =>
-  Match.value(error).pipe(
-    Match.tag('LogSourceError', () => true),
-    Match.tag('ProbeInputInvalid', () => false),
-    Match.exhaustive,
-  )
 
 Feature('Observing guest log output for readiness')
   .withScenarioLayer(dynamicScenarioEnvironment([]))
@@ -60,9 +45,9 @@ Feature('Observing guest log output for readiness')
               return verdict
             }),
         ),
-        Then('the check reports the service is ready')(({ verdict }) => {
-          expect(verdict).toSatisfy(reportedReady)
-        }),
+        Then('the check reports the service is ready')((state, expect) =>
+          expect(state.verdict).toMatchObject({ _tag: 'Satisfied' })
+        ),
       ),
     )
 
@@ -82,9 +67,9 @@ Feature('Observing guest log output for readiness')
           'verdict',
           () => awaitOver(Readiness.Wait.forLog('Ready for traffic: https://0.0.0.0:8080/v1')),
         ),
-        Then('the check reports the service is ready')(({ verdict }) => {
-          expect(verdict).toSatisfy(reportedReady)
-        }),
+        Then('the check reports the service is ready')((state, expect) =>
+          expect(state.verdict).toMatchObject({ _tag: 'Satisfied' })
+        ),
       ),
     )
 
@@ -109,9 +94,9 @@ Feature('Observing guest log output for readiness')
               return yield* Fiber.join(waiting)
             }),
         ),
-        Then('the check gives up reporting the service is not ready')(({ verdict }) => {
-          expect(verdict).not.toSatisfy(reportedReady)
-        }),
+        Then('the check gives up reporting the service is not ready')((state, expect) =>
+          expect(state.verdict).toMatchObject({ _tag: 'TimedOut' })
+        ),
       ),
     )
 
@@ -127,9 +112,9 @@ Feature('Observing guest log output for readiness')
           'outcome',
           () => awaitOver(Readiness.Wait.forLog('listening')).pipe(Effect.flip),
         ),
-        Then('the check reports the broken stream as the reason')(({ outcome }) => {
-          expect(outcome).toSatisfy(reportedLogFailure)
-        }),
+        Then('the check reports the broken stream as the reason')((state, expect) =>
+          expect(state.outcome).toMatchObject({ _tag: 'LogSourceError', source: 'guest' })
+        ),
       ),
     )
   })
