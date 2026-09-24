@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -8,7 +8,7 @@ import { expect } from 'vitest'
 
 import { publishDecisions } from './__fixtures__/publish-decisions.workflow.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface Journal {
   readonly entries: Effect.Effect<ReadonlyArray<string>>

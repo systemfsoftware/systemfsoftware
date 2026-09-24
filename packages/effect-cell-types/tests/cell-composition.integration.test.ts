@@ -1,5 +1,5 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -9,7 +9,7 @@ import { expect } from 'vitest'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface Order {
   readonly id: string

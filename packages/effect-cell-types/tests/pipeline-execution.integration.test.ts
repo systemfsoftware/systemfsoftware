@@ -1,5 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -9,7 +9,7 @@ import { expect } from 'vitest'
 
 import { admitDecodedCommand, Admitted, Malformed, Rejected } from './__fixtures__/admit-decoded-command.workflow.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface Submission {
   readonly id: string
@@ -20,16 +20,19 @@ class Ledger extends Context.Service<Ledger, {
   readonly append: (line: string) => Effect.Effect<void>
 }>()('Ledger') {}
 
-const LedgerRecording = Layer.sync(Ledger, () => {
-  const lines: string[] = []
-  return {
-    lines: Effect.sync(() => [...lines]),
-    append: (line: string) =>
-      Effect.sync(() => {
-        lines.push(line)
-      }),
-  }
-})
+const LedgerRecording = Layer.provideMerge(
+  Layer.sync(Ledger, () => {
+    const lines: string[] = []
+    return {
+      lines: Effect.sync(() => [...lines]),
+      append: (line: string) =>
+        Effect.sync(() => {
+          lines.push(line)
+        }),
+    }
+  }),
+  Layer.sync(Metric.MetricRegistry, (): Metric.MetricRegistry => new Map()),
+)
 
 type AdmittedEncoded = (typeof Admitted)['Encoded']
 type RejectedEncoded = (typeof Rejected)['Encoded']
@@ -87,9 +90,13 @@ Feature('Admitting submissions at the door')
     scenario(
       'A well-formed submission of good length is admitted and recorded',
       Gherkin.Do.pipe(
+        Given('a door that has recorded nothing yet')(
+          'door',
+          () => Effect.succeed(admissionCell),
+        ),
         When('a submission of four letters is checked at the door')(
           'outcome',
-          () => admissionCell.run({ id: 'abcd' }),
+          ({ door }) => door.run({ id: 'abcd' }),
         ),
         Then('the submission is admitted with its length noted')((s) => {
           expect(s.outcome).toBe('admitted:4')
@@ -106,9 +113,13 @@ Feature('Admitting submissions at the door')
     scenario(
       'A too-short submission is refused, and the refusal arrives as a plain written slip',
       Gherkin.Do.pipe(
+        Given('a door that has recorded nothing yet')(
+          'door',
+          () => Effect.succeed(admissionCell),
+        ),
         When('a submission of two letters is checked at the door')(
           'outcome',
-          () => admissionCell.run({ id: 'ab' }),
+          ({ door }) => door.run({ id: 'ab' }),
         ),
         Then('the submission is refused for being too short')((s) => {
           expect(s.outcome).toBe('refused:too short')
@@ -127,9 +138,13 @@ Feature('Admitting submissions at the door')
     scenario(
       'A submission with a damaged measurement is turned away and the run is recorded as a refusal',
       Gherkin.Do.pipe(
+        Given('a door whose measurement of every submission is damaged')(
+          'door',
+          () => Effect.succeed(damagedMeasurementCell),
+        ),
         When('a submission with a damaged measurement is checked at the door')(
           'outcome',
-          () => Effect.exit(damagedMeasurementCell.run({ id: 'abcd' })),
+          ({ door }) => Effect.exit(door.run({ id: 'abcd' })),
         ),
         Then('the door turns the submission away and records why')((s) => {
           expect(Exit.isSuccess(s.outcome)).toBe(true)
@@ -145,7 +160,9 @@ Feature('Admitting submissions at the door')
         And('the run itself is recorded as a refusal, not as a broken run')(() =>
           Effect.map(refusalSnapshotsOf('cell.admission.damaged'), (refusals) => {
             expect(refusals.length).toBe(1)
-            expect(refusals[0]?.state).toMatchObject({ count: 1 })
+            const [first] = refusals
+            if (first?.type !== 'Histogram') throw new Error('the door records refused runs on its duration histogram')
+            expect(first.state.count).toBe(1)
           })
         ),
       ),
@@ -154,9 +171,13 @@ Feature('Admitting submissions at the door')
     scenario(
       'A submission measured below zero is refused as unreadable and the run is recorded as a refusal',
       Gherkin.Do.pipe(
+        Given('a door that reads every submission below zero')(
+          'door',
+          () => Effect.succeed(negativeMeasurementCell),
+        ),
         When('a submission measured at minus three is checked at the door')(
           'outcome',
-          () => Effect.exit(negativeMeasurementCell.run({ id: 'abcd' })),
+          ({ door }) => Effect.exit(door.run({ id: 'abcd' })),
         ),
         Then('the door answers that the submission is unreadable')((s) => {
           expect(s.outcome).toStrictEqual(Exit.succeed('unreadable'))
@@ -183,9 +204,13 @@ Feature('Admitting submissions at the door')
       ] as const,
       (row) =>
         Gherkin.Do.pipe(
+          Given('a door that has recorded nothing yet')(
+            'door',
+            () => Effect.succeed(admissionCell),
+          ),
           When('a submission is checked at the door')(
             'outcome',
-            () => admissionCell.run({ id: row.id }),
+            ({ door }) => door.run({ id: row.id }),
           ),
           Then('the door keeps exactly that record')(() =>
             Effect.flatMap(Ledger, (ledger) =>
