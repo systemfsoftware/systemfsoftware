@@ -1,7 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 
 import { everyStepSettled, freshVisit, passOf, playedOnce } from './__fixtures__/story-leave.fixture.js'
 
@@ -22,7 +21,9 @@ Feature('Leaving a story with nothing hanging when the visit moves on', { timeou
           passOf(s.checked)
         }),
         And('the visit moved on at least once')((s) => {
-          expect(passOf(s.checked).histories).toBeGreaterThan(0)
+          if (passOf(s.checked).histories <= 0) {
+            throw new Error('expected the visit to have moved on at least once')
+          }
         }),
       ),
     )
