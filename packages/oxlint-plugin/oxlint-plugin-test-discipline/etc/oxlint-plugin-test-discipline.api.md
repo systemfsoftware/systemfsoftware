@@ -33,8 +33,6 @@ const _default: {
         'behaviour-one-feature-per-file': Rule;
         'no-pseudo-gherkin-unit-tests': Rule;
         'tests-dir-helpers-in-fixtures': Rule;
-        'expect-boolean-predicate': Rule;
-        'vitest-from-effect-vitest': Rule;
         'no-io-module-in-source-test': Rule;
         'tests-import-public-api': Rule;
         'differential-test-requires-harness': Rule;

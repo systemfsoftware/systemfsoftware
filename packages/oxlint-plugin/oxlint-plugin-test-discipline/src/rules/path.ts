@@ -1,5 +1,5 @@
 import { Array as A, Schema as S } from 'effect'
-import { RAW_VITEST_PACKAGES, SANCTIONED_TEST_DIRS, TEST_BASENAME, TEST_TREE_DIRS } from './path.config.js'
+import { SANCTIONED_TEST_DIRS, TEST_BASENAME, TEST_TREE_DIRS } from './path.config.js'
 
 const PathSegments = S.NonEmptyArray(S.String)
 
@@ -12,9 +12,6 @@ export const basenameOf = (filename: string): string => A.lastNonEmpty(segmentsO
 export const directoriesOf = (filename: string): readonly string[] => A.initNonEmpty(segmentsOf(filename))
 
 export const isUnderSrc = (filename: string): boolean => directoriesOf(filename).includes('src')
-
-export const isRawVitestPackage = (filename: string): boolean =>
-  directoriesOf(filename).some((segment) => RAW_VITEST_PACKAGES[segment] === true)
 
 export const isInSanctionedTestDir = (filename: string): boolean =>
   directoriesOf(filename).some((segment) => SANCTIONED_TEST_DIRS.has(segment))

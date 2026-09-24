@@ -56,12 +56,6 @@ export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 
 export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
 
-export const RAW_VITEST_PACKAGES: Record<string, true> = {
-  'effect-spec-runtime': true,
-  'vitest': true,
-  'vitest-conformance': true,
-}
-
 export const RUNNER_NAMES: ReadonlySet<string> = new Set(['it', 'test', 'describe'])
 
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
