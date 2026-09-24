@@ -5,7 +5,6 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Metric from 'effect/Metric'
-import { expect } from 'vitest'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
 import { recordedClassesOf, recordedLedger, type UnsettledRun } from './__fixtures__/sandwich-release.model.js'
@@ -70,7 +69,9 @@ Feature('Filing every order run under how it ended, even when the run is stopped
           passing(s.checked)
         }),
         And('at least one stop was tried')((s) => {
-          expect(passing(s.checked).histories).toBeGreaterThan(0)
+          if (passing(s.checked).histories <= 0) {
+            throw new Error('expected the check to have tried at least one stop')
+          }
         }),
       ),
     )
