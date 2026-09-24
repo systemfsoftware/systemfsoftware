@@ -37,4 +37,4 @@ export {
   SpecTypeId,
   strategy,
 } from './Supervisor.js'
-export type { ChildOptions, ChildProgram, ChildSpec, DynamicOptions, SupervisorSpec } from './Supervisor.js'
+export type { ChildOptions, ChildProgram, ChildSpec, DynamicOptions, FiberChild, SupervisorSpec } from './Supervisor.js'

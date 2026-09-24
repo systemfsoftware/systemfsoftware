@@ -69,6 +69,33 @@ Use `app.scoped` instead of `app.layer` to get the running supervisor handle ins
 
 `Supervisor.child(id, program, options)` appends a single child.
 
+### Choosing the medium a child runs on
+
+`Supervisor.ChildSpecs.make` binds a child to the fiber medium. When a child should run on something else — a process, a socket, a machine — declare a medium port and bind the child to it. A port is a `Context.Service` keyed to the program type it interprets; its driver provides the medium as a layer, so one tree can mix media while the strategy, order and policy never mention one.
+
+```ts
+import { Effect, Layer, Scope } from 'effect'
+
+const DocumentPort = Supervisor.Medium.MediumPort<
+  Effect.Effect<void, never, Scope.Scope>,
+  never,
+  Scope.Scope
+>('DocumentMedium')
+
+const tree = Supervisor.make('app').pipe(
+  Supervisor.children([
+    Supervisor.ChildSpecs.make('http', httpServer), // the fiber medium
+    Supervisor.ChildSpecs.on(DocumentPort)('document', documentTask), // the port's medium
+  ]),
+)
+
+const provided = tree.layer.pipe(
+  Layer.provideMerge(Layer.succeed(DocumentPort, { medium: documentMedium })),
+)
+```
+
+A port a child is bound to joins the tree's requirements, so `tree.scoped` and `tree.layer` wait for it. A port medium whose `start` fails reports that incarnation as an abnormal termination; nothing claims the child started.
+
 ## Nested supervisors
 
 A supervisor spec is itself a valid child program, so trees nest to any depth:

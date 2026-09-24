@@ -1,4 +1,4 @@
-import { Effect, Layer, Match, Predicate, Queue, Ref, Scope } from 'effect'
+import { Context, Effect, HashMap, Layer, Match, Option, Predicate, Queue, Ref, Scope } from 'effect'
 import { dual } from 'effect/Function'
 import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
@@ -15,8 +15,9 @@ import type {
   SupervisionPolicy,
 } from '../kernel/SupervisorPolicy.schema.js'
 import { SupervisionPolicy as SupervisionPolicyClass } from '../kernel/SupervisorPolicy.schema.js'
-import { type BareFiberProgram, type FiberProgram, readyOnStart } from './FiberMedium.js'
-import type { Medium } from './Medium.js'
+import { Binder, type BoundChild } from './bound-child.js'
+import { type BareFiberProgram, fiberPort, type FiberProgram, mediumFor, readyOnStart } from './FiberMedium.js'
+import { type Medium, type MediumPortShape } from './Medium.js'
 import {
   awaitTerminated,
   Handle,
@@ -26,21 +27,37 @@ import {
   shutdown,
   stateOf,
 } from './running-supervisor.handle.js'
-import { Commands } from './supervisor-commands.js'
 import { Steps, type SupervisorStepCell, supervisorStepFor } from './supervisor-step.cell.js'
 
 export const SpecTypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/SupervisorSpec')
 export type SpecTypeId = typeof SpecTypeId
 
-export type ChildProgram = BareFiberProgram | FiberProgram | SupervisorSpec
+/** A fiber-hosted child: a bare effect, a function of `ready`, or a nested spec. */
+export type FiberChild<R = never> =
+  | BareFiberProgram
+  | ((ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>)
+  | SupervisorSpec<R>
 
-export interface ChildSpec extends Pipeable {
+/** Any child program, on any medium. */
+export type ChildProgram<R = never> = BareFiberProgram | FiberProgram | SupervisorSpec<R>
+
+/**
+ * A child declared against a medium port, or against the default fiber medium
+ * (KTD9, R17, R18). Its `binding` resolves the medium from context at
+ * acquisition, so the same declaration runs on any medium.
+ */
+export interface ChildSpec<R = never> extends Pipeable {
   readonly childId: ChildId
   readonly declaration: ChildDeclaration
-  readonly program: FiberProgram
+  readonly binding: Effect.Effect<BoundChild, never, Scope.Scope | R>
 }
 
-interface SpecParts {
+interface Binding<R> {
+  readonly declaration: ChildDeclaration
+  readonly binding: Effect.Effect<BoundChild, never, Scope.Scope | R>
+}
+
+interface SpecParts<R> {
   readonly name: string
   readonly strategy: RestartStrategy
   readonly intensity: number
@@ -49,19 +66,24 @@ interface SpecParts {
   readonly coolDownMillis: number | undefined
   readonly backoff: BackoffSchedule
   readonly declarations: ReadonlyArray<ChildDeclaration>
-  readonly programs: ReadonlyMap<ChildId, FiberProgram>
+  readonly bindings: ReadonlyArray<Binding<R>>
   readonly dynamic: DynamicKind
 }
 
-export interface SupervisorSpec extends Pipeable, SpecParts {
+/**
+ * A supervision tree (KTD11). `R` is the environment its children need beyond
+ * the supervisor's own scope: the ports they are bound to and the media they
+ * run on (R17, R18).
+ */
+export interface SupervisorSpec<R = never> extends Pipeable, SpecParts<R> {
   readonly [SpecTypeId]: typeof SpecTypeId
-  readonly scoped: Effect.Effect<RunningSupervisor, never, Scope.Scope>
-  readonly layer: Layer.Layer<never>
+  readonly scoped: Effect.Effect<RunningSupervisor, never, Scope.Scope | R>
+  readonly layer: Layer.Layer<never, never, Exclude<R, Scope.Scope>>
 }
 
 const hasSpecTag = Predicate.hasProperty(SpecTypeId)
 
-export const isSupervisorSpec = (value: unknown): value is SupervisorSpec =>
+export const isSupervisorSpec = (value: unknown): value is SupervisorSpec<never> =>
   hasSpecTag(value) && value[SpecTypeId] === SpecTypeId
 
 const WORKER_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Graceful', millis: 5_000 }
@@ -70,7 +92,7 @@ const SUPERVISOR_SHUTDOWN: ChildDeclaration['shutdown'] = { _tag: 'Infinity' }
 
 const LIVENESS_TICK_MILLIS = 1_000
 
-const policyOfParts = (parts: SpecParts): SupervisionPolicy =>
+const policyOfParts = <R>(parts: SpecParts<R>): SupervisionPolicy =>
   new SupervisionPolicyClass({
     strategy: parts.strategy,
     intensity: parts.intensity,
@@ -101,20 +123,33 @@ const drainOf = (
           ))),
   )
 
-const scopedOf = (parts: SpecParts): Effect.Effect<RunningSupervisor, never, Scope.Scope> =>
+const fiberMediumOf = (): Effect.Effect<Medium<FiberProgram, never, Scope.Scope>, never, never> =>
+  Effect.map(Effect.serviceOption(fiberPort), (found) =>
+    Option.match(found, {
+      onNone: () => mediumFor<never>(),
+      onSome: (port) => port.medium,
+    }))
+
+const scopedOf = <R>(parts: SpecParts<R>): Effect.Effect<RunningSupervisor, never, Scope.Scope | R> =>
   Effect.gen(function*() {
     const supervisorScope = yield* Effect.scope
     const initial: SupervisorState = new Running({ core: initialStateOf(policyOfParts(parts)) })
-    const handle = yield* Handle.make(parts.name, initial, parts.programs)
-    const medium: Medium<FiberProgram, never, Scope.Scope> = yield* Commands.mediumOf()
-    const step = supervisorStepFor(Steps.runtimeOf({ handle }, medium))
+    const bound = yield* Effect.forEach(
+      parts.bindings,
+      (entry) => Effect.map(entry.binding, (child) => [entry.declaration.childId, child] as const),
+      { concurrency: 1 },
+    )
+    const context = yield* Effect.context<Scope.Scope>()
+    const fiber = yield* fiberMediumOf()
+    const handle = yield* Handle.make(parts.name, initial, HashMap.fromIterable(bound), context, fiber)
+    const step = supervisorStepFor(Steps.runtimeOf({ handle }))
     yield* Effect.forkIn(drainOf(handle, step), supervisorScope)
     yield* offerEvent(handle, { _tag: 'SupervisorStarted', at: 0 })
     yield* Effect.addFinalizer(() => shutdown(handle))
     return handle
   })
 
-const specOf = (parts: SpecParts): SupervisorSpec => {
+const specOf = <R>(parts: SpecParts<R>): SupervisorSpec<R> => {
   const scoped = scopedOf(parts)
   return {
     [SpecTypeId]: SpecTypeId,
@@ -125,7 +160,7 @@ const specOf = (parts: SpecParts): SupervisorSpec => {
   }
 }
 
-const partsOf = (self: SupervisorSpec): SpecParts => ({
+const partsOf = <R>(self: SupervisorSpec<R>): SpecParts<R> => ({
   name: self.name,
   strategy: self.strategy,
   intensity: self.intensity,
@@ -134,11 +169,11 @@ const partsOf = (self: SupervisorSpec): SpecParts => ({
   coolDownMillis: self.coolDownMillis,
   backoff: self.backoff,
   declarations: self.declarations,
-  programs: self.programs,
+  bindings: self.bindings,
   dynamic: self.dynamic,
 })
 
-export const make = (name: string): SupervisorSpec =>
+export const make = (name: string): SupervisorSpec<never> =>
   specOf({
     name,
     strategy: 'one_for_one',
@@ -148,49 +183,53 @@ export const make = (name: string): SupervisorSpec =>
     coolDownMillis: undefined,
     backoff: { baseMillis: 0, multiplier: 1, capMillis: 0 },
     declarations: [],
-    programs: new Map(),
+    bindings: [],
     dynamic: { _tag: 'NoDynamicChildren' },
   })
 
 export const strategy: {
-  (strategy: RestartStrategy): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, strategy: RestartStrategy): SupervisorSpec
+  (strategy: RestartStrategy): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, strategy: RestartStrategy): SupervisorSpec<R>
 } = dual(
   2,
-  (self: SupervisorSpec, strategy: RestartStrategy): SupervisorSpec => specOf({ ...partsOf(self), strategy }),
+  <R>(self: SupervisorSpec<R>, strategy: RestartStrategy): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), strategy }),
 )
 
 export const intensity: {
-  (intensity: number, periodMillis: number): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, intensity: number, periodMillis: number): SupervisorSpec
+  (intensity: number, periodMillis: number): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, intensity: number, periodMillis: number): SupervisorSpec<R>
 } = dual(
   3,
-  (self: SupervisorSpec, intensity: number, periodMillis: number): SupervisorSpec =>
-    specOf({ ...partsOf(self), intensity, periodMillis }),
+  <R>(self: SupervisorSpec<R>, intensity: number, periodMillis: number): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), intensity, periodMillis }),
 )
 
 export const autoShutdown: {
-  (autoShutdown: AutoShutdown): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, autoShutdown: AutoShutdown): SupervisorSpec
+  (autoShutdown: AutoShutdown): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, autoShutdown: AutoShutdown): SupervisorSpec<R>
 } = dual(
   2,
-  (self: SupervisorSpec, autoShutdown: AutoShutdown): SupervisorSpec => specOf({ ...partsOf(self), autoShutdown }),
+  <R>(self: SupervisorSpec<R>, autoShutdown: AutoShutdown): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), autoShutdown }),
 )
 
 export const coolDown: {
-  (millis: number): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, millis: number): SupervisorSpec
+  (millis: number): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, millis: number): SupervisorSpec<R>
 } = dual(
   2,
-  (self: SupervisorSpec, millis: number): SupervisorSpec => specOf({ ...partsOf(self), coolDownMillis: millis }),
+  <R>(self: SupervisorSpec<R>, millis: number): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), coolDownMillis: millis }),
 )
 
 export const backoff: {
-  (schedule: BackoffSchedule): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, schedule: BackoffSchedule): SupervisorSpec
+  (schedule: BackoffSchedule): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, schedule: BackoffSchedule): SupervisorSpec<R>
 } = dual(
   2,
-  (self: SupervisorSpec, schedule: BackoffSchedule): SupervisorSpec => specOf({ ...partsOf(self), backoff: schedule }),
+  <R>(self: SupervisorSpec<R>, schedule: BackoffSchedule): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), backoff: schedule }),
 )
 
 export interface DynamicOptions extends Omit<ChildOptions, 'significant'> {
@@ -207,12 +246,12 @@ const dynamicKindOf = (options: DynamicOptions): DynamicKind => ({
 })
 
 export const dynamic: {
-  (options: DynamicOptions): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, options: DynamicOptions): SupervisorSpec
+  (options: DynamicOptions): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, options: DynamicOptions): SupervisorSpec<R>
 } = dual(
   2,
-  (self: SupervisorSpec, options: DynamicOptions): SupervisorSpec =>
-    specOf({ ...partsOf(self), dynamic: dynamicKindOf(options) }),
+  <R>(self: SupervisorSpec<R>, options: DynamicOptions): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), dynamic: dynamicKindOf(options) }),
 )
 
 export interface ChildOptions {
@@ -222,62 +261,131 @@ export interface ChildOptions {
   readonly startTimeoutMillis?: number
 }
 
-const defaultShutdownOf = (program: ChildProgram): ChildDeclaration['shutdown'] =>
-  isSupervisorSpec(program) ? SUPERVISOR_SHUTDOWN : WORKER_SHUTDOWN
-
 const declarationOf = (
   childId: ChildId,
-  program: ChildProgram,
+  nested: boolean,
   options: ChildOptions | undefined,
 ): ChildDeclaration => ({
   childId,
   restartType: 'permanent',
-  shutdown: defaultShutdownOf(program),
+  shutdown: nested ? SUPERVISOR_SHUTDOWN : WORKER_SHUTDOWN,
   significant: false,
   startTimeoutMillis: 5_000,
   probeFailureThreshold: 2,
   ...options,
 })
 
-const nestedProgramOf = (nested: SupervisorSpec): FiberProgram => (ready) =>
+type FiberRunnable<R> =
+  | BareFiberProgram
+  | ((ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>)
+
+const isFiberRunnable = <R>(value: FiberChild<R>): value is FiberRunnable<R> =>
+  typeof value === 'function' || Effect.isEffect(value)
+
+const nestedProgramOf = <R>(
+  nested: SupervisorSpec<R>,
+): (ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R> =>
+(ready) =>
   Effect.flatMap(
     nested.scoped,
     (handle) => Effect.andThen(ready, Effect.andThen(awaitTerminated(handle), Effect.interrupt)),
   )
 
-const declaredProgramOf = (program: BareFiberProgram | FiberProgram): FiberProgram =>
-  typeof program === 'function' ? program : readyOnStart(program)
+const fiberMediumForChild = <R>(): Medium<
+  (ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>,
+  never,
+  Scope.Scope | R
+> => mediumFor<R>()
 
-const programOfChild = (program: ChildProgram): FiberProgram =>
-  isSupervisorSpec(program) ? nestedProgramOf(program) : declaredProgramOf(program)
+const bindFiberChild = <R>(
+  program: FiberRunnable<R>,
+): Effect.Effect<BoundChild, never, Scope.Scope | R> =>
+  Effect.gen(function*() {
+    const context = yield* Effect.context<Scope.Scope | R>()
+    const runnable = typeof program === 'function' ? program : readyOnStart(program)
+    return Binder.bind(runnable, fiberMediumForChild<R>(), context)
+  })
 
-export const ChildSpecs = {
-  make: (childId: ChildId, program: ChildProgram, options?: ChildOptions): ChildSpec => ({
-    childId,
-    declaration: declarationOf(childId, program, options),
-    program: programOfChild(program),
-    ...Prototype,
+const bindNestedChild = <R>(
+  nested: SupervisorSpec<R>,
+): Effect.Effect<BoundChild, never, Scope.Scope | R> =>
+  Effect.gen(function*() {
+    const context = yield* Effect.context<Scope.Scope | R>()
+    return Binder.bind(nestedProgramOf(nested), fiberMediumForChild<R>(), context)
+  })
+
+const childSpecMake = <R = never>(
+  childId: ChildId,
+  program: FiberChild<R>,
+  options?: ChildOptions,
+): ChildSpec<R> =>
+  isFiberRunnable(program)
+    ? { childId, declaration: declarationOf(childId, false, options), binding: bindFiberChild(program), ...Prototype }
+    : { childId, declaration: declarationOf(childId, true, options), binding: bindNestedChild(program), ...Prototype }
+
+const childSpecOn = <Program, StartError, R = never>(
+  port: Context.Service<
+    MediumPortShape<Program, StartError, Scope.Scope | R>,
+    MediumPortShape<Program, StartError, Scope.Scope | R>
+  >,
+) =>
+(
+  childId: ChildId,
+  program: Program,
+  options?: ChildOptions,
+): ChildSpec<MediumPortShape<Program, StartError, Scope.Scope | R> | R> => ({
+  childId,
+  declaration: declarationOf(childId, false, options),
+  binding: Effect.gen(function*() {
+    const shape = yield* port
+    const context = yield* Effect.context<Scope.Scope | R>()
+    return Binder.bind(program, shape.medium, context)
   }),
+  ...Prototype,
+})
+
+/**
+ * The two ways to declare a child: `make`, which binds to the fiber medium (and
+ * to the `FiberMedium` port when one is provided), and `on`, which binds to a
+ * named medium port (KTD9).
+ */
+export const ChildSpecs = {
+  make: childSpecMake,
+  on: childSpecOn,
 } as const
 
 export const children: {
-  (specs: ReadonlyArray<ChildSpec>): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, specs: ReadonlyArray<ChildSpec>): SupervisorSpec
+  <R>(specs: ReadonlyArray<ChildSpec<R>>): <R2>(self: SupervisorSpec<R2>) => SupervisorSpec<R | R2>
+  <R2, R>(self: SupervisorSpec<R2>, specs: ReadonlyArray<ChildSpec<R>>): SupervisorSpec<R | R2>
 } = dual(
   2,
-  (self: SupervisorSpec, specs: ReadonlyArray<ChildSpec>): SupervisorSpec =>
-    specOf({
+  <R2, R>(self: SupervisorSpec<R2>, specs: ReadonlyArray<ChildSpec<R>>): SupervisorSpec<R | R2> =>
+    specOf<R | R2>({
       ...partsOf(self),
       declarations: [...self.declarations, ...specs.map((spec) => spec.declaration)],
-      programs: new Map([...self.programs, ...specs.map((spec) => [spec.childId, spec.program] as const)]),
+      bindings: [
+        ...self.bindings,
+        ...specs.map((spec) => ({ declaration: spec.declaration, binding: spec.binding })),
+      ],
     }),
 )
 
 export const child: {
-  (childId: ChildId, program: ChildProgram, options?: ChildOptions): (self: SupervisorSpec) => SupervisorSpec
-  (self: SupervisorSpec, childId: ChildId, program: ChildProgram, options?: ChildOptions): SupervisorSpec
+  <R>(childId: ChildId, program: FiberChild<R>, options?: ChildOptions): <R2>(
+    self: SupervisorSpec<R2>,
+  ) => SupervisorSpec<R | R2>
+  <R2, R>(
+    self: SupervisorSpec<R2>,
+    childId: ChildId,
+    program: FiberChild<R>,
+    options?: ChildOptions,
+  ): SupervisorSpec<R | R2>
 } = dual(
   (args) => isSupervisorSpec(args[0]),
-  (self: SupervisorSpec, childId: ChildId, program: ChildProgram, options?: ChildOptions): SupervisorSpec =>
-    children(self, [ChildSpecs.make(childId, program, options)]),
+  <R2, R>(
+    self: SupervisorSpec<R2>,
+    childId: ChildId,
+    program: FiberChild<R>,
+    options?: ChildOptions,
+  ): SupervisorSpec<R | R2> => children(self, [childSpecMake(childId, program, options)]),
 )

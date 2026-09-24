@@ -80,28 +80,35 @@ const stopOf = (self: FiberStarted, mode: ShutdownMode): Effect.Effect<void> =>
     Match.exhaustive,
   )
 
-export const medium: MediumShape<FiberProgram, never, Scope.Scope> = make({
-  declaration: { reporting: 'full', groupStop: 'atomic' },
-  start: (program) =>
-    Effect.gen(function*() {
-      const scope = yield* Effect.scope
-      const signalled = yield* Deferred.make<void>()
-      const fiber = yield* Effect.forkIn(program(Deferred.succeed(signalled, void 0)), scope)
-      return fiberStarted(fiber, scope, Deferred.await(signalled))
-    }),
-  report: (evidence) =>
-    Option.match(fiberOf(evidence), {
-      onNone: () => Effect.succeed(shutdownTermination),
-      onSome: (self) => Effect.map(Fiber.await(self.fiber), terminationOf),
-    }),
-  probe: (evidence) =>
-    Option.match(fiberOf(evidence), {
-      onNone: () => Effect.succeed(false),
-      onSome: (self) => Effect.sync(() => self.fiber.pollUnsafe() === undefined),
-    }),
-  stop: (evidence, mode): Effect.Effect<Stopped, never, Scope.Scope> =>
-    Option.match(fiberOf(evidence), {
-      onNone: () => Effect.succeed(stopped),
-      onSome: (self) => Effect.as(stopOf(self, mode), stopped),
-    }),
-})
+export const mediumFor = <R = never>(): MediumShape<
+  (ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>,
+  never,
+  Scope.Scope | R
+> =>
+  make({
+    declaration: { reporting: 'full', groupStop: 'atomic' },
+    start: (program) =>
+      Effect.gen(function*() {
+        const scope = yield* Effect.scope
+        const signalled = yield* Deferred.make<void>()
+        const fiber = yield* Effect.forkIn(program(Deferred.succeed(signalled, void 0)), scope)
+        return fiberStarted(fiber, scope, Deferred.await(signalled))
+      }),
+    report: (evidence) =>
+      Option.match(fiberOf(evidence), {
+        onNone: () => Effect.succeed(shutdownTermination),
+        onSome: (self) => Effect.map(Fiber.await(self.fiber), terminationOf),
+      }),
+    probe: (evidence) =>
+      Option.match(fiberOf(evidence), {
+        onNone: () => Effect.succeed(false),
+        onSome: (self) => Effect.sync(() => self.fiber.pollUnsafe() === undefined),
+      }),
+    stop: (evidence, mode): Effect.Effect<Stopped, never, Scope.Scope | R> =>
+      Option.match(fiberOf(evidence), {
+        onNone: () => Effect.succeed(stopped),
+        onSome: (self) => Effect.as(stopOf(self, mode), stopped),
+      }),
+  })
+
+export const medium: MediumShape<FiberProgram, never, Scope.Scope> = mediumFor<never>()

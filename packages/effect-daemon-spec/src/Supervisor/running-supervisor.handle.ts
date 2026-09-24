@@ -1,4 +1,4 @@
-import { Clock, Deferred, Effect, HashMap, Match, Option, Predicate, PubSub, Queue, Ref, Scope } from 'effect'
+import { Clock, Context, Deferred, Effect, HashMap, Match, Option, Predicate, PubSub, Queue, Ref, Scope } from 'effect'
 import { dual } from 'effect/Function'
 import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
@@ -6,8 +6,9 @@ import * as Stream from 'effect/Stream'
 import type { SupervisionDecision, SupervisorState } from '../kernel/interpret-supervision-event.workflow.js'
 import type { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { ChildId, Generation } from '../kernel/SupervisionLimits.schema.js'
+import { Binder, type BoundChild } from './bound-child.js'
 import type { FiberProgram } from './FiberMedium.js'
-import type { Started } from './Medium.js'
+import type { Medium, Started } from './Medium.js'
 
 /** Brands a running supervisor handle. */
 export const TypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor')
@@ -19,11 +20,13 @@ const MailboxId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec
 const TraceId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/trace')
 const EvidenceId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/evidence')
 const RepliesId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/replies')
-const ProgramsId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/programs')
+const BoundChildrenId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/boundChildren')
 const PendingId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/pending')
 const RequestsId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/requests')
 const TerminatedId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/terminated')
 const ScopeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/scope')
+const ContextId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/context')
+const FiberId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/fiber')
 
 /** One kernel step as observed: the decoded event and the decision it produced. */
 export interface TraceEntry {
@@ -73,11 +76,13 @@ export interface RunningSupervisor extends Pipeable {
   readonly [TraceId]: PubSub.PubSub<TraceEntry>
   readonly [EvidenceId]: Ref.Ref<HashMap.HashMap<string, Started>>
   readonly [RepliesId]: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>>
-  readonly [ProgramsId]: Ref.Ref<HashMap.HashMap<ChildId, FiberProgram>>
-  readonly [PendingId]: Ref.Ref<HashMap.HashMap<string, FiberProgram>>
+  readonly [BoundChildrenId]: Ref.Ref<HashMap.HashMap<ChildId, BoundChild>>
+  readonly [PendingId]: Ref.Ref<HashMap.HashMap<string, BoundChild>>
   readonly [RequestsId]: Ref.Ref<number>
   readonly [TerminatedId]: Deferred.Deferred<void>
   readonly [ScopeId]: Scope.Scope
+  readonly [ContextId]: Context.Context<Scope.Scope>
+  readonly [FiberId]: Medium<FiberProgram, never, Scope.Scope>
   readonly name: string
 }
 
@@ -88,7 +93,9 @@ export const Handle = {
   make: (
     name: string,
     initial: SupervisorState,
-    programs: ReadonlyMap<ChildId, FiberProgram>,
+    children: HashMap.HashMap<ChildId, BoundChild>,
+    context: Context.Context<Scope.Scope>,
+    fiber: Medium<FiberProgram, never, Scope.Scope>,
   ): Effect.Effect<RunningSupervisor, never, Scope.Scope> =>
     Effect.gen(function*() {
       const scope = yield* Effect.scope
@@ -99,11 +106,13 @@ export const Handle = {
         [TraceId]: yield* PubSub.unbounded<TraceEntry>(),
         [EvidenceId]: yield* Ref.make(HashMap.empty<string, Started>()),
         [RepliesId]: yield* Ref.make(HashMap.empty<string, Deferred.Deferred<DynamicOutcome>>()),
-        [ProgramsId]: yield* Ref.make(HashMap.fromIterable(programs)),
-        [PendingId]: yield* Ref.make(HashMap.empty<string, FiberProgram>()),
+        [BoundChildrenId]: yield* Ref.make(children),
+        [PendingId]: yield* Ref.make(HashMap.empty<string, BoundChild>()),
         [RequestsId]: yield* Ref.make(0),
         [TerminatedId]: yield* Deferred.make<void>(),
         [ScopeId]: scope,
+        [ContextId]: context,
+        [FiberId]: fiber,
         name,
         ...Prototype,
       }
@@ -122,10 +131,20 @@ export const repliesOf = (
   self: RunningSupervisor,
 ): Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>> => self[RepliesId]
 
-export const programsOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<ChildId, FiberProgram>> => self[ProgramsId]
+export const boundChildrenOf = (
+  self: RunningSupervisor,
+): Ref.Ref<HashMap.HashMap<ChildId, BoundChild>> => self[BoundChildrenId]
 
-export const pendingProgramsOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, FiberProgram>> =>
+export const pendingChildrenOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, BoundChild>> =>
   self[PendingId]
+
+export const fiberContextOf = (self: RunningSupervisor): Context.Context<Scope.Scope> => self[ContextId]
+
+export const fiberMediumOf = (self: RunningSupervisor): Medium<FiberProgram, never, Scope.Scope> => self[FiberId]
+
+/** The fiber medium bound to `program`, ready to be stored as a dynamic child. */
+const boundFiberProgramOf = (self: RunningSupervisor, program: FiberProgram): BoundChild =>
+  Binder.bind(program, fiberMediumOf(self), fiberContextOf(self))
 
 export const terminatedLatchOf = (self: RunningSupervisor): Deferred.Deferred<void> => self[TerminatedId]
 
@@ -200,7 +219,7 @@ export const startChild: {
   (self: RunningSupervisor, program: FiberProgram): Effect.Effect<DynamicOutcome> =>
     Effect.flatMap(nextRequestId(self, 'start'), (requestId) =>
       Effect.andThen(
-        Ref.update(self[PendingId], (pending) => HashMap.set(pending, requestId, program)),
+        Ref.update(self[PendingId], (pending) => HashMap.set(pending, requestId, boundFiberProgramOf(self, program))),
         awaitReply(self, requestId, (now) => ({ _tag: 'DynamicStartRequested', at: now, requestId })),
       )),
 )

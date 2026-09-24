@@ -10,15 +10,12 @@ import {
 } from '../kernel/interpret-supervision-event.workflow.js'
 import type { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
 import type { SupervisorCommands } from '../kernel/SupervisorCommand.schema.js'
-import type { FiberProgram } from './FiberMedium.js'
-import type { Medium } from './Medium.js'
 import type { TraceEntry } from './running-supervisor.handle.js'
 import { stateOf, tracePubSubOf } from './running-supervisor.handle.js'
 import { type AcquiredSupervisor, Commands } from './supervisor-commands.js'
 
 export interface StepRuntime {
   readonly acquired: AcquiredSupervisor
-  readonly medium: Medium<FiberProgram, never, Scope.Scope>
 }
 
 const readStep = (
@@ -59,13 +56,10 @@ const persistStep = (
 const runBucketsOf = (
   runtime: StepRuntime,
   commands: SupervisorCommands,
-): Effect.Effect<void, never, Scope.Scope> => Commands.runBuckets(runtime.acquired, runtime.medium, commands)
+): Effect.Effect<void, never, Scope.Scope> => Commands.runBuckets(runtime.acquired, commands)
 
 const Steps = {
-  runtimeOf: (
-    acquired: AcquiredSupervisor,
-    medium: Medium<FiberProgram, never, Scope.Scope>,
-  ): StepRuntime => ({ acquired, medium }),
+  runtimeOf: (acquired: AcquiredSupervisor): StepRuntime => ({ acquired }),
 } as const
 
 export const supervisorStepFor = (runtime: StepRuntime) =>

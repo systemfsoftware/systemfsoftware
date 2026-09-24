@@ -1,4 +1,18 @@
-import { Array as Arr, Clock, Deferred, Duration, Effect, HashMap, Match, Option, Ref, Schema, Scope } from 'effect'
+import {
+  Array as Arr,
+  Cause,
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  HashMap,
+  Match,
+  Option,
+  Ref,
+  Schema,
+  Scope,
+} from 'effect'
 import type { SupervisionEvent, TimerKind } from '../kernel/SupervisionEvent.schema.js'
 import type { ChildId, Generation } from '../kernel/SupervisionLimits.schema.js'
 import { ReplyStartAccepted } from '../kernel/SupervisorCommand.schema.js'
@@ -13,16 +27,16 @@ import type {
   TerminateSupervisor,
 } from '../kernel/SupervisorCommand.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
-import { fiberPort, type FiberProgram, medium as fiberMedium } from './FiberMedium.js'
-import type { Medium, Started } from './Medium.js'
+import type { BoundChild } from './bound-child.js'
+import type { Started } from './Medium.js'
 import type { DynamicOutcome, RunningSupervisor } from './running-supervisor.handle.js'
 import {
+  boundChildrenOf,
   evidenceOf,
   offerEvent,
   Ops,
   ownerScopeOf,
-  pendingProgramsOf,
-  programsOf,
+  pendingChildrenOf,
   repliesOf,
   terminatedLatchOf,
 } from './running-supervisor.handle.js'
@@ -92,15 +106,6 @@ const supervisorTimerEventOf = (kind: TimerKind): SupervisionEvent => ({
 
 const evidenceKeyOf = (childId: ChildId, generation: Generation): string => `${childId}#${generation}`
 
-const mediumOf = (): Effect.Effect<Medium<FiberProgram, never, Scope.Scope>, never, never> =>
-  Effect.catchCause(
-    Effect.map(Effect.serviceOption(fiberPort), (found) =>
-      Option.match(found, {
-        onNone: () => fiberMedium,
-        onSome: (port) => port.medium,
-      })),
-    () => Effect.succeed(fiberMedium),
-  )
 const registerStarted = (
   handle: RunningSupervisor,
   childId: ChildId,
@@ -131,7 +136,7 @@ const watchReadiness = (
 
 const watchReport = (
   handle: RunningSupervisor,
-  medium: Medium<FiberProgram, never, Scope.Scope>,
+  child: BoundChild,
   evidence: Started,
   childId: ChildId,
   generation: Generation,
@@ -139,7 +144,7 @@ const watchReport = (
   Effect.asVoid(
     Effect.forkIn(
       Effect.flatMap(
-        medium.report(evidence),
+        child.report(evidence),
         (reason) => stampedNow(handle, terminatedEventOf(childId, generation, reason)),
       ),
       ownerScopeOf(handle),
@@ -147,33 +152,51 @@ const watchReport = (
   )
 
 /**
- * The program bound to a child. Declared children are bound at acquisition and
- * dynamic ones by `bindDynamicPrograms` before their start runs, so a missing
- * binding is a broken invariant and dies rather than reporting a start that never ran.
+ * The child bound to an id. Declared children are bound at acquisition and dynamic
+ * ones by `bindDynamicPrograms` before their start runs, so a missing binding is a
+ * broken invariant and dies rather than reporting a start that never ran.
  */
-const programFor = (handle: RunningSupervisor, childId: ChildId): Effect.Effect<FiberProgram> =>
+const boundChildFor = (handle: RunningSupervisor, childId: ChildId): Effect.Effect<BoundChild> =>
   Effect.flatMap(
-    Ref.get(programsOf(handle)),
-    (programs) => Effect.orDie(Effect.fromOption(HashMap.get(programs, childId))),
+    Ref.get(boundChildrenOf(handle)),
+    (children) => Effect.orDie(Effect.fromOption(HashMap.get(children, childId))),
   )
+
+const failureReasonOf = (cause: Cause.Cause<TerminationReason>): TerminationReason =>
+  Option.getOrElse(Cause.findErrorOption(cause), () => ({
+    _tag: 'Abnormal',
+    report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
+  }))
 
 const executeStart = (
   acquired: AcquiredSupervisor,
-  medium: Medium<FiberProgram, never, Scope.Scope>,
   command: StartChild,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const program = yield* programFor(acquired.handle, command.childId)
-    const childScope = yield* Scope.fork(ownerScopeOf(acquired.handle))
-    const evidence: Started = yield* medium.start(program).pipe(Scope.provide(childScope))
-    yield* registerStarted(acquired.handle, command.childId, command.generation, evidence)
-    yield* stampedNow(acquired.handle, startedEventOf(command.childId, command.generation))
-    yield* watchReadiness(acquired.handle, evidence, command.childId, command.generation)
-    yield* watchReport(acquired.handle, medium, evidence, command.childId, command.generation)
+    const child = yield* boundChildFor(acquired.handle, command.childId)
+    const outcome = yield* Effect.exit(child.start)
+    yield* Exit.match(outcome, {
+      onSuccess: (evidence) =>
+        Effect.andThen(
+          registerStarted(acquired.handle, command.childId, command.generation, evidence),
+          Effect.andThen(
+            stampedNow(acquired.handle, startedEventOf(command.childId, command.generation)),
+            Effect.andThen(
+              watchReadiness(acquired.handle, evidence, command.childId, command.generation),
+              watchReport(acquired.handle, child, evidence, command.childId, command.generation),
+            ),
+          ),
+        ),
+      onFailure: (cause) =>
+        stampedNow(
+          acquired.handle,
+          terminatedEventOf(command.childId, command.generation, failureReasonOf(cause)),
+        ),
+    })
   })
 
 /**
- * Moves each answered request's pending program: an accepted start binds it to the
+ * Moves each answered request's pending child: an accepted start binds it to the
  * child the kernel allocated, and every answered request drops its pending entry.
  */
 const bindDynamicPrograms = (
@@ -184,33 +207,33 @@ const bindDynamicPrograms = (
     Effect.forEach(
       Arr.filter(replies, Schema.is(ReplyStartAccepted)),
       (accepted) =>
-        Effect.flatMap(Ref.get(pendingProgramsOf(handle)), (pending) =>
+        Effect.flatMap(Ref.get(pendingChildrenOf(handle)), (pending) =>
           Effect.orDie(Effect.fromOption(HashMap.get(pending, accepted.requestId))).pipe(
-            Effect.flatMap((program) =>
-              Ref.update(programsOf(handle), (programs) =>
-                HashMap.set(programs, accepted.childId, program))
+            Effect.flatMap((child) =>
+              Ref.update(boundChildrenOf(handle), (children) =>
+                HashMap.set(children, accepted.childId, child))
             ),
           )),
       { discard: true },
     ),
-    Ref.update(pendingProgramsOf(handle), (pending) =>
+    Ref.update(pendingChildrenOf(handle), (pending) =>
       Arr.reduce(replies, pending, (remaining, reply) =>
         HashMap.remove(remaining, reply.requestId))),
   )
 
 const executeStop = (
   acquired: AcquiredSupervisor,
-  medium: Medium<FiberProgram, never, Scope.Scope>,
   command: StopChild,
 ): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.flatMap(knownStarted(acquired.handle, command.childId, command.generation), (found) =>
-    Effect.andThen(
-      Option.match(found, {
-        onNone: () => Effect.void,
-        onSome: (evidence) => Effect.asVoid(medium.stop(evidence, command.shutdown)),
-      }),
-      stampedNow(acquired.handle, stoppedEventOf(command.childId, command.generation)),
-    ))
+  Effect.gen(function*() {
+    const child = yield* boundChildFor(acquired.handle, command.childId)
+    const found = yield* knownStarted(acquired.handle, command.childId, command.generation)
+    yield* Option.match(found, {
+      onNone: () => Effect.void,
+      onSome: (evidence) => Effect.asVoid(child.stop(evidence, command.shutdown)),
+    })
+    yield* stampedNow(acquired.handle, stoppedEventOf(command.childId, command.generation))
+  })
 
 const executeChildArm = (
   acquired: AcquiredSupervisor,
@@ -289,7 +312,6 @@ const executeTerminate = (
 
 const bucketRunnerOf = (
   acquired: AcquiredSupervisor,
-  medium: Medium<FiberProgram, never, Scope.Scope>,
 ): {
   readonly stops: (commands: SupervisorCommands) => Effect.Effect<void, never, Scope.Scope>
   readonly starts: (commands: SupervisorCommands) => Effect.Effect<void, never, Scope.Scope>
@@ -297,10 +319,9 @@ const bucketRunnerOf = (
   readonly replies: (commands: SupervisorCommands) => Effect.Effect<void, never, never>
   readonly terminates: (commands: SupervisorCommands) => Effect.Effect<void, never, never>
 } => ({
-  stops: (commands) =>
-    Effect.forEach(commands.stops, (command) => executeStop(acquired, medium, command), { discard: true }),
+  stops: (commands) => Effect.forEach(commands.stops, (command) => executeStop(acquired, command), { discard: true }),
   starts: (commands) =>
-    Effect.forEach(commands.starts, (command) => executeStart(acquired, medium, command), { discard: true }),
+    Effect.forEach(commands.starts, (command) => executeStart(acquired, command), { discard: true }),
   arms: (commands) => Effect.forEach(commands.arms, (command) => executeArm(acquired, command), { discard: true }),
   replies: (commands) => Effect.forEach(commands.replies, (reply) => executeReply(acquired, reply), { discard: true }),
   terminates: (commands) =>
@@ -310,16 +331,13 @@ const bucketRunnerOf = (
 export const Commands = {
   runBuckets: (
     acquired: AcquiredSupervisor,
-    medium: Medium<FiberProgram, never, Scope.Scope>,
     commands: SupervisorCommands,
-  ): Effect.Effect<void, never, Scope.Scope> => runBuckets(acquired, medium, commands),
+  ): Effect.Effect<void, never, Scope.Scope> => runBuckets(acquired, commands),
   probeOnce: (
     acquired: AcquiredSupervisor,
-    medium: Medium<FiberProgram, never, Scope.Scope>,
     childId: ChildId,
     generation: Generation,
-  ): Effect.Effect<void, never, Scope.Scope> => probeOnce(acquired, medium, childId, generation),
-  mediumOf: (): Effect.Effect<Medium<FiberProgram, never, Scope.Scope>, never, never> => mediumOf(),
+  ): Effect.Effect<void, never, Scope.Scope> => probeOnce(acquired, childId, generation),
   answerStale: (
     acquired: AcquiredSupervisor,
     event: SupervisionEvent,
@@ -329,10 +347,9 @@ export const Commands = {
 
 const runBuckets = (
   acquired: AcquiredSupervisor,
-  medium: Medium<FiberProgram, never, Scope.Scope>,
   commands: SupervisorCommands,
 ): Effect.Effect<void, never, Scope.Scope> => {
-  const buckets = bucketRunnerOf(acquired, medium)
+  const buckets = bucketRunnerOf(acquired)
   return Effect.andThen(
     buckets.stops(commands),
     Effect.andThen(
@@ -347,18 +364,18 @@ const runBuckets = (
 
 const probeOnce = (
   acquired: AcquiredSupervisor,
-  medium: Medium<FiberProgram, never, Scope.Scope>,
   childId: ChildId,
   generation: Generation,
 ): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.flatMap(knownStarted(acquired.handle, childId, generation), (found) =>
-    Effect.flatMap(
-      Option.match(found, {
-        onNone: () => Effect.succeed(false),
-        onSome: (evidence) => medium.probe(evidence),
-      }),
-      (alive) => stampedNow(acquired.handle, probeEventOf(childId, generation, alive)),
-    ))
+  Effect.gen(function*() {
+    const child = yield* boundChildFor(acquired.handle, childId)
+    const found = yield* knownStarted(acquired.handle, childId, generation)
+    const alive = yield* Option.match(found, {
+      onNone: () => Effect.succeed(false),
+      onSome: (evidence) => child.probe(evidence),
+    })
+    yield* stampedNow(acquired.handle, probeEventOf(childId, generation, alive))
+  })
 
 const requestIdOf = (event: SupervisionEvent): string | undefined =>
   Match.value(event).pipe(
