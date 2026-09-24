@@ -254,7 +254,7 @@ export const scoredRuleAnchor: ScoredRuleAnchor = {
   tnr: 2 / 3,
   derivation: [
     'Product plan AE1: a task labelled as governed by the rule that the selector loads gives TP 1; AE2: a task',
-    'labelled as not governed where the selector loads the rule gives FP 1 (pack-evaluator plan line 389). Per',
+    'labelled as not governed where the selector loads the rule gives FP 1 (pack-evaluator plan U4 / AE2). Per',
     'the ruled reading (review page governs/does-not-govern versus notes-and-defer, R6): a deferred stem is',
     'the owner abstaining, so it builds no labelled cell, while every other pack rule of a labelled (task,',
     'pack) entry that is neither governing nor deferred is does-not-govern and makes a negative cell. Six dev',
@@ -330,7 +330,7 @@ export const bootstrapIntervalAnchor: BootstrapIntervalAnchor = {
     '1 - alpha/2 percentiles of the clipped bootstrap thetas (defaults 20000 iterations, confidence 0.95). The',
     "exact bounds depend on the resample stream: judgy draws through numpy's global PRNG, while the product",
     'port uses its own seeded generator whose algorithm the product plan KTD4 leaves to the implementation, and',
-    'this oracle reports point estimates only (rebuild plan KTD5 keeps interval checks as relations plus one',
+    'this oracle reports point estimates only (rebuild plan TKTD5 keeps interval checks as relations plus one',
     "pinned anchor). Neither a hand derivation nor an independent recomputation can settle the product's",
     'bounds, so the expected lower and upper bounds are pinned from a product run at the recorded seed (20000',
     'iterations, confidence 0.95) by the evaluate command-level suite — observed 0.2142857142857143 to',

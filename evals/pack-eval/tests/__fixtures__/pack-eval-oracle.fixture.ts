@@ -151,7 +151,7 @@ const missingJudgePromptRefusal = (world: World): OracleRefusal | undefined =>
     : undefined
 
 // A pair is witnessed only when one routing entry for its task and pack
-// governs both rules (pack-evaluator plan U2 :330, a pair whose task does not
+// governs both rules (pack-evaluator plan U2, a pair whose task does not
 // label both rules as governing is refused).
 const singleEntryGovernsPair = (
   world: World,
@@ -207,7 +207,7 @@ const loadedStemsOf = (world: World, taskId: string, packId: string): ReadonlySe
 
 // A deferred stem is an abstention and yields no cell; a pack rule that is
 // neither governing nor deferred on the entry is a does-not-govern negative
-// (pack-evaluator plan U6 :453-454, governs/does-not-govern vs defer).
+// (pack-evaluator plan U10, governs/does-not-govern vs defer).
 interface LabelledCell {
   readonly governing: boolean
   readonly loaded: boolean
