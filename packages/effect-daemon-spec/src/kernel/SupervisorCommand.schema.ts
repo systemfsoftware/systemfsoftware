@@ -55,3 +55,17 @@ export const SupervisorCommand = Schema.Union([
   TerminateSupervisor,
 ])
 export type SupervisorCommand = typeof SupervisorCommand.Type
+export const SupervisorArm = Schema.Union([ArmChildTimer, ArmSupervisorTimer])
+export type SupervisorArm = typeof SupervisorArm.Type
+
+export const SupervisorReply = Schema.Union([ReplyStartAccepted, ReplyStartRefused, ReplyStopped])
+export type SupervisorReply = typeof SupervisorReply.Type
+
+export const SupervisorCommands = Schema.Struct({
+  stops: Schema.Array(StopChild),
+  starts: Schema.Array(StartChild),
+  arms: Schema.Array(SupervisorArm),
+  replies: Schema.Array(SupervisorReply),
+  terminates: Schema.Array(TerminateSupervisor),
+})
+export type SupervisorCommands = typeof SupervisorCommands.Type

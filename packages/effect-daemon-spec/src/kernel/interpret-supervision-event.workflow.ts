@@ -6,7 +6,18 @@ import { Millis, PositiveMillis } from './SupervisionLimits.schema.js'
 import type { EventTime, Generation, RequestId } from './SupervisionLimits.schema.js'
 import { ChildId } from './SupervisionLimits.schema.js'
 import { DecisionTypeId, StateTypeId } from './SupervisionTypeIds.js'
-import { SupervisorCommand } from './SupervisorCommand.schema.js'
+import { StopChild, SupervisorCommands } from './SupervisorCommand.schema.js'
+import type {
+  ArmChildTimer,
+  ArmSupervisorTimer,
+  ReplyStartAccepted,
+  ReplyStartRefused,
+  ReplyStopped,
+  StartChild,
+  SupervisorArm,
+  SupervisorReply,
+  TerminateSupervisor,
+} from './SupervisorCommand.schema.js'
 import type {
   BackoffSchedule,
   ChildDeclaration,
@@ -26,7 +37,7 @@ export class Stale extends Schema.TaggedClass<Stale>()('Stale', {}) {
 
 export class Continue extends Schema.TaggedClass<Continue>()('Continue', {
   core: SupervisorCore,
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
@@ -34,14 +45,14 @@ export class Continue extends Schema.TaggedClass<Continue>()('Continue', {
 export class RestartChildren extends Schema.TaggedClass<RestartChildren>()('RestartChildren', {
   core: SupervisorCore,
   pending: Schema.Array(ChildStart),
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
 export class StartChildren extends Schema.TaggedClass<StartChildren>()('StartChildren', {
   core: SupervisorCore,
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
@@ -49,7 +60,7 @@ export class StartChildren extends Schema.TaggedClass<StartChildren>()('StartChi
 export class CoolDown extends Schema.TaggedClass<CoolDown>()('CoolDown', {
   core: SupervisorCore,
   millis: PositiveMillis,
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
@@ -57,20 +68,20 @@ export class CoolDown extends Schema.TaggedClass<CoolDown>()('CoolDown', {
 export class StopChildren extends Schema.TaggedClass<StopChildren>()('StopChildren', {
   core: SupervisorCore,
   reason: TerminationReason,
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
 export class Terminate extends Schema.TaggedClass<Terminate>()('Terminate', {
   reason: TerminationReason,
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
 export class RefuseDynamicStart extends Schema.TaggedClass<RefuseDynamicStart>()('RefuseDynamicStart', {
-  commands: Schema.Array(SupervisorCommand),
+  commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
 }
@@ -128,7 +139,17 @@ export class SupervisionStep extends Schema.TaggedClass<SupervisionStep>()('Supe
 
 const UNKNOWN_TIMEOUT_MILLIS = 1_000
 
-const noCommands: ReadonlyArray<SupervisorCommand> = []
+const noCommands: SupervisorCommands = { stops: [], starts: [], arms: [], replies: [], terminates: [] }
+
+type CommandBuckets = {
+  readonly stops?: ReadonlyArray<StopChild>
+  readonly starts?: ReadonlyArray<StartChild>
+  readonly arms?: ReadonlyArray<SupervisorArm>
+  readonly replies?: ReadonlyArray<SupervisorReply>
+  readonly terminates?: ReadonlyArray<TerminateSupervisor>
+}
+
+const commandsIn = (buckets: CommandBuckets): SupervisorCommands => ({ ...noCommands, ...buckets })
 
 const reasonTagOf = (reason: TerminationReason): 'Normal' | 'Shutdown' | 'Abnormal' => reason._tag
 
@@ -269,20 +290,20 @@ const backoffDelay = (schedule: BackoffSchedule, consecutiveRestarts: number): M
     Match.orElse((baseMillis) => Num.min(schedule.capMillis, baseMillis * schedule.multiplier ** consecutiveRestarts)),
   )
 
-const startCommandOf = (start: ChildStart): SupervisorCommand => ({
+const startCommandOf = (start: ChildStart): StartChild => ({
   _tag: 'StartChild',
   childId: start.childId,
   generation: start.generation,
 })
 
-const stopCommandOf = (policy: SupervisionPolicy, child: ChildInstance): SupervisorCommand => ({
+const stopCommandOf = (policy: SupervisionPolicy, child: ChildInstance): StopChild => ({
   _tag: 'StopChild',
   childId: child.childId,
   generation: child.generation,
   shutdown: kindOfPolicy(policy, child.childId).shutdown,
 })
 
-const backoffCommandOf = (start: ChildStart, deadline: EventTime): SupervisorCommand => ({
+const backoffCommandOf = (start: ChildStart, deadline: EventTime): ArmChildTimer => ({
   _tag: 'ArmChildTimer',
   kind: 'backoff',
   childId: start.childId,
@@ -290,7 +311,7 @@ const backoffCommandOf = (start: ChildStart, deadline: EventTime): SupervisorCom
   deadline,
 })
 
-const deadlineCommandOf = (start: ChildStart, deadline: EventTime): SupervisorCommand => ({
+const deadlineCommandOf = (start: ChildStart, deadline: EventTime): ArmChildTimer => ({
   _tag: 'ArmChildTimer',
   kind: 'start_deadline',
   childId: start.childId,
@@ -298,7 +319,7 @@ const deadlineCommandOf = (start: ChildStart, deadline: EventTime): SupervisorCo
   deadline,
 })
 
-const tickCommandOf = (child: ChildInstance, deadline: EventTime): SupervisorCommand => ({
+const tickCommandOf = (child: ChildInstance, deadline: EventTime): ArmChildTimer => ({
   _tag: 'ArmChildTimer',
   kind: 'liveness_tick',
   childId: child.childId,
@@ -306,27 +327,27 @@ const tickCommandOf = (child: ChildInstance, deadline: EventTime): SupervisorCom
   deadline,
 })
 
-const coolDownCommandOf = (deadline: EventTime): SupervisorCommand => ({
+const coolDownCommandOf = (deadline: EventTime): ArmSupervisorTimer => ({
   _tag: 'ArmSupervisorTimer',
   kind: 'cool_down',
   deadline,
 })
 
-const terminateCommandOf = (reason: TerminationReason): SupervisorCommand => ({
+const terminateCommandOf = (reason: TerminationReason): TerminateSupervisor => ({
   _tag: 'TerminateSupervisor',
   reason,
 })
 
-const replyAcceptedOf = (requestId: RequestId, start: ChildStart): SupervisorCommand => ({
+const replyAcceptedOf = (requestId: RequestId, start: ChildStart): ReplyStartAccepted => ({
   _tag: 'ReplyStartAccepted',
   requestId,
   childId: start.childId,
   generation: start.generation,
 })
 
-const replyRefusedOf = (requestId: RequestId): SupervisorCommand => ({ _tag: 'ReplyStartRefused', requestId })
+const replyRefusedOf = (requestId: RequestId): ReplyStartRefused => ({ _tag: 'ReplyStartRefused', requestId })
 
-const replyStoppedOf = (requestId: RequestId): SupervisorCommand => ({ _tag: 'ReplyStopped', requestId })
+const replyStoppedOf = (requestId: RequestId): ReplyStopped => ({ _tag: 'ReplyStopped', requestId })
 
 const holdOf = (core: SupervisorCore): SupervisionDecision => new Continue({ core, commands: noCommands })
 
@@ -334,7 +355,11 @@ const terminatedReason: TerminationReason = { _tag: 'Shutdown' }
 
 const stopEverything = (core: SupervisorCore, reason: TerminationReason): SupervisionDecision => {
   const stops = Arr.map(Arr.reverse(core.children), (child) => stopCommandOf(core.policy, child))
-  return new StopChildren({ core: withChildren(core, Arr.map(core.children, stoppingOf)), reason, commands: stops })
+  return new StopChildren({
+    core: withChildren(core, Arr.map(core.children, stoppingOf)),
+    reason,
+    commands: commandsIn({ stops }),
+  })
 }
 
 type Termination = {
@@ -361,7 +386,7 @@ type RestartScope = {
   readonly comingIds: ReadonlyArray<ChildId>
   readonly removedIds: ReadonlyArray<ChildId>
   readonly remaining: ReadonlyArray<ChildInstance>
-  readonly stops: ReadonlyArray<SupervisorCommand>
+  readonly stops: ReadonlyArray<StopChild>
 }
 
 const restartScopeOf = (core: SupervisorCore, failedIndex: number, termination: Termination): RestartScope => {
@@ -414,22 +439,23 @@ const phasedCommands = (
   core: SupervisorCore,
   at: EventTime,
   coming: ReadonlyArray<ChildInstance>,
-): { readonly commands: ReadonlyArray<SupervisorCommand>; readonly pending: ReadonlyArray<ChildStart> } => {
+): { readonly commands: SupervisorCommands; readonly pending: ReadonlyArray<ChildStart> } => {
   const steps: ReadonlyArray<RestartStep> = Arr.map(coming, (child) => {
     const start: ChildStart = { childId: child.childId, generation: child.generation + 1 }
     return { start, delay: backoffDelay(core.policy.backoff, child.consecutiveRestarts) }
   })
-  const immediate = Arr.flatMap(
-    Arr.filter(steps, (step: RestartStep) => step.delay === 0),
-    (step: RestartStep): ReadonlyArray<SupervisorCommand> => [
-      startCommandOf(step.start),
-      deadlineCommandOf(step.start, at + kindOfPolicy(core.policy, step.start.childId).startTimeoutMillis),
-    ],
-  )
+  const ready = Arr.filter(steps, (step: RestartStep) => step.delay === 0)
   const deferred = Arr.filter(steps, (step: RestartStep) => step.delay > 0)
-  const arms = Arr.map(deferred, (step: RestartStep) => backoffCommandOf(step.start, at + step.delay))
+  const timeoutOf = (step: RestartStep): EventTime =>
+    at + kindOfPolicy(core.policy, step.start.childId).startTimeoutMillis
   return {
-    commands: Arr.appendAll(immediate, arms),
+    commands: commandsIn({
+      starts: Arr.map(ready, (step: RestartStep) => startCommandOf(step.start)),
+      arms: Arr.appendAll(
+        Arr.map(ready, (step: RestartStep) => deadlineCommandOf(step.start, timeoutOf(step))),
+        Arr.map(deferred, (step: RestartStep) => backoffCommandOf(step.start, at + step.delay)),
+      ),
+    }),
     pending: Arr.map(deferred, (step: RestartStep) => step.start),
   }
 }
@@ -437,12 +463,12 @@ const phasedCommands = (
 const exhaustedDecisionOf = (
   policy: SupervisionPolicy,
   core: SupervisorCore,
-  stops: ReadonlyArray<SupervisorCommand>,
+  stops: ReadonlyArray<StopChild>,
   at: EventTime,
 ): SupervisionDecision =>
   Match.value(policy.coolDown).pipe(
     Match.tag('CoolDownAfter', ({ millis }) =>
-      new CoolDown({ core, millis, commands: Arr.append(stops, coolDownCommandOf(at + millis)) })),
+      new CoolDown({ core, millis, commands: commandsIn({ stops, arms: [coolDownCommandOf(at + millis)] }) })),
     Match.tag('NoCoolDown', () =>
       stopEverything(core, terminatedReason)),
     Match.exhaustive,
@@ -455,9 +481,9 @@ const stampedCoreOf = (core: SupervisorCore, scope: RestartScope, at: EventTime)
 
 type RestartOutcome = {
   readonly core: SupervisorCore
-  readonly stops: ReadonlyArray<SupervisorCommand>
+  readonly stops: ReadonlyArray<StopChild>
   readonly pending: ReadonlyArray<ChildStart>
-  readonly commands: ReadonlyArray<SupervisorCommand>
+  readonly commands: SupervisorCommands
   readonly exhausted: boolean
 }
 
@@ -468,7 +494,7 @@ const restartOutcomeOf = (core: SupervisorCore, scope: RestartScope, at: EventTi
     core: nextCore,
     stops: scope.stops,
     pending: phased.pending,
-    commands: Arr.appendAll(scope.stops, phased.commands),
+    commands: commandsIn({ stops: scope.stops, starts: phased.commands.starts, arms: phased.commands.arms }),
     exhausted: Arr.length(nextCore.restartStamps) > nextCore.policy.intensity,
   }
 }
@@ -518,9 +544,9 @@ const shutdownOrContinue = (
 const RestartedBase = Schema.TaggedStruct('Restarted', {
   outcome: Schema.Struct({
     core: SupervisorCore,
-    stops: Schema.Array(SupervisorCommand),
+    stops: Schema.Array(StopChild),
     pending: Schema.Array(ChildStart),
-    commands: Schema.Array(SupervisorCommand),
+    commands: SupervisorCommands,
     exhausted: Schema.Boolean,
   }),
 })
@@ -648,7 +674,7 @@ const becomingReady = (core: SupervisorCore, child: ChildInstance, at: EventTime
       const nextCore = withChildren(core, Arr.map(core.children, replacing(next)))
       return new Continue({
         core: nextCore,
-        commands: [tickCommandOf(next, at + core.policy.livenessTickMillis)],
+        commands: commandsIn({ arms: [tickCommandOf(next, at + core.policy.livenessTickMillis)] }),
       })
     }),
     Match.orElse(() => holdOf(core)),
@@ -662,7 +688,10 @@ const stoppedInShuttingDown = (
 ): SupervisionDecision => {
   const next = removalOf(core, childId, generation)
   return Match.value(Arr.every(next.children, (child) => child.status !== 'stopping')).pipe(
-    Match.when(true, () => new Terminate({ reason, commands: [terminateCommandOf(reason)] })),
+    Match.when(
+      true,
+      () => new Terminate({ reason, commands: commandsIn({ terminates: [terminateCommandOf(reason)] }) }),
+    ),
     Match.when(false, () => new Continue({ core: next, commands: noCommands })),
     Match.exhaustive,
   )
@@ -763,7 +792,11 @@ const tickInRunning = (core: SupervisorCore, child: ChildInstance, at: EventTime
   Match.value(child.status).pipe(
     Match.when(
       'ready',
-      () => new Continue({ core, commands: [tickCommandOf(child, at + core.policy.livenessTickMillis)] }),
+      () =>
+        new Continue({
+          core,
+          commands: commandsIn({ arms: [tickCommandOf(child, at + core.policy.livenessTickMillis)] }),
+        }),
     ),
     Match.orElse(() => new Stale({})),
   )
@@ -790,10 +823,10 @@ const fireBackoffOf = (
 ): SupervisionDecision => {
   const start: ChildStart = { childId, generation }
   const remaining = Arr.filter(pending, (plan) => planMatches(childId, generation)(plan) === false)
-  const commands: ReadonlyArray<SupervisorCommand> = [
-    startCommandOf(start),
-    deadlineCommandOf(start, at + kindOfPolicy(core.policy, childId).startTimeoutMillis),
-  ]
+  const commands: SupervisorCommands = commandsIn({
+    starts: [startCommandOf(start)],
+    arms: [deadlineCommandOf(start, at + kindOfPolicy(core.policy, childId).startTimeoutMillis)],
+  })
   return Match.value(Arr.length(remaining) === 0).pipe(
     Match.when(true, () => new StartChildren({ core, commands })),
     Match.when(false, () => new RestartChildren({ core, pending: remaining, commands })),
@@ -821,7 +854,7 @@ const backoffInRestarting = (
 
 const cooledStartsOf = (core: SupervisorCore, at: EventTime): {
   readonly fresh: ReadonlyArray<ChildInstance>
-  readonly commands: ReadonlyArray<SupervisorCommand>
+  readonly commands: SupervisorCommands
 } => {
   const fresh: ReadonlyArray<ChildInstance> = Arr.map(core.children, (child) => ({
     ...child,
@@ -829,14 +862,18 @@ const cooledStartsOf = (core: SupervisorCore, at: EventTime): {
     consecutiveRestarts: 0,
     probeFailures: 0,
   }))
-  const commands = Arr.flatMap(fresh, (child) => {
-    const start: ChildStart = { childId: child.childId, generation: child.generation }
-    return [
-      startCommandOf(start),
-      deadlineCommandOf(start, at + kindOfPolicy(core.policy, child.childId).startTimeoutMillis),
-    ]
-  })
-  return { fresh, commands }
+  const deadlineOf = (child: ChildInstance): ArmChildTimer =>
+    deadlineCommandOf(
+      { childId: child.childId, generation: child.generation },
+      at + kindOfPolicy(core.policy, child.childId).startTimeoutMillis,
+    )
+  return {
+    fresh,
+    commands: commandsIn({
+      starts: Arr.map(fresh, (child) => startCommandOf({ childId: child.childId, generation: child.generation })),
+      arms: Arr.map(fresh, deadlineOf),
+    }),
+  }
 }
 
 const cooledRestartOf = (core: SupervisorCore, at: EventTime): SupervisionDecision => {
@@ -882,11 +919,11 @@ const allocatedDecisionOf = (
   )
   return new StartChildren({
     core: allocated.core,
-    commands: [
-      startCommandOf(allocated.start),
-      deadlineCommandOf(allocated.start, at + timeoutMillis),
-      replyAcceptedOf(requestId, allocated.start),
-    ],
+    commands: commandsIn({
+      starts: [startCommandOf(allocated.start)],
+      arms: [deadlineCommandOf(allocated.start, at + timeoutMillis)],
+      replies: [replyAcceptedOf(requestId, allocated.start)],
+    }),
   })
 }
 
@@ -894,11 +931,13 @@ const ceilingAllows = (core: SupervisorCore, ceiling: number): boolean => runnin
 
 const dynamicStartOf = (core: SupervisorCore, requestId: RequestId, at: EventTime): SupervisionDecision =>
   Match.value(dynamicKindOf(core.policy)).pipe(
-    Match.tag('None', () => new RefuseDynamicStart({ commands: [replyRefusedOf(requestId)] })),
+    Match.tag('None', () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) })),
     Match.tag('Some', (dynamic) =>
       Match.value(ceilingAllows(core, dynamic.value.ceiling)).pipe(
-        Match.when(true, () => new RefuseDynamicStart({ commands: [replyRefusedOf(requestId)] })),
-        Match.when(false, () => allocatedDecisionOf(core, dynamicInstanceOf(core), requestId, at)),
+        Match.when(true, () =>
+          new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) })),
+        Match.when(false, () =>
+          allocatedDecisionOf(core, dynamicInstanceOf(core), requestId, at)),
         Match.exhaustive,
       )),
     Match.exhaustive,
@@ -926,7 +965,10 @@ const stoppable = (core: SupervisorCore, child: ChildInstance): boolean =>
 const stoppingContinue = (core: SupervisorCore, child: ChildInstance, requestId: RequestId): SupervisionDecision => {
   const next = stoppingOf(child)
   const nextCore = withChildren(core, Arr.map(core.children, replacing(next)))
-  return new Continue({ core: nextCore, commands: [stopCommandOf(core.policy, next), replyStoppedOf(requestId)] })
+  return new Continue({
+    core: nextCore,
+    commands: commandsIn({ stops: [stopCommandOf(core.policy, next)], replies: [replyStoppedOf(requestId)] }),
+  })
 }
 
 const dynamicStopCurrentOf = (
@@ -1055,9 +1097,18 @@ const coolDownElapsedOf = (core: SupervisorCore, kind: TimerKind, at: EventTime)
 const onDynamicStartRequested = (state: SupervisorState, requestId: RequestId, at: EventTime): SupervisionDecision =>
   Match.value(state).pipe(
     Match.tag('Running', ({ core }) => dynamicStartOf(core, requestId, at)),
-    Match.tag('Restarting', () => new RefuseDynamicStart({ commands: [replyRefusedOf(requestId)] })),
-    Match.tag('CoolingDown', () => new RefuseDynamicStart({ commands: [replyRefusedOf(requestId)] })),
-    Match.tag('ShuttingDown', () => new RefuseDynamicStart({ commands: [replyRefusedOf(requestId)] })),
+    Match.tag(
+      'Restarting',
+      () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) }),
+    ),
+    Match.tag(
+      'CoolingDown',
+      () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) }),
+    ),
+    Match.tag(
+      'ShuttingDown',
+      () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) }),
+    ),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
   )

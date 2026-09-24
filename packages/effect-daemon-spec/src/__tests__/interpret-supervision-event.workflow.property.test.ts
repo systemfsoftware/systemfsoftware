@@ -8,7 +8,8 @@ import {
   SupervisionStep,
   type SupervisorState,
 } from '../kernel/interpret-supervision-event.workflow.js'
-import type { SupervisionEvent, TimerKind } from '../kernel/SupervisionEvent.schema.js'
+import { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
+import type { TimerKind } from '../kernel/SupervisionEvent.schema.js'
 import {
   Ceiling,
   EventTime,
@@ -20,13 +21,15 @@ import {
 import type {
   ArmChildTimer,
   ArmSupervisorTimer,
-  StartChild,
-  StopChild,
+  SupervisorArm,
   SupervisorCommand,
+  SupervisorCommands,
+  SupervisorReply,
 } from '../kernel/SupervisorCommand.schema.js'
 import { BackoffSchedule, RestartStrategy, RestartType, SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
 import type { ChildDeclaration, CoolDownSetting, DynamicKind } from '../kernel/SupervisorPolicy.schema.js'
-import type { ChildInstance, ChildStatus, SupervisorCore } from '../kernel/SupervisorState.schema.js'
+import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
+import type { ChildInstance, ChildStatus } from '../kernel/SupervisorState.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 
 const PERIOD_MILLIS = 100
@@ -193,9 +196,11 @@ const folded = (state: SupervisorState, events: ReadonlyArray<SupervisionEvent>)
 
 const lastDecisionOf = (outcome: Folded): SupervisionDecision => Option.getOrThrow(Arr.last(outcome.decisions))
 
-const commandsOf = (decision: SupervisionDecision): ReadonlyArray<SupervisorCommand> =>
+const noCommands: SupervisorCommands = { stops: [], starts: [], arms: [], replies: [], terminates: [] }
+
+const commandsOf = (decision: SupervisionDecision): SupervisorCommands =>
   Match.value(decision).pipe(
-    Match.tag('Stale', () => []),
+    Match.tag('Stale', () => noCommands),
     Match.tag('RefuseDynamicStart', (refused) => refused.commands),
     Match.tag('Terminate', (terminated) => terminated.commands),
     Match.tag('Continue', (continued) => continued.commands),
@@ -218,33 +223,33 @@ const coreOf = (decision: SupervisionDecision): Option.Option<SupervisorCore> =>
     Match.tag('StopChildren', (stopped) => Option.some(stopped.core)),
     Match.exhaustive,
   )
+const flattenOf = (commands: SupervisorCommands): ReadonlyArray<SupervisorCommand> => [
+  ...commands.stops,
+  ...commands.starts,
+  ...commands.arms,
+  ...commands.replies,
+  ...commands.terminates,
+]
 
-const stopIdOf = (command: SupervisorCommand): Option.Option<StopChild> =>
-  Match.value(command).pipe(
-    Match.tag('StopChild', (stop) => Option.some(stop)),
+const stopIdsOf = (commands: SupervisorCommands): ReadonlyArray<string> =>
+  Arr.map(commands.stops, (stop) => stop.childId)
+
+const startIdsOf = (commands: SupervisorCommands): ReadonlyArray<string> =>
+  Arr.map(commands.starts, (start) => start.childId)
+
+const acceptedIdOf = (reply: SupervisorReply): Option.Option<string> =>
+  Match.value(reply).pipe(
+    Match.tag('ReplyStartAccepted', (accepted) => Option.some(accepted.childId)),
     Match.orElse(() => Option.none()),
   )
 
-const startIdOf = (command: SupervisorCommand): Option.Option<StartChild> =>
-  Match.value(command).pipe(
-    Match.tag('StartChild', (start) => Option.some(start)),
-    Match.orElse(() => Option.none()),
-  )
+const acceptedIdsOf = (commands: SupervisorCommands): ReadonlyArray<string> =>
+  Arr.getSomes(Arr.map(commands.replies, acceptedIdOf))
 
-const acceptedIdOf = (command: SupervisorCommand): Option.Option<string> =>
-  Match.value(command).pipe(
-    Match.tag('ReplyStartAccepted', (reply) => Option.some(reply.childId)),
-    Match.orElse(() => Option.none()),
-  )
+const terminatorCountOf = (commands: SupervisorCommands): number => Arr.length(commands.terminates)
 
-const terminatorOf = (command: SupervisorCommand): Option.Option<SupervisorCommand> =>
-  Match.value(command).pipe(
-    Match.tag('TerminateSupervisor', (terminated) => Option.some(terminated)),
-    Match.orElse(() => Option.none()),
-  )
-
-const backoffTimerOf = (command: SupervisorCommand): Option.Option<ArmChildTimer> =>
-  Match.value(command).pipe(
+const backoffTimerOf = (arm: SupervisorArm): Option.Option<ArmChildTimer> =>
+  Match.value(arm).pipe(
     Match.tag('ArmChildTimer', (armed) =>
       Match.value(armed.kind).pipe(
         Match.when('backoff', () => Option.some(armed)),
@@ -253,8 +258,8 @@ const backoffTimerOf = (command: SupervisorCommand): Option.Option<ArmChildTimer
     Match.orElse(() => Option.none()),
   )
 
-const coolDownTimerOf = (command: SupervisorCommand): Option.Option<ArmSupervisorTimer> =>
-  Match.value(command).pipe(
+const coolDownTimerOf = (arm: SupervisorArm): Option.Option<ArmSupervisorTimer> =>
+  Match.value(arm).pipe(
     Match.tag('ArmSupervisorTimer', (armed) =>
       Match.value(armed.kind).pipe(
         Match.when('cool_down', () => Option.some(armed)),
@@ -263,48 +268,36 @@ const coolDownTimerOf = (command: SupervisorCommand): Option.Option<ArmSuperviso
     Match.orElse(() => Option.none()),
   )
 
-const stopIdsOf = (commands: ReadonlyArray<SupervisorCommand>): ReadonlyArray<string> =>
-  Arr.map(Arr.getSomes(Arr.map(commands, stopIdOf)), (stop) => stop.childId)
-
-const startIdsOf = (commands: ReadonlyArray<SupervisorCommand>): ReadonlyArray<string> =>
-  Arr.map(Arr.getSomes(Arr.map(commands, startIdOf)), (start) => start.childId)
-
-const acceptedIdsOf = (commands: ReadonlyArray<SupervisorCommand>): ReadonlyArray<string> =>
-  Arr.getSomes(Arr.map(commands, acceptedIdOf))
-
-const terminatorCountOf = (commands: ReadonlyArray<SupervisorCommand>): number =>
-  Arr.length(Arr.getSomes(Arr.map(commands, terminatorOf)))
-
 const backoffDeadlineOf = (
-  commands: ReadonlyArray<SupervisorCommand>,
+  commands: SupervisorCommands,
   childId: string,
   generation: number,
 ): Option.Option<EventTime> => {
   const armed = Arr.findFirst(
-    commands,
-    (command) =>
-      Match.value(backoffTimerOf(command)).pipe(
+    commands.arms,
+    (arm) =>
+      Match.value(backoffTimerOf(arm)).pipe(
         Match.tag('Some', (timer) => timer.value.childId === childId && timer.value.generation === generation),
         Match.tag('None', () => false),
         Match.exhaustive,
       ),
   )
-  return Option.flatMap(armed, (command) => Option.map(backoffTimerOf(command), (timer) => timer.deadline))
+  return Option.flatMap(armed, (arm) => Option.map(backoffTimerOf(arm), (timer) => timer.deadline))
 }
 
-const coolDownDeadlineOf = (commands: ReadonlyArray<SupervisorCommand>): Option.Option<EventTime> => {
-  const armed = Arr.findFirst(commands, (command) => Option.isSome(coolDownTimerOf(command)))
-  return Option.flatMap(armed, (command) => Option.map(coolDownTimerOf(command), (timer) => timer.deadline))
+const coolDownDeadlineOf = (commands: SupervisorCommands): Option.Option<EventTime> => {
+  const armed = Arr.findFirst(commands.arms, (arm) => Option.isSome(coolDownTimerOf(arm)))
+  return Option.flatMap(armed, (arm) => Option.map(coolDownTimerOf(arm), (timer) => timer.deadline))
 }
 
-const isReplyStopped = (command: SupervisorCommand): Option.Option<SupervisorCommand> =>
-  Match.value(command).pipe(
-    Match.tag('ReplyStopped', (reply) => Option.some(reply)),
-    Match.orElse(() => Option.none()),
+const isReplyStopped = (reply: SupervisorReply): boolean =>
+  Match.value(reply).pipe(
+    Match.tag('ReplyStopped', () => true),
+    Match.orElse(() => false),
   )
 
 const repliesStopped = (decision: SupervisionDecision): boolean =>
-  Arr.length(Arr.getSomes(Arr.map(commandsOf(decision), isReplyStopped))) > 0
+  Arr.some(commandsOf(decision).replies, isReplyStopped)
 
 const deadlineIs = (deadline: Option.Option<EventTime>, expected: number): boolean =>
   Match.value(deadline).pipe(
@@ -350,7 +343,39 @@ const isRestartFamily = (decision: SupervisionDecision): boolean =>
     Match.orElse(() => false),
   )
 
-const hasNoCommands = (decision: SupervisionDecision): boolean => Arr.length(commandsOf(decision)) === 0
+const hasNoCommands = (decision: SupervisionDecision): boolean => {
+  const commands = commandsOf(decision)
+  return Arr.length(commands.stops) === 0 &&
+    Arr.length(commands.starts) === 0 &&
+    Arr.length(commands.arms) === 0 &&
+    Arr.length(commands.replies) === 0 &&
+    Arr.length(commands.terminates) === 0
+}
+
+const rankOf = (command: SupervisorCommand): number =>
+  Match.value(command).pipe(
+    Match.tag('StopChild', () => 0),
+    Match.tag('StartChild', () => 1),
+    Match.tag('ArmChildTimer', () => 2),
+    Match.tag('ArmSupervisorTimer', () => 2),
+    Match.tag('ReplyStartAccepted', () => 3),
+    Match.tag('ReplyStartRefused', () => 3),
+    Match.tag('ReplyStopped', () => 3),
+    Match.tag('TerminateSupervisor', () => 4),
+    Match.exhaustive,
+  )
+
+const ranksAscend = (commands: SupervisorCommands): boolean =>
+  Arr.every(
+    Arr.zip(Arr.map(flattenOf(commands), rankOf), Arr.drop(Arr.map(flattenOf(commands), rankOf), 1)),
+    ([left, right]) => left <= right,
+  )
+
+const noStopAfterStart = (commands: SupervisorCommands): boolean =>
+  Arr.reduce(flattenOf(commands), { seenStart: false, valid: true }, (acc, command) => ({
+    seenStart: acc.seenStart || rankOf(command) === 1,
+    valid: acc.valid && (acc.seenStart === false || rankOf(command) !== 0),
+  })).valid
 
 const sameSeq = (left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean =>
   Arr.join(left, '|') === Arr.join(right, '|')
@@ -874,5 +899,27 @@ it.prop(
     )
 
     return restarts && countsOneMore && Number.isSafeInteger(k + 1)
+  },
+)
+
+it.prop(
+  '∀d_BucketSequence_=ExecutionOrder',
+  [SupervisionPolicy, SupervisorCore, SupervisionEvent],
+  ([policy, core, event]) => {
+    const state = new Running({ core: { ...core, policy } })
+    const decision = decidedOf(stepOf(state, event))
+
+    return ranksAscend(commandsOf(decision))
+  },
+)
+
+it.prop(
+  '∀d_RestartBuckets_=StopsBeforeStarts',
+  [SupervisionPolicy, SupervisorCore, SupervisionEvent],
+  ([policy, core, event]) => {
+    const state = new Running({ core: { ...core, policy } })
+    const decision = decidedOf(stepOf(state, event))
+
+    return noStopAfterStart(commandsOf(decision))
   },
 )

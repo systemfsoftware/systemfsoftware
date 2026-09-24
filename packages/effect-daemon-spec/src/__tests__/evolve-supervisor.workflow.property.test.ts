@@ -62,7 +62,10 @@ it.prop('∀s_FoldStep_=ConsistentPhase', [SupervisionStep], ([step]) => {
 })
 
 it.prop('∀d_Continue_=SamePhase', [SupervisorState, SupervisorCore], ([state, core]) => {
-  const evolved = evolvedOf(state, new Continue({ core, commands: [] }))
+  const evolved = evolvedOf(
+    state,
+    new Continue({ core, commands: { stops: [], starts: [], arms: [], replies: [], terminates: [] } }),
+  )
 
   return phaseOf(evolved) === phaseOf(state)
 })
