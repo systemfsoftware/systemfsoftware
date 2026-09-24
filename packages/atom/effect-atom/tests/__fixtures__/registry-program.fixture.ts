@@ -66,15 +66,14 @@ const leafStep: fc.Arbitrary<Step> = fc.oneof(
   mountWatched.map((watched) => Step.Refresh({ watched })),
 )
 
-/**
- * A batch holds batch-safe steps and may nest one more batch inside itself.
- * Subscribing is not batch-safe: a listener attached while a batch is open is
- * not what the notification rules are about.
- */
+const batchedStep: fc.Arbitrary<Step> = fc.oneof(leafStep, subscribeStep)
+
 const batchStep: fc.Arbitrary<Step> = fc.oneof(
-  fc.array(leafStep, { maxLength: 3 }).map((steps) => Step.Batch({ steps })),
-  fc.array(leafStep, { maxLength: 2 }).chain((inner) =>
-    fc.array(leafStep, { maxLength: 2 }).map((outer) => Step.Batch({ steps: [...outer, Step.Batch({ steps: inner })] }))
+  fc.array(batchedStep, { maxLength: 3 }).map((steps) => Step.Batch({ steps })),
+  fc.array(batchedStep, { maxLength: 2 }).chain((inner) =>
+    fc.array(batchedStep, { maxLength: 2 }).map((outer) =>
+      Step.Batch({ steps: [...outer, Step.Batch({ steps: inner })] })
+    )
   ),
 )
 
@@ -226,6 +225,9 @@ const writeMirror = (state: ModelState, value: number, lines: Array<string>): Mo
   if (state.mirror === value) {
     return state
   }
+  if (state.depth > 0) {
+    return { ...state, mirror: value }
+  }
   const slots = [...state.slots]
   slots.forEach((slot, id) => {
     if (slot === undefined || slot.kind !== 'listener' || slot.watched !== mirrorAtom) {
@@ -235,10 +237,17 @@ const writeMirror = (state: ModelState, value: number, lines: Array<string>): Mo
       return
     }
     slots[id] = { ...slot, lastHeard: value }
-    lines.push(`heard ${id}: ${value}`)
+    lines.push(listenerLine(id, mirrorAtom, value))
   })
   return { ...state, mirror: value, slots }
 }
+
+const listenerKind = (watched: number): string => (watched === mirrorAtom ? 'mirror' : 'heard')
+
+const listenerLine = (id: number, watched: number, value: number): string => `${listenerKind(watched)} ${id}: ${value}`
+
+const baselineLine = (id: number, watched: number, value: number): string =>
+  `${listenerKind(watched)}-from ${id}: ${value}`
 
 /**
  * Each listener hears the change of the value it watches, once, in subscription
@@ -267,7 +276,7 @@ const hear = (state: ModelState): ModelState => {
       current = writeMirror(current, heard, lines)
       continue
     }
-    lines.push(`heard ${id}: ${heard}`)
+    lines.push(listenerLine(id, slot.watched, heard))
   }
   return { ...current, log: [...current.log, ...lines] }
 }
@@ -303,14 +312,14 @@ const subscribeStepModel = (
     slots: [...touched.slots, { kind: 'listener', watched, writer, lastHeard: value }],
   }
   if (immediate === false) {
-    return attached
+    return writer ? attached : logLine(attached, baselineLine(id, watched, value))
   }
   if (writer) {
     const lines: Array<string> = []
     const copied = writeMirror(attached, value, lines)
     return { ...copied, log: [...copied.log, ...lines] }
   }
-  return logLine(attached, `heard ${id}: ${value}`)
+  return logLine(attached, listenerLine(id, watched, value))
 }
 
 const unsubscribeStep = (state: ModelState, subscription: number): ModelState => {
@@ -474,7 +483,10 @@ const modelLines = (program: ReadonlyArray<Step>): ReadonlyArray<string> => {
   ]
 }
 
-const heardBy = (line: string): number => Number(line.slice('heard '.length, line.indexOf(':')))
+const listenerId = (line: string): number => Number(line.slice(line.indexOf(' ') + 1, line.indexOf(':')))
+const byListener = Order.mapInput(Order.Number, listenerId)
+const isListenerLine = (line: string): boolean => line.startsWith('heard') || line.startsWith('mirror')
+const listenerValue = (line: string): string => line.slice(line.indexOf(':') + 2)
 
 interface Segments {
   readonly done: ReadonlyArray<string>
@@ -483,20 +495,37 @@ interface Segments {
 
 const flushHeard = (segments: Segments): ReadonlyArray<string> => [
   ...segments.done,
-  ...Arr.sort(segments.heard, Order.mapInput(Order.Number, heardBy)),
+  ...Arr.sort(segments.heard.filter((line) => line.startsWith('heard ')), byListener),
 ]
 
 const collect = (segments: Segments, line: string): Segments =>
-  line.startsWith('heard ')
+  isListenerLine(line)
     ? { done: segments.done, heard: [...segments.heard, line] }
     : { done: [...flushHeard(segments), line], heard: [] }
 
-/**
- * Each subscriber's own sequence, and where it falls between reads, is the
- * contract; the order in which two different subscribers hear one write is not.
- */
-const normalized = (log: ReadonlyArray<string>): ReadonlyArray<string> =>
-  flushHeard(log.reduce(collect, { done: [], heard: [] }))
+const lastPerListener = (lines: ReadonlyArray<string>): ReadonlyArray<string> =>
+  lines.filter((line, index) => !lines.slice(index + 1).some((later) => listenerId(later) === listenerId(line)))
+
+const mirrorEndings = (log: ReadonlyArray<string>): ReadonlyArray<string> =>
+  Arr.sort(lastPerListener(log.filter((line) => line.startsWith('mirror'))), byListener).map((line) =>
+    `mirror listener ${listenerId(line)} ends on ${listenerValue(line)}`
+  )
+
+const repeatedLines = (log: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const last = new Map<number, string>()
+  return log.filter(isListenerLine).flatMap((line) => {
+    const id = listenerId(line)
+    const repeated = last.get(id) === listenerValue(line)
+    last.set(id, listenerValue(line))
+    return repeated ? [`listener ${id} heard ${listenerValue(line)} twice in a row`] : []
+  })
+}
+
+const normalized = (log: ReadonlyArray<string>): ReadonlyArray<string> => [
+  ...flushHeard(log.reduce(collect, { done: [], heard: [] })),
+  ...mirrorEndings(log),
+  ...repeatedLines(log),
+]
 
 /**
  * The specification: what a subscriber hears and what a read returns, written
@@ -636,6 +665,9 @@ export const observed = (program: ReadonlyArray<Step>): Effect.Effect<ReadonlyAr
         },
         Subscribe: ({ watched, writer, immediate }) => {
           const id = cancels.length
+          if (writer === false && immediate === false) {
+            log.push(baselineLine(id, watched, Atom.Registry.get(registry, watchedAtom(watched))))
+          }
           cancels.push(
             writer
               ? Atom.Registry.subscribe(
@@ -647,7 +679,7 @@ export const observed = (program: ReadonlyArray<Step>): Effect.Effect<ReadonlyAr
               : Atom.Registry.subscribe(
                 registry,
                 watchedAtom(watched),
-                (value) => log.push(`heard ${id}: ${value}`),
+                (value) => log.push(listenerLine(id, watched, value)),
                 immediate ? { immediate: true } : undefined,
               ),
           )
