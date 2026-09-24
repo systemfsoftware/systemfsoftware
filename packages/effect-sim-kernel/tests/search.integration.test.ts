@@ -4,6 +4,7 @@ import { ConfigProvider, Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { fiberPatternOf } from './__fixtures__/kernelFixtures.js'
 import {
+  allThreeClaimed,
   checkThenSet,
   firstFailureValue,
   isOverBudget,
@@ -13,6 +14,7 @@ import {
   replayValueOf,
   scopedProgram,
   sharedScopeProgram,
+  threeWorkerClaim,
 } from './__fixtures__/searchFixtures.js'
 
 const Feature = makeFeature({ it })
@@ -177,6 +179,38 @@ Feature('Searching schedules until a concurrency fault shows')
         And('each failing schedule spends its one pause')((s) => {
           expect(s.searches.pruned.failures[0]?.preemptions).toBe(1)
           expect(s.searches.unpruned.failures[0]?.preemptions).toBe(1)
+        }),
+      ),
+    )
+
+    scenario(
+      'Three workers racing for one empty slot need two pauses to all believe they won',
+      Gherkin.Do.pipe(
+        Given('three workers that each take the empty slot only while it is still empty')(
+          'target',
+          () => Effect.succeed(threeWorkerClaim),
+        ),
+        When('the same target is searched with one and then two pauses allowed')(
+          'searches',
+          (s) =>
+            Effect.promise(() =>
+              Kernel.search(s.target, { preemptions: 1, isFailure: allThreeClaimed }).then((onePause) =>
+                Kernel.search(s.target, { preemptions: 2, isFailure: allThreeClaimed }).then((twoPauses) => ({
+                  onePause,
+                  twoPauses,
+                }))
+              )
+            ),
+        ),
+        Then('one pause never lets all three believe they won')((s) => {
+          expect(isOverBudget(s.searches.onePause)).toBe(false)
+          expect(s.searches.onePause.failures).toEqual([])
+        }),
+        And('two pauses catch a run where all three believed they won')((s) => {
+          expect(firstFailureValue(s.searches.twoPauses)).toEqual([true, true, true])
+        }),
+        And('the caught run spent both of its pauses')((s) => {
+          expect(s.searches.twoPauses.failures[0]?.preemptions).toBe(2)
         }),
       ),
     )

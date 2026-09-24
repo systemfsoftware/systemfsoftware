@@ -17,6 +17,24 @@ export const checkThenSet: Effect.Effect<ReadonlyArray<boolean>> = Effect.gen(fu
   return [firstResult, secondResult]
 })
 
+export const threeWorkerClaim: Effect.Effect<ReadonlyArray<boolean>> = Effect.gen(function*() {
+  const holder = yield* Ref.make<string | null>(null)
+  const tryAcquire = (who: string) =>
+    Effect.gen(function*() {
+      const current = yield* Ref.get(holder)
+      if (current !== null) return false
+      yield* Ref.set(holder, who)
+      return true
+    })
+  const first = yield* Effect.forkChild(tryAcquire('a'))
+  const second = yield* Effect.forkChild(tryAcquire('b'))
+  const third = yield* Effect.forkChild(tryAcquire('c'))
+  const firstResult = yield* Fiber.join(first)
+  const secondResult = yield* Fiber.join(second)
+  const thirdResult = yield* Fiber.join(third)
+  return [firstResult, secondResult, thirdResult]
+})
+
 export const queueProgram: Effect.Effect<number> = Effect.gen(function*() {
   const queue = yield* Queue.unbounded<number>()
   yield* Queue.offer(queue, 1)
@@ -88,4 +106,11 @@ export const raceDetected = (result: Kernel.RunResult<ReadonlyArray<boolean>, ne
   if (exit === undefined || !Exit.isSuccess(exit)) return false
   const value = exit.value
   return value[0] === true && value[1] === true
+}
+
+export const allThreeClaimed = (result: Kernel.RunResult<ReadonlyArray<boolean>, never>): boolean => {
+  const exit = exitOf(result)
+  if (exit === undefined || !Exit.isSuccess(exit)) return false
+  const value = exit.value
+  return value[0] === true && value[1] === true && value[2] === true
 }
