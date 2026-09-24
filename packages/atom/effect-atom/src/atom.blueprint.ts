@@ -448,12 +448,13 @@ const withSerializable = (spec: AtomSpec, options: SerializableOptions): AtomSpe
   serializable: { key: options.key, codecJson: Schema.toCodecJson(options.schema) },
 })
 
-const refreshingOn = (spec: AtomSpec, keys: ReactivityKeys, reactivity: ReactivityAtom): AtomSpec => ({
-  ...spec,
+const refreshingOn = (source: Atom, keys: ReactivityKeys, reactivity: ReactivityAtom): AtomSpec => ({
+  ...source.spec,
   read: (get) => {
     const store = AsyncResult.getOrThrow(get(reactivity))
-    get.addFinalizer(store.registerUnsafe(keys, () => get.refreshSelf()))
-    return spec.read(get)
+    get.addFinalizer(store.registerUnsafe(keys, () => get.refresh(source)))
+    get.subscribe(source, (value) => get.setSelf(value))
+    return get.once(source)
   },
 })
 
@@ -468,7 +469,7 @@ const operations = {
   withServerValueInitial: (self: Atom) => remint({ ...self.spec, serverValue: constant(AsyncResult.initial(true)) }),
   serializable: (self: Atom, options: SerializableOptions) => remint(withSerializable(self.spec, options)),
   withReactivity: (self: Atom, keys: ReactivityKeys, reactivity: ReactivityAtom) =>
-    remint(refreshingOn(self.spec, keys, reactivity)),
+    remint(refreshingOn(self, keys, reactivity)),
 }
 
 const targets = {

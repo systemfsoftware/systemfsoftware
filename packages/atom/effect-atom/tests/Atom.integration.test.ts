@@ -65,6 +65,35 @@ Feature('Deriving values from other values on a page')
       ),
     )
     scenario(
+      'A value that also refreshes on named changes keeps showing every change to the value it wraps',
+      Gherkin.Do.pipe(
+        Given('a page watching a count that is also refreshed whenever "counts" change')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const count = Atom.make(0)
+              const watched = Atom.withReactivity(['counts'])(count)
+              const page = Atom.Registry.make()
+              return { page, count, watched }
+            }),
+        ),
+        When('the count is changed to 1 and then to 2')('heard', (s) =>
+          Effect.sync(() => {
+            const heard: Array<number> = []
+            const stop = Atom.Registry.subscribe(s.ctx.page, s.ctx.watched, (value) => heard.push(value), {
+              immediate: true,
+            })
+            Atom.Registry.set(s.ctx.page, s.ctx.count, 1)
+            Atom.Registry.set(s.ctx.page, s.ctx.count, 2)
+            stop()
+            return heard
+          })),
+        Then('the watcher heard 0, then 1, then 2')((s) => {
+          expect(s.heard).toEqual([0, 1, 2])
+        }),
+      ),
+    )
+    scenario(
       'Two items with different keys get their own independent values',
       Gherkin.Do.pipe(
         Given('a page with a value that depends on which item is being shown')('ctx', () =>
