@@ -1,3 +1,17 @@
+---
+title: A package named after a runtime is the product laundering itself as an adapter
+date: "2026-09-01"
+category: architecture-patterns
+module: stryker-js
+problem_type: architecture_pattern
+component: tooling
+severity: high
+applies_when:
+  - naming a package that bundles a product's engine alongside runtime-specific adapters
+  - reviewing whether a package implements ports or the product itself
+tags: [package-naming, runtime-adapter, port-discipline, architecture-pattern]
+---
+
 # Solution: A package named after a runtime is the product laundering itself as an adapter
 
 ## Problem

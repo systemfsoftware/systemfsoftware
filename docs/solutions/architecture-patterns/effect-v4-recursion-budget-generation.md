@@ -1,6 +1,7 @@
 ---
 title: Effect v4 gives recursion budgets one honest job — validate and mark, never bound
 date: "2026-09-20"
+category: architecture-patterns
 module: effect-schema-recursion-budget
 problem_type: architecture_pattern
 component: testing_framework
