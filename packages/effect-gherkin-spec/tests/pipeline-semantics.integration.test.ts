@@ -132,11 +132,8 @@ Feature('Gherkin pipeline execution semantics')
         )
 
         const fiber = yield* Effect.forkChild(pipeline)
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
         yield* Fiber.join(fiber)
 
