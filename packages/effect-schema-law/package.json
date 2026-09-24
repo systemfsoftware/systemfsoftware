@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-law#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Property-test any Effect Schema's codec laws — round-trip identity and encode stability, generated with @effect/vitest and fast-check.",
+  "description": "Property-test any Effect Schema's codec laws — round-trip identity and encode stability, generated with @systemfsoftware/vitest and fast-check.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -48,13 +48,13 @@
     "attw": "attw --pack ."
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "@systemfsoftware/oxlint-config-dmmf": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
@@ -65,7 +65,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/vitest": "catalog:peers",
+    "@systemfsoftware/vitest": "workspace:^",
     "effect": "catalog:peers",
     "vitest": "catalog:"
   },

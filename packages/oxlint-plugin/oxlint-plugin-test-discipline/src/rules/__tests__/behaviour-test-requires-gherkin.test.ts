@@ -16,7 +16,7 @@ const FEATURE_IMPORTS = `
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { expect, vi } from 'vitest'
+import { expect, vi } from '@systemfsoftware/vitest'
 
 const Feature = makeFeature({ it })
 `
@@ -75,6 +75,26 @@ const Feature = makeFeature({ it, layer })
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { describe, expect } from '@effect/vitest'
+
+const Feature = makeFeature({ it, layer })
+`,
+      filename: '/repo/pkg/__tests__/hook.integration.test.ts',
+      errors: [{
+        messageId: 'foreignRunner',
+        data: {
+          name: 'describe',
+          expected: FOREIGN_RUNNER_EXPECTED,
+          actual: FOREIGN_RUNNER_ACTUAL,
+          fix: FOREIGN_RUNNER_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_ForeignRunner_When_DescribeImportedFromSystemfsoftwareVitest_IntegrationFile',
+      code: `
+import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { describe, expect } from '@systemfsoftware/vitest'
 
 const Feature = makeFeature({ it, layer })
 `,

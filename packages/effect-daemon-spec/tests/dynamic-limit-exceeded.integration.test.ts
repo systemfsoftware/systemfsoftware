@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { DynamicLimitExceeded } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })

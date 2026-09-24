@@ -1,5 +1,5 @@
 /// <reference types="vitest/importMeta" />
-import type { Vitest } from '@effect/vitest'
+import type { Vitest } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'

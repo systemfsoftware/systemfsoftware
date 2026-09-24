@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Queue } from 'effect'
 import { sweepLostWakeups } from './__fixtures__/queueFixtures.js'
 import type { Take } from './__fixtures__/queueFixtures.js'

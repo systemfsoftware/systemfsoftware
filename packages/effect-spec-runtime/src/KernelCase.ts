@@ -301,7 +301,7 @@ export const explore = <A, E>(program: Effect.Effect<A, E>): Promise<void> =>
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const ReplayRow = Schema.Struct({
     seed: Schema.Natural.pipe(Schema.check(Schema.isLessThanOrEqualTo(1_000_000))),

@@ -1,6 +1,6 @@
 /// <reference types="vitest/importMeta" />
-import { owned } from '@effect/vitest'
 import type { Suite } from '@systemfsoftware/effect-spec-runtime'
+import { owned } from '@systemfsoftware/vitest'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Layer from 'effect/Layer'

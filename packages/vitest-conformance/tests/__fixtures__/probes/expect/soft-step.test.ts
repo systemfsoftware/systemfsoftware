@@ -1,4 +1,4 @@
-import { expect, it } from '@effect/vitest'
+import { expect, it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 const sideEffect = Effect.die('SIDE EFFECT RAN')

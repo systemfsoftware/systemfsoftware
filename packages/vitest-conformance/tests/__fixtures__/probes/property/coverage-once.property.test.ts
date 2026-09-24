@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import * as Schema from 'effect/Schema'
 
 const length = (xs: ReadonlyArray<number>): number => xs.length

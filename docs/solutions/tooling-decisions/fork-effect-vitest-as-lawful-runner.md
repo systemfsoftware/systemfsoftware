@@ -62,9 +62,9 @@ To guarantee test lawfulness without depending on optional author discipline, th
 
 ### 3. Resolution Protocol: Repository-Wide Alias vs. Dev-Only Alias vs. Specifier Rename
 
-- **Alternative A: Rename import specifiers across the monorepo to `@systemfsoftware/vitest`.** Rejected. Imposes unnecessary churn across 58 importing files and breaks compatibility with external documentation and conventions.
+- **Alternative A: Rename import specifiers across the monorepo to `@systemfsoftware/vitest`.** Chosen (user-directed, 2026-09-24). Every workspace package imports and declares the fork under its own name — the source specifiers and manifests were renamed and the `@effect/vitest` pnpm catalog entries deleted. Published packages (`effect-gherkin-spec`, `effect-spec-runtime`, `differential-spec`, `trace-spec`, `effect-schema-law`) peer on `@systemfsoftware/vitest` directly.
 - **Alternative B: Dev-only alias, preserving upstream `@effect/vitest` for published edges.** Rejected. Publishing downstream libraries (`effect-gherkin-spec`, `effect-spec-runtime`, `differential-spec`, `trace-spec`, `effect-schema-law`) with an upstream `@effect/vitest` peer allows third-party consumers to run on an unlawful runner where `owned()` and `recordAssertion()` are absent.
-- **Alternative C: Repository-wide pnpm alias on all edges including published peer edges.** Chosen (user-directed). Every package declares `"@effect/vitest": "workspace:@systemfsoftware/vitest@*"`. Source code continues importing `@effect/vitest`. On package publication, pnpm transforms the workspace dependency into `npm:@systemfsoftware/vitest@<version>`.
+- **Alternative C: Repository-wide pnpm alias on all edges including published peer edges.** Reversed on 2026-09-24 in favour of Alternative A. The alias made turbo `boundaries` report 245 of 247 diagnostics as "import `@effect/vitest` leaves the package" — the diagnostic named the upstream specifier rather than the fork and buried the real graph — and it hid the owned fork behind the upstream name: every importer read a package it never declared. Renaming the specifiers clears the diagnostics and makes the boundary graph name the fork the tests actually run on.
 
 ### 4. Pipeable Signature Compliance: Dual with Proxy `it` vs. Preset Exemption vs. Package Override
 

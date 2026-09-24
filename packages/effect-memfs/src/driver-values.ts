@@ -170,7 +170,7 @@ export const entryPathOf = (entry: string | Uint8Array | { readonly name: string
   isNamed(entry) ? textOf(entry.name) : textOf(entry)
 
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Schema } = await import('effect')
 
   const StatQuestion = Schema.Literals(['isFile', 'isDirectory', 'isSymbolicLink'])

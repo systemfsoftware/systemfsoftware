@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Fiber } from 'effect'
 import type { SavedBasket } from './__fixtures__/clerk-shelf.fixture.js'
 import { Shelf, shelfLayer } from './__fixtures__/clerk-shelf.fixture.js'

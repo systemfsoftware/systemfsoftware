@@ -1,4 +1,4 @@
-import { expect, layer } from '@effect/vitest'
+import { expect, layer } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 
 const started: Array<string> = []

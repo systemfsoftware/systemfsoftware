@@ -54,13 +54,13 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
@@ -71,7 +71,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/vitest": "catalog:peers",
+    "@systemfsoftware/vitest": "workspace:^",
     "effect": "catalog:peers",
     "vitest": "catalog:"
   },

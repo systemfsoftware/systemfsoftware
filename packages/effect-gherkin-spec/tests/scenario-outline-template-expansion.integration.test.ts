@@ -7,7 +7,6 @@
  * `renderTitle`, `stringifyForTitle`) are reached through the package barrel,
  * exactly as a downstream consumer would import them.
  */
-import { expect } from '@effect/vitest'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   expandOutline,
@@ -18,6 +17,7 @@ import {
   Then,
   tokenizeTemplate,
 } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Result } from 'effect'
 
 const Feature = makeFeature({ it })

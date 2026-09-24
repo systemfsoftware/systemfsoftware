@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import {
   expandOutline,
   Gherkin,
@@ -10,6 +9,7 @@ import {
   Then,
   tokenizeTemplate,
 } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Result } from 'effect'
 
 const Feature = makeFeature({ it })

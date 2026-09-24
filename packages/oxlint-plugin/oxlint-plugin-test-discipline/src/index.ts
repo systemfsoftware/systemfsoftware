@@ -27,7 +27,7 @@ import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
 import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures.js'
 import { testsImportPublicApi } from './rules/tests-import-public-api.js'
 import { traceTestRequiresTaxonomy } from './rules/trace-test-requires-taxonomy.js'
-import { vitestFromEffectVitest } from './rules/vitest-from-effect-vitest.js'
+import { vitestFromSystemfsoftwareVitest } from './rules/vitest-from-systemfsoftware-vitest.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-discipline'
 
@@ -55,7 +55,7 @@ const recommendedRules = {
   [rule('behaviour-one-feature-per-file')]: 'error',
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
   [rule('expect-boolean-predicate')]: 'error',
-  [rule('vitest-from-effect-vitest')]: 'error',
+  [rule('vitest-from-systemfsoftware-vitest')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
   [rule('differential-test-requires-harness')]: 'error',
@@ -93,7 +93,7 @@ export default {
     'no-pseudo-gherkin-unit-tests': noPseudoGherkinUnitTests,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'expect-boolean-predicate': expectBooleanPredicate,
-    'vitest-from-effect-vitest': vitestFromEffectVitest,
+    'vitest-from-systemfsoftware-vitest': vitestFromSystemfsoftwareVitest,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,
     'differential-test-requires-harness': differentialTestRequiresHarness,

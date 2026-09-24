@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Match } from 'effect'
 import { GuestService } from './__fixtures__/guest-service.fixture.js'
 import { scenarioEnvironment } from './__fixtures__/readiness-environment.fixture.js'

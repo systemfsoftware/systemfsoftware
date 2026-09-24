@@ -8,10 +8,10 @@
  *
  * @since 4.0.0
  */
-import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect, vi } from '@systemfsoftware/vitest'
 import { act, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'

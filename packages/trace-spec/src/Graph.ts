@@ -146,7 +146,7 @@ export const decode: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const ORDER_ATTR = 'app.order.id'
   const ORDER_SPAN = 'fulfillment.settle'

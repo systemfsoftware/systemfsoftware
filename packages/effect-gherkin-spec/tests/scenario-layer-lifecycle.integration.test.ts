@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 interface LifecycleCounters {

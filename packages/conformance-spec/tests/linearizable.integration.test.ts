@@ -1,7 +1,7 @@
-import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Equal, Exit, Fiber, Layer } from 'effect'
 import { answeredOperation, failReportOf, operationsOfRun, passReportOf } from './__fixtures__/checkReports.js'
 import type { LockOperation } from './__fixtures__/checkReports.js'

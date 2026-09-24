@@ -1,4 +1,4 @@
-export { it, layer } from '@effect/vitest'
+export { it, layer } from '@systemfsoftware/vitest'
 export { And, But, Gherkin, Given, Then, When } from './DoNotation.js'
 export type {
   AssertedPipeline,

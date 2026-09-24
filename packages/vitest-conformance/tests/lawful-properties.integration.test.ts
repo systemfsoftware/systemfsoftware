@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import * as Layer from 'effect/Layer'
 import { assertionOf, fileOf, type JsonReport, messagesOf, namesOf, runFixtures } from './__fixtures__/run-fixtures'
 

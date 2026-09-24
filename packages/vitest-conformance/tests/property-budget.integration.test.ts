@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import type { ProvidedContext } from 'vitest'

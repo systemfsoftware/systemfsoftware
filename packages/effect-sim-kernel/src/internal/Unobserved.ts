@@ -251,7 +251,7 @@ export const installUnobserved = (): void => {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const driftedInstance = (): object => {
     const instance: object = {}

@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'

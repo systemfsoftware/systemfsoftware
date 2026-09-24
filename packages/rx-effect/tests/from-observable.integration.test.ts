@@ -14,9 +14,9 @@
  *     enough values, including the boundary where the consumer takes a single
  *     element out of a long stream.
  */
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Result, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 

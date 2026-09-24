@@ -21,7 +21,7 @@ const runnerImportError = (source: string) => ({
   data: {
     name: `runner import from ${source} in a conformance test file`,
     expected: HP,
-    actual: 'a direct vitest / @effect/vitest runner import bypasses the conformance check',
+    actual: 'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the conformance check',
     fix: `delete the runner import; ${HP}`,
   },
 })
@@ -83,7 +83,7 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
     {
       name: 'Should_Allow_PlainTest_When_PropertyFile',
       code: `
-        import { it } from '@effect/vitest'
+        import { it } from '@systemfsoftware/vitest'
         it.prop('works', [arb], ([x]) => x === x)
       `,
       filename: '/repo/pkg/src/a.workflow.property.test.ts',
@@ -224,6 +224,24 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       `,
       filename: '/repo/pkg/tests/a.conformance.test.ts',
       errors: [runnerImportError('vitest'), missingImportError, rawRunnerError('it')],
+    },
+    {
+      name: 'Should_Report_RunnerImport_When_ForkRunnerImportedInConformanceFile',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        import { it } from '@systemfsoftware/vitest'
+      `,
+      filename: '/repo/pkg/tests/a.conformance.test.ts',
+      errors: [runnerImportError('@systemfsoftware/vitest')],
+    },
+    {
+      name: 'Should_Report_RunnerImport_When_UpstreamEffectVitestImportedInConformanceFile',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        import { it } from '@effect/vitest'
+      `,
+      filename: '/repo/pkg/tests/a.conformance.test.ts',
+      errors: [runnerImportError('@effect/vitest')],
     },
   ],
 })

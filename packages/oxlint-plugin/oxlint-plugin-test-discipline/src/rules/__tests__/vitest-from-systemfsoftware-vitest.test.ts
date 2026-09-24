@@ -3,8 +3,8 @@ import {
   VIOLATION_EXPECTED,
   VIOLATION_FIX,
   VIOLATION_NAME,
-} from '../vitest-from-effect-vitest.config.js'
-import { vitestFromEffectVitest } from '../vitest-from-effect-vitest.js'
+} from '../vitest-from-systemfsoftware-vitest.config.js'
+import { vitestFromSystemfsoftwareVitest } from '../vitest-from-systemfsoftware-vitest.js'
 import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
@@ -18,19 +18,19 @@ const EXPECTED_DATA = {
 
 const refusal = { messageId: 'vitestImport', data: EXPECTED_DATA } as const
 
-ruleTester.run('vitest-from-effect-vitest', vitestFromEffectVitest, {
+ruleTester.run('vitest-from-systemfsoftware-vitest', vitestFromSystemfsoftwareVitest, {
   valid: [
     {
-      name: 'Should_Allow_ValueImports_When_SourceIsEffectVitest',
-      code: `import { describe, expect, it, vi } from '@effect/vitest'`,
+      name: 'Should_Allow_ValueImports_When_SourceIsSystemfsoftwareVitest',
+      code: `import { describe, expect, it, vi } from '@systemfsoftware/vitest'`,
     },
     {
-      name: 'Should_Allow_NamespaceImport_When_SourceIsEffectVitest',
-      code: `import * as vitest from '@effect/vitest'`,
+      name: 'Should_Allow_NamespaceImport_When_SourceIsSystemfsoftwareVitest',
+      code: `import * as vitest from '@systemfsoftware/vitest'`,
     },
     {
-      name: 'Should_Allow_DynamicImport_When_SourceIsEffectVitest',
-      code: `const vitest = await import('@effect/vitest')`,
+      name: 'Should_Allow_DynamicImport_When_SourceIsSystemfsoftwareVitest',
+      code: `const vitest = await import('@systemfsoftware/vitest')`,
     },
     {
       name: 'Should_Allow_TypeOnlyDeclaration_When_SourceIsVitest',
@@ -71,6 +71,14 @@ export * from 'vitest'`,
       name: 'Should_Allow_ValueImport_When_ThePackageDrivesVitestDirectly',
       code: `import { describe } from 'vitest'`,
       filename: '/repo/packages/effect-spec-runtime/src/Register.ts',
+    },
+    {
+      name: 'Should_Allow_TypeReExport_When_SourceIsUpstreamEffectVitest',
+      code: `export type { TestAPI } from '@effect/vitest'`,
+    },
+    {
+      name: 'Should_Allow_ReExport_When_SourceIsSystemfsoftwareVitest',
+      code: `export * from '@systemfsoftware/vitest'`,
     },
   ],
   invalid: [
@@ -123,6 +131,31 @@ export * from 'vitest'`,
       name: 'Should_Report_ValueImport_When_TheFileIsNamedLikeASetupFile',
       code: `import { afterEach } from 'vitest'`,
       filename: '/repo/packages/atom/effect-atom-react/vitest-setup.ts',
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_RunnerImport_When_SourceIsUpstreamEffectVitest',
+      code: `import { it } from '@effect/vitest'`,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_NamespaceImport_When_SourceIsUpstreamEffectVitest',
+      code: `import * as V from '@effect/vitest'`,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_DynamicImport_When_SourceIsUpstreamEffectVitest',
+      code: `const V = await import('@effect/vitest')`,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_StarReExport_When_SourceIsUpstreamEffectVitest',
+      code: `export * from '@effect/vitest'`,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_NamedReExport_When_SourceIsVitest',
+      code: `export { it } from 'vitest'`,
       errors: [refusal],
     },
   ],

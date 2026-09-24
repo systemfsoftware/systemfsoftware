@@ -1,4 +1,4 @@
-import { expect, it } from '@effect/vitest'
+import { expect, it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { Equal } from 'effect'
 import { Hash } from 'effect'

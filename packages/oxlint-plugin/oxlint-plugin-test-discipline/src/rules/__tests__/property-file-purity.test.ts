@@ -194,7 +194,7 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
           messageId: 'rawFastCheck',
           data: {
             name: 'raw fc.check(...) in a .property.test.ts file',
-            expected: 'it.prop(...) or it.effect.prop(...) from @effect/vitest',
+            expected: 'it.prop(...) or it.effect.prop(...) from @systemfsoftware/vitest',
             actual: 'fc.check(...) bypasses the vitest/Effect integration',
             fix:
               'rewrite as it.prop(name, { of, subject, runs }, holds) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',

@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import {
   And,
   checkSoftFailures,
@@ -12,6 +11,7 @@ import {
   VitestTaskRef,
   When,
 } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Fiber, Layer, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 

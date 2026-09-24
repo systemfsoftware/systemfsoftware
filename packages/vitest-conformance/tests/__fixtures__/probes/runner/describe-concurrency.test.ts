@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@effect/vitest'
+import { describe, expect, it } from '@systemfsoftware/vitest'
 import { Deferred, Effect } from 'effect'
 
 const one = Deferred.makeUnsafe<string>()
