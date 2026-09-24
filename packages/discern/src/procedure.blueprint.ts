@@ -19,7 +19,6 @@ import * as Effect from 'effect/Effect'
 import type * as Schema from 'effect/Schema'
 import type { HandlerResult } from './pattern.blueprint.js'
 import type { RouteOptions } from './Route.schema.js'
-import { isEffectOf } from './run-policy.cell.js'
 import type { RouteUncertain } from './select-route.workflow.js'
 
 type Top<A = unknown> = A
@@ -184,6 +183,9 @@ export interface FallbackInvocation<Input, FallbackValue, FallbackError = never,
   readonly options: FallbackInvokeOptions<Input, FallbackValue, FallbackError, FallbackServices>
 }
 
+export const isEffectOf = <A, Err, Req>(value: A | Effect.Effect<A, Err, Req>): value is Effect.Effect<A, Err, Req> =>
+  Effect.isEffect(value)
+
 export const handlerEffectOf = <Value, Err, Req>(
   value: HandlerResult<Value, Err, Req>,
-): Effect.Effect<Value, Err, Req> => (isEffectOf(value) ? value : Effect.succeed(value))
+): Effect.Effect<Value, Err, Req> => isEffectOf(value) ? value : Effect.succeed(value)
