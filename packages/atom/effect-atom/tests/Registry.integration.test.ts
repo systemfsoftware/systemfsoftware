@@ -1443,6 +1443,38 @@ Feature('Providing registries by name')
     )
   })
 
+class VisitLog extends Context.Service<VisitLog, { readonly visits: Array<string> }>()(
+  '@systemfsoftware/effect-atom/tests/Registry.integration.test/VisitLog',
+) {}
+
+Feature('Keeping private notes per page')
+  .withLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'Each page keeps its own notes, and a closed page starts over',
+      Gherkin.Do.pipe(
+        Given('two open pages')('ctx', () => Effect.sync(() => ({ first: Registry.make(), second: Registry.make() }))),
+        When('the first page notes a visit, then is closed and asked for its notes again')(
+          'notes',
+          (s) =>
+            Effect.sync(() => {
+              Registry.storage(s.ctx.first, VisitLog, () => ({ visits: [] })).visits.push('home')
+              const firstBeforeClose = Registry.storage(s.ctx.first, VisitLog, () => ({ visits: [] })).visits
+              const second = Registry.storage(s.ctx.second, VisitLog, () => ({ visits: [] })).visits
+              Registry.dispose(s.ctx.first)
+              const firstAfterClose = s.ctx.first.pipe(Registry.storage(VisitLog, () => ({ visits: [] }))).visits
+              return { firstBeforeClose: [...firstBeforeClose], second, firstAfterClose }
+            }),
+        ),
+        Then('the first page remembered its visit, the second saw none, and the closed page forgot it')((s) => {
+          expect(s.notes.firstBeforeClose).toEqual(['home'])
+          expect(s.notes.second).toEqual([])
+          expect(s.notes.firstAfterClose).toEqual([])
+        }),
+      ),
+    )
+  })
+
 function manualClock() {
   const state: {
     time: number

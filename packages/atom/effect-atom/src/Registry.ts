@@ -12,7 +12,7 @@
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
-import { constVoid, dual } from 'effect/Function'
+import { constVoid, dual, type LazyArg } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
@@ -345,6 +345,21 @@ export const reset = (self: Registry): void => self[engine].reset()
  * @since 4.0.0
  */
 export const dispose = (self: Registry): void => self[engine].dispose()
+
+/**
+ * Returns the value this registry stores under `key`, creating it with `make`
+ * on first use. Storage belongs to the registry and is dropped when the
+ * registry is disposed, so per-registry caches never outlive their registry.
+ *
+ * @since 4.0.0
+ */
+export const storage: {
+  <I, A>(key: Context.Key<I, A>, make: LazyArg<A>): (self: Registry) => A
+  <I, A>(self: Registry, key: Context.Key<I, A>, make: LazyArg<A>): A
+} = dual(
+  3,
+  <I, A>(self: Registry, key: Context.Key<I, A>, make: LazyArg<A>): A => self[engine].storageFor(key, make),
+)
 
 // -----------------------------------------------------------------------------
 // conversions
@@ -991,6 +1006,17 @@ export class RegistryImpl extends Pipeable.Class {
   readonly timeoutBuckets = new Map<number, TimeoutBucket>()
   readonly nodeTimeoutBucket = new Map<NodeImpl, number>()
   disposed = false
+  storage: Context.Context<never> = Context.empty()
+
+  storageFor<I, A>(key: Context.Key<I, A>, make: LazyArg<A>): A {
+    const found = Context.getOption(this.storage, key)
+    if (Option.isSome(found)) {
+      return found.value
+    }
+    const created = make()
+    this.storage = Context.add(this.storage, key, created)
+    return created
+  }
 
   getNodes() {
     return this.nodes
@@ -1197,6 +1223,7 @@ export class RegistryImpl extends Pipeable.Class {
 
   dispose(): void {
     this.disposed = true
+    this.storage = Context.empty()
     this.reset()
   }
 }
