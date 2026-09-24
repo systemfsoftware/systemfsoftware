@@ -43,7 +43,6 @@ export default defineConfig({
   copy: [{ from: 'src/compat.d.ts', to: 'dist' }],
   exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
   tsconfig: './tsconfig.build.json',
-  clean: false,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: { onlyBundle: false },
   define: { 'import.meta.vitest': 'undefined' },
