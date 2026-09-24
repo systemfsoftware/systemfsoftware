@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer } from 'effect'
 import {
@@ -11,7 +11,7 @@ import {
   terminationTagsOf,
 } from './__fixtures__/socket-supervision.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Environment = Layer.provideMerge(
   SocketMedium.layer({ readyPollMillis: 5 }),
@@ -21,7 +21,7 @@ const Environment = Layer.provideMerge(
 const CLEAN_CLOSE_CODE = 1000
 
 Feature('Reporting how a connection ended')
-  .liveClock()
+  .live('a real loopback peer ends and resets the connection the child holds')
   .withLayer(Environment)
   .body(({ scenario }) => {
     scenario(

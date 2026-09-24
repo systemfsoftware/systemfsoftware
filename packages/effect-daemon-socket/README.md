@@ -56,6 +56,9 @@ const CacheConnection = Layer.provide(
 `Readiness.NodeHostProber.layer` once, at the layer. `readyPollMillis` (default 25) and
 `readyTimeoutMillis` (default 30000) bound the readiness wait; keep the poll tight, because the wait
 is raced against a start deadline a supervisor may declare in the low hundreds of milliseconds.
+`SocketMedium.Dialer` and `SocketMedium.LoopbackListener` are the medium's two ports: a composition
+root that names neither dials and listens over real TCP, and a check that must not open one provides
+its own for both.
 
 ## What an abnormal termination carries
 

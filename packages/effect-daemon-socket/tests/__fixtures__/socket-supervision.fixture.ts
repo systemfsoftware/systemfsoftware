@@ -173,7 +173,7 @@ export const observeSocketChild = (parts: {
             until: (frames) => frames.length >= count,
           }),
         ),
-      shutdown: Supervisor.shutdown(handle),
+      shutdown: Supervisor.shutdown(handle).pipe(Effect.catchTag('SupervisorTerminated', () => Effect.void)),
     })
     const quieted = yield* Effect.timeoutOption(
       Effect.repeat(fixture.openConnections, {

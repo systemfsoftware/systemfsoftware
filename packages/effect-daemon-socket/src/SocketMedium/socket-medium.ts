@@ -1,9 +1,9 @@
-import * as NodeSocket from '@effect/platform-node/NodeSocket'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
 import { Array as Arr, Duration, Effect, Exit, Fiber, Layer, Match, Option, Queue, Ref, Scope, Stream } from 'effect'
 import type { Socket } from 'effect/unstable/socket'
+import { dialerOf } from './socket-dialer.js'
 import type { SocketAddress, SocketFrames, SocketProgram } from './socket-program.js'
 import { shutdownTerminationOf, terminationOf } from './socket-termination.js'
 import { textOf } from './socket-text.js'
@@ -125,10 +125,7 @@ const startOf = (parts: {
     const log = yield* Ref.make<ReadonlyArray<string>>(Arr.empty())
     const stopping = yield* Ref.make(false)
     const frames = yield* Queue.unbounded<SocketFrames, Socket.SocketError>()
-    const socket = yield* NodeSocket.makeNet({
-      host: parts.program.address.host,
-      port: parts.program.address.port,
-    })
+    const socket = yield* Effect.flatMap(dialerOf, (dialer) => dialer.open(parts.program.address))
     const writer = yield* Scope.provide(socket.writer, writeHalf)
     const life = yield* Effect.forkIn(
       Effect.onError(

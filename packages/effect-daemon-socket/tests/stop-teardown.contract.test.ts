@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer } from 'effect'
 import { driveScript, observeSocketChild } from './__fixtures__/socket-supervision.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Environment = Layer.provideMerge(
   SocketMedium.layer({ readyPollMillis: 5 }),
@@ -13,7 +13,7 @@ const Environment = Layer.provideMerge(
 )
 
 Feature('Releasing the connection a stopped child held')
-  .liveClock()
+  .live('a real loopback peer holds the connection a stopped child has to give back')
   .withLayer(Environment)
   .body(({ scenarioOutline }) => {
     scenarioOutline(

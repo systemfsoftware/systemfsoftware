@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer, Match } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Environment = Layer.merge(
   Layer.provideMerge(SocketMedium.layer({ readyPollMillis: 5 }), Readiness.NodeHostProber.layer),
@@ -26,7 +26,7 @@ const labelOf = (result: Conformance.ScenarioResult): string =>
   )
 
 Feature('Supervising scripted connections as the fibre medium does')
-  .liveClock()
+  .live('the kit plays its scripted lifecycles against real loopback peers in this process')
   .withLayer(Environment)
   .body(({ scenario }) => {
     scenario(

@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace SocketMedium {
-    export { LoopbackServer, SocketAddress, SocketConnection, SocketMediumOptions, SocketProgram, conformanceDriver, declaration, layer, makeLoopbackServer, port };
+    export { AcceptedConnection, BoundListener, Dialer, DialerShape, LoopbackListener, LoopbackListenerShape, LoopbackServer, READY_FRAME, SocketAddress$1 as SocketAddress, SocketConnection, SocketMediumOptions, SocketProgram, conformanceDriver, declaration, dialerLayer, dialerOf, layer, listenerLayer, listenerOf, makeLoopbackServer, nodeDialer, nodeLoopbackListener, port };
 }
 
 // (No @packageDocumentation comment for this package)

@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Layer } from 'effect'
 import {
@@ -11,7 +11,7 @@ import {
   terminationTagsOf,
 } from './__fixtures__/socket-supervision.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Environment = Layer.provideMerge(
   SocketMedium.layer({ readyPollMillis: 5 }),
@@ -19,7 +19,7 @@ const Environment = Layer.provideMerge(
 )
 
 Feature('Refusing a connection nothing accepts')
-  .liveClock()
+  .live('a dial to a real loopback port with nothing listening is refused by the operating system')
   .withLayer(Environment)
   .body(({ scenario }) => {
     scenario(

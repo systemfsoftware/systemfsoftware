@@ -1,17 +1,11 @@
-import * as NodeSocket from '@effect/platform-node/NodeSocket'
-import * as NodeSocketServer from '@effect/platform-node/NodeSocketServer'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Readiness } from '@systemfsoftware/effect-readiness'
 import { Readiness as ReadinessModule } from '@systemfsoftware/effect-readiness'
 import { Array as Arr, Effect, HashMap, Match, MutableRef, Option, Ref } from 'effect'
-import * as NetAddress from 'effect/unstable/net/NetAddress'
-import type * as Socket from 'effect/unstable/socket/Socket'
+import { type AcceptedConnection, listenerOf } from './socket-listener.js'
 import type { SocketAddress } from './socket-program.js'
-import { textOf } from './socket-text.js'
 
 export const READY_FRAME = 'socket-medium-ready'
-
-const LOOPBACK_HOST = '127.0.0.1'
 
 export interface LoopbackServer {
   readonly address: SocketAddress
@@ -21,16 +15,9 @@ export interface LoopbackServer {
   readonly openConnections: Effect.Effect<number>
 }
 
-interface ServerConnection {
-  readonly greet: Effect.Effect<void>
-  readonly end: Effect.Effect<void>
-  readonly reset: Effect.Effect<void>
-  readonly hold: Effect.Effect<void>
-}
-
 interface Routing {
   readonly accepted: number
-  readonly byGeneration: HashMap.HashMap<number, ServerConnection>
+  readonly byGeneration: HashMap.HashMap<number, AcceptedConnection>
   readonly waiting: HashMap.HashMap<number, ReadonlyArray<Conformance.ChildStep>>
 }
 
@@ -40,32 +27,9 @@ interface FixtureState {
   readonly received: MutableRef.MutableRef<ReadonlyArray<string>>
 }
 
-type RawSocket = NodeSocket.NetSocket['Service']
-
-const portOf = (address: NetAddress.SocketAddress): number =>
-  Option.getOrElse(
-    Option.map(Option.liftPredicate(address, NetAddress.isInetAddress), (inet) => inet.port),
-    () => 0,
-  )
-
-const connectionOf = (net: RawSocket): ServerConnection => ({
-  greet: Effect.sync(() => {
-    net.write(READY_FRAME)
-  }),
-  end: Effect.sync(() => {
-    net.end()
-  }),
-  reset: Effect.sync(() => {
-    net.resetAndDestroy()
-  }),
-  hold: Effect.sync(() => {
-    net.allowHalfOpen = true
-  }),
-})
-
-const enactOf = (connection: ServerConnection) => (step: Conformance.ChildStep): Effect.Effect<void> =>
+const enactOf = (connection: AcceptedConnection) => (step: Conformance.ChildStep): Effect.Effect<void> =>
   Match.value(step).pipe(
-    Match.tag('BecomeReady', () => connection.greet),
+    Match.tag('BecomeReady', () => connection.send(READY_FRAME)),
     Match.tag('ExitNormal', () => connection.end),
     Match.tag('ExitAbnormal', () => connection.reset),
     Match.tag('IgnoreGracefulStop', () => connection.hold),
@@ -76,7 +40,7 @@ const enactOf = (connection: ServerConnection) => (step: Conformance.ChildStep):
 const heldFor = (routing: Routing, generation: number): ReadonlyArray<Conformance.ChildStep> =>
   Option.getOrElse(HashMap.get(routing.waiting, generation), () => [])
 
-const claimedBy = (connection: ServerConnection) => (routing: Routing) =>
+const claimedBy = (connection: AcceptedConnection) => (routing: Routing) =>
   [
     { generation: routing.accepted, held: heldFor(routing, routing.accepted) },
     {
@@ -91,7 +55,7 @@ const routedTo = (step: Conformance.ChildStep, generation: number) => (routing: 
     onSome: (connection) => [Option.some(connection), routing] as const,
     onNone: () =>
       [
-        Option.none<ServerConnection>(),
+        Option.none<AcceptedConnection>(),
         {
           ...routing,
           waiting: HashMap.set(routing.waiting, generation, Arr.append(heldFor(routing, generation), step)),
@@ -99,33 +63,22 @@ const routedTo = (step: Conformance.ChildStep, generation: number) => (routing: 
       ] as const,
   })
 
-/**
- * Each incarnation dials this server once, so the order connections arrive in is the kernel's
- * generation for that child. Claiming a generation and taking the steps held for it is one
- * atomic update, as is holding a step for a generation not yet connected, so no step can fall
- * between the two; a step for a connected generation reaches exactly that peer, never the
- * superseded incarnation whose connection is still open.
- */
-const trackOf = (state: FixtureState, net: RawSocket): Effect.Effect<void> =>
+const trackOf = (state: FixtureState, connection: AcceptedConnection): Effect.Effect<void> =>
   Effect.gen(function*() {
-    const connection = connectionOf(net)
     MutableRef.increment(state.open)
-    net.allowHalfOpen = false
-    net.on('data', (chunk) => {
-      MutableRef.update(state.received, (frames) => Arr.append(frames, textOf(chunk)))
+    yield* connection.onFrame((frame) => {
+      MutableRef.update(state.received, (frames) => Arr.append(frames, frame))
     })
-    net.on('close', () => {
+    yield* connection.onClose(() => {
       MutableRef.decrement(state.open)
     })
-    net.resume()
     const claim = yield* Ref.modify(state.routing, claimedBy(connection))
     yield* Effect.forEach(claim.held, enactOf(connection), { discard: true })
   })
 
-const acceptOf = (state: FixtureState) => (_socket: Socket.Socket): Effect.Effect<never, never, never> =>
+const acceptOf = (state: FixtureState) => (connection: AcceptedConnection): Effect.Effect<void> =>
   Effect.gen(function*() {
-    const net = Option.getOrThrow(yield* Effect.serviceOption(NodeSocket.NetSocket))
-    yield* trackOf(state, net)
+    yield* trackOf(state, connection)
     return yield* Effect.never
   })
 
@@ -136,15 +89,15 @@ const sendTo = (state: FixtureState) => (step: Conformance.ChildStep, generation
   )
 
 export const makeLoopbackServer = Effect.gen(function*() {
-  const server = yield* NodeSocketServer.make({ host: LOOPBACK_HOST, port: 0, allowHalfOpen: true })
   const state: FixtureState = {
     routing: yield* Ref.make<Routing>({ accepted: 0, byGeneration: HashMap.empty(), waiting: HashMap.empty() }),
     open: MutableRef.make(0),
     received: MutableRef.make<ReadonlyArray<string>>([]),
   }
-  yield* Effect.forkScoped(server.run(acceptOf(state)))
+  const bound = yield* Effect.flatMap(listenerOf, (listener) => listener.listen(acceptOf(state)))
+  yield* Effect.forkScoped(bound.serve)
   return {
-    address: { host: LOOPBACK_HOST, port: portOf(server.address) },
+    address: bound.address,
     ready: ReadinessModule.Wait.forLog(READY_FRAME),
     advance: sendTo(state),
     receivedFrames: Effect.sync(() => MutableRef.get(state.received)),

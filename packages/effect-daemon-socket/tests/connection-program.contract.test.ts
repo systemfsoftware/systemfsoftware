@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer, Stream } from 'effect'
 import { observeSocketChild } from './__fixtures__/socket-supervision.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Environment = Layer.provideMerge(
   SocketMedium.layer({ readyPollMillis: 5 }),
@@ -18,7 +18,7 @@ const echoOf = (connection: SocketMedium.SocketConnection): Effect.Effect<void, 
   Effect.orDie(Stream.runForEach(connection.frames, () => connection.send(ECHOED_FRAME)))
 
 Feature('Running the program over the live connection')
-  .liveClock()
+  .live('a supervised child dials a real loopback listener in this process and reads the frames it sends')
   .withLayer(Environment)
   .body(({ scenario }) => {
     scenario(
