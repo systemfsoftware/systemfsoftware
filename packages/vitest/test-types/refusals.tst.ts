@@ -179,3 +179,24 @@ describe('the habit names a test author reaches for are refusals (R9)', () => {
     })
   })
 })
+
+const body = {
+  sync:
+    '✗ the body must be a generator that yields its checks: it(name, function* ({ expect }) { const x = yield* program; yield* expect(x).toEqual(expected) }).',
+  async:
+    '✗ an async body runs outside the test runtime. Pass a generator: it(name, function* ({ expect }) { yield* expect(actual).toEqual(expected) }).',
+  effect:
+    '✗ the body returned an Effect, so the runner cannot see its steps. Pass the generator itself: it(name, function* ({ expect }) { ... }).',
+} as const
+
+describe('a body that is not the generator carries its own rewrite (R2)', () => {
+  it('pins every body refusal the call accepts, text by text', () => {
+    expect<Extract<Fork.Vitest.BodyRefusal, `✗ the body must be a generator${string}`>>().type.toBe<
+      (typeof body)['sync']
+    >()
+    expect<Extract<Fork.Vitest.BodyRefusal, `✗ an async body${string}`>>().type.toBe<(typeof body)['async']>()
+    expect<Extract<Fork.Vitest.BodyRefusal, `✗ the body returned an Effect${string}`>>().type.toBe<
+      (typeof body)['effect']
+    >()
+  })
+})
