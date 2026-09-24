@@ -17,7 +17,6 @@ export default defineConfig({
             './tests/**/*.contract.test.ts',
             '!./tests/ssr.integration.test.ts',
           ],
-          setupFiles: ['./vitest-setup.ts'],
           browser: {
             enabled: true,
             provider: playwright(),

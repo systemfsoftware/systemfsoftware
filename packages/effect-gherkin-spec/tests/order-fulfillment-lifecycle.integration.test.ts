@@ -1,6 +1,6 @@
+import { expect } from '@effect/vitest'
 import { And, But, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Exit, Layer, Ref } from 'effect'
-import { expect } from 'vitest'
 import { InsufficientFundsError, OutOfStockError } from './__fixtures__/OrderFulfillment.schema.js'
 
 interface WalletService {

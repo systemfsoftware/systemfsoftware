@@ -26,7 +26,7 @@ const DISCHARGED_BY = `
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([record]) => {
+it.prop('p', { of: [gen], subject: (record) => record, runs: 100 }, (s, [record]) => {
   // nested loop
   for (const key in record) {
     if (!costly(key)) return false
@@ -44,7 +44,7 @@ ruleTester.run('no-nested-quantification', noNestedQuantification, {
 import { it } from '@effect/vitest'
 import { Schema } from 'effect'
 
-it.prop('p', [Schema.Array(Schema.Number)], ([pool]) => {
+it.prop('p', { of: [Schema.Array(Schema.Number)], subject: (pool) => pool, runs: 100 }, (s, [pool]) => {
   return pool.length > 0
 })
 `,
@@ -56,7 +56,7 @@ it.prop('p', [Schema.Array(Schema.Number)], ([pool]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [fc.constant([1, 2, 3]), gen], ([pool, drawn]) => {
+it.prop('p', { of: [fc.constant([1, 2, 3]), gen], subject: (pool) => pool, runs: 100 }, (s, [pool, drawn]) => {
   for (const entry of pool) {
     if (!costly(entry)) return false
   }
@@ -73,7 +73,7 @@ import { costly } from '../kernel.js'
 
 const ALPHABET = ['a', 'b', 'c']
 
-it.prop('p', [gen], ([drawn]) => {
+it.prop('p', { of: [gen], subject: (drawn) => drawn, runs: 100 }, (s, [drawn]) => {
   for (const letter of ALPHABET) {
     if (costly(letter)) return false
   }
@@ -87,7 +87,7 @@ it.prop('p', [gen], ([drawn]) => {
       code: `
 import { it } from '@effect/vitest'
 
-it.prop('p', [gen], ([samples]) => samples.reduce((deepest, sample) => deepest + sample, 0) === 0)
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => samples.reduce((deepest, sample) => deepest + sample, 0) === 0)
 `,
     },
     {
@@ -97,7 +97,7 @@ it.prop('p', [gen], ([samples]) => samples.reduce((deepest, sample) => deepest +
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => samples.pipe((sample) => costly(sample)) !== null)
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => samples.pipe((sample) => costly(sample)) !== null)
 `,
     },
     {
@@ -107,7 +107,7 @@ it.prop('p', [gen], ([samples]) => samples.pipe((sample) => costly(sample)) !== 
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => samples['every']((sample) => costly(sample)))
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => samples['every']((sample) => costly(sample)))
 `,
     },
     {
@@ -117,7 +117,7 @@ it.prop('p', [gen], ([samples]) => samples['every']((sample) => costly(sample)))
 import { it } from '@effect/vitest'
 import { costly, runAll } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => runAll((sample) => costly(sample)) !== samples)
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => runAll((sample) => costly(sample)) !== samples)
 `,
     },
     {
@@ -126,7 +126,7 @@ it.prop('p', [gen], ([samples]) => runAll((sample) => costly(sample)) !== sample
       code: `
 import { it } from '@effect/vitest'
 
-it.prop('p', [gen], ([samples]) => samples.map().length === 0)
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => samples.map().length === 0)
 `,
     },
     {
@@ -135,7 +135,7 @@ it.prop('p', [gen], ([samples]) => samples.map().length === 0)
       code: `
 import { it } from '@effect/vitest'
 
-it.prop('p', [gen], ([thunks]) => thunks.every((thunk) => thunk()))
+it.prop('p', { of: [gen], subject: (thunks) => thunks, runs: 100 }, (s, [thunks]) => thunks.every((thunk) => thunk()))
 `,
     },
     {
@@ -144,7 +144,7 @@ it.prop('p', [gen], ([thunks]) => thunks.every((thunk) => thunk()))
       code: `
 import { it } from '@effect/vitest'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   function widen(sample) {
     return sample + 1
   }
@@ -161,7 +161,7 @@ it.prop('p', [gen], ([samples]) => {
       code: `
 import { it } from '@effect/vitest'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   const widen = (sample) => sample + 1
   for (const sample of samples) {
     if (widen(sample) < 0) return false
@@ -177,7 +177,7 @@ it.prop('p', [gen], ([samples]) => {
 import { test } from 'vitest'
 import { costly } from '../kernel.js'
 
-test.prop('p', [gen], ([samples]) => {
+test.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (const sample of samples) {
     if (!costly(sample)) return false
   }
@@ -191,7 +191,7 @@ test.prop('p', [gen], ([samples]) => {
       code: `
 import { it } from '@effect/vitest'
 
-it.prop('p', [gen])
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 })
 `,
     },
     {
@@ -222,7 +222,7 @@ it.prop('p', [gen])
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (const sample of samples) {
     if (!costly(sample)) return false
   }
@@ -238,7 +238,7 @@ it.prop('p', [gen], ([samples]) => {
 import { it } from '@effect/vitest'
 import { Processor } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (const sample of samples) {
     new Processor(sample)
   }
@@ -255,7 +255,7 @@ import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 import { Pool } from '../pool.js'
 
-it.prop('p', [Pool.constantFrom(1, 2, 3)], ([samples]) => {
+it.prop('p', { of: [Pool.constantFrom(1, 2, 3)], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (const sample of samples) {
     if (!costly(sample)) return false
   }
@@ -272,7 +272,7 @@ import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 import { wrappers } from '../wrappers.js'
 
-it.prop('p', [wrappers.fc.constantFrom(1, 2, 3)], ([samples]) => {
+it.prop('p', { of: [wrappers.fc.constantFrom(1, 2, 3)], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (const sample of samples) {
     if (!costly(sample)) return false
   }
@@ -288,7 +288,7 @@ it.prop('p', [wrappers.fc.constantFrom(1, 2, 3)], ([samples]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([record]) => {
+it.prop('p', { of: [gen], subject: (record) => record, runs: 100 }, (s, [record]) => {
   for (const key in record) {
     if (!costly(key)) return false
   }
@@ -304,7 +304,7 @@ it.prop('p', [gen], ([record]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (let index = 0; index < samples.length; index++) {
     if (!costly(samples[index])) return false
   }
@@ -320,7 +320,7 @@ it.prop('p', [gen], ([samples]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   const queue = [...samples]
   while (queue.length > 0) {
     if (!costly(queue.pop())) return false
@@ -337,7 +337,7 @@ it.prop('p', [gen], ([samples]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   const queue = [...samples]
   do {
     if (!costly(queue.pop())) return false
@@ -354,7 +354,7 @@ it.prop('p', [gen], ([samples]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], ([samples]) => {
+it.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   let last
   for (const sample of samples) {
     last = costly(sample)
@@ -371,7 +371,7 @@ it.prop('p', [gen], ([samples]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.effect.prop('p', [gen], ([samples]) => {
+it.effect.prop('p', { of: [gen], subject: (samples) => samples, runs: 100 }, (s, [samples]) => {
   for (const sample of samples) {
     if (!costly(sample)) return false
   }
@@ -388,7 +388,7 @@ import { it } from '@effect/vitest'
 import { constant } from 'fast-check'
 import { costly } from '../kernel.js'
 
-it.prop('p', [constant([1, 2, 3])], ([pool]) => {
+it.prop('p', { of: [constant([1, 2, 3])], subject: (pool) => pool, runs: 100 }, (s, [pool]) => {
   for (const entry of pool) {
     if (!costly(entry)) return false
   }
@@ -405,7 +405,7 @@ import { it } from '@effect/vitest'
 import { FastCheck as fc } from 'effect'
 import { costly } from '../kernel.js'
 
-it.prop('p', [fc['constantFrom'](1, 2, 3)], ([pool]) => {
+it.prop('p', { of: [fc['constantFrom'](1, 2, 3)], subject: (pool) => pool, runs: 100 }, (s, [pool]) => {
   for (const entry of pool) {
     if (!costly(entry)) return false
   }
@@ -421,7 +421,7 @@ it.prop('p', [fc['constantFrom'](1, 2, 3)], ([pool]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [gen], (drawn) => {
+it.prop('p', { of: [gen], subject: (drawn) => drawn, runs: 100 }, (s, drawn) => {
   for (const sample of drawn) {
     if (!costly(sample)) return false
   }
@@ -437,7 +437,7 @@ it.prop('p', [gen], (drawn) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', [, gen], ([held, drawn]) => {
+it.prop('p', { of: [, gen], subject: (held) => held, runs: 100 }, (s, [held, drawn]) => {
   for (const sample of held) {
     if (!costly(sample)) return false
   }
@@ -453,7 +453,7 @@ it.prop('p', [, gen], ([held, drawn]) => {
 import { it } from '@effect/vitest'
 import { costly } from '../kernel.js'
 
-it.prop('p', generators, ([samples]) => {
+it.prop('p', generators, (s, [samples]) => {
   for (const sample of samples) {
     if (!costly(sample)) return false
   }

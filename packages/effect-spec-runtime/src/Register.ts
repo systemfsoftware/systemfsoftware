@@ -1,9 +1,8 @@
-/// <reference types="vitest/globals" />
-/// <reference types="vitest/importMeta" />
 import type { Vitest } from '@effect/vitest'
 import { Match, Option } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
+import { describe } from 'vitest'
 import type { Options } from './Suite.js'
 
 export type RegisterMode = 'run' | 'skip' | 'only'

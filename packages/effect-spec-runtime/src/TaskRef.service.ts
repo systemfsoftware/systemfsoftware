@@ -1,4 +1,5 @@
 /// <reference types="vitest/importMeta" />
+import { vitestTestContextKey } from '@effect/vitest'
 import { Context, Effect, Option, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
@@ -16,9 +17,13 @@ export const VitestTaskRef: Context.Reference<VitestTaskContext | null> = Contex
   },
 )
 
+/**
+ * The task context as the fork's run provides it: built on the fork's own key, so a case lane that goes
+ * through `provideTaskRef` and a property lane the fork runs itself read the same context.
+ */
 export const RawVitestTaskRef: Context.Reference<VitestTaskContext | null> = Context.Reference<
   VitestTaskContext | null
->('@systemfsoftware/effect-spec-runtime/VitestTaskRaw', {
+>(vitestTestContextKey, {
   defaultValue: () => null,
 })
 
@@ -52,13 +57,13 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀o_ReadTaskContext_=Identity',
-    [Labelled],
-    ([record]) => readTaskContext(record) === record,
+    { of: [Labelled], subject: readTaskContext },
+    (read, [record]) => read(record) === record,
   )
 
   it.prop(
     '∀p_ReadTaskContext_=Null',
-    [Schema.String],
-    ([primitive]) => readTaskContext(primitive) === null,
+    { of: [Schema.String], subject: readTaskContext },
+    (read, [primitive]) => read(primitive) === null,
   )
 }

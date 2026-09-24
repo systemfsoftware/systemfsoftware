@@ -1,0 +1,98 @@
+{
+  "name": "@systemfsoftware/vitest",
+  "license": "MIT",
+  "version": "0.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/vitest"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/vitest#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "A fork of @effect/vitest whose defaults make the lazy test a good test: fresh layers, a second run that catches leaked state, virtual time, soft checks that stop at the next step, and properties refuted against a constant impostor.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "vitest",
+    "testing",
+    "property-testing",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./refusals": {
+      "@systemfsoftware/source": "./src/Refusals.ts",
+      "types": "./dist/refusals.d.ts",
+      "default": "./dist/refusals.mjs"
+    },
+    "./TestClock": {
+      "@systemfsoftware/source": "./src/TestClock.ts",
+      "types": "./dist/TestClock.d.ts",
+      "default": "./dist/TestClock.mjs"
+    },
+    "./utils": {
+      "@systemfsoftware/source": "./src/utils.ts",
+      "types": "./dist/utils.d.ts",
+      "default": "./dist/utils.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./refusals": {
+        "types": "./dist/refusals.d.ts",
+        "default": "./dist/refusals.mjs"
+      },
+      "./TestClock": {
+        "types": "./dist/TestClock.d.ts",
+        "default": "./dist/TestClock.mjs"
+      },
+      "./utils": {
+        "types": "./dist/utils.d.ts",
+        "default": "./dist/utils.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

@@ -1,6 +1,6 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
-import { expect } from 'vitest'
+import { Effect, SchemaAST } from 'effect'
 
 import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
 import { budgetToArbitrary } from '@systemfsoftware/effect-schema-recursion-budget/runtime'
@@ -116,7 +116,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
       ),
       When('the schema-laws pipeline processes that module')('code', (s) => Effect.sync(() => processed(s.source))),
       Then('the directive is still the first line of the module')((s) => {
-        expect(s.code?.startsWith('/// <reference types="vitest/import-meta" />')).toBe(true)
+        expect(s.code).toMatch(/^\/\/\/ <reference types="vitest\/import-meta" \/>/)
       }),
       Then('the runtime import is inserted below it')((s) => {
         expect(s.code?.split('\n')[1]).toContain(RUNTIME_SPECIFIER)
@@ -137,7 +137,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
       }),
       Then('the runtime module the import names ships with the package')(() => {
         const hook = budgetToArbitrary(() => Chain, { maxDepth: 3, depthSize: 'small' })
-        expect(hook()).toBeDefined()
+        expect(hook()).toBeInstanceOf(SchemaAST.Link)
       }),
     ),
   )

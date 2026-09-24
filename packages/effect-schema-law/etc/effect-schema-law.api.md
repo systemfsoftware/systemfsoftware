@@ -12,7 +12,7 @@ export const recursionLaws: {
     <A, I>(label: string, schema: Schema.Codec<A, I>): void;
 };
 
-// @public
+// @public (undocumented)
 export const ruleOfSchemas: {
     (name: string): <A, I>(schema: Schema.Codec<A, I>) => void;
     <A, I>(name: string, schema: Schema.Codec<A, I>): void;

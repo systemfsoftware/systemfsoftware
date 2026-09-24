@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result, Schema } from 'effect'
-import { expect } from 'vitest'
 import {
   type AnswerFor,
   answering,
@@ -173,8 +173,7 @@ Feature('Reusing answers without paying twice')
           Effect.gen(function*() {
             expect(s.outcomes.first).toBe('block')
             expect(s.outcomes.second).toBe('block')
-            expect(s.outcomes.third).toBeDefined()
-            expect(Discern.Model.isBudgetExceeded(s.outcomes.third)).toBe(true)
+            expect(s.outcomes.third).toSatisfy(Discern.Model.isBudgetExceeded)
             expect(yield* Discern.Model.spent(s.spend)).toStrictEqual({ decisions: 2, calls: 2 })
           })
         ),
@@ -310,7 +309,7 @@ Feature('Reusing answers without paying twice')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Model.BudgetSpend)(s.payload)),
         ),
         Then('the unreadable count is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -327,7 +326,7 @@ Feature('Reusing answers without paying twice')
           (s) => Effect.succeed(Schema.decodeResult(Discern.Model.BudgetLimits)(s.payload)),
         ),
         Then('the endless allowance is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )

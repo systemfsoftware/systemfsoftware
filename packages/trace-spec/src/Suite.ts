@@ -95,13 +95,13 @@ const caseTools = <Provided, ScenarioRequired>(
   ) => {
     propIt.effect.prop(
       name,
-      [arbitrary],
-      (values, context) =>
+      { of: [arbitrary], subject: contract.stimulus },
+      (subject, values) =>
         Prop.predicate<Input, Output, E, Provided | Harness, ScenarioRequired>(
           name,
           contract,
           scenario,
-        )(values[0], context),
+        )(subject, values[0]),
     )
   }
   return { Case }

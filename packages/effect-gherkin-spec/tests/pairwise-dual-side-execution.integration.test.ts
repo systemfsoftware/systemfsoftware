@@ -6,10 +6,10 @@
  * receives both results back into the scope. Failure and layer-acquisition
  * behaviours are covered through the same scenario surface.
  */
+import { expect } from '@effect/vitest'
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, pairwiseFor, StepError, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref, Result } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 

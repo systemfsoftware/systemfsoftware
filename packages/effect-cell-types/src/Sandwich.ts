@@ -556,40 +556,56 @@ if (import.meta.vitest !== void 0) {
   const RefusedLength = Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: -100, maximum: -1 })))
   const holds = (verdicts: ReadonlyArray<boolean>): boolean => Arr.every(verdicts, (verdict) => verdict)
 
-  it.effect.prop('∀c_Span_=Named', [AdmittedLength], ([length]) =>
-    Effect.gen(function*() {
-      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
-      return Option.getOrThrow(observed.operation).name === Operation
-    }))
+  it.effect.prop(
+    '∀c_Span_=Named',
+    { of: [AdmittedLength], subject: cell.run },
+    (run, [length]) =>
+      Effect.gen(function*() {
+        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        return Option.getOrThrow(observed.operation).name === Operation
+      }),
+  )
 
-  it.effect.prop('∀c_Span_=Mapped', [Schema.Int], ([length]) =>
-    Effect.gen(function*() {
-      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
-      const attributes = Option.getOrThrow(observed.operation).attributes
-      return holds([
-        attributes.get('tests.span.length') === length,
-        !attributes.has('length'),
-      ])
-    }))
+  it.effect.prop(
+    '∀c_Span_=Mapped',
+    { of: [Schema.Int], subject: cell.run },
+    (run, [length]) =>
+      Effect.gen(function*() {
+        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const attributes = Option.getOrThrow(observed.operation).attributes
+        return holds([
+          attributes.get('tests.span.length') === length,
+          !attributes.has('length'),
+        ])
+      }),
+  )
 
-  it.effect.prop('∀c_Span_=Decided', [AdmittedLength], ([length]) =>
-    Effect.gen(function*() {
-      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
-      const attributes = Option.getOrThrow(observed.operation).attributes
-      return holds([
-        attributes.get('app.span.command.law.decision') === observed.tag,
-        attributes.get('tests.span.admitted.length') === length,
-        !attributes.has('decision'),
-      ])
-    }))
+  it.effect.prop(
+    '∀c_Span_=Decided',
+    { of: [AdmittedLength], subject: cell.run },
+    (run, [length]) =>
+      Effect.gen(function*() {
+        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const attributes = Option.getOrThrow(observed.operation).attributes
+        return holds([
+          attributes.get('app.span.command.law.decision') === observed.tag,
+          attributes.get('tests.span.admitted.length') === length,
+          !attributes.has('decision'),
+        ])
+      }),
+  )
 
-  it.effect.prop('∀c_Span_=Refused', [RefusedLength], ([length]) =>
-    Effect.gen(function*() {
-      const observed = Option.getOrThrow(yield* cell.run(new LawCommand({ length })))
-      const attributes = Option.getOrThrow(observed.operation).attributes
-      return holds([
-        attributes.get('app.span.command.law.failure') === 'LawMalformed',
-        !attributes.has('failure'),
-      ])
-    }))
+  it.effect.prop(
+    '∀c_Span_=Refused',
+    { of: [RefusedLength], subject: cell.run },
+    (run, [length]) =>
+      Effect.gen(function*() {
+        const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
+        const attributes = Option.getOrThrow(observed.operation).attributes
+        return holds([
+          attributes.get('app.span.command.law.failure') === 'LawMalformed',
+          !attributes.has('failure'),
+        ])
+      }),
+  )
 }

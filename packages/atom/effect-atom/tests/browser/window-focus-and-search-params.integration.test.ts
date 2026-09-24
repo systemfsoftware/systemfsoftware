@@ -9,10 +9,10 @@
  *
  * @since 4.0.0
  */
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema } from 'effect'
-import { afterEach, expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -113,7 +113,7 @@ const waitUntilRegistryEmpties = (registry: Atom.Registry.Registry) =>
     expect(Atom.Registry.getNodes(registry).size).toBe(0)
   })
 
-afterEach(() => {
+const clearBrowserState = (): void => {
   for (const stopRecording of recordings.splice(0)) {
     stopRecording()
   }
@@ -122,10 +122,15 @@ afterEach(() => {
   }
   document.querySelector('[data-testid="page-marker"]')?.remove()
   visit('')
-})
+}
+
+const browserCleanupLayer = Layer.effectDiscard(
+  Effect.addFinalizer(() => Effect.sync(clearBrowserState)),
+)
 
 Feature('Keeping watched values in step with the browser page')
   .withLayer(Layer.empty)
+  .withScenarioLayer(browserCleanupLayer)
   .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A count of page visits rises only when the page is in view',
@@ -301,7 +306,7 @@ Feature('Keeping watched values in step with the browser page')
         Then('the address first named page 7, now names page 8, and the page never reloaded')((s) => {
           expect(s.seen.readFromAddress).toBe('7')
           expect(s.seen.search).toBe('8')
-          expect(document.body.contains(s.ctx.marker)).toBe(true)
+          expect(s.ctx.marker).toSatisfy((marker: HTMLElement) => document.body.contains(marker))
         }),
       ),
     )

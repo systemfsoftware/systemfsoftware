@@ -11,8 +11,7 @@
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.test.tsbuildinfo",
     "outDir": "node_modules/.cache/tsc/test",
     "types": [
-      "node",
-      "vitest/globals"
+      "node"
     ],
     "customConditions": [
       "@systemfsoftware/source"

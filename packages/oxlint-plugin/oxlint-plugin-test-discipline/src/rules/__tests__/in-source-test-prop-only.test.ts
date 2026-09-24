@@ -27,7 +27,7 @@ ruleTester.run('in-source-test-prop-only', inSourceTestPropOnly, {
 const helper = (x: number): number => x + 1
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  it.prop('Holds_ForOne', [helper(1)], ([v]) => v === 1)
+  it.prop('Holds_ForOne', { of: [helper(1)], subject: (v) => v, runs: 100 }, (s, [v]) => v === 1)
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
@@ -38,7 +38,7 @@ if (import.meta.vitest !== void 0) {
 const helper = (x: number): number => x + 1
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  it.effect.prop('Holds_ForOne', [helper(1)], ([v]) => v === 1)
+  it.effect.prop('Holds_ForOne', { of: [helper(1)], subject: (v) => v, runs: 100 }, (s, [v]) => v === 1)
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
@@ -48,9 +48,9 @@ if (import.meta.vitest !== void 0) {
       code: `
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  it.prop.skip('Skipped_Prop', [], () => true)
-  it.prop.only('Only_Prop', [], () => true)
-  it.effect.prop.todo('Todo_EffectProp', [], () => true)
+  it.prop.skip('Skipped_Prop', { of: [], subject: () => true, runs: 100 }, () => true)
+  it.prop.only('Only_Prop', { of: [], subject: () => true, runs: 100 }, () => true)
+  it.effect.prop.todo('Todo_EffectProp', { of: [], subject: () => true, runs: 100 }, () => true)
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
@@ -65,8 +65,8 @@ if (import.meta.vitest !== void 0) {
   const negative = fc.integer({ min: -100, max: -1 })
   it.prop(
     'NegativeLimit_Fails',
-    [negative.map((limit) => ({ _tag: 'DynamicLimitExceeded' as const, limit }))],
-    ([input]) => Exit.isFailure(decode(input)),
+    { of: [negative.map((limit) => ({ _tag: 'DynamicLimitExceeded' as const, limit }))], subject: (input) => input, runs: 100 },
+    (s, [input]) => Exit.isFailure(decode(input)),
   )
 }
 `,
@@ -77,7 +77,7 @@ if (import.meta.vitest !== void 0) {
       code: `
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  it.prop('Holds_AfterSetup', [], () => this.setup() === true)
+  it.prop('Holds_AfterSetup', { of: [], subject: () => true, runs: 100 }, () => this.setup() === true)
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
@@ -88,7 +88,7 @@ if (import.meta.vitest !== void 0) {
 const helper = (x: number): number => x + 1
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  it.prop('Holds_ForOne', [helper(1)], ([v]) => v === 1)
+  it.prop('Holds_ForOne', { of: [helper(1)], subject: (v) => v, runs: 100 }, (s, [v]) => v === 1)
 }
 if (helper(0) > 0) {
   it('Outside_AnyGuard', () => {})

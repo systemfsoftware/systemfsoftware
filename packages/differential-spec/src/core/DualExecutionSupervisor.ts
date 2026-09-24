@@ -1,3 +1,4 @@
+import { recordAssertion } from '@effect/vitest'
 import { Cause, Effect, Exit, Function } from 'effect'
 import * as fc from 'fast-check'
 import { DisparityError } from './DisparityError.schema.js'
@@ -184,7 +185,7 @@ const failWithDisparity = <Input, OutputA, OutputB, E, DescribedInput = unknown>
   describeInput: (input: Input, followUp: Input) => DescribedInput,
   details: fc.RunDetails<[Input]>,
 ): Effect.Effect<void, DisparityError> => {
-  if (isConclusivePass(details)) return Effect.void
+  if (isConclusivePass(details)) return Effect.sync(recordAssertion)
   return reportFailure(targetA, targetB, secondInput, describeInput, details)
 }
 

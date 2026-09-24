@@ -1,4 +1,5 @@
 /// <reference types="vitest/importMeta" />
+import { owned } from '@effect/vitest'
 import type { Suite } from '@systemfsoftware/effect-spec-runtime'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
@@ -46,7 +47,7 @@ export const checkSoftFailures = <R>(
 
 const normalizePipeline = <R>(
   pipeline: Effect.Effect<Top, StepError, R>,
-): Effect.Effect<void, StepError, R> => checkSoftFailures(pipeline.pipe(Effect.asVoid))
+): Effect.Effect<void, StepError, R> => checkSoftFailures(pipeline.pipe(Effect.asVoid, owned))
 
 const composeWithBackground = <R>(
   pipeline: Effect.Effect<Top, StepError, R>,

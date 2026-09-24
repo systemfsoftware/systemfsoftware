@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { toDirectoryJSON } from '@systemfsoftware/npm-package'
 import { Effect, Exit, Layer } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
@@ -47,7 +47,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
           (s) => Effect.exit(s.fs.readFile('/node_modules/demo/missing.txt')),
         ),
         Then('the filesystem returns a Failure exit indicating missing path')((s) => {
-          expect(Exit.isFailure(s.exit)).toBe(true)
+          expect(s.exit).toSatisfy(Exit.isFailure)
         }),
       ),
     )
@@ -87,7 +87,7 @@ Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
         ),
         Then('the prefixed paths remain in place without double-prefixing')((s) => {
           expect(s.contents['/node_modules/demo/index.js']).toBe('export const x = 1')
-          expect(s.contents['/node_modules/demo/package.json']).toBeDefined()
+          expect(s.contents).toHaveProperty(['/node_modules/demo/package.json'])
         }),
       ),
     )

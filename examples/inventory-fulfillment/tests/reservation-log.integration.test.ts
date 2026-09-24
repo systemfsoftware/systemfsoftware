@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Reservation } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 import {
   acrossLogs,
   findOf,

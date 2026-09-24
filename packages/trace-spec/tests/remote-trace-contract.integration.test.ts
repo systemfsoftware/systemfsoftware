@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, Rel, RemoteObservation, Stimulus, TempoTraceStore } from '@systemfsoftware/trace-spec'
 import { Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
@@ -6,7 +7,6 @@ import type { HttpClientError } from 'effect/unstable/http/HttpClientError'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
-import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 
@@ -321,7 +321,7 @@ Feature('Holding a settlement to a trace contract through a remote store')
         ),
         Then('the settlement is accepted and its charge is on the same trace')((s) => {
           expect(s.checked.run.output).toBe('settled:order-41')
-          expect(Schema.is(Rel.Hold)(s.checked.verdict)).toBe(true)
+          expect(s.checked.verdict).toSatisfy(Schema.is(Rel.Hold))
         }),
       ),
     )

@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Result, Schema } from 'effect'
-import { expect } from 'vitest'
 import {
   type AnswerFor,
   answering,
@@ -126,7 +126,7 @@ Feature('Measuring a question against labelled examples')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.EvalRecord)(s.payload)),
         ),
         Then('the unknown outcome is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -156,7 +156,7 @@ Feature('Measuring a question against labelled examples')
           (s) => Effect.succeed(Schema.decodeResult(Discern.EvalMetrics)(s.payload)),
         ),
         Then('the non-finite number is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -173,7 +173,7 @@ Feature('Measuring a question against labelled examples')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.EvalMetrics)(s.payload)),
         ),
         Then('the incomplete record is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )

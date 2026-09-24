@@ -1,7 +1,7 @@
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
-import { expect, vi } from 'vitest'
 import { SavedText } from './__fixtures__/SavedText.schema.js'
 
 const Feature = makeFeature({ it, layer })
@@ -89,7 +89,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             }),
         ),
         Then('the reloaded page shows the value as already finished, with the saved answer')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.reading) && s.reading.value === 123).toBe(true)
+          expect(s.reading).toMatchObject({ _tag: 'Success', value: 123 })
         }),
       ),
     )
@@ -127,10 +127,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             }),
         ),
         Then('the reloaded page starts out loading, then fills in with the finished answer on its own')((s) => {
-          expect(Atom.AsyncResult.isInitial(s.reading.beforeItFinishes)).toBe(true)
-          expect(Atom.AsyncResult.isSuccess(s.reading.afterItFinishes) && s.reading.afterItFinishes.value === 42).toBe(
-            true,
-          )
+          expect(s.reading.beforeItFinishes).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.reading.afterItFinishes).toMatchObject({ _tag: 'Success', value: 42 })
         }),
       ),
     )
@@ -198,10 +196,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             }),
         ),
         Then('the reloaded page starts out loading and then fills in with the finished answer on its own')((s) => {
-          expect(Atom.AsyncResult.isInitial(s.reading.beforeItFinishes)).toBe(true)
-          expect(Atom.AsyncResult.isSuccess(s.reading.afterItFinishes) && s.reading.afterItFinishes.value === 42).toBe(
-            true,
-          )
+          expect(s.reading.beforeItFinishes).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.reading.afterItFinishes).toMatchObject({ _tag: 'Success', value: 42 })
         }),
       ),
     )
@@ -415,10 +411,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         ),
         Then('the text copy hides the machinery and the reloaded page still fills in')((s) => {
           expect(s.reading.text).not.toContain('Deferred')
-          expect(Atom.AsyncResult.isInitial(s.reading.beforeItFinishes)).toBe(true)
-          expect(Atom.AsyncResult.isSuccess(s.reading.afterItFinishes) && s.reading.afterItFinishes.value === 42).toBe(
-            true,
-          )
+          expect(s.reading.beforeItFinishes).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.reading.afterItFinishes).toMatchObject({ _tag: 'Success', value: 42 })
         }),
       ),
     )
@@ -449,7 +443,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             ),
         ),
         Then('the reloaded page shows the value as already finished, with the saved answer')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.reading) && s.reading.value === 123).toBe(true)
+          expect(s.reading).toMatchObject({ _tag: 'Success', value: 123 })
         }),
       ),
     )
