@@ -22,8 +22,7 @@ const SPLITS = ['dev', 'test'] as const
 type Split = (typeof SPLITS)[number]
 type RuleKind = 'negative' | 'governing' | 'deferred'
 
-/** The label state a task's bit draw names for one rule. Index 3 re-enters `negative`. */
-const KINDS: ReadonlyArray<RuleKind> = ['negative', 'governing', 'deferred', 'negative']
+const KINDS: ReadonlyArray<RuleKind> = ['negative', 'governing', 'deferred']
 
 interface Cell {
   readonly taskId: string

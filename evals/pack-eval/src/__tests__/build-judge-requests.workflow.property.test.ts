@@ -110,6 +110,16 @@ const judgePromptWith = (fewShotPairIds: ReadonlyArray<string>): JudgePrompt =>
     fewShotPairIds,
   })
 
+const rulesOf = (packs: ReadonlyArray<Pack>): Record<string, RuleFact> =>
+  Object.fromEntries(
+    packs.flatMap((pack) =>
+      pack.rules.map((rule) => [ruleKeyOf(pack.id, rule.stem), { title: rule.title, body: rule.body }])
+    ),
+  )
+
+const taskTextsOf = (tasks: ReadonlyArray<Task>): Record<string, string> =>
+  Object.fromEntries(tasks.map((task) => [task.id, task.text]))
+
 const scenarioOf = (packDraw: number, ruleDraw: number, taskDraw: number, pairDraw: number): Scenario => {
   const packCount = 1 + (Math.abs(packDraw) % 2)
   const ruleCount = 2 + (Math.abs(ruleDraw) % 2)
@@ -120,6 +130,7 @@ const scenarioOf = (packDraw: number, ruleDraw: number, taskDraw: number, pairDr
   const labels = Array.from({ length: pairCount }, (_, pairIndex) => pairLabelAt(pairIndex, taskCount))
   const trainIds = labels.filter((label) => label.split === 'train').map((label) => label.id)
   return {
+    rules: rulesOf(packs),
     command: new BuildJudgeRequestsCommand({
       packs,
       tasks: new TaskSet({ version: 1, tasks }),
@@ -129,12 +140,7 @@ const scenarioOf = (packDraw: number, ruleDraw: number, taskDraw: number, pairDr
     }),
     plantedTargetId: pairIdAt(1),
     trainIds,
-    rules: Object.fromEntries(
-      packs.flatMap((pack) =>
-        pack.rules.map((rule) => [ruleKeyOf(pack.id, rule.stem), { title: rule.title, body: rule.body }])
-      ),
-    ),
-    taskTexts: Object.fromEntries(tasks.map((task) => [task.id, task.text])),
+    taskTexts: taskTextsOf(tasks),
   }
 }
 
@@ -221,18 +227,15 @@ it.prop(
         const entry = requests[index]
         const ruleA = scenario.rules[ruleKeyOf(target.packId, target.ruleA)]
         const ruleB = scenario.rules[ruleKeyOf(target.packId, target.ruleB)]
-        const expectedBodyB = target.plantedBody === undefined ? ruleB?.body : target.plantedBody
         return entry !== undefined &&
+          ruleA !== undefined &&
+          ruleB !== undefined &&
           entry.id === target.id &&
-          entry.request.packId === target.packId &&
-          entry.request.taskId === target.taskId &&
           entry.request.taskText === scenario.taskTexts[target.taskId] &&
-          entry.request.ruleA.stem === target.ruleA &&
-          (ruleA === undefined ||
-            (entry.request.ruleA.title === ruleA.title && entry.request.ruleA.body === ruleA.body)) &&
-          entry.request.ruleB.stem === target.ruleB &&
-          entry.request.ruleB.title === ruleB?.title &&
-          entry.request.ruleB.body === expectedBodyB
+          entry.request.ruleA.title === ruleA.title &&
+          entry.request.ruleA.body === ruleA.body &&
+          entry.request.ruleB.title === ruleB.title &&
+          entry.request.ruleB.body === (target.plantedBody ?? ruleB.body)
       })
   },
 )

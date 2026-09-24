@@ -11,6 +11,11 @@ import { estimateCorrectedRate, EstimateCorrectedRateCommand } from '../estimate
  * `n` items per class and the unlabelled length `n²`, the count of ones that realises
  * `θ·TPR + (1−θ)·(1−TNR)` is the integer `k·tp + (n−k)·(n−tn)`.
  */
+
+/** The interval read level; the confidence-contrast laws vary it, everything else holds it still. */
+const CONFIDENCE = 0.95
+/** Resamples per interval; the point estimate is independent of it (see the seed-and-iteration law). */
+const ITERATIONS = 100
 const ones = (count: number): ReadonlyArray<number> => Array.from({ length: count }, () => 1)
 
 const zeros = (count: number): ReadonlyArray<number> => Array.from({ length: count }, () => 0)
@@ -53,8 +58,8 @@ const perfectCommandOf = (
     testLabels: labels,
     testPredictions: labels,
     unlabeledPredictions: mixOf(1 + (Math.abs(rawLength) % 8), offset),
-    iterations: 100,
-    confidence: 0.95,
+    iterations: ITERATIONS,
+    confidence: CONFIDENCE,
     seed: Math.abs(seed),
   })
 }
@@ -73,7 +78,7 @@ const identityEstimateOf = (
   const universe = size * size
   const count = k * tp + (size - k) * (size - tn)
   return {
-    command: routingCommandOf(raw, [...ones(count), ...zeros(universe - count)], 0.95, 100),
+    command: routingCommandOf(raw, [...ones(count), ...zeros(universe - count)], CONFIDENCE, ITERATIONS),
     trueRate: k / size,
   }
 }
@@ -87,8 +92,8 @@ const poorCommandOf = (raw: readonly number[]): EstimateCorrectedRateCommand => 
     testLabels: [...ones(size), ...zeros(size)],
     testPredictions: [...ones(tp), ...zeros(size - tp), ...zeros(tn), ...ones(size - tn)],
     unlabeledPredictions: mixOf(1 + (Math.abs(raw[3] ?? 0) % 8), raw[4] ?? 0),
-    iterations: 100,
-    confidence: 0.95,
+    iterations: ITERATIONS,
+    confidence: CONFIDENCE,
     seed: Math.abs(raw[5] ?? 0),
   })
 }
@@ -148,8 +153,8 @@ it.prop(
       testLabels: labels,
       testPredictions: mixOf(labels.length, seed),
       unlabeledPredictions: mixOf(1 + (Math.abs(rawLength) % 8), seed),
-      iterations: 100,
-      confidence: 0.95,
+      iterations: ITERATIONS,
+      confidence: CONFIDENCE,
       seed: Math.abs(seed),
     })
     return tagOf(command) === 'EstimateCorrectedRateOneClassTestLabels'
@@ -165,8 +170,8 @@ it.prop(
       testLabels: labels,
       testPredictions: mixOf(labels.length, seed),
       unlabeledPredictions: mixOf(1 + (Math.abs(rawLength) % 8), seed),
-      iterations: 100,
-      confidence: 0.95,
+      iterations: ITERATIONS,
+      confidence: CONFIDENCE,
       seed: Math.abs(seed),
     })
     return tagOf(command) === 'EstimateCorrectedRateOneClassTestLabels'
@@ -185,16 +190,16 @@ it.prop(
       testLabels: [],
       testPredictions: [],
       unlabeledPredictions: unlabeled,
-      iterations: 100,
-      confidence: 0.95,
+      iterations: ITERATIONS,
+      confidence: CONFIDENCE,
       seed: Math.abs(rawSeed),
     })
     const emptyUnlabeled = new EstimateCorrectedRateCommand({
       testLabels: labels,
       testPredictions: predictions,
       unlabeledPredictions: [],
-      iterations: 100,
-      confidence: 0.95,
+      iterations: ITERATIONS,
+      confidence: CONFIDENCE,
       seed: Math.abs(rawSeed),
     })
     const widened: ReadonlyArray<number> = labels
@@ -202,16 +207,16 @@ it.prop(
       testLabels: widened.with(Math.abs(rawSeed) % widened.length, 2 + (Math.abs(rawSeed) % 5)),
       testPredictions: predictions,
       unlabeledPredictions: unlabeled,
-      iterations: 100,
-      confidence: 0.95,
+      iterations: ITERATIONS,
+      confidence: CONFIDENCE,
       seed: Math.abs(rawSeed),
     })
     const mismatched = new EstimateCorrectedRateCommand({
       testLabels: labels,
       testPredictions: [...predictions, 1],
       unlabeledPredictions: unlabeled,
-      iterations: 100,
-      confidence: 0.95,
+      iterations: ITERATIONS,
+      confidence: CONFIDENCE,
       seed: Math.abs(rawSeed),
     })
     const outside = [0.9 - 1, 0.9 + 1]
@@ -219,7 +224,7 @@ it.prop(
       testLabels: labels,
       testPredictions: predictions,
       unlabeledPredictions: unlabeled,
-      iterations: 100,
+      iterations: ITERATIONS,
       confidence: outside[Math.abs(rawSeed) % outside.length] ?? 0,
       seed: Math.abs(rawSeed),
     })
@@ -228,7 +233,7 @@ it.prop(
       testPredictions: predictions,
       unlabeledPredictions: unlabeled,
       iterations: (Math.abs(rawSeed) % 2) - 1,
-      confidence: 0.95,
+      confidence: CONFIDENCE,
       seed: Math.abs(rawSeed),
     })
     return (
@@ -258,8 +263,8 @@ it.prop(
   '∀c_Estimate_≡SeedAndIterationIndependent',
   [Schema.Int, Schema.Int, Schema.Int, Schema.Int, Schema.Int, Schema.Int],
   ([a, b, c, d, e, f]) => {
-    const base = validCommandOf([a, b, c, d, e, f], 0.95, 200)
-    const reseeded = validCommandOf([a, b, c, d, e, -(Math.abs(f) + 17)], 0.95, 137)
+    const base = validCommandOf([a, b, c, d, e, f], CONFIDENCE, 200)
+    const reseeded = validCommandOf([a, b, c, d, e, -(Math.abs(f) + 17)], CONFIDENCE, 137)
     const estimate = estimateOf(base)
     return estimate >= 0 && estimate <= 1 && estimate === estimateOf(reseeded)
   },
@@ -269,8 +274,8 @@ it.prop(
   '∀c_Seed_≡DeterministicOrderedBounds',
   [Schema.Int, Schema.Int, Schema.Int, Schema.Int, Schema.Int, Schema.Int],
   ([a, b, c, d, e, f]) => {
-    const first = boundsOf(validCommandOf([a, b, c, d, e, f], 0.95, 200))
-    const second = boundsOf(validCommandOf([a, b, c, d, e, f], 0.95, 200))
+    const first = boundsOf(validCommandOf([a, b, c, d, e, f], CONFIDENCE, 200))
+    const second = boundsOf(validCommandOf([a, b, c, d, e, f], CONFIDENCE, 200))
     return first.lower === second.lower && first.upper === second.upper && first.lower <= first.upper &&
       first.lower >= 0 && first.upper <= 1
   },
@@ -285,7 +290,7 @@ it.prop(
       testPredictions: [1, 0],
       unlabeledPredictions: [1],
       iterations: 1,
-      confidence: 0.95,
+      confidence: CONFIDENCE,
       seed: [1, 4, 5, 9][Math.abs(raw) % 4] ?? 4,
     })
     return decisionOf(command).estimate === 1 && tagOf(command) === 'EstimateCorrectedRateNoValidSamples'
@@ -301,7 +306,7 @@ it.prop(
       testPredictions: [1, 0],
       unlabeledPredictions: [1],
       iterations: 1,
-      confidence: 0.95,
+      confidence: CONFIDENCE,
       seed: [0, 2, 3][Math.abs(raw) % 3] ?? 0,
     })
     const decision = decisionOf(command)
@@ -321,8 +326,8 @@ it.prop(
     const length = 2 + (Math.abs(d) % 6)
     const positives = 1 + (Math.abs(e) % (length - 1))
     const arrangement = [...ones(positives), ...zeros(length - positives)]
-    const base = routingCommandOf([a, b, c, d, e, f], arrangement, 0.95, 200)
-    const mirrored = routingCommandOf([a, b, c, d, e, f], [...arrangement].reverse(), 0.95, 200)
+    const base = routingCommandOf([a, b, c, d, e, f], arrangement, CONFIDENCE, 200)
+    const mirrored = routingCommandOf([a, b, c, d, e, f], [...arrangement].reverse(), CONFIDENCE, 200)
     const left = boundsOf(base)
     const right = boundsOf(mirrored)
     return left.lower === right.lower && left.upper === right.upper

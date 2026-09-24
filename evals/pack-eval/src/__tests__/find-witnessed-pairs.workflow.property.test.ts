@@ -1,13 +1,7 @@
 import { it } from '@effect/vitest'
 import { Match, Result, Schema } from 'effect'
 import type { FindWitnessedPairsDecision, PairWitness } from '../find-witnessed-pairs.workflow.js'
-import {
-  findWitnessedPairs,
-  FindWitnessedPairsCommand,
-  PackStems,
-  UnwitnessedPair,
-  WitnessedPair,
-} from '../find-witnessed-pairs.workflow.js'
+import { findWitnessedPairs, FindWitnessedPairsCommand, PackStems } from '../find-witnessed-pairs.workflow.js'
 import { RoutingLabelEntry, RoutingLabels } from '../labels.schema.js'
 
 const trialsOf = (count: number): number => 1 + (Math.abs(count) % 4)
@@ -191,8 +185,6 @@ it.prop(
       packs: [single],
       routingLabels: command.routingLabels,
     })
-    return pairsOf(lone, 'pack-single').length === 0 &&
-      Schema.is(UnwitnessedPair)(new UnwitnessedPair({ ruleA: 'a', ruleB: 'b' })) &&
-      Schema.is(WitnessedPair)(new WitnessedPair({ ruleA: 'a', ruleB: 'b', taskIds: ['t'] }))
+    return pairsOf(lone, 'pack-single').length === 0
   },
 )

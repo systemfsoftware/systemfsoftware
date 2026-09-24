@@ -211,14 +211,31 @@ it.prop(
   [Schema.Int, Schema.Int, Schema.Int, Schema.Int],
   ([packDraw, ruleDraw, taskDraw, pairDraw]) => {
     const scenario = scenarioFrom(packDraw, ruleDraw, taskDraw, pairDraw)
-    const outcome = admit(scenario.dataset)
-    const expected = new DatasetAdmitted({
-      packs: scenario.dataset.packs,
-      taskSet: scenario.dataset.taskSet,
-      routingLabels: scenario.dataset.routingLabels,
-      pairLabels: scenario.dataset.pairLabels,
-      judgePrompt: scenario.dataset.judgePrompt,
-    })
-    return Result.isSuccess(outcome) && Equal.equals(Result.getOrThrow(outcome), expected)
+    const outcome = admitDataset(new AdmitDataset(scenario.dataset))
+    const admitted = Result.getOrThrow(outcome)
+    return Equal.equals(admitted.packs, scenario.dataset.packs) &&
+      Equal.equals(admitted.taskSet, scenario.dataset.taskSet) &&
+      Equal.equals(admitted.routingLabels, scenario.dataset.routingLabels) &&
+      Equal.equals(admitted.pairLabels, scenario.dataset.pairLabels) &&
+      Equal.equals(admitted.judgePrompt, scenario.dataset.judgePrompt)
+  },
+)
+
+it.prop(
+  '∀s_datasetWithoutOptionalEvidence_≡AdmittedLeavingItAbsent',
+  [Schema.Int, Schema.Int, Schema.Int, Schema.Int],
+  ([packDraw, ruleDraw, taskDraw, pairDraw]) => {
+    const scenario = scenarioFrom(packDraw, ruleDraw, taskDraw, pairDraw)
+    const outcome = admitDataset(
+      new AdmitDataset({
+        packs: scenario.dataset.packs,
+        taskSet: scenario.dataset.taskSet,
+        routingLabels: scenario.dataset.routingLabels,
+      }),
+    )
+    const admitted = Result.getOrThrow(outcome)
+    return Equal.equals(admitted.packs, scenario.dataset.packs) &&
+      admitted.pairLabels === undefined &&
+      admitted.judgePrompt === undefined
   },
 )

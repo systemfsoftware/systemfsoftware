@@ -1,76 +1,60 @@
 import { it } from '@effect/vitest'
-import { Equal, Result, Schema } from 'effect'
-import { ContradictionNotEvaluated } from '../eval-report.schema.js'
-import type { ContradictionState, ResolveRunOutcomeDecision, RunFault } from '../resolve-run-outcome.workflow.js'
+import { Equal, Match, Result, Schema } from 'effect'
+import type { ContradictionState, ResolveRunOutcomeDecision } from '../resolve-run-outcome.workflow.js'
 import {
+  ContradictionState as ContradictionStateSchema,
   ContradictionUnvalidated,
-  ContradictionValidated,
-  ContradictionValidityRefused,
   resolveRunOutcome,
   ResolveRunOutcomeCommand,
   RunCleanUnderRefusedValidity,
   RunCleanUnderUnvalidatedJudge,
   RunCleanUnderValidatedJudge,
   RunFailedOnWitnessedContradiction,
-  RunInputRefused,
+  RunFault as RunFaultSchema,
   RunNotYetEvaluated,
-  RunProviderError,
-  RunRefused,
 } from '../resolve-run-outcome.workflow.js'
 
-const STATE_TAGS = ['not-evaluated', 'validated', 'unvalidated', 'refused'] as const
-const FAULT_TAGS = ['none', 'input-refused', 'provider-error'] as const
-
-type StateTag = (typeof STATE_TAGS)[number]
-type FaultTag = (typeof FAULT_TAGS)[number]
-
-const stateOf = (tag: StateTag, witnessedFailures: number): ContradictionState => {
-  if (tag === 'validated') return new ContradictionValidated({ witnessedFailures })
-  if (tag === 'unvalidated') return new ContradictionUnvalidated({ witnessedFailures })
-  if (tag === 'refused') return new ContradictionValidityRefused({ reason: 'a one-class test split' })
-  return new ContradictionNotEvaluated()
-}
-
-const faultOf = (tag: FaultTag, detail: string): RunFault | undefined => {
-  if (tag === 'input-refused') return new RunInputRefused({ detail })
-  if (tag === 'provider-error') return new RunProviderError({ detail })
-  return undefined
-}
-
-const commandOf = (state: ContradictionState, fault: RunFault | undefined): ResolveRunOutcomeCommand =>
-  fault === undefined
-    ? new ResolveRunOutcomeCommand({ contradiction: state })
-    : new ResolveRunOutcomeCommand({ contradiction: state, fault })
-
 /** The outcome table of the High-Level Technical Design, written out independently. */
-const expectedOf = (
-  stateTag: StateTag,
-  faultTag: FaultTag,
-  witnessedFailures: number,
-  detail: string,
-): ResolveRunOutcomeDecision => {
-  const fault = faultOf(faultTag, detail)
-  if (fault !== undefined) return new RunRefused({ outcome: 2, fault })
-  if (stateTag === 'validated') {
-    return witnessedFailures > 0
-      ? new RunFailedOnWitnessedContradiction({ outcome: 1, witnessedFailures })
-      : new RunCleanUnderValidatedJudge({ outcome: 0 })
-  }
-  if (stateTag === 'unvalidated') return new RunCleanUnderUnvalidatedJudge({ outcome: 0 })
-  if (stateTag === 'refused') return new RunCleanUnderRefusedValidity({ outcome: 0 })
-  return new RunNotYetEvaluated({ outcome: 0 })
-}
+const rowOf = (state: ContradictionState): ResolveRunOutcomeDecision =>
+  Match.value(state).pipe(
+    Match.tag('ContradictionNotEvaluated', () => new RunNotYetEvaluated({ outcome: 0 })),
+    Match.tag(
+      'ContradictionValidated',
+      (validated) =>
+        validated.witnessedFailures > 0
+          ? new RunFailedOnWitnessedContradiction({ outcome: 1, witnessedFailures: validated.witnessedFailures })
+          : new RunCleanUnderValidatedJudge({ outcome: 0 }),
+    ),
+    Match.tag('ContradictionUnvalidated', () => new RunCleanUnderUnvalidatedJudge({ outcome: 0 })),
+    Match.tag('ContradictionValidityRefused', () => new RunCleanUnderRefusedValidity({ outcome: 0 })),
+    Match.exhaustive,
+  )
 
 const decisionOf = (command: ResolveRunOutcomeCommand): ResolveRunOutcomeDecision =>
   Result.getOrThrow(resolveRunOutcome(command))
+it.prop(
+  '∀s_contradictionState_≡OutcomeTableRow',
+  [ContradictionStateSchema],
+  ([state]) => {
+    const command = new ResolveRunOutcomeCommand({ contradiction: state })
+    return Equal.equals(decisionOf(command), rowOf(state))
+  },
+)
 
 it.prop(
-  '∀s_contradictionState×Fault_≡OutcomeTableRow',
-  [Schema.Literals(STATE_TAGS), Schema.Literals(FAULT_TAGS), Schema.Int, Schema.String],
-  ([stateTag, faultTag, witnessedFailures, detailDraw]) => {
-    const detail = `pack file named by the refusal ${detailDraw}`
-    const command = commandOf(stateOf(stateTag, witnessedFailures), faultOf(faultTag, detail))
-    return Equal.equals(decisionOf(command), expectedOf(stateTag, faultTag, witnessedFailures, detail))
+  '∀s_anyFault_≡RefusedCarryingTheFault',
+  [ContradictionStateSchema, RunFaultSchema],
+  ([state, fault]) => {
+    const command = new ResolveRunOutcomeCommand({ contradiction: state, fault })
+    return Match.value(decisionOf(command)).pipe(
+      Match.tag('RunRefused', (refused) => Equal.equals(refused.fault, fault)),
+      Match.tag('RunNotYetEvaluated', () => false),
+      Match.tag('RunFailedOnWitnessedContradiction', () => false),
+      Match.tag('RunCleanUnderValidatedJudge', () => false),
+      Match.tag('RunCleanUnderUnvalidatedJudge', () => false),
+      Match.tag('RunCleanUnderRefusedValidity', () => false),
+      Match.exhaustive,
+    )
   },
 )
 
@@ -79,7 +63,9 @@ it.prop(
   [Schema.Int],
   ([failuresDraw]) => {
     const witnessedFailures = 1 + Math.abs(failuresDraw)
-    const command = commandOf(new ContradictionUnvalidated({ witnessedFailures }), undefined)
+    const command = new ResolveRunOutcomeCommand({
+      contradiction: new ContradictionUnvalidated({ witnessedFailures }),
+    })
     return Equal.equals(decisionOf(command), new RunCleanUnderUnvalidatedJudge({ outcome: 0 }))
   },
 )

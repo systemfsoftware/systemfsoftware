@@ -119,7 +119,8 @@ it.prop(
   ],
   ([outcomes, iterations, confidence, seed]) => {
     const values: ReadonlyArray<number> = outcomes
-    const corrupted = values.with(Math.abs(seed) % values.length, 2 + (Math.abs(seed) % 5))
+    const outsideBinaryOf = (draw: number): number => (draw < 0 ? draw : draw + 2)
+    const corrupted = values.with(Math.abs(seed) % values.length, outsideBinaryOf(seed))
     return tagOf(commandOf(corrupted, iterations, confidence, seed)) === 'BootstrapRateIntervalNonBinaryValue'
   },
 )

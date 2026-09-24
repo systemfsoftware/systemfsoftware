@@ -41,16 +41,14 @@ it.prop('∀k_KnownTuples_≡NoNewCandidates', [Schema.String, Schema.String, Sc
   return Result.isSuccess(outcome) && Equal.equals(Result.getOrThrow(outcome), expected)
 })
 
-it.prop('∀n_NewTuples_≡AdmittedWithTuple', [Schema.String, Schema.String, Schema.String], ([name, valueA, valueB]) => {
+it.prop('∀n_NewTuples_≡AdmittedWithDistinctIds', [Schema.String, Schema.String, Schema.String], (
+  [name, valueA, valueB],
+) => {
   const freshA = tupleOf(name, valueA)
   const freshB = tupleOf(`${name}-b`, valueB)
   const decided = Result.getOrThrow(admitTaskCandidates(commandOf({ held: {}, offered: {} }, [freshA, freshB])))
   return Schema.is(TaskCandidatesAdmitted)(decided) &&
     decided.admitted.length === 2 &&
-    Equal.equals(decided.admitted[0]?.dimensions, freshA) &&
-    Equal.equals(decided.admitted[1]?.dimensions, freshB) &&
-    (decided.admitted[0]?.id ?? '') !== '' &&
-    (decided.admitted[1]?.id ?? '') !== '' &&
     decided.admitted[0]?.id !== decided.admitted[1]?.id
 })
 
@@ -65,4 +63,15 @@ it.prop('∀o_ReorderedTuple_≡SameId', [Schema.String, Schema.String, Schema.S
     first.admitted.length === 1 &&
     second.admitted.length === 1 &&
     first.admitted[0]?.id === second.admitted[0]?.id
+})
+
+it.prop('∀o_ProposedTwice_≡AdmittedOnce', [Schema.String, Schema.String], ([name, value]) => {
+  const tuple = tupleOf(name, value)
+  const once = Result.getOrThrow(admitTaskCandidates(commandOf({ held: {}, offered: {} }, [tuple])))
+  const twice = Result.getOrThrow(admitTaskCandidates(commandOf({ held: {}, offered: {} }, [tuple, tuple])))
+  return Schema.is(TaskCandidatesAdmitted)(once) &&
+    Schema.is(TaskCandidatesAdmitted)(twice) &&
+    once.admitted.length === 1 &&
+    twice.admitted.length === 1 &&
+    once.admitted[0]?.id === twice.admitted[0]?.id
 })

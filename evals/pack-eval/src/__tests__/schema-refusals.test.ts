@@ -8,10 +8,15 @@ const CRUST_PATH = '/packs/bakery/crust.md'
 
 const ruleFileOf = (text: string): RuleFile => new RuleFile({ path: CRUST_PATH, packId: 'bakery', stem: 'crust', text })
 
+const refusedPathOf = (text: string): string | null =>
+  Result.match(RuleFile.decode(ruleFileOf(text)), {
+    onFailure: (refusal) => refusal.path,
+    onSuccess: () => null,
+  })
+
 describe('rule file refusals', () => {
   it('refuses a file with no frontmatter block', () => {
-    const outcome = RuleFile.decode(ruleFileOf('just a body, no delimiters'))
-    expect(Result.isFailure(outcome)).toBe(true)
+    expect(refusedPathOf('just a body, no delimiters')).toBe(CRUST_PATH)
   })
 
   it('names the refused file', () => {
@@ -22,18 +27,15 @@ describe('rule file refusals', () => {
   })
 
   it('refuses unparseable yaml', () => {
-    const outcome = RuleFile.decode(ruleFileOf('---\ntitle: [unclosed\n---\nbody'))
-    expect(Result.isFailure(outcome)).toBe(true)
+    expect(refusedPathOf('---\ntitle: [unclosed\n---\nbody')).toBe(CRUST_PATH)
   })
 
   it('refuses a missing title', () => {
-    const outcome = RuleFile.decode(ruleFileOf('---\napplies_when:\n  - heuristics\ntags: []\n---\nbody'))
-    expect(Result.isFailure(outcome)).toBe(true)
+    expect(refusedPathOf('---\napplies_when:\n  - heuristics\ntags: []\n---\nbody')).toBe(CRUST_PATH)
   })
 
   it('refuses applies_when given as a bare string', () => {
-    const outcome = RuleFile.decode(ruleFileOf('---\ntitle: Crust\napplies_when: heuristics\ntags: []\n---\nbody'))
-    expect(Result.isFailure(outcome)).toBe(true)
+    expect(refusedPathOf('---\ntitle: Crust\napplies_when: heuristics\ntags: []\n---\nbody')).toBe(CRUST_PATH)
   })
 
   it('decodes a well-formed rule file', () => {
