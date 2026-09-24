@@ -2,6 +2,7 @@ import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Queue } from 'effect'
+import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import {
   crashingChild,
   neverChild,
@@ -31,6 +32,7 @@ const restartedAfterCrash = (childId: string) => (trace: ReadonlyArray<Superviso
   Arr.contains(startedIn(sinceTerminationOf(childId)(trace)), childId)
 
 Feature('Restarting the children a crash affects')
+  .withLayer(fiberMediumLayer)
   .body(({ scenario }) => {
     scenario(
       'A crash under rest-for-one stops the later siblings and restarts only those that should come back',

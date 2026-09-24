@@ -1,6 +1,5 @@
 import { it } from '@effect/vitest'
 import { Array as Arr, Match, Result } from 'effect'
-import { DrawnChildren, drawnChildrenOf } from '../../tests/__fixtures__/supervisor-boot.schema.js'
 import { initialStateOf } from '../kernel/initial-supervisor-state.js'
 import {
   interpretSupervisionEvent,
@@ -11,9 +10,18 @@ import {
 import { EventTime } from '../kernel/SupervisionLimits.schema.js'
 import type { StartChild, SupervisorCommands } from '../kernel/SupervisorCommand.schema.js'
 import { SupervisionPolicy } from '../kernel/SupervisorPolicy.schema.js'
-import type { ChildDeclaration, RestartStrategy, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
+import type { ChildDeclaration, RestartStrategy, RestartType, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
+import { DrawnChildren } from './supervisor-boot.schema.js'
 
 type Decide = typeof interpretSupervisionEvent
+
+interface DrawnChild {
+  readonly name: string
+  readonly restart: RestartType
+}
+
+const drawnChildrenOf = (drawn: DrawnChildren): ReadonlyArray<DrawnChild> =>
+  Arr.map(drawn, (child) => ({ name: child['name'], restart: child['restart'] }))
 
 const noCommands: SupervisorCommands = { stops: [], starts: [], arms: [], replies: [], terminates: [] }
 

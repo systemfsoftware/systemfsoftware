@@ -2,6 +2,7 @@ import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Duration, Effect, Match, Queue, Ref } from 'effect'
+import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { crashingChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
 const Feature = makeFeature({ it })
@@ -103,6 +104,7 @@ const slowStoppingTree = Effect.gen(function*() {
 })
 
 Feature('Supervising a supervisor')
+  .withLayer(fiberMediumLayer)
   .body(({ scenario }) => {
     scenario(
       'A nested supervisor that runs out of restart intensity takes its children down and ends',
