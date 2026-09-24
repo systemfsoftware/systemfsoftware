@@ -2,7 +2,7 @@ import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import type { LockConfig } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule, Stream } from 'effect'
+import { Deferred, Duration, Effect, Fiber, Layer, Match, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 
@@ -18,7 +18,6 @@ Feature('Daemon Leader Election')
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLockFake,
-      TestClock.layer(),
       Noop,
     ),
   )
@@ -32,8 +31,11 @@ Feature('Daemon Leader Election')
             Effect.gen(function*() {
               const counter = yield* Ref.make(0)
               const lock = yield* LeaderLock
-              const holder = yield* Effect.forkChild(lock.withLock('pipeline', Effect.never))
-              yield* Effect.yieldNow
+              const holderAcquired = yield* Deferred.make<void>()
+              const holder = yield* Effect.forkChild(
+                lock.withLock('pipeline', Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never)),
+              )
+              yield* Deferred.await(holderAcquired)
               return { counter, holder }
             }),
         ),
@@ -71,8 +73,11 @@ Feature('Daemon Leader Election')
             Effect.gen(function*() {
               const counter = yield* Ref.make(0)
               const lock = yield* LeaderLock
-              const holder = yield* Effect.forkChild(lock.withLock('pipeline', Effect.never))
-              yield* Effect.yieldNow
+              const holderAcquired = yield* Deferred.make<void>()
+              const holder = yield* Effect.forkChild(
+                lock.withLock('pipeline', Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never)),
+              )
+              yield* Deferred.await(holderAcquired)
               return { counter, holder }
             }),
         ),
@@ -124,12 +129,12 @@ Feature('Daemon Leader Election')
             () =>
               Effect.gen(function*() {
                 const observed = yield* Ref.make(0)
-                const acquired = yield* Latch.make(false)
+                const acquired = yield* Deferred.make<void>()
                 const lock = yield* LeaderLock
                 const holder = yield* Effect.forkChild(
-                  lock.withLock('pipeline', Effect.andThen(acquired.open, Effect.never)),
+                  lock.withLock('pipeline', Effect.andThen(Deferred.succeed(acquired, undefined), Effect.never)),
                 )
-                yield* acquired.await
+                yield* Deferred.await(acquired)
                 return { observed, holder }
               }),
           ),
@@ -165,7 +170,6 @@ Feature('Daemon Leader Election')
                   Match.exhaustive,
                 )
                 const health = yield* run.worker(worker)
-                yield* TestClock.adjust(Duration.millis(10))
                 return health
               }),
           ),
@@ -179,7 +183,7 @@ Feature('Daemon Leader Election')
     )
 
     scenario(
-      'A poll worker without lock config runs every tick regardless of held keys',
+      'A poll worker without lock config ticks regardless of held keys',
       Gherkin.Do.pipe(
         Given('a counter and a fiber holding the "pipeline" lock indefinitely')(
           'state',
@@ -187,28 +191,35 @@ Feature('Daemon Leader Election')
             Effect.gen(function*() {
               const counter = yield* Ref.make(0)
               const lock = yield* LeaderLock
-              const holder = yield* Effect.forkChild(lock.withLock('pipeline', Effect.never))
-              yield* Effect.yieldNow
+              const holderAcquired = yield* Deferred.make<void>()
+              const holder = yield* Effect.forkChild(
+                lock.withLock('pipeline', Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never)),
+              )
+              yield* Deferred.await(holderAcquired)
               return { counter, holder }
             }),
         ),
-        When('an unlocked poll worker runs for 50 ticks')(
+        When('an unlocked poll worker runs against the held key')(
           'count',
           (s) =>
             Effect.gen(function*() {
+              const firstTick = yield* Deferred.make<void>()
               const worker = Daemon.poll({
                 name: 'unlocked',
-                work: Ref.update(s.state.counter, (n) => n + 1),
+                work: Effect.andThen(
+                  Ref.update(s.state.counter, (n) => n + 1),
+                  Deferred.succeed(firstTick, undefined),
+                ),
                 interval: Duration.millis(1),
                 tick: { tickTimeout: Duration.seconds(90) },
                 lock: { mode: 'none' },
               })
               yield* run.worker(worker)
-              yield* TestClock.adjust(Duration.millis(50))
+              yield* Deferred.await(firstTick)
               return yield* Ref.get(s.state.counter)
             }),
         ),
-        Then('the worker incremented on most ticks (held key is irrelevant without lock config)')((s) =>
+        Then('the worker incremented (held key is irrelevant without lock config)')((s) =>
           Effect.sync(() => {
             expect(s.count).toBeGreaterThan(0)
           })

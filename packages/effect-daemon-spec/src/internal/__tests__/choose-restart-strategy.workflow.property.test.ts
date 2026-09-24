@@ -1,4 +1,4 @@
-import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@effect/vitest'
 import { Array, Match, Option } from 'effect'
 import { chooseRestartStrategy, type RestartDecisionOutcome } from '../choose-restart-strategy.workflow.js'
 import { DecideInput, type RestartStrategy } from '../RestartDecision.schema.js'
@@ -57,86 +57,82 @@ const commandWith = (
 
 const RESTARTING = { exitSuccess: false, intensityExceeded: false } as const
 
-describe('chooseRestartStrategy — invariants', () => {
-  it.prop(
-    '→Succeeded_Exit_=Continue',
-    [DecideInput],
-    ([input]) => tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: true }))) === 'Continue',
-  )
+it.prop(
+  '→Succeeded_Exit_=Continue',
+  [DecideInput],
+  ([input]) => tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: true }))) === 'Continue',
+)
 
-  it.prop(
-    '→Failed∧Exceeded_Decide_=Exhausted',
-    [DecideInput],
-    ([input]) =>
-      tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: false, intensityExceeded: true }))) === 'Exhausted',
-  )
+it.prop(
+  '→Failed∧Exceeded_Decide_=Exhausted',
+  [DecideInput],
+  ([input]) =>
+    tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: false, intensityExceeded: true }))) === 'Exhausted',
+)
 
-  it.prop(
-    '→Failed∧¬Exceeded_Decide_=Restart',
-    [DecideInput],
-    ([input]) => tagOf(chooseRestartStrategy(commandWith(input, RESTARTING))) === 'Restart',
-  )
+it.prop(
+  '→Failed∧¬Exceeded_Decide_=Restart',
+  [DecideInput],
+  ([input]) => tagOf(chooseRestartStrategy(commandWith(input, RESTARTING))) === 'Restart',
+)
 
-  it.prop(
-    '→Restart_Indices_≠∅',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(chooseRestartStrategy(commandWith(input, RESTARTING)))
-      return indices !== null && indices.length > 0
-    },
-  )
-})
+it.prop(
+  '→Restart_Indices_≠∅',
+  [DecideInput],
+  ([input]) => {
+    const indices = indicesOf(chooseRestartStrategy(commandWith(input, RESTARTING)))
+    return indices !== null && indices.length > 0
+  },
+)
 
-describe('chooseRestartStrategy — restart index invariants', () => {
-  it.prop(
-    '→OneForOne_Indices_={Failed}',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'one_for_one' })))
-      return indices !== null && indices.length === 1 && indices[0] === input.failedIndex
-    },
-  )
+it.prop(
+  '→OneForOne_Indices_={Failed}',
+  [DecideInput],
+  ([input]) => {
+    const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'one_for_one' })))
+    return indices !== null && indices.length === 1 && indices[0] === input.failedIndex
+  },
+)
 
-  it.prop(
-    '→OneForAll_Indices_=All',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'one_for_all' })))
-      return indices !== null &&
-        indices.length === input.totalChildren &&
-        indices[0] === 0 &&
-        indices[indices.length - 1] === input.totalChildren - 1
-    },
-  )
+it.prop(
+  '→OneForAll_Indices_=All',
+  [DecideInput],
+  ([input]) => {
+    const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'one_for_all' })))
+    return indices !== null &&
+      indices.length === input.totalChildren &&
+      indices[0] === 0 &&
+      indices[indices.length - 1] === input.totalChildren - 1
+  },
+)
 
-  it.prop(
-    '→RestForOne_Indices_=Failed..End',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'rest_for_one' })))
-      return indices !== null &&
-        indices.length === input.totalChildren - input.failedIndex &&
-        indices[0] === input.failedIndex &&
-        indices[indices.length - 1] === input.totalChildren - 1
-    },
-  )
+it.prop(
+  '→RestForOne_Indices_=Failed..End',
+  [DecideInput],
+  ([input]) => {
+    const indices = indicesOf(chooseRestartStrategy(commandWith(input, { ...RESTARTING, strategy: 'rest_for_one' })))
+    return indices !== null &&
+      indices.length === input.totalChildren - input.failedIndex &&
+      indices[0] === input.failedIndex &&
+      indices[indices.length - 1] === input.totalChildren - 1
+  },
+)
 
-  it.prop(
-    '∀s_Indices_⊇Ascending',
-    [DecideInput],
-    ([input]) => {
-      const indices = indicesOf(chooseRestartStrategy(commandWith(input, RESTARTING)))
-      if (indices === null) return false
-      const strictlyIncreasing = indices.length <= 1 ||
-        indices.every((value, idx) =>
-          idx === 0 ||
-          Option.match(Array.get(indices, idx - 1), {
-            onNone: () => false,
-            onSome: (prev) => value > prev,
-          })
-        )
-      const withinRange = indices.every((idxVal) => idxVal >= 0 && idxVal < input.totalChildren)
-      return strictlyIncreasing && withinRange
-    },
-  )
-})
+it.prop(
+  '∀s_Indices_⊇Ascending',
+  [DecideInput],
+  ([input]) => {
+    const indices = indicesOf(chooseRestartStrategy(commandWith(input, RESTARTING)))
+    if (indices === null) return false
+    const strictlyIncreasing = indices.length <= 1 ||
+      indices.every((value, idx) =>
+        idx === 0 ||
+        Option.match(Array.get(indices, idx - 1), {
+          onNone: () => false,
+          onSome: (prev) => value > prev,
+        })
+      )
+    const withinRange = indices.every((idxVal) => idxVal >= 0 && idxVal < input.totalChildren)
+    return strictlyIncreasing && withinRange
+  },
+)

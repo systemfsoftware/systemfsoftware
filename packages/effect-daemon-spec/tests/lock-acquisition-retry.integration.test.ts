@@ -6,10 +6,11 @@ import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule } from 'effect'
+import { Context, Deferred, Duration, Effect, Fiber, Layer, Match, Option, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
+import { advanceUntil } from './__fixtures__/TestUtils.js'
 
 const Feature = makeFeature({ it })
 
@@ -22,12 +23,53 @@ const quickCycleSchedule = Schedule.duration(Duration.millis(1)).pipe(
   Schedule.concat(Schedule.duration(Duration.millis(1))),
 )
 
+interface RefusalTallyShape {
+  readonly refusals: Ref.Ref<number>
+  readonly threeRefusals: Deferred.Deferred<void>
+}
+
+class RefusalTally extends Context.Service<RefusalTally, RefusalTallyShape>()(
+  '@systemfsoftware/effect-daemon-spec/tests/RefusalTally',
+) {}
+const TallyingLeaderLock: Layer.Layer<LeaderLock, never, LeaderLock | RefusalTally> = Layer.effect(
+  LeaderLock,
+  Effect.gen(function*() {
+    const inner = yield* LeaderLock
+    const tally = yield* RefusalTally
+    return LeaderLock.of({
+      withLock: (key, self) =>
+        Effect.tap(inner.withLock(key, self), (result) =>
+          Option.isNone(result)
+            ? Effect.gen(function*() {
+              const seen = yield* Ref.updateAndGet(tally.refusals, (n) => n + 1)
+              if (seen >= 3) {
+                yield* Deferred.succeed(tally.threeRefusals, undefined)
+              }
+            })
+            : Effect.void),
+    })
+  }),
+)
+
+const RefusalTallyLayer = Layer.effect(
+  RefusalTally,
+  Effect.gen(function*() {
+    const refusals = yield* Ref.make(0)
+    const threeRefusals = yield* Deferred.make<void>()
+    return { refusals, threeRefusals }
+  }),
+)
+
+const TallyLayers = Layer.mergeAll(
+  Layer.provideMerge(TallyingLeaderLock.pipe(Layer.provide(LeaderLockFake)), RefusalTallyLayer),
+  Noop,
+)
+
 Feature('Lock acquisition retry on contention')
   .withLayer(Noop)
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLockFake,
-      TestClock.layer(),
       Noop,
     ),
   )
@@ -43,10 +85,14 @@ Feature('Lock acquisition retry on contention')
               Effect.gen(function*() {
                 const counter = yield* Ref.make(0)
                 const lock = yield* LeaderLock
+                const holderAcquired = yield* Deferred.make<void>()
                 const holder = yield* Effect.forkChild(
-                  lock.withLock('pipeline', Effect.sleep(Duration.millis(50))),
+                  lock.withLock(
+                    'pipeline',
+                    Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.sleep(Duration.millis(50))),
+                  ),
                 )
-                yield* Effect.yieldNow
+                yield* Deferred.await(holderAcquired)
                 return { counter, holder }
               }),
           ),
@@ -54,56 +100,60 @@ Feature('Lock acquisition retry on contention')
             `a ${row.kind} that retries lock acquisition runs against the contended resource for two hundred virtual milliseconds`,
           )(
             'readyOpen',
-            (s) =>
-              Match.value(row.kind).pipe(
-                Match.when('worker', () =>
-                  Effect.gen(function*() {
-                    const worker = Daemon.poll({
-                      name: 'patient-worker',
-                      work: Ref.update(s.state.counter, (n) => n + 1),
-                      interval: Duration.millis(1),
-                      lock: {
-                        key: 'pipeline',
-                        mode: 'required',
-                        acquireRetryBackoff: Schedule.exponential(Duration.millis(10), 1),
-                      },
-                      tick: { tickTimeout: Duration.seconds(90) },
-                    })
-                    yield* run.worker(worker)
-                    yield* TestClock.adjust(Duration.millis(200))
-                    return true
-                  })),
-                Match.when('supervisor', () =>
-                  Effect.gen(function*() {
-                    const child = Daemon.poll({
-                      name: 'patient-child',
-                      work: Ref.update(s.state.counter, (n) => n + 1),
-                      interval: Duration.millis(1),
-                      tick: { tickTimeout: Duration.seconds(90) },
-                      lock: { mode: 'none' },
-                    })
-                    const supervisor = oneForOne({
-                      name: 'patient-parent',
-                      children: [child],
-                      lock: {
-                        key: 'pipeline',
-                        mode: 'required',
-                        acquireRetryBackoff: Schedule.exponential(Duration.millis(10), 1),
-                      },
-                      supervision: Supervision.worker(Duration.minutes(5)),
-                    })
-                    const supHealth = yield* run.supervisor(supervisor)
-                    yield* TestClock.adjust(Duration.millis(200))
-                    return yield* supHealth.ready.await.pipe(
-                      Effect.timeout('0 millis'),
-                      Effect.match({
-                        onFailure: () => false,
-                        onSuccess: () => true,
-                      }),
-                    )
-                  })),
-                Match.exhaustive,
-              ),
+            row.kind === 'worker'
+              ? (s) =>
+                Effect.gen(function*() {
+                  const firstWork = yield* Deferred.make<void>()
+                  const signalledWork = Effect.andThen(
+                    Ref.update(s.state.counter, (n) => n + 1),
+                    Deferred.succeed(firstWork, undefined),
+                  )
+                  const worker = Daemon.poll({
+                    name: 'patient-worker',
+                    work: signalledWork,
+                    interval: Duration.millis(1),
+                    lock: {
+                      key: 'pipeline',
+                      mode: 'required',
+                      acquireRetryBackoff: Schedule.exponential(Duration.millis(10), 1),
+                    },
+                    tick: { tickTimeout: Duration.seconds(90) },
+                  })
+                  yield* run.worker(worker)
+                  yield* Effect.forkChild(TestClock.adjust(Duration.millis(200)))
+                  yield* Deferred.await(firstWork)
+                  return true
+                })
+              : (s) =>
+                Effect.gen(function*() {
+                  const firstWork = yield* Deferred.make<void>()
+                  const signalledWork = Effect.andThen(
+                    Ref.update(s.state.counter, (n) => n + 1),
+                    Deferred.succeed(firstWork, undefined),
+                  )
+                  const child = Daemon.poll({
+                    name: 'patient-child',
+                    work: signalledWork,
+                    interval: Duration.millis(1),
+                    tick: { tickTimeout: Duration.seconds(90) },
+                    lock: { mode: 'none' },
+                  })
+                  const supervisor = oneForOne({
+                    name: 'patient-parent',
+                    children: [child],
+                    lock: {
+                      key: 'pipeline',
+                      mode: 'required',
+                      acquireRetryBackoff: Schedule.exponential(Duration.millis(10), 1),
+                    },
+                    supervision: Supervision.worker(Duration.minutes(5)),
+                  })
+                  const supHealth = yield* run.supervisor(supervisor)
+                  yield* Effect.forkChild(TestClock.adjust(Duration.millis(200)))
+                  yield* Deferred.await(firstWork)
+                  yield* supHealth.ready.await
+                  return true
+                }),
           ),
           Then('the daemon performs work after the resource frees')((s) =>
             Effect.sync(() => {
@@ -131,10 +181,14 @@ Feature('Lock acquisition retry on contention')
               Effect.gen(function*() {
                 const counter = yield* Ref.make(0)
                 const lock = yield* LeaderLock
+                const holderAcquired = yield* Deferred.make<void>()
                 const holder = yield* Effect.forkChild(
-                  lock.withLock('pipeline', Effect.sleep(Duration.millis(50))),
+                  lock.withLock(
+                    'pipeline',
+                    Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.sleep(Duration.millis(50))),
+                  ),
                 )
-                yield* Effect.yieldNow
+                yield* Deferred.await(holderAcquired)
                 return { counter, holder }
               }),
           ),
@@ -146,9 +200,14 @@ Feature('Lock acquisition retry on contention')
               Match.value(row.kind).pipe(
                 Match.when('worker', () =>
                   Effect.gen(function*() {
+                    const firstWork = yield* Deferred.make<void>()
+                    const signalledWork = Effect.andThen(
+                      Ref.update(s.state.counter, (n) => n + 1),
+                      Deferred.succeed(firstWork, undefined),
+                    )
                     const worker = Daemon.poll({
                       name: 'finite-retry-worker',
-                      work: Ref.update(s.state.counter, (n) => n + 1),
+                      work: signalledWork,
                       interval: Duration.millis(1),
                       lock: {
                         key: 'pipeline',
@@ -158,14 +217,19 @@ Feature('Lock acquisition retry on contention')
                       tick: { tickTimeout: Duration.seconds(90) },
                     })
                     yield* run.worker(worker)
-                    yield* TestClock.adjust(Duration.millis(200))
+                    yield* advanceUntil(firstWork, Duration.millis(1))
                     return true
                   })),
                 Match.when('supervisor', () =>
                   Effect.gen(function*() {
+                    const firstWork = yield* Deferred.make<void>()
+                    const signalledWork = Effect.andThen(
+                      Ref.update(s.state.counter, (n) => n + 1),
+                      Deferred.succeed(firstWork, undefined),
+                    )
                     const child = Daemon.poll({
                       name: 'finite-retry-child',
-                      work: Ref.update(s.state.counter, (n) => n + 1),
+                      work: signalledWork,
                       interval: Duration.millis(1),
                       tick: { tickTimeout: Duration.seconds(90) },
                       lock: { mode: 'none' },
@@ -181,14 +245,9 @@ Feature('Lock acquisition retry on contention')
                       supervision: Supervision.worker(Duration.minutes(5)),
                     })
                     const supHealth = yield* run.supervisor(supervisor)
-                    yield* TestClock.adjust(Duration.millis(200))
-                    return yield* supHealth.ready.await.pipe(
-                      Effect.timeout('0 millis'),
-                      Effect.match({
-                        onFailure: () => false,
-                        onSuccess: () => true,
-                      }),
-                    )
+                    yield* advanceUntil(firstWork, Duration.millis(1))
+                    yield* supHealth.ready.await
+                    return true
                   })),
                 Match.exhaustive,
               ),
@@ -207,37 +266,50 @@ Feature('Lock acquisition retry on contention')
           And('the holder fiber has completed')((s) => Fiber.await(s.state.holder).pipe(Effect.asVoid)),
         ),
     )
+  })
 
+Feature('Lock acquisition tally on contention')
+  .withScenarioLayer(TallyLayers)
+  .withLayer(Noop)
+  .body(({ scenarioOutline }) => {
     scenarioOutline(
-      'A <kind> with a finite retry schedule cycles indefinitely while lock is held forever, and acquires after leader releases',
+      'A <kind> with a finite retry schedule cycles while the lock is held, and acquires after the leader releases',
       [{ kind: 'worker' }, { kind: 'supervisor' }],
       (row) =>
         Gherkin.Do.pipe(
-          Given('a fiber holding the shared resource indefinitely')(
+          Given('the shared resource is held while refusals are tallied')(
             'state',
             () =>
               Effect.gen(function*() {
                 const counter = yield* Ref.make(0)
-                const acquired = yield* Latch.make(false)
                 const lock = yield* LeaderLock
-                const holder = yield* Effect.forkChild(
-                  lock.withLock('pipeline', Effect.andThen(acquired.open, Effect.never)),
+                const tally = yield* RefusalTally
+                const firstWork = yield* Deferred.make<void>()
+                const holderAcquired = yield* Deferred.make<void>()
+                const holder = yield* Effect.forkScoped(
+                  lock.withLock(
+                    'pipeline',
+                    Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never),
+                  ),
+                  { startImmediately: true },
                 )
-                yield* acquired.await
-                return { counter, holder, acquired }
+                yield* Deferred.await(holderAcquired)
+                return { counter, firstWork, holder, tally }
               }),
           ),
-          When(
-            `a ${row.kind} with a finite retry schedule runs against the held resource for one second of virtual time`,
-          )(
+          When(`a ${row.kind} retries against the held resource and then runs after release`)(
             'readyOpen',
             (s) =>
               Match.value(row.kind).pipe(
                 Match.when('worker', () =>
                   Effect.gen(function*() {
+                    const signalledWork = Effect.andThen(
+                      Ref.update(s.state.counter, (n) => n + 1),
+                      Deferred.succeed(s.state.firstWork, undefined),
+                    )
                     const worker = Daemon.poll({
-                      name: 'infinite-cycle-worker',
-                      work: Ref.update(s.state.counter, (n) => n + 1),
+                      name: 'tally-cycle-worker',
+                      work: signalledWork,
                       interval: Duration.millis(1),
                       lock: {
                         key: 'pipeline',
@@ -247,24 +319,28 @@ Feature('Lock acquisition retry on contention')
                       tick: { tickTimeout: Duration.seconds(90) },
                     })
                     yield* run.worker(worker)
-                    yield* TestClock.adjust(Duration.seconds(1))
-                    const countAfterContention = yield* Ref.get(s.state.counter)
+                    yield* advanceUntil(s.state.tally.threeRefusals, Duration.millis(1))
+                    const countWhileHeld = yield* Ref.get(s.state.counter)
                     yield* Fiber.interrupt(s.state.holder)
-                    yield* TestClock.adjust(Duration.millis(200))
+                    yield* advanceUntil(s.state.firstWork, Duration.millis(1))
                     const countAfterRelease = yield* Ref.get(s.state.counter)
-                    return { countAfterContention, countAfterRelease }
+                    return { countWhileHeld, countAfterRelease }
                   })),
                 Match.when('supervisor', () =>
                   Effect.gen(function*() {
+                    const signalledWork = Effect.andThen(
+                      Ref.update(s.state.counter, (n) => n + 1),
+                      Deferred.succeed(s.state.firstWork, undefined),
+                    )
                     const child = Daemon.poll({
-                      name: 'infinite-cycle-child',
-                      work: Ref.update(s.state.counter, (n) => n + 1),
+                      name: 'tally-cycle-child',
+                      work: signalledWork,
                       interval: Duration.millis(1),
                       tick: { tickTimeout: Duration.seconds(90) },
                       lock: { mode: 'none' },
                     })
                     const supervisor = oneForOne({
-                      name: 'infinite-cycle-parent',
+                      name: 'tally-cycle-parent',
                       children: [child],
                       lock: {
                         key: 'pipeline',
@@ -274,29 +350,23 @@ Feature('Lock acquisition retry on contention')
                       supervision: Supervision.worker(Duration.minutes(5)),
                     })
                     const supHealth = yield* run.supervisor(supervisor)
-                    yield* TestClock.adjust(Duration.seconds(1))
-                    const countAfterContention = yield* Ref.get(s.state.counter)
+                    yield* advanceUntil(s.state.tally.threeRefusals, Duration.millis(1))
+                    const countWhileHeld = yield* Ref.get(s.state.counter)
                     yield* Fiber.interrupt(s.state.holder)
-                    yield* TestClock.adjust(Duration.millis(200))
+                    yield* advanceUntil(s.state.firstWork, Duration.millis(1))
+                    yield* supHealth.ready.await
                     const countAfterRelease = yield* Ref.get(s.state.counter)
-                    const ready = yield* supHealth.ready.await.pipe(
-                      Effect.timeout('0 millis'),
-                      Effect.match({
-                        onFailure: () => false,
-                        onSuccess: () => true,
-                      }),
-                    )
-                    return { countAfterContention, countAfterRelease, ready }
+                    return { countWhileHeld, countAfterRelease }
                   })),
                 Match.exhaustive,
               ),
           ),
           Then('no work executes while the lock is held')((s) =>
             Effect.sync(() => {
-              expect(s.readyOpen.countAfterContention).toBe(0)
+              expect(s.readyOpen.countWhileHeld).toBe(0)
             })
           ),
-          And('work eventually runs after the holder releases')((s) =>
+          And('work runs after the holder releases')((s) =>
             Effect.sync(() => {
               expect(s.readyOpen.countAfterRelease).toBeGreaterThan(0)
             })

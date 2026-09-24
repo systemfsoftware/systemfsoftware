@@ -285,10 +285,6 @@ Feature('OneForOne Strategy')
               yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
               const countRestarts = () =>
                 Effect.map(s.spy.getRestarts(), (rs) => rs.filter((r) => r.name === 'backoff-sequence').length)
-              // Let the first failure's restart decision land before touching the clock.
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
               const atStart = yield* countRestarts()
               yield* TestClock.adjust(Duration.millis(9))
               const at9 = yield* countRestarts()

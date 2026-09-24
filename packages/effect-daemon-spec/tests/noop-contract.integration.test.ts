@@ -4,7 +4,6 @@ import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer } from 'effect'
-import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 
 const withLock = <A, E, R>(
@@ -23,7 +22,6 @@ Feature('Noop Contract')
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLock.Noop,
-      TestClock.layer(),
     ),
   )
   .body(({ scenario }) => {

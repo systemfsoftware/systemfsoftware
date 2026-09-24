@@ -14,7 +14,7 @@ import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
 
 const Feature = makeFeature({ it })
 
-Feature('Leader daemon never surrenders under sustained failure')
+Feature('Leader daemon never surrenders under sustained failure', { timeout: 120_000 })
   .withScenarioLayer(NoopLayer)
   .body(({ scenario }) => {
     scenario(

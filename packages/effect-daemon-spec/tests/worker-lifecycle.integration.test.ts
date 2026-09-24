@@ -81,11 +81,9 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(5))
             const countBeforePause = yield* CounterRef.read(s.counterRef)
             yield* health.paused.close
-            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countWhilePaused = yield* CounterRef.read(s.counterRef)
             yield* health.paused.open
-            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countAfterResume = yield* CounterRef.read(s.counterRef)
             return { countBeforePause, countWhilePaused, countAfterResume }

@@ -5,7 +5,7 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Latch, Metric, Ref, Result, Schedule, Stream } from 'effect'
+import { Deferred, Duration, Effect, Latch, Metric, Ref, Result, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -17,20 +17,21 @@ Feature('Health Latch Lifecycle')
   .withScenarioLayer(NoopLayer)
   .body(({ scenario }) => {
     scenario(
-      'Worker starts with ready closed and healthy open',
+      'A worker stays not-ready until its first tick finishes, and is healthy from the start',
       Gherkin.Do.pipe(
-        When('a poll worker is started without advancing time')('health', () =>
+        Given('a first tick held shut by a gate')('gate', () => Deferred.make<void>()),
+        When('a poll worker whose first tick waits on the gate is started')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.poll({
               name: 'latch-init-worker',
-              work: Effect.void,
+              work: Deferred.await(s.gate),
               interval: Duration.millis(1),
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },
             })
             return yield* run.worker(worker)
           })),
-        Then('ready is closed')((s) =>
+        Then('ready is still closed')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
             Effect.result,
@@ -43,6 +44,9 @@ Feature('Health Latch Lifecycle')
           )
         ),
         And('healthy is open')((s) => s.health.healthy.await),
+        And('once the gate opens, ready opens')((s) =>
+          Effect.andThen(Deferred.succeed(s.gate, undefined), s.health.ready.await)
+        ),
       ),
     )
 
@@ -65,27 +69,31 @@ Feature('Health Latch Lifecycle')
     )
 
     scenario(
-      'Supervisor starts with ready closed and healthy open',
+      'A supervisor stays not-ready until its child first ticks, and is healthy from the start',
       Gherkin.Do.pipe(
-        When('a supervisor is started without advancing time')('health', () =>
-          Effect.gen(function*() {
-            const sup = oneForOne({
-              name: 'latch-init-sup',
-              children: [
-                Daemon.poll({
-                  name: 'latch-init-sup-child',
-                  work: Effect.void,
-                  interval: Duration.millis(1),
-                  tick: { tickTimeout: Duration.seconds(90) },
-                  lock: { mode: 'none' },
-                }),
-              ],
-              supervision: Supervision.worker(Duration.minutes(5)),
-              lock: { mode: 'none' },
-            })
-            return yield* run.supervisor(sup)
-          })),
-        Then('ready is closed')((s) =>
+        Given("a child's first tick held shut by a gate")('gate', () => Deferred.make<void>()),
+        When('a supervisor whose child first tick waits on the gate is started')(
+          'health',
+          (s) =>
+            Effect.gen(function*() {
+              const sup = oneForOne({
+                name: 'latch-init-sup',
+                children: [
+                  Daemon.poll({
+                    name: 'latch-init-sup-child',
+                    work: Deferred.await(s.gate),
+                    interval: Duration.millis(1),
+                    tick: { tickTimeout: Duration.seconds(90) },
+                    lock: { mode: 'none' },
+                  }),
+                ],
+                supervision: Supervision.worker(Duration.minutes(5)),
+                lock: { mode: 'none' },
+              })
+              return yield* run.supervisor(sup)
+            }),
+        ),
+        Then('ready is still closed')((s) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
             Effect.result,
@@ -98,6 +106,9 @@ Feature('Health Latch Lifecycle')
           )
         ),
         And('healthy is open')((s) => s.health.healthy.await),
+        And('once the gate opens, ready opens')((s) =>
+          Effect.andThen(Deferred.succeed(s.gate, undefined), s.health.ready.await)
+        ),
       ),
     )
 
@@ -127,14 +138,15 @@ Feature('Health Latch Lifecycle')
     )
 
     scenario(
-      'Worker health metrics match initial latch states',
+      'Worker health metrics match latch states before the first tick finishes',
       Gherkin.Do.pipe(
-        When('worker health is allocated through a running worker')('out', () =>
+        Given('a first tick held shut by a gate')('gate', () => Deferred.make<void>()),
+        When('worker health is read while the first tick waits on the gate')('out', (s) =>
           Effect.gen(function*() {
             const daemon = 'metric-init-worker'
             const worker = Daemon.poll({
               name: daemon,
-              work: Effect.void,
+              work: Deferred.await(s.gate),
               interval: Duration.millis(1),
               tick: { tickTimeout: Duration.seconds(90) },
               lock: { mode: 'none' },

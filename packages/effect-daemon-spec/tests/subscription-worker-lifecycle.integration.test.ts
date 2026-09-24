@@ -51,7 +51,6 @@ Feature('Subscription Worker Lifecycle')
             const acquired = yield* Ref.get(s.acquiredRef)
             expect(acquired).toBe(true)
             yield* health.paused.close
-            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(5))
             return health
           })),
