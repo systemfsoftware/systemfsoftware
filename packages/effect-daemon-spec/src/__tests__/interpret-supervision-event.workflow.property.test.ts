@@ -32,6 +32,8 @@ import { SupervisorCore } from '../kernel/SupervisorState.schema.js'
 import type { ChildInstance, ChildStatus } from '../kernel/SupervisorState.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
 
+const CeilingWithinQuadraticFoldBudget = Ceiling.pipe(Schema.check(Schema.isLessThanOrEqualTo(32)))
+
 const PERIOD_MILLIS = 100
 
 // The test-side oracle for R8's schedule: mathematically min(cap, base * multiplier**k)
@@ -734,7 +736,7 @@ it.prop(
 
 it.prop(
   '∀c_DynamicStarts_≤Ceiling',
-  [Ceiling, EventTime],
+  [CeilingWithinQuadraticFoldBudget, EventTime],
   ([ceiling, at0]) => {
     const policy = policyWith({
       strategy: 'one_for_one',
