@@ -237,7 +237,7 @@ export const sharedConfig = {
     provide: { '@systemfsoftware/vitest:property-check': propertyCheckDefaults },
     ...(isAgent ? { bail: 1 } : {}),
     coverage: {
-      enabled: isCI || process.env['COVERAGE'] === 'true',
+      enabled: process.env['COVERAGE'] === 'true',
       provider: 'v8',
       reporter: ['json', 'html', 'lcov'],
     },
