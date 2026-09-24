@@ -10,6 +10,7 @@ import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-priva
 import { modelFixtureImportsSubject } from './rules/model-fixture-imports-subject.js'
 import { noAssertInProperty } from './rules/no-assert-in-property.js'
 import { noBehaviourlessAssertion } from './rules/no-behaviourless-assertion.js'
+import { noEffectInSyncProp } from './rules/no-effect-in-sync-prop.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noNestedQuantification } from './rules/no-nested-quantification.js'
 import { noPseudoGherkinUnitTests } from './rules/no-pseudo-gherkin-unit-tests.js'
@@ -60,6 +61,7 @@ const recommendedRules = {
   [rule('no-pseudo-gherkin-unit-tests')]: 'error',
   [rule('ban-raw-span-name-emit')]: 'error',
   [rule('trace-test-requires-taxonomy')]: 'error',
+  [rule('no-effect-in-sync-prop')]: 'error',
 } as const
 
 export default {
@@ -95,6 +97,7 @@ export default {
     'model-fixture-imports-subject': modelFixtureImportsSubject,
     'ban-raw-span-name-emit': banRawSpanNameEmit,
     'trace-test-requires-taxonomy': traceTestRequiresTaxonomy,
+    'no-effect-in-sync-prop': noEffectInSyncProp,
   },
   configs: {
     recommended: {

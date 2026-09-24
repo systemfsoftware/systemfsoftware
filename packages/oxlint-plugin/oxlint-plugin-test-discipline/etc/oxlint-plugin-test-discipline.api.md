@@ -40,6 +40,7 @@ const _default: {
         'model-fixture-imports-subject': Rule;
         'ban-raw-span-name-emit': Rule;
         'trace-test-requires-taxonomy': Rule;
+        'no-effect-in-sync-prop': Rule;
     };
     configs: {
         recommended: {
