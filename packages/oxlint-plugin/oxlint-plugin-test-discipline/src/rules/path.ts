@@ -1,5 +1,12 @@
 import { Array as A, Schema as S } from 'effect'
-import { RAW_VITEST_PACKAGES, SANCTIONED_TEST_DIRS, TEST_BASENAME, TEST_TREE_DIRS } from './path.config.js'
+import {
+  CONTRACT_SUFFIX,
+  INTEGRATION_SUFFIX,
+  RAW_VITEST_PACKAGES,
+  SANCTIONED_TEST_DIRS,
+  TEST_BASENAME,
+  TEST_TREE_DIRS,
+} from './path.config.js'
 
 const PathSegments = S.NonEmptyArray(S.String)
 
@@ -30,6 +37,9 @@ export const isInConfiguredTestDir = (filename: string, dirs: readonly string[])
   directoriesOf(filename).some((segment) => dirs.includes(segment))
 
 export const isTestFile = (basename: string): boolean => TEST_BASENAME.test(basename)
+
+export const isBehaviourBasename = (basename: string): boolean =>
+  basename.endsWith(INTEGRATION_SUFFIX) || basename.endsWith(CONTRACT_SUFFIX)
 
 const CELL_SUFFIX = /\.([^.]+)\.[cm]?tsx?$/
 

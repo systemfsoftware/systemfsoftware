@@ -11,8 +11,7 @@ import {
   TOO_MANY_FEATURES_FIX,
   TOO_MANY_FEATURES_NAME,
 } from './behaviour-one-feature-per-file.config.js'
-import { INTEGRATION_SUFFIX } from './path.config.js'
-import { basenameOf } from './path.js'
+import { basenameOf, isBehaviourBasename } from './path.js'
 
 export type MessageIds = 'tooFewFeatures' | 'tooManyFeatures'
 
@@ -31,8 +30,6 @@ const isFeatureCallStatement = (statement: ESTree.Program['body'][number]): bool
   if (statement.expression.type !== 'CallExpression') return false
   return rootCalleeName(statement.expression.callee) === 'Feature'
 }
-
-const isBehaviourTest = (basename: string): boolean => basename.endsWith(INTEGRATION_SUFFIX)
 
 const findSecondFeatureCall = (program: ESTree.Program): ESTree.Node | null => {
   let seen = 0
@@ -64,7 +61,7 @@ export const behaviourOneFeaturePerFile = defineRule({
   create(context: Context) {
     return {
       'Program:exit'(node: ESTree.Program) {
-        if (!isBehaviourTest(basenameOf(context.filename))) return
+        if (!isBehaviourBasename(basenameOf(context.filename))) return
         const excess = findSecondFeatureCall(node)
         if (excess !== null) {
           const total = countFeatureCalls(node)

@@ -14,6 +14,7 @@ export const TEST_TREE_DIRS: ReadonlySet<string> = new Set([...SANCTIONED_TEST_D
 
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
+export const CONTRACT_SUFFIX = '.contract.test.ts' as const
 export const DIFFERENTIAL_SUFFIX = '.differential.test.ts' as const
 
 export const CONFORMANCE_SUFFIX = '.conformance.test.ts' as const

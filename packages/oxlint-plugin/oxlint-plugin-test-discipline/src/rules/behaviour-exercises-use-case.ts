@@ -7,8 +7,8 @@ import {
   NO_SUBJECT_IMPORT_FIX,
   NO_SUBJECT_IMPORT_NAME,
 } from './behaviour-exercises-use-case.config.js'
-import { FOREIGN_RUNNERS, GHERKIN_PACKAGE, INTEGRATION_SUFFIX } from './path.config.js'
-import { basenameOf } from './path.js'
+import { FOREIGN_RUNNERS, GHERKIN_PACKAGE } from './path.config.js'
+import { basenameOf, isBehaviourBasename } from './path.js'
 
 export type MessageIds = 'noSubjectImport'
 
@@ -45,8 +45,6 @@ const isFoundationImport = (source: string, filename: string): boolean => {
     source.startsWith('node:')
   )
 }
-
-const isBehaviourTest = (basename: string): boolean => basename.endsWith(INTEGRATION_SUFFIX)
 
 /** The stem of a path with its final extension stripped, for identity comparisons. */
 const stemOf = (file: string): string => file.replace(/\.[^/]+$/, '')
@@ -140,7 +138,7 @@ export const behaviourExercisesUseCase = defineRule({
         if (typeof node.value === 'string' && DIST_SEGMENT.test(node.value)) reached = true
       },
       'Program:exit'(node: ESTree.Program) {
-        if (!isBehaviourTest(basenameOf(context.filename))) return
+        if (!isBehaviourBasename(basenameOf(context.filename))) return
         if (reached) return
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration') continue
