@@ -8,6 +8,7 @@ import type { ChildRef, DecisionKind, ObservedCommand, ObservedEvent, ObservedSt
 import { ConformanceTrace } from '../Trace.schema.js'
 
 type Declaration = Supervisor.Medium.MediumDeclaration
+type Compare = typeof compare
 
 const EVENTUAL: Declaration = { reporting: 'full', groupStop: 'eventual' }
 
@@ -43,26 +44,36 @@ const divergeAt = (trace: ConformanceTrace, position: number): ConformanceTrace 
 
 const positionOf = (index: number, length: number): number => index % Math.max(length, 1)
 
-const conformHolds = (comparison: TraceComparison): boolean =>
-  Match.value(comparison).pipe(
-    Match.tag('TracesConform', () => true),
-    Match.orElse(() => false),
-  )
+type Divergence = {
+  readonly index: number
+  readonly scenario: string
+  readonly medium: string
+}
 
-const divergenceIndexOf = (comparison: TraceComparison): Option.Option<number> =>
+const comparedCountOf = (comparison: TraceComparison): Option.Option<number> =>
   Match.value(comparison).pipe(
-    Match.tag('TracesDiverge', (diverged) => Option.some(diverged.index)),
+    Match.tag('TracesConform', (conformed) => Option.some(conformed.compared)),
     Match.orElse(() => Option.none<number>()),
   )
 
+const divergenceOf = (comparison: TraceComparison): Option.Option<Divergence> =>
+  Match.value(comparison).pipe(
+    Match.tag('TracesDiverge', (diverged) =>
+      Option.some({ index: diverged.index, scenario: diverged.scenario, medium: diverged.medium })),
+    Match.orElse(() =>
+      Option.none<Divergence>()
+    ),
+  )
+
 const divergedAtHolds = (
+  subject: Compare,
   reference: ConformanceTrace,
   candidate: ConformanceTrace,
   declaration: Declaration,
   expected: number,
 ): boolean =>
-  Option.match(divergenceIndexOf(compare(reference, candidate, declaration)), {
-    onSome: (index) => index === expected,
+  Option.match(divergenceOf(subject(reference, candidate, declaration)), {
+    onSome: (diverged) => diverged.index === expected,
     onNone: () => false,
   })
 
@@ -85,24 +96,32 @@ const swappedStartsOf = (parts: StartSwapCase): { reference: ConformanceTrace; c
 
 it.prop(
   '∀t_Compare_=Reflexive',
-  [ConformanceTrace, Supervisor.Medium.MediumDeclaration],
-  ([trace, declaration]) => conformHolds(compare(trace, trace, declaration)),
+  { of: [ConformanceTrace, Supervisor.Medium.MediumDeclaration], subject: compare },
+  (subject, [trace, declaration]) =>
+    Option.match(comparedCountOf(subject(trace, trace, declaration)), {
+      onSome: (compared) => compared === trace.steps.length,
+      onNone: () => false,
+    }),
 )
 
 it.prop(
   '∀t_DivergentDecision_≡FirstIndex',
-  [NonEmptyTrace, Index, Supervisor.Medium.MediumDeclaration],
-  ([trace, index, declaration]) => {
+  { of: [NonEmptyTrace, Index, Supervisor.Medium.MediumDeclaration], subject: compare },
+  (subject, [trace, index, declaration]) => {
     const position = positionOf(index, trace.steps.length)
-    return divergedAtHolds(trace, divergeAt(trace, position), declaration, position)
+    return divergedAtHolds(subject, trace, divergeAt(trace, position), declaration, position)
   },
 )
 
 it.prop(
   '∀s_EventualStarts_=Diverge',
-  [StartSwapCase],
-  ([parts]) => {
+  { of: [StartSwapCase], subject: compare },
+  (subject, [parts]) => {
     const swapped = swappedStartsOf(parts)
-    return !conformHolds(compare(swapped.reference, swapped.candidate, EVENTUAL))
+    return Option.match(divergenceOf(subject(swapped.reference, swapped.candidate, EVENTUAL)), {
+      onSome: (diverged) =>
+        diverged.index === 0 && diverged.scenario === parts.scenario && diverged.medium === parts.medium,
+      onNone: () => false,
+    })
   },
 )
