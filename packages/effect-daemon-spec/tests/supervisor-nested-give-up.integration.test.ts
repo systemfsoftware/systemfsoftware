@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Cause, Effect, Match, Queue, Schema } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { crashingChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
@@ -93,12 +92,13 @@ Feature('A supervisor giving up under another supervisor')
               return yield* settled(watching)
             }),
         ),
-        Then('the parent hears one abnormal ending for the inner supervisor')(({ trace }) => {
-          expect(trace).toSatisfy(abnormalEnding('inner', FIRST_INCARNATION))
-        }),
-        And('the parent starts the inner supervisor again')(({ trace }) => {
-          expect(trace).toSatisfy(incarnationStarted('inner', FIRST_INCARNATION + 1))
-        }),
+        Then('the parent hears one abnormal ending for the inner supervisor and starts it again')(
+          ({ trace }, expect) =>
+            expect({
+              endedAbnormally: abnormalEnding('inner', FIRST_INCARNATION)(trace),
+              restarted: incarnationStarted('inner', FIRST_INCARNATION + 1)(trace),
+            }).toEqual({ endedAbnormally: true, restarted: true }),
+        ),
       ),
     )
 
@@ -117,16 +117,20 @@ Feature('A supervisor giving up under another supervisor')
               return yield* Supervisor.awaitTerminated(tree.outer).pipe(Effect.flip)
             }),
         ),
-        Then('the owner sees a typed give-up naming the outer supervisor')(({ failure }) => {
-          expect(failure).toBeInstanceOf(Supervisor.SupervisorTerminated)
-          expect(failure.name).toBe('outer')
-        }),
-        And('the outer cause carries the inner give-up')(({ failure }) => {
-          const innerErrors: ReadonlyArray<Supervisor.SupervisorTerminated> = failure.cause.pipe(errorsOf)
-          expect(innerErrors).toSatisfy((values: ReadonlyArray<Supervisor.SupervisorTerminated>) =>
-            values.some((value) => value.name === 'inner')
-          )
-        }),
+        Then('the owner sees a typed give-up naming the outer supervisor, whose cause carries the inner give-up')(
+          ({ failure }, expect) => {
+            const innerNames = failure.cause.pipe(errorsOf).map((error) => error.name)
+            return expect({
+              failure: failure,
+              name: failure.name,
+              innerNames,
+            }).toMatchObject({
+              failure: expect.schemaMatching(Supervisor.SupervisorTerminated),
+              name: 'outer',
+              innerNames: expect.arrayContaining(['inner']),
+            })
+          },
+        ),
       ),
     )
   })

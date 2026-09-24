@@ -3,7 +3,6 @@ import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Match } from 'effect'
 import { childScriptWorkload } from './__fixtures__/child-script.js'
 import { featureNameOf, kvmGate } from './__fixtures__/kvm-gate.js'
@@ -50,15 +49,16 @@ Feature(
           'report',
           (s) => Conformance.prove(s.driver),
         ),
-        Then('all five lifecycles compared as conforming')((s) => {
-          expect(s.report.results.map(labelOf)).toEqual([
-            'ready-then-exit-normal: conform',
-            'ready-then-exit-abnormal: conform',
-            'never-become-ready: conform',
-            'ignores-graceful-stop: conform',
-            'one-for-all-group-stop: conform',
-          ])
-        }),
+        Then('all five lifecycles compared as conforming')(
+          (state, expect) =>
+            expect(state.report.results.map(labelOf)).toEqual([
+              'ready-then-exit-normal: conform',
+              'ready-then-exit-abnormal: conform',
+              'never-become-ready: conform',
+              'ignores-graceful-stop: conform',
+              'one-for-all-group-stop: conform',
+            ]),
+        ),
       ),
     )
   })

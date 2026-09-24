@@ -1,7 +1,6 @@
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import {
   driveScript,
@@ -40,12 +39,13 @@ Feature('Reporting how a connection ended')
               drive: driveScript(script),
             }),
         ),
-        Then('the child is reported as normally terminated')(({ observation }) => {
-          expect(observation.reasons).toEqual([{ _tag: 'Normal' }])
-        }),
-        And('the child was ready before its peer ended the connection')(({ observation }) => {
-          expect(observation.ready).toBe(1)
-        }),
+        Then('the child was ready on the connection its peer then ended, and is reported as normally terminated')(
+          (state, expect) =>
+            expect({
+              reasons: state.observation.reasons,
+              ready: state.observation.ready,
+            }).toEqual({ reasons: [{ _tag: 'Normal' }], ready: 1 }),
+        ),
       ),
     )
 
@@ -65,13 +65,21 @@ Feature('Reporting how a connection ended')
               drive: driveScript(script),
             }),
         ),
-        Then('the child is reported as abnormally terminated')(({ observation }) => {
-          expect(terminationTagsOf(observation.reasons)).toEqual(['Abnormal'])
-        }),
-        And('the report carries a failure that is not an orderly close')(({ observation }) => {
-          expect(exitCodesOf(observation.reasons)).not.toEqual([CLEAN_CLOSE_CODE])
-          expect(exitSignalsOf(observation.reasons)).toHaveLength(1)
-        }),
+        Then('the child is reported as abnormally terminated with one exit signal that is not an orderly close')(
+          (state, expect) =>
+            expect({
+              terminationTags: terminationTagsOf(state.observation.reasons),
+              exitCodes: exitCodesOf(state.observation.reasons),
+              exitSignals: exitSignalsOf(state.observation.reasons),
+            }).toSatisfy(
+              (observed) =>
+                observed.terminationTags.length === 1 &&
+                observed.terminationTags[0] === 'Abnormal' &&
+                !(observed.exitCodes.length === 1 && observed.exitCodes[0] === CLEAN_CLOSE_CODE) &&
+                observed.exitSignals.length === 1,
+              'the report carries one failure signal and a close code that is not an orderly close',
+            ),
+        ),
       ),
     )
   })

@@ -8,8 +8,7 @@
  * other member defects, naming the part of sharding the double does not model, so a check that
  * reaches one fails loudly instead of reading a made-up answer.
  */
-import { Conformance } from '@systemfsoftware/conformance-spec'
-import { Array as Arr, Context, Data, Effect, Layer, Match, Ref, Stream } from 'effect'
+import { Array as Arr, Context, Data, Effect, Layer, Ref, Stream } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { ShardId, Sharding } from 'effect/unstable/cluster'
 
@@ -17,9 +16,6 @@ import { ShardId, Sharding } from 'effect/unstable/cluster'
 export class RegistrationLeftHeld extends Data.TaggedError('RegistrationLeftHeld')<{
   readonly names: ReadonlyArray<string>
 }> {}
-
-/** A run the check could not judge. */
-export class CheckRejected extends Data.TaggedError('CheckRejected')<{ readonly report: string }> {}
 
 export class ChildReportedOtherThanShutdown extends Data.TaggedError('ChildReportedOtherThanShutdown')<{
   readonly observed: string
@@ -48,15 +44,6 @@ export const nothingLeftRegistered: Effect.Effect<void, RegistrationLeftHeld, Re
       (names) => names.length === 0 ? Effect.void : Effect.fail(new RegistrationLeftHeld({ names })),
     ),
 )
-
-/** The count of interruption points a release check explored, or the report that says it did not pass. */
-export const passedInterruptions = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new CheckRejected({ report: Conformance.render(report) })
-    }),
-  )
 
 const unmodelled = (member: string): Effect.Effect<never> =>
   Effect.die(new globalThis.Error(`the scripted sharding does not model ${member}`))

@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Duration, Effect, Match, Queue, Ref } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { crashingChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
@@ -125,12 +124,16 @@ Feature('Supervising a supervisor')
               return { trace, stopped }
             }),
         ),
-        Then('the child that never failed is stopped as well')(({ observation }) => {
-          expect(observation.stopped).toContain('idler')
-        }),
-        And('the parent hears exactly one ending for the first incarnation')(({ observation }) => {
-          expect(firstIncarnationEndings('inner')(observation.trace)).toBe(1)
-        }),
+        Then('the child that never failed is stopped as well and the parent hears exactly one ending')(
+          ({ observation }, expect) =>
+            expect({
+              stopped: observation.stopped,
+              endings: firstIncarnationEndings('inner')(observation.trace),
+            }).toMatchObject({
+              stopped: expect.arrayContaining(['idler']),
+              endings: 1,
+            }),
+        ),
       ),
     )
 
@@ -153,11 +156,13 @@ Feature('Supervising a supervisor')
               return { trace, stopped }
             }),
         ),
-        Then('every child has finished stopping by the time the parent hears it stopped')(({ observation }) => {
-          expect(observation.trace).toSatisfy(reportedStopped('inner'))
-          expect(observation.stopped).toEqual(expect.arrayContaining(['alpha', 'beta']))
-          expect(observation.stopped).toHaveLength(2)
-        }),
+        Then('every child has finished stopping by the time the parent hears it stopped')(
+          ({ observation }, expect) =>
+            expect({
+              reportsStopped: reportedStopped('inner')(observation.trace),
+              stopped: [...observation.stopped].sort(),
+            }).toEqual({ reportsStopped: true, stopped: ['alpha', 'beta'] }),
+        ),
       ),
     )
   })

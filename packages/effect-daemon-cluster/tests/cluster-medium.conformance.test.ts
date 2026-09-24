@@ -10,7 +10,6 @@ import {
   ChildNotReportedAsInferredDeath,
   ChildReportedOtherThanShutdown,
   nothingLeftRegistered,
-  passedInterruptions,
   RunningChildAnsweredDead,
   scriptedSharding,
 } from './__fixtures__/scripted-sharding.fixture.js'
@@ -105,9 +104,9 @@ Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
               probe: Effect.provide(nothingLeftRegistered, s.environment),
             }),
         ),
-        Then('the child answered its liveness probe and no name stays held once the supervision stops')((s) => {
-          passedInterruptions(s.checked)
-        }),
+        Then('the child answered its liveness probe and no name stays held once the supervision stops')((s, expect) =>
+          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+        ),
       ),
     )
 
@@ -125,9 +124,9 @@ Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
               probe: Effect.provide(nothingLeftRegistered, s.environment),
             }),
         ),
-        Then('the child was announced ready and no name stays held once the supervision stops')((s) => {
-          passedInterruptions(s.checked)
-        }),
+        Then('the child was announced ready and no name stays held once the supervision stops')((s, expect) =>
+          expect(s.checked).toMatchObject({ _tag: 'Pass' })
+        ),
       ),
     )
 
@@ -147,9 +146,7 @@ Feature('Supervising children hosted by the cluster', { timeout: 120_000 })
         ),
         Then(
           'the death the medium cannot observe is reported as inferred, and no name stays held once the supervision stops',
-        )((s) => {
-          passedInterruptions(s.checked)
-        }),
+        )((s, expect) => expect(s.checked).toMatchObject({ _tag: 'Pass' })),
       ),
     )
   })

@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Queue } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import {
@@ -44,12 +43,12 @@ Feature('Restarting the children a crash affects')
             yield* Queue.offer(tree.crashes, void 0)
             return sinceTerminationOf('b')(yield* settled(watching))
           })),
-        Then('c is stopped first, then b')(({ trace }) => {
-          expect(stoppedIn(trace)).toEqual(['c', 'b'])
-        }),
-        And('b is the only child started again, so a keeps running and c stays down')(({ trace }) => {
-          expect(startedIn(trace)).toEqual(['b'])
-        }),
+        Then('c is stopped first then b, and b is the only child started again')((state, expect) =>
+          expect({
+            stopped: stoppedIn(state.trace),
+            started: startedIn(state.trace),
+          }).toEqual({ stopped: ['c', 'b'], started: ['b'] })
+        ),
       ),
     )
   })

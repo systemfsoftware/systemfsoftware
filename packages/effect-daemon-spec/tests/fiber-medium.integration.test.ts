@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Exit, Fiber, Match, Ref, Scope } from 'effect'
 import { TestClock } from 'effect/testing'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
@@ -80,9 +79,9 @@ Feature("Running a child in the supervisor's own process")
       Gherkin.Do.pipe(
         Given('a child that finishes as soon as it starts')('child', () => startInChildScope(Effect.void)),
         When('the medium is asked why that child ended')('reason', ({ child }) => child.medium.report(child.started)),
-        Then('the child is reported as having ended normally')(({ reason }) => {
-          expect(reason).toEqual({ _tag: 'Normal' })
-        }),
+        Then('the child is reported as having ended normally')((state, expect) =>
+          expect(state.reason).toEqual({ _tag: 'Normal' })
+        ),
       ),
     )
 
@@ -91,10 +90,9 @@ Feature("Running a child in the supervisor's own process")
       Gherkin.Do.pipe(
         Given('a child that dies as soon as it starts')('child', () => startInChildScope(Effect.die('boom'))),
         When('the medium is asked why that child ended')('reason', ({ child }) => child.medium.report(child.started)),
-        Then('the child is reported as having ended abnormally, carrying its cause')(({ reason }) => {
-          expect(causeOf(reason)).toContain('boom')
-          expect(causeOf(reason)).not.toBe('')
-        }),
+        Then('the child is reported as having ended abnormally, carrying its cause')((state, expect) =>
+          expect(causeOf(state.reason)).toContain('boom')
+        ),
       ),
     )
 
@@ -106,9 +104,9 @@ Feature("Running a child in the supervisor's own process")
           () => startInChildScope(Effect.interrupt),
         ),
         When('the medium is asked why that child ended')('reason', ({ child }) => child.medium.report(child.started)),
-        Then('the child is reported as having been shut down')(({ reason }) => {
-          expect(reason).toEqual({ _tag: 'Shutdown' })
-        }),
+        Then('the child is reported as having been shut down')((state, expect) =>
+          expect(state.reason).toEqual({ _tag: 'Shutdown' })
+        ),
       ),
     )
 
@@ -135,12 +133,9 @@ Feature("Running a child in the supervisor's own process")
           'ready',
           ({ child }) => Effect.as(Effect.andThen(Deferred.succeed(child.gate, void 0), child.started.ready), true),
         ),
-        Then('the child does not say it is ready while its gate stays closed')(({ waiting }) => {
-          expect(waiting).toBe(true)
-        }),
-        And('the child says it is ready once its gate opens')(({ ready }) => {
-          expect(ready).toBe(true)
-        }),
+        Then('the child is not ready while its gate stays closed, and ready once it opens')((state, expect) =>
+          expect({ waiting: state.waiting, ready: state.ready }).toEqual({ waiting: true, ready: true })
+        ),
       ),
     )
 
@@ -155,9 +150,9 @@ Feature("Running a child in the supervisor's own process")
           'ready',
           ({ child }) => Effect.as(child.started.ready, true),
         ),
-        Then('the child is ready without any further signal')(({ ready }) => {
-          expect(ready).toBe(true)
-        }),
+        Then('the child is ready without any further signal')((state, expect) =>
+          expect({ ready: state.ready }).toEqual({ ready: true })
+        ),
       ),
     )
 
@@ -186,16 +181,19 @@ Feature("Running a child in the supervisor's own process")
               }
             }),
         ),
-        Then('the child was interrupted')(({ stopped }) => {
-          expect(stopped.interrupted).toBe(true)
-        }),
-        And('the stop was still waiting while the child finished its work')(({ stopped }) => {
-          expect(stopped.stillFinishing).toBe(true)
-        }),
-        And('the child is no longer running once it finishes')(({ stopped }) => {
-          expect(stopped.reason).toEqual({ _tag: 'Shutdown' })
-          expect(stopped.running).toBe(false)
-        }),
+        Then('the child was interrupted, the stop kept waiting, and it is no longer running')((state, expect) =>
+          expect({
+            interrupted: state.stopped.interrupted,
+            stillFinishing: state.stopped.stillFinishing,
+            reason: state.stopped.reason,
+            running: state.stopped.running,
+          }).toEqual({
+            interrupted: true,
+            stillFinishing: true,
+            reason: { _tag: 'Shutdown' },
+            running: false,
+          })
+        ),
       ),
     )
 
@@ -218,9 +216,9 @@ Feature("Running a child in the supervisor's own process")
             yield* settled(stopping)
             return { running: yield* child.medium.probe(child.started) }
           })),
-        Then('the child is no longer running')(({ stopped }) => {
-          expect(stopped.running).toBe(false)
-        }),
+        Then('the child is no longer running')((state, expect) =>
+          expect({ running: state.stopped.running }).toEqual({ running: false })
+        ),
       ),
     )
 
@@ -240,13 +238,13 @@ Feature("Running a child in the supervisor's own process")
               }
             }),
         ),
-        Then('the child was interrupted as soon as the stop began')(({ stopped }) => {
-          expect(stopped.interrupted).toBe(true)
-        }),
-        And('the child is no longer running')(({ stopped }) => {
-          expect(stopped.reason).toEqual({ _tag: 'Shutdown' })
-          expect(stopped.running).toBe(false)
-        }),
+        Then('the child was interrupted at once and is no longer running')((state, expect) =>
+          expect({
+            interrupted: state.stopped.interrupted,
+            reason: state.stopped.reason,
+            running: state.stopped.running,
+          }).toEqual({ interrupted: true, reason: { _tag: 'Shutdown' }, running: false })
+        ),
       ),
     )
 
@@ -272,16 +270,19 @@ Feature("Running a child in the supervisor's own process")
               stillFinishing,
             }
           })),
-        Then('the child was interrupted')(({ stopped }) => {
-          expect(stopped.interrupted).toBe(true)
-        }),
-        And('the stop was still waiting while the child finished its work')(({ stopped }) => {
-          expect(stopped.stillFinishing).toBe(true)
-        }),
-        And('the child is no longer running once it finishes')(({ stopped }) => {
-          expect(stopped.reason).toEqual({ _tag: 'Shutdown' })
-          expect(stopped.running).toBe(false)
-        }),
+        Then('the child was interrupted, the stop kept waiting, and it is no longer running')((state, expect) =>
+          expect({
+            interrupted: state.stopped.interrupted,
+            stillFinishing: state.stopped.stillFinishing,
+            reason: state.stopped.reason,
+            running: state.stopped.running,
+          }).toEqual({
+            interrupted: true,
+            stillFinishing: true,
+            reason: { _tag: 'Shutdown' },
+            running: false,
+          })
+        ),
       ),
     )
 
@@ -306,9 +307,9 @@ Feature("Running a child in the supervisor's own process")
           'closed',
           ({ child }) => Effect.andThen(Scope.close(child.childScope, Exit.void), Ref.get(child.finished)),
         ),
-        Then('the child ran its finishing work')(({ closed }) => {
-          expect(closed).toBe(true)
-        }),
+        Then('the child ran its finishing work')((state, expect) =>
+          expect({ closed: state.closed }).toEqual({ closed: true })
+        ),
       ),
     )
 
@@ -335,12 +336,12 @@ Feature("Running a child in the supervisor's own process")
               }
             }),
         ),
-        Then('the child was interrupted')(({ stopped }) => {
-          expect(stopped.interrupted).toBe(true)
-        }),
-        And('the child is no longer running although the caller gave up')(({ stopped }) => {
-          expect(stopped.running).toBe(false)
-        }),
+        Then('the child was interrupted and is no longer running although its caller gave up')((state, expect) =>
+          expect({ interrupted: state.stopped.interrupted, running: state.stopped.running }).toEqual({
+            interrupted: true,
+            running: false,
+          })
+        ),
       ),
     )
   })

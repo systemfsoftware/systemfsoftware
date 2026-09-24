@@ -1,7 +1,6 @@
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Match } from 'effect'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 
@@ -30,18 +29,22 @@ Feature('Supervising cluster children')
           'report',
           () => Conformance.prove(ClusterMedium.conformanceDriver),
         ),
-        Then('every lifecycle compares as conforming')((s) => {
-          expect(s.report.results.map(describeResult)).toEqual([
-            'ready-then-exit-normal:TracesConform',
-            'ready-then-exit-abnormal:TracesConform',
-            'never-become-ready:TracesConform',
-            'ignores-graceful-stop:TracesConform',
-            'one-for-all-group-stop:TracesConform',
-          ])
-        }),
-        And('the medium is held only to the inferred reporting and eventual group stop it declares')((s) => {
-          expect(s.report.declaration).toEqual(ClusterMedium.declaration)
-        }),
+        Then('every lifecycle compares as conforming and the medium is held to the declaration it infers')(
+          (s, expect) =>
+            expect({
+              results: s.report.results.map(describeResult),
+              declaration: s.report.declaration,
+            }).toEqual({
+              results: [
+                'ready-then-exit-normal:TracesConform',
+                'ready-then-exit-abnormal:TracesConform',
+                'never-become-ready:TracesConform',
+                'ignores-graceful-stop:TracesConform',
+                'one-for-all-group-stop:TracesConform',
+              ],
+              declaration: ClusterMedium.declaration,
+            }),
+        ),
       ),
     )
   })

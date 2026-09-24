@@ -1,8 +1,7 @@
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Match } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -40,13 +39,18 @@ Feature('Supervising scripted connections as the fibre medium does')
           'report',
           () => Conformance.prove(SocketMedium.conformanceDriver),
         ),
-        Then('every scripted lifecycle is compared and conforming')(({ report, lifecycles }) => {
-          expect(report.results.length).toBe(lifecycles.length)
-          expect(report.results.map(labelOf)).toEqual(lifecycles.map((name) => `${name}:conform`))
-        }),
-        And('the report names the declaration the socket medium claims')(({ report }) => {
-          expect(report.declaration).toEqual({ reporting: 'exit', groupStop: 'atomic' })
-        }),
+        Then('every scripted lifecycle is compared and conforming, and the report names the socket declaration')(
+          (state, expect) =>
+            expect({
+              resultCount: state.report.results.length,
+              labels: state.report.results.map(labelOf),
+              declaration: state.report.declaration,
+            }).toMatchObject({
+              resultCount: state.lifecycles.length,
+              labels: state.lifecycles.map((name) => `${name}:conform`),
+              declaration: { reporting: 'exit', groupStop: 'atomic' },
+            }),
+        ),
       ),
     )
   })

@@ -50,18 +50,6 @@ const check = Conformance.sequential(fibreProofLayer, {
   operations: 1,
 })
 
-const passedHistories = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(
-        `expected every run to report the verdicts the catalogue declares, but the check read: ${
-          Conformance.render(report)
-        }`,
-      )
-    }),
-  )
-
 Feature('Judging the fibre reference with the conformance harness', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
@@ -74,9 +62,9 @@ Feature('Judging the fibre reference with the conformance harness', { timeout: 0
           () => Effect.succeed(check),
         ),
         When('the harness runs the fibre reference through the scenario catalogue')('report', (s) => s.check),
-        Then('the run reports the verdicts the scenario catalogue declares')((s) => {
-          passedHistories(s.report)
-        }),
+        Then('the run reports the verdicts the scenario catalogue declares')(
+          (state, expect) => expect(state.report).toMatchObject({ _tag: 'Pass' }),
+        ),
       ),
     )
   })

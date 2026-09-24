@@ -11,7 +11,6 @@ import { ExceptionalTermination } from './__fixtures__/exceptional-termination.s
 import {
   microvmSandboxRuntime,
   nothingLeftBehind,
-  passedInterruptions,
   type SandboxBehaviour,
 } from './__fixtures__/microvm-runtime.fixture.js'
 
@@ -98,9 +97,9 @@ Feature('Supervising a workload in a microVM until the scope that owns it closes
               probe: Effect.provide(nothingLeftBehind, s.environment),
             }),
         ),
-        Then('every stop left no virtual machine behind and the workload was reported as a normal termination')((s) => {
-          passedInterruptions(s.checked)
-        }),
+        Then('every stop left no virtual machine behind and the workload was reported as a normal termination')(
+          (state, expect) => expect(state.checked).toMatchObject({ _tag: 'Pass' }),
+        ),
       ),
     )
 
@@ -118,9 +117,9 @@ Feature('Supervising a workload in a microVM until the scope that owns it closes
               probe: Effect.provide(nothingLeftBehind, s.environment),
             }),
         ),
-        Then('every stop left no virtual machine behind and the workload was reported as a normal termination')((s) => {
-          passedInterruptions(s.checked)
-        }),
+        Then('every stop left no virtual machine behind and the workload was reported as a normal termination')(
+          (state, expect) => expect(state.checked).toMatchObject({ _tag: 'Pass' }),
+        ),
       ),
     )
   })

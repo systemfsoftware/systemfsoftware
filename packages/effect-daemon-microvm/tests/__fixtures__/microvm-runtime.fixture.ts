@@ -1,10 +1,9 @@
-import { Conformance } from '@systemfsoftware/conformance-spec'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Context, Effect, Layer, Match, Option } from 'effect'
 import type { ExecEvent, ExecHandle, ExecSink, ResolvedRuntime, Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, READY_TOKEN } from './child-script.js'
-import { CheckRejected, MachineLeftBehind } from './microvm-runtime.schema.js'
+import { MachineLeftBehind } from './microvm-runtime.schema.js'
 
 export type SandboxBehaviour = 'waits-for-steps' | 'ends-after-started'
 
@@ -139,14 +138,6 @@ export const nothingLeftBehind: Effect.Effect<void, MachineLeftBehind, SandboxLe
       (names) => names.length === 0 ? Effect.void : Effect.fail(new MachineLeftBehind({ names })),
     ),
 )
-
-export const passedInterruptions = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new CheckRejected({ report: Conformance.render(report) })
-    }),
-  )
 
 const outstandingIn = (record: SandboxRecord): ReadonlyArray<string> =>
   [...record.created].filter((name) => !record.destroyed.has(name))

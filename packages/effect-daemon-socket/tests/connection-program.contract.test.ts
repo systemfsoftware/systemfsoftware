@@ -1,7 +1,6 @@
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Stream } from 'effect'
 import { observeSocketChild } from './__fixtures__/socket-supervision.fixture.js'
 
@@ -44,12 +43,16 @@ Feature('Running the program over the live connection')
                 ),
             }),
         ),
-        Then('the peer receives the frame the program wrote back')(({ observation }) => {
-          expect(observation.receivedFrames).toContain(ECHOED_FRAME)
-        }),
-        And('the child was ready on the connection it wrote over')(({ observation }) => {
-          expect(observation.ready).toBe(1)
-        }),
+        Then('the child was ready on the connection and its peer received the frame the program wrote back')(
+          (state, expect) =>
+            expect({
+              receivedFrames: state.observation.receivedFrames,
+              ready: state.observation.ready,
+            }).toMatchObject({
+              receivedFrames: expect.arrayContaining([ECHOED_FRAME]),
+              ready: 1,
+            }),
+        ),
       ),
     )
   })

@@ -1,6 +1,5 @@
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Match } from 'effect'
 import { SharedChannelMedium, SharedChannelMediumLayer } from './__fixtures__/shared-channel-medium.js'
 
@@ -31,10 +30,9 @@ Feature('Proving that a step reaches the incarnation it is for', { timeout: 240_
           () => Effect.succeed(Conformance.prove(SharedChannelMedium)),
         ),
         When('the whole scenario catalogue runs on both')('report', (s) => s.proof),
-        Then('the proof fails and names that medium')((s) => {
-          expect(namedMediums(s.report)).not.toEqual([])
-          expect(namedMediums(s.report)).toContain('shared-channel')
-        }),
+        Then('the proof fails and names that medium')(
+          (state, expect) => expect(namedMediums(state.report)).toContain('shared-channel'),
+        ),
       ),
     )
   })

@@ -1,9 +1,9 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Cause, Deferred, Effect, Layer, Match, Option, Ref, Stream } from 'effect'
+import { Cause, Deferred, Effect, Layer, Match, Option, Ref, Schema, Stream } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { type MemoryTransport, memoryTransport } from './__fixtures__/memory-transport.fixture.js'
 
@@ -12,21 +12,12 @@ const Feature = makeFeature({ it })
 const GREETING = 'socket-medium-greeting'
 const ECHO = 'socket-medium-echo'
 
-const passRuns = (report: Conformance.Report<never, never>): Conformance.Pass =>
+/** The steps the release check stopped at, or zero when the check did not pass. */
+const stoppedStepsOf = (report: Conformance.Report<never, never>): number =>
   Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed),
-    Match.orElse(() => {
-      throw new Error(
-        `expected every stopped life to release what it held, but the check read: ${Conformance.render(report)}`,
-      )
-    }),
+    Match.tag('Pass', (passed) => passed.histories),
+    Match.orElse(() => 0),
   )
-
-const stoppedAtLeastOneStep = (report: Conformance.Report<never, never>): void => {
-  if (passRuns(report).histories < 1) {
-    throw new Error('the check stopped no step, so the release proves nothing')
-  }
-}
 
 const mediumEnvironment = Layer.provideMerge(
   SocketMedium.layer({ readyPollMillis: 5 }),
@@ -112,26 +103,6 @@ const failureOf = (notes: Notes): Effect.Effect<Option.Option<string>> => Ref.ge
 
 const endingOf = (notes: Notes): Effect.Effect<Option.Option<string>> => Ref.get(notes.ending)
 
-const ranToShutdown = (notes: Notes): Effect.Effect<void> =>
-  Effect.gen(function*() {
-    const failed = yield* failureOf(notes)
-    const ended = yield* endingOf(notes)
-    const seen = Option.getOrElse(ended, () => 'nothing')
-    if (Option.isSome(failed)) {
-      throw new Error(`the child's life never settled: ${failed.value} (the run noted: ${seen})`)
-    }
-    if (ended.pipe(Option.exists((ending: string) => ending === 'Shutdown'))) return
-    throw new Error(`a stopped child reported ${seen} instead of a shutdown`)
-  })
-
-const echoedTo = (peer: MemoryTransport): Effect.Effect<void> =>
-  Effect.gen(function*() {
-    const frames = yield* peer.received
-    if (!frames.includes(ECHO)) {
-      throw new Error('the peer never received the frame the child wrote back over the connection')
-    }
-  })
-
 const oracleLife = (peer: MemoryTransport, notes: Notes): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
     const read = yield* Deferred.make<void>()
@@ -188,16 +159,32 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
           'checked',
           (s) => checkedAgainstTheMemoryPeer(s.observed.peer, s.observed.notes),
         ),
-        Then('the child read the greeting, wrote its answer back and was stopped as a shutdown')((s) =>
-          Effect.gen(function*() {
-            stoppedAtLeastOneStep(s.checked)
-            yield* ranToShutdown(s.observed.notes)
-            yield* echoedTo(s.observed.peer)
-          })
+        Then(
+          'the child read the greeting, wrote its answer back, was stopped as a shutdown, and left the peer holding nothing',
+        )(
+          (s, expect) =>
+            Effect.map(
+              Effect.all({
+                frames: s.observed.peer.received,
+                failed: failureOf(s.observed.notes),
+                ending: endingOf(s.observed.notes),
+              }),
+              ({ frames, failed, ending }) =>
+                expect({
+                  report: s.checked,
+                  stoppedSteps: stoppedStepsOf(s.checked),
+                  failed,
+                  ending,
+                  frames,
+                }).toMatchObject({
+                  report: { _tag: 'Pass' },
+                  stoppedSteps: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+                  failed: Option.none(),
+                  ending: Option.some('Shutdown'),
+                  frames: expect.arrayContaining([ECHO]),
+                }),
+            ),
         ),
-        And('no stopped life left the peer holding a connection')((s) => {
-          passRuns(s.checked)
-        }),
       ),
     )
 
@@ -219,16 +206,32 @@ Feature('Releasing what a supervised socket child held', { timeout: 0 })
           'checked',
           (s) => checkedAgainstTheLoopbackOracle(s.observed.peer, s.observed.notes),
         ),
-        Then('the child read the listener greeting, wrote its answer back and was stopped as a shutdown')((s) =>
-          Effect.gen(function*() {
-            stoppedAtLeastOneStep(s.checked)
-            yield* ranToShutdown(s.observed.notes)
-            yield* echoedTo(s.observed.peer)
-          })
+        Then(
+          'the child read the listener greeting, wrote its answer back, was stopped as a shutdown, and left the listener holding nothing',
+        )(
+          (s, expect) =>
+            Effect.map(
+              Effect.all({
+                frames: s.observed.peer.received,
+                failed: failureOf(s.observed.notes),
+                ending: endingOf(s.observed.notes),
+              }),
+              ({ frames, failed, ending }) =>
+                expect({
+                  report: s.checked,
+                  stoppedSteps: stoppedStepsOf(s.checked),
+                  failed,
+                  ending,
+                  frames,
+                }).toMatchObject({
+                  report: { _tag: 'Pass' },
+                  stoppedSteps: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+                  failed: Option.none(),
+                  ending: Option.some('Shutdown'),
+                  frames: expect.arrayContaining([ECHO]),
+                }),
+            ),
         ),
-        And('no interrupted life left the listener holding a connection')((s) => {
-          passRuns(s.checked)
-        }),
       ),
     )
   })

@@ -1,6 +1,5 @@
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Match, Schema } from 'effect'
 import { plantedDriver, plantedLayer } from './__fixtures__/planted-process-medium.js'
 import { mediumLayer, processDriver, referenceLayer, spawnerLayer } from './__fixtures__/process-fixtures.js'
@@ -53,13 +52,17 @@ Feature('Proving a medium against the reference', { timeout: 240_000 })
           () => Effect.succeed(Conformance.prove(processDriver)),
         ),
         When('the whole scenario catalogue runs on both')('report', (s) => s.proof),
-        Then('every scenario ran to a matching comparison')((s) => {
-          expect(s.report.results.map(labelOf)).toEqual(
-            Conformance.Scenarios.map((scripted) => `${scripted.name}: conform`),
-          )
-          expect(s.report).toSatisfy(comparedEverywhere)
-          expect(namedMediums(s.report)).toEqual([])
-        }),
+        Then('every scenario ran to a matching comparison')((s, expect) =>
+          expect({
+            labels: s.report.results.map(labelOf),
+            allCompared: comparedEverywhere(s.report),
+            named: namedMediums(s.report),
+          }).toEqual({
+            labels: Conformance.Scenarios.map((scripted) => `${scripted.name}: conform`),
+            allCompared: true,
+            named: [],
+          })
+        ),
       ),
     )
 
@@ -71,10 +74,13 @@ Feature('Proving a medium against the reference', { timeout: 240_000 })
           () => Effect.succeed(Conformance.prove(plantedDriver)),
         ),
         When('the whole scenario catalogue runs on both')('report', (s) => s.proof),
-        Then('the proof fails and names that medium')((s) => {
-          expect(namedMediums(s.report)).not.toEqual([])
-          expect(namedMediums(s.report)).toContain('process-planted')
-          expect(namedMediums(s.report)).not.toContain(processDriver.name)
+        Then('the proof fails and names that medium')((s, expect) => {
+          const named = namedMediums(s.report)
+          return expect({
+            anyNamed: named.length > 0,
+            namesPlanted: named.includes('process-planted'),
+            namesDriver: named.includes(processDriver.name),
+          }).toEqual({ anyNamed: true, namesPlanted: true, namesDriver: false })
         }),
       ),
     )

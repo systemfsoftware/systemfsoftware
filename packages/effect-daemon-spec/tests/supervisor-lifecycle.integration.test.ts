@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Match } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { neverChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
@@ -56,15 +55,23 @@ Feature('Growing and shrinking a running supervision tree')
             const after = yield* runningChildIds(tree.supervisor)
             return { first, second, third, before, after }
           })),
-        Then('the first two answers name the children the supervisor allocated')(({ answers }) => {
-          expect(answers.first).toEqual({ outcome: 'accepted', childId: 'd0', generation: 0 })
-          expect(answers.second).toEqual({ outcome: 'accepted', childId: 'd1', generation: 0 })
-        }),
-        And('the third is turned away and the running children are unchanged')(({ answers }) => {
-          expect(answers.third).toEqual({ outcome: 'refused' })
-          expect(answers.before).toEqual(['d0', 'd1'])
-          expect(answers.after).toEqual(['d0', 'd1'])
-        }),
+        Then(
+          'the first two answers name the children the supervisor allocated, the third is turned away, and the running children are unchanged',
+        )(({ answers }, expect) =>
+          expect({
+            first: answers.first,
+            second: answers.second,
+            third: answers.third,
+            before: answers.before,
+            after: answers.after,
+          }).toEqual({
+            first: { outcome: 'accepted', childId: 'd0', generation: 0 },
+            second: { outcome: 'accepted', childId: 'd1', generation: 0 },
+            third: { outcome: 'refused' },
+            before: ['d0', 'd1'],
+            after: ['d0', 'd1'],
+          })
+        ),
       ),
     )
 
@@ -95,14 +102,21 @@ Feature('Growing and shrinking a running supervision tree')
               return { answer, remaining, again, afterwards }
             }),
         ),
-        Then('the first stop is answered as done and the child leaves the tree')(({ answers }) => {
-          expect(answers.answer).toEqual({ outcome: 'stopped' })
-          expect(answers.remaining).toEqual([])
-        }),
-        And('the second stop finds no such incarnation')(({ answers }) => {
-          expect(answers.again).toEqual({ outcome: 'missed' })
-          expect(answers.afterwards).toEqual([])
-        }),
+        Then(
+          'the first stop is answered as done and the child leaves the tree, and the second stop finds no such incarnation',
+        )(({ answers }, expect) =>
+          expect({
+            answer: answers.answer,
+            remaining: answers.remaining,
+            again: answers.again,
+            afterwards: answers.afterwards,
+          }).toEqual({
+            answer: { outcome: 'stopped' },
+            remaining: [],
+            again: { outcome: 'missed' },
+            afterwards: [],
+          })
+        ),
       ),
     )
 
@@ -124,12 +138,12 @@ Feature('Growing and shrinking a running supervision tree')
             const stop = yield* Supervisor.stopChild(tree.supervisor, 'd0', 0)
             return { start, stop }
           })),
-        Then('the new child is turned away')(({ answers }) => {
-          expect(answers.start).toEqual({ outcome: 'refused' })
-        }),
-        And('the stop finds no such child')(({ answers }) => {
-          expect(answers.stop).toEqual({ outcome: 'missed' })
-        }),
+        Then('the new child is turned away and the stop finds no such child')(({ answers }, expect) =>
+          expect({ start: answers.start, stop: answers.stop }).toEqual({
+            start: { outcome: 'refused' },
+            stop: { outcome: 'missed' },
+          })
+        ),
       ),
     )
 
@@ -154,12 +168,12 @@ Feature('Growing and shrinking a running supervision tree')
               return { answer, remaining }
             }),
         ),
-        Then('the stop finds no such child')(({ answers }) => {
-          expect(answers.answer).toEqual({ outcome: 'missed' })
-        }),
-        And('the running child stays in the tree')(({ answers }) => {
-          expect(answers.remaining).toEqual(['d0'])
-        }),
+        Then('the stop finds no such child and the running child stays in the tree')(({ answers }, expect) =>
+          expect({ answer: answers.answer, remaining: answers.remaining }).toEqual({
+            answer: { outcome: 'missed' },
+            remaining: ['d0'],
+          })
+        ),
       ),
     )
   })

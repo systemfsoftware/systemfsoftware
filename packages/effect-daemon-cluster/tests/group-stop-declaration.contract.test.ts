@@ -1,8 +1,7 @@
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Match } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -61,16 +60,18 @@ Feature('Holding a medium to the group-stop guarantee it claims')
           'atomicComparison',
           (s) => Effect.succeed(Conformance.compare(s.reference, s.candidate, atomicDeclaration)),
         ),
-        Then('the atomic comparison names the first diverging step')((s) => {
-          expect(divergedAt(s.atomicComparison)).toBe(0)
-        }),
-        And('the same traces conform under the cluster medium')((s) => {
+        Then(
+          'the atomic comparison names the first diverging step and the same traces conform under the cluster medium',
+        )((s, expect) => {
           const comparison = Conformance.compare(s.reference, s.candidate, ClusterMedium.declaration)
-          expect(comparison).toMatchObject({
-            _tag: 'TracesConform',
-            scenario: 'one-for-all-group-stop',
-            medium: 'cluster-atomic',
-            compared: 1,
+          return expect({ divergedAt: divergedAt(s.atomicComparison), comparison }).toMatchObject({
+            divergedAt: 0,
+            comparison: {
+              _tag: 'TracesConform',
+              scenario: 'one-for-all-group-stop',
+              medium: 'cluster-atomic',
+              compared: 1,
+            },
           })
         }),
       ),

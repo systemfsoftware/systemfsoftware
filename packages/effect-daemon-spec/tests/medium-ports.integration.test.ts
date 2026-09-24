@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Scope } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -104,17 +103,20 @@ Feature('Mixing media in one supervision tree')
             const afterwards = yield* Ref.get(tree.log)
             return { started, afterwards }
           })),
-        Then('the children started in the order the supervisor declared them')(({ order }) => {
-          expect(order.started).toEqual(['port started', 'fiber started'])
-        }),
-        And('the children stopped in reverse of that order')(({ order }) => {
-          expect(order.afterwards).toEqual([
-            'port started',
-            'fiber started',
-            'fiber stopped',
-            'port stopped',
-          ])
-        }),
+        Then('the children started in the declared order and stopped in reverse')((state, expect) =>
+          expect({
+            started: state.order.started,
+            afterwards: state.order.afterwards,
+          }).toEqual({
+            started: ['port started', 'fiber started'],
+            afterwards: [
+              'port started',
+              'fiber started',
+              'fiber stopped',
+              'port stopped',
+            ],
+          })
+        ),
       ),
     )
   })

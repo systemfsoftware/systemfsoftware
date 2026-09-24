@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { featureNameOf, kvmGate, kvmVerdictOf } from './__fixtures__/kvm-gate.js'
 
@@ -15,9 +14,9 @@ Feature(
       'The host grants the virtualization device a microVM needs',
       Gherkin.Do.pipe(
         Given('the machine this suite runs on')('verdict', () => Effect.succeed(kvmVerdictOf())),
-        Then('the virtualization device a microVM needs is readable and writable')((s) => {
-          expect(s.verdict).toBe('readable and writable')
-        }),
+        Then('the virtualization device a microVM needs is readable and writable')(
+          (state, expect) => expect(state.verdict).toBe('readable and writable'),
+        ),
       ),
     )
   })

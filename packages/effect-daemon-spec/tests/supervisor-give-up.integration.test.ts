@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Cause, Clock, Deferred, Effect, Match, Queue, Ref } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { crashingChild, settled, terminatedIn, traceUntil } from './__fixtures__/SupervisorHarness.js'
@@ -96,14 +95,20 @@ Feature('An owner whose supervisor gives up')
             const after = yield* Clock.currentTimeMillis
             return { before, after, error }
           })),
-        Then('the owner sees a typed give-up naming the supervisor and its crash')(({ failure }) => {
-          expect(failure.error).toBeInstanceOf(Supervisor.SupervisorTerminated)
-          expect(failure.error.name).toBe('root')
-          expect(failure.error.cause.pipe(defectsOf)).toContain('crashed')
-        }),
-        And('the give-up and the failure happen at the same instant')(({ failure }) => {
-          expect(failure.after).toEqual(failure.before)
-        }),
+        Then('the owner sees a typed give-up naming the supervisor and its crash, at the instant of failure')(
+          ({ failure }, expect) =>
+            expect({
+              error: failure.error,
+              name: failure.error.name,
+              defects: failure.error.cause.pipe(defectsOf),
+              elapsed: failure.after - failure.before,
+            }).toMatchObject({
+              error: expect.schemaMatching(Supervisor.SupervisorTerminated),
+              name: 'root',
+              defects: expect.arrayContaining(['crashed']),
+              elapsed: 0,
+            }),
+        ),
       ),
     )
 
@@ -122,15 +127,18 @@ Feature('An owner whose supervisor gives up')
               return { failure, trace }
             }),
         ),
-        Then('the owner sees a typed give-up')(({ observation }) => {
-          expect(observation.failure).toBeInstanceOf(Supervisor.SupervisorTerminated)
-        }),
-        And('the child is never started a second time')(({ observation }) => {
-          expect(observation.trace).toSatisfy(abnormalEnding('crasher', FIRST_INCARNATION))
-          expect(observation.trace).toSatisfy(
-            (trace: Trace) => !incarnationStarted('crasher', FIRST_INCARNATION + 1)(trace),
-          )
-        }),
+        Then('the owner sees a typed give-up and the child is never started a second time')(
+          ({ observation }, expect) =>
+            expect({
+              failure: observation.failure,
+              endedAbnormally: abnormalEnding('crasher', FIRST_INCARNATION)(observation.trace),
+              restarted: incarnationStarted('crasher', FIRST_INCARNATION + 1)(observation.trace),
+            }).toMatchObject({
+              failure: expect.schemaMatching(Supervisor.SupervisorTerminated),
+              endedAbnormally: true,
+              restarted: false,
+            }),
+        ),
       ),
     )
 
@@ -153,12 +161,13 @@ Feature('An owner whose supervisor gives up')
               return { stopped, running }
             }),
         ),
-        Then('the steady child has finished stopping by then')(({ observation }) => {
-          expect(observation.stopped).toContain('keeper')
-        }),
-        And('no child is still running')(({ observation }) => {
-          expect(observation.running).toEqual([])
-        }),
+        Then('the steady child has finished stopping by then and no child is still running')(
+          ({ observation }, expect) =>
+            expect({ stopped: observation.stopped, running: observation.running }).toMatchObject({
+              stopped: expect.arrayContaining(['keeper']),
+              running: [],
+            }),
+        ),
       ),
     )
   })

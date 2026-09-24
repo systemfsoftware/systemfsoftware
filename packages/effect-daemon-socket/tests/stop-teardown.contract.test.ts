@@ -1,7 +1,6 @@
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { driveScript, observeSocketChild } from './__fixtures__/socket-supervision.fixture.js'
 
@@ -37,10 +36,12 @@ Feature('Releasing the connection a stopped child held')
                 drive: driveScript(script),
               }),
           ),
-          Then('the peer holds no connection to the child')(({ observation }) => {
-            expect(observation.ready).toBe(1)
-            expect(observation.openConnections).toBe(0)
-          }),
+          Then('the peer holds no connection to the child')((state, expect) =>
+            expect({
+              ready: state.observation.ready,
+              openConnections: state.observation.openConnections,
+            }).toEqual({ ready: 1, openConnections: 0 })
+          ),
         ),
     )
   })

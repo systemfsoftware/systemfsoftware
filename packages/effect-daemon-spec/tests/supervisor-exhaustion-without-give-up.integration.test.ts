@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Match, Queue, Ref } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { crashingChild, neverChild, settled, terminatedIn, traceUntil } from './__fixtures__/SupervisorHarness.js'
@@ -135,12 +134,12 @@ Feature('A supervisor whose exhaustion does not end it')
               return { trace, phase }
             }),
         ),
-        Then('the supervisor is still running')(({ observation }) => {
-          expect(observation.phase).toBe('running')
-        }),
-        And('the supervisor never terminated itself')(({ observation }) => {
-          expect(observation.trace).not.toSatisfy(terminatedIn)
-        }),
+        Then('the supervisor is still running and never terminated itself')((state, expect) =>
+          expect({
+            phase: state.observation.phase,
+            terminated: terminatedIn(state.observation.trace),
+          }).toEqual({ phase: 'running', terminated: false })
+        ),
       ),
     )
 
@@ -165,12 +164,12 @@ Feature('A supervisor whose exhaustion does not end it')
               return { trace, phase }
             }),
         ),
-        Then('the supervisor is still running')(({ observation }) => {
-          expect(observation.phase).toBe('running')
-        }),
-        And('the supervisor never terminated itself')(({ observation }) => {
-          expect(observation.trace).not.toSatisfy(terminatedIn)
-        }),
+        Then('the supervisor is still running and never terminated itself')((state, expect) =>
+          expect({
+            phase: state.observation.phase,
+            terminated: terminatedIn(state.observation.trace),
+          }).toEqual({ phase: 'running', terminated: false })
+        ),
       ),
     )
 
@@ -192,9 +191,9 @@ Feature('A supervisor whose exhaustion does not end it')
               return yield* Ref.get(tree.stopped)
             }),
         ),
-        Then('both steady children have been stopped')(({ observation }) => {
-          expect(observation).toEqual(expect.arrayContaining(['b', 'c']))
-        }),
+        Then('both steady children have been stopped')((state, expect) =>
+          expect(state.observation).toEqual(expect.arrayContaining(['b', 'c']))
+        ),
       ),
     )
 
@@ -216,9 +215,7 @@ Feature('A supervisor whose exhaustion does not end it')
             }),
         ),
         Then('the earlier child has been stopped although a restart would have spared it')(
-          ({ observation }) => {
-            expect(observation).toContain('earlier')
-          },
+          (state, expect) => expect(state.observation).toContain('earlier'),
         ),
       ),
     )
@@ -238,13 +235,13 @@ Feature('A supervisor whose exhaustion does not end it')
               return { trace, phase }
             }),
         ),
-        Then('the supervisor starts the child again after the cool-down')(({ observation }) => {
-          expect(observation.trace).toSatisfy(incarnationStarted('crasher', FIRST_INCARNATION + 1))
-        }),
-        And('the supervisor is still running, so the owner was not failed')(({ observation }) => {
-          expect(observation.phase).toBe('running')
-          expect(observation.trace).not.toSatisfy(terminatedIn)
-        }),
+        Then('the supervisor restarts the child after the cool-down and stays running')((state, expect) =>
+          expect({
+            restarted: incarnationStarted('crasher', FIRST_INCARNATION + 1)(state.observation.trace),
+            phase: state.observation.phase,
+            terminated: terminatedIn(state.observation.trace),
+          }).toEqual({ restarted: true, phase: 'running', terminated: false })
+        ),
       ),
     )
 
@@ -258,9 +255,9 @@ Feature('A supervisor whose exhaustion does not end it')
             yield* Supervisor.awaitTerminated(tree.supervisor)
             return yield* phaseOf(tree.supervisor)
           })),
-        Then('the supervisor has terminated and the wait did not fail')(({ phase }) => {
-          expect(phase).toBe('terminated')
-        }),
+        Then('the supervisor has terminated and the wait did not fail')((state, expect) =>
+          expect({ phase: state.phase }).toEqual({ phase: 'terminated' })
+        ),
       ),
     )
   })

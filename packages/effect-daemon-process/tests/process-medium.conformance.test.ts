@@ -3,7 +3,7 @@ import { Conformance as Medium } from '@systemfsoftware/effect-daemon-conformanc
 import { ProcessMedium } from '@systemfsoftware/effect-daemon-process'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Array as Arr, Duration, Effect, Layer, Match, Option } from 'effect'
+import { Array as Arr, Duration, Effect, Layer, Match, Option, Schema } from 'effect'
 import type { Scope } from 'effect'
 import type * as PlatformError from 'effect/PlatformError'
 import type { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process'
@@ -12,10 +12,8 @@ import {
   ChildReportedOtherThanShutdown,
   ChildWasReadyBeforeItSaidSo,
   nothingLeftRunning,
-  passedInterruptions,
   ProcessLedger,
   scriptedSpawner,
-  startedAtLeastOneChild,
   StoppedWithAnUnexpectedSignal,
 } from './__fixtures__/scripted-spawner.fixture.js'
 
@@ -34,6 +32,12 @@ const FORCED = 'SIGKILL'
 const SETTLE_MILLIS = 1
 
 const becomeReady: Medium.ChildStep = { _tag: 'BecomeReady' }
+
+/** How many incarnations the run's spawner started, read from the run's own ledger. */
+const startedChildrenIn: Effect.Effect<number, never, ProcessLedger> = Effect.flatMap(
+  Effect.service(ProcessLedger),
+  (ledger) => ledger.started,
+)
 
 const driver = ProcessMedium.conformanceDriver({ fixturePath })
 
@@ -126,11 +130,15 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
               probe: Effect.provide(nothingLeftRunning, s.environment),
             }),
         ),
-        Then('no child is left running and every stop was the shutdown it promised')((s) =>
-          Effect.gen(function*() {
-            passedInterruptions(s.checked)
-            yield* Effect.provide(startedAtLeastOneChild, s.environment)
-          })
+        Then('no child is left running and every stop was the shutdown it promised')((s, expect) =>
+          Effect.provide(startedChildrenIn, s.environment).pipe(
+            Effect.map((started) =>
+              expect({ report: s.checked, started }).toMatchObject({
+                report: { _tag: 'Pass' },
+                started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              })
+            ),
+          )
         ),
       ),
     )
@@ -152,11 +160,15 @@ Feature('Supervising a child process until the scope that owns it closes', { tim
               probe: Effect.provide(nothingLeftRunning, s.environment),
             }),
         ),
-        Then('readiness waited for the child and no child is left running')((s) =>
-          Effect.gen(function*() {
-            passedInterruptions(s.checked)
-            yield* Effect.provide(startedAtLeastOneChild, s.environment)
-          })
+        Then('readiness waited for the child and no child is left running')((s, expect) =>
+          Effect.provide(startedChildrenIn, s.environment).pipe(
+            Effect.map((started) =>
+              expect({ report: s.checked, started }).toMatchObject({
+                report: { _tag: 'Pass' },
+                started: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              })
+            ),
+          )
         ),
       ),
     )

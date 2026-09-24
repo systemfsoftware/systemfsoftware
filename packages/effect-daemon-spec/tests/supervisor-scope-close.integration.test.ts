@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Match, Ref } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 
@@ -65,14 +64,16 @@ Feature('Shutting a supervision tree down when the scope it runs in closes')
             const afterwards = yield* Ref.get(tree.log)
             return { started, afterwards }
           })),
-        Then('the children stopped in reverse of the order the supervisor started them')(({ record }) => {
-          expect(record.started).toHaveLength(2)
-          expect(record.started).toEqual(expect.arrayContaining(['alpha', 'beta']))
-          expect(record.afterwards.slice(2)).toEqual(['beta stopped', 'alpha stopped'])
-        }),
-        And('the scope closed only after the last child had stopped')(({ record }) => {
-          expect(record.afterwards.slice(-1)).toEqual(['alpha stopped'])
-        }),
+        Then('the children stopped in reverse of the order the supervisor started them')(
+          ({ record }, expect) =>
+            expect({
+              started: [...record.started].sort(),
+              stopped: record.afterwards.slice(2),
+            }).toEqual({
+              started: ['alpha', 'beta'],
+              stopped: ['beta stopped', 'alpha stopped'],
+            }),
+        ),
       ),
     )
 
@@ -89,9 +90,7 @@ Feature('Shutting a supervision tree down when the scope it runs in closes')
             yield* Supervisor.awaitTerminated(supervisor)
             return yield* phaseOf(supervisor)
           })),
-        Then('the supervisor has terminated')(({ phase }) => {
-          expect(phase).toBe('terminated')
-        }),
+        Then('the supervisor has terminated')(({ phase }, expect) => expect(phase).toBe('terminated')),
       ),
     )
   })

@@ -3,7 +3,6 @@ import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, childScriptWorkload } from './__fixtures__/child-script.js'
@@ -81,9 +80,9 @@ Feature(
           'termination',
           () => terminationAfter({ _tag: 'ExitNormal' }),
         ),
-        Then('the medium reports a normal termination')((s) => {
-          expect(s.termination).toEqual({ _tag: 'Normal' })
-        }),
+        Then('the medium reports a normal termination')(
+          (state, expect) => expect(state.termination).toEqual({ _tag: 'Normal' }),
+        ),
       ),
     )
 
@@ -94,12 +93,13 @@ Feature(
           'termination',
           () => terminationAfter({ _tag: 'ExitAbnormal' }),
         ),
-        Then('the medium reports an abnormal termination carrying that workload exit code')((s) => {
-          expect(s.termination).toMatchObject({
-            _tag: 'Abnormal',
-            report: { _tag: 'ExitReport', code: ABNORMAL_EXIT_CODE },
-          })
-        }),
+        Then('the medium reports an abnormal termination carrying that workload exit code')(
+          (state, expect) =>
+            expect(state.termination).toMatchObject({
+              _tag: 'Abnormal',
+              report: { _tag: 'ExitReport', code: ABNORMAL_EXIT_CODE },
+            }),
+        ),
       ),
     )
 
@@ -110,9 +110,9 @@ Feature(
           'probe',
           () => readinessAndProbe,
         ),
-        Then('the incarnation is ready and answers its liveness probe')((s) => {
-          expect(s.probe).toBe(true)
-        }),
+        Then('the incarnation is ready and answers its liveness probe')(
+          (state, expect) => expect({ probe: state.probe }).toEqual({ probe: true }),
+        ),
       ),
     )
 
@@ -123,9 +123,9 @@ Feature(
           'remaining',
           () => sandboxesLeftByAnIncarnation,
         ),
-        Then('no virtual machine of this package remains')((s) => {
-          expect(s.remaining).toEqual([])
-        }),
+        Then('no virtual machine of this package remains')(
+          (state, expect) => expect(state.remaining).toEqual([]),
+        ),
       ),
     )
   })

@@ -1,7 +1,6 @@
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Match } from 'effect'
 import { TestClock } from 'effect/testing'
 import { LateStopMedium, LateStopMediumLayer } from './__fixtures__/late-stop-medium.js'
@@ -86,15 +85,20 @@ Feature('Comparing a medium against the in-process reference over the scripted c
       'The in-process reference conforms on every scripted lifecycle',
       Gherkin.Do.pipe(
         Given('the in-process reference proven over the whole scripted catalogue')('report', () => reference),
-        Then('no lifecycle names a medium that diverged or stalled')((s) => {
-          expect(namedMediums(s.report)).toEqual([])
-        }),
-        And('every lifecycle of the catalogue was compared')((s) => {
-          expect(s.report.results.length).toBe(Conformance.Scenarios.length)
-        }),
-        And('each comparison is the catalogue’s conforming outcome')((s) => {
-          expect(s.report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
-        }),
+        Then(
+          'no lifecycle names a diverging medium, every lifecycle is compared, and each comparison is the catalogue’s conforming outcome',
+        )(
+          (state, expect) =>
+            expect({
+              divergedOrStalled: namedMediums(state.report),
+              compared: state.report.results.length,
+              labels: state.report.results.map(labelOf),
+            }).toEqual({
+              divergedOrStalled: [],
+              compared: Conformance.Scenarios.length,
+              labels: EXPECTED_CATALOGUE_COMPARISONS,
+            }),
+        ),
       ),
     )
 
@@ -105,12 +109,9 @@ Feature('Comparing a medium against the in-process reference over the scripted c
           'report',
           () => planted,
         ),
-        Then('at least one lifecycle names the medium that failed to conform')((s) => {
-          expect(namedMediums(s.report)).not.toEqual([])
-        }),
-        And('the medium named is the one that reported the child ready')((s) => {
-          expect(namedMediums(s.report)).toContain('planted')
-        }),
+        Then('the medium named as diverging is the one that reported the child ready')(
+          (state, expect) => expect(namedMediums(state.report)).toContain('planted'),
+        ),
       ),
     )
 
@@ -121,9 +122,9 @@ Feature('Comparing a medium against the in-process reference over the scripted c
           'report',
           () => lateStop,
         ),
-        Then('each comparison is the catalogue’s conforming outcome')((s) => {
-          expect(s.report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
-        }),
+        Then('each comparison is the catalogue’s conforming outcome')(
+          (state, expect) => expect(state.report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS),
+        ),
       ),
     )
 
@@ -136,9 +137,9 @@ Feature('Comparing a medium against the in-process reference over the scripted c
           'report',
           () => budgetedProve({ millis: 20_000, startTimeoutMillis: 1 }),
         ),
-        Then('each comparison is the catalogue’s conforming outcome')((s) => {
-          expect(s.report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
-        }),
+        Then('each comparison is the catalogue’s conforming outcome')(
+          (state, expect) => expect(state.report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS),
+        ),
       ),
     )
 
@@ -151,15 +152,16 @@ Feature('Comparing a medium against the in-process reference over the scripted c
           'report',
           () => budgetedProve({ millis: 500, startTimeoutMillis: 10_000 }),
         ),
-        Then('only the lifecycle the bound cannot cover stalls, and it is named')((s) => {
-          expect(s.report.results.map(labelOf)).toEqual([
-            'ready-then-exit-normal:conform',
-            'ready-then-exit-abnormal:conform',
-            'never-become-ready:stalled',
-            'ignores-graceful-stop:conform',
-            'one-for-all-group-stop:conform',
-          ])
-        }),
+        Then('only the lifecycle the bound cannot cover stalls, and it is named')(
+          (state, expect) =>
+            expect(state.report.results.map(labelOf)).toEqual([
+              'ready-then-exit-normal:conform',
+              'ready-then-exit-abnormal:conform',
+              'never-become-ready:stalled',
+              'ignores-graceful-stop:conform',
+              'one-for-all-group-stop:conform',
+            ]),
+        ),
       ),
     )
   })

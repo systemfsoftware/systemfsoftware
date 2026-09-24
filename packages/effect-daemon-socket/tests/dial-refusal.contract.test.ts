@@ -1,7 +1,6 @@
 import { SocketMedium } from '@systemfsoftware/effect-daemon-socket'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { expect } from '@systemfsoftware/vitest'
 import { Layer } from 'effect'
 import {
   awaitTerminationThenShutdown,
@@ -35,14 +34,18 @@ Feature('Refusing a connection nothing accepts')
               drive: awaitTerminationThenShutdown,
             }),
         ),
-        Then('the child is reported as terminated rather than left waiting for readiness')(({ observation }) => {
-          expect(observation.ready).toBe(0)
-          expect(terminationTagsOf(observation.reasons)).toEqual(['Abnormal'])
-          expect(exitSignalsOf(observation.reasons)).not.toEqual(['DeadlineMissed'])
-        }),
-        And('the refusal names the operating system error the dial raised')(({ observation }) => {
-          expect(exitSignalsOf(observation.reasons)).toEqual(['ECONNREFUSED'])
-        }),
+        Then('the child is refused rather than left waiting, naming the operating system error the dial raised')(
+          (state, expect) =>
+            expect({
+              ready: state.observation.ready,
+              terminationTags: terminationTagsOf(state.observation.reasons),
+              exitSignals: exitSignalsOf(state.observation.reasons),
+            }).toMatchObject({
+              ready: 0,
+              terminationTags: ['Abnormal'],
+              exitSignals: ['ECONNREFUSED'],
+            }),
+        ),
       ),
     )
   })

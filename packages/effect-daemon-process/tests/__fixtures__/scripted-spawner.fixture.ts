@@ -8,7 +8,6 @@
  * medium-independent child script in process, so a check drives incarnations without
  * spawning an operating-system process.
  */
-import { Conformance } from '@systemfsoftware/conformance-spec'
 import {
   Array as Arr,
   Context,
@@ -83,9 +82,6 @@ export class StoppedWithAnUnexpectedSignal extends Data.TaggedError('StoppedWith
 /** A child the medium reported ready before it had been told to become ready. */
 export class ChildWasReadyBeforeItSaidSo extends Data.TaggedError('ChildWasReadyBeforeItSaidSo')<{}> {}
 
-/** A run the check could not judge. */
-export class CheckRejected extends Data.TaggedError('CheckRejected')<{ readonly report: string }> {}
-
 /** What the scripted spawner did, readable after a run without holding the run's environment. */
 export class ProcessLedger extends Context.Service<
   ProcessLedger,
@@ -105,27 +101,6 @@ export const nothingLeftRunning: Effect.Effect<void, ProcessLeftRunning, Process
       (names) => names.length === 0 ? Effect.void : Effect.fail(new ProcessLeftRunning({ names })),
     ),
 )
-
-export const startedAtLeastOneChild: Effect.Effect<void, CheckRejected, ProcessLedger> = Effect.flatMap(
-  Effect.service(ProcessLedger),
-  (ledger) =>
-    Effect.flatMap(
-      ledger.started,
-      (started) =>
-        started > 0
-          ? Effect.void
-          : Effect.fail(new CheckRejected({ report: 'the check started no child, so its release proves nothing' })),
-    ),
-)
-
-/** The count of interruption points a release check explored, or the report that says it did not pass. */
-export const passedInterruptions = (report: Conformance.Report<never, never>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new CheckRejected({ report: Conformance.render(report) })
-    }),
-  )
 
 const rememberedSignals = (
   known: HashMap.HashMap<string, ReadonlyArray<string>>,

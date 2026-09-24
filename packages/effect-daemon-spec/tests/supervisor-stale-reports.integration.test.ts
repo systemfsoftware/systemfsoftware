@@ -1,6 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Match, Queue } from 'effect'
 import { fiberMediumLayer } from './__fixtures__/FiberMediumHarness.js'
 import { crashingChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
@@ -76,12 +75,16 @@ Feature('Reports from a child the supervisor has already replaced')
             const incarnations = yield* runningIncarnations(tree.supervisor)
             return { trace, incarnations }
           })),
-        Then('the report from the replaced incarnation has no effect')(({ after }) => {
-          expect(terminationReportDecisions('b')(after.trace)).toEqual([{ _tag: 'Stale' }])
-        }),
-        And('both children are running in their new incarnation')(({ after }) => {
-          expect(after.incarnations).toEqual([['a', 1, 'ready'], ['b', 1, 'ready']])
-        }),
+        Then("the replaced incarnation's report has no effect and both children run in their new incarnation")(
+          ({ after }, expect) =>
+            expect({
+              decisions: terminationReportDecisions('b')(after.trace),
+              incarnations: after.incarnations,
+            }).toEqual({
+              decisions: [{ _tag: 'Stale' }],
+              incarnations: [['a', 1, 'ready'], ['b', 1, 'ready']],
+            }),
+        ),
       ),
     )
   })
