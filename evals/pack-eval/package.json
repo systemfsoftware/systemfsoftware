@@ -15,6 +15,10 @@
     "pack-eval": "./dist/main.mjs"
   },
   "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "default": "./dist/mod.mjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

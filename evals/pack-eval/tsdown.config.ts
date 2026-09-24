@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   ...quietBuild,
-  entry: { main: './src/main.ts' },
+  entry: { mod: './src/mod.ts' },
   define: { 'import.meta.vitest': 'undefined' },
   format: 'esm',
   platform: 'node',
