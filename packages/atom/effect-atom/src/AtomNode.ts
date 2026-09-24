@@ -42,49 +42,32 @@ const NodeState: {
 }
 type NodeState = number
 
-/**
- * Concrete node tracked by a `RegistryImpl` for one atom.
- *
- * Nodes are plain `Object.create(NodeImplProto)` values carrying the standard
- * `Pipeable.pipe` implementation, not class instances.
- *
- * @since 4.0.0
- */
-export interface NodeImpl<A = unknown> {
+export class NodeImpl<A = unknown> extends Pipeable.Class {
+  constructor(
+    registry: RegistryImpl,
+    atom: Atom.Atom<A>,
+  ) {
+    super()
+    this.registry = registry
+    this.atom = atom
+    this.writeContext = new WriteContextImpl(registry, this)
+  }
   readonly registry: RegistryImpl
   readonly atom: Atom.Atom<A>
-  state: NodeState
+  state: NodeState = NodeState.uninitialized
   lifetime: Lifetime<A> | undefined
   writeContext: WriteContextImpl<A>
-  preserveInitialValueOnBuild: boolean
-  parents: Set<AnyNode>
+  preserveInitialValueOnBuild = false
+
+  parents = new Set<AnyNode>()
   previousParents: Set<AnyNode> | undefined
-  children: Set<AnyNode>
-  listeners: Set<() => void>
-  skipInvalidation: boolean
-  building: boolean
-  invalidatedDuringBuild: boolean
-  _value: Option.Option<A>
-  readonly canBeRemoved: boolean
-  currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed'
-  value(): A
-  valueOption(): Option.Option<A>
-  setInitialValue(value: A): void
-  setValue(value: A): void
-  addParent(parent: AnyNode): void
-  removeChild(child: AnyNode): void
-  invalidate(): void
-  invalidateChildren(): void
-  notify(): void
-  disposeLifetime(): void
-  remove(): void
-  subscribe(listener: () => void): () => void
-}
+  children = new Set<AnyNode>()
+  listeners = new Set<() => void>()
+  skipInvalidation = false
+  building = false
+  invalidatedDuringBuild = false
 
-const NodeImplProto = {
-  ...Pipeable.Prototype,
-
-  currentState(this: NodeImpl): 'uninitialized' | 'stale' | 'valid' | 'removed' {
+  currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed' {
     switch (this.state) {
       case NodeState.uninitialized:
         return 'uninitialized'
@@ -95,153 +78,88 @@ const NodeImplProto = {
       default:
         return 'removed'
     }
-  },
+  }
 
-  value<A>(this: NodeImpl<A>): A {
+  get canBeRemoved(): boolean {
+    return fateMeansRemoved(decideNodeFate(nodeLifetimeInput(this)))
+  }
+
+  _value!: A
+  value(): A {
     rebuildIfWaiting(this)
-    return Option.getOrThrow(this._value)
-  },
+    return this._value
+  }
 
-  valueOption<A>(this: NodeImpl<A>): Option.Option<A> {
+  valueOption(): Option.Option<A> {
     if ((this.state & NodeFlags.initialized) === 0) {
       return Option.none()
     }
-    return this._value
-  },
+    return Option.some(this._value)
+  }
 
-  setInitialValue<A>(this: NodeImpl<A>, value: A): void {
+  setInitialValue(value: A): void {
     if ((this.state & NodeFlags.initialized) === 0) {
       assignInitialUninitialized(this, value)
       return
     }
     this.setValue(value)
-  },
+  }
 
-  setValue<A>(this: NodeImpl<A>, value: A): void {
+  setValue(value: A): void {
     if ((this.state & NodeFlags.initialized) === 0) {
       assignFirstValue(this, value)
       return
     }
     replaceInitializedValue(this, value)
-  },
+  }
 
-  addParent<A>(this: NodeImpl<A>, parent: AnyNode): void {
+  addParent(parent: AnyNode): void {
     this.parents.add(parent)
     forgetPreviousParent(this, parent)
     linkChild(this, parent)
-  },
+  }
 
-  removeChild<A>(this: NodeImpl<A>, child: AnyNode): void {
+  removeChild(child: AnyNode): void {
     this.children.delete(child)
-  },
+  }
 
-  invalidate<A>(this: NodeImpl<A>): void {
+  invalidate(): void {
     markInvalidatedDuringBuild(this)
     staleIfValid(this)
     continueInvalidate(this)
-  },
+  }
 
-  invalidateChildren<A>(this: NodeImpl<A>): void {
+  invalidateChildren(): void {
     if (this.children.size === 0) {
       return
     }
     invalidateChildSet(this)
-  },
+  }
 
-  notify<A>(this: NodeImpl<A>): void {
+  notify(): void {
     this.listeners.forEach(notifyListener)
 
     if (batchState.phase === BatchPhase.commit) {
       batchState.notify.delete(this)
     }
-  },
+  }
 
-  disposeLifetime<A>(this: NodeImpl<A>): void {
+  disposeLifetime(): void {
     disposeCurrentLifetime(this)
     stashParents(this)
-  },
+  }
 
-  remove<A>(this: NodeImpl<A>): void {
+  remove() {
     this.state = NodeState.removed
     this.listeners.clear()
     removeLifetimeAndParents(this)
-  },
+  }
 
-  subscribe<A>(this: NodeImpl<A>, listener: () => void): () => void {
+  subscribe(listener: () => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
-  },
+  }
 }
-
-export const makeNode = <A>(registry: RegistryImpl, atom: Atom.Atom<A>): NodeImpl<A> => {
-  const partial: Omit<NodeImpl<A>, 'writeContext'> = Object.assign(
-    {},
-    NodeImplProto,
-    {
-      registry,
-      atom,
-      state: NodeState.uninitialized,
-      lifetime: undefined,
-      preserveInitialValueOnBuild: false,
-      parents: new Set<AnyNode>(),
-      previousParents: undefined,
-      children: new Set<AnyNode>(),
-      listeners: new Set<() => void>(),
-      skipInvalidation: false,
-      building: false,
-      invalidatedDuringBuild: false,
-      canBeRemoved: false,
-      _value: Option.none<A>(),
-    },
-  )
-  const self: NodeImpl<A> = Object.assign(partial, {
-    writeContext: makeWriteContext(registry, partial),
-  })
-  Object.defineProperty(self, 'canBeRemoved', {
-    get(this: NodeImpl<A>): boolean {
-      return fateMeansRemoved(decideNodeFate(nodeLifetimeInput(this)))
-    },
-  })
-  return self
-}
-
-interface WriteContextImpl<A = unknown> extends Pipeable.Pipeable {
-  readonly registry: RegistryImpl
-  readonly node: Pick<NodeImpl<A>, 'setValue' | 'invalidate'>
-  get<T>(atom: Atom.Atom<T>): T
-  set<R, W>(atom: Atom.Writable<R, W>, value: W): void
-  setSelf(a: A): void
-  refreshSelf(): void
-}
-
-const WriteContextImplProto = {
-  ...Pipeable.Prototype,
-
-  get<A>(this: WriteContextImpl<A>, atom: Atom.Atom<A>): A {
-    return this.registry.get(atom)
-  },
-
-  set<A, R, W>(this: WriteContextImpl<A>, atom: Atom.Writable<R, W>, value: W): void {
-    this.registry.set(atom, value)
-  },
-
-  setSelf<A>(this: WriteContextImpl<A>, value: A): void {
-    this.node.setValue(value)
-  },
-
-  refreshSelf<A>(this: WriteContextImpl<A>): void {
-    this.node.invalidate()
-  },
-}
-
-const makeWriteContext = <A>(
-  registry: RegistryImpl,
-  node: Pick<NodeImpl<A>, 'setValue' | 'invalidate'>,
-): WriteContextImpl<A> =>
-  Object.assign({}, WriteContextImplProto, {
-    registry,
-    node,
-  })
 
 function nodeLifetimeInput<A>(node: NodeImpl<A>): NodeLifetimeInput {
   return {
@@ -249,7 +167,7 @@ function nodeLifetimeInput<A>(node: NodeImpl<A>): NodeLifetimeInput {
     listenerCount: node.listeners.size,
     childCount: node.children.size,
     isLive: node.state !== 0,
-    isWaiting: Option.isSome(node._value) && isWaitingForInitial(node._value.value),
+    isWaiting: isWaitingForInitial(node._value),
     idleTTL: node.atom.idleTTL,
     defaultIdleTTL: node.registry.defaultIdleTTL,
   }
@@ -338,13 +256,13 @@ function scheduleRemovalIfIdle<A>(node: NodeImpl<A>, parent: AnyNode): void {
 function assignInitialUninitialized<A>(node: NodeImpl<A>, value: A): void {
   node.preserveInitialValueOnBuild = true
   node.state = NodeState.stale
-  node._value = Option.some(value)
+  node._value = value
   notifyNodeOrBatch(node)
 }
 
 function assignFirstValue<A>(node: NodeImpl<A>, value: A): void {
   node.state = NodeState.valid
-  node._value = Option.some(value)
+  node._value = value
   notifyNodeOrBatch(node)
 }
 
@@ -362,14 +280,14 @@ function replaceInitializedValue<A>(node: NodeImpl<A>, value: A): void {
 }
 
 function replaceIfChanged<A>(node: NodeImpl<A>, value: A): void {
-  if (node.atom.equals(Option.getOrThrow(node._value), value)) {
+  if (node.atom.equals(node._value, value)) {
     return
   }
   commitChangedValue(node, value)
 }
 
 function commitChangedValue<A>(node: NodeImpl<A>, value: A): void {
-  node._value = Option.some(value)
+  node._value = value
   invalidateAfterValueChange(node)
   notifyListenersIfPresent(node)
 }
@@ -1030,6 +948,31 @@ function readAndLink<A, A2>(node: NodeImpl<A>, atom: Atom.Atom<A2>): A2 {
   const value = parent.value()
   node.addParent(parent)
   return value
+}
+
+class WriteContextImpl<A> extends Pipeable.Class implements Atom.WriteContext<A> {
+  constructor(
+    registry: RegistryImpl,
+    node: NodeImpl<A>,
+  ) {
+    super()
+    this.registry = registry
+    this.node = node
+  }
+  readonly registry: RegistryImpl
+  readonly node: NodeImpl<A>
+  get<A>(atom: Atom.Atom<A>): A {
+    return this.registry.get(atom)
+  }
+  set<R, W>(atom: Atom.Writable<R, W>, value: W) {
+    return this.registry.set(atom, value)
+  }
+  setSelf(value: A) {
+    return this.node.setValue(value)
+  }
+  refreshSelf() {
+    return this.node.invalidate()
+  }
 }
 
 // -----------------------------------------------------------------------------

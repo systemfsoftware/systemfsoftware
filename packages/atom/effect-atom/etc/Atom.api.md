@@ -681,9 +681,9 @@ export interface WriteContext<A> {
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-Bsmv_yh4.d.ts:492:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
-// dist/Atom-Bsmv_yh4.d.ts:675:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
-// dist/Atom-Bsmv_yh4.d.ts:692:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CNcOgrn0.d.ts:490:3 - (ae-forgotten-export) The symbol "AnyAtom$1" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CNcOgrn0.d.ts:673:5 - (ae-forgotten-export) The symbol "AtomRegistry" needs to be exported by the entry point Atom.d.ts
+// dist/Atom-CNcOgrn0.d.ts:690:7 - (ae-forgotten-export) The symbol "AnyAtomResultFn" needs to be exported by the entry point Atom.d.ts
 
 // (No @packageDocumentation comment for this package)
 

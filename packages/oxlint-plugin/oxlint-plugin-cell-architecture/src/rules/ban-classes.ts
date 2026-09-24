@@ -1,16 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 
-import {
-  ANONYMOUS_CLASS,
-  EXPECTED,
-  FIX,
-  meta,
-  SANCTIONED_BASES,
-  SANCTIONED_MODULE,
-  SIBLING_RULE_TERRITORY,
-  TEST_OR_FIXTURE_PATH,
-} from './ban-classes.config.js'
+import { ANONYMOUS_CLASS, EXPECTED, FIX, meta, TEST_OR_FIXTURE_PATH } from './ban-classes.config.js'
 
 export type Options = []
 
@@ -33,103 +24,10 @@ export type MessageIds = 'banned'
  */
 const isTestPath = (filename: string): boolean => TEST_OR_FIXTURE_PATH.test(filename)
 
-const canonicalModule = (source: string): string =>
-  source === 'effect' || source.startsWith('effect/') ? SANCTIONED_MODULE : source
-
-/**
- * The namespace segment a namespace import contributes to the resolved path.
- *
- * `import * as Context from 'effect/Context'` binds the MEMBERS of `Context`, so
- * the local name stands for the namespace and `Context.Service` must resolve to
- * `effect/Context.Service`. `import * as Effect from 'effect'` binds the package
- * root instead, so the namespace arrives as the first property access and this
- * contributes nothing.
- *
- * `canonicalModule` collapses both spellings to `effect` because that is what
- * the membership test needs, which destroys exactly this distinction — so it is
- * read from the original specifier here rather than recovered later.
- */
-const namespaceSegmentOf = (source: string): string | null =>
-  source.startsWith(`${SANCTIONED_MODULE}/`) ? source.slice(SANCTIONED_MODULE.length + 1) : null
-
-const dynamicImportSource = (init: ESTree.Expression | null | undefined): string | null =>
-  init?.type === 'AwaitExpression' &&
-    init.argument.type === 'ImportExpression' &&
-    init.argument.source.type === 'Literal' &&
-    typeof init.argument.source.value === 'string'
-    ? init.argument.source.value
-    : null
-
 export const banClasses = defineRule({
   meta,
   create(context: Context) {
     if (isTestPath(context.filename)) return {}
-
-    const namedBindings = new Map<string, { readonly module: string; readonly namespace: string }>()
-    const namespaceImports = new Map<string, string | null>()
-    const shadowedLocals = new Set<string>()
-
-    const markShadowed = (name: string): void => {
-      if (namedBindings.has(name) || namespaceImports.has(name)) {
-        shadowedLocals.add(name)
-      }
-    }
-
-    /**
-     * Resolve an `extends` expression to its rooted, import-resolved dotted
-     * path (e.g. `effect/Schema.Class`), or `null` when it does not bottom out
-     * in a resolved effect namespace member. Unwraps every call layer (so the
-     * double-call `Context.Service<Self>()('Tag')`, the single-call
-     * `Context.Reference<Shape>('key', { defaultValue })`, the type-argument
-     * wrapper `Data.Class<Props>`, and the bare member `Pipeable.Class` all
-     * land on the same root MemberExpression) and ignores computed access.
-     */
-    const resolveBasePath = (superClass: ESTree.Expression): string | null => {
-      let node: ESTree.Expression = superClass
-      for (;;) {
-        if (node.type === 'CallExpression') {
-          node = node.callee
-          continue
-        }
-        if (node.type === 'TSInstantiationExpression') {
-          node = node.expression
-          continue
-        }
-        break
-      }
-
-      const segments: Array<string> = []
-      while (node.type === 'MemberExpression') {
-        if (node.computed || node.property.type !== 'Identifier') return null
-        segments.unshift(node.property.name)
-        node = node.object
-      }
-      if (node.type !== 'Identifier') return null
-
-      const localName = node.name
-      if (shadowedLocals.has(localName)) return null
-
-      const binding = namedBindings.get(localName)
-      if (binding !== undefined) {
-        return segments.length > 0 ? `${binding.module}/${binding.namespace}.${segments.join('.')}` : null
-      }
-
-      if (namespaceImports.has(localName)) {
-        const namespace = namespaceImports.get(localName) ?? null
-        // A deep import (`effect/Context`) already names the namespace, so the
-        // member is the only segment the extends-expression needs to supply. A
-        // root import (`effect`) supplies the namespace as its first segment,
-        // which needs at least two.
-        const path = namespace === null
-          ? `${SANCTIONED_MODULE}/${segments.join('.')}`
-          : `${SANCTIONED_MODULE}/${namespace}.${segments.join('.')}`
-        const required = namespace === null ? 2 : 1
-        return segments.length >= required ? path : null
-      }
-
-      return null
-    }
-
     const report = (node: ESTree.Class, className: string, basePath: string | null): void => {
       context.report({
         node,
@@ -175,84 +73,25 @@ export const banClasses = defineRule({
     const checkClass = (node: ESTree.Class): void => {
       if (isAmbientDeclaration(node)) return
       const className = node.id === null ? ANONYMOUS_CLASS : node.id.name
-
       if (node.superClass === null) {
         report(node, className, null)
         return
       }
 
-      const basePath = resolveBasePath(node.superClass)
-      if (basePath === null) {
-        report(node, className, null)
+      if (
+        node.superClass.type === 'Identifier' &&
+        (node.superClass.name === 'Object' || node.superClass.name === 'Function')
+      ) {
+        report(node, className, node.superClass.name)
         return
       }
-
-      if (SANCTIONED_BASES.has(basePath)) return
-      if (SIBLING_RULE_TERRITORY.has(basePath)) return
-
-      report(node, className, basePath)
     }
 
     return {
-      ImportDeclaration(node: ESTree.ImportDeclaration) {
-        const module = canonicalModule(node.source.value)
-        for (const spec of node.specifiers) {
-          if (spec.type === 'ImportSpecifier' && spec.imported.type === 'Identifier') {
-            namedBindings.set(spec.local.name, { module, namespace: spec.imported.name })
-          } else if (spec.type === 'ImportNamespaceSpecifier') {
-            if (module === SANCTIONED_MODULE) {
-              namespaceImports.set(spec.local.name, namespaceSegmentOf(node.source.value))
-            }
-          } else {
-            markShadowed(spec.local.name)
-          }
-        }
-      },
-
-      VariableDeclaration(node: ESTree.VariableDeclaration) {
-        for (const decl of node.declarations) {
-          if (decl.id.type === 'Identifier') {
-            markShadowed(decl.id.name)
-          } else if (decl.id.type === 'ObjectPattern') {
-            const source = dynamicImportSource(decl.init)
-            for (const property of decl.id.properties) {
-              if (
-                source !== null &&
-                property.type === 'Property' &&
-                property.key.type === 'Identifier' &&
-                property.value.type === 'Identifier'
-              ) {
-                namedBindings.set(property.value.name, {
-                  module: canonicalModule(source),
-                  namespace: property.key.name,
-                })
-              } else if (property.type === 'Property' && property.value.type === 'Identifier') {
-                markShadowed(property.value.name)
-              } else if (property.type === 'RestElement' && property.argument.type === 'Identifier') {
-                markShadowed(property.argument.name)
-              }
-            }
-          }
-        }
-      },
-
-      FunctionDeclaration(node: ESTree.Function) {
-        if (node.id !== null) {
-          markShadowed(node.id.name)
-        }
-      },
-
       ClassDeclaration(node: ESTree.Class) {
-        if (node.id !== null) {
-          markShadowed(node.id.name)
-        }
         checkClass(node)
       },
-
       ClassExpression(node: ESTree.Class) {
-        if (node.id !== null) {
-          markShadowed(node.id.name)
-        }
         checkClass(node)
       },
     }

@@ -118,9 +118,11 @@ export interface Registry {
 }
 
 // @public
-export interface RegistryImpl extends Registry {
+export class RegistryImpl extends Pipeable$1.Class implements Registry {
     // (undocumented)
     readonly [TypeId]: TypeId;
+    // Warning: (ae-forgotten-export) The symbol "AnyValue" needs to be exported by the entry point Registry.d.ts
+    constructor(initialValues?: Iterable<readonly [Atom, AnyValue]>, scheduleTask?: (cb: () => void) => () => void, timeoutResolution?: number, defaultIdleTTL?: number, now?: () => number, scheduleTimer?: (f: () => void, delayMillis: number) => () => void);
     // (undocumented)
     atomHasTtl(atom: Atom): boolean;
     // (undocumented)
@@ -138,7 +140,7 @@ export interface RegistryImpl extends Registry {
     // (undocumented)
     get<A>(atom: Atom<A>): A;
     // (undocumented)
-    getNodes(): Map<Atom | string, NodeImpl>;
+    getNodes(): Map<string | Atom<unknown>, NodeImpl<unknown>>;
     // (undocumented)
     getRaw<A>(atom: Atom<A>): Option_2.Option<A>;
     // (undocumented)
@@ -150,19 +152,17 @@ export interface RegistryImpl extends Registry {
     // Warning: (ae-forgotten-export) The symbol "NodeImpl" needs to be exported by the entry point Registry.d.ts
     //
     // (undocumented)
-    readonly nodes: Map<Atom | string, NodeImpl>;
+    readonly nodes: Map<string | Atom<unknown>, NodeImpl<unknown>>;
     // (undocumented)
-    readonly nodeTimeoutBucket: Map<NodeImpl, number>;
+    readonly nodeTimeoutBucket: Map<NodeImpl<unknown>, number>;
     // (undocumented)
     readonly now: () => number;
     // (undocumented)
     onNodeAdded?: ((node: Node_2) => void) | undefined;
     // (undocumented)
     onNodeRemoved?: ((node: Node_2) => void) | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AnyValue" needs to be exported by the entry point Registry.d.ts
-    //
     // (undocumented)
-    readonly preloadedSerializable: Map<string, AnyValue>;
+    readonly preloadedSerializable: Map<string, unknown>;
     // (undocumented)
     refresh: <A>(atom: Atom<A>) => void;
     // (undocumented)
@@ -225,8 +225,8 @@ export const TypeId: TypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-Bsmv_yh4.d.ts:344:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
-// dist/Atom-Bsmv_yh4.d.ts:344:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CNcOgrn0.d.ts:338:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-CNcOgrn0.d.ts:338:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
 
 // (No @packageDocumentation comment for this package)
 

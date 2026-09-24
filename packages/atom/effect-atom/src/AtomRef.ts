@@ -88,7 +88,7 @@ export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
  *
  * @since 4.0.0
  */
-export const make = <A>(value: A): AtomRef<A> => makeAtomRefImpl(value)
+export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
 
 /**
  * Creates a reactive collection from an iterable of initial item values.
@@ -100,7 +100,7 @@ export const make = <A>(value: A): AtomRef<A> => makeAtomRefImpl(value)
  *
  * @since 4.0.0
  */
-export const collection = <A>(items: Iterable<A>): Collection<A> => makeCollectionImpl(items)
+export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items)
 
 const isReadonlyRef = (u: unknown): u is AnyReadonlyRef => hasProperty(u, TypeId)
 
@@ -194,32 +194,35 @@ const unlinkListener = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): voi
   unlinkNext(listener)
 }
 
-interface ReadonlyRefImpl<A> extends ReadonlyRef<A> {
-  value: A
-  listeners: Listener<A> | null
-  notify(a: A): void
-}
+class ReadonlyRefImpl<A> extends Pipeable.Class implements ReadonlyRef<A> {
+  readonly [TypeId]: TypeId
+  readonly key = keyState.generate()
+  public value: A
+  constructor(value: A) {
+    super()
+    this[TypeId] = TypeId
+    this.value = value
+  }
 
-const ReadonlyRefProto = {
-  ...Pipeable.Prototype,
-
-  [Equal.symbol]<A>(this: ReadonlyRefImpl<A>, that: Equal.Equal): boolean {
+  [Equal.symbol](that: Equal.Equal) {
     return isReadonlyRef(that) && Equal.equals(this.value, that.value)
-  },
+  }
 
-  [Hash.symbol]<A>(this: ReadonlyRefImpl<A>): number {
+  [Hash.symbol]() {
     return Hash.hash(this.value)
-  },
+  }
 
-  notify<A>(this: ReadonlyRefImpl<A>, a: A): void {
+  listeners: Listener<A> | null = null
+
+  notify(a: A) {
     let listener = this.listeners
     while (listener !== null) {
       listener.f(a)
       listener = listener.next
     }
-  },
+  }
 
-  subscribe<A>(this: ReadonlyRefImpl<A>, f: (a: A) => void): () => void {
+  subscribe(f: (a: A) => void): () => void {
     const listener: Listener<A> = {
       f,
       prev: null,
@@ -231,64 +234,52 @@ const ReadonlyRefProto = {
     return () => {
       unlinkListener(this, listener)
     }
-  },
+  }
 
-  map<A, B>(this: ReadonlyRefImpl<A>, f: (a: A) => B): ReadonlyRef<B> {
-    return makeMapRefImpl(this, f)
-  },
+  map<B>(f: (a: A) => B): ReadonlyRef<B> {
+    return new MapRefImpl(this, f)
+  }
 }
 
-const makeReadonlyRefFields = <A>(value: A) => ({
-  [TypeId]: TypeId,
-  key: keyState.generate(),
-  value,
-  listeners: null,
-})
-
-interface AtomRefImpl<A> extends AtomRef<A> {
-  value: A
-  listeners: Listener<A> | null
-  notify(a: A): void
-}
-
-const AtomRefProto = {
-  ...ReadonlyRefProto,
-
-  prop<A, K extends keyof A>(this: AtomRefImpl<A>, prop: K): AtomRef<A[K]> {
-    return makePropRefImpl(this, prop)
-  },
-
-  set<A>(this: AtomRefImpl<A>, value: A): AtomRef<A> {
+class AtomRefImpl<A> extends ReadonlyRefImpl<A> implements AtomRef<A> {
+  prop<K extends keyof A>(prop: K): AtomRef<A[K]> {
+    return new PropRefImpl(this, prop)
+  }
+  set(value: A) {
     if (Equal.equals(value, this.value)) {
       return this
     }
     this.value = value
     this.notify(value)
     return this
-  },
-
-  update<A>(this: AtomRefImpl<A>, f: (value: A) => A): AtomRef<A> {
-    return this.set(f(this.value))
-  },
-}
-
-const makeAtomRefImpl = <A>(value: A): AtomRefImpl<A> => {
-  const self: AtomRefImpl<A> = {
-    ...AtomRefProto,
-    ...makeReadonlyRefFields(value),
   }
-  return self
+
+  update(f: (value: A) => A) {
+    return this.set(f(this.value))
+  }
 }
 
-interface MapRefImpl<A, B> extends ReadonlyRef<B> {
+class MapRefImpl<A, B> extends Pipeable.Class implements ReadonlyRef<B> {
+  readonly [TypeId]: TypeId
+  readonly key = keyState.generate()
   readonly parent: ReadonlyRef<A>
   readonly transform: (a: A) => B
-}
-
-const MapRefProto = {
-  ...ReadonlyRefProto,
-
-  subscribe<A, B>(this: MapRefImpl<A, B>, f: (a: B) => void): () => void {
+  constructor(parent: ReadonlyRef<A>, transform: (a: A) => B) {
+    super()
+    this[TypeId] = TypeId
+    this.parent = parent
+    this.transform = transform
+  }
+  [Equal.symbol](that: Equal.Equal) {
+    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
+  }
+  [Hash.symbol]() {
+    return Hash.hash(this.value)
+  }
+  get value() {
+    return this.transform(this.parent.value)
+  }
+  subscribe(f: (a: B) => void): () => void {
     let previous = this.transform(this.parent.value)
     return this.parent.subscribe((a) => {
       const next = this.transform(a)
@@ -298,53 +289,52 @@ const MapRefProto = {
       previous = next
       f(next)
     })
-  },
-
-  map<A, B, C>(this: MapRefImpl<A, B>, f: (a: B) => C): ReadonlyRef<C> {
-    return makeMapRefImpl(this, f)
-  },
-}
-
-const makeMapRefImpl = <A, B>(parent: ReadonlyRef<A>, transform: (a: A) => B): MapRefImpl<A, B> => {
-  const self: MapRefImpl<A, B> = {
-    ...MapRefProto,
-    [TypeId]: TypeId,
-    key: keyState.generate(),
-    parent,
-    transform,
-    get value(): B {
-      return this.transform(this.parent.value)
-    },
   }
-  return self
+  map<C>(f: (a: B) => C): ReadonlyRef<C> {
+    return new MapRefImpl(this, f)
+  }
 }
 
-interface PropRefImpl<A, K extends keyof A> extends AtomRef<A[K]> {
-  listeners: Listener<A[K]> | null
+class PropRefImpl<A, K extends keyof A> extends Pipeable.Class implements AtomRef<A[K]> {
+  readonly [TypeId]: TypeId
+  readonly key = keyState.generate()
+  private previous: A[K]
   readonly parent: AtomRef<A>
   readonly _prop: K
-  previous: A[K]
-}
 
-const PropRefProto = {
-  ...ReadonlyRefProto,
-
-  subscribe<A, K extends keyof A>(this: PropRefImpl<A, K>, f: (a: A[K]) => void): () => void {
+  constructor(parent: AtomRef<A>, _prop: K) {
+    super()
+    this[TypeId] = TypeId
+    this.parent = parent
+    this._prop = _prop
+    this.previous = parent.value[_prop]
+  }
+  [Equal.symbol](that: Equal.Equal) {
+    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
+  }
+  [Hash.symbol]() {
+    return Hash.hash(this.value)
+  }
+  get value() {
+    const parentValue = this.parent.value
+    if (hasProp(parentValue, this._prop)) {
+      this.previous = parentValue[this._prop]
+    }
+    return this.previous
+  }
+  subscribe(f: (a: A[K]) => void): () => void {
     let previous = this.value
     return this.parent.subscribe((a) => {
       previous = emitPropIfPresent(this._prop, a, previous, f)
     })
-  },
-
-  map<A, K extends keyof A, C>(this: PropRefImpl<A, K>, f: (a: A[K]) => C): ReadonlyRef<C> {
-    return makeMapRefImpl(this, f)
-  },
-
-  prop<A, K extends keyof A, CK extends keyof A[K]>(this: PropRefImpl<A, K>, prop: CK): AtomRef<A[K][CK]> {
-    return makePropRefImpl(this, prop)
-  },
-
-  set<A, K extends keyof A>(this: PropRefImpl<A, K>, value: A[K]): AtomRef<A[K]> {
+  }
+  map<C>(f: (a: A[K]) => C): ReadonlyRef<C> {
+    return new MapRefImpl(this, f)
+  }
+  prop<CK extends keyof A[K]>(prop: CK): AtomRef<A[K][CK]> {
+    return new PropRefImpl(this, prop)
+  }
+  set(value: A[K]): AtomRef<A[K]> {
     if (isArrayWithProp(this.parent.value, this._prop)) {
       const newArray = Object.assign(new Array<A[K]>(), this.parent.value)
       newArray[Number(this._prop)] = value
@@ -356,9 +346,8 @@ const PropRefProto = {
       })
     }
     return this
-  },
-
-  update<A, K extends keyof A>(this: PropRefImpl<A, K>, f: (value: A[K]) => A[K]): AtomRef<A[K]> {
+  }
+  update(f: (value: A[K]) => A[K]): AtomRef<A[K]> {
     if (isArrayWithProp(this.parent.value, this._prop)) {
       const newArray = Object.assign(new Array<A[K]>(), this.parent.value)
       newArray[Number(this._prop)] = f(this.parent.value[this._prop])
@@ -370,42 +359,21 @@ const PropRefProto = {
       })
     }
     return this
-  },
-}
-
-const makePropRefImpl = <A, K extends keyof A>(parent: AtomRef<A>, _prop: K): PropRefImpl<A, K> => {
-  const self: PropRefImpl<A, K> = {
-    ...PropRefProto,
-    [TypeId]: TypeId,
-    key: keyState.generate(),
-    listeners: null,
-    parent,
-    _prop,
-    previous: parent.value[_prop],
-    get value(): A[K] {
-      const parentValue = this.parent.value
-      if (hasProp(parentValue, this._prop)) {
-        this.previous = parentValue[this._prop]
-      }
-      return this.previous
-    },
   }
-  return self
 }
 
-interface CollectionImpl<A> extends Collection<A> {
-  value: Array<AtomRef<A>>
-  listeners: Listener<Array<AtomRef<A>>> | null
-  linked: Set<AtomRef<A>>
-  notify(a: Array<AtomRef<A>>): void
-  makeRef(value: A): AtomRef<A>
-}
+class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collection<A> {
+  private readonly linked = new Set<AtomRef<A>>()
 
-const CollectionProto = {
-  ...ReadonlyRefProto,
+  constructor(items: Iterable<A>) {
+    super([])
+    for (const item of items) {
+      this.value.push(this.makeRef(item))
+    }
+  }
 
-  makeRef<A>(this: CollectionImpl<A>, value: A): AtomRef<A> {
-    const ref = makeAtomRefImpl(value)
+  makeRef(value: A) {
+    const ref = new AtomRefImpl(value)
     let proxy!: AtomRef<A>
     const notify = (value: A) => {
       ref.notify(value)
@@ -424,23 +392,23 @@ const CollectionProto = {
     })
     this.linked.add(proxy)
     return proxy
-  },
+  }
 
-  push<A>(this: CollectionImpl<A>, item: A): Collection<A> {
+  push(item: A) {
     const ref = this.makeRef(item)
     this.value.push(ref)
     this.notify(this.value)
     return this
-  },
+  }
 
-  insertAt<A>(this: CollectionImpl<A>, index: number, item: A): Collection<A> {
+  insertAt(index: number, item: A) {
     const ref = this.makeRef(item)
     this.value.splice(index, 0, ref)
     this.notify(this.value)
     return this
-  },
+  }
 
-  remove<A>(this: CollectionImpl<A>, ref: AtomRef<A>): Collection<A> {
+  remove(ref: AtomRef<A>) {
     const index = this.value.indexOf(ref)
     if (index !== -1) {
       this.value.splice(index, 1)
@@ -448,24 +416,9 @@ const CollectionProto = {
       this.notify(this.value)
     }
     return this
-  },
+  }
 
-  toArray<A>(this: CollectionImpl<A>): Array<A> {
+  toArray() {
     return this.value.map((ref) => ref.value)
-  },
-}
-
-const makeCollectionImpl = <A>(items: Iterable<A>): CollectionImpl<A> => {
-  const self: CollectionImpl<A> = {
-    ...CollectionProto,
-    [TypeId]: TypeId,
-    key: keyState.generate(),
-    value: new Array<AtomRef<A>>(),
-    listeners: null,
-    linked: new Set<AtomRef<A>>(),
   }
-  for (const item of items) {
-    self.value.push(self.makeRef(item))
-  }
-  return self
 }
