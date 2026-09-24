@@ -348,9 +348,19 @@ function removeAtomIfIdle(registry: RegistryImpl, atom: Atom.Atom): void {
 }
 
 function evictNode(registry: RegistryImpl, node: NodeImpl): void {
+  clearNodeTimeout(registry, node)
   registry.nodes.delete(atomKey(node.atom))
   node.remove()
   notifyNodeRemoved(registry, node)
+}
+
+function clearNodeTimeout(registry: RegistryImpl, node: NodeImpl): void {
+  const bucket = registry.nodeTimeoutBucket.get(node)
+  if (bucket === undefined) {
+    return
+  }
+  registry.nodeTimeoutBucket.delete(node)
+  dropNodeFromTimeoutBucket(registry, node, bucket)
 }
 
 function evictNodeIfIdle(registry: RegistryImpl, node: NodeImpl): void {
@@ -649,13 +659,11 @@ export class RegistryImpl extends Pipeable.Class {
   }
 
   removeNodeTimeout(node: NodeImpl): void {
-    const bucket = this.nodeTimeoutBucket.get(node)
-    if (bucket === undefined) {
+    if (this.nodeTimeoutBucket.has(node) === false) {
       return
     }
-    this.nodeTimeoutBucket.delete(node)
+    clearNodeTimeout(this, node)
     this.scheduleNodeRemoval(node)
-    dropNodeFromTimeoutBucket(this, node, bucket)
   }
 
   #currentSweepTTL: number | null = null
