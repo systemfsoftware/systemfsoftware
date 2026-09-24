@@ -31,22 +31,25 @@ pnpm add @systemfsoftware/effect-daemon-conformance
 ## Usage
 
 ```ts
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from '@effect/platform-node-shared'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
-import { Effect } from 'effect'
+import { ProcessMedium } from '@systemfsoftware/effect-daemon-process'
+import { Effect, Layer } from 'effect'
 
-const report = yield* Conformance.prove({
-  name: 'process',
-  declaration: { reporting: 'exit', groupStop: 'atomic' },
-  port: ProcessMedium.port,
-  launch: (childId, script) =>
-    Effect.succeed({
-      program: processSpecOf(childId, script),
-      control: { advance: (step, generation) => writeStepToChild(childId, generation, step) },
-    }),
-}).pipe(Effect.provide(ProcessMedium.layer(options)))
+const media = Layer.mergeAll(
+  Conformance.FiberReferenceLayer,
+  ProcessMedium.layer({ readyLine: ProcessMedium.fixtureReadyLine }),
+  NodeChildProcessSpawner.layer.pipe(Layer.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+)
 
-Conformance.isConforming(report)
+const conforms = Conformance.prove(ProcessMedium.conformanceDriver({ fixturePath: './child-script.mjs' })).pipe(
+  Effect.map(Conformance.isConforming),
+  Effect.provide(media),
+)
 ```
+
+A driver is `{ name, declaration, port, launch }`. `ProcessMedium.conformanceDriver` is one;
+`SocketMedium`, `ClusterMedium` and `MicroVMMedium` ship theirs the same way.
 
 `launch` turns a `ChildScript` into the medium's own program and hands back the control channel that
 advances it — a queue for the fiber reference, stdin or a fixture socket for another medium. The
