@@ -1,4 +1,3 @@
-import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Match, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
@@ -37,7 +36,14 @@ export const stepLock: {
 
 const acquireOn = (state: LockState, key: string): readonly [LockState, boolean] =>
   state.holder === undefined ? [{ holder: key }, true] : [{ holder: state.holder }, false]
-export const lockModel: Conformance.Model<LockCommand, LockState, boolean | void> = {
+
+type LockModel = {
+  readonly state: Schema.Codec<LockState>
+  readonly initial: LockState
+  readonly step: (state: LockState, command: LockCommand) => readonly [LockState, boolean | void]
+}
+
+export const lockModel: LockModel = {
   state: LockState,
   initial: initialLockState,
   step: stepLock,
