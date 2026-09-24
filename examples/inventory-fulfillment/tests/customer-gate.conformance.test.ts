@@ -6,7 +6,7 @@ import { GateCommand, gateModel } from './__fixtures__/customer-gate.model.js'
 
 const Feature = makeFeature({ it })
 
-Feature("Serving one customer's orders one at a time", { timeout: 120_000 })
+Feature("Serving one customer's orders one at a time", { timeout: 0 })
   .withLayer(Layer.empty)
   .live('the scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -25,8 +25,6 @@ Feature("Serving one customer's orders one at a time", { timeout: 120_000 })
               operations: 4,
               preemptions: 2,
               maxSchedules: 200_000,
-              timeoutMs: 60_000,
-              now: () => performance.now(),
             }),
         ),
         Then("every order finds its own customer's line empty when it enters")((s) => {

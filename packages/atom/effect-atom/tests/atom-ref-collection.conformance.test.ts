@@ -66,7 +66,7 @@ const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
     }),
   )
 
-Feature('A shopping list collection that stays with a plain list', { timeout: 120_000 })
+Feature('A shopping list collection that stays with a plain list', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

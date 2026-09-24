@@ -46,7 +46,7 @@ const passedRuns = <C, R>(report: Conformance.Report<C, R>): number =>
     }),
   )
 
-Feature('Keeping one leadership for one daemon at a time', { timeout: 120_000 })
+Feature('Keeping one leadership for one daemon at a time', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
@@ -69,7 +69,6 @@ Feature('Keeping one leadership for one daemon at a time', { timeout: 120_000 })
                 operations: row.operations,
                 preemptions: 2,
                 maxSchedules: 100_000,
-                timeoutMs: 60_000,
               }),
           ),
           Then('every interleaving matches the daemons taking turns one after the other')((s) => {

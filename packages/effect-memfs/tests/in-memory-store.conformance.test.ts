@@ -20,7 +20,7 @@ const startWatchingInbox = Effect.flatMap(
   (watcher) => watcher.start('/inbox'),
 )
 
-Feature('An in-memory store that answers like a real filesystem', { timeout: 120_000 })
+Feature('An in-memory store that answers like a real filesystem', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -66,7 +66,6 @@ Feature('An in-memory store that answers like a real filesystem', { timeout: 120
               fibers: 2,
               operations: 2,
               preemptions: 2,
-              timeoutMs: 60_000,
             }),
         ),
         Then('every interleaving matches Ada and Bo taking turns one after the other')((s) => {

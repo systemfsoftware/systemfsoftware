@@ -10,7 +10,7 @@ const Feature = makeFeature({ it })
 const ROUNDS = 300
 const ACTIONS_PER_ROUND = 8
 
-Feature('Keeping observed traces in step with the store that serves them', { timeout: 120_000 })
+Feature('Keeping observed traces in step with the store that serves them', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

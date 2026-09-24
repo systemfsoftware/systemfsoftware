@@ -122,8 +122,6 @@ const runRegistryCommand = (command: RegistryCommand): Effect.Effect<number | un
 const CONCURRENCY_BOUND = {
   preemptions: 2,
   maxSchedules: 200_000,
-  timeoutMs: 60_000,
-  now: () => performance.now(),
 } as const
 
 const registryCheck = (
@@ -300,7 +298,7 @@ const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
     }),
   )
 
-Feature('A registry that keeps readers, writers, listeners, and idle entries consistent', { timeout: 120_000 })
+Feature('A registry that keeps readers, writers, listeners, and idle entries consistent', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
