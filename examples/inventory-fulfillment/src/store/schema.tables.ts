@@ -1,4 +1,5 @@
-import { boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { boolean, check, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 export const warehouses = pgTable('warehouses', {
   id: text('id').primaryKey(),
@@ -15,6 +16,7 @@ export const stockLots = pgTable('stock_lots', {
 }, (table) => [
   index('stock_lots_sku_idx').on(table.sku),
   index('stock_lots_warehouse_id_idx').on(table.warehouseId),
+  check('stock_lots_on_hand_non_negative', sql`${table.quantityOnHand} >= 0`),
 ])
 
 export const reservations = pgTable('reservations', {
@@ -54,7 +56,6 @@ export const user = pgTable('user', {
   creditLimit: integer('credit_limit').notNull().default(0),
   outstandingBalance: integer('outstanding_balance').notNull().default(0),
   overdraftPrivilege: integer('overdraft_privilege').notNull().default(0),
-  creditVersion: integer('credit_version').notNull().default(1),
 })
 
 export const session = pgTable('session', {

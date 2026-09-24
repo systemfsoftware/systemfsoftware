@@ -1,17 +1,16 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
-import { DateTime, Effect, Encoding, Match, Result, Schema as S } from 'effect'
+import { DateTime, Effect, Encoding, Result, Schema as S } from 'effect'
 import { expect } from 'vitest'
 import {
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
-  CellHarness,
-  ConflictRollback,
   CreditHold,
   DuplicateOrder,
   Forbidden,
   InsufficientStock,
+  StoreUnavailable,
   submitRequest,
   TestServer,
   TestServerLayer,
@@ -21,6 +20,7 @@ import {
   uniquePassword,
 } from './__fixtures__/server.fixture.js'
 import type {
+  Client,
   CreditInput,
   FulfillmentDecision,
   Session,
@@ -370,7 +370,7 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 1 }])
             return { sku, lot }
           })),
-        When('the first order reads the last unit, the second commits it, then the first settles')(
+        When('both customers order the last unit at once')(
           'tags',
           (s) =>
             Effect.gen(function*() {
@@ -385,16 +385,10 @@ Feature('Inventory fulfillment across the warehouse network')
                 orderId: uniqueId('order'),
                 lines: [{ sku: s.catalog.sku, quantity: 1 }],
               })
-              yield* server.seam.holdOnce
               const [contested, sibling] = yield* Effect.all(
                 [
                   Effect.result(firstClient.submitOrder(firstPayload)),
-                  Effect.gen(function*() {
-                    yield* server.seam.held
-                    const settled = yield* Effect.result(secondClient.submitOrder(secondPayload))
-                    yield* server.seam.release
-                    return settled
-                  }),
+                  Effect.result(secondClient.submitOrder(secondPayload)),
                 ],
                 { concurrency: 'unbounded' },
               )
@@ -420,7 +414,7 @@ Feature('Inventory fulfillment across the warehouse network')
     )
 
     scenario(
-      'A writer whose read version went stale retries and still fulfills the order',
+      'An order whose first commit attempt fails is retried and still fulfills the order',
       Gherkin.Do.pipe(
         Given('a customer with a Standard account and ample credit')(
           'customer',
@@ -434,7 +428,7 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 5 }])
             return { sku, lot }
           })),
-        When('another writer changes the stock version after the read')('outcome', (s) =>
+        When('the first commit attempt raises a serialization failure')('outcome', (s) =>
           Effect.gen(function*() {
             const server = yield* TestServer
             yield* server.seam.armOnce
@@ -442,7 +436,7 @@ Feature('Inventory fulfillment across the warehouse network')
             const decision = yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
             return { decision, orderId }
           })),
-        Then('the retry fulfills the order and reserves the stock')(
+        Then('the retry fulfills the order, charges once, and reserves the stock')(
           (s) =>
             Effect.gen(function*() {
               const server = yield* TestServer
@@ -450,13 +444,15 @@ Feature('Inventory fulfillment across the warehouse network')
               expect(split.allocations.map((allocation) => allocation.quantity)).toEqual([2])
               expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(3)
               expect((yield* server.inspect.reservations(s.outcome.orderId)).map((row) => row.quantity)).toEqual([2])
+              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(2)
+              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(1)
             }),
         ),
       ),
     )
 
     scenario(
-      'A writer that keeps losing the race rolls the reservation back',
+      'An order that keeps failing to commit is refused and inventory is untouched',
       Gherkin.Do.pipe(
         Given('a customer with a Standard account and ample credit')(
           'customer',
@@ -470,28 +466,28 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 5 }])
             return { sku, lot }
           })),
-        When('every write attempt is invalidated by a newer stock version')('outcome', (s) =>
+        When('every commit attempt raises a serialization failure')('outcome', (s) =>
           Effect.gen(function*() {
             const server = yield* TestServer
             const orderId = uniqueId('order')
-            const decision = yield* Effect.ensuring(
-              Effect.gen(function*() {
-                yield* server.seam.armAlways
-                return yield* placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
-              }),
+            yield* server.seam.armAlways
+            const failure = yield* Effect.ensuring(
+              Effect.flip(
+                placeOrder(s.customer, orderId, [{ sku: s.catalog.sku, quantity: 2 }]),
+              ),
               server.seam.disarm,
             )
-            return { orderId, decision }
+            return { orderId, failure }
           })),
-        Then('the order is reported as rolled back and inventory is untouched')(
+        Then('the order is refused as unavailable and nothing is written')(
           (s) =>
             Effect.gen(function*() {
               const server = yield* TestServer
-              const rollback = yield* S.decodeUnknownEffect(ConflictRollback)(s.outcome.decision)
-              expect(rollback.attempts).toBe(3)
+              expect(S.is(StoreUnavailable)(s.outcome.failure)).toBe(true)
               expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(5)
               expect(yield* server.inspect.reservations(s.outcome.orderId)).toHaveLength(0)
-              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toContain('ConflictRollback')
+              expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(0)
+              expect((yield* server.inspect.credit(s.customer.userId)).outstandingBalance).toBe(0)
             }),
         ),
       ),
@@ -614,6 +610,64 @@ Feature('Inventory fulfillment across the warehouse network')
     )
 
     scenario(
+      'Another caller naming a fulfilled order is refused',
+      Gherkin.Do.pipe(
+        Given('two customers with Standard accounts and ample credit')('customers', () =>
+          Effect.gen(function*() {
+            const owner = yield* registerCustomerWithCredit('Duplicate Owner', {
+              tier: 'Standard',
+              creditLimit: 1000,
+            })
+            const other = yield* registerCustomerWithCredit('Duplicate Other', {
+              tier: 'Standard',
+              creditLimit: 1000,
+            })
+            return { owner, other }
+          })),
+        Given('a warehouse holding five units')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(warehouse, 'central', [{
+              id: uniqueId('lot'),
+              sku,
+              warehouseId: warehouse,
+              quantity: 5,
+            }])
+            return { sku }
+          })),
+        When('the first customer fulfills an order')(
+          'order',
+          (s) =>
+            Effect.gen(function*() {
+              const orderId = uniqueId('order')
+              yield* placeOrder(s.customers.owner, orderId, [{ sku: s.catalog.sku, quantity: 2 }])
+              return { orderId }
+            }),
+        ),
+        When('the second customer submits the same order')(
+          'refusal',
+          (s) =>
+            Effect.gen(function*() {
+              const refusal = yield* Effect.flip(
+                placeOrder(s.customers.other, s.order.orderId, [{ sku: s.catalog.sku, quantity: 2 }]),
+              )
+              return yield* S.decodeUnknownEffect(Forbidden)(refusal)
+            }),
+        ),
+        Then('the refusal names the order and the other customer is charged nothing')((s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            expect(s.refusal.resource).toBe(s.order.orderId)
+            expect(yield* server.inspect.reservations(s.order.orderId)).toHaveLength(1)
+            expect(yield* server.inspect.auditTags(s.order.orderId)).toHaveLength(1)
+            expect((yield* server.inspect.credit(s.customers.other.userId)).outstandingBalance).toBe(0)
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'A customer paging through the stock list reaches every lot',
       Gherkin.Do.pipe(
         Given('a customer with an authenticated session')('customer', () => registerCustomer('Stock Pager')),
@@ -726,7 +780,7 @@ Feature('Inventory fulfillment across the warehouse network')
             ])
             return { sku }
           })),
-        When('the first order reads the account, the second commits against it, then the first settles')(
+        When('both orders draw on the account at once')(
           'outcomes',
           (s) =>
             Effect.gen(function*() {
@@ -741,16 +795,10 @@ Feature('Inventory fulfillment across the warehouse network')
                 orderId: uniqueId('order'),
                 lines: [{ sku: s.catalog.sku, quantity: 80 }],
               })
-              yield* server.seam.holdOnce
               const [contested, sibling] = yield* Effect.all(
                 [
                   firstClient.submitOrder(firstPayload),
-                  Effect.gen(function*() {
-                    yield* server.seam.held
-                    const settled = yield* secondClient.submitOrder(secondPayload)
-                    yield* server.seam.release
-                    return settled
-                  }),
+                  secondClient.submitOrder(secondPayload),
                 ],
                 { concurrency: 'unbounded' },
               )
@@ -792,31 +840,21 @@ Feature('Inventory fulfillment across the warehouse network')
           (s) =>
             Effect.gen(function*() {
               const server = yield* TestServer
-              const cell = yield* CellHarness
-              const attempt = (sku: string) =>
-                cell.submit({
-                  orderId: uniqueId('order'),
-                  customerId: s.customer.userId,
-                  lines: [{ sku, quantity: 40 }],
+              const firstClient = yield* server.client(s.customer.cookie)
+              const secondClient = yield* server.client(s.customer.cookie)
+              const attempt = (client: Client, sku: string) =>
+                Effect.gen(function*() {
+                  const payload = yield* submitRequest({
+                    orderId: uniqueId('order'),
+                    lines: [{ sku, quantity: 40 }],
+                  })
+                  return yield* client.submitOrder(payload)
                 })
-              yield* server.seam.holdOnce
               const [contested, sibling] = yield* Effect.all(
-                [
-                  attempt(s.catalog.first),
-                  Effect.gen(function*() {
-                    yield* server.seam.held
-                    const settled = yield* attempt(s.catalog.second)
-                    yield* server.seam.release
-                    return settled
-                  }),
-                ],
+                [attempt(firstClient, s.catalog.first), attempt(secondClient, s.catalog.second)],
                 { concurrency: 'unbounded' },
               )
-              const contestedFinal = yield* Match.value(contested).pipe(
-                Match.tag('Conflicted', () => attempt(s.catalog.first)),
-                Match.orElse(() => Effect.succeed(contested)),
-              )
-              return { contested: contestedFinal, sibling }
+              return yield* Effect.forEach([contested, sibling], classifyCreditOutcome)
             }),
         ),
         Then('the customer never owes more than the credit allows')((s) =>
@@ -827,8 +865,13 @@ Feature('Inventory fulfillment across the warehouse network')
           })
         ),
         And('one order is fulfilled and the other is held for credit')((s) => {
-          expect(s.outcomes.sibling).toEqual({ _tag: 'Allocated' })
-          expect(s.outcomes.contested).toEqual({ _tag: 'Held', shortfall: 20 })
+          expect(s.outcomes.filter((outcome) => outcome.tag === 'AllocatedSplit')).toHaveLength(1)
+          const held = s.outcomes.filter(
+            (outcome): outcome is CreditHoldOutcome => outcome.tag === 'CreditHold',
+          )
+          expect(held).toHaveLength(1)
+          expect(held[0]?.shortfall).toBe(20)
+          expect(held[0]?.requiredDownpayment).toBe(20)
         }),
       ),
     )

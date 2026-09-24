@@ -1,41 +1,24 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@effect/vitest'
 import { Fulfillment } from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract } from '@systemfsoftware/trace-spec'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
+import { describe, expect } from 'vitest'
 import {
   allocateContract,
-  contestedSettlementLayers,
   disparityOf,
-  settlementRequest,
+  placeOrderRequest,
+  settlementLayers,
 } from './__fixtures__/fulfillment-trace.fixture.js'
 
-const Feature = makeFeature({ it, layer })
-
-const world = contestedSettlementLayers
-
-Feature('Refusing a settlement whose trace breaks the written contract')
-  .withScenarioLayer(world)
-  .liveClock()
-  .body(({ scenario }) => {
-    scenario(
-      'A settlement whose reservation was already taken names the charge that never arrived',
-      Gherkin.Do.pipe(
-        Given('an order whose reservation moved on after it was read')(
-          'order',
-          () => Effect.succeed(settlementRequest('contested-order', 'customer-in-good-standing')),
-        ),
-        When('the settlement is held to the contract that requires the charge')(
-          'refusal',
-          (s) => Effect.flip(Contract.check(allocateContract, s.order)),
-        ),
-        Then('the refusal names the charge that never arrived and where the trace was written')((s) => {
-          const refusal = disparityOf(s.refusal)
-          expect(refusal.breaks.map((entry) => entry.conjunct)).toContain(
-            `exists(${Fulfillment.Taxonomy.CreditCharge.id})`,
-          )
-          expect(refusal.dumpPath).toContain('artifacts/traces/')
-        }),
-      ),
-    )
-  })
+describe('Refusing an order whose trace breaks the written contract', () => {
+  it.effect('a held order held to the contract that requires the charge names the charge', () =>
+    Effect.gen(function*() {
+      const refusal = yield* Effect.flip(
+        Contract.check(allocateContract, placeOrderRequest('held-order', 'customer-without-credit')),
+      )
+      const disparity = disparityOf(refusal)
+      expect(disparity.breaks.map((entry) => entry.conjunct)).toContain(
+        `unique(${Fulfillment.Taxonomy.CreditCharge.id})`,
+      )
+    }).pipe(Effect.provide(settlementLayers)))
+})

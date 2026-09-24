@@ -1,6 +1,5 @@
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import { Fulfillment, Inventory, Persistence, Reservation } from '@systemfsoftware/example-inventory-fulfillment'
-import { eq } from 'drizzle-orm/sql/expressions/conditions'
 import { Array as Arr, DateTime, Effect, Layer, Option, Order, Result, Schema as S } from 'effect'
 import { dual } from 'effect/Function'
 
@@ -124,27 +123,4 @@ export const findOf: {
   2,
   (log: Reservation.Log.ReservationLogService, orderId: string) =>
     Effect.map(log.findReservation(orderId), reservationViewOf),
-)
-
-export const rollbackAuditOf = (audit: {
-  readonly orderId: string
-  readonly actorId: string
-}): Fulfillment.Event.AuditPayload =>
-  new Fulfillment.Event.AuditPayload({
-    orderId: audit.orderId,
-    actorId: audit.actorId,
-    decisionTag: 'ConflictRollback',
-    occurredAt,
-  })
-
-export const rollbackRowsOf: {
-  (orderId: string): (db: Persistence.DrizzleSession.DrizzleDatabase) => Effect.Effect<number>
-  (db: Persistence.DrizzleSession.DrizzleDatabase, orderId: string): Effect.Effect<number>
-} = dual(
-  2,
-  (db: Persistence.DrizzleSession.DrizzleDatabase, orderId: string) =>
-    Effect.map(
-      db.select().from(Persistence.Tables.auditEvents).where(eq(Persistence.Tables.auditEvents.orderId, orderId)),
-      (rows) => rows.length,
-    ).pipe(Effect.orDie),
 )

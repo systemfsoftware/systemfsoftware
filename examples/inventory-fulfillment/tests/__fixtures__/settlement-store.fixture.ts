@@ -1,7 +1,11 @@
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import { Fulfillment, Inventory, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
-import { DateTime, Effect, Layer, Option, Result, Schema as S } from 'effect'
+import { eq } from 'drizzle-orm/sql/expressions/conditions'
+import { DateTime, Duration, Effect, Layer, Option, Result, Schema as S } from 'effect'
 import { dual } from 'effect/Function'
+import { armSeamAlways, armSeamOnce, disarmSeam, serializationSeamLayer } from './serialization-seam.fixture.js'
+
+export { armSeamAlways, armSeamOnce, disarmSeam, serializationSeamLayer }
 
 export const FIRST_CUSTOMER = 'customer-one'
 export const SECOND_CUSTOMER = 'customer-two'
@@ -34,11 +38,28 @@ export const settlementSeed = (): Settlement.Store.SettlementStoreSeed => ({
   ],
 })
 
-export const settlementStoreWorld: Layer.Layer<Persistence.DrizzleSession.DrizzleSession> = Persistence.DrizzleSession
-  .layerTest
-  .pipe(Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)))
+export const standardBudget: Settlement.Drizzle.RetryBudget = {
+  attempts: 30,
+  baseInterval: Duration.millis(2),
+  maxInterval: Duration.millis(100),
+}
 
-const seedPostgres = Effect.gen(function*() {
+export const exhaustedBudget: Settlement.Drizzle.RetryBudget = {
+  attempts: 3,
+  baseInterval: Duration.millis(1),
+  maxInterval: Duration.millis(10),
+}
+
+const pgliteSession = Persistence.DrizzleSession.layerTest.pipe(
+  Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
+)
+
+export const settlementStoreWorld: Layer.Layer<Persistence.DrizzleSession.DrizzleSession> = Layer.mergeAll(
+  pgliteSession,
+  serializationSeamLayer.pipe(Layer.provide(pgliteSession)),
+)
+
+export const seedPostgres = Effect.gen(function*() {
   const db = yield* Persistence.DrizzleSession.DrizzleSession
   const at = DateTime.toDate(DateTime.makeUnsafe('2026-01-01T00:00:00.000Z'))
   yield* db.insert(Persistence.Tables.warehouses).values({ id: 'warehouse-central', region: 'central' })
@@ -97,49 +118,121 @@ const resetPostgres = Effect.gen(function*() {
     Effect.orDie,
     Effect.asVoid,
   )
-  yield* db.update(Persistence.Tables.user).set({ outstandingBalance: 0, creditVersion: 1 }).pipe(
-    Effect.orDie,
-    Effect.asVoid,
-  )
+  yield* db.update(Persistence.Tables.user).set({
+    outstandingBalance: 0,
+    creditLimit: 100,
+    overdraftPrivilege: 0,
+    tier: 'Standard',
+  }).pipe(Effect.orDie, Effect.asVoid)
+  yield* disarmSeam
 })
 
 /** Runs one law against both adapters and reports what each of them answered. */
 export const acrossStores = <A, E>(
-  law: Effect.Effect<A, E, Settlement.Store.SettlementStore>,
-): Effect.Effect<{ readonly memory: A; readonly postgres: A }, E, Persistence.DrizzleSession.DrizzleSession> =>
+  law: Effect.Effect<
+    A,
+    E,
+    Settlement.Store.SettlementStore | Persistence.DrizzleSession.DrizzleSession
+  >,
+): Effect.Effect<
+  { readonly memory: A; readonly postgres: A },
+  E,
+  Persistence.DrizzleSession.DrizzleSession
+> =>
   Effect.gen(function*() {
     const memory = yield* Effect.provide(law, Settlement.Memory.layer(settlementSeed()))
     yield* resetPostgres
-    const postgres = yield* Effect.provide(law, Settlement.Drizzle.layer)
+    const postgres = yield* Effect.provide(law, Settlement.Drizzle.layer(standardBudget))
     return { memory, postgres }
   })
 
-export const readCreditOf: {
-  (customerId: string): (
+export interface OrderInput {
+  readonly orderId: string
+  readonly customerId: string
+  readonly sku: string
+  readonly lotId: string
+  readonly quantity: number
+  readonly charge: number | undefined
+}
+
+export const keyOf = (input: OrderInput): Settlement.Store.OrderKey => ({
+  orderId: input.orderId,
+  customerId: input.customerId,
+  skus: [input.sku],
+})
+
+const attemptOccurredAt = DateTime.makeUnsafe('2026-01-01T00:00:00.000Z')
+
+const moneyOf = (value: number): Fulfillment.Credit.Money =>
+  Result.getOrThrow(S.decodeResult(Fulfillment.Credit.Money)(value))
+
+const allocationOf = (input: OrderInput) =>
+  Result.getOrThrow(
+    S.decodeResult(Inventory.Schema.LotAllocation)({
+      warehouseId: 'warehouse-central',
+      lotId: input.lotId,
+      sku: input.sku,
+      quantity: input.quantity,
+    }),
+  )
+
+export const planOf = (input: OrderInput): Settlement.Store.OrderPlan => ({
+  orderId: input.orderId,
+  customerId: input.customerId,
+  charge: input.charge === undefined ? Option.none() : Option.some(moneyOf(input.charge)),
+  events: [
+    new Fulfillment.Event.StockReserved({
+      orderId: input.orderId,
+      allocations: [allocationOf(input)],
+      occurredAt: attemptOccurredAt,
+    }),
+  ],
+  audit: new Fulfillment.Event.AuditPayload({
+    orderId: input.orderId,
+    actorId: input.customerId,
+    decisionTag: 'AllocatedSplit',
+    occurredAt: attemptOccurredAt,
+  }),
+})
+
+export const settleInUnit: {
+  (input: OrderInput): (
     store: Settlement.Store.SettlementStoreService,
-  ) => Effect.Effect<Settlement.Store.CreditObservation>
+  ) => Effect.Effect<void, Settlement.Store.SettlementFailure>
   (
     store: Settlement.Store.SettlementStoreService,
-    customerId: string,
-  ): Effect.Effect<Settlement.Store.CreditObservation>
+    input: OrderInput,
+  ): Effect.Effect<void, Settlement.Store.SettlementFailure>
 } = dual(
   2,
-  (store: Settlement.Store.SettlementStoreService, customerId: string) => Effect.orDie(store.readCredit(customerId)),
+  (store: Settlement.Store.SettlementStoreService, input: OrderInput) =>
+    store.unitOfWork(Effect.flatMap(store.load(keyOf(input)), () => store.settle(planOf(input)))),
 )
 
-export const lotVersionOf: {
-  (lotId: string): (stock: Settlement.Store.StockObservation) => number
-  (stock: Settlement.Store.StockObservation, lotId: string): number
-} = dual(2, (stock: Settlement.Store.StockObservation, lotId: string) => lotStateOf(stock, lotId).version)
+export const snapshotInUnit: {
+  (input: OrderInput): (
+    store: Settlement.Store.SettlementStoreService,
+  ) => Effect.Effect<Settlement.Store.OrderSnapshot, Settlement.Store.SettlementFailure>
+  (
+    store: Settlement.Store.SettlementStoreService,
+    input: OrderInput,
+  ): Effect.Effect<Settlement.Store.OrderSnapshot, Settlement.Store.SettlementFailure>
+} = dual(
+  2,
+  (store: Settlement.Store.SettlementStoreService, input: OrderInput) => store.unitOfWork(store.load(keyOf(input))),
+)
 
 export const lotQuantityOf: {
-  (lotId: string): (stock: Settlement.Store.StockObservation) => number
-  (stock: Settlement.Store.StockObservation, lotId: string): number
-} = dual(2, (stock: Settlement.Store.StockObservation, lotId: string) => lotStateOf(stock, lotId).quantityOnHand)
+  (lotId: string): (stock: Settlement.Store.OrderSnapshot['stock']) => number
+  (stock: Settlement.Store.OrderSnapshot['stock'], lotId: string): number
+} = dual(
+  2,
+  (stock: Settlement.Store.OrderSnapshot['stock'], lotId: string) => lotStateOf(stock, lotId).quantityOnHand,
+)
 
-const lotStateOf = (stock: Settlement.Store.StockObservation, lotId: string) => {
+const lotStateOf = (stock: Settlement.Store.OrderSnapshot['stock'], lotId: string) => {
   const lot = Option.fromUndefinedOr(
-    stock.partitions.flatMap((partition) => partition.lots).find((lot) => lot.lotId === lotId),
+    stock.flatMap((partition) => partition.lots).find((lot) => lot.lotId === lotId),
   )
   return Result.getOrThrow(Option.match(lot, {
     onNone: () => Result.fail(new Error(`the read holds no lot ${lotId}`)),
@@ -147,59 +240,45 @@ const lotStateOf = (stock: Settlement.Store.StockObservation, lotId: string) => 
   }))
 }
 
-export interface SettlementAttempt {
-  readonly orderId: string
-  readonly customerId: string
-  readonly sku: string
-  readonly lotId: string
-  readonly quantity: number
-  readonly creditProof: Settlement.Store.CreditProof
-  readonly stockProof: Settlement.Store.StockProof
-}
+export const outstandingOf: {
+  (customerId: string): (db: Persistence.DrizzleSession.DrizzleDatabase) => Effect.Effect<number>
+  (db: Persistence.DrizzleSession.DrizzleDatabase, customerId: string): Effect.Effect<number>
+} = dual(
+  2,
+  (db: Persistence.DrizzleSession.DrizzleDatabase, customerId: string): Effect.Effect<number> =>
+    Effect.map(
+      db.select().from(Persistence.Tables.user).where(eq(Persistence.Tables.user.id, customerId)).pipe(Effect.orDie),
+      (rows) =>
+        Result.getOrThrow(Option.match(Option.fromUndefinedOr(rows[0]), {
+          onNone: () => Result.fail(new Error(`no credit account ${customerId}`)),
+          onSome: (row) => Result.succeed(row.outstandingBalance),
+        })),
+    ),
+)
 
-export interface ChargedSettlementAttempt extends SettlementAttempt {
-  readonly charge: number
-}
+export const reservationsOf: {
+  (orderId: string): (db: Persistence.DrizzleSession.DrizzleDatabase) => Effect.Effect<number>
+  (db: Persistence.DrizzleSession.DrizzleDatabase, orderId: string): Effect.Effect<number>
+} = dual(
+  2,
+  (db: Persistence.DrizzleSession.DrizzleDatabase, orderId: string): Effect.Effect<number> =>
+    Effect.map(
+      db.select().from(Persistence.Tables.reservations).where(
+        eq(Persistence.Tables.reservations.orderId, orderId),
+      ).pipe(Effect.orDie),
+      (rows) => rows.length,
+    ),
+)
 
-const attemptOccurredAt = DateTime.makeUnsafe('2026-01-01T00:00:00.000Z')
-
-const moneyOf = (value: number): Fulfillment.Credit.Money =>
-  Result.getOrThrow(S.decodeResult(Fulfillment.Credit.Money)(value))
-
-const chargeableCommandOf = (
-  attempt: SettlementAttempt,
-  charge: Option.Option<Settlement.Store.SettlementCharge>,
-): Settlement.Store.SettlementCommand => ({
-  orderId: attempt.orderId,
-  customerId: attempt.customerId,
-  events: [
-    new Fulfillment.Event.StockReserved({
-      orderId: attempt.orderId,
-      allocations: [
-        Result.getOrThrow(
-          S.decodeResult(Inventory.Schema.LotAllocation)({
-            warehouseId: 'warehouse-central',
-            lotId: attempt.lotId,
-            sku: attempt.sku,
-            quantity: attempt.quantity,
-          }),
-        ),
-      ],
-      occurredAt: attemptOccurredAt,
-    }),
-  ],
-  audit: new Fulfillment.Event.AuditPayload({
-    orderId: attempt.orderId,
-    actorId: attempt.customerId,
-    decisionTag: 'AllocatedSplit',
-    occurredAt: attemptOccurredAt,
-  }),
-  stock: attempt.stockProof,
-  charge,
-})
-
-export const settlementCommandOf = (attempt: ChargedSettlementAttempt): Settlement.Store.SettlementCommand =>
-  chargeableCommandOf(attempt, Option.some({ amount: moneyOf(attempt.charge), proof: attempt.creditProof }))
-
-export const settlementCommandWithoutCharge = (attempt: SettlementAttempt): Settlement.Store.SettlementCommand =>
-  chargeableCommandOf(attempt, Option.none())
+export const auditsOf: {
+  (orderId: string): (db: Persistence.DrizzleSession.DrizzleDatabase) => Effect.Effect<number>
+  (db: Persistence.DrizzleSession.DrizzleDatabase, orderId: string): Effect.Effect<number>
+} = dual(
+  2,
+  (db: Persistence.DrizzleSession.DrizzleDatabase, orderId: string): Effect.Effect<number> =>
+    Effect.map(
+      db.select().from(Persistence.Tables.auditEvents).where(eq(Persistence.Tables.auditEvents.orderId, orderId))
+        .pipe(Effect.orDie),
+      (rows) => rows.length,
+    ),
+)

@@ -1,29 +1,46 @@
 # Inventory fulfillment example
 
-This is a working order-fulfillment service written to the [cell-architecture](../../compound-packs/cell-architecture/) and [boundary-testing](../../compound-packs/boundary-testing/) compound packs. Each rule in those packs has real code here, and the tests for that code pass. Read it to see a rule applied end to end, or run it and send it orders.
+An order-fulfillment service that takes orders from many app instances at once and never grants more credit, or sells more stock, than exists. It is the reference implementation of the [cell-architecture](../../compound-packs/cell-architecture/) and [boundary-testing](../../compound-packs/boundary-testing/) compound packs: every rule in them points at real code here, and the tests for that code pass.
 
-A customer submits an order. The service expands any kits into parts, checks the customer's credit, reserves stock lot by lot, and charges the account. Each step is a pure decision between one read and one write. The last step commits the credit charge, the stock decrements, the reservations, and the audit row in a single Postgres transaction.
+Eight app instances racing 40 orders against one customer with a credit limit of 100:
+
+```text
+40 orders x 20 units from 8 instances, credit limit 100
+outcomes: AllocatedSplit 5, CreditHold 35
+transactions: 182 for 40 orders (142 re-runs)
+ok   credit limit held: outstanding 100 of 100
+ok   every grant charged once: charged 100, grants x quantity 100
+ok   no stock lost or double-sold: on hand 100 + reserved 100 of 200
+ok   reserved units equal charged credit: reserved 100, charged 100
+ok   one audit row per committed order: audit rows 40, committed 40
+```
+
+Exactly five 20-unit orders fit under the limit, so exactly five are granted. Run at Postgres's default isolation level (READ COMMITTED), the same load-decide-write charged 200 against that limit of 100. [Race it](#race-it) yourself.
+
+## How an order is placed
+
+The service reads an order, expands kits into parts, checks the customer's credit, reserves stock lot by lot, and charges the account. Those four steps are one pure function, `placeOrder`, with no I/O, so property tests exercise it directly. Around it sits one read and one write:
 
 ```mermaid
 flowchart LR
-  rpc[submitOrder RPC] --> explode[explode kits]
-  explode --> credit[check credit]
-  credit --> allocate[allocate stock]
-  allocate --> settle[settle: one transaction]
-  settle -- versions moved --> retry[run the cell again from read]
-  retry --> explode
-  settle -- committed --> reply[decision to the caller]
+  rpc[submitOrder] --> begin[BEGIN SERIALIZABLE]
+  begin --> load[load: credit row, stock lots, existing reservation]
+  load --> decide[placeOrder: explode, credit, allocate, settle]
+  decide --> write[write: charge, stock, reservations, audit row]
+  write --> commit{COMMIT}
+  commit -- serialization failure --> begin
+  commit -- committed --> reply[decision to the caller]
 ```
 
-## What it prevents
+All three run in one Postgres transaction at SERIALIZABLE isolation. Postgres commits it only when some serial order of the concurrent orders would give the same result. So it checks every value the decision read, including a credit balance another instance charged a moment earlier. When it cannot commit, it aborts with SQLSTATE `40001` and the service runs the whole order again from the read. Nothing else guards the data: no locks, no version columns. A `CHECK (quantity_on_hand >= 0)` constraint backs the stock side.
 
-Two orders from one customer, for different products, can push the customer past their credit limit. The two orders touch different stock lots, so a version check on stock never fires. The charge used to run after the stock was reserved, with no check at all. In a race against real Postgres with two app instances, the original code charged 120 against a limit of 100 in every run.
-
-Now the store's reads hand back proofs of the credit version and every lot version they saw. `settle` refuses to compile without those proofs. At commit it re-checks every version, and any change sends the order back through the cell with fresh data. `tests/inventory-fulfillment.integration.test.ts` replays the losing interleaving: two 40-unit orders against 60 of headroom. One order commits. The other re-reads, then gets a credit hold.
+The compiler keeps the read and the write inside that transaction. The settlement store's `load` and `settle` require a `UnitOfWork` service that only the store's `unitOfWork` provides. Code that reads outside the transaction, or settles in a different one, does not typecheck.
 
 ## Run it
 
-You need Node 24, pnpm, and a Postgres 17 database. The service applies its own migrations when it starts.
+### Start the service
+
+You need Node 24, pnpm, and Postgres 17. The service applies its own migrations when it starts.
 
 ```bash
 docker run -d --name fulfillment-db -e POSTGRES_PASSWORD=pg -e POSTGRES_DB=fulfillment -p 5432:5432 postgres:17-alpine
@@ -36,12 +53,12 @@ BETTER_AUTH_SECRET=change-me-to-a-long-random-string \
 node examples/inventory-fulfillment/dist/main.mjs
 ```
 
-It listens on port 3000; set `PORT` to change that.
+It listens on port 3000.
 
 > [!NOTE]
 > The example is not published to npm. Run every command here from the repository root.
 
-## Send it an order
+### Send it an order
 
 Sign up. The session cookie goes into `jar.txt`:
 
@@ -51,7 +68,7 @@ curl -c jar.txt -H 'content-type: application/json' -H 'origin: http://localhost
   http://localhost:3000/api/auth/sign-up/email
 ```
 
-The service has no admin API. Stock and credit limits come from the database:
+The service has no admin API, so stock and credit limits go straight into the database:
 
 ```bash
 docker exec fulfillment-db psql -U postgres -d fulfillment -c "
@@ -60,7 +77,7 @@ docker exec fulfillment-db psql -U postgres -d fulfillment -c "
   UPDATE \"user\" SET credit_limit = 100 WHERE email = 'ada@example.com';"
 ```
 
-Submit an order for 6 mugs over the RPC endpoint:
+Order 6 mugs:
 
 ```bash
 curl -b jar.txt -H 'content-type: application/json' -H 'origin: http://localhost:3000' \
@@ -84,44 +101,78 @@ curl -b jar.txt -H 'content-type: application/json' -H 'origin: http://localhost
 }]
 ```
 
-Send the same order again as `order-2` and it comes back `Backordered`: 4 mugs reserved and 2 owed. `listStock` and `getReservation` use the same envelope. For typed calls, `Rpc.Client.make` in `src/rpc/client.ts` builds an Effect RPC client.
+Send the same order again as `order-2` and it comes back `Backordered`: 4 mugs reserved and 2 owed. Send `order-1` again and it fails with `DuplicateOrder`. The other two RPCs, `listStock` and `getReservation`, use the same envelope. For typed calls, `Rpc.Client.make` in [`src/rpc/client.ts`](src/rpc/client.ts) builds an Effect RPC client.
 
-## Where each rule lives
+### Race it
 
-| Pack rule                                                                                                                                                                                                  | Where to read it                                                                                                                                                                  |
-| :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [sandwich-phase-order](../../compound-packs/cell-architecture/sandwich-phase-order.md), [pipeline-composition](../../compound-packs/cell-architecture/pipeline-composition.md)                             | `src/fulfillment/fulfillment.cell.ts`: four `Sandwich.named` cells joined with `Cell.andThen`                                                                                     |
-| [pure-decision-workflows](../../compound-packs/cell-architecture/pure-decision-workflows.md)                                                                                                               | `src/fulfillment/*.workflow.ts` and `src/inventory/allocate-stock.workflow.ts`, with property tests in `__tests__/`                                                               |
-| [four-channel-contracts](../../compound-packs/cell-architecture/four-channel-contracts.md)                                                                                                                 | Refusals are decisions on the success channel. Store and auth outages fail as `StoreUnavailable` and `AuthServiceUnavailable` in `src/fulfillment/decision.schema.ts`             |
-| [decode-never-cast](../../compound-packs/cell-architecture/decode-never-cast.md)                                                                                                                           | Database rows are decoded in `src/store/decode.ts`. Request fields, including the paging cursor, are decoded in `src/rpc/inventory-fulfillment.schema.ts`                         |
-| [ports-separate-from-layers](../../compound-packs/cell-architecture/ports-separate-from-layers.md), [service-and-layer-boundaries](../../compound-packs/cell-architecture/service-and-layer-boundaries.md) | Contracts live in `*.service.ts` and adapters in `src/store/`. Everything is wired only in `src/store/PgRuntime.ts`, `src/http/server.ts`, and `src/main.ts`                      |
-| [store-issued-proofs](../../compound-packs/cell-architecture/store-issued-proofs.md)                                                                                                                       | `src/store/SettlementProof.ts`, pinned by `test-types/settlement-proof.tst.ts`                                                                                                    |
-| [store-recheck-at-one-commit](../../compound-packs/cell-architecture/store-recheck-at-one-commit.md)                                                                                                       | `settle` in `src/store/SettlementStoreDrizzle.ts`, plus the retry loop in `src/rpc/inventory-fulfillment.rpc.ts`                                                                  |
-| [single-namespace-barrel](../../compound-packs/cell-architecture/single-namespace-barrel.md)                                                                                                               | `src/mod.ts`: `Fulfillment`, `Inventory`, `Settlement`, `Reservation`, `Auth`, `Rpc`, `Http`, `Persistence`                                                                       |
-| [fake-and-real-store-laws](../../compound-packs/boundary-testing/fake-and-real-store-laws.md)                                                                                                              | `tests/settlement-store`, `tests/inventory-store`, and `tests/reservation-log` integration tests. Each runs the memory adapter and the Drizzle adapter through the same histories |
-| [refusals-beside-generated-laws](../../compound-packs/boundary-testing/refusals-beside-generated-laws.md)                                                                                                  | In-source `it.prop` blocks in `src/inventory/inventory.schema.ts` and `src/fulfillment/credit.schema.ts`                                                                          |
-| [pin-dependency-semantics](../../compound-packs/boundary-testing/pin-dependency-semantics.md)                                                                                                              | `tests/drizzle-rollback.integration.test.ts`                                                                                                                                      |
-| [real-system-oracles](../../compound-packs/boundary-testing/real-system-oracles.md), [no-mocks-on-internal-glue](../../compound-packs/boundary-testing/no-mocks-on-internal-glue.md)                       | `tests/inventory-fulfillment.integration.test.ts` drives the real server on a loopback port, backed by embedded Postgres (PGlite)                                                 |
+[`scripts/race.ts`](scripts/race.ts) starts several app instances, each with its own connection pool, and submits 20-unit orders from all of them at once. It seeds one customer with a credit limit of 100 and two products with 100 units each, then checks five invariants. It truncates the order tables first, so give it a scratch database. After [building](#start-the-service):
 
-The builder and handle rules (`staged-lawful-builders`, `resource-vs-handle-duality`) have no counterpart here, because the service builds no resources of its own.
+```bash
+docker exec fulfillment-db createdb -U postgres race
 
-## Upgrading an existing database
-
-The `drizzle/20260923215213_add_credit_version` migration adds `user.credit_version integer not null default 1`. Existing rows start at version 1, so no backfill is needed. After you deploy, both of these queries must return zero rows:
-
-```sql
-SELECT 1 FROM information_schema.columns
-WHERE table_name = 'user' AND column_name = 'credit_version' AND is_nullable = 'YES';
-
-SELECT id FROM "user" WHERE outstanding_balance > credit_limit + overdraft_privilege;
+DATABASE_URL=postgres://postgres:pg@127.0.0.1:5432/race INSTANCES=4 ORDERS=20 \
+pnpm --filter @systemfsoftware/example-inventory-fulfillment race
 ```
 
-To roll back, redeploy the previous app version first; it ignores the new column. Only then run `ALTER TABLE "user" DROP COLUMN credit_version`. Dropping the column while this version is running breaks every `settle`.
+```text
+20 orders x 20 units from 4 instances, credit limit 100
+outcomes: CreditHold 15, AllocatedSplit 5
+transactions: 101 for 20 orders (81 re-runs)
+ok   credit limit held: outstanding 100 of 100
+ok   every grant charged once: charged 100, grants x quantity 100
+ok   no stock lost or double-sold: on hand 100 + reserved 100 of 200
+ok   reserved units equal charged credit: reserved 100, charged 100
+ok   one audit row per committed order: audit rows 20, committed 20
+```
+
+Five orders are granted at any instance count; only the re-run count changes. Any line reading `FAIL` makes the script exit non-zero. The test suite cannot do this: it runs on embedded Postgres (PGlite), which has one connection and so never races.
+
+### Configuration
+
+| Variable                            | Default    | What it sets                                                             |
+| :---------------------------------- | :--------- | :----------------------------------------------------------------------- |
+| `DATABASE_URL`                      | (required) | Postgres connection string                                               |
+| `BETTER_AUTH_SECRET`                | (required) | Session signing secret                                                   |
+| `PORT`                              | `3000`     | HTTP port                                                                |
+| `SETTLEMENT_RETRY_ATTEMPTS`         | `30`       | Transactions one order may start before it fails with `StoreUnavailable` |
+| `SETTLEMENT_RETRY_BASE_INTERVAL_MS` | `2`        | First backoff between re-runs, doubled with jitter each time             |
+| `INSTANCES`, `ORDERS`               | `2`, `10`  | Race script only: app instances and total orders                         |
+
+A spent retry budget writes nothing: the order fails with `StoreUnavailable`, carrying the last serialization failure as its cause.
+
+## Where each pack rule lives
+
+| Pack rule                                                                                                          | Code                                                                                                                                                      |
+| :----------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [sandwich-phase-order](../../compound-packs/cell-architecture/sandwich-phase-order.md)                             | [`src/fulfillment/place-order.cell.ts`](src/fulfillment/place-order.cell.ts): load, decide, settle                                                        |
+| [pure-decision-workflows](../../compound-packs/cell-architecture/pure-decision-workflows.md)                       | [`src/fulfillment/place-order.workflow.ts`](src/fulfillment/place-order.workflow.ts), properties in `src/fulfillment/__tests__/`                          |
+| [store-serializable-unit-of-work](../../compound-packs/cell-architecture/store-serializable-unit-of-work.md)       | `unitOfWork` in [`src/store/SettlementStoreDrizzle.ts`](src/store/SettlementStoreDrizzle.ts)                                                              |
+| [store-unit-of-work-in-requirements](../../compound-packs/cell-architecture/store-unit-of-work-in-requirements.md) | [`src/ports/SettlementStore.service.ts`](src/ports/SettlementStore.service.ts), pinned by `test-types/unit-of-work.tst.ts`                                |
+| [four-channel-contracts](../../compound-packs/cell-architecture/four-channel-contracts.md)                         | [`src/fulfillment/decision.schema.ts`](src/fulfillment/decision.schema.ts): refusals are decisions, outages are errors                                    |
+| [decode-never-cast](../../compound-packs/cell-architecture/decode-never-cast.md)                                   | [`src/store/decode.ts`](src/store/decode.ts) for rows, [`src/rpc/inventory-fulfillment.schema.ts`](src/rpc/inventory-fulfillment.schema.ts) for requests  |
+| [ports-separate-from-layers](../../compound-packs/cell-architecture/ports-separate-from-layers.md)                 | Ports in `src/ports/`, adapters in `src/store/`, wired only in [`src/store/PgRuntime.ts`](src/store/PgRuntime.ts)                                         |
+| [single-namespace-barrel](../../compound-packs/cell-architecture/single-namespace-barrel.md)                       | [`src/mod.ts`](src/mod.ts)                                                                                                                                |
+| [fake-and-real-store-laws](../../compound-packs/boundary-testing/fake-and-real-store-laws.md)                      | [`tests/settlement-store.integration.test.ts`](tests/settlement-store.integration.test.ts) runs the memory and Postgres stores through the same histories |
+| [pin-dependency-semantics](../../compound-packs/boundary-testing/pin-dependency-semantics.md)                      | The same suite's retry scenarios: Postgres itself raises the `40001`                                                                                      |
+| [real-system-oracles](../../compound-packs/boundary-testing/real-system-oracles.md)                                | [`tests/inventory-fulfillment.integration.test.ts`](tests/inventory-fulfillment.integration.test.ts) drives the real server over loopback                 |
+| [refusals-beside-generated-laws](../../compound-packs/boundary-testing/refusals-beside-generated-laws.md)          | In-source `it.prop` blocks in [`src/fulfillment/credit.schema.ts`](src/fulfillment/credit.schema.ts)                                                      |
+
+The builder and handle rules have no counterpart here: the service builds no resources of its own.
+
+## Upgrading from an earlier version
+
+This version adds `CHECK (quantity_on_hand >= 0)` to `stock_lots`, and the migration fails if any row already holds a negative quantity. Before you upgrade, this query must return no rows:
+
+```sql
+SELECT id, quantity_on_hand FROM stock_lots WHERE quantity_on_hand < 0;
+```
+
+Any other program that writes `user`, `stock_lots`, `reservations`, or `audit_events` must also use SERIALIZABLE. Postgres checks a serializable transaction only against other serializable transactions.
 
 ## Stack
 
 | Concern            | Library                                                                             | Version              |
 | :----------------- | :---------------------------------------------------------------------------------- | :------------------- |
-| Effects, RPC, HTTP | `effect`                                                                            | `4.0.0-rc.116`       |
+| Effects, RPC, HTTP | `effect`                                                                            | `4.0.0-rc.117`       |
 | Persistence        | `drizzle-orm` over `@effect/sql-pg` in production and `@effect/sql-pglite` in tests | `1.0.0-rc.5-5935859` |
 | Sessions           | `better-auth`                                                                       | `1.7.5`              |

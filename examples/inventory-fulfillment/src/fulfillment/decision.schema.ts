@@ -44,22 +44,11 @@ export class CreditHold extends S.TaggedClass<CreditHold>()('CreditHold', {
   readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
 }
 
-export class ConflictRollback extends S.TaggedClass<ConflictRollback>()('ConflictRollback', {
-  orderId: S.String,
-  attempts: Quantity,
-}) {
-  readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
-}
-
-export const CoreFulfillmentDecision = S.Union([AllocatedSplit, AllocatedWithOverdraft, Backordered, CreditHold])
-export type CoreFulfillmentDecision = S.Schema.Type<typeof CoreFulfillmentDecision>
-
 export const FulfillmentDecision = S.Union([
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
   CreditHold,
-  ConflictRollback,
 ])
 export type FulfillmentDecision = S.Schema.Type<typeof FulfillmentDecision>
 
@@ -114,9 +103,6 @@ export class AuthServiceUnavailable extends S.TaggedError<AuthServiceUnavailable
 export class StoreUnavailable extends S.TaggedError<StoreUnavailable>()('StoreUnavailable', {
   cause: S.Defect(),
 }) {
-  readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
-}
-export class OptimisticConflict extends S.TaggedError<OptimisticConflict>()('OptimisticConflict', {}) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
 }
 

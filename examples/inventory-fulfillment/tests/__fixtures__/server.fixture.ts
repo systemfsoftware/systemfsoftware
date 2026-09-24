@@ -12,48 +12,36 @@ import {
   Settlement,
 } from '@systemfsoftware/example-inventory-fulfillment'
 import { drizzle } from 'drizzle-orm/pglite'
-import { sql } from 'drizzle-orm/sql'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
-import {
-  ConfigProvider,
-  Context,
-  Crypto,
-  DateTime,
-  Deferred,
-  Duration,
-  Effect,
-  Layer,
-  Match,
-  Option,
-  Ref,
-  Result,
-  Schema as S,
-} from 'effect'
+import { ConfigProvider, Context, Crypto, DateTime, Effect, Layer, Option, Schema as S } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
 import { RpcSerialization } from 'effect/unstable/rpc'
 import { RpcWireFailure } from './rpc-wire.schema.js'
+import {
+  armSeamAlways,
+  armSeamOnce,
+  disarmSeam,
+  exhaustedBudget,
+  serializationSeamLayer,
+} from './settlement-store.fixture.js'
 
 const {
   AllocatedSplit,
   AllocatedWithOverdraft,
   Backordered,
-  ConflictRollback,
   CreditHold,
   CreditLimitExceeded,
   DuplicateOrder,
   Forbidden,
   InsufficientStock,
+  StoreUnavailable,
   Unauthorized,
 } = Fulfillment.Decision
-
-const SettlementStore = Settlement.Store.SettlementStore
-type SettlementStore = Settlement.Store.SettlementStore
 const AuthService = Auth.Service.AuthService
 type AuthService = Auth.Service.AuthService
 const DrizzleSession = Persistence.DrizzleSession.DrizzleSession
 type DrizzleSession = Persistence.DrizzleSession.DrizzleSession
-const FulfillmentConfig = Fulfillment.Config.FulfillmentConfig
 const makeRpcClient = Rpc.Client.make
 const HttpLive = Http.Server.HttpLive
 const httpServerLayer = Http.Server.httpServerLayer
@@ -71,140 +59,21 @@ const SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
 type SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
 type Client = Rpc.Client.Client
 type DrizzleDatabase = Persistence.DrizzleSession.DrizzleDatabase
-type SettlementCommand = Settlement.Store.SettlementCommand
-type SettlementStoreService = Settlement.Store.SettlementStoreService
 type FulfillmentDecision = Fulfillment.Decision.FulfillmentDecision
 type FulfillmentError = Fulfillment.Decision.FulfillmentError
 
 const pgTestLayer = Layer.mergeAll(
   Inventory.Drizzle.layer,
-  Settlement.Drizzle.layer,
+  Settlement.Drizzle.layer(exhaustedBudget),
   Reservation.Drizzle.layer,
 ).pipe(
   Layer.provideMerge(Persistence.DrizzleSession.layerTest),
   Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
 )
 
-export {
-  AllocatedSplit,
-  AllocatedWithOverdraft,
-  Backordered,
-  ConflictRollback,
-  CreditHold,
-  CreditLimitExceeded,
-  DuplicateOrder,
-  Forbidden,
-  InsufficientStock,
-  ReservationView,
-  StockView,
-  Unauthorized,
-}
-export type { Client, FulfillmentDecision, FulfillmentError }
-
-let sequence = 0
-const nextId = (prefix: string): string => {
-  sequence += 1
-  return `${prefix}-${process.pid.toString(36)}-${sequence}`
-}
-
-export const uniqueId = nextId
-export const uniqueEmail = (): string => `${nextId('user')}@example.test`
-export const uniquePassword = (): string => `pw-${nextId('secret')}`
-
-type BumpMode = 'off' | 'once' | 'always'
-type HoldMode = 'off' | 'hold'
-
-export interface ConflictSeamService {
-  readonly armOnce: Effect.Effect<void>
-  readonly armAlways: Effect.Effect<void>
-  readonly holdOnce: Effect.Effect<void>
-  readonly disarm: Effect.Effect<void>
-  readonly shouldBump: Effect.Effect<boolean>
-  /** Called by instrumented reads: parks once when armed, signalling arrival first. */
-  readonly park: Effect.Effect<void>
-  /** Completes when a read has parked at the seam. */
-  readonly held: Effect.Effect<void>
-  readonly release: Effect.Effect<void>
-}
-
-export class ConflictSeam extends Context.Service<ConflictSeam, ConflictSeamService>()(
-  '@systemfsoftware/example-inventory-fulfillment/tests/ConflictSeam',
-) {}
-
-const parkLimit = Duration.seconds(10)
-
-const conflictSeamLayer: Layer.Layer<ConflictSeam> = Layer.effect(
-  ConflictSeam,
-  Effect.gen(function*() {
-    const bumps = yield* Ref.make<BumpMode>('off')
-    const holds = yield* Ref.make<HoldMode>('off')
-    const parked = yield* Deferred.make<void>()
-    const released = yield* Deferred.make<void>()
-    const awaitRelease = Deferred.await(released).pipe(
-      Effect.timeoutOrElse({
-        duration: parkLimit,
-        orElse: () =>
-          Effect.die(
-            new Error('The conflict seam held a read but no test released it: pair holdOnce with held and release.'),
-          ),
-      }),
-    )
-    return {
-      armOnce: Ref.set(bumps, 'once'),
-      armAlways: Ref.set(bumps, 'always'),
-      holdOnce: Ref.set(holds, 'hold'),
-      disarm: Effect.andThen(Ref.set(bumps, 'off'), Ref.set(holds, 'off')),
-      shouldBump: Ref.modify(bumps, (current): readonly [boolean, BumpMode] =>
-        Match.value(current).pipe(
-          Match.when('always', () => [true, 'always'] as const),
-          Match.when('once', () => [true, 'off'] as const),
-          Match.when('off', () => [false, 'off'] as const),
-          Match.exhaustive,
-        )),
-      park: Effect.flatMap(
-        Ref.modify(holds, (current): readonly [boolean, HoldMode] =>
-          Match.value(current).pipe(
-            Match.when('hold', () => [true, 'off'] as const),
-            Match.when('off', () => [false, 'off'] as const),
-            Match.exhaustive,
-          )),
-        (hold) => (hold ? Effect.andThen(Deferred.succeed(parked, void 0), awaitRelease) : Effect.void),
-      ),
-      held: Deferred.await(parked),
-      release: Effect.asVoid(Deferred.succeed(released, void 0)),
-    }
-  }),
+const wrappedFoundation = pgTestLayer.pipe(
+  Layer.provideMerge(serializationSeamLayer.pipe(Layer.provide(pgTestLayer))),
 )
-
-const bumpStockVersions = (db: DrizzleDatabase): Effect.Effect<void, never> =>
-  db.execute(sql`UPDATE stock_lots SET version = version + 1`).pipe(Effect.orDie, Effect.asVoid)
-
-const seamInstrumentedSettlementStore: Layer.Layer<SettlementStore, never, DrizzleSession | ConflictSeam> = pgTestLayer
-  .pipe(
-    Layer.flatMap((context) => {
-      const store = Context.get(context, SettlementStore)
-      return Layer.effect(
-        SettlementStore,
-        Effect.gen(function*() {
-          const db = yield* DrizzleSession
-          const seam = yield* ConflictSeam
-          return {
-            readCredit: (customerId: string) =>
-              Effect.flatMap(store.readCredit(customerId), (credit) => Effect.as(seam.park, credit)),
-            readAllStock: Effect.gen(function*() {
-              const stock = yield* store.readAllStock
-              const bump = yield* seam.shouldBump
-              yield* bump ? bumpStockVersions(db) : Effect.void
-              return stock
-            }),
-            settle: (command: SettlementCommand) => store.settle(command),
-          }
-        }),
-      )
-    }),
-  )
-
-const wrappedFoundation = seamInstrumentedSettlementStore.pipe(Layer.provideMerge(pgTestLayer))
 
 const authLayer: Layer.Layer<AuthService, never, Pglite.PgliteClient> = Layer.effect(
   AuthService,
@@ -273,6 +142,18 @@ export interface InspectService {
   readonly auditTags: (orderId: string) => Effect.Effect<readonly string[]>
 }
 
+export interface SerializationSeamService {
+  readonly armOnce: Effect.Effect<void>
+  readonly armAlways: Effect.Effect<void>
+  readonly disarm: Effect.Effect<void>
+}
+
+const seamServiceOf = (db: DrizzleDatabase): SerializationSeamService => ({
+  armOnce: Effect.provideService(armSeamOnce, DrizzleSession, db),
+  armAlways: Effect.provideService(armSeamAlways, DrizzleSession, db),
+  disarm: Effect.provideService(disarmSeam, DrizzleSession, db),
+})
+
 export interface TestServerService {
   readonly baseUrl: string
   readonly signUp: (email: string, password: string, name: string) => Effect.Effect<Session>
@@ -283,36 +164,13 @@ export interface TestServerService {
     payload: Record<string, string | number>,
     cookie?: string,
   ) => Effect.Effect<readonly RpcWireFailure[]>
-  readonly seam: ConflictSeamService
+  readonly seam: SerializationSeamService
   readonly seed: SeedService
   readonly inspect: InspectService
 }
 
 export class TestServer extends Context.Service<TestServer, TestServerService>()(
   '@systemfsoftware/example-inventory-fulfillment/tests/TestServer',
-) {}
-
-export type SettlementOutcome =
-  | { readonly _tag: 'Allocated' }
-  | { readonly _tag: 'Backordered' }
-  | { readonly _tag: 'Held'; readonly shortfall: number }
-  | { readonly _tag: 'Refused' }
-  | { readonly _tag: 'Conflicted' }
-
-export interface CellOrderInput {
-  readonly orderId: string
-  readonly customerId: string
-  readonly lines: readonly { readonly sku: string; readonly quantity: number }[]
-}
-
-export interface CellHarnessService {
-  readonly submit: (input: CellOrderInput) => Effect.Effect<SettlementOutcome>
-  readonly seed: SeedService
-  readonly inspect: InspectService
-}
-
-export class CellHarness extends Context.Service<CellHarness, CellHarnessService>()(
-  '@systemfsoftware/example-inventory-fulfillment/tests/CellHarness',
 ) {}
 
 export interface SubmitOrderInput {
@@ -333,6 +191,32 @@ export const submitRequest = (input: SubmitOrderInput): Effect.Effect<SubmitOrde
     fraudRisk: input.fraudRisk ?? 0,
   }).pipe(Effect.orDie)
 
+export {
+  AllocatedSplit,
+  AllocatedWithOverdraft,
+  Backordered,
+  CreditHold,
+  CreditLimitExceeded,
+  DuplicateOrder,
+  Forbidden,
+  InsufficientStock,
+  ReservationView,
+  StockView,
+  StoreUnavailable,
+  Unauthorized,
+}
+export type { Client, FulfillmentDecision, FulfillmentError }
+
+let sequence = 0
+const nextId = (prefix: string): string => {
+  sequence += 1
+  return `${prefix}-${process.pid.toString(36)}-${sequence}`
+}
+
+export const uniqueId = nextId
+export const uniqueEmail = (): string => `${nextId('user')}@example.test`
+export const uniquePassword = (): string => `pw-${nextId('secret')}`
+
 const cookieHeaderOf = (cookies: Cookies.Cookies): string => {
   const header = Cookies.toCookieHeader(cookies)
   if (header.length === 0) {
@@ -350,13 +234,12 @@ const userFromSession = <J = unknown>(json: J): string => {
   return id
 }
 
-type BuildContext = HttpServer.HttpServer | HttpClient.HttpClient | DrizzleSession | ConflictSeam
+type BuildContext = HttpServer.HttpServer | HttpClient.HttpClient | DrizzleSession
 
 const buildService = (context: Context.Context<BuildContext>): TestServerService => {
   const server = Context.get(context, HttpServer.HttpServer)
   const http = Context.get(context, HttpClient.HttpClient)
   const db = Context.get(context, DrizzleSession)
-  const seam = Context.get(context, ConflictSeam)
   const baseUrl = HttpServer.formatAddress(server.address)
 
   const execute = (request: HttpClientRequest.HttpClientRequest) => http.execute(request).pipe(Effect.orDie)
@@ -419,11 +302,11 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
 
   return {
     baseUrl,
-    seam,
     signUp: (email, password, name) => authenticate('/api/auth/sign-up/email', { email, password, name }),
     signIn: (email, password) => authenticate('/api/auth/sign-in/email', { email, password }),
     client,
     postRpc,
+    seam: seamServiceOf(db),
     seed: seedServiceOf(db),
     inspect: inspectServiceOf(db),
   }
@@ -491,72 +374,13 @@ const inspectServiceOf = (db: DrizzleDatabase): InspectService => ({
     ),
 })
 
-type SettlementDecision = Fulfillment.Decision.CoreFulfillmentDecision | Fulfillment.Decision.FulfillmentRefusal
-type SettlementFailure =
-  | Fulfillment.Decision.OptimisticConflict
-  | Fulfillment.Decision.CreditAccountNotFound
-  | Fulfillment.Decision.StoreUnavailable
-
-const conflicted: SettlementOutcome = { _tag: 'Conflicted' }
-
-const outcomeOf = (attempt: Result.Result<SettlementDecision, SettlementFailure>): Effect.Effect<SettlementOutcome> =>
-  Result.match(attempt, {
-    onFailure: (failure) =>
-      Match.value(failure).pipe(
-        Match.tag('OptimisticConflict', (): Effect.Effect<SettlementOutcome> => Effect.succeed(conflicted)),
-        Match.orElse((error) => Effect.die(error)),
-      ),
-    onSuccess: (decision) =>
-      Effect.succeed(
-        Match.value(decision).pipe(
-          Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', (): SettlementOutcome => ({ _tag: 'Allocated' })),
-          Match.tag('Backordered', (): SettlementOutcome => ({ _tag: 'Backordered' })),
-          Match.tag('CreditHold', (held): SettlementOutcome => ({ _tag: 'Held', shortfall: held.shortfall })),
-          Match.tag('InsufficientStock', 'CreditLimitExceeded', (): SettlementOutcome => ({ _tag: 'Refused' })),
-          Match.exhaustive,
-        ),
-      ),
-  })
-
-const buildCellHarness = (
-  store: SettlementStoreService,
-  db: DrizzleDatabase,
-): CellHarnessService => {
-  const attempt = (input: CellOrderInput): Effect.Effect<SettlementOutcome> =>
-    Effect.gen(function*() {
-      const order = yield* S.decodeEffect(Fulfillment.Order.Order)({
-        orderId: input.orderId,
-        customerId: input.customerId,
-        lines: input.lines,
-      }).pipe(Effect.orDie)
-      const fraudRisk = yield* S.decodeEffect(Fulfillment.Credit.FraudRiskScore)(0).pipe(Effect.orDie)
-      return yield* Fulfillment.Cell.fulfillmentCell.run({ order, kits: [], fraudRisk })
-    }).pipe(
-      Effect.provideService(SettlementStore, store),
-      Effect.result,
-      Effect.flatMap(outcomeOf),
-    )
-  return {
-    submit: attempt,
-    seed: seedServiceOf(db),
-    inspect: inspectServiceOf(db),
-  }
-}
-
 const ephemeralPortConfigLayer = ConfigProvider.layer(
   ConfigProvider.fromUnknown({ PORT: '0' }),
 )
 
-const fulfillmentConfigLayer = Layer.succeed(FulfillmentConfig, {
-  maxRetries: 3,
-  retryInterval: Duration.millis(10),
-})
-
 const appLayer = HttpLive.pipe(
   Layer.provide(authLayer),
   Layer.provideMerge(wrappedFoundation),
-  Layer.provideMerge(conflictSeamLayer),
-  Layer.provideMerge(fulfillmentConfigLayer),
   Layer.provide(ephemeralPortConfigLayer),
 )
 
@@ -566,14 +390,6 @@ const fullLayer = Layer.mergeAll(
   NodeHttpClient.layerUndici,
 ).pipe(Layer.orDie)
 
-export const TestServerLayer: Layer.Layer<TestServer | CellHarness> = fullLayer.pipe(
-  Layer.flatMap((context) =>
-    Layer.mergeAll(
-      Layer.succeed(TestServer, buildService(context)),
-      Layer.succeed(
-        CellHarness,
-        buildCellHarness(Context.get(context, SettlementStore), Context.get(context, DrizzleSession)),
-      ),
-    )
-  ),
+export const TestServerLayer: Layer.Layer<TestServer> = fullLayer.pipe(
+  Layer.flatMap((context) => Layer.succeed(TestServer, buildService(context))),
 )

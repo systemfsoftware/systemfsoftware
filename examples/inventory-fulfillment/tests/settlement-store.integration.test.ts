@@ -1,39 +1,37 @@
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { Settlement } from '@systemfsoftware/example-inventory-fulfillment'
-import type { Fulfillment, Inventory } from '@systemfsoftware/example-inventory-fulfillment'
-import { Effect, Equal } from 'effect'
+import { Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
+import { Cause, Effect, Exit, Option, Ref, Result, Schema as S } from 'effect'
 import { expect } from 'vitest'
+import { StoreUnavailable } from '../src/fulfillment/decision.schema.js'
 import {
   acrossStores,
+  armSeamAlways,
+  armSeamOnce,
+  auditsOf,
+  disarmSeam,
+  exhaustedBudget,
   FIRST_CUSTOMER,
   FIRST_LOT,
   FIRST_SKU,
+  keyOf,
   lotQuantityOf,
-  lotVersionOf,
-  readCreditOf,
+  outstandingOf,
+  planOf,
+  reservationsOf,
   SECOND_CUSTOMER,
   SECOND_LOT,
   SECOND_SKU,
-  settlementCommandOf,
-  settlementCommandWithoutCharge,
+  seedPostgres,
+  settleInUnit,
   settlementStoreWorld,
+  snapshotInUnit,
 } from './__fixtures__/settlement-store.fixture.js'
-
-const SettlementStore = Settlement.Store.SettlementStore
-type SettlementStore = Settlement.Store.SettlementStore
-type SettlementOutcome = Settlement.Store.SettlementOutcome
-type SettlementStoreService = Settlement.Store.SettlementStoreService
-type StoreUnavailable = Fulfillment.Decision.StoreUnavailable
-interface OrderInput {
-  readonly orderId: string
-  readonly customerId: string
-  readonly sku: string
-  readonly lotId: string
-  readonly quantity: number
-  readonly charge: number
-}
+import type { OrderInput } from './__fixtures__/settlement-store.fixture.js'
 
 const Feature = makeFeature({ it, layer })
+
+type SettlementStore = Settlement.Store.SettlementStore
+type OrderSnapshot = Settlement.Store.OrderSnapshot
 
 const FIRST_ORDER: OrderInput = {
   orderId: 'order-first',
@@ -53,241 +51,274 @@ const SECOND_ORDER: OrderInput = {
   charge: 8,
 }
 
-const settleOrder = (
-  store: SettlementStoreService,
+const FIRST_ORDER_FREE: OrderInput = { ...FIRST_ORDER, charge: undefined }
+
+const balanceOf = (snapshot: OrderSnapshot): number => snapshot.account.outstandingBalance
+
+const chargeAndReread = (
+  store: Settlement.Store.SettlementStoreService,
   input: OrderInput,
-): Effect.Effect<SettlementOutcome, StoreUnavailable> =>
+): Effect.Effect<
+  { readonly outstandingBalance: number; readonly lotQuantity: number; readonly owner: Option.Option<string> },
+  Settlement.Store.SettlementFailure
+> =>
   Effect.gen(function*() {
-    const credit = yield* readCreditOf(store, input.customerId)
-    const stock = yield* store.readAllStock
-    return yield* store.settle(settlementCommandOf({
-      ...input,
-      creditProof: credit.proof,
-      stockProof: stock.proof,
-    }))
+    yield* settleInUnit(store, input)
+    const after = yield* snapshotInUnit(store, input)
+    return {
+      outstandingBalance: balanceOf(after),
+      lotQuantity: lotQuantityOf(after.stock, input.lotId),
+      owner: after.reservedBy,
+    }
   })
 
-const settleWithoutCharge = (
-  store: SettlementStoreService,
-  input: OrderInput,
-): Effect.Effect<SettlementOutcome, StoreUnavailable> =>
+const readAfterWrite = Effect.flatMap(Settlement.Store.SettlementStore, (store) => chargeAndReread(store, FIRST_ORDER))
+
+const settleWithoutCharge = Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
   Effect.gen(function*() {
-    const credit = yield* readCreditOf(store, input.customerId)
-    const stock = yield* store.readAllStock
-    return yield* store.settle(settlementCommandWithoutCharge({
-      ...input,
-      creditProof: credit.proof,
-      stockProof: stock.proof,
+    yield* settleInUnit(store, FIRST_ORDER_FREE)
+    const after = yield* snapshotInUnit(store, FIRST_ORDER_FREE)
+    return {
+      outstandingBalance: balanceOf(after),
+      lotQuantity: lotQuantityOf(after.stock, FIRST_LOT),
+    }
+  }))
+
+const repeatedRead = Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
+  Effect.gen(function*() {
+    const settled = yield* store.unitOfWork(Effect.gen(function*() {
+      const first = yield* store.load(keyOf(FIRST_ORDER))
+      const second = yield* store.load(keyOf(FIRST_ORDER))
+      return { first, second }
     }))
-  })
+    const after = yield* snapshotInUnit(store, FIRST_ORDER)
+    return { ...settled, after }
+  }))
 
 interface FullState {
   readonly outstandingOne: number
   readonly outstandingTwo: number
   readonly quantityOne: number
   readonly quantityTwo: number
-  readonly versionOne: number
-  readonly versionTwo: number
 }
 
-interface SettlementLaw {
-  readonly outcome: SettlementOutcome
-  readonly outstandingBalance: number
-  readonly creditProofUnchanged: boolean
-  readonly lotQuantity: number
-  readonly lotVersion: number
-}
-
-interface RepeatedReadResult {
-  readonly firstStock: readonly Inventory.Schema.WarehouseStockPartition[]
-  readonly secondStock: readonly Inventory.Schema.WarehouseStockPartition[]
-  readonly firstCredit: Fulfillment.Credit.CreditAccount
-  readonly secondCredit: Fulfillment.Credit.CreditAccount
-}
-
-const fullState = (store: SettlementStoreService): Effect.Effect<FullState, StoreUnavailable> =>
+const fullState = (
+  store: Settlement.Store.SettlementStoreService,
+): Effect.Effect<FullState, Settlement.Store.SettlementFailure> =>
   Effect.gen(function*() {
-    const one = yield* readCreditOf(store, FIRST_CUSTOMER)
-    const two = yield* readCreditOf(store, SECOND_CUSTOMER)
-    const stock = yield* store.readAllStock
+    const one = yield* snapshotInUnit(store, { ...FIRST_ORDER, orderId: 'order-probe-one' })
+    const two = yield* snapshotInUnit(store, { ...SECOND_ORDER, orderId: 'order-probe-two' })
     return {
-      outstandingOne: one.account.outstandingBalance,
-      outstandingTwo: two.account.outstandingBalance,
-      quantityOne: lotQuantityOf(stock, FIRST_LOT),
-      quantityTwo: lotQuantityOf(stock, SECOND_LOT),
-      versionOne: lotVersionOf(stock, FIRST_LOT),
-      versionTwo: lotVersionOf(stock, SECOND_LOT),
+      outstandingOne: balanceOf(one),
+      outstandingTwo: balanceOf(two),
+      quantityOne: lotQuantityOf(one.stock, FIRST_LOT),
+      quantityTwo: lotQuantityOf(two.stock, SECOND_LOT),
     }
   })
-
-const readSeesTheWrite: Effect.Effect<
-  {
-    readonly outcome: SettlementOutcome
-    readonly outstandingBalance: number
-    readonly lotQuantity: number
-    readonly lotVersion: number
-  },
-  StoreUnavailable,
-  SettlementStore
-> = Effect.flatMap(SettlementStore, (store) =>
-  Effect.gen(function*() {
-    const outcome = yield* settleOrder(store, FIRST_ORDER)
-    const after = yield* readCreditOf(store, FIRST_CUSTOMER)
-    const stockAfter = yield* store.readAllStock
-    return {
-      outcome,
-      outstandingBalance: after.account.outstandingBalance,
-      lotQuantity: lotQuantityOf(stockAfter, FIRST_LOT),
-      lotVersion: lotVersionOf(stockAfter, FIRST_LOT),
-    }
-  }))
-
-const repeatedRead: Effect.Effect<RepeatedReadResult, StoreUnavailable, SettlementStore> = Effect.flatMap(
-  SettlementStore,
-  (store) =>
-    Effect.gen(function*() {
-      const first = yield* store.readAllStock
-      const creditFirst = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const second = yield* store.readAllStock
-      const creditSecond = yield* readCreditOf(store, FIRST_CUSTOMER)
-      return {
-        firstStock: first.partitions,
-        secondStock: second.partitions,
-        firstCredit: creditFirst.account,
-        secondCredit: creditSecond.account,
-      }
-    }),
-)
 
 const committedFinalState = (
   first: OrderInput,
   second: OrderInput,
-): Effect.Effect<FullState, StoreUnavailable, SettlementStore> =>
-  Effect.flatMap(SettlementStore, (store) =>
+): Effect.Effect<FullState, Settlement.Store.SettlementFailure, SettlementStore> =>
+  Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
     Effect.gen(function*() {
-      yield* settleOrder(store, first)
-      yield* settleOrder(store, second)
+      yield* settleInUnit(store, first)
+      yield* settleInUnit(store, second)
       return yield* fullState(store)
     }))
 
-const settledWithoutCharge: Effect.Effect<SettlementLaw, StoreUnavailable, SettlementStore> = Effect.flatMap(
-  SettlementStore,
-  (store) =>
-    Effect.gen(function*() {
-      const before = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const outcome = yield* settleWithoutCharge(store, FIRST_ORDER)
-      const after = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const stock = yield* store.readAllStock
-      return {
-        outcome,
-        outstandingBalance: after.account.outstandingBalance,
-        creditProofUnchanged: Equal.equals(before.proof, after.proof),
-        lotQuantity: lotQuantityOf(stock, FIRST_LOT),
-        lotVersion: lotVersionOf(stock, FIRST_LOT),
-      }
-    }),
-)
-
-const UNCLAIMED_LOT = 'lot-vanished'
-const claimedOutsideTheProof: Effect.Effect<SettlementLaw, StoreUnavailable, SettlementStore> = Effect.flatMap(
-  SettlementStore,
-  (store) =>
-    Effect.gen(function*() {
-      const before = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const stock = yield* store.readAllStock
-      const outcome = yield* store.settle(settlementCommandOf({
-        ...FIRST_ORDER,
-        lotId: UNCLAIMED_LOT,
-        creditProof: before.proof,
-        stockProof: stock.proof,
-      }))
-      const after = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const stockAfter = yield* store.readAllStock
-      return {
-        outcome,
-        outstandingBalance: after.account.outstandingBalance,
-        creditProofUnchanged: Equal.equals(before.proof, after.proof),
-        lotQuantity: lotQuantityOf(stockAfter, FIRST_LOT),
-        lotVersion: lotVersionOf(stockAfter, FIRST_LOT),
-      }
-    }),
-)
-
-const sameProofSettlesTwice: Effect.Effect<
-  readonly [SettlementOutcome, SettlementOutcome],
-  StoreUnavailable,
-  SettlementStore
-> = Effect.flatMap(SettlementStore, (store) =>
+const refusedSecondSettle = Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
   Effect.gen(function*() {
-    const firstRead = yield* readCreditOf(store, FIRST_CUSTOMER)
-    const firstStock = yield* store.readAllStock
-    const secondRead = yield* readCreditOf(store, FIRST_CUSTOMER)
-    const secondStock = yield* store.readAllStock
-    const first = yield* store.settle(settlementCommandOf({
-      ...FIRST_ORDER,
-      orderId: 'order-first',
-      creditProof: firstRead.proof,
-      stockProof: firstStock.proof,
-    }))
-    const second = yield* store.settle(settlementCommandOf({
-      ...FIRST_ORDER,
-      orderId: 'order-second',
-      creditProof: secondRead.proof,
-      stockProof: secondStock.proof,
-    }))
-    return [first, second] as const
+    yield* settleInUnit(store, FIRST_ORDER)
+    const second = yield* Effect.result(settleInUnit(store, { ...FIRST_ORDER, quantity: 1, charge: 1 }))
+    const after = yield* snapshotInUnit(store, FIRST_ORDER)
+    return {
+      refused: Result.isFailure(second),
+      outstandingBalance: balanceOf(after),
+      lotQuantity: lotQuantityOf(after.stock, FIRST_LOT),
+      owner: after.reservedBy,
+    }
   }))
 
-const anotherCustomersProof: Effect.Effect<SettlementOutcome, StoreUnavailable, SettlementStore> = Effect.flatMap(
-  SettlementStore,
-  (store) =>
-    Effect.gen(function*() {
-      const credit = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const stock = yield* store.readAllStock
-      return yield* store.settle(settlementCommandOf({
-        ...FIRST_ORDER,
-        orderId: 'order-other',
-        customerId: SECOND_CUSTOMER,
-        creditProof: credit.proof,
-        stockProof: stock.proof,
-      }))
-    }),
-)
+const failedUnitWritesNothing = Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
+  Effect.gen(function*() {
+    const failed = yield* Effect.result(
+      store.unitOfWork(Effect.gen(function*() {
+        yield* store.load(keyOf(FIRST_ORDER))
+        yield* store.settle(planOf(FIRST_ORDER))
+        return yield* Effect.fail('a business refusal after the settle')
+      })),
+    )
+    const afterFailure = yield* snapshotInUnit(store, FIRST_ORDER)
+    const rerun = yield* Effect.result(settleInUnit(store, FIRST_ORDER))
+    const afterRerun = yield* snapshotInUnit(store, FIRST_ORDER)
+    return {
+      failed: Result.isFailure(failed),
+      pristineBalance: balanceOf(afterFailure),
+      pristineLot: lotQuantityOf(afterFailure.stock, FIRST_LOT),
+      rerunCommitted: Result.isSuccess(rerun),
+      finalBalance: balanceOf(afterRerun),
+      finalLot: lotQuantityOf(afterRerun.stock, FIRST_LOT),
+      owner: afterRerun.reservedBy,
+    }
+  }))
 
-const staleStockProof: Effect.Effect<SettlementOutcome, StoreUnavailable, SettlementStore> = Effect.flatMap(
-  SettlementStore,
-  (store) =>
-    Effect.gen(function*() {
-      const credit = yield* readCreditOf(store, FIRST_CUSTOMER)
-      const stock = yield* store.readAllStock
-      yield* store.settle(settlementCommandOf({
-        ...FIRST_ORDER,
-        creditProof: credit.proof,
-        stockProof: stock.proof,
+const contendedMemorySeed = (): Settlement.Store.SettlementStoreSeed => ({
+  warehouses: [{ warehouseId: 'warehouse-central', region: 'central' }],
+  lots: [
+    { lotId: FIRST_LOT, sku: FIRST_SKU, warehouseId: 'warehouse-central', quantityOnHand: 100, version: 1 },
+  ],
+  customers: [
+    {
+      customerId: FIRST_CUSTOMER,
+      tier: 'Standard',
+      creditLimit: 100,
+      outstandingBalance: 0,
+      overdraftPrivilege: 0,
+    },
+  ],
+})
+
+const contendedCharge = Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
+  Effect.gen(function*() {
+    const attempt = (orderId: string) =>
+      store.unitOfWork(Effect.gen(function*() {
+        const snapshot = yield* store.load({ orderId, customerId: FIRST_CUSTOMER, skus: [FIRST_SKU] })
+        const headroom = snapshot.account.creditLimit - snapshot.account.outstandingBalance
+        const granted = headroom >= 60
+        const input: OrderInput = {
+          orderId,
+          customerId: FIRST_CUSTOMER,
+          sku: FIRST_SKU,
+          lotId: FIRST_LOT,
+          quantity: 60,
+          charge: granted ? 60 : undefined,
+        }
+        const settled = granted ? planOf(input) : { ...planOf(input), events: [] }
+        yield* store.settle(settled)
+        return granted
       }))
-      const refreshed = yield* readCreditOf(store, FIRST_CUSTOMER)
-      return yield* store.settle(settlementCommandOf({
-        ...FIRST_ORDER,
-        orderId: 'order-second',
-        creditProof: refreshed.proof,
-        stockProof: stock.proof,
-      }))
-    }),
-)
+    const [first, second] = yield* Effect.all([attempt('order-contend-a'), attempt('order-contend-b')], {
+      concurrency: 'unbounded',
+    })
+    const after = yield* snapshotInUnit(store, { ...FIRST_ORDER, orderId: 'order-probe' })
+    return {
+      first,
+      second,
+      outstandingBalance: balanceOf(after),
+      lotQuantity: lotQuantityOf(after.stock, FIRST_LOT),
+    }
+  }))
+
+const retriedOnce = Effect.gen(function*() {
+  yield* seedPostgres
+  const store = yield* Settlement.Store.SettlementStore
+  const db = yield* Persistence.DrizzleSession.DrizzleSession
+  yield* armSeamOnce
+  const attempts = yield* Ref.make(0)
+  const settled = yield* Effect.result(
+    store.unitOfWork(Effect.gen(function*() {
+      yield* Ref.update(attempts, (count) => count + 1)
+      yield* Effect.flatMap(store.load(keyOf(FIRST_ORDER)), () => store.settle(planOf(FIRST_ORDER)))
+    })),
+  )
+  const tries = yield* Ref.get(attempts)
+  yield* disarmSeam
+  const outstandingBalance = yield* outstandingOf(db, FIRST_CUSTOMER)
+  const reservationCount = yield* reservationsOf(db, FIRST_ORDER.orderId)
+  const auditCount = yield* auditsOf(db, FIRST_ORDER.orderId)
+  return {
+    committed: Result.isSuccess(settled),
+    tries,
+    outstandingBalance,
+    reservationCount,
+    auditCount,
+  }
+})
+const exhaustedBudgetFails = Effect.gen(function*() {
+  yield* seedPostgres
+  const store = yield* Settlement.Store.SettlementStore
+  const db = yield* Persistence.DrizzleSession.DrizzleSession
+  yield* armSeamAlways
+  const attempts = yield* Ref.make(0)
+  const settled = yield* Effect.result(
+    store.unitOfWork(Effect.gen(function*() {
+      yield* Ref.update(attempts, (count) => count + 1)
+      yield* Effect.flatMap(
+        store.load({ ...keyOf(FIRST_ORDER), orderId: 'order-exhausted' }),
+        () => store.settle(planOf({ ...FIRST_ORDER, orderId: 'order-exhausted' })),
+      )
+    })),
+  )
+  const tries = yield* Ref.get(attempts)
+  yield* disarmSeam
+  const outstandingBalance = yield* outstandingOf(db, FIRST_CUSTOMER)
+  const reservationCount = yield* reservationsOf(db, 'order-exhausted')
+  const auditCount = yield* auditsOf(db, 'order-exhausted')
+  return { settled, tries, outstandingBalance, reservationCount, auditCount }
+})
+
+const checkedWrite = Effect.gen(function*() {
+  yield* seedPostgres
+  const store = yield* Settlement.Store.SettlementStore
+  const db = yield* Persistence.DrizzleSession.DrizzleSession
+  const attempts = yield* Ref.make(0)
+  const settled = yield* Effect.result(
+    store.unitOfWork(Effect.gen(function*() {
+      yield* Ref.update(attempts, (count) => count + 1)
+      yield* Effect.flatMap(
+        store.load({ ...keyOf(FIRST_ORDER), orderId: 'order-overdraw' }),
+        () => store.settle(planOf({ ...FIRST_ORDER, orderId: 'order-overdraw', quantity: 20, charge: 20 })),
+      )
+    })),
+  )
+  const tries = yield* Ref.get(attempts)
+  const outstandingBalance = yield* outstandingOf(db, FIRST_CUSTOMER)
+  return { settled, tries, outstandingBalance }
+})
+
+const forgedUnitOfWork = Effect.flatMap(Settlement.Store.SettlementStore, (store) =>
+  Effect.gen(function*() {
+    const forged = Effect.provideService(store.load(keyOf(FIRST_ORDER)), Settlement.Store.UnitOfWork, { open: true })
+    const forgedSettle = Effect.provideService(
+      store.settle(planOf(FIRST_ORDER)),
+      Settlement.Store.UnitOfWork,
+      { open: true },
+    )
+    const readExit = yield* Effect.exit(forged)
+    const settleExit = yield* Effect.exit(forgedSettle)
+    const after = yield* snapshotInUnit(store, FIRST_ORDER)
+    return {
+      readDefects: Exit.isFailure(readExit) ? Cause.prettyErrors(readExit.cause) : [],
+      settleDefects: Exit.isFailure(settleExit) ? Cause.prettyErrors(settleExit.cause) : [],
+      outstandingBalance: balanceOf(after),
+      lotQuantity: lotQuantityOf(after.stock, FIRST_LOT),
+    }
+  }))
+
+const forbiddenMarker = 'UnitOfWork was provided by something other than SettlementStore.unitOfWork'
+
+const markerOf = (defects: ReadonlyArray<Error>): ReadonlyArray<string> => defects.map((defect) => defect.message)
 
 Feature('Settlement stores keep their promises in memory and in Postgres')
   .withScenarioLayer(settlementStoreWorld)
+  .liveClock()
   .body(({ scenario }) => {
     scenario(
       'A settlement that commits is visible to the next read',
       Gherkin.Do.pipe(
         Given('two customers with clean accounts and a stocked warehouse')(
           'outcome',
-          () => acrossStores(readSeesTheWrite),
+          () => acrossStores(readAfterWrite),
         ),
-        Then('the charge, the new balance and the moved stock show up, either way')((s) => {
-          const expected = { outcome: 'Committed', outstandingBalance: 9, lotQuantity: 7, lotVersion: 2 }
-          expect(s.outcome).toEqual({ memory: expected, postgres: expected })
+        Then('the charge, the new balance, the moved stock and the owner show up, either way')((s) => {
+          const expected = {
+            outstandingBalance: 9,
+            lotQuantity: 7,
+            owner: Option.some(FIRST_CUSTOMER),
+          }
+          expect(s.outcome.memory).toEqual(expected)
+          expect(s.outcome.postgres).toEqual(expected)
         }),
       ),
     )
@@ -297,17 +328,12 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
       Gherkin.Do.pipe(
         Given('two customers with clean accounts and a stocked warehouse')(
           'outcome',
-          () => acrossStores(settledWithoutCharge),
+          () => acrossStores(settleWithoutCharge),
         ),
-        Then('the stock moves while the account balance and its standing stay put, either way')((s) => {
-          const expected = {
-            outcome: 'Committed',
-            outstandingBalance: 0,
-            creditProofUnchanged: true,
-            lotQuantity: 7,
-            lotVersion: 2,
-          }
-          expect(s.outcome).toEqual({ memory: expected, postgres: expected })
+        Then('the stock moves while the account balance stays put, either way')((s) => {
+          const expected = { outstandingBalance: 0, lotQuantity: 7 }
+          expect(s.outcome.memory).toEqual(expected)
+          expect(s.outcome.postgres).toEqual(expected)
         }),
       ),
     )
@@ -317,10 +343,9 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
       Gherkin.Do.pipe(
         Given('two customers with clean accounts and a stocked warehouse')('outcome', () => acrossStores(repeatedRead)),
         Then('both reads see the same account and the same stock')((s) => {
-          expect(s.outcome.memory.secondStock).toEqual(s.outcome.memory.firstStock)
-          expect(s.outcome.memory.secondCredit).toEqual(s.outcome.memory.firstCredit)
-          expect(s.outcome.postgres.secondStock).toEqual(s.outcome.postgres.firstStock)
-          expect(s.outcome.postgres.secondCredit).toEqual(s.outcome.postgres.firstCredit)
+          expect(s.outcome.memory.second).toEqual(s.outcome.memory.first)
+          expect(s.outcome.postgres.second).toEqual(s.outcome.postgres.first)
+          expect(s.outcome.postgres.after).toEqual(s.outcome.memory.after)
         }),
       ),
     )
@@ -341,60 +366,136 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
     )
 
     scenario(
-      'Two settlements on the same account state cannot both commit',
+      'Settling twice for one order is refused the second time',
       Gherkin.Do.pipe(
         Given('two customers with clean accounts and a stocked warehouse')(
           'outcome',
-          () => acrossStores(sameProofSettlesTwice),
+          () => acrossStores(refusedSecondSettle),
         ),
-        Then('exactly one of the two settlements commits for each store')((s) => {
-          expect(s.outcome).toEqual({ memory: ['Committed', 'Conflict'], postgres: ['Committed', 'Conflict'] })
-        }),
-      ),
-    )
-
-    scenario(
-      "A settlement holding another customer's account proof is turned away",
-      Gherkin.Do.pipe(
-        Given('two customers with clean accounts and a stocked warehouse')(
-          'outcome',
-          () => acrossStores(anotherCustomersProof),
-        ),
-        Then('the settlement conflicts for each store')((s) => {
-          expect(s.outcome).toEqual({ memory: 'Conflict', postgres: 'Conflict' })
-        }),
-      ),
-    )
-
-    scenario(
-      'A settlement whose stock moved after the read is turned away',
-      Gherkin.Do.pipe(
-        Given('two customers with clean accounts and a stocked warehouse')(
-          'outcome',
-          () => acrossStores(staleStockProof),
-        ),
-        Then('the settlement conflicts for each store')((s) => {
-          expect(s.outcome).toEqual({ memory: 'Conflict', postgres: 'Conflict' })
-        }),
-      ),
-    )
-
-    scenario(
-      'A reservation for a lot the read never vouched for is turned away',
-      Gherkin.Do.pipe(
-        Given('two customers with clean accounts and a stocked warehouse')(
-          'outcome',
-          () => acrossStores(claimedOutsideTheProof),
-        ),
-        Then('the settlement conflicts and nothing moves for each store')((s) => {
+        Then('the second settle fails and the first settlement still stands, either way')((s) => {
           const expected = {
-            outcome: 'Conflict',
-            outstandingBalance: 0,
-            creditProofUnchanged: true,
-            lotQuantity: 10,
-            lotVersion: 1,
+            refused: true,
+            outstandingBalance: 9,
+            lotQuantity: 7,
+            owner: Option.some(FIRST_CUSTOMER),
           }
-          expect(s.outcome).toEqual({ memory: expected, postgres: expected })
+          expect(s.outcome.memory).toEqual(expected)
+          expect(s.outcome.postgres).toEqual(expected)
+        }),
+      ),
+    )
+
+    scenario(
+      'A unit that fails after its settle writes nothing and can run again',
+      Gherkin.Do.pipe(
+        Given('two customers with clean accounts and a stocked warehouse')(
+          'outcome',
+          () => acrossStores(failedUnitWritesNothing),
+        ),
+        Then('the failed unit leaves the account and the stock alone, and the rerun commits once')((s) => {
+          const expected = {
+            failed: true,
+            pristineBalance: 0,
+            pristineLot: 10,
+            rerunCommitted: true,
+            finalBalance: 9,
+            finalLot: 7,
+            owner: Option.some(FIRST_CUSTOMER),
+          }
+          expect(s.outcome.memory).toEqual(expected)
+          expect(s.outcome.postgres).toEqual(expected)
+        }),
+      ),
+    )
+
+    scenario(
+      'Two concurrent units for one customer leave exactly one charge',
+      Gherkin.Do.pipe(
+        Given('a customer whose headroom fits one of two concurrent orders')(
+          'outcome',
+          () => Effect.provide(contendedCharge, Settlement.Memory.layer(contendedMemorySeed())),
+        ),
+        Then('exactly one order charges and the other settles without one')((s) => {
+          expect([s.outcome.first, s.outcome.second].filter((charged) => charged)).toHaveLength(1)
+          expect(s.outcome.outstandingBalance).toBe(60)
+          expect(s.outcome.lotQuantity).toBe(40)
+        }),
+      ),
+    )
+
+    scenario(
+      'A serialization failure re-runs the unit from its first read',
+      Gherkin.Do.pipe(
+        Given('a unit whose first settle hits an engine-raised serialization failure')(
+          'outcome',
+          () => Effect.provide(retriedOnce, Settlement.Drizzle.layer(exhaustedBudget)),
+        ),
+        Then('the unit commits exactly once: one charge, one reservation, one audit row')((s) => {
+          expect(s.outcome.committed).toBe(true)
+          expect(s.outcome.tries).toBe(2)
+          expect(s.outcome.outstandingBalance).toBe(9)
+          expect(s.outcome.reservationCount).toBe(1)
+          expect(s.outcome.auditCount).toBe(1)
+        }),
+      ),
+    )
+
+    scenario(
+      'A unit that fails on every attempt reports the store as unavailable',
+      Gherkin.Do.pipe(
+        Given('a unit that hits a serialization failure on every attempt, with a budget of three')(
+          'outcome',
+          () => Effect.provide(exhaustedBudgetFails, Settlement.Drizzle.layer(exhaustedBudget)),
+        ),
+        Then('the order fails as unavailable naming the serialization failure, having written nothing')((s) => {
+          expect(Result.isFailure(s.outcome.settled)).toBe(true)
+          const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : undefined
+          expect(S.is(StoreUnavailable)(failure)).toBe(true)
+          const states = failure === undefined
+            ? []
+            : Settlement.Drizzle.sqlStatesOf(failure)
+          expect(states).toContain('40001')
+          expect(s.outcome.tries).toBe(3)
+          expect(s.outcome.outstandingBalance).toBe(0)
+          expect(s.outcome.reservationCount).toBe(0)
+          expect(s.outcome.auditCount).toBe(0)
+        }),
+      ),
+    )
+
+    scenario(
+      'A settle that breaks the stock backstop is not retried',
+      Gherkin.Do.pipe(
+        Given('a settle that would drive a lot below zero')(
+          'outcome',
+          () => Effect.provide(checkedWrite, Settlement.Drizzle.layer(exhaustedBudget)),
+        ),
+        Then('the unit fails as unavailable on its first attempt and the stock is untouched')((s) => {
+          expect(Result.isFailure(s.outcome.settled)).toBe(true)
+          const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : undefined
+          expect(S.is(StoreUnavailable)(failure)).toBe(true)
+          expect(s.outcome.tries).toBe(1)
+          expect(s.outcome.outstandingBalance).toBe(0)
+        }),
+      ),
+    )
+
+    scenario(
+      'A unit of work provided by hand dies before any query',
+      Gherkin.Do.pipe(
+        Given('a hand-provided unit of work around a read and a settle')(
+          'outcome',
+          () => acrossStores(forgedUnitOfWork),
+        ),
+        Then('both operations die naming the forged marker, and nothing is written')((s) => {
+          expect(markerOf(s.outcome.memory.readDefects)).toContain(forbiddenMarker)
+          expect(markerOf(s.outcome.memory.settleDefects)).toContain(forbiddenMarker)
+          expect(markerOf(s.outcome.postgres.readDefects)).toContain(forbiddenMarker)
+          expect(markerOf(s.outcome.postgres.settleDefects)).toContain(forbiddenMarker)
+          expect(s.outcome.memory.outstandingBalance).toBe(0)
+          expect(s.outcome.memory.lotQuantity).toBe(10)
+          expect(s.outcome.postgres.outstandingBalance).toBe(0)
+          expect(s.outcome.postgres.lotQuantity).toBe(10)
         }),
       ),
     )

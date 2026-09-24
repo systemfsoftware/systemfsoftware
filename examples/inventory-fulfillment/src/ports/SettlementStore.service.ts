@@ -3,47 +3,46 @@ import type { CreditAccount, CustomerTier, Money } from '../fulfillment/credit.s
 import { CreditAccountNotFound, StoreUnavailable } from '../fulfillment/decision.schema.js'
 import type { AuditPayload, InventoryReservationEvents } from '../fulfillment/event.schema.js'
 import type { WarehouseStockPartition } from '../inventory/inventory.schema.js'
-import type { CreditProof, StockProof } from '../store/SettlementProof.js'
 
-export interface CreditObservation {
+/** What one order reads: its customer's credit row and the lots of its SKUs. */
+export interface OrderKey {
+  readonly orderId: string
+  readonly customerId: string
+  readonly skus: readonly string[]
+}
+
+export interface OrderSnapshot {
   readonly account: CreditAccount
   readonly tier: CustomerTier
-  readonly proof: CreditProof
+  readonly stock: readonly WarehouseStockPartition[]
+  readonly reservedBy: Option.Option<string>
 }
 
-export interface StockObservation {
-  readonly partitions: readonly WarehouseStockPartition[]
-  readonly proof: StockProof
-}
-
-export interface SettlementCharge {
-  readonly amount: Money
-  readonly proof: CreditProof
+export interface OrderPlan {
+  readonly orderId: string
+  readonly customerId: string
+  readonly charge: Option.Option<Money>
+  readonly events: readonly InventoryReservationEvents[]
+  readonly audit: AuditPayload
 }
 
 /**
- * Everything the one atomic commit needs: the reservation events and audit row
- * to write, the stock proof that vouches for every allocated lot, and — for a
- * decision that charges — the amount plus the credit proof that vouches for
- * the account. Absent for held or backordered decisions.
+ * Present in `R` while the store's unit of work is open. Only
+ * {@link SettlementStoreService.unitOfWork} removes it; a hand-provided value
+ * dies inside the adapter before any query runs.
  */
-export interface SettlementCommand {
-  readonly orderId: string
-  readonly customerId: string
-  readonly events: readonly InventoryReservationEvents[]
-  readonly audit: AuditPayload
-  readonly stock: StockProof
-  readonly charge: Option.Option<SettlementCharge>
-}
+export class UnitOfWork extends Context.Service<UnitOfWork, { readonly open: true }>()(
+  '@systemfsoftware/example-inventory-fulfillment/ports/SettlementStore/UnitOfWork',
+) {}
 
-export type SettlementOutcome = 'Committed' | 'Conflict'
+export type SettlementFailure = CreditAccountNotFound | StoreUnavailable
 
 export interface SettlementStoreService {
-  readonly readCredit: (
-    customerId: string,
-  ) => Effect.Effect<CreditObservation, CreditAccountNotFound | StoreUnavailable>
-  readonly readAllStock: Effect.Effect<StockObservation, StoreUnavailable>
-  readonly settle: (command: SettlementCommand) => Effect.Effect<SettlementOutcome, StoreUnavailable>
+  readonly load: (key: OrderKey) => Effect.Effect<OrderSnapshot, SettlementFailure, UnitOfWork>
+  readonly settle: (plan: OrderPlan) => Effect.Effect<void, StoreUnavailable, UnitOfWork>
+  readonly unitOfWork: <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E | StoreUnavailable, Exclude<R, UnitOfWork>>
 }
 
 export interface SettlementStoreSeed {
@@ -67,5 +66,3 @@ export interface SettlementStoreSeed {
 export class SettlementStore extends Context.Service<SettlementStore, SettlementStoreService>()(
   '@systemfsoftware/example-inventory-fulfillment/ports/SettlementStore',
 ) {}
-
-export type { CreditProof, StockProof } from '../store/SettlementProof.js'

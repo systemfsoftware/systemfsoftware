@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "6ea4d973-5998-4ced-bd58-612a6649bedb",
+  "id": "0c3e3e8d-8c9c-40dd-9cee-faed8debdb8a",
   "prevIds": [
     "a59f9bb1-c468-4822-bdee-508a7f2dd733"
   ],
@@ -731,19 +731,6 @@
       "table": "user"
     },
     {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "1",
-      "generated": null,
-      "identity": null,
-      "name": "credit_version",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1112,6 +1099,13 @@
       "schema": "public",
       "table": "user",
       "entityType": "uniques"
+    },
+    {
+      "value": "\"quantity_on_hand\" >= 0",
+      "name": "stock_lots_on_hand_non_negative",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "stock_lots"
     }
   ],
   "renames": []

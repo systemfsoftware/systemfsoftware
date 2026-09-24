@@ -1,7 +1,6 @@
-import { DateTime, Effect, Match, Option, Predicate, Schedule, Schema as S } from 'effect'
+import { Effect, Match, Option, Schema as S } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import {
-  ConflictRollback,
   CreditAccountNotFound,
   CreditLimitExceeded,
   DuplicateOrder,
@@ -11,13 +10,11 @@ import {
   InsufficientStock,
   StoreUnavailable,
 } from '../fulfillment/decision.schema.js'
-import { AuditPayload } from '../fulfillment/event.schema.js'
-import { fulfillmentCell } from '../fulfillment/fulfillment.cell.js'
-import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.service.js'
-import { Order } from '../fulfillment/order.schema.js'
+import { placeOrderCell } from '../fulfillment/place-order.cell.js'
 import { InventoryStore } from '../inventory/InventoryStore.service.js'
 import { AuthContext } from '../ports/AuthContext.service.js'
 import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.service.js'
+import { SettlementStore } from '../ports/SettlementStore.service.js'
 import { AuthMiddleware } from './AuthMiddleware.service.js'
 import {
   GetReservationRequest,
@@ -28,9 +25,9 @@ import {
 } from './inventory-fulfillment.schema.js'
 
 /**
- * Submit a fulfillment order. `ConflictRollback` rides the success union (a
- * wire decision, not an error); `Unauthorized` joins the failure union from
- * {@link AuthMiddleware}.
+ * Submit a fulfillment order. The use case runs inside the settlement store's unit of work,
+ * which re-runs the whole cell on a serialization failure; the edge keeps no retry of its own.
+ * `Unauthorized` joins the failure union from {@link AuthMiddleware}.
  */
 export const SubmitOrder = Rpc.make('submitOrder', {
   payload: SubmitOrderRequest,
@@ -63,13 +60,10 @@ const submitOrderOutcome = (
   outcome: FulfillmentDecisionType | InsufficientStock | CreditLimitExceeded,
 ): Effect.Effect<FulfillmentDecisionType, InsufficientStock | CreditLimitExceeded> =>
   Match.value(outcome).pipe(
-    Match.tag('AllocatedSplit', (decision) => Effect.succeed(decision)),
-    Match.tag('AllocatedWithOverdraft', (decision) => Effect.succeed(decision)),
-    Match.tag('Backordered', (decision) => Effect.succeed(decision)),
-    Match.tag('CreditHold', (decision) => Effect.succeed(decision)),
-    Match.tag('ConflictRollback', (decision) => Effect.succeed(decision)),
-    Match.tag('InsufficientStock', (error) => Effect.fail(error)),
-    Match.tag('CreditLimitExceeded', (error) => Effect.fail(error)),
+    Match.tag('AllocatedSplit', 'AllocatedWithOverdraft', 'Backordered', 'CreditHold', (decision) =>
+      Effect.succeed(decision)),
+    Match.tag('InsufficientStock', 'CreditLimitExceeded', (error) =>
+      Effect.fail(error)),
     Match.exhaustive,
   )
 
@@ -86,58 +80,18 @@ const ownershipOf = <A, E>(
     Match.exhaustive,
   )
 
-const rollback = (orderId: string, customerId: string, attempts: number) =>
-  Effect.gen(function*() {
-    const log = yield* ReservationLog
-    const now = yield* DateTime.now
-    yield* log.appendRollback(
-      new AuditPayload({
-        orderId,
-        actorId: customerId,
-        decisionTag: 'ConflictRollback',
-        occurredAt: now,
-      }),
-    )
-    return new ConflictRollback({ orderId, attempts })
-  })
-
-const runFulfillment = (request: {
-  readonly order: Order
-  readonly kits: SubmitOrderRequest['kits']
-  readonly fraudRisk: SubmitOrderRequest['fraudRisk']
-}) =>
-  Effect.gen(function*() {
-    const config = yield* FulfillmentConfig
-    return yield* fulfillmentCell.run(request).pipe(
-      Effect.retry({
-        times: config.maxRetries - 1,
-        schedule: Schedule.spaced(config.retryInterval).pipe(Schedule.jittered),
-        while: Predicate.isTagged('OptimisticConflict'),
-      }),
-      Effect.catchTag('OptimisticConflict', () =>
-        rollback(request.order.orderId, request.order.customerId, config.maxRetries)),
-    )
-  })
-
 const submitOrder = (request: SubmitOrderRequest) =>
   Effect.gen(function*() {
     const { userId } = yield* AuthContext
-    const log = yield* ReservationLog
-    const existing = yield* log.findReservation(request.orderId)
-    yield* Option.match(existing, {
-      onNone: () => Effect.void,
-      onSome: (record) =>
-        ownershipOf(
-          record,
-          userId,
-          Effect.fail(new DuplicateOrder({ orderId: request.orderId, reason: 'order id already fulfilled' })),
-        ),
-    })
-    const outcome = yield* runFulfillment({
-      order: new Order({ orderId: request.orderId, customerId: userId, lines: request.lines }),
-      kits: request.kits,
-      fraudRisk: request.fraudRisk,
-    })
+    const store = yield* SettlementStore
+    const outcome = yield* store.unitOfWork(
+      placeOrderCell.run({
+        orderId: request.orderId,
+        customerId: userId,
+        lines: request.lines,
+        kits: request.kits,
+      }),
+    )
     return yield* submitOrderOutcome(outcome)
   })
 

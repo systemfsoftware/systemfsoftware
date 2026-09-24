@@ -1,0 +1,1 @@
+ALTER TABLE "stock_lots" ADD CONSTRAINT "stock_lots_on_hand_non_negative" CHECK ("quantity_on_hand" >= 0);
