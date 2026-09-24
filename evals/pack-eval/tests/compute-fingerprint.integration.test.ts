@@ -41,6 +41,8 @@ interface VarianceWorld {
   readonly ruleByte: FingerprintCheckout
   readonly labelByte: FingerprintCheckout
   readonly instructionByte: FingerprintCheckout
+  readonly judgePromptByte: FingerprintCheckout
+  readonly pairLabelByte: FingerprintCheckout
   readonly outsideFile: FingerprintCheckout
   readonly elsewhere: FingerprintCheckout
 }
@@ -52,6 +54,8 @@ const varianceWorld = (labelled: FingerprintCheckout) =>
       readonly ruleByte?: boolean
       readonly labelByte?: boolean
       readonly instructionByte?: boolean
+      readonly judgePromptByte?: boolean
+      readonly pairLabelByte?: boolean
       readonly outsideFile?: boolean
     }) =>
       Effect.flatMap(
@@ -63,6 +67,8 @@ const varianceWorld = (labelled: FingerprintCheckout) =>
       ruleByte: yield* fresh({ ruleByte: true }),
       labelByte: yield* fresh({ labelByte: true }),
       instructionByte: yield* fresh({ instructionByte: true }),
+      judgePromptByte: yield* fresh({ judgePromptByte: true }),
+      pairLabelByte: yield* fresh({ pairLabelByte: true }),
       outsideFile: yield* fresh({ outsideFile: true }),
       elsewhere: yield* fresh(),
     } satisfies VarianceWorld
@@ -125,9 +131,21 @@ Feature('Fingerprinting the evaluation inputs')
             const ruleByte = yield* digestRunOf(s.world.ruleByte, lines)
             const labelByte = yield* digestRunOf(s.world.labelByte, lines)
             const instructionByte = yield* digestRunOf(s.world.instructionByte, lines)
+            const judgePromptByte = yield* digestRunOf(s.world.judgePromptByte, lines)
+            const pairLabelByte = yield* digestRunOf(s.world.pairLabelByte, lines)
             const outsideFile = yield* digestRunOf(s.world.outsideFile, lines)
             const elsewhere = yield* digestRunOf(s.world.elsewhere, lines)
-            return { base, ruleByte, labelByte, instructionByte, outsideFile, elsewhere, lines }
+            return {
+              base,
+              ruleByte,
+              labelByte,
+              instructionByte,
+              judgePromptByte,
+              pairLabelByte,
+              outsideFile,
+              elsewhere,
+              lines,
+            }
           }).pipe(Effect.provide(fileLayer))),
         Then('covered runs exit zero, and each named change moves the digest')((s) => {
           const digestOf = (index: number): string => s.digests.lines[index] ?? ''
@@ -135,13 +153,17 @@ Feature('Fingerprinting the evaluation inputs')
           expect(s.digests.ruleByte).toBe(0)
           expect(s.digests.labelByte).toBe(0)
           expect(s.digests.instructionByte).toBe(0)
+          expect(s.digests.judgePromptByte).toBe(0)
+          expect(s.digests.pairLabelByte).toBe(0)
           expect(s.digests.outsideFile).toBe(0)
           expect(s.digests.elsewhere).toBe(0)
           expect(digestOf(1)).not.toBe(digestOf(0))
           expect(digestOf(2)).not.toBe(digestOf(0))
           expect(digestOf(3)).not.toBe(digestOf(0))
-          expect(digestOf(4)).toBe(digestOf(0))
-          expect(digestOf(5)).toBe(digestOf(0))
+          expect(digestOf(4)).not.toBe(digestOf(0))
+          expect(digestOf(5)).not.toBe(digestOf(0))
+          expect(digestOf(6)).toBe(digestOf(0))
+          expect(digestOf(7)).toBe(digestOf(0))
         }),
       ),
     )
@@ -174,7 +196,10 @@ Feature('Fingerprinting the evaluation inputs')
               const judge = yield* fingerprintCell
                 .run(fingerprintRequest({ checkout: s.checkout, judgeModel: 'acme/judge-mini' }))
                 .pipe(linesLayerOf(lines))
-              return { base, model, seed, judge, lines }
+              const minimum = yield* fingerprintCell
+                .run(fingerprintRequest({ checkout: s.checkout, judgeMinimum: 0.9 }))
+                .pipe(linesLayerOf(lines))
+              return { base, model, seed, judge, minimum, lines }
             }).pipe(Effect.provide(fileLayer)),
         ),
         Then('the parameter changes each move the digest')((s) => {
@@ -183,9 +208,11 @@ Feature('Fingerprinting the evaluation inputs')
           expect(s.digests.model).toBe(0)
           expect(s.digests.seed).toBe(0)
           expect(s.digests.judge).toBe(0)
+          expect(s.digests.minimum).toBe(0)
           expect(digestOf(1)).not.toBe(digestOf(0))
           expect(digestOf(2)).not.toBe(digestOf(0))
           expect(digestOf(3)).not.toBe(digestOf(0))
+          expect(digestOf(4)).not.toBe(digestOf(0))
         }),
       ),
     )

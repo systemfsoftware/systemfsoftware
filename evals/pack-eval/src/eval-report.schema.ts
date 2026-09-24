@@ -50,7 +50,74 @@ export class ContradictionNotEvaluated
   extends Schema.TaggedClass<ContradictionNotEvaluated>()('ContradictionNotEvaluated', {})
 {}
 
-export const ContradictionReport = Schema.Union([ContradictionNotEvaluated])
+export class JudgeValidityValidated extends Schema.TaggedClass<JudgeValidityValidated>()(
+  'JudgeValidityValidated',
+  {
+    tpr: Schema.Finite,
+    tnr: Schema.Finite,
+  },
+) {}
+
+export class JudgeValidityUnvalidated extends Schema.TaggedClass<JudgeValidityUnvalidated>()(
+  'JudgeValidityUnvalidated',
+  {
+    tpr: Schema.Finite,
+    tnr: Schema.Finite,
+    short: Schema.Literals(['TPR', 'TNR', 'both']),
+  },
+) {}
+
+export class JudgeValidityUnavailable extends Schema.TaggedClass<JudgeValidityUnavailable>()(
+  'JudgeValidityUnavailable',
+  {
+    reason: Schema.NonEmptyString,
+  },
+) {}
+
+export const JudgeValidityReport = Schema.Union([
+  JudgeValidityValidated,
+  JudgeValidityUnvalidated,
+  JudgeValidityUnavailable,
+])
+export type JudgeValidityReport = typeof JudgeValidityReport.Type
+
+export class FailLabelCounts extends Schema.Class<FailLabelCounts>('FailLabelCounts')({
+  observed: Schema.Int,
+  planted: Schema.Int,
+}) {}
+
+export class WitnessedFailure extends Schema.Class<WitnessedFailure>('WitnessedFailure')({
+  packId: Schema.NonEmptyString,
+  ruleA: Schema.NonEmptyString,
+  ruleB: Schema.NonEmptyString,
+  taskId: Schema.NonEmptyString,
+  critique: Schema.NonEmptyString,
+}) {}
+
+export class UnwitnessedPairView extends Schema.Class<UnwitnessedPairView>('UnwitnessedPairView')({
+  packId: Schema.NonEmptyString,
+  ruleA: Schema.NonEmptyString,
+  ruleB: Schema.NonEmptyString,
+}) {}
+
+export class ContradictionRate extends Schema.Class<ContradictionRate>('ContradictionRate')({
+  packId: Schema.NonEmptyString,
+  estimate: Schema.Finite,
+  lower: Schema.Finite,
+  upper: Schema.Finite,
+}) {}
+
+export class ContradictionJudged extends Schema.TaggedClass<ContradictionJudged>()('ContradictionJudged', {
+  judge: JudgeValidityReport,
+  judgeMinimum: Schema.Finite,
+  servedJudgeModel: Schema.NonEmptyString,
+  failures: Schema.Array(WitnessedFailure),
+  failLabels: FailLabelCounts,
+  unwitnessedPairs: Schema.Array(UnwitnessedPairView),
+  rates: Schema.Array(ContradictionRate),
+}) {}
+
+export const ContradictionReport = Schema.Union([ContradictionNotEvaluated, ContradictionJudged])
 export type ContradictionReport = typeof ContradictionReport.Type
 
 export class EvalReport extends Schema.Class<EvalReport>('EvalReport')({

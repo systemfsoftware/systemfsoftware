@@ -39,10 +39,39 @@ const checkoutRules: ReadonlyArray<RuleSource> = [
 
 const INSTRUCTION_BYTE = 'Load every rule whose applies_when matches the work the task describes.'
 
+const JUDGE_CRITERION = 'On this task, can one change satisfy both rules?'
+
+const checkoutJudgePrompt = (changed: boolean): PackEval.JudgePrompt =>
+  new PackEval.JudgePrompt({
+    criterion: changed ? `${JUDGE_CRITERION} Count the shoots too.` : JUDGE_CRITERION,
+    passDefinition: 'Pass: one change can satisfy both rules at once.',
+    failDefinition: 'Fail: no single change satisfies both rules together.',
+    fewShotPairIds: [],
+  })
+
+const checkoutPairLabels = (changed: boolean): PackEval.PairLabels =>
+  new PackEval.PairLabels({
+    version: 1,
+    entries: [
+      new PackEval.PairLabel({
+        id: 'pair-greenhouse-1',
+        taskId: 'task-vent',
+        packId: evaluatePackId,
+        ruleA: 'watering-schedule',
+        ruleB: 'prune-everything',
+        split: 'test',
+        verdict: 'Pass',
+        origin: 'observed',
+        notes: changed ? 'the walk-through satisfies both rules twice over' : 'one walk-through can satisfy both rules',
+      }),
+    ],
+  })
 export interface CheckoutMutation {
   readonly ruleByte?: boolean
   readonly labelByte?: boolean
   readonly instructionByte?: boolean
+  readonly judgePromptByte?: boolean
+  readonly pairLabelByte?: boolean
   readonly outsideFile?: boolean
 }
 
@@ -95,6 +124,16 @@ export const writeFingerprintCheckout = (options: CheckoutOptions) =>
       PackEval.RoutingLabels,
       labels,
     )
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(datasetDir, 'judge-prompt.json'),
+      PackEval.JudgePrompt,
+      checkoutJudgePrompt(mutation?.judgePromptByte === true),
+    )
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(datasetDir, 'pair-labels.json'),
+      PackEval.PairLabels,
+      checkoutPairLabels(mutation?.pairLabelByte === true),
+    )
     yield* fileSystem.writeFileString(paths.join(codeRoot, 'src', 'evaluate.ts'), 'export const evaluate = 1\n')
     yield* fileSystem.writeFileString(paths.join(codeRoot, 'src', 'drivers', 'score.ts'), 'export const score = 2\n')
     yield* fileSystem.writeFileString(lockfilePath, 'lockfileVersion: 9.0\n')
@@ -109,6 +148,7 @@ export interface FingerprintRequestInput {
   readonly checkout: FingerprintCheckout
   readonly selectorModel?: string | undefined
   readonly judgeModel?: string | undefined
+  readonly judgeMinimum?: number | undefined
   readonly seed?: number | undefined
 }
 
@@ -119,6 +159,7 @@ export const fingerprintRequest = (options: FingerprintRequestInput) => ({
   lockfilePath: options.checkout.lockfilePath,
   selectorModel: options.selectorModel ?? 'acme/planner-large',
   judgeModel: options.judgeModel,
+  judgeMinimum: options.judgeMinimum ?? 0.8,
   seed: options.seed ?? 7,
   iterations: 200,
   confidence: 0.95,

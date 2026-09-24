@@ -5,28 +5,88 @@ import type * as FileSystem from 'effect/FileSystem'
 import type * as Path from 'effect/Path'
 import { expect } from 'vitest'
 import {
+  cardPairLine,
+  contradictionRequest,
+  contradictionTasks,
+  type ContradictionWorld,
+  contradictionWorld,
   type EvaluateWorld,
   evaluateWorld,
   evaluationRequest,
   evaluationStack,
   expectedCounts,
   expectedVerdict,
+  failCritiqueText,
+  judgeServedModel,
+  judgeStackOf,
+  observedBluntedPlan,
+  observedSharpPlan,
+  plantedPartialPlan,
   servedModel,
 } from './__fixtures__/evaluate-pack.fixture.js'
 import { openRouterLoopback } from './__fixtures__/openrouter-loopback.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
+interface ContradictionRequestShape {
+  readonly packDirs: ReadonlyArray<string>
+  readonly datasetDir: string
+  readonly reportPath: string
+  readonly selectorModel: string
+  readonly provider: string
+  readonly seed: number
+  readonly iterations: number
+  readonly confidence: number
+  readonly evidenceFloor: PackEval.EvidenceFloor
+  readonly judgeModel: string | undefined
+  readonly judgeMinimum: number
+}
+
+interface ContradictionCell {
+  readonly run: (
+    input: ContradictionRequestShape,
+  ) => Effect.Effect<
+    number,
+    PackEval.DatasetFileRefusal,
+    FileSystem.FileSystem | Path.Path | PackEval.RuleSelector
+  >
+}
+
+const contradictionCell: ContradictionCell = PackEval.EvaluatePacks.run
+
+const judgedOnce = (
+  world: ContradictionWorld,
+  overrides?: { readonly judgeModel?: string | undefined; readonly judgeMinimum?: number | undefined },
+) =>
+  Effect.gen(function*() {
+    const lines: Array<string> = []
+    const exitCode = yield* contradictionCell.run(contradictionRequest({ world, ...overrides })).pipe(
+      Effect.provide(judgeStackOf({ world, lines })),
+    )
+    const report = yield* PackEval.DatasetFiles.readJson(world.reportPath, PackEval.EvalReport)
+    const providerCalls = yield* world.provider.requestCount
+    const judgeCalls = providerCalls - contradictionTasks.length
+    return { exitCode, report, judgeCalls, card: lines.join('\n') }
+  })
+
 interface EvaluateCell {
   readonly run: (
-    input: ReturnType<typeof evaluationRequest>,
-  ) => Effect.Effect<number, PackEval.DatasetFileRefusal, FileSystem.FileSystem | Path.Path | PackEval.RuleSelector>
+    input: ContradictionRequestShape,
+  ) => Effect.Effect<
+    number,
+    PackEval.DatasetFileRefusal,
+    FileSystem.FileSystem | Path.Path | PackEval.RuleSelector
+  >
 }
 
 const evaluateCell: EvaluateCell = PackEval.EvaluatePacks.run
 
 const evaluateOnce = (world: EvaluateWorld) =>
-  evaluateCell.run(evaluationRequest(world)).pipe(Effect.provide(evaluationStack(world)))
+  evaluateCell.run({
+    ...evaluationRequest(world),
+    judgeModel: undefined,
+    judgeMinimum: 0.8,
+  }).pipe(Effect.provide(evaluationStack(world)))
 
 const splitOf = (key: string): string => key.split('/')[1] ?? ''
 
@@ -162,6 +222,76 @@ Feature('Scoring rule routing against owner labels')
           expect(s.outcome.exitCode).toBe(2)
           expect(s.outcome.asked).toBe(0)
           expect(s.outcome.report.refusal).toContain('prune-everything.md')
+        }),
+      ),
+    )
+  })
+
+Feature('Failing the run on a witnessed contradiction')
+  .withScenarioLayer(openRouterLoopback)
+  .body(({ scenario }) => {
+    scenario(
+      'Two clashing rules the harvest needs together fail the run with the pair, the task, and the critique',
+      Gherkin.Do.pipe(
+        Given('the greenhouse pack, nine labelled tasks, and a judge answering Fail on the clashing pair')(
+          'world',
+          () => contradictionWorld(observedSharpPlan),
+        ),
+        When('the packs are evaluated')('outcome', (s) => judgedOnce(s.world)),
+        Then('the run fails with the pair, the task, and the critique on the card')((s) => {
+          expect(s.outcome.exitCode).toBe(1)
+          expect(s.outcome.judgeCalls).toBe(s.world.judgeCalls)
+          expect(s.outcome.card).toContain(cardPairLine)
+          expect(s.outcome.card).toContain('task-fail-1')
+          expect(s.outcome.card).toContain(failCritiqueText('task-fail-1'))
+        }),
+      ),
+    )
+    scenario(
+      'A judge below the bar stays advisory, and the run stays clean',
+      Gherkin.Do.pipe(
+        Given('the greenhouse pack, nine labelled tasks, and a judge missing two clashes')(
+          'world',
+          () => contradictionWorld(observedBluntedPlan),
+        ),
+        When('the packs are evaluated')('outcome', (s) => judgedOnce(s.world)),
+        Then('the run stays clean, the judge is marked unvalidated, and its verdicts are advisory')((s) => {
+          expect(s.outcome.exitCode).toBe(0)
+          expect(s.outcome.judgeCalls).toBe(s.world.judgeCalls)
+          expect(s.outcome.card).toContain('judge: unvalidated (advisory)')
+          expect(s.outcome.card).toContain('TNR short of the 0.8 minimum')
+        }),
+      ),
+    )
+
+    scenario(
+      'A pair no task needs together is listed but never asked',
+      Gherkin.Do.pipe(
+        Given('the greenhouse pack, nine labelled tasks, and two rules no task needs together')(
+          'world',
+          () => contradictionWorld(observedSharpPlan),
+        ),
+        When('the packs are evaluated')('outcome', (s) => judgedOnce(s.world)),
+        Then('the pair is listed as unwitnessed, and the listener hears no question for it')((s) => {
+          expect(s.outcome.judgeCalls).toBe(s.world.judgeCalls)
+          expect(s.outcome.card).toContain('unwitnessed pairs: greenhouse prune-everything × seed-labelling')
+        }),
+      ),
+    )
+
+    scenario(
+      'A validated judge with a clean run reports the corrected rate and its interval',
+      Gherkin.Do.pipe(
+        Given('the greenhouse pack, nine labelled tasks, and a judge clearing every real pair')(
+          'world',
+          () => contradictionWorld(plantedPartialPlan),
+        ),
+        When('the packs are evaluated')('outcome', (s) => judgedOnce(s.world)),
+        Then('the run stays clean with the corrected rate and its interval on the card')((s) => {
+          expect(s.outcome.exitCode).toBe(0)
+          expect(s.outcome.judgeCalls).toBe(s.world.judgeCalls)
+          expect(s.outcome.card).toContain(`judge model (served): ${judgeServedModel}`)
+          expect(s.outcome.card).toContain('corrected contradiction rate (greenhouse): 0.0% [0.0%, 0.0%]')
         }),
       ),
     )

@@ -14,6 +14,7 @@ export interface FingerprintRequest {
   readonly lockfilePath: string
   readonly selectorModel: string
   readonly judgeModel: string | undefined
+  readonly judgeMinimum: number
   readonly seed: number
   readonly iterations: number
   readonly confidence: number
@@ -125,6 +126,7 @@ const parameterEntries = (request: FingerprintRequest): ReadonlyArray<Fingerprin
   entryOf('params/iterations')(String(request.iterations)),
   entryOf('params/confidence')(String(request.confidence)),
   entryOf('params/evidence-floor')(`${request.evidenceFloor.positives}/${request.evidenceFloor.negatives}`),
+  entryOf('params/judge-minimum')(String(request.judgeMinimum)),
 ]
 
 const entriesOf = (
