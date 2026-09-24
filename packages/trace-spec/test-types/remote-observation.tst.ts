@@ -13,14 +13,14 @@ declare const strangerSource: (traceId: string) => Effect.Effect<ReadonlyArray<G
 declare const options: RemoteObservation.Options
 
 describe('RemoteObservation.layer', () => {
-  it('stands over a trace source, provides the observation service alone, and requires exactly what the source requires', () => {
+  it('Should_ProvideObservationAloneAndRequireSourceNeeds_When_LayerBuiltOverTraceSource', () => {
     expect(RemoteObservation.layer).type.toBeCallableWith(guestSource, options)
     expect(RemoteObservation.layer(guestSource, options)).type.toBe<
       Layer.Layer<Observation.Observation, never, Guest>
     >()
   })
 
-  it('composes data-last in a pipe to the same layer', () => {
+  it('Should_ComposeInPipeToSameLayer_When_LayerIsDataLast', () => {
     expect(pipe(guestSource, RemoteObservation.layer(options))).type.toBe<
       Layer.Layer<Observation.Observation, never, Guest>
     >()
@@ -28,7 +28,7 @@ describe('RemoteObservation.layer', () => {
     expect(RemoteObservation.layer(options)).type.not.toBeCallableWith(strangerSource)
   })
 
-  it('refuses a source whose failures are not observation failures', () => {
+  it('Should_RefuseSource_When_FailuresAreNotObservationFailures', () => {
     expect(RemoteObservation.layer).type.not.toBeCallableWith(strangerSource, options)
   })
 })

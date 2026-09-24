@@ -5,7 +5,7 @@ import type * as HttpClient from 'effect/unstable/http/HttpClient'
 import { describe, expect, it } from 'tstyche'
 
 describe('TempoTraceStore.source', () => {
-  it('one read needs exactly the caller’s http client and answers with the two store failures', () => {
+  it('Should_RequireHttpClientAndAnswerTwoFailures_When_SourceReads', () => {
     expect(TempoTraceStore.source({ baseUrl: 'http://127.0.0.1:3200' })).type.toBe<
       (
         traceId: string,
@@ -17,12 +17,12 @@ describe('TempoTraceStore.source', () => {
     >()
   })
 
-  it('takes a base url and refuses to be built without one', () => {
+  it('Should_AcceptBaseUrlAndRefuseMissing_When_SourceBuilt', () => {
     expect(TempoTraceStore.source).type.toBeCallableWith({ baseUrl: 'http://127.0.0.1:3200' })
     expect(TempoTraceStore.source).type.not.toBeCallableWith({})
   })
 
-  it('does not erase the http client requirement or the store failures', () => {
+  it('Should_KeepHttpClientRequirementAndFailures_When_SourceInspected', () => {
     const source = TempoTraceStore.source({ baseUrl: 'http://127.0.0.1:3200' })
     expect(source).type.not.toBeAssignableTo<
       (
