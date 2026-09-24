@@ -39,17 +39,18 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 
 Root doctrine files `CONSTITUTION.md`, `CONCEPTS.md`. Run `pnpm map` for current packages, publish targets, and leaf coverage.
 
-| Directory         | What it is                                                     | Governance                               |
-| ----------------- | -------------------------------------------------------------- | ---------------------------------------- |
-| `packages/`       | Workspace packages published for external adopters             | Root invariants plus hook-delivered leaf |
-| `repos/`          | Vendored third-party trees (`subtrees.toml`), read-only        | `REPO-S3` read-only; `REPO-W4`           |
-| `scripts/`        | Root guards (`guards/`) and release/harness tools (`tools/`)   | Editable except Evaluator scripts        |
-| `.github/`        | CI workflows and reusable actions; `.github/AGENTS.md` runbook | Evaluator                                |
-| `.claude/`        | Hook scripts (`hooks/`) and harness settings                   | Evaluator                                |
-| `docs/`           | Plans, audits, notes (`docs/solutions/` is Doctrine)           | Editable                                 |
-| `compound-packs/` | Architectural rule packs and design law citations              | Doctrine                                 |
-| `omp/`            | OMP plugin packages                                            | Leaf-governed                            |
-| `agent-plugins/`  | Distributable agent-plugins.org plugins                        | Leaf-governed                            |
+| Directory         | What it is                                                          | Governance                               |
+| ----------------- | ------------------------------------------------------------------- | ---------------------------------------- |
+| `packages/`       | Workspace packages published for external adopters                  | Root invariants plus hook-delivered leaf |
+| `repos/`          | Vendored third-party trees (`subtrees.toml`), read-only             | `REPO-S3` read-only; `REPO-W4`           |
+| `scripts/`        | Root guards (`guards/`) and release/harness tools (`tools/`)        | Editable except Evaluator scripts        |
+| `.github/`        | CI workflows and reusable actions; `.github/AGENTS.md` runbook      | Evaluator                                |
+| `.claude/`        | Hook scripts (`hooks/`) and harness settings                        | Evaluator                                |
+| `docs/`           | Plans, audits, notes (`docs/solutions/` is Doctrine)                | Editable                                 |
+| `evals/`          | `pack-eval` (grades compound packs) and its owner-labelled datasets | Evaluator                                |
+| `compound-packs/` | Architectural rule packs and design law citations                   | Doctrine                                 |
+| `omp/`            | OMP plugin packages                                                 | Leaf-governed                            |
+| `agent-plugins/`  | Distributable agent-plugins.org plugins                             | Leaf-governed                            |
 
 ## Rules — Must Hold At Done
 

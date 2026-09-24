@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "application": "A coding agent working in a TypeScript monorepo of Effect libraries, before it plans or reviews one change.",
+  "dimensions": [
+    {
+      "name": "artifact",
+      "captures": "The kind of file the change mostly touches.",
+      "values": [
+        "pure decision module",
+        "schema or data contract",
+        "service port or driver adapter",
+        "composition root or CLI entrypoint",
+        "test suite",
+        "documentation or configuration"
+      ]
+    },
+    {
+      "name": "boundary",
+      "captures": "The outside system the changed code talks to, if any.",
+      "values": [
+        "none, pure code only",
+        "file system",
+        "network or HTTP",
+        "child process or container",
+        "third-party library API"
+      ]
+    },
+    {
+      "name": "work",
+      "captures": "What the agent is asked to do.",
+      "values": [
+        "add a feature",
+        "fix a bug",
+        "refactor without behaviour change",
+        "write or repair tests",
+        "upgrade a dependency",
+        "edit prose only"
+      ]
+    }
+  ]
+}
