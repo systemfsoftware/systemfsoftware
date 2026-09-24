@@ -16,7 +16,7 @@ interface CollectionHandle {
 }
 
 class Collections extends Context.Service<Collections, CollectionHandle>()(
-  '@systemfsoftware/effect-atom/tests/Collections',
+  '@systemfsoftware/effect-atom/tests/atom-ref-collection.conformance.test/Collections',
 ) {}
 
 const removedAt = (collection: AtomRef.Collection<number>, index: number): Items => {

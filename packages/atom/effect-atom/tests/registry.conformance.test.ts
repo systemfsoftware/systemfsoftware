@@ -68,7 +68,9 @@ interface RegistryGraph {
   readonly derived: Atom.Atom<number>
 }
 
-class Graph extends Context.Service<Graph, RegistryGraph>()('@systemfsoftware/effect-atom/tests/RegistryGraph') {}
+class Graph
+  extends Context.Service<Graph, RegistryGraph>()('@systemfsoftware/effect-atom/tests/registry.conformance.test/Graph')
+{}
 
 const freshGraph = (ports: KernelPorts): RegistryGraph => {
   const source = Atom.keepAlive(Atom.make(0))
@@ -159,7 +161,7 @@ interface SubscriptionHandle {
 }
 
 class Subscriptions extends Context.Service<Subscriptions, SubscriptionHandle>()(
-  '@systemfsoftware/effect-atom/tests/Subscriptions',
+  '@systemfsoftware/effect-atom/tests/registry.conformance.test/Subscriptions',
 ) {}
 
 const freshSubscription = (ports: KernelPorts): SubscriptionHandle => {
@@ -226,7 +228,9 @@ interface LifetimeHandle {
   readonly observe: () => boolean
 }
 
-class Lifetimes extends Context.Service<Lifetimes, LifetimeHandle>()('@systemfsoftware/effect-atom/tests/Lifetimes') {}
+class Lifetimes extends Context.Service<Lifetimes, LifetimeHandle>()(
+  '@systemfsoftware/effect-atom/tests/registry.conformance.test/Lifetimes',
+) {}
 
 const IDLE_MILLIS = 10
 const RESOLUTION_MILLIS = 10
