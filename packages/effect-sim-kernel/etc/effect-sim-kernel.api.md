@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Kernel {
-    export { AnyFiber, BlockedFailure, Choice, ChoiceOption, DeadlockFailure, Decision, Escape, EscapeFailure, FiberTarget, Interruption, RunCompleted, RunFailed, RunFailure, RunHistory, RunOptions, RunResult, RunawayFailure, StepRecord, SuspendedFiber, TestClock_d_exports as TestClock, TimerName, WaitKind, beginExploration, runOutcomeTags as outcomeTags, run };
+    export { AnyFiber, BlockedFailure, Bound, Budget, BudgetLimit, Choice, ChoiceOption, DeadlockFailure, Decision, Escape, EscapeFailure, FiberTarget, Interruption, OverBudgetOutcome, PctFailure, PctOptions, PctOutcome, PickOptions, ProfileName, Pruning, RunCompleted, RunFailed, RunFailure, RunHistory, RunOptions, RunResult, RunawayFailure, SearchFailure, SearchOptions, SearchOutcome, SearchReport, ShrinkOptions, ShrinkOutcome, StepRecord, SuspendedFiber, TestClock_d_exports as TestClock, TimerName, UnobservedPrimitive, WaitKind, beginExploration, currentProfile, currentSeedsFor, runOutcomeTags as outcomeTags, pct, pctDepth, perChangeSeeds, pick, pruned, run, search, searchTags, seedsFor, shrink, shrinkCommands, unpruned };
 }
 
 // (No @packageDocumentation comment for this package)

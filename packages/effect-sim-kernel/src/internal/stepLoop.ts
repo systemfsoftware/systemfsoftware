@@ -94,10 +94,10 @@ export interface Interruption {
 /** @internal */
 export interface RunOptions {
   /**
-   * The decisions to take, one per explored step (R4). A shorter path falls
-   * back to Effect's order for its remaining steps.
+   * The decisions to take, one per explored step (R4). An `undefined` entry,
+   * or a step past the end of the path, takes Effect's order.
    */
-  readonly path?: ReadonlyArray<Decision>
+  readonly path?: ReadonlyArray<Decision | undefined>
   /**
    * Chooses beyond the recorded path (seam for PCT and bounded search).
    * Returning undefined takes the zero-preemption choice.
