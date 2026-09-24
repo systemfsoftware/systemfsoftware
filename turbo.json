@@ -5,7 +5,8 @@
   ],
   "globalPassThroughEnv": [
     "XDG_CACHE_HOME",
-    "PLAYWRIGHT_BROWSERS_PATH"
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "VITEST_MAX_WORKERS"
   ],
   "tasks": {
     "build": {
@@ -74,7 +75,8 @@
         "NODE_ENV",
         "CI",
         "AGENT",
-        "COVERAGE"
+        "COVERAGE",
+        "CONFORMANCE_PROFILE"
       ],
       "cache": true
     },
@@ -215,9 +217,7 @@
       ],
       "dependsOn": [
         "^build",
-        "^api:check",
-        "build",
-        "api:check"
+        "build"
       ]
     }
   }
