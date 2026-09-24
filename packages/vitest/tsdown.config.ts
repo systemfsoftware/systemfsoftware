@@ -5,6 +5,7 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const typesOf: Record<string, string> = {
   '.': './dist/index.d.ts',
+  './refusals': './dist/refusals.d.ts',
   './TestClock': './dist/TestClock.d.ts',
   './utils': './dist/utils.d.ts',
 }
@@ -28,7 +29,12 @@ const compatReference = '/// <reference types="./compat.d.ts" />'
 
 export default defineConfig({
   ...quietBuild,
-  entry: { index: './src/mod.ts', TestClock: './src/TestClock.ts', utils: './src/utils.ts' },
+  entry: {
+    index: './src/mod.ts',
+    refusals: './src/Refusals.ts',
+    TestClock: './src/TestClock.ts',
+    utils: './src/utils.ts',
+  },
   format: 'esm',
   dts: true,
   // The v3 `effect/TestClock` ambient is a script, so it cannot ride inside a bundled declaration file:

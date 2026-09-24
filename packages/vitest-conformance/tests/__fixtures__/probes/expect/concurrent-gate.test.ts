@@ -4,7 +4,7 @@ import { Effect } from 'effect'
 
 const recorded = Deferred.makeUnsafe<void>()
 
-describe('concurrent no-assertion gate', { concurrent: true }, () => {
+describe('concurrent no-assertion gate', () => {
   it.effect('Should_PassTheGate_When_ItsOwnRecordCounts', () =>
     Effect.gen(function*() {
       yield* Effect.sync(() => recordAssertion())

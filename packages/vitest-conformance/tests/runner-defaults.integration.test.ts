@@ -1,8 +1,8 @@
 import { expect } from '@effect/vitest'
+import { refuseAsync, refuseBareEffect, refuseNoAssertion } from '@effect/vitest/refusals'
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { refuseAsync, refuseBareEffect, refuseNoAssertion } from '../../vitest/src/internal/refusals'
 import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures, runProbes } from './support/run-fixtures'
 
 const Feature = makeFeature({ it, layer })
@@ -61,7 +61,17 @@ Feature('Fork runner defaults')
           () => runFixtures(['runner/nested-shared.test.ts']),
         ),
         Then('the nested tests share the outer build')((s) => {
-          expect(fileOf(s.report, 'runner/nested-shared.test.ts').status).toBe('passed')
+          const file = fileOf(s.report, 'runner/nested-shared.test.ts')
+          expect(file.status).toBe('passed')
+          expect(file.assertionResults).toHaveLength(2)
+          expect(
+            assertionOf(s.report, 'nested inside shared nested block Should_SeeOuterState_When_NestedInsideShared')
+              .status,
+          ).toBe('passed')
+          expect(
+            assertionOf(s.report, 'nested inside shared nested block Should_KeepOuterBuild_When_ANestedTestAlreadyRan')
+              .status,
+          ).toBe('passed')
         }),
       ),
     )
@@ -233,6 +243,40 @@ Feature('Fork runner defaults')
           expect(messagesOf(s.report, 'Should_RefuseTheReturnedEffect_When_ItsBodyReturnsOne')).toContain(
             refuseBareEffect,
           )
+        }),
+      ),
+    )
+
+    scenario(
+      'a plain describe block runs its tests concurrently',
+      Gherkin.Do.pipe(
+        Given('two tests in a plain describe that each wait for the other to arrive')(
+          'report',
+          () => runFixtures(['runner/describe-concurrency.test.ts']),
+        ),
+        Then('both tests rendezvous, so neither waited for the other to finish first')((s) => {
+          const file = fileOf(s.report, 'runner/describe-concurrency.test.ts')
+          expect(file.status).toBe('passed')
+          expect(file.assertionResults.map((assertion) => assertion.status)).toEqual(['passed', 'passed'])
+        }),
+      ),
+    )
+
+    scenario(
+      'a named layer block shuffles its tests by default',
+      Gherkin.Do.pipe(
+        Given('a named block that runs its tests one at a time, under a fixed seed')(
+          'report',
+          () => runProbes({ globs: ['runner/layer-shuffle.test.ts'], seed: 2 }).pipe(Effect.map((run) => run.report)),
+        ),
+        Then('each test runs in its seeded slot, not in the order it was declared')((s) => {
+          const file = fileOf(s.report, 'runner/layer-shuffle.test.ts')
+          expect(file.status).toBe('passed')
+          expect(file.assertionResults.map((assertion) => assertion.status)).toEqual([
+            'passed',
+            'passed',
+            'passed',
+          ])
         }),
       ),
     )

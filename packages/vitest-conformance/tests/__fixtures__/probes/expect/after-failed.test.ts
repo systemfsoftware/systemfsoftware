@@ -8,6 +8,6 @@ const readMissing = (record: { readonly missing?: number }): number => {
 
 it.effect('Should_ReportAfterFailedExpect_When_AThrowFollowsAFailedCheck', () =>
   Effect.gen(function*() {
+    yield* Effect.acquireRelease(Effect.void, () => Effect.sync(() => readMissing({})))
     expect(1).toEqual(2)
-    return yield* Effect.sync(() => readMissing({}))
   }))

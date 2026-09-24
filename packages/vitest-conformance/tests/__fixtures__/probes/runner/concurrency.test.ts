@@ -8,7 +8,7 @@ const interleavedFailure = (actual: string, expected: string) =>
     yield* Effect.sync(() => expect(actual).toEqual(expected))
   })
 
-describe('interleaved concurrent failures', { concurrent: true }, () => {
+describe('interleaved concurrent failures', () => {
   it.effect('Should_ReportOnlyItsFailure_When_FirstTestFails', () =>
     interleavedFailure('first-marker', 'first-expected-marker'))
 

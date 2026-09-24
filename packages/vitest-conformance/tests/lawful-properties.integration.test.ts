@@ -3,6 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { assertionOf, fileOf, type JsonReport, messagesOf, namesOf, runFixtures } from './support/run-fixtures'
 
 const CHEATS = ['cheats/property-shape.test.ts']
+const LAW_KINDS = 'property/law-kinds.test.ts'
+
+const LAWS_THAT_HOLD = [
+  'Should_AgreeWithItself_When_TheInputOrderIsReversed',
+  'Should_RoundTrip_When_TheTextIsDecodedBack',
+  'Should_KeepTheLength_When_TheInputIsSorted',
+] as const
+
+const LAWS_THAT_FALSIFY = [
+  'Should_Falsify_When_TheSubjectKeepsOnlyTheFirstElement',
+  'Should_Falsify_When_TheSubjectEncodesTheNextNumber',
+  'Should_Falsify_When_TheSubjectAppendsAnElement',
+] as const
 
 const messagesFor = (report: JsonReport, fullName: string): string => messagesOf(report, fullName)
 
@@ -72,5 +85,24 @@ describe('lawful properties (R11-R15)', () => {
       expect(messages).toContain('singletons')
       expect(messages).toContain('below the required')
       expect(file.message).not.toContain('coverage')
+    }).pipe(Effect.runPromise))
+
+  it('passes metamorphic, roundTrip and invariant laws over correct subjects', () =>
+    Effect.gen(function*() {
+      const report = yield* runFixtures([LAW_KINDS])
+      const passed = LAWS_THAT_HOLD.filter((name) => assertionOf(report, name).status === 'passed')
+      expect(passed).toEqual([...LAWS_THAT_HOLD])
+      expect(fileOf(report, 'law-kinds.test.ts').message).not.toContain('no property in this file refuted')
+    }).pipe(Effect.runPromise))
+
+  it('falsifies metamorphic, roundTrip and invariant laws with a shrunk counterexample', () =>
+    Effect.gen(function*() {
+      const report = yield* runFixtures([LAW_KINDS])
+      const verdicts = LAWS_THAT_FALSIFY.map((name) => ({
+        name,
+        status: assertionOf(report, name).status,
+        shrunk: messagesOf(report, name).includes('Shrunk input:'),
+      }))
+      expect(verdicts).toEqual(LAWS_THAT_FALSIFY.map((name) => ({ name, status: 'failed', shrunk: true })))
     }).pipe(Effect.runPromise))
 })

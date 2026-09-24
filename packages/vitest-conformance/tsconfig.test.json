@@ -17,7 +17,6 @@
     ]
   },
   "include": [
-    "tests",
-    "../vitest/src/internal/refusals.ts"
+    "tests"
   ]
 }

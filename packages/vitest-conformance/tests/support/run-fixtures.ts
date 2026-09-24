@@ -25,6 +25,7 @@ import { startVitest } from 'vitest/node'
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
 const forkEntry = fileURLToPath(new URL('../../../vitest/src/mod.ts', import.meta.url))
+const forkRefusals = fileURLToPath(new URL('../../../vitest/src/Refusals.ts', import.meta.url))
 const forkTestClock = fileURLToPath(new URL('../../../vitest/src/TestClock.ts', import.meta.url))
 
 const AssertionSchema = Schema.Struct({
@@ -176,7 +177,11 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
               },
               {
                 resolve: {
-                  alias: { '@effect/vitest': forkEntry, 'effect/TestClock': forkTestClock },
+                  alias: {
+                    '@effect/vitest/refusals': forkRefusals,
+                    '@effect/vitest': forkEntry,
+                    'effect/TestClock': forkTestClock,
+                  },
                 },
               },
             ),

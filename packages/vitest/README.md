@@ -2,7 +2,7 @@
 
 A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packages/vitest) whose defaults make the lazy test a good test. Write the obvious thing and you get a fresh build of your services, a second run that catches leaked state, virtual time, checks that stop the test at its next step, and properties refuted against a constant impostor. Write the slop form and the refusal names the rewrite.
 
-Everything upstream exports is still exported: `it`, `test`, `it.effect`, `it.live`, `it.scoped`, `it.each`, `it.layer`, `layer`, `expect`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods`, `describeWrapped`, and `export * from "vitest"`. On top of that surface the fork adds five things: `owned`, `recordAssertion`, `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `layer`, `it.layer`, `flakyTest`, `it.prop`, `it.effect`, `it.live`, `describeWrapped` and `it` itself also take a data-last form (`it.effect(body, timeout?)(name)`, `layer(options)(L)`, `flakyTest(timeout?)(effect)`), so they pipe.
+Everything upstream exports is still exported: `it`, `test`, `it.effect`, `it.live`, `it.scoped`, `it.each`, `it.layer`, `layer`, `describe`, `expect`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods`, `describeWrapped`, and `export * from "vitest"`. Two things do differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower — both are listed under [Compatibility](#compatibility-with-effectvitest). On top of that surface the fork adds five things: `owned`, `recordAssertion`, `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `layer`, `it.layer`, `flakyTest`, `it.prop`, `it.effect`, `it.live`, `describeWrapped` and `it` itself also take a data-last form (`it.effect(body, timeout?)(name)`, `layer(options)(L)`, `flakyTest(timeout?)(effect)`), so they pipe.
 
 The defaults are forced, not opted into. Every package in this workspace resolves `@effect/vitest` here through a pnpm alias, so libraries keep importing from `@effect/vitest` and never name this package.
 
@@ -210,7 +210,14 @@ export const TaskRef = Context.Reference<{ annotate?: (message: string) => void 
 
 ## Compatibility with @effect/vitest
 
-The whole upstream surface for `effect` 4.0.0-rc.117 is kept, and the new behaviour is additive: the fork does not remove example tests, `it.each`, `describe`, `toStrictEqual`, or any other Vitest binding. What differs is what runs by default, what `expect` refuses, and what `toEqual` means — that is the reason for the alias.
+Everything upstream exports is still exported, and the fork adds behaviour rather than removing bindings: example tests, `it.each`, `toStrictEqual` and the other Vitest bindings stay. It is not a drop-in, though, in one behaviour and four accepted-input types:
+
+- `describe` is the fork's lawful collector (R4), not upstream's: it forces the fork's concurrency and shuffle defaults and hands its body the fork's methods. Vitest's own collector — one test at a time, in declaration order — stays reachable as `import { describe } from 'vitest'`.
+- `deepStrictEqual`, `notDeepStrictEqual`, `strictEqual` and `assertEquals` take no message argument. A data-last dual has to repeat its data-first twin parameter for parameter, so a trailing string cannot be told from an expected value; the message is refused rather than silently dropped.
+- `skipIf` and `runIf` take a `boolean` condition where upstream took `unknown`, and `each` cases must be objects (`T extends object`). An `unknown` or `any` condition is refused by this repo's lint.
+- `assertTrue` takes a `boolean` where upstream took `unknown`, for the same reason.
+
+What else differs is what runs by default, what `expect` refuses, and what `toEqual` means — that is the reason for the alias.
 
 This package is part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
 

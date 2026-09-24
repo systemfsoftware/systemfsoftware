@@ -147,21 +147,18 @@ const wrapOwned = <A, E>(
   runtime: VirtualRuntime | undefined,
 ): Effect.Effect<A, E, never> => observeOf(runtime).pipe(Effect.andThen(effect.pipe(Effect.ensuring(endOf(runtime)))))
 
-const stoppedThenNever = (): Promise<never> =>
-  stoppedValue.then((): never => {
-    throw new Error('unreachable: stopped run resolved')
-  })
+const stoppedSettled = <A>(): Promise<A | undefined> => Promise.resolve(undefined)
 
-const stoppedValue: Promise<undefined> = Promise.resolve(undefined)
+const stoppedExit = <A, E>(cause: Cause.Cause<E>): Promise<A | undefined> =>
+  Cause.hasInterruptsOnly(cause) ? stoppedSettled<A>() : failExit(cause)
 
-const stoppedExit = <E>(cause: Cause.Cause<E>): Promise<never> =>
-  Cause.hasInterruptsOnly(cause) ? stoppedThenNever() : failExit(cause)
+const stoppedChecked = <A, E>(cause: Cause.Cause<E>, failed: boolean): Promise<A | undefined> =>
+  failed ? stoppedExit<A, E>(cause) : failExit(cause)
 
-const stoppedChecked = <E>(cause: Cause.Cause<E>, failed: boolean): Promise<never> =>
-  failed ? stoppedExit(cause) : failExit(cause)
-
-const failedOrThrow = <E>(cause: Cause.Cause<E>, failedCheck: (() => boolean) | undefined): Promise<never> =>
-  failedCheck === undefined ? failExit(cause) : stoppedChecked(cause, failedCheck())
+const failedOrThrow = <A, E>(
+  cause: Cause.Cause<E>,
+  failedCheck: (() => boolean) | undefined,
+): Promise<A | undefined> => failedCheck === undefined ? failExit(cause) : stoppedChecked<A, E>(cause, failedCheck())
 
 const reportExit = <A, E>(
   failedCheck: (() => boolean) | undefined,

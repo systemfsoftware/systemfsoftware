@@ -7,9 +7,14 @@ class BuildCount extends Context.Service<BuildCount, { readonly count: number }>
   'vitest-conformance/probes/runner/nested-shared/BuildCount',
 ) {}
 
+let outerBuilds = 0
+
 const countingOuter = Layer.effect(
   BuildCount,
-  Effect.sync(() => ({ count: 1 })),
+  Effect.sync(() => {
+    outerBuilds = outerBuilds + 1
+    return { count: outerBuilds }
+  }),
 )
 
 class Inner extends Context.Service<Inner, { readonly tag: string }>()(

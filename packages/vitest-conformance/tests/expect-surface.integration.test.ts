@@ -1,14 +1,8 @@
 import { expect } from '@effect/vitest'
+import { presenceMessage, refuseAsync, refuseHook, refuseNoAssertion, refuseUnprovided } from '@effect/vitest/refusals'
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import {
-  presenceMessage,
-  refuseAsync,
-  refuseHook,
-  refuseNoAssertion,
-  refuseUnprovided,
-} from '../../vitest/src/internal/refusals'
 import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures } from './support/run-fixtures'
 
 const Feature = makeFeature({ it, layer })
@@ -55,15 +49,31 @@ Feature('Fork expect surface')
     scenario(
       'a throw after a failed check is reported as AfterFailedExpect',
       Gherkin.Do.pipe(
-        Given('a failed check followed by a TypeError')(
+        Given('a failed check whose cleanup then throws')(
           'report',
           () => runFixtures(['expect/after-failed.test.ts']),
         ),
-        Then('the report names AfterFailedExpect, not a second fault')((s) => {
+        Then('the report names AfterFailedExpect beside the check, and nothing else')((s) => {
           expectSuiteFailed(s.report, 'expect/after-failed.test.ts')
-          expect(messagesOf(s.report, 'Should_ReportAfterFailedExpect_When_AThrowFollowsAFailedCheck')).toContain(
-            'AfterFailedExpect',
-          )
+          const assertion = assertionOf(s.report, 'Should_ReportAfterFailedExpect_When_AThrowFollowsAFailedCheck')
+          expect(assertion.failureMessages).toHaveLength(2)
+          expect(assertion.failureMessages.join('\n')).toContain('AfterFailedExpect')
+        }),
+      ),
+    )
+
+    scenario(
+      'a failed check that throws nothing is not relabelled',
+      Gherkin.Do.pipe(
+        Given('a failed check with nothing thrown after it')(
+          'report',
+          () => runFixtures(['expect/check-only.test.ts']),
+        ),
+        Then('the report carries the check alone, with no invented failure')((s) => {
+          expectSuiteFailed(s.report, 'expect/check-only.test.ts')
+          const assertion = assertionOf(s.report, 'Should_ReportOnlyTheCheck_When_NothingThrowsAfterAFailedCheck')
+          expect(assertion.failureMessages).toHaveLength(1)
+          expect(assertion.failureMessages.join('\n')).not.toContain('AfterFailedExpect')
         }),
       ),
     )

@@ -398,6 +398,12 @@ export const describeWrapped: {
   (name: string, f: (it: Vitest.Methods) => void): V.SuiteCollector
   (f: (it: Vitest.Methods) => void): (name: string) => V.SuiteCollector
 } = internal.describeWrapped
+
+export const describe: {
+  (name: string, f: (it: Vitest.Methods) => void): V.SuiteCollector
+  (f: (it: Vitest.Methods) => void): (name: string) => V.SuiteCollector
+} = internal.describeWrapped
+
 /**
  * The fork's `expect`: soft within one Effect step, refusing the slop forms.
  *

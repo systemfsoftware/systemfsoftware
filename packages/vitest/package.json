@@ -26,6 +26,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./refusals": {
+      "@systemfsoftware/source": "./src/Refusals.ts",
+      "types": "./dist/refusals.d.ts",
+      "default": "./dist/refusals.mjs"
+    },
     "./TestClock": {
       "@systemfsoftware/source": "./src/TestClock.ts",
       "types": "./dist/TestClock.d.ts",
@@ -73,6 +78,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./refusals": {
+        "types": "./dist/refusals.d.ts",
+        "default": "./dist/refusals.mjs"
       },
       "./TestClock": {
         "types": "./dist/TestClock.d.ts",
