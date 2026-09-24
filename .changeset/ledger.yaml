@@ -183,6 +183,7 @@
     - good-cooks-dance
     - hungry-kiwis-change
     - runner-rename-runtime
+    - weak-jeans-dress
 "@systemfsoftware/discern@0.0.0":
   dir: packages/discern
   intents:
@@ -641,6 +642,7 @@
   intents:
     - fork-under-own-name
     - kind-rats-kiss
+    - sweet-horses-trade
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -1054,6 +1056,7 @@
   intents:
     - ancient-clocks-hug
     - fork-under-own-name
+    - little-deers-stand
     - pretty-poets-fail
     - witty-lions-queue
 "@systemfsoftware/harness-toml@0.0.0":
@@ -1329,6 +1332,7 @@
 "@systemfsoftware/oxlint-config-recommended@3.1.0":
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
+    - fresh-stars-marry
     - khaki-walls-argue
     - runner-rename-runtime
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
@@ -1818,6 +1822,7 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
   intents:
     - fast-stars-heal
+    - fresh-stars-marry
     - little-kings-run
     - lucky-buses-whisper
     - lucky-lions-shave
@@ -2954,6 +2959,7 @@
 "@systemfsoftware/trace-spec@0.4.0":
   dir: packages/trace-spec
   intents:
+    - calm-tools-end
     - fork-under-own-name
     - shaggy-olives-bathe
 "@systemfsoftware/trace-taxonomy@0.0.0":
@@ -2999,3 +3005,7 @@
     - runner-rename-runtime
     - thick-cooks-sell
     - witty-lions-queue
+"@systemfsoftware/vitest@0.1.0":
+  dir: packages/vitest
+  intents:
+    - pretty-rocks-explode
