@@ -107,7 +107,7 @@ Send the same order again as `order-2` and it comes back `Backordered`: 4 mugs r
 
 ### Race it
 
-[`scripts/race.ts`](scripts/race.ts) starts several app instances, each with its own connection pool, and submits 20-unit orders from all of them at once. It seeds one customer with a credit limit of 100 and two products with 100 units each, then checks five invariants. It truncates the order tables first, so give it a scratch database. After [building](#start-the-service):
+[`scripts/race.ts`](scripts/race.ts) starts several app instances, each with its own connection pool, and submits 20-unit orders from all of them at once. It seeds one customer with a credit limit of 100 and two products with 100 units each, then checks seven invariants. It truncates the order tables first, so give it a scratch database. After [building](#start-the-service):
 
 ```bash
 docker exec fulfillment-db createdb -U postgres race
