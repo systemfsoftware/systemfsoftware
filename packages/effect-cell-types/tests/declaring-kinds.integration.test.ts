@@ -4,6 +4,7 @@ import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import { expect } from 'vitest'
 
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import { isContainer, job, make, withPort, withWorkdir } from './__fixtures__/container.blueprint.js'
 import { concat, matcher, orElse, when } from './__fixtures__/matcher.blueprint.js'
 import { above, ask, is, isQuestion, labels, numbers } from './__fixtures__/question.blueprint.js'
@@ -12,6 +13,9 @@ import { exec, isRunningContainer, make as running } from './__fixtures__/runnin
 const Feature = makeFeature({ it, layer })
 
 const countingDriver = { exec: (cmd: string) => Promise.resolve(cmd.length) }
+
+const PlainRecordTypeId = Symbol.for('~systemfsoftware/effect-cell-types/tests/PlainRecord')
+const PlainRecord = Handle.make<{ readonly tag: string }>()(PlainRecordTypeId)
 
 Feature('Declaring a container and the running instance it becomes')
   .withScenarioLayer(Layer.empty)
@@ -102,6 +106,24 @@ Feature('Declaring a container and the running instance it becomes')
         Then('the job has no ports and ran in /srv')((s) => {
           expect(s.outcome.configured.spec.ports).toEqual([])
           expect(s.outcome.folder).toBe('/srv')
+        }),
+      ),
+    )
+  })
+
+Feature('Declaring a kind that carries no slot')
+  .withScenarioLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'A kind that declares no slot mints its record without a slot mark',
+      Gherkin.Do.pipe(
+        Given('a plain record for the tag "alpha"')(
+          'plain',
+          () => Effect.succeed(PlainRecord.make({ tag: 'alpha' })),
+        ),
+        When('its own symbols are listed')('symbols', (s) => Effect.succeed(Object.getOwnPropertySymbols(s.plain))),
+        Then('the record carries nothing but its kind brand')((s) => {
+          expect(s.symbols).toEqual([PlainRecordTypeId])
         }),
       ),
     )

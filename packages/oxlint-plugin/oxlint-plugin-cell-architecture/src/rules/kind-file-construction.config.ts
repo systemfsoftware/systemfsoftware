@@ -1,6 +1,11 @@
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
-export const RETIRED_MESSAGE = '{{name}} carries a retired kind suffix. Fix: {{fix}}.' as const
+export const RETIRED_MESSAGE =
+  '{{name}} carries a retired kind suffix. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
+
+export const RETIRED_EXPECTED =
+  'a *.blueprint.ts module for a cold spec, or a *.handle.ts module for a running record, minted with Blueprint.make or Handle.make imported from @systemfsoftware/effect-cell-types' as const
+export const RETIRED_ACTUAL = 'a *.resource.ts module still carrying the retired resource suffix' as const
 
 export const BLUEPRINT_EXPECTED =
   'a *.blueprint.ts module that mints its blueprint with Blueprint.make imported from @systemfsoftware/effect-cell-types' as const

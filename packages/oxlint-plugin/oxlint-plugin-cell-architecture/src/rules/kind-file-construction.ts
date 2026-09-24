@@ -9,6 +9,8 @@ import {
   HANDLE_EXPECTED,
   HANDLE_FIX,
   meta,
+  RETIRED_ACTUAL,
+  RETIRED_EXPECTED,
   RETIRED_FIX,
 } from './kind-file-construction.config.js'
 import { basenameOf, isRetiredResourceFile, isTypeTestFile, type KindFileKind, kindOfFile } from './kind-file.js'
@@ -37,7 +39,12 @@ export const kindFileConstruction = defineRule({
           context.report({
             node,
             messageId: 'retiredResourceFile',
-            data: { name: basenameOf(context.filename), fix: RETIRED_FIX },
+            data: {
+              name: basenameOf(context.filename),
+              expected: RETIRED_EXPECTED,
+              actual: RETIRED_ACTUAL,
+              fix: RETIRED_FIX,
+            },
           })
         },
       }

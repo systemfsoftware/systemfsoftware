@@ -94,7 +94,7 @@ export interface RegistrySpec {
   readonly members: Readonly<Record<string, AnyProcedure>>
   readonly ids: ReadonlyArray<string>
   readonly decision: Top
-  readonly memberAt: (id: string) => AnyProcedure
+  readonly memberAt: (id: never) => AnyProcedure
   readonly routeOf: (input: never, options?: never) => Top
   readonly invokeOf: (input: never, options?: never) => Top
   readonly invokeWithRouteOf: (input: never, options?: never) => Top
@@ -338,12 +338,6 @@ const memberOf = <Members extends Readonly<Record<string, AnyProcedure>>, K exte
   key: K,
 ): Members[K] => members[key]
 
-/** The same read through the erased shape the spec records. Reads forward through the held members. */
-const memberAtOf = (members: Readonly<Record<string, AnyProcedure>>, id: string): AnyProcedure =>
-  Arr.findFirst(Object.entries(members), ([key]) => key === id).pipe(
-    Option.map(([, member]) => member),
-    Option.getOrThrow,
-  )
 /**
  * The member keys, each one an id by construction: a record cannot hold two
  * entries under one key, so the ids a registry routes between are unique
@@ -366,7 +360,7 @@ const criteriaOf = <Members extends Readonly<Record<string, AnyProcedure>>>(
 
 const Registries = Blueprint.make<RegistrySpec, AnyRegistryIndex>()(TypeId).operations<RegistryOps>()({
   operations: {
-    get: (self: AnyRegistry, id: string) => self.spec.memberAt(id),
+    get: (self: AnyRegistry, id: never) => self.spec.memberAt(id),
     route: {
       run: (self: AnyRegistry, input: never, options?: never) => self.spec.routeOf(input, options),
       isDataFirst: (args) => Registries.is(args[0]),
@@ -505,7 +499,7 @@ const buildRegistry = <
     members,
     ids,
     decision: decisionFor(ids),
-    memberAt: (id) => memberAtOf(members, id),
+    memberAt: (id) => memberOf(members, id),
     routeOf: (request: S['Type'], routeOptions?: RouteOptions) => prepareRoute(view, request, routeOptions),
     invokeOf,
     invokeWithRouteOf,

@@ -8,6 +8,8 @@ import {
   HANDLE_ACTUAL,
   HANDLE_EXPECTED,
   HANDLE_FIX,
+  RETIRED_ACTUAL,
+  RETIRED_EXPECTED,
   RETIRED_FIX,
 } from '../kind-file-construction.config.js'
 import { kindFileConstruction } from '../kind-file-construction.js'
@@ -37,7 +39,7 @@ const blueprintError = (name: string) => ({
 
 const retiredError = (name: string) => ({
   messageId: 'retiredResourceFile' as const,
-  data: { name, fix: RETIRED_FIX },
+  data: { name, expected: RETIRED_EXPECTED, actual: RETIRED_ACTUAL, fix: RETIRED_FIX },
 })
 
 const handleError = (name: string) => ({

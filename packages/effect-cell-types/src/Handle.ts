@@ -34,7 +34,7 @@ export const make =
     TypeId: typeId,
     is: (u: unknown): u is Handle<T, Data, Slot> => Predicate.hasProperty(u, typeId),
     make: (data: Data, ...slot: SlotArguments<Slot>): Handle<T, Data, Slot> => {
-      const self = { ...data, ...Prototype, [typeId]: typeId, [SlotId]: slot[0] }
+      const self = { ...data, ...Prototype, [typeId]: typeId, ...(slot.length === 0 ? {} : { [SlotId]: slot[0] }) }
       assertHandle<T, Data, Slot>(self)
       return self
     },
