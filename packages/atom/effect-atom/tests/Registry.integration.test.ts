@@ -1,9 +1,14 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Context, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Scope, Stream } from 'effect'
-import { expect, vi } from 'vitest'
+import { vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
+
+/** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
+const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
+  Atom.AsyncResult.isInitial(reading) || Atom.AsyncResult.isWaiting(reading)
 
 Feature('Keeping a value that is still loading available to every reader')
   .withLayer(Layer.empty)
@@ -42,10 +47,9 @@ Feature('Keeping a value that is still loading available to every reader')
         Then('the work only ever started once, and every reader still sees it loading')(
           (s) => {
             expect(s.result.started).toBe(1)
-            expect(Atom.AsyncResult.isInitial(s.result.firstReading) || s.result.firstReading.waiting).toBe(true)
-            expect(Atom.AsyncResult.isInitial(s.result.secondReading) || s.result.secondReading.waiting).toBe(true)
-            expect(Atom.AsyncResult.isInitial(s.result.readingAfterCleanup) || s.result.readingAfterCleanup.waiting)
-              .toBe(true)
+            expect(s.result.firstReading).toSatisfy(isLoading)
+            expect(s.result.secondReading).toSatisfy(isLoading)
+            expect(s.result.readingAfterCleanup).toSatisfy(isLoading)
           },
         ),
       ),
@@ -179,7 +183,7 @@ Feature('Keeping a value that is still loading available to every reader')
             }),
         ),
         Then('the reader waited and received the fresh answer')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.answer.first) && s.answer.first.value === 1).toBe(true)
+          expect(s.answer.first).toMatchObject({ _tag: 'Success', value: 1 })
           expect(s.answer.settled).toBe(2)
         }),
       ),
@@ -369,7 +373,7 @@ Feature('Keeping a value that is still loading available to every reader')
           (s) => {
             expect(s.outcome.heard).toEqual([1, 2])
             expect(s.outcome.afterDuplicate).toBe(2)
-            expect(Exit.isFailure(s.outcome.exit)).toBe(true)
+            expect(s.outcome.exit).toSatisfy(Exit.isFailure)
           },
         ),
       ),
@@ -394,7 +398,7 @@ Feature('Keeping a value that is still loading available to every reader')
             return { exit }
           })),
         Then('the stream failed immediately with the failure')((s) => {
-          expect(Exit.isFailure(s.outcome.exit)).toBe(true)
+          expect(s.outcome.exit).toSatisfy(Exit.isFailure)
         }),
       ),
     )
@@ -435,7 +439,7 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         Then('the settled stream delivered its value and the failed one failed')((s) => {
           expect(s.outcome.chunk).toEqual([3])
-          expect(Exit.isFailure(s.outcome.exit)).toBe(true)
+          expect(s.outcome.exit).toSatisfy(Exit.isFailure)
         }),
       ),
     )

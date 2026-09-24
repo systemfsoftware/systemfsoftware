@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -6,7 +7,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
-import { expect, vi } from 'vitest'
+import { vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -75,7 +76,10 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
             }),
         ),
         Then('the widgets do not both flip to the same state together')((s) => {
-          expect(s.state.firstLoading || s.state.secondLoading).toBe(true)
+          expect(s.state).toSatisfy(
+            (state: { readonly firstLoading: boolean; readonly secondLoading: boolean }) =>
+              state.firstLoading || state.secondLoading,
+          )
         }),
       ),
     )

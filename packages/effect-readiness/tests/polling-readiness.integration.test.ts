@@ -104,7 +104,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
             }),
         ),
         Then('the shortened check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(reportedReady(outcome.verdict)).toBe(false)
+          expect(outcome.verdict).not.toSatisfy(reportedReady)
         }),
         And('the shortened check retried the connection before giving up')(({ outcome }) => {
           expect(outcome.attempts).toBeGreaterThan(1)

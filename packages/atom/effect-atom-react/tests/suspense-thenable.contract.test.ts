@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
@@ -10,7 +11,6 @@ import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 

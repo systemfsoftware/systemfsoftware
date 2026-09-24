@@ -9,6 +9,7 @@
  *
  * @since 4.0.0
  */
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -18,7 +19,7 @@ import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { renderToString } from 'react-dom/server'
-import { expect, vi } from 'vitest'
+import { vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -95,7 +96,7 @@ Feature('Server-side rendering of React atom hooks')
           })),
         Then('the client read ran the effect and settled the atom')((s) => {
           expect(s.ctx.mockFetchData).toHaveBeenCalled()
-          expect(Atom.AsyncResult.isSuccess(s.result.clientValue)).toBe(true)
+          expect(s.result.clientValue).toSatisfy(Atom.AsyncResult.isSuccess)
         }),
       ),
     )
@@ -263,7 +264,7 @@ Feature('Server-side rendering of React atom hooks')
                 .then(() =>
                   vi.waitFor(() => {
                     const snapshot = Atom.Registry.get(s.ctx.hydrationRegistry, s.ctx.atom)
-                    expect(Atom.AsyncResult.isSuccess(snapshot)).toBe(true)
+                    expect(snapshot).toSatisfy(Atom.AsyncResult.isSuccess)
                   })
                 )
                 .then(() => Atom.AsyncResult.getOrThrow(Atom.Registry.get(s.ctx.hydrationRegistry, s.ctx.atom)))

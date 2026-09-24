@@ -1,5 +1,6 @@
+import { expect } from '@effect/vitest'
 import { Effect } from 'effect'
-import { describe, expect, it } from 'vitest'
+import { describe, it } from 'vitest'
 import { assertionOf, fileOf, type JsonReport, messagesOf, namesOf, runFixtures } from './support/run-fixtures'
 
 const CHEATS = ['cheats/property-shape.test.ts']

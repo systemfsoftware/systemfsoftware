@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import * as RpcTest from 'effect/unstable/rpc/RpcTest'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -160,7 +160,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
           if (Atom.AsyncResult.isSuccess(s.outcome)) {
             expect(s.outcome.value).toEqual({ id: 1, name: 'grace' })
           }
@@ -206,7 +206,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return final
           })),
         Then('the records arrived in order and the feed is marked finished')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.final)).toBe(true)
+          expect(s.final).toSatisfy(Atom.AsyncResult.isSuccess)
           if (Atom.AsyncResult.isSuccess(s.final)) {
             expect(s.final.value.done).toBe(true)
             expect([...s.final.value.items]).toEqual([
@@ -272,8 +272,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return { first, second, calls }
           })),
         Then('the change ran and the watched user was fetched again')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.readings.first)).toBe(true)
-          expect(Atom.AsyncResult.isSuccess(s.readings.second)).toBe(true)
+          expect(s.readings.first).toSatisfy(Atom.AsyncResult.isSuccess)
+          expect(s.readings.second).toSatisfy(Atom.AsyncResult.isSuccess)
           expect(s.readings.calls).toBe(3)
         }),
       ),
@@ -307,7 +307,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return outcome
           })),
         Then('the user is reported')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
           if (Atom.AsyncResult.isSuccess(s.outcome)) {
             expect(s.outcome.value).toEqual({ id: 1, name: 'user-1' })
           }
