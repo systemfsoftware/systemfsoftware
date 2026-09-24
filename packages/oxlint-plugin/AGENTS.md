@@ -1,39 +1,24 @@
-# @systemfsoftware/oxlint-plugin
+# AGENTS.md — `packages/oxlint-plugin/`
 
-Custom Oxlint plugins for architectural invariants, Effect-TS idioms, and test discipline.
+Governs every plugin and shared kernel below this directory; root `AGENTS.md` governs the rest.
 
-## Standing Rules
+## Diagnostic contract (OP-D1)
 
-Every rule authored across plugins in this directory must comply with the diagnostic contract.
-
-### OP-D1: The Four-Part Diagnostic Standard
-
-Oxlint operates in agent loops using `--format=agent`, which formats findings as a single line:
-`<file>:<line>:<col>: error <plugin>(<rule>): <message>`
-
-To maximize agent repair convergence and prevent hallucinated workarounds, every diagnostic message MUST follow the four-part single-line template:
+Oxlint runs in agent loops with `--format=agent`, one line per finding. Every rule message is a single line in four parts, and `Fix:` names the literal replacement — a message that only forbids makes the agent oscillate or suppress the rule:
 
 ```typescript
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 ```
 
-Or for presence/absence checks:
+Absence checks open with `'{{name}} is untested.'` and keep the same three tail parts. `{{actual}}` is what the visitor observed; `{{fix}}` carries code tokens, not advice.
 
-```typescript
-export const ABSENCE_MESSAGE =
-  '{{name}} is untested. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
-```
+wrong: `'Data.TaggedError is not allowed.'` / right: `'Data.TaggedError is forbidden. Expected: a Schema.TaggedError class. Actual: Data.TaggedError(...). Fix: class E extends S.TaggedError<E>()("E", {}) {}.'`
 
-### Diagnostic Quality Rubric
+## Plugin boundaries
 
-| Segment        | Invariant                                                                    | Example                                                                                                        |
-| -------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `{{name}}`     | Unambiguous description of the construct violated                            | `a *.integration.test.ts feature with no environment double`                                                   |
-| `{{expected}}` | The required AST or semantic contract                                        | `a Feature builder chained with .withLayer(layer) or .withScenarioLayer(layer)`                                |
-| `{{actual}}`   | Exactly what the AST visitor observed (grounds the agent)                    | `a Feature(...) call without .withLayer or .withScenarioLayer`                                                 |
-| `{{fix}}`      | Constructive guidance with literal syntax, code tokens, or default factories | `Chain .withLayer(Layer.empty) if in-memory, or provide the boundary Layer (e.g. .withLayer(MyService.Live)).` |
-
-### Banned Formats
-
-- **Multiline formats (e.g. TOON, YAML, multi-line blocks):** Banned. Breaks single-line `--format=agent` parsing across terminal and CI watchers.
-- **Negative-only messages:** Banned. Messages stating only that something is forbidden without providing the concrete syntactic replacement in `Fix:` cause LLMs to oscillate or attempt rule suppression.
+| ID      | Rule                                                                                                                                                                                                                                                                                                                                   | Gate                                                                                                                                        |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EW1** | `oxlint-plugin-dmmf-workflow` holds prohibitions only. Never add a rule that fails a workflow for lacking a Command/Decision/Error schema: `Workflow.make`'s `Inhabited` constraint already refuses it at construction, so a lint report duplicates a compile error.                                                                   | `pnpm --filter @systemfsoftware/oxlint-plugin-dmmf-workflow test` — `Should_Ignore_When_TheCommandIsAPlainClass` pins the silence           |
+| **TP3** | File placement — which filenames may exist where — lives only in `@systemfsoftware/oxlint-plugin-test-discipline`; no other plugin reports on a file's location.                                                                                                                                                                       | `review` — wrong: an `effect-schema` rule reporting a `*.schema.ts` outside `src/`; right: that verdict added to the test-discipline plugin |
+| **TP5** | Two behaviour test suffixes exist: `*.integration.test.ts` (Gherkin) and `*.differential.test.ts` (`@systemfsoftware/differential-spec`). A third lands only together with the rule that enforces it.                                                                                                                                  | `pnpm --filter @systemfsoftware/oxlint-plugin-test-discipline test` — the retired-suffix suite rejects `.composition`/`.feature`            |
+| **IO4** | `import-origin` and `make-boundary` are shared kernels, not plugins: deliberately no tests and no `stryker.config.json` (a mutation config over a test-less package fails CI vacuously) — consumers' RuleTester suites are the net. Consumers take them as `devDependencies` and bundle them; no plugin depends on another at runtime. | `test ! -e packages/oxlint-plugin/import-origin/stryker.config.json && test ! -e packages/oxlint-plugin/make-boundary/stryker.config.json`  |
