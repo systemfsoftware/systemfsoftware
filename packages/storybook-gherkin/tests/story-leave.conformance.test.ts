@@ -1,8 +1,8 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, Schema } from 'effect'
 
-import { everyStepSettled, freshVisit, passOf, playedOnce } from './__fixtures__/story-leave.fixture.js'
+import { everyStepSettled, freshVisit, playedOnce } from './__fixtures__/story-leave.fixture.js'
 
 const Feature = makeFeature({ it })
 
@@ -17,14 +17,12 @@ Feature('Leaving a story with nothing hanging when the visit moves on', { timeou
           'checked',
           (s) => Conformance.released(playedOnce(s.visit), { probe: everyStepSettled(s.visit) }),
         ),
-        Then('no step is left hanging once the visit has moved on')((s) => {
-          passOf(s.checked)
-        }),
-        And('the visit moved on at least once')((s) => {
-          if (passOf(s.checked).histories <= 0) {
-            throw new Error('expected the visit to have moved on at least once')
-          }
-        }),
+        Then('no step is left hanging and the visit moved on at least once')((s, expect) =>
+          expect(s.checked).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
   })

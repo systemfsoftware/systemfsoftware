@@ -22,6 +22,6 @@ Feature.skip('A suite registered in skip mode is not executed')
     )
   })
 
-it('A skipped suite never ran any of its steps', function*({ expect }) {
+it('Should_RunNoStep_When_TheSuiteIsRegisteredInSkipMode', function*({ expect }) {
   yield* expect(executions.ran).toBe(0)
 })
