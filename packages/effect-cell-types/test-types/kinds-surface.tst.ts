@@ -1,4 +1,4 @@
-import { Handle } from '@systemfsoftware/effect-cell-types'
+import { type Blueprint, Handle } from '@systemfsoftware/effect-cell-types'
 import type * as Context from 'effect/Context'
 import type * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
@@ -17,7 +17,16 @@ import {
   withWorkdir,
 } from '../tests/__fixtures__/container.blueprint.js'
 import { concat, type Matcher, matcher, orElse, type Policy, when } from '../tests/__fixtures__/matcher.blueprint.js'
-import { above, ask, type Check, is, labels, numbers, type Unsure } from '../tests/__fixtures__/question.blueprint.js'
+import {
+  above,
+  ask,
+  type Check,
+  is,
+  labels,
+  numbers,
+  type Question,
+  type Unsure,
+} from '../tests/__fixtures__/question.blueprint.js'
 import {
   exec,
   isRunningContainer,
@@ -93,6 +102,12 @@ const impact = labels<Change>()('impact', ['breaking', 'minor'], () => 'minor')
 const risk = labels<Change>()('risk', ['high', 'low'], () => 'low')
 const size = numbers<Change>()('size', (change) => change.title.length)
 
+declare const TaggedId: unique symbol
+interface TagOf extends Blueprint.Target {
+  readonly target: this['Index'] extends { readonly Tag: infer A } ? A : never
+}
+type Tagged<A> = Blueprint.Blueprint<typeof TaggedId, null, { readonly tag: TagOf }, { readonly Tag: A }>
+
 describe('Blueprint over a type index', () => {
   it('Should_AgreeAcrossMethodAndBothDuals_When_AnOperationCompilesToAnotherType', () => {
     expect(impact.is('breaking')).type.toBe<Check<Change>>()
@@ -116,6 +131,13 @@ describe('Blueprint over a type index', () => {
 
   it('Should_ReadATargetTypedByTheIndex_When_ItIsAProperty', () => {
     expect(impact.labels).type.toBe<ReadonlyArray<'breaking' | 'minor'>>()
+  })
+
+  it('Should_KeepUnmarkedMembers_When_TheIndexIsGeneric', () => {
+    const tagOf = <A>(tagged: Tagged<A>) => tagged.tag
+    expect(tagOf<'x'>).type.toBe<(tagged: Tagged<'x'>) => 'x'>()
+    expect<Tagged<'x'>>().type.toHaveProperty('tag')
+    expect<Question<Change, string>>().type.not.toHaveProperty('above')
   })
 
   it('Should_DropTheErrorChannel_When_AFallbackIsGiven', () => {

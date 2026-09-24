@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Blueprint {
-    export { Applied, Blueprint, Carrying, DataFirst, Definition$1 as Definition, Derived, Dual, DualOut, Either, Get, Implementation, Implementations, IndexId, IndexOf, LastFirstOf, LastRestOf, Of$1 as Of, Operation, OutOf, ParamsOf, RestOf, Step, Target, TargetOf, make$2 as make };
+    export { Applied, Blueprint, Carrying, Conditional, DataFirst, Definition$1 as Definition, Derived, Dual, DualOut, Either, Get, Implementation, Implementations, IndexId, IndexOf, LastFirstOf, LastRestOf, Of$1 as Of, Operation, OutOf, ParamsOf, RestOf, Step, Target, TargetOf, make$2 as make };
 }
 
 // @public (undocumented)

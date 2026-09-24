@@ -22,7 +22,7 @@ export interface Operation {
   readonly Index: Top
   readonly Args: ReadonlyArray<Top>
   readonly First: Top
-  /** The arguments after the receiver. An operation whose params are `never` for an index is absent from it. */
+  /** The arguments after the receiver. A {@link Conditional} operation whose params are `never` for an index is absent from it. */
   readonly params: ReadonlyArray<Top>
   /** The data-last first argument, as far as it is known before the receiver is. */
   readonly lastFirst: Top
@@ -31,12 +31,21 @@ export interface Operation {
   readonly out: Top
 }
 
-/** A compilation target read as a property, such as `.scoped` or `.layer`. Absent where `target` is `never`. */
+/** A compilation target read as a property, such as `.scoped` or `.layer`. A {@link Conditional} target is absent where `target` is `never`. */
 export interface Target {
   readonly kind: 'target'
   readonly Self: Top
   readonly Index: Top
   readonly target: Top
+}
+
+/**
+ * Marks an operation or target whose presence depends on the index. Only a marked member is dropped
+ * where its params or target are `never`; every other member stays present, so code generic over the
+ * index can still read it.
+ */
+export interface Conditional {
+  readonly presence: 'conditional'
 }
 
 type TailOf<P extends ReadonlyArray<Top>> = P extends readonly [Top, ...infer Rest] ? Rest
@@ -88,8 +97,12 @@ type Method<F, R extends { readonly self: Top }, X> = F extends Operation
 
 type Present<A, K> = [A] extends [never] ? never : K
 
+type PresentIf<F, A, K> = F extends Conditional ? Present<A, K> : K
+
 type Methods<Ops, R extends { readonly self: Top }, X> = {
-  readonly [K in OperationKeys<Ops> as Ops[K] extends Operation ? Present<ParamsOf<Ops[K], Top, X>, K> : never]: Method<
+  readonly [
+    K in OperationKeys<Ops> as Ops[K] extends Operation ? PresentIf<Ops[K], ParamsOf<Ops[K], Top, X>, K> : never
+  ]: Method<
     Ops[K],
     R,
     X
@@ -97,7 +110,7 @@ type Methods<Ops, R extends { readonly self: Top }, X> = {
 }
 
 type Targets<Ops, R extends { readonly self: Top }, X> = {
-  readonly [K in TargetKeys<Ops> as Ops[K] extends Target ? Present<TargetOf<Ops[K], Top, X>, K> : never]:
+  readonly [K in TargetKeys<Ops> as Ops[K] extends Target ? PresentIf<Ops[K], TargetOf<Ops[K], Top, X>, K> : never]:
     Ops[K] extends Target ? TargetOf<Ops[K], R['self'], X> : never
 }
 

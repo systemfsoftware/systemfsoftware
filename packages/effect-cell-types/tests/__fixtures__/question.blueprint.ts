@@ -28,8 +28,8 @@ export interface Check<Input> {
 
 export class Unsure extends Data.TaggedError('Unsure')<{ readonly question: string }> {}
 
-type InputOf<X> = X extends QuestionIndex ? X['Input'] : never
-type LabelOf<X> = X extends QuestionIndex ? X['Label'] : never
+type InputOf<X> = (X & QuestionIndex)['Input']
+type LabelOf<X> = (X & QuestionIndex)['Label']
 type Fallback<A> = A extends readonly [Top, { readonly onUnsure: () => infer R }] ? readonly [R] : readonly []
 
 interface Is extends Blueprint.Operation {
@@ -39,7 +39,7 @@ interface Is extends Blueprint.Operation {
   readonly out: Check<InputOf<this['Index']>>
 }
 
-interface Above extends Blueprint.Operation {
+interface Above extends Blueprint.Operation, Blueprint.Conditional {
   readonly params: this['Index'] extends { readonly Scale: 'numbers' } ? readonly [threshold: number] : never
   readonly lastFirst: number
   readonly lastRest: readonly []
