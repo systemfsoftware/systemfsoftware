@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defineConfig as defineVitestConfig } from 'vitest/config'
@@ -26,14 +25,14 @@ const stringField = (value, key) => {
   return typeof field === 'string' ? field : ''
 }
 
-// The fork is declared under this name: `pnpm-workspace.yaml`'s catalog aliases it to this repo's
-// `@systemfsoftware/vitest` package. A package that cannot resolve it must not run unguarded.
-const forkDependency = '@systemfsoftware/vitest'
+// Workspace packages expose their source under this condition in `exports`, so a
+// test resolves a sibling's `src/` instead of a `dist/` this run may not have built.
+// Both pipelines need it: node-environment tests resolve through the SSR resolver,
+// while browser tests use the client one. Vite replaces the default conditions when
+// they are set, so the defaults are spread back in rather than dropped.
+export const sourceCondition = '@systemfsoftware/source'
 
-// The setup file that installs the fork's guard (KTD8), published by the fork under this subpath.
-const forkGuardSpecifier = `${forkDependency}/guard`
-
-// The fork's own package. It holds no dependency on itself, so it loads its guard from source instead.
+// The fork's package. Its own tests load its guard from source, since it holds no dependency on itself.
 const forkPackage = '@systemfsoftware/vitest'
 
 /**
@@ -72,9 +71,13 @@ const guardExemptions = {
 }
 
 /**
- * The setup file that installs the guard, resolved from the package's own directory so a package that
- * cannot resolve the fork fails config load instead of running unguarded. The fork resolves its own
- * source, since it holds no dependency on itself.
+ * The setup file that installs the guard, as an absolute path. The fork is looked up only where pnpm
+ * links a package's declared dependencies, `<package>/node_modules/<fork>`: Node resolution is not
+ * used because pnpm's bin shims put the whole virtual store on `NODE_PATH`, so it finds the fork from
+ * a package that never declared it. Vitest reads a setup-file specifier without the project's resolve
+ * conditions, so the fork's `./guard` export is resolved here: its source entry when that file exists,
+ * so an unbuilt fork still guards, otherwise its built entry. A package that has not declared the fork,
+ * or whose fork has no guard on disk, fails config load instead of running unguarded.
  *
  * @param {string} cwd
  * @param {string} name
@@ -82,16 +85,23 @@ const guardExemptions = {
  */
 const guardSetupFile = (cwd, name) => {
   if (name === forkPackage) return join(cwd, 'src', 'guard.ts')
-  try {
-    return createRequire(join(cwd, 'package.json')).resolve(forkGuardSpecifier)
-  } catch (cause) {
-    throw new Error(
-      `[@systemfsoftware/vitest-config] ${name} cannot resolve "${forkGuardSpecifier}", so its tests would run without the KTD8 guard. ` +
-        `Declare "@systemfsoftware/vitest": "workspace:^" in devDependencies of ${join(cwd, 'package.json')}, ` +
+  const refuse = (/** @type {string} */ what) =>
+    new Error(
+      `[@systemfsoftware/vitest-config] ${name} ${what}, so its tests would run without the KTD8 guard. ` +
+        `Declare "${forkPackage}": "workspace:^" in devDependencies of ${join(cwd, 'package.json')}, ` +
         `or name the exempt test project in vitest-config's guard exemption table.`,
-      { cause },
     )
-  }
+  const forkDir = join(cwd, 'node_modules', forkPackage)
+  const manifestPath = join(forkDir, 'package.json')
+  if (!existsSync(manifestPath)) throw refuse(`has no "${forkPackage}" linked in its own node_modules`)
+  const exportsField = Reflect.get(Object(readJson(manifestPath)), 'exports')
+  const guardEntry = Reflect.get(Object(exportsField), './guard')
+  const found = [stringField(guardEntry, sourceCondition), stringField(guardEntry, 'default')]
+    .filter((entry) => entry.length > 0)
+    .map((entry) => join(forkDir, entry))
+    .find((file) => existsSync(file))
+  if (found === undefined) throw refuse(`links a "${forkPackage}" whose "./guard" export has no file on disk`)
+  return realpathSync(found)
 }
 
 // A package config is evaluated with the package directory as the working directory (`pnpm --filter <pkg>
@@ -174,13 +184,6 @@ export const defineConfig = (config) => {
       : { ...test, projects: /** @type {Projects} */ (projects.map(projectWithSetup)) },
   })
 }
-
-// Workspace packages expose their source under this condition in `exports`, so a
-// test resolves a sibling's `src/` instead of a `dist/` this run may not have built.
-// Both pipelines need it: node-environment tests resolve through the SSR resolver,
-// while browser tests use the client one. Vite replaces the default conditions when
-// they are set, so the defaults are spread back in rather than dropped.
-export const sourceCondition = '@systemfsoftware/source'
 
 // AGENT outranks CI. This repo's agent shell sets both, so a CI-first reading
 // gives every agent run the thorough forge treatment - tenfold property draws
