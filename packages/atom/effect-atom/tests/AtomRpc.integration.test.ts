@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Schema, Stream } from 'effect'
+import { Effect, Layer, Option, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import * as RpcTest from 'effect/unstable/rpc/RpcTest'
 
@@ -105,9 +104,9 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
-        Then('the fresh page shows the user without calling the server a second time')((s) => {
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('the fresh page shows the user without calling the server a second time')(
+          (s, expect) => expect(s.result.calls).toBe(1),
+        ),
       ),
     )
     scenario(
@@ -139,12 +138,15 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           Effect.sync(() => {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.first, () => {}, { immediate: true })
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.second, () => {}, { immediate: true })
-            return { sameAtom: s.ctx.first === s.ctx.second, calls: s.ctx.callsMade() }
+            return { first: s.ctx.first, second: s.ctx.second, calls: s.ctx.callsMade() }
           })),
-        Then('both queries share one atom and the server is called once')((s) => {
-          expect(s.result.sameAtom).toBe(true)
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('both queries share one atom and the server is called once')(
+          (s, expect) =>
+            expect({ first: s.result.first, second: s.result.second, calls: s.result.calls }).toSatisfy(
+              ({ first, second, calls }) => first === second && calls === 1,
+              'the two queries share one atom, so the server was called once',
+            ),
+        ),
       ),
     )
     scenario(
@@ -173,12 +175,13 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
-        Then('the created record is reported')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.outcome)) {
-            expect(s.outcome.value).toEqual({ id: 1, name: 'grace' })
-          }
-        }),
+        Then('the created record is reported')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, value: Atom.AsyncResult.value(s.outcome) }).toEqual({
+              tag: 'Success',
+              value: Option.some({ id: 1, name: 'grace' }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -215,16 +218,19 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             unmount()
             return final
           })),
-        Then('the records arrived in order and the feed is marked finished')((s) => {
-          expect(s.final).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.final)) {
-            expect(s.final.value.done).toBe(true)
-            expect([...s.final.value.items]).toEqual([
-              { id: 1, name: 'first' },
-              { id: 2, name: 'second' },
-            ])
-          }
-        }),
+        Then('the records arrived in order and the feed is marked finished')(
+          (s, expect) =>
+            expect({ tag: s.final._tag, value: Atom.AsyncResult.value(s.final) }).toEqual({
+              tag: 'Success',
+              value: Option.some({
+                done: true,
+                items: [
+                  { id: 1, name: 'first' },
+                  { id: 2, name: 'second' },
+                ],
+              }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -276,11 +282,14 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             unmount()
             return { first, second, calls }
           })),
-        Then('the change ran and the watched user was fetched again')((s) => {
-          expect(s.readings.first).toSatisfy(Atom.AsyncResult.isSuccess)
-          expect(s.readings.second).toSatisfy(Atom.AsyncResult.isSuccess)
-          expect(s.readings.calls).toBe(3)
-        }),
+        Then('the change ran and the watched user was fetched again')(
+          (s, expect) =>
+            expect({ first: s.readings.first._tag, second: s.readings.second._tag, calls: s.readings.calls }).toEqual({
+              first: 'Success',
+              second: 'Success',
+              calls: 3,
+            }),
+        ),
       ),
     )
     scenario(
@@ -310,12 +319,13 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             unmount()
             return outcome
           })),
-        Then('the user is reported')((s) => {
-          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.outcome)) {
-            expect(s.outcome.value).toEqual({ id: 1, name: 'user-1' })
-          }
-        }),
+        Then('the user is reported')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, value: Atom.AsyncResult.value(s.outcome) }).toEqual({
+              tag: 'Success',
+              value: Option.some({ id: 1, name: 'user-1' }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -369,11 +379,14 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             const secondReading = Atom.Registry.get(freshPage, s.ctx.user)
             return { secondReading, calls: s.ctx.callsMade() }
           })),
-        Then('the first query keeps its retention and the second stays alive, and reload does not refetch')((s) => {
-          expect(s.ctx.idleTTL).toBe(60_000)
-          expect(s.ctx.keepAlive).toBe(true)
-          expect(s.result.calls).toBe(1)
-        }),
+        Then('the first query keeps its retention and the second stays alive, and reload does not refetch')(
+          (s, expect) =>
+            expect({ idleTTL: s.ctx.idleTTL, keepAlive: s.ctx.keepAlive, calls: s.result.calls }).toEqual({
+              idleTTL: 60_000,
+              keepAlive: true,
+              calls: 1,
+            }),
+        ),
       ),
     )
   })

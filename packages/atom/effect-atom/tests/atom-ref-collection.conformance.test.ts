@@ -5,6 +5,9 @@ import { Context, Effect, Layer, Match } from 'effect'
 
 import { CollectionCommand, collectionModel } from './__fixtures__/collection.model.js'
 
+/** The budget the sequential check is given: every one of these histories is checked. */
+const COLLECTION_ROUNDS = 1000
+
 const Feature = makeFeature({ it })
 
 type Items = ReadonlyArray<number>
@@ -60,14 +63,6 @@ const collectionCheck = (
     operations: spec.operations,
   })
 
-const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
-    }),
-  )
-
 Feature('A shopping list collection that stays with a plain list', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -80,11 +75,11 @@ Feature('A shopping list collection that stays with a plain list', { timeout: 0 
         ),
         When('a thousand rounds of pushing 1, 2, or 3, inserting, and removing are replayed')(
           'report',
-          (s) => collectionCheck(s.subject, { sequences: 1000, operations: 10 }),
+          (s) => collectionCheck(s.subject, { sequences: COLLECTION_ROUNDS, operations: 10 }),
         ),
-        Then('the shopping list matches the plain list after every round')((s) => {
-          passHistories(s.report)
-        }),
+        Then('the shopping list matches the plain list after every round')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: COLLECTION_ROUNDS })
+        ),
       ),
     )
   })

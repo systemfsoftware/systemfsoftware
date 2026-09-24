@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect, Equal, Hash, Layer, Option, Predicate, Result as EffectResult, Schema } from 'effect'
@@ -139,6 +138,14 @@ const taggedErrorCode = (result: TaggedSample): number => {
   )
 }
 
+/**
+ * The draws that break a law: empty exactly when every draw satisfies it.
+ */
+const violations = <Sample>(
+  samples: ReadonlyArray<Sample>,
+  holds: (sample: Sample) => boolean,
+): ReadonlyArray<Sample> => samples.filter((sample) => !holds(sample))
+
 const Feature = makeFeature({ it })
 
 Feature('Keeping the last good answer on screen when a retry fails')
@@ -169,10 +176,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
               return Atom.Registry.get(s.ctx.page, s.ctx.atom)
             }),
         ),
-        Then('the refresh reports a failure, but the previous answer is still remembered')((s) => {
-          expect(s.reading).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.reading).toMatchObject({ _tag: 'Failure', previousSuccess: { _tag: 'Some' } })
-        }),
+        Then('the refresh reports a failure, but the previous answer is still remembered')(
+          (s, expect) => expect(s.reading).toMatchObject({ _tag: 'Failure', previousSuccess: { _tag: 'Some' } }),
+        ),
       ),
     )
 
@@ -189,9 +195,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'reading',
           (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.atom)),
         ),
-        Then('the failure carries no previous answer')((s) => {
-          expect(s.reading).toMatchObject({ _tag: 'Failure', previousSuccess: { _tag: 'None' } })
-        }),
+        Then('the failure carries no previous answer')(
+          (s, expect) => expect(s.reading).toMatchObject({ _tag: 'Failure', previousSuccess: { _tag: 'None' } }),
+        ),
       ),
     )
 
@@ -200,19 +206,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const enc = Option.getOrThrow(Schema.encodeOption(resultSchema)(result))
                 const dec = Option.getOrThrow(Schema.decodeOption(resultSchema)(enc))
                 return Equal.equals(dec, result)
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -220,15 +224,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => Equal.equals(Atom.AsyncResult.map(result, (n) => n), result))
+              violations(s.samples, (result) => Equal.equals(Atom.AsyncResult.map(result, (n) => n), result))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -236,20 +238,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 Equal.equals(
                   Atom.AsyncResult.map(Atom.AsyncResult.map(result, (n: number) => n + 1), (n) => n * 2),
                   Atom.AsyncResult.map(result, (n: number) => (n + 1) * 2),
-                )
-              )
+                ))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -257,10 +256,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const rebuilt = Atom.AsyncResult.match(result, {
                     onInitial: (t) => Atom.AsyncResult.initial(t.waiting),
@@ -270,13 +269,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                       Atom.AsyncResult.successWith(t.value, { waiting: t.waiting, timestamp: t.timestamp }),
                   })
                   return !Equal.equals(result, rebuilt) || Hash.hash(result) === Hash.hash(rebuilt)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -284,18 +280,18 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => PAIR_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) =>
-                Atom.AsyncResult.isSuccess(Atom.AsyncResult.all([first, second])) ===
-                  (Atom.AsyncResult.isSuccess(first) && Atom.AsyncResult.isSuccess(second))
+              violations(
+                s.samples,
+                ([first, second]) =>
+                  Atom.AsyncResult.isSuccess(Atom.AsyncResult.all([first, second])) ===
+                    (Atom.AsyncResult.isSuccess(first) && Atom.AsyncResult.isSuccess(second)),
               )
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -303,10 +299,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => PAIR_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) => {
+              violations(s.samples, ([first, second]) => {
                 const replaced = Atom.AsyncResult.replacePrevious(first, Option.some(second))
                 const expected = rememberedSuccess(second)
                 if (Atom.AsyncResult.isFailure(first)) {
@@ -316,9 +312,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -326,15 +320,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => GARBAGE_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((garbage) => Option.isNone(Schema.decodeUnknownOption(resultSchema)(garbage)))
+              violations(s.samples, (garbage) => Option.isNone(Schema.decodeUnknownOption(resultSchema)(garbage)))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -342,10 +334,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => PAIR_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) =>
+              violations(s.samples, ([first, second]) =>
                 (() => {
                   const combined = Atom.AsyncResult.all({ first, second })
                   if (!Atom.AsyncResult.isSuccess(combined)) {
@@ -353,13 +345,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                   }
                   return Atom.AsyncResult.isSuccess(first) && Atom.AsyncResult.isSuccess(second) &&
                     Equal.equals(combined.value.first, first.value) && Equal.equals(combined.value.second, second.value)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -367,10 +356,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => PAIR_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) => {
+              violations(s.samples, ([first, second]) => {
                 if (!Atom.AsyncResult.isFailure(first)) {
                   return true
                 }
@@ -383,9 +372,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -393,10 +380,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const routed = Atom.AsyncResult.builder(result).onError(() => 'typed' as const).orElse(() =>
                   'other' as const
                 )
@@ -409,9 +396,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -419,15 +404,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => PAIR_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) => sameResultTag(first, second) || !Equal.equals(first, second))
+              violations(s.samples, ([first, second]) => sameResultTag(first, second) || !Equal.equals(first, second))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -435,10 +418,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const waited = Atom.AsyncResult.waiting(result)
                 const touched = Atom.AsyncResult.waiting(result, { touch: true })
                 return waited.waiting === true && touched.waiting === true &&
@@ -446,9 +429,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -456,18 +437,15 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 !Atom.AsyncResult.isFailure(result) ||
-                Equal.equals(Atom.AsyncResult.flatMap(result, (n: number) => Atom.AsyncResult.success(n + 1)), result)
-              )
+                Equal.equals(Atom.AsyncResult.flatMap(result, (n: number) => Atom.AsyncResult.success(n + 1)), result))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -475,10 +453,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const equal = Equal.equals(result, Atom.AsyncResult.waiting(result))
                 if (result.waiting) {
                   return equal
@@ -487,9 +465,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -497,21 +473,18 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => MSG_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((message) =>
+              violations(s.samples, (message) =>
                 (() => {
                   const bare = Atom.AsyncResult.failure(Cause.fail(message))
                   return Option.isNone(Atom.AsyncResult.value(bare)) &&
                     Equal.equals(Atom.AsyncResult.error(bare), Option.some(message))
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -519,12 +492,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
-          (s) => Effect.sync(() => s.samples.every((result) => exitRoundtripHolds(result))),
+          'violations',
+          (s) => Effect.sync(() => violations(s.samples, (result) => exitRoundtripHolds(result))),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -532,21 +503,18 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 !Atom.AsyncResult.isSuccess(result) ||
                 Equal.equals(
                   Atom.AsyncResult.fromExitWithPrevious(Atom.AsyncResult.toExit(result), Option.some(result)),
                   Atom.AsyncResult.success(result.value),
-                )
-              )
+                ))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -554,22 +522,19 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const fromNothing = Atom.AsyncResult.waitingFrom(Option.none())
                   const fromResult = Atom.AsyncResult.waitingFrom(Option.some(result))
                   return Atom.AsyncResult.isInitial(fromNothing) && fromNothing.waiting === true &&
                     Equal.equals(fromResult, Atom.AsyncResult.waiting(result))
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -577,19 +542,26 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => [interruptedResult])),
         When('the law is checked against every draw')(
-          'ok',
-          (_s) =>
-            Effect.sync(
-              () => (Atom.AsyncResult.isInterrupted(interruptedResult) &&
-                Atom.AsyncResult.isFailure(interruptedResult) &&
-                Option.isNone(Atom.AsyncResult.value(interruptedResult)) &&
-                Option.isNone(Atom.AsyncResult.error(interruptedResult)) &&
-                !Atom.AsyncResult.isInterrupted(Atom.AsyncResult.failure(Cause.fail('plain')))),
-            ),
+          'results',
+          () =>
+            Effect.sync(() => ({
+              interrupted: interruptedResult,
+              plainFailure: Atom.AsyncResult.failure(Cause.fail('plain')),
+            })),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) =>
+          expect({
+            interrupted: s.results.interrupted,
+            plainFailure: s.results.plainFailure,
+            value: Atom.AsyncResult.value(s.results.interrupted),
+            error: Atom.AsyncResult.error(s.results.interrupted),
+          }).toEqual({
+            interrupted: Atom.AsyncResult.failure(Cause.interrupt(1)),
+            plainFailure: Atom.AsyncResult.failure(Cause.fail('plain')),
+            value: Option.none(),
+            error: Option.none(),
+          })
+        ),
       ),
     )
     scenario(
@@ -597,20 +569,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 Equal.equals(
                   Atom.AsyncResult.value(Atom.AsyncResult.map(result, (n: number) => n + 1)),
                   Option.map(Atom.AsyncResult.value(result), (n: number) => n + 1),
-                )
-              )
+                ))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -618,10 +587,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   if (!Atom.AsyncResult.isFailure(result)) return true
                   const mapped = Atom.AsyncResult.map(result, (n: number) => n + 1)
@@ -631,13 +600,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                       mapped.previousSuccess,
                       Option.map(result.previousSuccess, (s) => Atom.AsyncResult.successWith(s.value + 1, s)),
                     )
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -645,19 +611,19 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                Option.isSome(Atom.AsyncResult.cause(result)) === Atom.AsyncResult.isFailure(result) &&
-                (!Atom.AsyncResult.isFailure(result) ||
-                  Equal.equals(Atom.AsyncResult.cause(result), Option.some(result.cause)))
+              violations(
+                s.samples,
+                (result) =>
+                  Option.isSome(Atom.AsyncResult.cause(result)) === Atom.AsyncResult.isFailure(result) &&
+                  (!Atom.AsyncResult.isFailure(result) ||
+                    Equal.equals(Atom.AsyncResult.cause(result), Option.some(result.cause))),
               )
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -665,10 +631,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const err = Atom.AsyncResult.error(result)
                 const hasTypedCause = Atom.AsyncResult.isFailure(result) &&
                   Option.isSome(Cause.findErrorOption(result.cause))
@@ -679,9 +645,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -689,10 +653,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const routed = Atom.AsyncResult.match(result, {
                   onInitial: () => 'initial',
                   onFailure: () => 'failure',
@@ -702,9 +666,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -712,10 +674,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const routed = Atom.AsyncResult.matchWithError(result, {
                   onInitial: () => 'initial',
                   onError: () => 'error',
@@ -726,9 +688,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -736,10 +696,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const routed = Atom.AsyncResult.matchWithWaiting(result, {
                   onWaiting: () => 'waiting',
                   onError: () => 'error',
@@ -750,9 +710,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -760,12 +718,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
-          (s) => Effect.sync(() => s.samples.every((result) => flatMapInitialAndSuccessHolds(result))),
+          'violations',
+          (s) => Effect.sync(() => violations(s.samples, (result) => flatMapInitialAndSuccessHolds(result))),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -773,22 +729,19 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   if (!Atom.AsyncResult.isFailure(result)) return true
                   const mapped = Atom.AsyncResult.flatMap(result, () => Atom.AsyncResult.failure(Cause.fail('nope')))
                   return Atom.AsyncResult.isFailure(mapped) && Option.isNone(mapped.previousSuccess) &&
                     mapped.waiting === result.waiting && Equal.equals(mapped.cause, result.cause)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -796,10 +749,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => PAIR_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every(([first, second]) => {
+              violations(s.samples, ([first, second]) => {
                 const bothSucceeded = Atom.AsyncResult.isSuccess(first) && Atom.AsyncResult.isSuccess(second)
                 const list = Atom.AsyncResult.all([first, 7, second])
                 const record = Atom.AsyncResult.all({ first, marker: 7, second })
@@ -817,9 +770,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -827,19 +778,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const routed = Atom.AsyncResult.builder(result).onInitial(() => 'initial').onWaiting(() => 'waiting')
                   .onSuccess(() => 'success').onFailure(() => 'failure').orElse(() => 'other')
                 return routed === builderFirstHandler(result)
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -847,38 +796,36 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const fired = Atom.AsyncResult.builder(result).onInitialOrWaiting(() => true).orElse(() => false)
                   return fired === (Atom.AsyncResult.isInitial(result) || result.waiting)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
       'Tagged error matching fires only when the failure carries that tag',
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => TAGGED_SAMPLES)),
-        When('the law is checked against every draw')('ok', (s) =>
-          Effect.sync(() =>
-            s.samples.every((result) => {
-              const byTag = Atom.AsyncResult.builder(result).onErrorTag('T', (e) => e.code).orElse(() => -1)
-              const byTags = Atom.AsyncResult.builder(result).onErrorTag(['T'], (e) => e.code).orElse(() => -1)
-              const expected = taggedErrorCode(result)
-              return Equal.equals(byTag, expected) && Equal.equals(byTags, expected)
-            })
-          )),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        When('the law is checked against every draw')(
+          'violations',
+          (s) =>
+            Effect.sync(() =>
+              violations(s.samples, (result) => {
+                const byTag = Atom.AsyncResult.builder(result).onErrorTag('T', (e) => e.code).orElse(() => -1)
+                const byTags = Atom.AsyncResult.builder(result).onErrorTag(['T'], (e) => e.code).orElse(() => -1)
+                const expected = taggedErrorCode(result)
+                return Equal.equals(byTag, expected) && Equal.equals(byTags, expected)
+              })
+            ),
+        ),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -886,18 +833,18 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
-                (Atom.AsyncResult.builder(result).onDefect(() => true).orElse(() => false)) ===
-                  (Atom.AsyncResult.isFailure(result) && EffectResult.isSuccess(Cause.findDefect(result.cause)))
+              violations(
+                s.samples,
+                (result) =>
+                  (Atom.AsyncResult.builder(result).onDefect(() => true).orElse(() => false)) ===
+                    (Atom.AsyncResult.isFailure(result) && EffectResult.isSuccess(Cause.findDefect(result.cause))),
               )
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -905,10 +852,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   if (!Atom.AsyncResult.isFailure(result)) {
                     const routed = Atom.AsyncResult.builder(result).onSuccess(() => 's').orElse(() => 'o')
@@ -922,34 +869,26 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     return Equal.equals(handled, Cause.squash(result.cause))
                   }
                   return handled === null
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
       'An exhaustive builder renders the handled tagged case',
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => [interruptedResult])),
-        When('the exhaustive render is inspected')('ok', (_s) =>
-          Effect.sync(() =>
-            (function() {
-              const result = exhaustiveResult
-              return (() => {
-                const rendered = Atom.AsyncResult.builder(result).onErrorTag('T', (e) => `missing:${e.code}`).onDefect(
-                  () => 'defect',
-                ).onInterrupt(() => 'interrupt').exhaustive()
-                return rendered === 'missing:7'
-              })()
-            })()
-          )),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        When('the exhaustive render is inspected')(
+          'rendered',
+          () =>
+            Effect.sync(() =>
+              Atom.AsyncResult.builder(exhaustiveResult).onErrorTag('T', (e) => `missing:${e.code}`).onDefect(
+                () => 'defect',
+              ).onInterrupt(() => 'interrupt').exhaustive()
+            ),
+        ),
+        Then('every draw satisfies the law')((s, expect) => expect(s.rendered).toEqual('missing:7')),
       ),
     )
     scenario(
@@ -957,18 +896,16 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 const value: AnyValue = Atom.AsyncResult.builder(result).orNull()
                 return value === null
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -976,18 +913,22 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'checks',
           (s) =>
-            Effect.sync(() =>
-              s.samples.filter((input) => !Atom.AsyncResult.isInterrupted(input)).every((
-                result: Schema.Schema.Type<typeof resultSchema>,
-              ) => Atom.AsyncResult.builder(result).onInterrupt(() => true).orElse(() => false) === false) &&
-              Atom.AsyncResult.builder(interruptedResult).onInterrupt(() => true).orElse(() => false) === true
-            ),
+            Effect.sync(() => ({
+              unhandledInterruptions: violations(
+                s.samples.filter((input) => !Atom.AsyncResult.isInterrupted(input)),
+                (result: SampleResult) =>
+                  Atom.AsyncResult.builder(result).onInterrupt(() => true).orElse(() => false) === false,
+              ),
+              interruptedResultHandled: Atom.AsyncResult.builder(interruptedResult).onInterrupt(() => true).orElse(
+                () => false,
+              ),
+            })),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')(
+          (s, expect) => expect(s.checks).toEqual({ unhandledInterruptions: [], interruptedResultHandled: true }),
+        ),
       ),
     )
     scenario(
@@ -995,10 +936,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   if (Atom.AsyncResult.isSuccess(result)) {
                     return Equal.equals(
@@ -1017,13 +958,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     threw = true
                   }
                   return threw
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1031,10 +969,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const noValue = Atom.AsyncResult.Schema({ error: Schema.String })
                   const encoded = Option.getOrThrow(Schema.encodeOption(resultSchema)(result))
@@ -1045,13 +983,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     return Option.isNone(decoded)
                   }
                   return Option.isSome(decoded)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1059,22 +994,19 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const codex = Schema.toCodecJson(resultSchema)
                   const enc = Option.getOrThrow(Schema.encodeOption(codex)(result))
                   const dec = Option.getOrThrow(Schema.decodeOption(codex)(enc))
                   return Equal.equals(dec, result)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1082,20 +1014,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const formatted = Schema.toFormatter(resultSchema)(result)
                   return typeof formatted === 'string' && formatted.length > 0
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1103,20 +1032,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 Equal.equals(
                   result.pipe(Atom.AsyncResult.map((n: number) => n + 1)),
                   Atom.AsyncResult.map(result, (n: number) => n + 1),
-                )
-              )
+                ))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1124,10 +1050,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) => {
+              violations(s.samples, (result) => {
                 let expected = 0
                 if (Atom.AsyncResult.isSuccess(result)) {
                   expected = result.value + 1
@@ -1139,9 +1065,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
               })
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1149,21 +1073,18 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((
+              violations(s.samples, (
                 result,
               ) => (Atom.AsyncResult.isWaiting(result) === result.waiting &&
                 Atom.AsyncResult.isNotInitial(result) === !Atom.AsyncResult.isInitial(result) &&
                 Atom.AsyncResult.isNotInitial(result) ===
-                  (Atom.AsyncResult.isSuccess(result) || Atom.AsyncResult.isFailure(result)))
-              )
+                  (Atom.AsyncResult.isSuccess(result) || Atom.AsyncResult.isFailure(result))))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1171,10 +1092,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const available = Atom.AsyncResult.value(result)
                   if (Option.isSome(available)) {
@@ -1188,13 +1109,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
                     threw = true
                   }
                   return Atom.AsyncResult.getOrElse(result, () => -1) === -1 && threw
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1202,20 +1120,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('a batch of generated inputs')('samples', () => Effect.sync(() => MSG_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((
+              violations(s.samples, (
                 message,
               ) => (Atom.AsyncResult.isFailure(Atom.AsyncResult.fail(message)) &&
                 Equal.equals(Atom.AsyncResult.error(Atom.AsyncResult.fail(message)), Option.some(message)) &&
-                Option.isNone(Atom.AsyncResult.value(Atom.AsyncResult.fail(message))))
-              )
+                Option.isNone(Atom.AsyncResult.value(Atom.AsyncResult.fail(message)))))
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1226,10 +1141,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
           () => Effect.sync(() => Atom.AsyncResult.success({})),
         ),
         When('the outcome is inspected')('reading', (s) => Effect.sync(() => s.outcome)),
-        Then('it is a success carrying exactly that object')((s) => {
-          expect(s.reading).toSatisfy(Atom.AsyncResult.isSuccess)
-          expect(s.reading.value).toEqual({})
-        }),
+        Then('it is a success carrying exactly that object')(
+          (s, expect) => expect({ tag: s.reading._tag, value: s.reading.value }).toEqual({ tag: 'Success', value: {} }),
+        ),
       ),
     )
     scenario(
@@ -1240,10 +1154,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
           () => Effect.sync(() => Atom.AsyncResult.fail({})),
         ),
         When('the outcome is inspected')('reading', (s) => Effect.sync(() => s.outcome)),
-        Then('it reports a failure whose error is exactly that object')((s) => {
-          expect(s.reading).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(Atom.AsyncResult.error(s.reading)).toEqual(Option.some({}))
-        }),
+        Then('it reports a failure whose error is exactly that object')(
+          (s, expect) =>
+            expect({ tag: s.reading._tag, error: Atom.AsyncResult.error(s.reading) }).toEqual({
+              tag: 'Failure',
+              error: Option.some({}),
+            }),
+        ),
       ),
     )
     scenario(
@@ -1251,23 +1168,20 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((result) =>
+              violations(s.samples, (result) =>
                 (() => {
                   const failed = Atom.AsyncResult.failWithPrevious('boom', { previous: Option.some(result) })
                   const expected = rememberedSuccess(result)
                   return Atom.AsyncResult.isFailure(failed) && failed.waiting === false &&
                     Equal.equals(failed.previousSuccess, expected) &&
                     Equal.equals(Atom.AsyncResult.error(failed), Option.some('boom'))
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
     scenario(
@@ -1275,20 +1189,17 @@ Feature('Keeping the last good answer on screen when a retry fails')
       Gherkin.Do.pipe(
         Given('every representative result')('samples', () => Effect.sync(() => RESULT_SAMPLES)),
         When('the law is checked against every draw')(
-          'ok',
+          'violations',
           (s) =>
             Effect.sync(() =>
-              s.samples.every((_result) =>
+              violations(s.samples, (_result) =>
                 (() => {
                   const decoded = Schema.decodeUnknownOption(resultSchema)(Atom.AsyncResult.failure(Cause.fail(7)))
                   return Option.isNone(decoded)
-                })()
-              )
+                })())
             ),
         ),
-        Then('every draw satisfies the law')((s) => {
-          expect(s.ok).toBe(true)
-        }),
+        Then('every draw satisfies the law')((s, expect) => expect(s.violations).toEqual([])),
       ),
     )
   })

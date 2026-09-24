@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema } from 'effect'
@@ -104,14 +103,16 @@ Feature("Reloading a page's saved values without letting damaged entries through
                 notes: Atom.Registry.refusals(s.ctx.page),
               }
             })),
-          Then('the page shows its own number and exactly one note records the refusal')((s) => {
-            expect(s.result.reading).toBe(7)
-            expect(s.result.notes).toHaveLength(1)
-            const [note] = s.result.notes
-            if (note === undefined) throw new Error('expected one refusal note')
-            expect(note.key).toBe(row.noteKey)
-            expect(note.issue).toContain(row.issueMentions)
-          }),
+          Then('the page shows its own number and exactly one note records the refusal')(
+            (s, expect) =>
+              expect({
+                reading: s.result.reading,
+                notes: s.result.notes.map((note) => ({ key: note.key, issue: note.issue })),
+              }).toEqual({
+                reading: 7,
+                notes: [{ key: row.noteKey, issue: expect.stringContaining(row.issueMentions) }],
+              }),
+          ),
         ),
     )
   })

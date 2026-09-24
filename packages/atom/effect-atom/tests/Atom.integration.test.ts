@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, SubscriptionRef } from 'effect'
@@ -47,9 +46,7 @@ Feature('Deriving values from other values on a page')
             return { page, value }
           })),
         When('the value is read')('reading', (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.value))),
-        Then('it matches what was set')((s) => {
-          expect(s.reading).toBe(42)
-        }),
+        Then('it matches what was set')((s, expect) => expect(s.reading).toBe(42)),
       ),
     )
     scenario(
@@ -67,10 +64,13 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.set(s.ctx.page, s.ctx.value, { filled: true })
             return { before, after: Atom.Registry.get(s.ctx.page, s.ctx.value) }
           })),
-        Then('the page first held the empty object and then the replacement')((s) => {
-          expect(s.readings.before).toEqual({})
-          expect(s.readings.after).toEqual({ filled: true })
-        }),
+        Then('the page first held the empty object and then the replacement')(
+          (s, expect) =>
+            expect({ before: s.readings.before, after: s.readings.after }).toEqual({
+              before: {},
+              after: { filled: true },
+            }),
+        ),
       ),
     )
     scenario(
@@ -87,9 +87,7 @@ Feature('Deriving values from other values on a page')
           'reading',
           (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.doubled)),
         ),
-        Then('it reflects the source value doubled')((s) => {
-          expect(s.reading).toBe(20)
-        }),
+        Then('it reflects the source value doubled')((s, expect) => expect(s.reading).toBe(20)),
       ),
     )
     scenario(
@@ -116,9 +114,7 @@ Feature('Deriving values from other values on a page')
             stop()
             return heard
           })),
-        Then('the watcher heard 0, then 1, then 2')((s) => {
-          expect(s.heard).toEqual([0, 1, 2])
-        }),
+        Then('the watcher heard 0, then 1, then 2')((s, expect) => expect(s.heard).toEqual([0, 1, 2])),
       ),
     )
     scenario(
@@ -135,10 +131,9 @@ Feature('Deriving values from other values on a page')
             first: Atom.Registry.get(s.ctx.page, s.ctx.lengthOfName('foo')),
             second: Atom.Registry.get(s.ctx.page, s.ctx.lengthOfName('bar')),
           }))),
-        Then('each item keeps its own value')((s) => {
-          expect(s.readings.first).toBe(3)
-          expect(s.readings.second).toBe(3)
-        }),
+        Then('each item keeps its own value')(
+          (s, expect) => expect(s.readings).toMatchObject({ first: 3, second: 3 }),
+        ),
       ),
     )
     scenario(
@@ -160,10 +155,13 @@ Feature('Deriving values from other values on a page')
               return { firstReading, secondReading }
             }),
         ),
-        Then('both readings show it is still loading')((s) => {
-          expect(s.readings.firstReading).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.secondReading).toSatisfy(Atom.AsyncResult.isInitial)
-        }),
+        Then('both readings show it is still loading')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              firstReading: { _tag: 'Initial' },
+              secondReading: { _tag: 'Initial' },
+            }),
+        ),
       ),
     )
     scenario(
@@ -180,9 +178,9 @@ Feature('Deriving values from other values on a page')
           'reading',
           (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)),
         ),
-        Then('the stand-in is shown, marked as still loading')((s) => {
-          expect(s.reading).toMatchObject({ _tag: 'Success', value: 'cached', waiting: true })
-        }),
+        Then('the stand-in is shown, marked as still loading')(
+          (s, expect) => expect(s.reading).toMatchObject({ _tag: 'Success', value: 'cached', waiting: true }),
+        ),
       ),
     )
     scenario(
@@ -201,9 +199,10 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.refresh(s.ctx.page, s.ctx.withStandIn)
             return Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)
           })),
-        Then('the real failure is shown, not the stand-in')((s) => {
-          expect(s.reading).toSatisfy(Atom.AsyncResult.isFailure)
-        }),
+        Then('the real failure is shown, not the stand-in')(
+          (s, expect) =>
+            expect(s.reading).toMatchObject({ _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'down' }] } }),
+        ),
       ),
     )
     scenario(
@@ -248,11 +247,9 @@ Feature('Deriving values from other values on a page')
             const afterRejection = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { before, whilePending, afterRejection }
           })),
-        Then('the change showed immediately, then rolled back to the stored value')((s) => {
-          expect(s.readings.before).toBe(1)
-          expect(s.readings.whilePending).toBe(99)
-          expect(s.readings.afterRejection).toBe(1)
-        }),
+        Then('the change showed immediately, then rolled back to the stored value')(
+          (s, expect) => expect(s.readings).toMatchObject({ before: 1, whilePending: 99, afterRejection: 1 }),
+        ),
       ),
     )
     scenario(
@@ -296,10 +293,9 @@ Feature('Deriving values from other values on a page')
             const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
-        Then('the confirmed value stays on screen')((s) => {
-          expect(s.readings.whilePending).toBe(99)
-          expect(s.readings.afterConfirmation).toBe(99)
-        }),
+        Then('the confirmed value stays on screen')(
+          (s, expect) => expect(s.readings).toMatchObject({ whilePending: 99, afterConfirmation: 99 }),
+        ),
       ),
     )
     scenario(
@@ -326,10 +322,9 @@ Feature('Deriving values from other values on a page')
               return { duringBurst, afterQuiet }
             }),
         ),
-        Then('nothing changed during the burst, and the final edit arrived once it was quiet')((s) => {
-          expect(s.readings.duringBurst).toBe(0)
-          expect(s.readings.afterQuiet).toBe(3)
-        }),
+        Then('nothing changed during the burst, and the final edit arrived once it was quiet')(
+          (s, expect) => expect(s.readings).toMatchObject({ duringBurst: 0, afterQuiet: 3 }),
+        ),
       ),
     )
     scenario(
@@ -356,9 +351,9 @@ Feature('Deriving values from other values on a page')
               return { starts }
             }),
         ),
-        Then('the value was cleaned up on its own schedule and started over')((s) => {
-          expect(s.readings.starts).toBe(2)
-        }),
+        Then('the value was cleaned up on its own schedule and started over')(
+          (s, expect) => expect(s.readings.starts).toBe(2),
+        ),
       ),
     )
     scenario(
@@ -384,9 +379,7 @@ Feature('Deriving values from other values on a page')
             const starts = s.ctx.starts()
             return { first, second, starts }
           })),
-        Then('the member was cleaned up and recreated on demand')((s) => {
-          expect(s.readings.starts).toBe(2)
-        }),
+        Then('the member was cleaned up and recreated on demand')((s, expect) => expect(s.readings.starts).toBe(2)),
       ),
     )
     scenario(
@@ -407,13 +400,9 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
             return Atom.Registry.get(s.ctx.page, s.ctx.feed)
           })),
-        Then('every update arrived in order and the feed is marked finished')((s) => {
-          expect(s.final).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.final)) {
-            expect(s.final.value.done).toBe(true)
-            expect([...s.final.value.items]).toEqual([1, 2, 3])
-          }
-        }),
+        Then('every update arrived in order and the feed is marked finished')(
+          (s, expect) => expect(s.final).toMatchObject({ _tag: 'Success', value: { done: true, items: [1, 2, 3] } }),
+        ),
       ),
     )
     scenario(
@@ -435,10 +424,9 @@ Feature('Deriving values from other values on a page')
             const second = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 9)
             return { first, second }
           })),
-        Then('the view tracked both changes')((s) => {
-          expect(s.readings.first).toBe(5)
-          expect(s.readings.second).toBe(9)
-        }),
+        Then('the view tracked both changes')(
+          (s, expect) => expect(s.readings).toMatchObject({ first: 5, second: 9 }),
+        ),
       ),
     )
     scenario(
@@ -465,9 +453,7 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.subscribe(freshPage, s.ctx.remembered, () => {}, { immediate: true })
             return { onFreshPage: Atom.Registry.get(freshPage, s.ctx.remembered) }
           })),
-        Then('the fresh page sees the remembered value')((s) => {
-          expect(s.readings.onFreshPage).toBe(42)
-        }),
+        Then('the fresh page sees the remembered value')((s, expect) => expect(s.readings.onFreshPage).toBe(42)),
       ),
     )
     scenario(
@@ -488,11 +474,14 @@ Feature('Deriving values from other values on a page')
             const plainAfter = Atom.Registry.get(s.ctx.page, s.ctx.plain)
             return { plainBefore, decodedBefore, plainAfter }
           })),
-        Then('both read as empty, and a write keeps the value locally')((s) => {
-          expect(s.readings.plainBefore).toBe('')
-          expect(s.readings.decodedBefore).toSatisfy(Option.isNone)
-          expect(s.readings.plainAfter).toBe('hello')
-        }),
+        Then('both read as empty, and a write keeps the value locally')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              plainBefore: '',
+              decodedBefore: { _tag: 'None' },
+              plainAfter: 'hello',
+            }),
+        ),
       ),
     )
     scenario(
@@ -526,10 +515,13 @@ Feature('Deriving values from other values on a page')
               return { fresh, revalidated }
             }),
         ),
-        Then('the first read was fresh, and the stale read refreshed to the new value')((s) => {
-          expect(s.readings.fresh).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.revalidated).toMatchObject({ _tag: 'Success', value: 2 })
-        }),
+        Then('the first read was fresh, and the stale read refreshed to the new value')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              fresh: { _tag: 'Success', value: 1 },
+              revalidated: { _tag: 'Success', value: 2 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -544,9 +536,7 @@ Feature('Deriving values from other values on a page')
           'members',
           (s) => Effect.sync(() => ({ first: s.ctx.family(1), second: s.ctx.family(1) })),
         ),
-        Then('both asks returned the same member')((s) => {
-          expect(s.members.first).toBe(s.members.second)
-        }),
+        Then('both asks returned the same member')((s, expect) => expect(s.members.first).toBe(s.members.second)),
       ),
     )
     scenario(
@@ -587,10 +577,13 @@ Feature('Deriving values from other values on a page')
             const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
-        Then('the change reported itself in flight, then settled on the stored value')((s) => {
-          expect(s.readings.whilePending).toMatchObject({ _tag: 'Success', waiting: true, value: 99 })
-          expect(s.readings.afterConfirmation).toMatchObject({ _tag: 'Success', value: 99, waiting: false })
-        }),
+        Then('the change reported itself in flight, then settled on the stored value')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              whilePending: { _tag: 'Success', waiting: true, value: 99 },
+              afterConfirmation: { _tag: 'Success', value: 99, waiting: false },
+            }),
+        ),
       ),
     )
     scenario(
@@ -617,13 +610,16 @@ Feature('Deriving values from other values on a page')
               return { beforeDouble, beforeQuad, baseAfter, afterDouble, afterQuad }
             }),
         ),
-        Then('both derived values tracked the write, and the source changed underneath')((s) => {
-          expect(s.readings.beforeDouble).toBe(20)
-          expect(s.readings.beforeQuad).toBe(40)
-          expect(s.readings.baseAfter).toBe(100)
-          expect(s.readings.afterDouble).toBe(200)
-          expect(s.readings.afterQuad).toBe(400)
-        }),
+        Then('both derived values tracked the write, and the source changed underneath')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              beforeDouble: 20,
+              beforeQuad: 40,
+              baseAfter: 100,
+              afterDouble: 200,
+              afterQuad: 400,
+            }),
+        ),
       ),
     )
     scenario(
@@ -648,11 +644,14 @@ Feature('Deriving values from other values on a page')
               return { before, after, afterAgain }
             }),
         ),
-        Then('the mapped values stayed empty until the source ran, then showed the mapped outcomes')((s) => {
-          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.after).toMatchObject({ _tag: 'Success', value: 20 })
-          expect(s.readings.afterAgain).toMatchObject({ _tag: 'Success', value: 21 })
-        }),
+        Then('the mapped values stayed empty until the source ran, then showed the mapped outcomes')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Initial' },
+              after: { _tag: 'Success', value: 20 },
+              afterAgain: { _tag: 'Success', value: 21 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -692,16 +691,19 @@ Feature('Deriving values from other values on a page')
               withInitialFnAfter,
             }
           })),
-        Then('the plain values were empty until asked, and the ones with stand-ins started filled in')((s) => {
-          expect(s.readings.plainBefore).toSatisfy(Option.isNone)
-          expect(s.readings.withInitialBefore).toBe(0)
-          expect(s.readings.plainFnBefore).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.withInitialFnBefore).toMatchObject({ _tag: 'Success', value: 0 })
-          expect(s.readings.plainAfter).toMatchObject({ _tag: 'Some', value: 6 })
-          expect(s.readings.withInitialAfter).toBe(5)
-          expect(s.readings.plainFnAfter).toMatchObject({ _tag: 'Success', value: 20 })
-          expect(s.readings.withInitialFnAfter).toMatchObject({ _tag: 'Success', value: 6 })
-        }),
+        Then('the plain values were empty until asked, and the ones with stand-ins started filled in')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              plainBefore: { _tag: 'None' },
+              withInitialBefore: 0,
+              plainFnBefore: { _tag: 'Initial' },
+              withInitialFnBefore: { _tag: 'Success', value: 0 },
+              plainAfter: { _tag: 'Some', value: 6 },
+              withInitialAfter: 5,
+              plainFnAfter: { _tag: 'Success', value: 20 },
+              withInitialFnAfter: { _tag: 'Success', value: 6 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -733,14 +735,17 @@ Feature('Deriving values from other values on a page')
               return { before, running, interrupted, reset, restarted, finished }
             }),
         ),
-        Then('the computation reported empty, waiting, interrupted, empty again, waiting again, then done')((s) => {
-          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.running).toMatchObject({ _tag: 'Initial', waiting: true })
-          expect(s.readings.interrupted).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.reset).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.restarted).toMatchObject({ _tag: 'Initial', waiting: true })
-          expect(s.readings.finished).toSatisfy(Atom.AsyncResult.isSuccess)
-        }),
+        Then('the computation reported empty, waiting, interrupted, empty again, waiting again, then done')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Initial' },
+              running: { _tag: 'Initial', waiting: true },
+              interrupted: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Interrupt' }] } },
+              reset: { _tag: 'Initial' },
+              restarted: { _tag: 'Initial', waiting: true },
+              finished: { _tag: 'Success' },
+            }),
+        ),
       ),
     )
     scenario(
@@ -776,14 +781,17 @@ Feature('Deriving values from other values on a page')
               return { before, during, started, finishedBefore, finishedAfter, after }
             }),
         ),
-        Then('all three runs started and finished, and the value reflects the latest run')((s) => {
-          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.during).toMatchObject({ _tag: 'Initial', waiting: true })
-          expect(s.readings.started).toBe(3)
-          expect(s.readings.finishedBefore).toBe(0)
-          expect(s.readings.finishedAfter).toBe(3)
-          expect(s.readings.after).toSatisfy(Atom.AsyncResult.isSuccess)
-        }),
+        Then('all three runs started and finished, and the value reflects the latest run')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Initial' },
+              during: { _tag: 'Initial', waiting: true },
+              started: 3,
+              finishedBefore: 0,
+              finishedAfter: 3,
+              after: { _tag: 'Success' },
+            }),
+        ),
       ),
     )
     scenario(
@@ -807,10 +815,13 @@ Feature('Deriving values from other values on a page')
               return { before, after }
             }),
         ),
-        Then('the stand-in was shown while waiting, then the fetched answer replaced it')((s) => {
-          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 0 })
-          expect(s.readings.after).toMatchObject({ _tag: 'Success', waiting: false, value: 1 })
-        }),
+        Then('the stand-in was shown while waiting, then the fetched answer replaced it')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Success', waiting: true, value: 0 },
+              after: { _tag: 'Success', waiting: false, value: 1 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -836,11 +847,14 @@ Feature('Deriving values from other values on a page')
               return { before, during, after }
             }),
         ),
-        Then('the value was empty, then waiting, then filled in with the streamed answer')((s) => {
-          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.during).toMatchObject({ _tag: 'Initial', waiting: true })
-          expect(s.readings.after).toMatchObject({ _tag: 'Success', waiting: false, value: 2 })
-        }),
+        Then('the value was empty, then waiting, then filled in with the streamed answer')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Initial' },
+              during: { _tag: 'Initial', waiting: true },
+              after: { _tag: 'Success', waiting: false, value: 2 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -867,12 +881,15 @@ Feature('Deriving values from other values on a page')
               return { before, loaded, afterRefresh, settled }
             }),
         ),
-        Then('the stand-in showed first, the streamed answer arrived, the refresh kept it, and it settled')((s) => {
-          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 0 })
-          expect(s.readings.loaded).toMatchObject({ _tag: 'Success', value: 5 })
-          expect(s.readings.afterRefresh).toMatchObject({ _tag: 'Success', value: 5 })
-          expect(s.readings.settled).toMatchObject({ _tag: 'Success', waiting: false, value: 5 })
-        }),
+        Then('the stand-in showed first, the streamed answer arrived, the refresh kept it, and it settled')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Success', waiting: true, value: 0 },
+              loaded: { _tag: 'Success', value: 5 },
+              afterRefresh: { _tag: 'Success', value: 5 },
+              settled: { _tag: 'Success', waiting: false, value: 5 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -904,13 +921,17 @@ Feature('Deriving values from other values on a page')
         ),
         Then(
           'the dry stream reported nothing to show, the failing stream reported the failure, and the plain one filled in',
-        )((
-          s,
-        ) => {
-          expect(s.readings.emptyResult).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.failingResult).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.streamedResult).toMatchObject({ _tag: 'Success', value: 7 })
-        }),
+        )(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              emptyResult: {
+                _tag: 'Failure',
+                cause: { reasons: [{ _tag: 'Fail', error: { _tag: 'NoSuchElementError' } }] },
+              },
+              failingResult: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'boom' }] } },
+              streamedResult: { _tag: 'Success', value: 7 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -933,13 +954,9 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
             return Atom.Registry.get(s.ctx.page, s.ctx.feed)
           })),
-        Then('the second batch replaced the first instead of joining it')((s) => {
-          expect(s.result).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.result)) {
-            expect(s.result.value.done).toBe(false)
-            expect([...s.result.value.items]).toEqual([3, 4])
-          }
-        }),
+        Then('the second batch replaced the first instead of joining it')(
+          (s, expect) => expect(s.result).toMatchObject({ _tag: 'Success', value: { done: false, items: [3, 4] } }),
+        ),
       ),
     )
     scenario(
@@ -956,9 +973,13 @@ Feature('Deriving values from other values on a page')
           'result',
           (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.feed)),
         ),
-        Then('the feed reports that there was nothing to show')((s) => {
-          expect(s.result).toSatisfy(Atom.AsyncResult.isFailure)
-        }),
+        Then('the feed reports that there was nothing to show')(
+          (s, expect) =>
+            expect(s.result).toMatchObject({
+              _tag: 'Failure',
+              cause: { reasons: [{ _tag: 'Fail', error: { _tag: 'NoSuchElementError' } }] },
+            }),
+        ),
       ),
     )
     scenario(
@@ -975,9 +996,9 @@ Feature('Deriving values from other values on a page')
           'result',
           (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.feed)),
         ),
-        Then('the feed reports the failure')((s) => {
-          expect(s.result).toSatisfy(Atom.AsyncResult.isFailure)
-        }),
+        Then('the feed reports the failure')((s, expect) =>
+          expect(s.result).toMatchObject({ _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'boom' }] } })
+        ),
       ),
     )
     scenario(
@@ -1005,13 +1026,9 @@ Feature('Deriving values from other values on a page')
               )
             }),
         ),
-        Then('every batch that was asked for arrived once the signal came')((s) => {
-          expect(s.result).toSatisfy(Atom.AsyncResult.isSuccess)
-          if (Atom.AsyncResult.isSuccess(s.result)) {
-            expect(s.result.value.done).toBe(false)
-            expect([...s.result.value.items]).toEqual([7, 7, 7])
-          }
-        }),
+        Then('every batch that was asked for arrived once the signal came')(
+          (s, expect) => expect(s.result).toMatchObject({ _tag: 'Success', value: { done: false, items: [7, 7, 7] } }),
+        ),
       ),
     )
     scenario(
@@ -1046,26 +1063,18 @@ Feature('Deriving values from other values on a page')
         ),
         Then(
           'every view tracked its reference, writes reached the references, and the broken view reported its problem',
-        )((
-          s,
-        ) => {
-          expect(s.readings.viewBefore).toBe(0)
-          expect(s.readings.effectBefore).toSatisfy((result) =>
-            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isSuccess(result)
-          )
-          expect(s.readings.functionBefore).toSatisfy((result) =>
-            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isSuccess(result)
-          )
-          expect(s.readings.brokenBefore).toSatisfy((result) =>
-            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isFailure(result)
-          )
-          expect(s.readings.viewWritten).toBe(5)
-          expect(s.readings.effectWritten).toSatisfy((result) =>
-            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isSuccess(result)
-          )
-
-          expect(s.readings.viewChanged).toBe(9)
-        }),
+        )(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              viewBefore: 0,
+              effectBefore: { _tag: 'Success' },
+              functionBefore: { _tag: 'Success' },
+              brokenBefore: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'nope' }] } },
+              viewWritten: 5,
+              effectWritten: { _tag: 'Success' },
+              viewChanged: 9,
+            }),
+        ),
       ),
     )
     scenario(
@@ -1140,18 +1149,21 @@ Feature('Deriving values from other values on a page')
               refFunctionResult,
             }
           })),
-        Then('every value came from the services and every task ran against them')((s) => {
-          expect(s.readings.countResult).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.doubledResult).toMatchObject({ _tag: 'Success', value: 2 })
-          expect(s.readings.addResult).toMatchObject({ _tag: 'Success', value: 5 })
-          expect(s.readings.curriedResult).toMatchObject({ _tag: 'Success', value: 21 })
-          expect(s.readings.reactiveResult).toMatchObject({ _tag: 'Success', value: 5 })
-          expect(s.readings.reactiveStreamResult).toMatchObject({ _tag: 'Success', value: 3 })
-          expect(s.readings.feedResult).toMatchObject({ _tag: 'Success', value: { done: true } })
-          expect(s.readings.streamedResult).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.refResult).toMatchObject({ _tag: 'Success', value: 0 })
-          expect(s.readings.refFunctionResult).toMatchObject({ _tag: 'Success', value: 0 })
-        }),
+        Then('every value came from the services and every task ran against them')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              countResult: { _tag: 'Success', value: 1 },
+              doubledResult: { _tag: 'Success', value: 2 },
+              addResult: { _tag: 'Success', value: 5 },
+              curriedResult: { _tag: 'Success', value: 21 },
+              reactiveResult: { _tag: 'Success', value: 5 },
+              reactiveStreamResult: { _tag: 'Success', value: 3 },
+              feedResult: { _tag: 'Success', value: { done: true } },
+              streamedResult: { _tag: 'Success', value: 1 },
+              refResult: { _tag: 'Success', value: 0 },
+              refFunctionResult: { _tag: 'Success', value: 0 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1171,9 +1183,9 @@ Feature('Deriving values from other values on a page')
             }),
         ),
         When('the value is read')('reading', (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.count))),
-        Then('it reflects the number the recipe provided')((s) => {
-          expect(s.reading).toMatchObject({ _tag: 'Success', value: 7 })
-        }),
+        Then('it reflects the number the recipe provided')(
+          (s, expect) => expect(s.reading).toMatchObject({ _tag: 'Success', value: 7 }),
+        ),
       ),
     )
     scenario(
@@ -1196,12 +1208,15 @@ Feature('Deriving values from other values on a page')
             feed: Atom.Registry.get(s.ctx.page, s.ctx.feed),
             refView: Atom.Registry.get(s.ctx.page, s.ctx.refView),
           }))),
-        Then('every value reports the failure')((s) => {
-          expect(s.readings.count).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.add).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.feed).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.refView).toSatisfy(Atom.AsyncResult.isFailure)
-        }),
+        Then('every value reports the failure')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              count: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'boom' }] } },
+              add: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'boom' }] } },
+              feed: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'boom' }] } },
+              refView: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'boom' }] } },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1220,10 +1235,9 @@ Feature('Deriving values from other values on a page')
             const afterChange = Atom.Registry.get(s.ctx.page, s.ctx.count)
             return { seeded, afterChange }
           })),
-        Then('the page started with the saved value and kept the change')((s) => {
-          expect(s.readings.seeded).toBe(10)
-          expect(s.readings.afterChange).toBe(5)
-        }),
+        Then('the page started with the saved value and kept the change')(
+          (s, expect) => expect(s.readings).toMatchObject({ seeded: 10, afterChange: 5 }),
+        ),
       ),
     )
     scenario(
@@ -1242,10 +1256,9 @@ Feature('Deriving values from other values on a page')
             const after = Atom.Registry.get(s.ctx.page, s.ctx.count)
             return { before, after }
           })),
-        Then('the value on the page was replaced by the saved copy')((s) => {
-          expect(s.readings.before).toBe(0)
-          expect(s.readings.after).toBe(42)
-        }),
+        Then('the value on the page was replaced by the saved copy')(
+          (s, expect) => expect(s.readings).toMatchObject({ before: 0, after: 42 }),
+        ),
       ),
     )
     scenario(
@@ -1259,9 +1272,7 @@ Feature('Deriving values from other values on a page')
             return { page, count }
           })),
         When('the value is read')('reading', (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.count))),
-        Then('it shows the saved value')((s) => {
-          expect(s.reading).toBe(42)
-        }),
+        Then('it shows the saved value')((s, expect) => expect(s.reading).toBe(42)),
       ),
     )
     scenario(
@@ -1291,10 +1302,9 @@ Feature('Deriving values from other values on a page')
               return { restored, afterRefresh }
             }),
         ),
-        Then('the derived value was restored from the saved copy, then returned to its own schedule')((s) => {
-          expect(s.readings.restored).toBe(99)
-          expect(s.readings.afterRefresh).toBe(0)
-        }),
+        Then('the derived value was restored from the saved copy, then returned to its own schedule')(
+          (s, expect) => expect(s.readings).toMatchObject({ restored: 99, afterRefresh: 0 }),
+        ),
       ),
     )
     scenario(
@@ -1315,10 +1325,9 @@ Feature('Deriving values from other values on a page')
             value: Atom.Registry.get(s.ctx.page, s.ctx.named),
             name: s.ctx.named.spec.label?.[0],
           }))),
-        Then('the value works normally and keeps the name it was given')((s) => {
-          expect(s.readings.value).toBe(0)
-          expect(s.readings.name).toBe('my-count')
-        }),
+        Then('the value works normally and keeps the name it was given')(
+          (s, expect) => expect(s.readings).toMatchObject({ value: 0, name: 'my-count' }),
+        ),
       ),
     )
     scenario(
@@ -1342,12 +1351,15 @@ Feature('Deriving values from other values on a page')
             const notYetLoadedValue = Atom.getServerValue(s.ctx.notYetLoaded, s.ctx.page)
             return { plain, overriddenValue, nestedValue, notYetLoadedValue }
           })),
-        Then('each value followed its own server recipe')((s) => {
-          expect(s.readings.plain).toBe(5)
-          expect(s.readings.overriddenValue).toBe(7)
-          expect(s.readings.nestedValue).toBe(15)
-          expect(s.readings.notYetLoadedValue).toMatchObject({ _tag: 'Initial', waiting: true })
-        }),
+        Then('each value followed its own server recipe')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              plain: 5,
+              overriddenValue: 7,
+              nestedValue: 15,
+              notYetLoadedValue: { _tag: 'Initial', waiting: true },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1373,12 +1385,15 @@ Feature('Deriving values from other values on a page')
             const mappedAfter = Atom.Registry.get(s.ctx.page, s.ctx.mappedWithStandIn)
             return { before, after, mappedBefore, mappedAfter }
           })),
-        Then('the stored copy showed until the value ran, then the real outcome replaced it')((s) => {
-          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 'cached' })
-          expect(s.readings.after).toMatchObject({ _tag: 'Success', waiting: false, value: '1' })
-          expect(s.readings.mappedBefore).toMatchObject({ _tag: 'Success', waiting: true, value: 'cached' })
-          expect(s.readings.mappedAfter).toMatchObject({ _tag: 'Success', waiting: false, value: '2!' })
-        }),
+        Then('the stored copy showed until the value ran, then the real outcome replaced it')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Success', waiting: true, value: 'cached' },
+              after: { _tag: 'Success', waiting: false, value: '1' },
+              mappedBefore: { _tag: 'Success', waiting: true, value: 'cached' },
+              mappedAfter: { _tag: 'Success', waiting: false, value: '2!' },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1418,12 +1433,15 @@ Feature('Deriving values from other values on a page')
               return { first, firstAlways, revalidated, revalidatedAlways }
             }),
         ),
-        Then('both values refreshed to the new store value when attention returned')((s) => {
-          expect(s.readings.first).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.firstAlways).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.revalidated).toMatchObject({ _tag: 'Success', value: 2 })
-          expect(s.readings.revalidatedAlways).toMatchObject({ _tag: 'Success', value: 2 })
-        }),
+        Then('both values refreshed to the new store value when attention returned')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              first: { _tag: 'Success', value: 1 },
+              firstAlways: { _tag: 'Success', value: 1 },
+              revalidated: { _tag: 'Success', value: 2 },
+              revalidatedAlways: { _tag: 'Success', value: 2 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1449,12 +1467,19 @@ Feature('Deriving values from other values on a page')
             const readsAfterSecond = s.ctx.reads()
             return { first, readsAfterFirst, second, readsAfterSecond }
           })),
-        Then('the first sight did not fetch again, and only the later refresh did')((s) => {
-          expect(s.readings.first).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.readsAfterFirst).toBe(1)
-          expect(s.readings.second).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.readsAfterSecond).toBeGreaterThan(1)
-        }),
+        Then('the first sight did not fetch again, and only the later refresh did')((s, expect) =>
+          expect({
+            first: Atom.AsyncResult.value(s.readings.first),
+            readsAfterFirst: s.readings.readsAfterFirst,
+            second: Atom.AsyncResult.value(s.readings.second),
+            readsAfterSecond: s.readings.readsAfterSecond,
+          }).toMatchObject({
+            first: Option.some(1),
+            readsAfterFirst: 1,
+            second: Option.some(1),
+            readsAfterSecond: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(1)))),
+          })
+        ),
       ),
     )
     scenario(
@@ -1474,10 +1499,13 @@ Feature('Deriving values from other values on a page')
             failing: Atom.Registry.get(s.ctx.page, s.ctx.failing),
             waiting: Atom.Registry.get(s.ctx.page, s.ctx.waiting),
           }))),
-        Then('the failed value reports its failure and the waiting value stays waiting')((s) => {
-          expect(s.readings.failing).toSatisfy(Atom.AsyncResult.isFailure)
-          expect(s.readings.waiting).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
-        }),
+        Then('the failed value reports its failure and the waiting value stays waiting')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              failing: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Fail', error: 'down' }] } },
+              waiting: { _tag: 'Success', waiting: true, value: 1 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1551,14 +1579,17 @@ Feature('Deriving values from other values on a page')
             const afterConfirmation2 = Atom.Registry.get(s.ctx.page, s.ctx.optimistic2)
             return { before, whilePending, afterConfirmation, before2, whilePending2, afterConfirmation2 }
           })),
-        Then('each change showed its progress, then settled on the confirmed value')((s) => {
-          expect(s.readings.before).toBe(1)
-          expect(s.readings.whilePending).toBe(990)
-          expect(s.readings.afterConfirmation).toBe(99)
-          expect(s.readings.before2).toMatchObject({ _tag: 'Success', value: 1 })
-          expect(s.readings.whilePending2).toMatchObject({ _tag: 'Success', waiting: true, value: 990 })
-          expect(s.readings.afterConfirmation2).toMatchObject({ _tag: 'Success', waiting: false, value: 99 })
-        }),
+        Then('each change showed its progress, then settled on the confirmed value')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: 1,
+              whilePending: 990,
+              afterConfirmation: 99,
+              before2: { _tag: 'Success', value: 1 },
+              whilePending2: { _tag: 'Success', waiting: true, value: 990 },
+              afterConfirmation2: { _tag: 'Success', waiting: false, value: 99 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1589,9 +1620,9 @@ Feature('Deriving values from other values on a page')
             const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { afterConfirmation }
           })),
-        Then('the confirmed value settled on screen right away')((s) => {
-          expect(s.readings.afterConfirmation).toBe(99)
-        }),
+        Then('the confirmed value settled on screen right away')(
+          (s, expect) => expect(s.readings.afterConfirmation).toBe(99),
+        ),
       ),
     )
     scenario(
@@ -1640,11 +1671,9 @@ Feature('Deriving values from other values on a page')
               return { whileLoading, loaded, stored }
             }),
         ),
-        Then('the fallback showed while loading, then the stored value appeared and the store was untouched')((s) => {
-          expect(s.readings.whileLoading).toBe(0)
-          expect(s.readings.loaded).toBe(42)
-          expect(s.readings.stored).toBe('42')
-        }),
+        Then('the fallback showed while loading, then the stored value appeared and the store was untouched')(
+          (s, expect) => expect(s.readings).toMatchObject({ whileLoading: 0, loaded: 42, stored: '42' }),
+        ),
       ),
     )
     scenario(
@@ -1691,9 +1720,7 @@ Feature('Deriving values from other values on a page')
             yield* Deferred.succeed(s.ctx.gate, void 0)
             return Atom.Registry.get(s.ctx.page, s.ctx.remembered)
           })),
-        Then('the written value wins over the slower store read')((s) => {
-          expect(s.value).toBe(99)
-        }),
+        Then('the written value wins over the slower store read')((s, expect) => expect(s.value).toBe(99)),
       ),
     )
     scenario(
@@ -1747,12 +1774,15 @@ Feature('Deriving values from other values on a page')
               return { whileLoading, loaded, afterWrite, stored }
             }),
         ),
-        Then('the value reported loading, filled in the fallback, accepted the write, and wrote it through')((s) => {
-          expect(s.readings.whileLoading).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.readings.loaded).toMatchObject({ _tag: 'Success', value: 0 })
-          expect(s.readings.afterWrite).toMatchObject({ _tag: 'Success', value: 99 })
-          expect(s.readings.stored).toBe('99')
-        }),
+        Then('the value reported loading, filled in the fallback, accepted the write, and wrote it through')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              whileLoading: { _tag: 'Initial' },
+              loaded: { _tag: 'Success', value: 0 },
+              afterWrite: { _tag: 'Success', value: 99 },
+              stored: '99',
+            }),
+        ),
       ),
     )
     scenario(
@@ -1777,12 +1807,15 @@ Feature('Deriving values from other values on a page')
             const restartedGuarded = Atom.Registry.get(s.ctx.page, s.ctx.guarded)
             return { before, guardedBefore, restarted, restartedGuarded }
           })),
-        Then('both values showed their stand-in while running, and started over once read again')((s) => {
-          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
-          expect(s.readings.guardedBefore).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
-          expect(s.readings.restarted).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
-          expect(s.readings.restartedGuarded).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
-        }),
+        Then('both values showed their stand-in while running, and started over once read again')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              before: { _tag: 'Success', waiting: true, value: 1 },
+              guardedBefore: { _tag: 'Success', waiting: true, value: 1 },
+              restarted: { _tag: 'Success', waiting: true, value: 1 },
+              restartedGuarded: { _tag: 'Success', waiting: true, value: 1 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -1809,13 +1842,16 @@ Feature('Deriving values from other values on a page')
             const finalValue = yield* withPage(s.ctx.value.pipe(Atom.get))
             return { initial, afterSet, afterUpdate, doubled, finalValue }
           })),
-        Then('each step saw the value the previous step left behind, and the refresh returned it to its start')((s) => {
-          expect(s.readings.initial).toBe(0)
-          expect(s.readings.afterSet).toBe(5)
-          expect(s.readings.afterUpdate).toBe(6)
-          expect(s.readings.doubled).toBe(12)
-          expect(s.readings.finalValue).toBe(0)
-        }),
+        Then('each step saw the value the previous step left behind, and the refresh returned it to its start')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              initial: 0,
+              afterSet: 5,
+              afterUpdate: 6,
+              doubled: 12,
+              finalValue: 0,
+            }),
+        ),
       ),
     )
     scenario(
@@ -1852,13 +1888,22 @@ Feature('Deriving values from other values on a page')
               return { before, after, nullRead, objectRead, effectRead }
             }),
         ),
-        Then('the following value tracked the change, and each plain value kept its own shape')((s) => {
-          expect(s.readings.before).toBe(20)
-          expect(s.readings.after).toBe(30)
-          expect(s.readings.nullRead).toBeNull()
-          expect(s.readings.objectRead).toEqual({ n: 1 })
-          expect(s.readings.effectRead).toMatchObject({ _tag: 'Success', value: 5 })
-        }),
+        Then('the following value tracked the change, and each plain value kept its own shape')(
+          (s, expect) =>
+            expect({
+              before: s.readings.before,
+              after: s.readings.after,
+              nullRead: s.readings.nullRead,
+              objectRead: s.readings.objectRead,
+              effectRead: s.readings.effectRead,
+            }).toEqual({
+              before: 20,
+              after: 30,
+              nullRead: null,
+              objectRead: { n: 1 },
+              effectRead: expect.objectContaining({ _tag: 'Success', value: 5 }),
+            }),
+        ),
       ),
     )
     scenario(
@@ -1890,9 +1935,7 @@ Feature('Deriving values from other values on a page')
             }),
         ),
         Then('no pending update fired after the values were released, and the value started over from its source')(
-          (s) => {
-            expect(s.readings.after).toBe(0)
-          },
+          (s, expect) => expect(s.readings.after).toBe(0),
         ),
       ),
     )
@@ -1926,10 +1969,13 @@ Feature('Deriving values from other values on a page')
             first: Atom.Registry.get(s.ctx.page, s.ctx.firstStation),
             second: Atom.Registry.get(s.ctx.page, s.ctx.secondStation),
           }))),
-        Then('each runtime reports only the extra service it was given')((s) => {
-          expect(s.readings.first).toMatchObject({ _tag: 'Success', value: 'first' })
-          expect(s.readings.second).toMatchObject({ _tag: 'Success', value: 'second' })
-        }),
+        Then('each runtime reports only the extra service it was given')(
+          (s, expect) =>
+            expect(s.readings).toMatchObject({
+              first: { _tag: 'Success', value: 'first' },
+              second: { _tag: 'Success', value: 'second' },
+            }),
+        ),
       ),
     )
   })
