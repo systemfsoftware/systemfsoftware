@@ -113,7 +113,7 @@ Feature('Observing guest log output for readiness')
           () => awaitOver(Readiness.Wait.forLog('listening')).pipe(Effect.flip),
         ),
         Then('the check reports the broken stream as the reason')((state, expect) =>
-          expect(state.outcome).toMatchObject({ _tag: 'LogSourceError' })
+          expect(state.outcome).toMatchObject({ _tag: 'LogSourceError', source: 'guest' })
         ),
       ),
     )
