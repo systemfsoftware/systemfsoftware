@@ -91,7 +91,8 @@ const isStat = (value: unknown): value is OpenFile.Stat =>
 const isReadWrite = <V = unknown>(value: V): boolean =>
   isFunctionProperty(value, 'read') && isFunctionProperty(value, 'write')
 
-const isDriver = (value: unknown): value is OpenFile.Driver => isFunctionProperty(value, 'close') && isReadWrite(value)
+const isDriver = (value: unknown): value is OpenFile.FileHandle =>
+  isFunctionProperty(value, 'close') && isReadWrite(value)
 
 export const statOf = <S = unknown>(value: S): Result.Result<OpenFile.Stat, ShapeRefusal> => {
   if (isStat(value)) {
@@ -100,7 +101,7 @@ export const statOf = <S = unknown>(value: S): Result.Result<OpenFile.Stat, Shap
   return Result.fail(new ShapeRefusal({ method: 'stat', cause: value }))
 }
 
-export const driverOf = <H = unknown>(value: H): Result.Result<OpenFile.Driver, ShapeRefusal> => {
+export const driverOf = <H = unknown>(value: H): Result.Result<OpenFile.FileHandle, ShapeRefusal> => {
   if (isDriver(value)) {
     return Result.succeed(value)
   }

@@ -1,8 +1,9 @@
-import { Effect, Match, Queue, Stream } from 'effect'
+/// <reference types="vitest/importMeta" />
+import { Handle } from '@systemfsoftware/effect-cell-types'
+import { Context, Effect, Match, Queue, Random, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Error from 'effect/PlatformError'
-import * as Random from 'effect/Random'
+import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as memfs from 'memfs'
 import {
@@ -24,36 +25,15 @@ import {
   volumeJSONOf,
 } from './driver-values.js'
 import { ShapeRefusal } from './MemoryFileSystemError.schema.js'
-import type { MemoryFileSystemSpec } from './MemoryFileSystemSpec.schema.js'
-import * as OpenFile from './open-file.handle.js'
+import { type MemoryFileSystemSpec } from './MemoryFileSystemSpec.schema.js'
+import { file as fileOf, info as described, OpenFile } from './open-file.handle.js'
 
-export const TypeId = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem')
-export type TypeId = typeof TypeId
-
-const DriverId: unique symbol = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem/driver')
-
-export interface MemoryFileSystem extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [DriverId]: memfs.IFs
+/** What the handle carries: where the volume is rooted. */
+export interface MemoryFileSystemData {
   readonly cwd: string
 }
 
-const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
-  const driver = memfs.createFsFromVolume(memfs.Volume.fromJSON(volumeJSONOf(spec.contents), spec.cwd))
-  byteBodiesOf(spec.cwd, spec.contents).forEach(([path, bytes]) => driver.writeFileSync(path, bytes))
-  return driver
-}
-
-export const make = (spec: MemoryFileSystemSpec): MemoryFileSystem => ({
-  [TypeId]: TypeId,
-  [DriverId]: mounted(spec),
-  cwd: spec.cwd,
-  ...Prototype,
-})
-
-// ---------------------------------------------------------------------------
-// What the port asks for, translated into what the driver takes
-// ---------------------------------------------------------------------------
+export type MemoryFileSystemHandle = Handle.Handle<'MemoryFileSystem', MemoryFileSystemData>
 
 interface AccessConstants {
   readonly F_OK: number
@@ -103,28 +83,30 @@ interface TempOptions {
   readonly suffix?: string | undefined
 }
 
-const withReadable = (mode: number, constants: AccessConstants, options: AccessOptions): number => {
+const ACCESS_CONSTANTS: AccessConstants = memfs.fs.constants
+
+const withReadable = (mode: number, options: AccessOptions): number => {
   if (options.readable === true) {
-    return mode | constants.R_OK
+    return mode | ACCESS_CONSTANTS.R_OK
   }
   return mode
 }
 
-const withWritable = (mode: number, constants: AccessConstants, options: AccessOptions): number => {
+const withWritable = (mode: number, options: AccessOptions): number => {
   if (options.writable === true) {
-    return mode | constants.W_OK
+    return mode | ACCESS_CONSTANTS.W_OK
   }
   return mode
 }
 
-const accessModeFromOptions = (constants: AccessConstants, options: AccessOptions): number =>
-  withWritable(withReadable(constants.F_OK, constants, options), constants, options)
+const accessModeFromOptions = (options: AccessOptions): number =>
+  withWritable(withReadable(ACCESS_CONSTANTS.F_OK, options), options)
 
-const accessModeOf = (constants: AccessConstants, options?: AccessOptions): number => {
+const accessModeOf = (options?: AccessOptions): number => {
   if (options === undefined) {
-    return constants.F_OK
+    return ACCESS_CONSTANTS.F_OK
   }
-  return accessModeFromOptions(constants, options)
+  return accessModeFromOptions(options)
 }
 
 const isRecursive = (options?: { readonly recursive?: boolean | undefined }): boolean =>
@@ -264,246 +246,240 @@ const eventOf = (decision: WatchEventDecision): FileSystem.WatchEvent =>
     Match.exhaustive,
   )
 
-// ---------------------------------------------------------------------------
-// The port
-// ---------------------------------------------------------------------------
+const parentOf = (path: string): string => {
+  const cut = path.lastIndexOf('/')
+  return cut <= 0 ? '/' : path.slice(0, cut)
+}
 
-export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
-  const nfs = self[DriverId]
+const entryUnder = (directory: string, entry: string): string =>
+  directory.endsWith('/') ? `${directory}${entry}` : `${directory}/${entry}`
 
-  const access: FileSystem.FileSystem['access'] = (path, options) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.access(path, accessModeOf(nfs.constants, options)),
-      catch: failureOf('access'),
-    })
+const decidedFrom = (entry: string, exists: boolean): FileSystem.WatchEvent =>
+  decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })).pipe(
+    Result.getOrThrow,
+    eventOf,
+  )
 
-  const chmod: FileSystem.FileSystem['chmod'] = (path, mode) =>
-    Effect.tryPromise({ try: () => nfs.promises.chmod(path, mode), catch: failureOf('chmod') })
+const changedFrom = (entry: string): FileSystem.WatchEvent =>
+  decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })).pipe(
+    Result.getOrThrow,
+    eventOf,
+  )
 
-  const chown: FileSystem.FileSystem['chown'] = (path, uid, gid) =>
-    Effect.tryPromise({ try: () => nfs.promises.chown(path, uid, gid), catch: failureOf('chown') })
+type DriverEvent = { readonly eventType: string; readonly entry: string }
 
-  const copy: FileSystem.FileSystem['copy'] = (fromPath, toPath, options) =>
-    Effect.tryPromise({ try: () => nfs.promises.cp(fromPath, toPath, copyArgsOf(options)), catch: failureOf('copy') })
+const infoFrom =
+  <S = unknown>(method: string) => (value: S): Effect.Effect<FileSystem.File.Info, Error.PlatformError> =>
+    Effect.fromResult(statOf(value)).pipe(Effect.mapError(shapeFailure(method)), Effect.map(infoOf))
 
-  const copyFile: FileSystem.FileSystem['copyFile'] = (fromPath, toPath) =>
-    Effect.tryPromise({ try: () => nfs.promises.copyFile(fromPath, toPath), catch: failureOf('copyFile') })
+/** The memfs volume the definition's `create` mounts from the spec. A volume holds nothing to release. */
+const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
+  const driver = memfs.createFsFromVolume(memfs.Volume.fromJSON(volumeJSONOf(spec.contents), spec.cwd))
+  byteBodiesOf(spec.cwd, spec.contents).forEach(([path, bytes]) => driver.writeFileSync(path, bytes))
+  return driver
+}
 
-  const glob: FileSystem.FileSystem['glob'] = (pattern, options) =>
-    Effect.tryPromise({
-      try: () => Array.fromAsync(nfs.promises.glob(pattern, globArgsOf(self.cwd, options))),
-      catch: failureOf('glob'),
-    }).pipe(Effect.map((matches) => matches.map(entryPathOf)))
-
-  const link: FileSystem.FileSystem['link'] = (existingPath, newPath) =>
-    Effect.tryPromise({ try: () => nfs.promises.link(existingPath, newPath), catch: failureOf('link') })
-
-  const makeDirectory: FileSystem.FileSystem['makeDirectory'] = (path, options) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.mkdir(path, makeDirectoryArgsOf(options)),
-      catch: failureOf('makeDirectory'),
-    })
-
-  const removeWith = (method: string): FileSystem.FileSystem['remove'] => (path, options) =>
-    Effect.tryPromise({ try: () => nfs.promises.rm(path, removeArgsOf(options)), catch: failureOf(method) })
-
-  const remove = removeWith('remove')
-
-  const makeTempDirectory: FileSystem.FileSystem['makeTempDirectory'] = (options) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.mkdir(tempParentOf(options), { recursive: true }),
-      catch: failureOf('makeTempDirectory'),
-    }).pipe(
-      Effect.flatMap(() =>
-        Effect.tryPromise({
-          try: () => nfs.promises.mkdtemp(tempDirectoryOf(options)),
-          catch: failureOf('makeTempDirectory'),
-        })
-      ),
-      Effect.map(entryPathOf),
-    )
-
-  const makeTempDirectoryScoped: FileSystem.FileSystem['makeTempDirectoryScoped'] = (options) =>
-    Effect.acquireRelease(
-      makeTempDirectory(options),
-      (directory) => Effect.orDie(removeWith('makeTempDirectoryScoped')(directory, { recursive: true })),
-    )
-
-  const makeTempFile: FileSystem.FileSystem['makeTempFile'] = (options) =>
-    Effect.flatMap(Random.next, (entropy) => {
-      const filePath = tempFileOf(entropy.toString(36).slice(2, 10), options)
-      return Effect.tryPromise({
-        try: () => nfs.promises.mkdir(tempParentOf(options), { recursive: true }),
-        catch: failureOf('makeTempFile'),
+/**
+ * Declares the in-memory filesystem. The volume's identity is the spec's contents, so `create`
+ * mounts it from the spec and the definition declares no release: a volume holds nothing to
+ * let go of. The port is assembled from the definition's own operations, and `open` is a child
+ * entry, so every file the port opens is released exactly once when its scope ends.
+ */
+export const MemoryFileSystem = Handle.make({
+  name: 'MemoryFileSystem',
+  create: (spec: MemoryFileSystemSpec) => Effect.sync(() => ({ driver: mounted(spec), data: { cwd: spec.cwd } })),
+  operations: {
+    access: (driver, _self, path: string, options?: AccessOptions) =>
+      Effect.tryPromise({
+        try: () => driver.promises.access(path, accessModeOf(options)),
+        catch: failureOf('access'),
+      }),
+    chmod: (driver, _self, path: string, mode: number) =>
+      Effect.tryPromise({ try: () => driver.promises.chmod(path, mode), catch: failureOf('chmod') }),
+    chown: (driver, _self, path: string, uid: number, gid: number) =>
+      Effect.tryPromise({ try: () => driver.promises.chown(path, uid, gid), catch: failureOf('chown') }),
+    copy: (driver, _self, fromPath: string, toPath: string, options?: CopyOptions) =>
+      Effect.tryPromise({
+        try: () => driver.promises.cp(fromPath, toPath, copyArgsOf(options)),
+        catch: failureOf('copy'),
+      }),
+    copyFile: (driver, _self, fromPath: string, toPath: string) =>
+      Effect.tryPromise({ try: () => driver.promises.copyFile(fromPath, toPath), catch: failureOf('copyFile') }),
+    glob: (driver, self, pattern: string, options?: GlobOptions) =>
+      Effect.tryPromise({
+        try: () => Array.fromAsync(driver.promises.glob(pattern, globArgsOf(self.cwd, options))),
+        catch: failureOf('glob'),
+      }).pipe(Effect.map((matches) => matches.map(entryPathOf))),
+    link: (driver, _self, existingPath: string, newPath: string) =>
+      Effect.tryPromise({ try: () => driver.promises.link(existingPath, newPath), catch: failureOf('link') }),
+    makeDirectory: (driver, _self, path: string, options?: MakeDirectoryOptions) =>
+      Effect.tryPromise({
+        try: () => driver.promises.mkdir(path, makeDirectoryArgsOf(options)),
+        catch: failureOf('makeDirectory'),
+      }),
+    makeTempDirectory: (driver, _self, options?: TempOptions) =>
+      Effect.tryPromise({
+        try: () => driver.promises.mkdir(tempParentOf(options), { recursive: true }),
+        catch: failureOf('makeTempDirectory'),
       }).pipe(
         Effect.flatMap(() =>
           Effect.tryPromise({
-            try: () => nfs.promises.writeFile(filePath, '').then(() => filePath),
-            catch: failureOf('makeTempFile'),
+            try: () => driver.promises.mkdtemp(tempDirectoryOf(options)),
+            catch: failureOf('makeTempDirectory'),
           })
         ),
-      )
-    })
-
-  const makeTempFileScoped: FileSystem.FileSystem['makeTempFileScoped'] = (options) =>
-    Effect.acquireRelease(
-      makeTempFile(options),
-      (filePath) => Effect.orDie(removeWith('makeTempFileScoped')(filePath, {})),
-    )
-
-  const infoFrom =
-    <S = unknown>(method: string) => (value: S): Effect.Effect<FileSystem.File.Info, Error.PlatformError> =>
-      Effect.fromResult(statOf(value)).pipe(Effect.mapError(shapeFailure(method)), Effect.map(infoOf))
-
-  const stat: FileSystem.FileSystem['stat'] = (path) =>
-    Effect.tryPromise({ try: () => nfs.promises.stat(path), catch: failureOf('stat') }).pipe(
-      Effect.flatMap(infoFrom('stat record')),
-    )
-
-  const open: FileSystem.FileSystem['open'] = (path, options) =>
-    Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () => nfs.promises.open(path, openFlagOf(options)),
-        catch: failureOf('open'),
-      }).pipe(
-        Effect.flatMap((handle) =>
-          Effect.fromResult(driverOf(handle)).pipe(Effect.mapError(shapeFailure('file handle')))
-        ),
-        Effect.flatMap(OpenFile.make),
+        Effect.map(entryPathOf),
       ),
-      (file) => Effect.orDie(OpenFile.close(file)),
-    ).pipe(
-      Effect.map((file) => OpenFile.file(file, OpenFile.stat(file).pipe(Effect.flatMap(infoFrom('stat record'))))),
-    )
-
-  const readFile: FileSystem.FileSystem['readFile'] = (path) =>
-    Effect.tryPromise({ try: () => nfs.promises.readFile(path), catch: failureOf('readFile') }).pipe(
-      Effect.map(bytesOf),
-    )
-
-  const readLink: FileSystem.FileSystem['readLink'] = (path) =>
-    Effect.tryPromise({ try: () => nfs.promises.readlink(path), catch: failureOf('readLink') }).pipe(
-      Effect.map(entryPathOf),
-    )
-
-  const readDirectory: FileSystem.FileSystem['readDirectory'] = (path, options) =>
-    Effect.tryPromise({
-      try: () =>
-        nfs.promises.readdir(path, { recursive: isRecursive(options) }).then((entries) => entries.map(entryPathOf)),
-      catch: failureOf('readDirectory'),
-    })
-
-  const realPath: FileSystem.FileSystem['realPath'] = (path) =>
-    Effect.tryPromise({ try: () => nfs.promises.realpath(path), catch: failureOf('realPath') }).pipe(
-      Effect.map(entryPathOf),
-    )
-
-  const rename: FileSystem.FileSystem['rename'] = (oldPath, newPath) =>
-    Effect.tryPromise({ try: () => nfs.promises.rename(oldPath, newPath), catch: failureOf('rename') })
-
-  const symlink: FileSystem.FileSystem['symlink'] = (target, path) =>
-    Effect.tryPromise({ try: () => nfs.promises.symlink(target, path), catch: failureOf('symlink') })
-
-  const truncate: FileSystem.FileSystem['truncate'] = (path, length) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.truncate(path, truncateLengthOf(length)),
-      catch: failureOf('truncate'),
-    })
-
-  const utimes: FileSystem.FileSystem['utimes'] = (path, atime, mtime) =>
-    Effect.tryPromise({ try: () => nfs.promises.utimes(path, atime, mtime), catch: failureOf('utimes') })
-
-  const writeFile: FileSystem.FileSystem['writeFile'] = (path, data, options) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.writeFile(path, data, writeFileArgsOf(options)),
-      catch: failureOf('writeFile'),
-    })
-
-  const parentOf = (path: string): string => {
-    const cut = path.lastIndexOf('/')
-    return cut <= 0 ? '/' : path.slice(0, cut)
-  }
-
-  const watchedDirectoryOf = (path: string): string => nfs.statSync(path).isDirectory() ? path : parentOf(path)
-
-  const entryUnder = (directory: string, entry: string): string =>
-    directory.endsWith('/') ? `${directory}${entry}` : `${directory}/${entry}`
-
-  const existsUnder = (directory: string, entry: string): Effect.Effect<boolean> =>
-    Effect.match(
-      Effect.tryPromise({
-        try: () => nfs.promises.stat(entryUnder(directory, entry)),
-        catch: () => new ShapeRefusal({ method: 'watch' }),
-      }),
-      { onFailure: () => false, onSuccess: () => true },
-    )
-
-  const decidedFrom = (entry: string, exists: boolean): FileSystem.WatchEvent =>
-    decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename: entry, exists })).pipe(
-      Result.getOrThrow,
-      eventOf,
-    )
-
-  const changedFrom = (entry: string): FileSystem.WatchEvent =>
-    decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename: entry, exists: true })).pipe(
-      Result.getOrThrow,
-      eventOf,
-    )
-
-  type DriverEvent = { readonly eventType: string; readonly entry: string }
-
-  const decideEvent = (directory: string) => (event: DriverEvent): Effect.Effect<FileSystem.WatchEvent> =>
-    eventTypeOf(event.eventType) === 'change'
-      ? Effect.succeed(changedFrom(event.entry))
-      : Effect.map(existsUnder(directory, event.entry), (exists) => decidedFrom(event.entry, exists))
-
-  const watch: FileSystem.FileSystem['watch'] = (path, options) =>
-    Stream.callback<FileSystem.WatchEvent, Error.PlatformError>((queue) =>
-      Effect.gen(function*() {
-        const decide = decideEvent(watchedDirectoryOf(path))
-        const driverEvents = yield* Queue.unbounded<DriverEvent>()
-        yield* Effect.forkScoped(Effect.forever(
-          Effect.flatMap(
-            Effect.flatMap(Queue.take(driverEvents), decide),
-            (event) => Queue.offer(queue, event),
-          ),
-        ))
-        return yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            nfs.watch(path, { persistent: false, recursive: isRecursive(options) }, (eventType, filename) => {
-              Queue.offerUnsafe(driverEvents, { entry: entryPathOf(filename), eventType })
+    makeTempFile: (driver, _self, options?: TempOptions) =>
+      Effect.flatMap(Random.next, (entropy) => {
+        const filePath = tempFileOf(entropy.toString(36).slice(2, 10), options)
+        return Effect.tryPromise({
+          try: () => driver.promises.mkdir(tempParentOf(options), { recursive: true }),
+          catch: failureOf('makeTempFile'),
+        }).pipe(
+          Effect.flatMap(() =>
+            Effect.tryPromise({
+              try: () => driver.promises.writeFile(filePath, '').then(() => filePath),
+              catch: failureOf('makeTempFile'),
             })
           ),
-          (watcher) => Effect.sync(() => watcher.close()),
         )
-      })
+      }),
+    readFile: (driver, _self, path: string) =>
+      Effect.tryPromise({ try: () => driver.promises.readFile(path), catch: failureOf('readFile') }).pipe(
+        Effect.map(bytesOf),
+      ),
+    readLink: (driver, _self, path: string) =>
+      Effect.tryPromise({ try: () => driver.promises.readlink(path), catch: failureOf('readLink') }).pipe(
+        Effect.map(entryPathOf),
+      ),
+    readDirectory: (driver, _self, path: string, options?: { readonly recursive?: boolean | undefined }) =>
+      Effect.tryPromise({
+        try: () =>
+          driver.promises.readdir(path, { recursive: isRecursive(options) }).then((entries) =>
+            entries.map(entryPathOf)
+          ),
+        catch: failureOf('readDirectory'),
+      }),
+    realPath: (driver, _self, path: string) =>
+      Effect.tryPromise({ try: () => driver.promises.realpath(path), catch: failureOf('realPath') }).pipe(
+        Effect.map(entryPathOf),
+      ),
+    remove: (driver, _self, path: string, options?: RemoveOptions) =>
+      Effect.tryPromise({ try: () => driver.promises.rm(path, removeArgsOf(options)), catch: failureOf('remove') }),
+    rename: (driver, _self, oldPath: string, newPath: string) =>
+      Effect.tryPromise({ try: () => driver.promises.rename(oldPath, newPath), catch: failureOf('rename') }),
+    stat: (driver, _self, path: string) =>
+      Effect.tryPromise({ try: () => driver.promises.stat(path), catch: failureOf('stat') }).pipe(
+        Effect.flatMap(infoFrom('stat record')),
+      ),
+    symlink: (driver, _self, target: string, path: string) =>
+      Effect.tryPromise({ try: () => driver.promises.symlink(target, path), catch: failureOf('symlink') }),
+    truncate: (driver, _self, path: string, length?: number) =>
+      Effect.tryPromise({
+        try: () => driver.promises.truncate(path, truncateLengthOf(length)),
+        catch: failureOf('truncate'),
+      }),
+    utimes: (driver, _self, path: string, atime: Date | number, mtime: Date | number) =>
+      Effect.tryPromise({ try: () => driver.promises.utimes(path, atime, mtime), catch: failureOf('utimes') }),
+    writeFile: (driver, _self, path: string, data: string | Uint8Array, options?: WriteFileOptions) =>
+      Effect.tryPromise({
+        try: () => driver.promises.writeFile(path, data, writeFileArgsOf(options)),
+        catch: failureOf('writeFile'),
+      }),
+  },
+  streams: {
+    watch: (driver, _self, path: string, options?: FileSystem.WatchOptions) =>
+      Stream.callback<FileSystem.WatchEvent, Error.PlatformError>((queue) =>
+        Effect.gen(function*() {
+          const directory = yield* Effect.sync(() => driver.statSync(path).isDirectory() ? path : parentOf(path))
+          const changes = yield* Queue.unbounded<DriverEvent>()
+          yield* Effect.forkScoped(
+            Effect.forever(
+              Effect.flatMap(Queue.take(changes), (event) =>
+                eventTypeOf(event.eventType) === 'change'
+                  ? Queue.offer(queue, changedFrom(event.entry))
+                  : Effect.flatMap(
+                    Effect.match(
+                      Effect.tryPromise({
+                        try: () => driver.promises.stat(entryUnder(directory, event.entry)),
+                        catch: () => new ShapeRefusal({ method: 'watch' }),
+                      }),
+                      { onFailure: () => false, onSuccess: () => true },
+                    ),
+                    (exists) => Queue.offer(queue, decidedFrom(event.entry, exists)),
+                  )),
+            ),
+          )
+          return yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              driver.watch(path, { persistent: false, recursive: isRecursive(options) }, (eventType, filename) => {
+                Queue.offerUnsafe(changes, { entry: entryPathOf(filename), eventType })
+              })
+            ),
+            (watcher) => Effect.sync(() => watcher.close()),
+          )
+        })
+      ),
+  },
+  children: {
+    open: {
+      handle: OpenFile,
+      create: (driver, _self, path: string, options?: OpenOptions) =>
+        Effect.tryPromise({
+          try: () => driver.promises.open(path, openFlagOf(options)),
+          catch: failureOf('open'),
+        }).pipe(
+          Effect.flatMap((handle) =>
+            Effect.fromResult(driverOf(handle)).pipe(Effect.mapError(shapeFailure('file handle')))
+          ),
+          Effect.flatMap((file) =>
+            Effect.map(Ref.make(0n), (cursor) => ({ driver: { file, cursor }, data: { fd: file.fd } }))
+          ),
+        ),
+    },
+  },
+  services: (self, members) => {
+    const makeTempDirectory = (options?: TempOptions) => members.operations.makeTempDirectory(self, options)
+    const makeTempFile = (options?: TempOptions) => members.operations.makeTempFile(self, options)
+    return Context.make(
+      FileSystem.FileSystem,
+      FileSystem.make({
+        access: (path, options) => members.operations.access(self, path, options),
+        chown: (path, uid, gid) => members.operations.chown(self, path, uid, gid),
+        chmod: (path, mode) => members.operations.chmod(self, path, mode),
+        copy: (fromPath, toPath, options) => members.operations.copy(self, fromPath, toPath, options),
+        copyFile: (fromPath, toPath) => members.operations.copyFile(self, fromPath, toPath),
+        glob: (pattern, options) => members.operations.glob(self, pattern, options),
+        link: (existingPath, newPath) => members.operations.link(self, existingPath, newPath),
+        makeDirectory: (path, options) => members.operations.makeDirectory(self, path, options),
+        makeTempDirectory,
+        makeTempDirectoryScoped: (options) =>
+          Effect.acquireRelease(
+            makeTempDirectory(options),
+            (directory) => Effect.orDie(members.operations.remove(self, directory, { recursive: true })),
+          ),
+        makeTempFile,
+        makeTempFileScoped: (options) =>
+          Effect.acquireRelease(
+            makeTempFile(options),
+            (filePath) => Effect.orDie(members.operations.remove(self, filePath, {})),
+          ),
+        open: (path, options) =>
+          Effect.map(members.children.open(self, path, options), (file) => fileOf(file, described(file))),
+        readFile: (path) => members.operations.readFile(self, path),
+        readDirectory: (path, options) => members.operations.readDirectory(self, path, options),
+        readLink: (path) => members.operations.readLink(self, path),
+        realPath: (path) => members.operations.realPath(self, path),
+        remove: (path, options) => members.operations.remove(self, path, options),
+        rename: (oldPath, newPath) => members.operations.rename(self, oldPath, newPath),
+        stat: (path) => members.operations.stat(self, path),
+        symlink: (target, path) => members.operations.symlink(self, target, path),
+        truncate: (path, length) => members.operations.truncate(self, path, length),
+        utimes: (path, atime, mtime) => members.operations.utimes(self, path, atime, mtime),
+        watch: (path, options) => members.streams.watch(self, path, options),
+        writeFile: (path, data, options) => members.operations.writeFile(self, path, data, options),
+      }),
     )
-
-  return FileSystem.make({
-    access,
-    chmod,
-    chown,
-    copy,
-    copyFile,
-    glob,
-    link,
-    makeDirectory,
-    makeTempDirectory,
-    makeTempDirectoryScoped,
-    makeTempFile,
-    makeTempFileScoped,
-    open,
-    readFile,
-    readDirectory,
-    readLink,
-    realPath,
-    remove,
-    rename,
-    stat,
-    symlink,
-    truncate,
-    utimes,
-    watch,
-    writeFile,
-  })
-}
+  },
+})

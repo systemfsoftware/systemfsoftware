@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Effect, Option, type Scope } from 'effect'
+import { Cause, Context, Effect, Exit, Option, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Error from 'effect/PlatformError'
 import { expect } from 'vitest'
@@ -18,6 +18,14 @@ const textOf = (fs: FileSystem.FileSystem): Effect.Effect<string, Error.Platform
 
 const allocated = (contents: Option.Option<Uint8Array>): string =>
   Option.match(contents, { onNone: () => 'nothing', onSome: decode })
+
+type Top<A = unknown> = A
+
+const defectsOf = <A, E>(exit: Exit.Exit<A, E>): ReadonlyArray<Top> =>
+  Exit.match(exit, {
+    onSuccess: () => [],
+    onFailure: (cause) => cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect),
+  })
 
 type Work = {
   readonly work: string
@@ -136,12 +144,34 @@ const works: ReadonlyArray<Work> = [
         return String(yield* file.seek(0n, 'current'))
       }),
   },
+  {
+    work: 'writing nothing at all and then asking where the reader is',
+    seen: '0 hello',
+    observe: (fs) =>
+      Effect.gen(function*() {
+        const file = yield* opened(fs, 'r+')
+        yield* file.writeAll(new Uint8Array(0))
+        const position = yield* file.seek(0n, 'current')
+        return `${position} ${yield* textOf(fs)}`
+      }),
+  },
+  {
+    work: 'moving further than any file can reach and reading on',
+    seen: 'BadResource readAlloc',
+    observe: (fs) =>
+      Effect.gen(function*() {
+        const file = yield* opened(fs, 'r')
+        yield* file.seek(2n ** 53n, 'start')
+        return yield* Effect.match(file.readAlloc(4), {
+          onFailure: (refusal) => `${refusal.reason._tag} ${refusal.reason.method}`,
+          onSuccess: allocated,
+        })
+      }),
+  },
 ]
 
-type Refusal = {
+type Use = {
   readonly use: string
-  readonly reason: string
-  readonly method: string
   readonly attempt: (fs: FileSystem.FileSystem) => Effect.Effect<void, Error.PlatformError>
 }
 
@@ -150,60 +180,55 @@ const afterClosing = (
   use: (file: FileSystem.File) => Effect.Effect<void, Error.PlatformError>,
 ): Effect.Effect<void, Error.PlatformError> => Effect.flatMap(Effect.scoped(opened(fs, 'r+')), use)
 
-const refusals: ReadonlyArray<Refusal> = [
+const closedUses: ReadonlyArray<Use> = [
   {
-    use: 'move the reader before the first letter',
-    reason: 'BadArgument',
-    method: 'seek',
-    attempt: (fs) => Effect.scoped(Effect.flatMap(opened(fs, 'r'), (file) => Effect.asVoid(file.seek(-1n, 'start')))),
-  },
-  {
-    use: 'ask how many letters it holds once it is closed',
-    reason: 'BadResource',
-    method: 'stat',
+    use: 'asking how many letters it holds',
     attempt: (fs) => afterClosing(fs, (file) => Effect.asVoid(file.stat)),
   },
   {
-    use: 'read into a buffer once it is closed',
-    reason: 'BadResource',
-    method: 'read',
+    use: 'reading into a buffer',
     attempt: (fs) => afterClosing(fs, (file) => Effect.asVoid(file.read(new Uint8Array(2)))),
   },
   {
-    use: 'read a fresh buffer once it is closed',
-    reason: 'BadResource',
-    method: 'readAlloc',
+    use: 'reading a fresh buffer',
     attempt: (fs) => afterClosing(fs, (file) => Effect.asVoid(file.readAlloc(2))),
   },
   {
-    use: 'write a letter once it is closed',
-    reason: 'BadResource',
-    method: 'write',
+    use: 'writing a letter',
     attempt: (fs) => afterClosing(fs, (file) => Effect.asVoid(file.write(encode('z')))),
   },
   {
-    use: 'write a whole word once it is closed',
-    reason: 'BadResource',
-    method: 'writeAll',
+    use: 'writing a whole word',
     attempt: (fs) => afterClosing(fs, (file) => file.writeAll(encode('zz'))),
   },
   {
-    use: 'flush it once it is closed',
-    reason: 'BadResource',
-    method: 'sync',
+    use: 'flushing it',
     attempt: (fs) => afterClosing(fs, (file) => file.sync),
   },
   {
-    use: 'cut it short once it is closed',
-    reason: 'BadResource',
-    method: 'truncate',
+    use: 'cutting it short',
     attempt: (fs) => afterClosing(fs, (file) => file.truncate(1)),
   },
 ]
 
+type Ending = {
+  readonly ending: string
+  readonly givesUp: boolean
+}
+
+const endings: ReadonlyArray<Ending> = [
+  { ending: 'after a successful read', givesUp: false },
+  { ending: 'after a read that gives up', givesUp: true },
+]
+
+const descriptorOf = (fs: MemoryFileSystem.MemoryFileSystemHandle) =>
+  Effect.scoped(
+    Effect.map(MemoryFileSystem.Definition.children.open(fs, note, { flag: 'r' }), (file) => file.fd),
+  )
+
 Feature('Reading and writing an open file from a position that moves')
   .withScenarioLayer(MemoryFileSystem.make({ [note]: 'hello' }).layer)
-  .body(({ scenarioOutline }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
       'Working through an open note by <work> shows what was done',
       works,
@@ -217,16 +242,86 @@ Feature('Reading and writing an open file from a position that moves')
         ),
     )
 
+    scenario(
+      'Moving the reader before the first letter is turned down',
+      Gherkin.Do.pipe(
+        Given('a note of five letters')('fs', () => filesystem),
+        When('the reader is moved before the first letter')('refusal', (s) =>
+          Effect.flip(
+            Effect.scoped(Effect.flatMap(opened(s.fs, 'r'), (file) => Effect.asVoid(file.seek(-1n, 'start')))),
+          )),
+        Then('the refusal says the move was not allowed')((s) => {
+          expect(s.refusal.reason._tag).toBe('BadArgument')
+          expect(s.refusal.reason.method).toBe('seek')
+        }),
+      ),
+    )
+
+    scenario(
+      'Writing nothing at all leaves the note and the reader where they were',
+      Gherkin.Do.pipe(
+        Given('a note of five letters')('fs', () => filesystem),
+        When('nothing is written to the note')('where', (s) =>
+          Effect.scoped(Effect.gen(function*() {
+            const file = yield* opened(s.fs, 'r+')
+            yield* file.writeAll(new Uint8Array(0))
+            const at = yield* file.seek(0n, 'current')
+            const text = yield* textOf(s.fs)
+            return `${at}:${text}`
+          }))),
+        Then('the note still reads the same and the reader has not moved')((s) => {
+          expect(s.where).toBe('0:hello')
+        }),
+      ),
+    )
+
     scenarioOutline(
-      'Trying to <use> is turned down',
-      refusals,
+      'Once the note is closed, <use> is refused',
+      closedUses,
       (row) =>
         Gherkin.Do.pipe(
           Given('a note of five letters')('fs', () => filesystem),
-          When('the note is used that way')('refusal', (s) => Effect.flip(row.attempt(s.fs))),
-          Then('the refusal names what went wrong and which use it was')((s) => {
-            expect(s.refusal.reason._tag).toBe(row.reason)
-            expect(s.refusal.reason.method).toBe(row.method)
+          When('the note is used that way')('outcome', (s) => Effect.exit(row.attempt(s.fs))),
+          Then('the refusal names the closed note')((s) => {
+            expect(defectsOf(s.outcome)).toMatchObject([{ _tag: 'HandleReleased', handle: 'OpenFile' }])
+          }),
+        ),
+    )
+
+    scenarioOutline(
+      'A note opened inside a scope is closed once when the scope ends <ending>',
+      endings,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a filesystem holding a note of five letters')('fs', () =>
+            MemoryFileSystem.make({ [note]: 'hello' }).scoped),
+          When('the note is opened, read from inside a scope of its own, and that scope ends')('outcome', (s) =>
+            Effect.flatMap(MemoryFileSystem.Definition.context(s.fs), (context) =>
+              Effect.gen(function*() {
+                const port = Context.get(context, FileSystem.FileSystem)
+                const first = yield* descriptorOf(s.fs)
+                const sealed = yield* Effect.exit(Effect.scoped(
+                  Effect.gen(function*() {
+                    const file = yield* opened(port, 'r')
+                    const read = allocated(yield* file.readAlloc(5))
+                    const ended = yield* Effect.exit(row.givesUp ? Effect.fail('the reader gave up') : Effect.void)
+                    return { read, gaveUp: Exit.isFailure(ended) }
+                  }),
+                ))
+                const last = yield* descriptorOf(s.fs)
+                return { sealed, first, last }
+              }))),
+          Then('the note was read, the reader ended as it chose, and the volume took the descriptor back')((s) => {
+            expect(Exit.isSuccess(s.outcome.sealed)).toBe(true)
+            expect(s.outcome.last).toBe(s.outcome.first)
+            Exit.match(s.outcome.sealed, {
+              onSuccess: ({ read, gaveUp }) => {
+                expect(read).toBe('hello')
+                expect(gaveUp).toBe(row.givesUp)
+              },
+              onFailure: () =>
+                undefined,
+            })
           }),
         ),
     )
