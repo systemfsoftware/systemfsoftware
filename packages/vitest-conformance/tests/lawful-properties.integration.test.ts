@@ -56,6 +56,13 @@ describe('lawful properties (R11-R15)', () => {
     return shouldContain('sorts singletons', 'singletons')
   })
 
+  it('judges a subject whose first output is undefined against a constant impostor', () =>
+    Effect.gen(function*() {
+      const report = yield* runFixtures(['property/undefined-output.test.ts'])
+      expect(fileOf(report, 'undefined-output.test.ts').status).toBe('passed')
+      expect(assertionOf(report, 'a subject whose first output is undefined').status).toBe('passed')
+    }).pipe(Effect.runPromise))
+
   it('reports a coverage failure once, on the property that declared it', () =>
     Effect.gen(function*() {
       const report = yield* runFixtures(['property/coverage-once.test.ts'])

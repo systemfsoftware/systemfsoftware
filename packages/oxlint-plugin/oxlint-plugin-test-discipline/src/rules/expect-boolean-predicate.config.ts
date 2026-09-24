@@ -1,6 +1,5 @@
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
-export const EXPECT = 'expect' as const
 export const NOT = 'not' as const
 
 export const BOOLEAN_MATCHERS: Record<string, true> = { toBe: true, toEqual: true }

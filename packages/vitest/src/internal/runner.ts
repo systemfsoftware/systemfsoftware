@@ -134,10 +134,7 @@ const runExit = <A, E>(
   return Effect.runPromiseExit(program, runOptions(ctx, pickScheduler(env, failedCheck)))
 }
 
-const ownedRuntime = (env: RunEnv): VirtualRuntime | undefined => ownedOnly(env.owned, env.runtime)
-
-const ownedOnly = (owned: boolean, runtime: VirtualRuntime | undefined): VirtualRuntime | undefined =>
-  owned === false ? undefined : runtime
+const ownedRuntime = (env: RunEnv): VirtualRuntime | undefined => env.owned === false ? undefined : env.runtime
 
 const observeOf = (runtime: VirtualRuntime | undefined): Effect.Effect<void, never, never> =>
   runtime === undefined ? Effect.void : runtime.observe
@@ -297,9 +294,9 @@ const syncRuntime: PropertyRuntime<never> = {
 
 const property = makeProperty(syncRuntime)
 
-const byName = (args: IArguments): boolean => typeof args[0] === 'string'
+const isName = (first: unknown): first is string => typeof first === 'string'
 
-const isName = (first: string | object | null | undefined): boolean => typeof first === 'string'
+const byName = (args: IArguments): boolean => isName(args[0])
 
 const byLayer = (args: IArguments): boolean => Layer.isLayer(args[0])
 
@@ -479,12 +476,11 @@ const throwAfterCheck = (ctx: V.TestContext, error: Error): never => {
 }
 
 const afterFailedCheck = (ctx: V.TestContext, error: Error): never => {
-  if (errorCount(ctx) > 0) throwAfterFailed(error)
+  if (errorCount(ctx) > 0) throwAfterFailed()
   throw error
 }
 
-const throwAfterFailed = (error: Error): never => {
-  void error
+const throwAfterFailed = (): never => {
   throw new Refusals.AfterFailedExpect({
     detail: 'thrown after a failed expect above, most likely caused by it',
   })
@@ -519,12 +515,20 @@ const throwLeaked = (outcome: Error): never => {
   })
 }
 
-/** @internal */
+/**
+ * Options for the top-level `layer` and for `it.layer` inside a `Methods` block.
+ *
+ * @internal
+ */
 export type LayerOptions = {
   readonly concurrent?: boolean
   readonly memoMap?: Layer.MemoMap
   readonly timeout?: Duration.Input
   readonly excludeTestServices?: boolean
+  /**
+   * Share one build of these layers across every test of the block, instead of giving each test its own
+   * fresh build. The only way to share; nested blocks inherit it.
+   */
   readonly shared?: boolean
 }
 
@@ -532,15 +536,22 @@ type BlockBody<R> = (it: Vitest.Vitest.MethodsNonLive<R>) => void
 
 type BlockName<R> = string | BlockBody<R>
 
-type BlockRegistrar<R> = {
+/** @internal */
+export type BlockRegistrar<R> = {
   (f: BlockBody<R>): void
   (name: string, f: BlockBody<R>): void
 }
 
-/** The nested layer a block's own `it.layer` opens, and the options it accepts. */
-type NestedLayer = {
+/**
+ * The nested layer a block's own `it.layer` opens, and the options it accepts.
+ *
+ * @internal
+ */
+export type NestedLayer = {
   readonly concurrent?: boolean
   readonly timeout?: Duration.Input
+  /** Share one build across this nested block's tests; inherited from a shared parent block. */
+  readonly shared?: boolean
 }
 
 type NestedLayerRegistrar<R> = {
@@ -795,16 +806,20 @@ const openAddedTests = <R>(
   options: LayerOptions | undefined,
 ): void => {
   const blockTaskSet = new Set(added)
-  let remaining = added.length
   V.beforeEach(
-    (ctx) => sharedBeforeEach(ctx, blockTaskSet, () => countDown(() => remaining, closeScope), contextEffect, blockEnv),
+    (ctx) => sharedBeforeEach(ctx, blockTaskSet, countDown(added.length, closeScope), contextEffect, blockEnv),
     blockHookTimeout(options),
   )
   V.afterAll(() => closeScope(), blockHookTimeout(options))
 }
 
-const countDown = (remaining: () => number, closeScope: () => Promise<void>): Promise<void> | undefined =>
-  remaining() === 1 ? closeScope() : undefined
+const countDown = (remaining: number, closeScope: () => Promise<void>): () => Promise<void> | undefined => {
+  let left = remaining
+  return () => {
+    left -= 1
+    return left === 0 ? closeScope() : undefined
+  }
+}
 
 const sharedBeforeEach = <R>(
   ctx: V.TestContext,
@@ -1013,7 +1028,6 @@ function memberOrOverride(
     : memberOf(target, property, receiver)
 }
 
-/** Vitest's own member. `Reflect.get` cannot be typed, and the fork hands the member over unchanged. */
 function memberOf<A extends object>(target: A, property: string | symbol, receiver: object): A[keyof A] | undefined {
   return Reflect.get(target, property, receiver)
 }

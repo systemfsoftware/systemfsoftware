@@ -12,7 +12,7 @@ import * as Schema from 'effect/Schema'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as V from 'vitest'
 import { MissingBudget, NonBooleanVerdict } from '../errors.schema.js'
-import { CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
+import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
 import { VacuousProperty } from './error.schema.js'
 import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
@@ -95,7 +95,11 @@ type Lane = 'sync' | 'effect'
 
 type Verdict<E, R> = boolean | Effect.Effect<boolean, E, R>
 
-type CoverSpec<G extends Gens> = Readonly<Record<string, readonly [CoveragePredicate<G>, number]>>
+type CoverageEntry<G extends Gens> = readonly [CoveragePredicate<G>, number]
+
+type CoverSpec<G extends Gens> = Readonly<Record<string, CoverageEntry<G>>>
+
+type CoverEntries<G extends Gens> = ReadonlyArray<readonly [string, CoverageEntry<G>]>
 
 interface Budget {
   readonly runs: number
@@ -122,7 +126,7 @@ interface Run<G extends Gens, S extends PropertySubject, E, R> {
 }
 
 interface Checked<G extends Gens> {
-  readonly violations: ReadonlyArray<string>
+  readonly violations: ReadonlySet<string>
   readonly result: Arbitrary.CheckResult<Values<G>, Opaque>
 }
 
@@ -182,44 +186,34 @@ function arbitraryOf(of: Gens): Arbitrary.Arbitrary<Opaque> {
   return isTupleOf(of) ? Arbitrary.all(of.map(toArbitrary)) : Arbitrary.all(recordArbitraries(of))
 }
 
-const minimumOf = <G extends Gens>(cover: CoverSpec<G>, label: string): number => {
-  const entry = cover[label]
-  return entry === undefined ? 0 : entry[1]
-}
+const minimumOf = <G extends Gens>(entry: CoverageEntry<G>): number => entry[1]
 
-const seedClasses = <G extends Gens>(cover: CoverSpec<G>): Map<string, CoverageClass> => {
+const seedClasses = <G extends Gens>(entries: CoverEntries<G>): Map<string, CoverageClass> => {
   const classes = new Map<string, CoverageClass>()
-  for (const label of Object.keys(cover)) classes.set(label, { hits: 0, minimum: minimumOf(cover, label) })
+  for (const [label, entry] of entries) classes.set(label, { hits: 0, minimum: minimumOf(entry) })
   return classes
 }
 
-const satisfies = <G extends Gens>(cover: CoverSpec<G>, label: string, values: Values<G>): boolean => {
-  const entry = cover[label]
-  return entry === undefined ? false : entry[0](...spreadValues(values))
-}
-
-const satisfiedLabels = <G extends Gens>(cover: CoverSpec<G>, values: Values<G>): ReadonlyArray<string> =>
-  Object.keys(cover).filter((label) => satisfies(cover, label, values))
-
-const bumpHit = (classes: Map<string, CoverageClass>, label: string): void => {
-  const prior = classes.get(label)
-  if (prior !== undefined) classes.set(label, { hits: prior.hits + 1, minimum: prior.minimum })
-}
+const satisfiedLabels = <G extends Gens>(entries: CoverEntries<G>, values: Values<G>): ReadonlyArray<string> =>
+  entries.filter(([, entry]) => entry[0](...spreadValues(values))).map(([label]) => label)
 
 const observeRun = <G extends Gens>(
   classes: Map<string, CoverageClass>,
   counter: { runs: number },
-  cover: CoverSpec<G>,
+  entries: CoverEntries<G>,
   values: Values<G>,
 ): void => {
   counter.runs = counter.runs + 1
-  for (const label of satisfiedLabels(cover, values)) bumpHit(classes, label)
+  for (const label of satisfiedLabels(entries, values)) countHit(classes, label)
 }
 
-const drawFor = <G extends Gens>(cover: CoverSpec<G>, arbitrary: Arbitrary.Arbitrary<Values<G>>): CoverageDraw => ({
+const drawFor = <G extends Gens>(
+  entries: CoverEntries<G>,
+  arbitrary: Arbitrary.Arbitrary<Values<G>>,
+): CoverageDraw => ({
   more: (count) =>
     Effect.runSync(Arbitrary.sampleEffect(arbitrary, { count }).pipe(Effect.orDie)).map((values) =>
-      satisfiedLabels(cover, values)
+      satisfiedLabels(entries, values)
     ),
 })
 
@@ -232,12 +226,13 @@ const liveCoverage = <G extends Gens>(
   cover: CoverSpec<G>,
   arbitrary: Arbitrary.Arbitrary<Values<G>>,
 ): CoverageRecorder<G> => {
-  const classes = seedClasses(cover)
+  const entries: CoverEntries<G> = Object.entries(cover)
+  const classes = seedClasses(entries)
   const counter: { runs: number } = { runs: 0 }
   return {
-    observe: (values) => observeRun(classes, counter, cover, values),
+    observe: (values) => observeRun(classes, counter, entries, values),
     judge: () =>
-      judgeCoverage({ classes: Object.fromEntries(classes), runs: counter.runs, draw: drawFor(cover, arbitrary) }),
+      judgeCoverage({ classes: Object.fromEntries(classes), runs: counter.runs, draw: drawFor(entries, arbitrary) }),
   }
 }
 
@@ -249,18 +244,18 @@ const makeCoverage = <G extends Gens>(
 const describeVerdict = (verdict: Opaque): string =>
   Effect.isEffect(verdict) ? 'an Effect, which this lane never runs' : `a ${typeof verdict}`
 
-const nonBoolean = (verdict: Opaque, violations: Array<string>): boolean => {
-  violations.push(describeVerdict(verdict))
+const nonBoolean = (verdict: Opaque, violations: Set<string>): boolean => {
+  violations.add(describeVerdict(verdict))
   return true
 }
 
-const literalVerdict = (verdict: Opaque, violations: Array<string>): boolean =>
+const literalVerdict = (verdict: Opaque, violations: Set<string>): boolean =>
   typeof verdict === 'boolean' ? verdict : nonBoolean(verdict, violations)
 
 const effectVerdict = <E, R>(
   lane: Lane,
   verdict: Effect.Effect<boolean, E, R>,
-  violations: Array<string>,
+  violations: Set<string>,
 ): Effect.Effect<boolean, E, R> =>
   lane === 'sync'
     ? Effect.succeed(nonBoolean(verdict, violations))
@@ -269,7 +264,7 @@ const effectVerdict = <E, R>(
 const verdictFor = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   values: Values<G>,
-  violations: Array<string>,
+  violations: Set<string>,
 ): Effect.Effect<boolean, E, R> => {
   run.observe(values)
   const verdict = run.holds(run.subject, values)
@@ -284,7 +279,7 @@ const tolerateInterruption = <E>(
 
 const guardedVerdict = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
-  violations: Array<string>,
+  violations: Set<string>,
 ): (values: Values<G>) => Effect.Effect<boolean, Cause.Cause<E>, R> =>
 (values) => Effect.catchCause(Effect.suspend(() => verdictFor(run, values, violations)), tolerateInterruption)
 
@@ -296,7 +291,7 @@ const violationMessage = (name: string, violations: ReadonlyArray<string>): stri
 const runCheck = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
 ): Effect.Effect<Checked<G>, Cause.Cause<NonBooleanVerdict>, R> => {
-  const violations: Array<string> = []
+  const violations = new Set<string>()
   return Arbitrary.checkEffect(run.arbitrary, guardedVerdict(run, violations), run.options).pipe(
     Effect.map((result) => ({ violations, result })),
   )
@@ -306,10 +301,10 @@ const reportOf = <G extends Gens>(checked: Checked<G>): string | undefined =>
   Arbitrary.formatCheckFailure(checked.result)
 
 const violationOf = <G extends Gens>(name: string, checked: Checked<G>): string | undefined =>
-  checked.violations.length === 0 ? undefined : violationMessage(name, checked.violations)
+  checked.violations.size === 0 ? undefined : violationMessage(name, [...checked.violations])
 
 const isRefuted = <G extends Gens>(checked: Checked<G>): boolean =>
-  checked.violations.length > 0 || reportOf(checked) !== undefined
+  checked.violations.size > 0 || reportOf(checked) !== undefined
 
 const dieViolation = (detail: string): Effect.Effect<never, never, never> =>
   Effect.die(new NonBooleanVerdict({ detail }))

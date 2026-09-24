@@ -26,7 +26,6 @@ export const refuseBoolean =
 export const refusePositionalProp =
   '✗ it.prop(name, [arbitraries], predicate) is removed. Name the function under test and pass a budget: it.prop(name, { of, subject, runs }, holds).'
 
-/** The narrowed matchers say one thing, with the matcher's own name: this text is both the refusal and the repair. */
 /** @internal */
 export type PresenceMessage<N extends string = string> =
   `✗ ${N} passes for almost any value the code returns. Assert the value: toEqual(expected); for a key that must exist: toHaveProperty(key).`

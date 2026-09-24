@@ -5,7 +5,6 @@
  * `effect/TestClock` ambient (R18) through the reference above.
  */
 import type * as Context from 'effect/Context'
-import type * as Duration from 'effect/Duration'
 import type * as Effect from 'effect/Effect'
 import type * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
@@ -150,39 +149,21 @@ export namespace Vitest {
    *
    * @since 4.0.0
    */
-  export interface LayerBlock<R> {
-    (f: (it: MethodsNonLive<R>) => void): void
-    (name: string, f: (it: MethodsNonLive<R>) => void): void
-  }
+  export type LayerBlock<R> = internal.BlockRegistrar<R>
 
   /**
    * The nested layer a block's own `it.layer` opens.
    *
    * @since 4.0.0
    */
-  export interface NestedLayerOptions {
-    readonly concurrent?: boolean
-    readonly timeout?: Duration.Input
-    /** Share one build across this nested block's tests; inherited from a shared parent block. */
-    readonly shared?: boolean
-  }
+  export type NestedLayerOptions = internal.NestedLayer
 
   /**
    * Options for the top-level `layer` and for `it.layer` inside a `Methods` block.
    *
    * @since 4.0.0
    */
-  export interface LayerOptions {
-    readonly concurrent?: boolean
-    readonly memoMap?: Layer.MemoMap
-    readonly timeout?: Duration.Input
-    readonly excludeTestServices?: boolean
-    /**
-     * Share one build of these layers across every test of the block, instead of giving each test its own
-     * fresh build. The only way to share; nested blocks inherit it.
-     */
-    readonly shared?: boolean
-  }
+  export type LayerOptions = internal.LayerOptions
 
   /**
    * A layer's block, data-first or data-last.
@@ -199,12 +180,7 @@ export namespace Vitest {
    *
    * @since 4.0.0
    */
-  export interface FlakyTest {
-    <A, E, R2>(self: Effect.Effect<A, E, R2 | Scope.Scope>, timeout?: Duration.Input): Effect.Effect<A, never, R2>
-    (timeout?: Duration.Input): <A, E, R2>(
-      self: Effect.Effect<A, E, R2 | Scope.Scope>,
-    ) => Effect.Effect<A, never, R2>
-  }
+  export type FlakyTest = typeof internal.flakyTest
 
   /**
    * @since 4.0.0

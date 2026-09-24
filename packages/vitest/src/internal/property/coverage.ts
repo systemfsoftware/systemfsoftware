@@ -7,6 +7,7 @@
  * exactly at its minimum would otherwise draw forever.
  */
 import * as Data from 'effect/Data'
+import * as Function from 'effect/Function'
 
 const CERTAINTY = 10 ** 9
 const TOLERANCE = 0.9
@@ -137,10 +138,14 @@ const describeFailure = (label: string, entry: CoverageClass, runs: number): str
 const reportFailures = (judge: CoverageJudge): string =>
   failedEntries(judge).map(([label, entry]) => describeFailure(label, entry, judge.runs)).join('\n')
 
-const countHit = (classes: Map<string, CoverageClass>, label: string): void => {
+/** @internal */
+export const countHit: {
+  (classes: Map<string, CoverageClass>, label: string): void
+  (label: string): (classes: Map<string, CoverageClass>) => void
+} = Function.dual(2, (classes: Map<string, CoverageClass>, label: string): void => {
   const prior = classes.get(label)
   if (prior !== undefined) classes.set(label, { hits: prior.hits + 1, minimum: prior.minimum })
-}
+})
 
 const countLabels = (
   classes: Map<string, CoverageClass>,

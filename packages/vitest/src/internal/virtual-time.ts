@@ -217,18 +217,16 @@ export const virtualClockLayer = (runtime: VirtualRuntime): Layer.Layer<never> =
 const virtualClockOf = (runtime: VirtualRuntime): TestClock.TestClock => {
   const live = runtime.clock
   return {
-    currentTimeMillisUnsafe: () => runtime.clock.currentTimeMillisUnsafe(),
-    currentTimeMillis: Effect.sync((): number => runtime.clock.currentTimeMillisUnsafe()),
-    currentTimeNanosUnsafe: () => runtime.clock.currentTimeNanosUnsafe(),
-    currentTimeNanos: Effect.sync((): bigint => runtime.clock.currentTimeNanosUnsafe()),
-    monotonicTimeNanosUnsafe: () => runtime.clock.monotonicTimeNanosUnsafe(),
-    monotonicTimeNanos: Effect.sync((): bigint => runtime.clock.monotonicTimeNanosUnsafe()),
-    sleep: (duration) => runtime.clock.sleep(duration),
+    currentTimeMillisUnsafe: () => live.currentTimeMillisUnsafe(),
+    currentTimeMillis: Effect.sync((): number => live.currentTimeMillisUnsafe()),
+    currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
+    currentTimeNanos: Effect.sync((): bigint => live.currentTimeNanosUnsafe()),
+    monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+    monotonicTimeNanos: Effect.sync((): bigint => live.monotonicTimeNanosUnsafe()),
+    sleep: (duration) => live.sleep(duration),
     adjust: (duration) => Effect.sleep(duration),
     setTime: (timestamp) =>
-      Effect.suspend(() =>
-        Effect.sleep(Duration.millis(Math.max(0, timestamp - runtime.clock.currentTimeMillisUnsafe())))
-      ),
+      Effect.suspend(() => Effect.sleep(Duration.millis(Math.max(0, timestamp - live.currentTimeMillisUnsafe())))),
     withLive: (effect) => Effect.provideService(effect, Clock.Clock, live),
   }
 }

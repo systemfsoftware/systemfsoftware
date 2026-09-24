@@ -1,5 +1,4 @@
 export const TEST_FILE = /\.(test|spec)\.[cm]?tsx?$/
-export const EXPECT = 'expect'
 
 export const BEHAVIOUR_NODES: Record<string, true> = {
   AwaitExpression: true,

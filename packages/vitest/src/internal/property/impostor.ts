@@ -68,10 +68,8 @@ interface FrozenState {
 
 const emptyState = (): FrozenState => ({ outputs: new Map<string, Opaque>() })
 
-const frozenAt = (state: FrozenState, key: string, compute: () => Opaque): Opaque => {
-  const prior = state.outputs.get(key)
-  return prior === undefined ? remember(state, key, compute()) : prior
-}
+const frozenAt = (state: FrozenState, key: string, compute: () => Opaque): Opaque =>
+  state.outputs.has(key) ? state.outputs.get(key) : remember(state, key, compute())
 
 const remember = (state: FrozenState, key: string, value: Opaque): Opaque => {
   state.outputs.set(key, value)

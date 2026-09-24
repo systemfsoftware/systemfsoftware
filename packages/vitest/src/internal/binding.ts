@@ -50,12 +50,12 @@ export const withSyncRun: {
  *
  * @internal
  */
-export const lookupRun = (): Running | undefined => fromFiber() ?? syncRun
+export const lookupRun = (): Running | undefined => currentRun() ?? syncRun
 
-const fromFiber = (): Running | undefined => currentRun()
+const NO_ERRORS: ReadonlyArray<object> = []
 
 /** @internal */
 export const errorCount = (ctx: V.TestContext): number => presentErrors(ctx.task.result?.errors).length
 
 const presentErrors = (errors: ReadonlyArray<object> | undefined): ReadonlyArray<object> =>
-  errors === undefined ? [] : errors
+  errors === undefined ? NO_ERRORS : errors

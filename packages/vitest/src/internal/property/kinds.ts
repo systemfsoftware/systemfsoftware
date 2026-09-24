@@ -13,12 +13,6 @@ import { NonTupleOf } from './error.schema.js'
 /** @internal */
 export type LawKind = 'model' | 'metamorphic' | 'roundTrip' | 'invariant' | 'idempotent' | 'deterministic'
 
-/** @internal */
-export type ExemptKind = 'idempotent' | 'deterministic'
-
-/** @internal */
-export const isExemptKind = (kind: LawKind): kind is ExemptKind => kind === 'idempotent' || kind === 'deterministic'
-
 /**
  * A subject of a law kind: a function of the generated values.
  *

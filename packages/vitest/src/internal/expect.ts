@@ -77,7 +77,6 @@ const refusedMember = (property: string | symbol, negated: boolean): Refusing | 
   return name === undefined ? undefined : refuseNarrowed(name)
 }
 
-/** Vitest's own member. `Reflect.get` cannot be typed, and the fork hands the member over unchanged. */
 const memberAt = <A extends object>(target: A, property: string | symbol): A[keyof A] | undefined =>
   Reflect.get(target, property, target)
 
@@ -167,6 +166,14 @@ export const expect: LawfulExpectStatic = makeExpect()
 
 const refuseHookNow = (): never => refuse(refuseHook)
 
+const takesHook = (args: IArguments): boolean => typeof args[0] === 'function'
+
+const refuseHookPair = <F>(fn: F, timeout?: number): never => {
+  void fn
+  void timeout
+  return refuseHookNow()
+}
+
 type EachFirst = Parameters<typeof V.beforeEach>[0]
 
 type AfterEachFirst = Parameters<typeof V.afterEach>[0]
@@ -181,14 +188,7 @@ type AfterAllFirst = Parameters<typeof V.afterAll>[0]
 export const beforeEach: {
   (fn: EachFirst, timeout?: number): void
   (timeout?: number): (fn: EachFirst) => void
-} = Function.dual(
-  (args: IArguments) => typeof args[0] === 'function',
-  (fn: EachFirst, timeout?: number): void => {
-    void fn
-    void timeout
-    refuseHookNow()
-  },
-)
+} = Function.dual(takesHook, refuseHookPair)
 
 /**
  * @internal
@@ -196,14 +196,7 @@ export const beforeEach: {
 export const afterEach: {
   (fn: AfterEachFirst, timeout?: number): void
   (timeout?: number): (fn: AfterEachFirst) => void
-} = Function.dual(
-  (args: IArguments) => typeof args[0] === 'function',
-  (fn: AfterEachFirst, timeout?: number): void => {
-    void fn
-    void timeout
-    refuseHookNow()
-  },
-)
+} = Function.dual(takesHook, refuseHookPair)
 
 /**
  * @internal
@@ -211,12 +204,7 @@ export const afterEach: {
 export const beforeAll: {
   (fn: BeforeAllFirst, timeout?: number): void
   (timeout?: number): (fn: BeforeAllFirst) => void
-} = Function.dual(
-  (args: IArguments) => typeof args[0] === 'function',
-  (fn: BeforeAllFirst, timeout?: number): void => {
-    V.beforeAll(fn, timeout)
-  },
-)
+} = Function.dual(takesHook, V.beforeAll)
 
 /**
  * @internal
@@ -224,9 +212,4 @@ export const beforeAll: {
 export const afterAll: {
   (fn: AfterAllFirst, timeout?: number): void
   (timeout?: number): (fn: AfterAllFirst) => void
-} = Function.dual(
-  (args: IArguments) => typeof args[0] === 'function',
-  (fn: AfterAllFirst, timeout?: number): void => {
-    V.afterAll(fn, timeout)
-  },
-)
+} = Function.dual(takesHook, V.afterAll)

@@ -66,20 +66,11 @@ ruleTester.run('no-behaviourless-assertion', noBehaviourlessAssertion, {
       code: `${imports}expect(CEILING_MS).toBe([resolve(1), STEP_MS])`,
     },
     {
-      // Pins the `target.callee.name !== EXPECT` guard at expectCallOf line 49
-      // col 46: an inner call whose callee is an Identifier with a name other
-      // than 'expect' must not be treated as an expect call. The original
-      // returns undefined for non-'expect' identifiers; the mutant flips the
-      // check and would proceed to process the call as if it were expect.
       name: 'Should_Pass_When_TheInnerCallIsNotAnExpectCall',
       filename,
       code: `${imports}assert(CEILING_MS).toBe(STEP_MS)`,
     },
     {
-      // Pins the `target.callee.type !== 'Identifier'` guard at expectCallOf
-      // line 49 col 7: an inner call whose callee is a MemberExpression must
-      // not be treated as an expect call. The original returns undefined for
-      // non-Identifier callees; the mutant flips the check and would proceed.
       name: 'Should_Pass_When_TheInnerCallCalleeIsAMemberExpression',
       filename,
       code: `${imports}foo.bar(CEILING_MS).toBe(STEP_MS)`,
