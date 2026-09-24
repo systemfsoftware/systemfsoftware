@@ -1,3 +1,4 @@
+import { Resource } from '@systemfsoftware/effect-cell-types'
 import { Effect, Predicate, Schedule } from 'effect'
 import { dual } from 'effect/Function'
 import { probeConditionCell } from './await-condition.cell.js'
@@ -24,42 +25,49 @@ export interface TargetOptions {
 
 const DEFAULTS = { timeoutMs: 30_000, pollMs: 250 } as const
 
+export const TypeId = Symbol.for('~systemfsoftware/effect-readiness/ProbeTarget')
+export type TypeId = typeof TypeId
+
+const probe = (
+  spec: ProbeTarget,
+  condition: Condition,
+): Effect.Effect<Satisfied | TimedOut, LogSourceError | ProbeInputInvalid, HostProber | LogSource> =>
+  probeConditionCell.run(new AwaitCondition({ target: spec, condition })).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced(`${spec.pollMs} millis`),
+      until: Predicate.isTagged('Satisfied'),
+    }),
+    Effect.as(new Satisfied({})),
+    Effect.timeoutOrElse({
+      duration: `${spec.timeoutMs} millis`,
+      orElse: () => Effect.succeed(new TimedOut({})),
+    }),
+  )
+
+const ProbeTargets = Resource.make<ProbeTarget>()({
+  typeId: TypeId,
+  combinators: {
+    withTimeout: (spec, timeoutMs: number): ProbeTarget => ({ ...spec, timeoutMs }),
+    withPoll: (spec, pollMs: number): ProbeTarget => ({ ...spec, pollMs }),
+  },
+  projections: {
+    awaitCondition: (spec) => (condition: Condition) => probe(spec, condition),
+  },
+})
+
+export type ProbeTargetResource = Resource.Of<typeof ProbeTargets>
+
+export const isTarget = ProbeTargets.is
+
+export const withTimeout = ProbeTargets.combinators.withTimeout
+
+export const withPoll = ProbeTargets.combinators.withPoll
+
 export const target: {
-  (options?: TargetOptions): (bindings: ReadonlyArray<PortBinding>) => ProbeTarget
-  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTarget
+  (options?: TargetOptions): (bindings: ReadonlyArray<PortBinding>) => ProbeTargetResource
+  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTargetResource
 } = dual(
   (args) => Array.isArray(args[0]),
-  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTarget => ({
-    ...DEFAULTS,
-    ...options,
-    bindings,
-  }),
-)
-
-export const awaitCondition: {
-  (
-    target: ProbeTarget,
-    condition: Condition,
-  ): Effect.Effect<Satisfied | TimedOut, LogSourceError | ProbeInputInvalid, HostProber | LogSource>
-  (
-    condition: Condition,
-  ): (target: ProbeTarget) => Effect.Effect<
-    Satisfied | TimedOut,
-    LogSourceError | ProbeInputInvalid,
-    HostProber | LogSource
-  >
-} = dual(
-  2,
-  (probeTarget: ProbeTarget, condition: Condition) =>
-    probeConditionCell.run(new AwaitCondition({ target: probeTarget, condition })).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced(`${probeTarget.pollMs} millis`),
-        until: Predicate.isTagged('Satisfied'),
-      }),
-      Effect.as(new Satisfied({})),
-      Effect.timeoutOrElse({
-        duration: `${probeTarget.timeoutMs} millis`,
-        orElse: () => Effect.succeed(new TimedOut({})),
-      }),
-    ),
+  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTargetResource =>
+    ProbeTargets.of({ ...DEFAULTS, ...options, bindings }),
 )

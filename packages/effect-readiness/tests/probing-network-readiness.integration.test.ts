@@ -16,7 +16,7 @@ const bindingOf = (hostPort: number): Readiness.PortBinding => ({
   hostPort,
 })
 
-const targetOf = (bindings: ReadonlyArray<Readiness.PortBinding>): Readiness.ProbeTarget =>
+const targetOf = (bindings: ReadonlyArray<Readiness.PortBinding>): Readiness.ProbeTargetResource =>
   Readiness.target(bindings, TIGHT_WAIT)
 
 const targetOfMappedGuest = Effect.gen(function*() {
@@ -24,8 +24,8 @@ const targetOfMappedGuest = Effect.gen(function*() {
   return targetOf([bindingOf(guest.hostPort)])
 })
 
-const awaitOver = (target: Readiness.ProbeTarget, condition: Readiness.Condition) =>
-  Readiness.awaitCondition(target, condition)
+const awaitOver = (target: Readiness.ProbeTargetResource, condition: Readiness.Condition) =>
+  target.awaitCondition(condition)
 
 const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boolean =>
   Match.value(verdict).pipe(

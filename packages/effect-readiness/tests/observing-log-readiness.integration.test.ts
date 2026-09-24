@@ -14,7 +14,7 @@ const TIGHT_WAIT = { timeoutMs: 400, pollMs: 25 } as const
 
 const target = Readiness.target([], TIGHT_WAIT)
 
-const awaitOver = (condition: Readiness.Condition) => Readiness.awaitCondition(target, condition)
+const awaitOver = (condition: Readiness.Condition) => target.awaitCondition(condition)
 
 const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boolean =>
   Match.value(verdict).pipe(

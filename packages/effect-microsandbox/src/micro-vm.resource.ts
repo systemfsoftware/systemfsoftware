@@ -1,10 +1,9 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Resource } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { type Context, Effect, Exit, Layer, Match, Schema } from 'effect'
 import * as Crypto from 'effect/Crypto'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type * as Scope from 'effect/Scope'
 import { awaitJobCompletion } from './await-job-completion.cell.js'
 import { bootMicroVM } from './boot-microvm.cell.js'
@@ -71,116 +70,8 @@ export const Wait = {
   forLog: (pattern: string): WaitStrategy => ({ _tag: 'Log', pattern }),
 }
 
-const TypeId = '~systemfsoftware/microvm/MicroVM'
+export const TypeId = Symbol.for('~systemfsoftware/microvm/MicroVM')
 export type TypeId = typeof TypeId
-
-export interface MicroVMResource extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly spec: MicroVMSpec
-  withExposedPorts(ports: ReadonlyArray<number>): MicroVMResource
-  withEnv(env: Record<string, string>): MicroVMResource
-  withMount(mount: Mount): MicroVMResource
-  withMemoryLimit(memoryMb: number): MicroVMResource
-  withWaitStrategy(waitStrategy: WaitStrategy): MicroVMResource
-  readonly scoped: Effect.Effect<
-    RunningVM,
-    MicroVMError,
-    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
-  >
-  layer<Id>(
-    service: Context.Key<Id, RunningVM>,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
-}
-
-const makeProto = (raw: MicroVMSpec): MicroVMResource => {
-  const self: MicroVMResource = {
-    [TypeId]: TypeId,
-    spec: raw,
-    ...Prototype,
-    withExposedPorts(ports: ReadonlyArray<number>): MicroVMResource {
-      return makeProto(withExposedPorts(raw, ports))
-    },
-    withEnv(env: Record<string, string>): MicroVMResource {
-      return makeProto(withEnv(raw, env))
-    },
-    withMount(mount: Mount): MicroVMResource {
-      return makeProto(withMount(raw, mount))
-    },
-    withMemoryLimit(memoryMb: number): MicroVMResource {
-      return makeProto(withMemoryLimit(raw, memoryMb))
-    },
-    withWaitStrategy(waitStrategy: WaitStrategy): MicroVMResource {
-      return makeProto(withWaitStrategy(raw, waitStrategy))
-    },
-    get scoped() {
-      return scoped(raw)
-    },
-    layer<Id>(
-      service: Context.Key<Id, RunningVM>,
-    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> {
-      return Layer.effect(service)(scoped(raw))
-    },
-  }
-  return self
-}
-
-export interface JobResource extends MicroVMResource {
-  withExposedPorts(ports: ReadonlyArray<number>): JobResource
-  withEnv(env: Record<string, string>): JobResource
-  withMount(mount: Mount): JobResource
-  withMemoryLimit(memoryMb: number): JobResource
-  withWaitStrategy(waitStrategy: WaitStrategy): JobResource
-  withHostAccess(enabled: boolean): JobResource
-  withWorkdir(path: string): JobResource
-  readonly run: Effect.Effect<
-    JobCompletion,
-    MicroVMError,
-    Scope.Scope | Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
-  >
-}
-
-const runJob = bootMicroVM.pipe(Cell.andThen(awaitJobCompletion))
-
-const makeJobProto = (raw: JobSpec): JobResource => {
-  const self: JobResource = {
-    [TypeId]: TypeId,
-    spec: raw,
-    ...Prototype,
-    withExposedPorts(): JobResource {
-      return self
-    },
-    withEnv(env: Record<string, string>): JobResource {
-      return makeJobProto(jobWithEnv(raw, env))
-    },
-    withMount(mount: Mount): JobResource {
-      return makeJobProto(jobWithMount(raw, mount))
-    },
-    withMemoryLimit(memoryMb: number): JobResource {
-      return makeJobProto(jobWithMemoryLimit(raw, memoryMb))
-    },
-    withWaitStrategy(): JobResource {
-      return self
-    },
-    withHostAccess(enabled: boolean): JobResource {
-      return makeJobProto(withHostAccess(raw, enabled))
-    },
-    withWorkdir(path: string): JobResource {
-      return makeJobProto(withWorkdir(raw, path))
-    },
-    get scoped() {
-      return scoped(raw)
-    },
-    layer<Id>(
-      service: Context.Key<Id, RunningVM>,
-    ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> {
-      return Layer.effect(service)(scoped(raw))
-    },
-    get run() {
-      return runJob.run(raw)
-    },
-  }
-  return self
-}
 
 const runningVMOf = (vm: AcquiredVM): RunningVM =>
   makeRunningVM({
@@ -188,7 +79,8 @@ const runningVMOf = (vm: AcquiredVM): RunningVM =>
     portBindings: vm.plan.portBindings,
     sandbox: vm.sandbox,
   })
-export const scoped = (
+
+const scopedOf = (
   spec: MicroVMSpec,
 ): Effect.Effect<
   RunningVM,
@@ -196,42 +88,11 @@ export const scoped = (
   Scope.Scope | Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
 > => Effect.map(bootMicroVM.run(spec), runningVMOf)
 
-export const layer: {
-  <Id>(
-    service: Context.Key<Id, RunningVM>,
-  ): (spec: MicroVMSpec) => Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
-  <Id>(
-    service: Context.Key<Id, RunningVM>,
-    spec: MicroVMSpec,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber>
-} = dual(
-  (args) => args.length >= 2,
-  <Id>(
-    service: Context.Key<Id, RunningVM>,
-    spec: MicroVMSpec,
-  ): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> =>
-    Layer.effect(service)(scoped(spec)),
-)
-export const service: {
-  (ports?: ReadonlyArray<number>): (image: string) => MicroVMResource
-  (image: string, ports?: ReadonlyArray<number>): MicroVMResource
-} = dual(
-  (args) => typeof args[0] === 'string',
-  (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
-    makeProto(new ServiceSpec({ image, ports, env: {}, mounts: [] })),
-)
-
-export const job: {
-  (cmd: readonly [string, ...Array<string>]): (image: string) => JobResource
-  (image: string, cmd: readonly [string, ...Array<string>]): JobResource
-} = dual(
-  2,
-  (image: string, cmd: readonly [string, ...Array<string>]): JobResource =>
-    makeJobProto(new JobSpec({ image, cmd, env: {}, mounts: [] })),
-)
-
-export const make = (image: string): MicroVMResource => service(image, [])
-export const spec = make
+const layerOf = (spec: MicroVMSpec) =>
+<Id>(
+  service: Context.Key<Id, RunningVM>,
+): Layer.Layer<Id, MicroVMError, Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber> =>
+  Layer.effect(service)(scopedOf(spec))
 
 type JobFields = ConstructorParameters<typeof JobSpec>[0]
 
@@ -248,15 +109,7 @@ const reviseJob = (job: JobSpec, patch: Partial<JobFields>): JobSpec =>
     ...patch,
   })
 
-const jobWithEnv = (job: JobSpec, env: Record<string, string>): JobSpec =>
-  reviseJob(job, { env: { ...job.env, ...env } })
-const jobWithMount = (job: JobSpec, mount: Mount): JobSpec => reviseJob(job, { mounts: [...job.mounts, mount] })
-const jobWithMemoryLimit = (job: JobSpec, memoryMb: number): JobSpec => reviseJob(job, { memoryMb })
-
-export const withEnv: {
-  (env: Record<string, string>): (spec: MicroVMSpec) => MicroVMSpec
-  (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec =>
+const withEnvSpec = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
       new ServiceSpec({
@@ -268,14 +121,11 @@ export const withEnv: {
         vCPUs: s.vCPUs,
         waitStrategy: s.waitStrategy,
       })),
-    Match.tag('Job', (j) => jobWithEnv(j, env)),
+    Match.tag('Job', (j) => reviseJob(j, { env: { ...j.env, ...env } })),
     Match.exhaustive,
-  ))
+  )
 
-export const withExposedPorts: {
-  (ports: ReadonlyArray<number>): (spec: MicroVMSpec) => MicroVMSpec
-  (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
+const withExposedPortsSpec = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
       new ServiceSpec({
@@ -289,12 +139,9 @@ export const withExposedPorts: {
       })),
     Match.tag('Job', (j) => j),
     Match.exhaustive,
-  ))
+  )
 
-export const withMount: {
-  (mount: Mount): (spec: MicroVMSpec) => MicroVMSpec
-  (spec: MicroVMSpec, mount: Mount): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, mount: Mount): MicroVMSpec =>
+const withMountSpec = (spec: MicroVMSpec, mount: Mount): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
       new ServiceSpec({
@@ -306,14 +153,11 @@ export const withMount: {
         vCPUs: s.vCPUs,
         waitStrategy: s.waitStrategy,
       })),
-    Match.tag('Job', (j) => jobWithMount(j, mount)),
+    Match.tag('Job', (j) => reviseJob(j, { mounts: [...j.mounts, mount] })),
     Match.exhaustive,
-  ))
+  )
 
-export const withMemoryLimit: {
-  (memoryMb: number): (spec: MicroVMSpec) => MicroVMSpec
-  (spec: MicroVMSpec, memoryMb: number): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, memoryMb: number): MicroVMSpec =>
+const withMemoryLimitSpec = (spec: MicroVMSpec, memoryMb: number): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
       new ServiceSpec({
@@ -325,14 +169,11 @@ export const withMemoryLimit: {
         vCPUs: s.vCPUs,
         waitStrategy: s.waitStrategy,
       })),
-    Match.tag('Job', (j) => jobWithMemoryLimit(j, memoryMb)),
+    Match.tag('Job', (j) => reviseJob(j, { memoryMb })),
     Match.exhaustive,
-  ))
+  )
 
-export const withWaitStrategy: {
-  (waitStrategy: WaitStrategy): (spec: MicroVMSpec) => MicroVMSpec
-  (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec
-} = dual(2, (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec =>
+const withWaitStrategySpec = (spec: MicroVMSpec, waitStrategy: WaitStrategy): MicroVMSpec =>
   Match.value(spec).pipe(
     Match.tag('Service', (s) =>
       new ServiceSpec({
@@ -346,30 +187,90 @@ export const withWaitStrategy: {
       })),
     Match.tag('Job', (j) => j),
     Match.exhaustive,
-  ))
+  )
+const Services = Resource.make<MicroVMSpec>()({
+  typeId: TypeId,
+  combinators: {
+    withEnv: withEnvSpec,
+    withExposedPorts: withExposedPortsSpec,
+    withMount: withMountSpec,
+    withMemoryLimit: withMemoryLimitSpec,
+    withWaitStrategy: withWaitStrategySpec,
+  },
+  projections: { scoped: scopedOf, layer: layerOf },
+})
 
-export const withHostAccess: {
-  (enabled: boolean): (spec: JobSpec) => JobSpec
-  (spec: JobSpec, enabled: boolean): JobSpec
-} = dual(2, (spec: JobSpec, enabled: boolean): JobSpec => reviseJob(spec, { hostAccess: enabled }))
+const runJob = bootMicroVM.pipe(Cell.andThen(awaitJobCompletion))
 
-export const withWorkdir: {
-  (path: string): (spec: JobSpec) => JobSpec
-  (spec: JobSpec, path: string): JobSpec
-} = dual(2, (spec: JobSpec, path: string): JobSpec => reviseJob(spec, { workdir: path }))
+const Jobs = Resource.make<JobSpec>()({
+  typeId: TypeId,
+  combinators: {
+    withEnv: (spec: JobSpec, env: Record<string, string>): JobSpec => reviseJob(spec, { env: { ...spec.env, ...env } }),
+    withExposedPorts: (spec: JobSpec, _ports: ReadonlyArray<number>): JobSpec => spec,
+    withHostAccess: (spec: JobSpec, enabled: boolean): JobSpec => reviseJob(spec, { hostAccess: enabled }),
+    withMemoryLimit: (spec: JobSpec, memoryMb: number): JobSpec => reviseJob(spec, { memoryMb }),
+    withMount: (spec: JobSpec, mount: Mount): JobSpec => reviseJob(spec, { mounts: [...spec.mounts, mount] }),
+    withWaitStrategy: (spec: JobSpec, _strategy: WaitStrategy): JobSpec => spec,
+    withWorkdir: (spec: JobSpec, path: string): JobSpec => reviseJob(spec, { workdir: path }),
+  },
+  projections: { scoped: scopedOf, layer: layerOf, run: (spec: JobSpec) => runJob.run(spec) },
+})
 
-const applyAll = (spec: MicroVMSpec): MicroVMSpec =>
-  withEnv({ K: 'V' })(
-    withExposedPorts([6379])(
-      withMount({ host: '/tmp/a', guest: '/data' })(withMemoryLimit(512)(withWaitStrategy(Wait.forPort(8080))(spec))),
-    ),
+export type MicroVMResource = Resource.Of<typeof Services>
+export type JobResource = Resource.Of<typeof Jobs>
+
+export const withEnv = Services.combinators.withEnv
+
+export const withExposedPorts = Services.combinators.withExposedPorts
+
+export const withMount = Services.combinators.withMount
+
+export const withMemoryLimit = Services.combinators.withMemoryLimit
+
+export const withWaitStrategy = Services.combinators.withWaitStrategy
+
+export const withHostAccess = Jobs.combinators.withHostAccess
+
+export const withWorkdir = Jobs.combinators.withWorkdir
+
+export const service: {
+  (ports?: ReadonlyArray<number>): (image: string) => MicroVMResource
+  (image: string, ports?: ReadonlyArray<number>): MicroVMResource
+} = dual(
+  (args) => typeof args[0] === 'string',
+  (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
+    Services.of(new ServiceSpec({ image, ports, env: {}, mounts: [] })),
+)
+
+export const job: {
+  (cmd: readonly [string, ...Array<string>]): (image: string) => JobResource
+  (image: string, cmd: readonly [string, ...Array<string>]): JobResource
+} = dual(
+  2,
+  (image: string, cmd: readonly [string, ...Array<string>]): JobResource =>
+    Jobs.of(new JobSpec({ image, cmd, env: {}, mounts: [] })),
+)
+
+export const make = (image: string): MicroVMResource => service(image, [])
+export const spec = make
+
+const applyAll = (self: MicroVMResource): MicroVMResource =>
+  self.pipe(
+    withWaitStrategy(Wait.forPort(8080)),
+    withMemoryLimit(512),
+    withMount({ host: '/tmp/a', guest: '/data' }),
+    withExposedPorts([6379]),
+    withEnv({ K: 'V' }),
   )
 
-const applyEnv = (spec: MicroVMSpec, env: Record<string, string>): MicroVMSpec => withEnv(spec, env)
-const applyMemory = (spec: MicroVMSpec, mb: number): MicroVMSpec => withMemoryLimit(spec, mb)
-const applyPorts = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec => withExposedPorts(spec, ports)
+const applyEnv = (self: MicroVMResource, env: Record<string, string>): MicroVMResource => withEnv(self, env)
+const applyMemory = (self: MicroVMResource, mb: number): MicroVMResource => withMemoryLimit(self, mb)
+const applyPorts = (self: MicroVMResource, ports: ReadonlyArray<number>): MicroVMResource =>
+  withExposedPorts(self, ports)
 
 if (import.meta.vitest !== void 0) {
+  // The test-only dependencies cannot be imported statically: `import.meta.vitest` is only
+  // defined when vitest transforms this file, so a static import would land in the bundle.
   const { it } = await import('@effect/vitest')
   const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
 
@@ -378,9 +279,9 @@ if (import.meta.vitest !== void 0) {
   const guestPorts = Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique()))
 
   it.prop('∀spec_Combinators_=Pure', [MicroVMSpec], ([spec]) => {
-    const next = applyAll(spec)
+    const next = applyAll(Services.of(spec)).spec
     return Exit.match(Schema.decodeExit(MicroVMSpec)(spec), {
-      onSuccess: (twin) => specEq(applyAll(twin), next) && !Object.is(next, spec),
+      onSuccess: (twin) => specEq(applyAll(Services.of(twin)).spec, next) && !Object.is(next, spec),
       onFailure: () => false,
     })
   })
@@ -392,29 +293,37 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.prop('≤kk_EnvMerge_≡Assoc', [MicroVMSpec, distinctKeyPair], ([spec, [k1, k2]]) => {
-    const sequential = applyEnv(applyEnv(spec, { [k2]: 'v2' }), { [k1]: 'v1' })
-    const merged = applyEnv(spec, { [k1]: 'v1', [k2]: 'v2' })
+    const sequential = applyEnv(applyEnv(Services.of(spec), { [k2]: 'v2' }), { [k1]: 'v1' }).spec
+    const merged = applyEnv(Services.of(spec), { [k1]: 'v1', [k2]: 'v2' }).spec
     return specEq(sequential, merged)
   })
 
   it.prop(
     '∀spec_MemoryLimit_=Idempotent',
     [MicroVMSpec, positiveMb],
-    ([spec, mb]) => specEq(applyMemory(applyMemory(spec, mb), mb), applyMemory(spec, mb)),
+    ([spec, mb]) =>
+      specEq(
+        applyMemory(applyMemory(Services.of(spec), mb), mb).spec,
+        applyMemory(Services.of(spec), mb).spec,
+      ),
   )
 
   it.prop(
     '∀spec_Ports_=Idempotent',
     [MicroVMSpec, guestPorts],
-    ([spec, ports]) => specEq(applyPorts(applyPorts(spec, ports), ports), applyPorts(spec, ports)),
+    ([spec, ports]) =>
+      specEq(
+        applyPorts(applyPorts(Services.of(spec), ports), ports).spec,
+        applyPorts(Services.of(spec), ports).spec,
+      ),
   )
 
   it.prop(
     '∀job_Combinators_⊇HostAccessWorkdir',
     [JobSpec, Schema.Boolean, Schema.String],
     ([job, enabled, path]) => {
-      const opted = withWorkdir(withHostAccess(job, enabled), path)
-      const next = applyAll(opted)
+      const opted = withWorkdir(withHostAccess(Jobs.of(job), enabled), path)
+      const next = applyAll(opted).spec
       return Match.value(next).pipe(
         Match.tag('Job', (revised) => revised.hostAccess === enabled && revised.workdir === path),
         Match.tag('Service', () => false),
