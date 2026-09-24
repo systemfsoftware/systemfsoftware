@@ -7,56 +7,39 @@ applies_when:
 tags: [cell, pipeable, dual, combinators]
 ---
 
-In accordance with `skill://gcanti-tim-smart-style` (Rule `R6`), every fluent builder and combinator must provide full parity between direct method chaining and data-last functional composition using Effect's `pipe(...)`.
+Resources and handles are pipeable data; every combinator over them is a `dual(2, …)`. Configuration is dual-only: a resource value carries its spec, `pipe`, and its projections, and no configuration methods. Effect v4 configures its child-process command the same way (`repos/effect/packages/effect/src/unstable/process/ChildProcess.ts:798`).
 
-### 1. Prototype-Backed Pipeable
+### 1. Pipeable by construction
 
-Resource builders must extend `Pipeable.Pipeable` and spread `...Pipeable.Prototype` into their prototype or factory object:
+`Resource.make` and `Handle.make` put `pipe` on every resource and handle they build. A package never spreads `Pipeable.Prototype` by hand for either kind.
 
-```ts
-import { type Pipeable, Prototype } from 'effect/Pipeable'
+### 2. One dual per option, typed over the variants that honor it
 
-export interface ResourceBuilder<Spec> extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly spec: Spec
-  withPort(port: number): ResourceBuilder<Spec>
-}
-```
-
-### 2. Dual Combinator Parity (Rule R6)
-
-Every standalone combinator function must be wrapped in `dual(2, ...)` (from `effect/Function`), supporting both data-first method calls and data-last pipe arguments:
+Each option is one `dual(2, …)` over the resource types of the variants that honor it, so a variant that ignores an option refuses it at compile time:
 
 ```ts
-export const withPort: {
-  (port: number): <Spec extends BaseSpec>(spec: Spec) => Spec
-  <Spec extends BaseSpec>(spec: Spec, port: number): Spec
-} = dual(2, <Spec extends BaseSpec>(spec: Spec, port: number): Spec => ({
-  ...spec,
-  port,
-}))
+type ServiceVM = Resource.Of<typeof ServiceKind>
+type JobVM = Resource.Of<typeof JobKind>
+
+// honored by both variants
+export const withEnv: {
+  (env: Record<string, string>): <Self extends ServiceVM | JobVM>(self: Self) => Self
+  <Self extends ServiceVM | JobVM>(self: Self, env: Record<string, string>): Self
+} = dual(2, …)
+
+// honored only by services: a job resource is not an argument
+export const withExposedPorts: {
+  (ports: ReadonlyArray<number>): (self: ServiceVM) => ServiceVM
+  (self: ServiceVM, ports: ReadonlyArray<number>): ServiceVM
+} = dual(2, …)
 ```
 
 ```ts
-// WRONG: Method-only builder that breaks pipe composition
-const resource = Container.make('postgres:16')
-pipe(
-  resource,
-  Container.withPort(5432), // TypeError: withPort is not a dual!
-)
+// WRONG: a method chain beside the duals; two ways to say one thing, and the chain can't be typed per variant
+MicroVM.job('alpine', ['true']).withExposedPorts([80])
 
-// RIGHT: Full parity between method chaining and pipe composition
-// Style A: Fluent method chaining
-const instanceA = Container.make('postgres:16')
-  .withPort(5432)
-  .withMemoryLimit(512)
-
-// Style B: Functional pipe composition
-const instanceB = pipe(
-  Container.make('postgres:16'),
-  Container.withPort(5432),
-  Container.withMemoryLimit(512),
-)
+// RIGHT: configuration through pipe
+pipe(MicroVM.service('redis:7'), MicroVM.withExposedPorts([6379]), MicroVM.withMemoryLimit(512))
 ```
 
-Gate: `review` — verify the builder implements `Pipeable.Pipeable` and every combinator export is authored with `dual(2, ...)`.
+Gate: `missingPipeableSignature` at `error` in `packages/toolchain/tsconfig/effect.json` refuses an exported combinator without its data-last form. Each package's type tests refuse an option applied to a variant that ignores it (`pnpm --filter @systemfsoftware/effect-microsandbox test:types`). The absence of configuration methods on a resource value follows from `Resource.make` building the value.

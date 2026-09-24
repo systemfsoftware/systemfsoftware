@@ -7,73 +7,62 @@ applies_when:
 tags: [cell, resource-vs-handle, scope, handle, lifecycle]
 ---
 
-Infrastructure packages must strictly separate the **Resource Specification** (the cold declarative builder) from the **Runtime Handle** (the live materialized instance). Conflating the two or modeling the runtime handle as an ambient `Context.Service` creates identity collision and artificial ceremony:
+Infrastructure packages separate the **resource** (the inert, schema-declared spec) from the **handle** (the live instance it acquires). Both are cell kinds in `@systemfsoftware/effect-cell-types`: `Resource.make` builds a resource kind in a `*.resource.ts` file, and `Handle.make` builds a handle kind in a `*.handle.ts` file. A kind is a file suffix; its constructor carries what a type can see, and a suffix-keyed rule carries the rest.
 
-### 1. The Duality: Cold Resource vs. Hot Handle
+### 1. The Duality: Inert Resource vs. Live Handle
 
-In Effect-TS, a managed lifecycle is a two-phase contract:
+| Kind         | Role                                                                                                    | Built by        | Example                                                  |
+| :----------- | :------------------------------------------------------------------------------------------------------ | :-------------- | :------------------------------------------------------- |
+| **Resource** | Immutable data: a spec plus projections of one scoped acquisition (`scoped`, `layer`, `bind(key)`).     | `Resource.make` | `MicroVM.service('redis:7')`, `MemoryFileSystem.make(…)` |
+| **Handle**   | Branded, pipeable data held while the `Scope` stays open; its driver sits in a slot callers can't name. | `Handle.make`   | `RunningVM`, `OpenFile`, `ObservationWindow`             |
 
-| Phase             | Role                                                                                                                                                      | Representation in Effect                                            | Example                                             |
-| :---------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------ | :-------------------------------------------------- |
-| **Cold Resource** | The **lifecycle bracket & configuration algebra**. Immutable data at rest describing how to allocate, configure, and release an entity.                   | `Effect<Handle, Error, Scope>` or a staged builder (`ResourceSpec`) | `Container.make('redis:7')`, `Database.config(...)` |
-| **Hot Handle**    | The **live materialized capability object** held while the `Scope` remains open. Represents an active external process, container, socket, or connection. | A nominal interface extending `Pipeable`, branded with `TypeId`     | `Fiber`, `Socket`, `Queue`, `RunningVM`             |
+Building a resource performs no I/O. Acquiring it runs the handle's `create` and registers the release in the caller's `Scope` in the same uninterruptible step.
 
-### 2. Never Model a Runtime Handle as a `Context.Service`
+### 2. Never Model a Handle as a `Context.Service`
 
-A `Context.Service` represents an ambient, usually singleton dependency in the environment (`R`). Runtime handles are **ephemeral values** bound to an active `Scope`:
+A `Context.Service` is one ambient dependency per environment. Handles are values bound to a `Scope`:
 
-- **Singleton Collision**: If a library models its running container handle as `export const RunningContainer = Context.Service<RunningContainer>('RunningContainer')`, an application running two containers (e.g. `redis` and `postgres`) cannot hold both in `Context`. One container overwrites the other.
-- **Handles are Values, not Environment Identifiers**: Just as Effect's `Fiber`, `Socket`, `Queue`, and `Ref` are plain interfaces and never `Context.Service` tags, container and database instances are values returned by `yield* spec.scoped`.
-- **Parameterized Layer Synthesis**: When an application _does_ want to bind a handle to a specific domain tag in `Context`, the library provides parameterized layer synthesis on demand:
-  ```ts
-  spec.layer(RedisTag) // Layer.Layer<RedisTag, Error, ...>
-  ```
+- **Singleton collision**: a running container modeled as `Context.Service<RunningContainer>` cannot exist twice in one `Context`; `redis` overwrites `postgres`.
+- **Handles are values**: like Effect's `Fiber`, `Socket`, and `Queue`, a handle is returned by `yield* resource.scoped`.
+- **Binding on demand**: an application that wants a handle under its own key asks for it: `resource.bind(RedisKey)` returns `Layer<RedisKey, …>`. The key belongs to the caller, never to the resource or handle file.
+- **Services come from the handle**: a service a handle provides (Effect's `FileSystem`, trace-spec's `Observation`) is assembled from the built operations in the definition's `services`, or from a third-party library layer in its `integration`.
 
-### 3. Handles are Minimal Protocol Records; Operations are Standalone Dual Functions
+### 3. Handles are Data; Operations are Duals the Kind Builds
 
-In idiomatic Effect (`Socket`, `Queue`, `Fiber`, `Ref`), **handles are not OOP-style fat bags of closures**. A handle is a minimal protocol record carrying identity, bindings, and underlying runtime references, while operations are standalone dual functions in the module namespace:
+A handle carries its name, its data, and a private driver slot. It never carries closures. The definition declares each operation as a function that receives the driver first and the handle second; the kind returns it as a dual over the handle:
 
 ```ts
-// 1. Nominal TypeId branding:
-export const TypeId = Symbol.for('~my-org/package/RunningInstance')
-export type TypeId = typeof TypeId
-
-// 2. Type guard:
-export const isRunningInstance = (u: unknown): u is RunningInstance =>
-  Predicate.hasProperty(u, TypeId)
-
-// 3. Minimal protocol record extending Pipeable:
-export interface RunningInstance extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly id: string
-  readonly endpoint: string
-}
-
-// 4. Operations are dual pipeable functions (data-first & data-last):
-export const exec: {
-  (cmd: string): (self: RunningInstance) => Effect.Effect<ExecResult, ExecError>
-  (self: RunningInstance, cmd: string): Effect.Effect<ExecResult, ExecError>
-} = dual(2, (self: RunningInstance, cmd: string) => ...)
+// running-vm.handle.ts
+export const RunningVM = Handle.make({
+  name: 'RunningVM',
+  create: (input: SandboxInput) =>
+    Effect.map(createSandbox(input), (sandbox) => ({ driver: sandbox, data: { name: input.name } })),
+  release: [
+    [(sandbox) => Effect.tryPromise(() => sandbox.stop()), (sandbox) => Effect.tryPromise(() => sandbox.kill())],
+    [(sandbox) => Effect.tryPromise(() => sandbox.destroy())],
+  ],
+  operations: {
+    exec: (sandbox, _vm, cmd: string) => Effect.tryPromise(() => sandbox.exec(cmd)),
+  },
+})
+export const exec = RunningVM.operations.exec // (self, cmd) and (cmd)(self)
 ```
 
-Where a handle carries a third-party driver token, the symbol-slot mechanism is prescribed by `handle-state-privacy.md`.
-
 ```ts
-// WRONG: Modeling an acquired entity as an ambient singleton Service
-export const RunningContainer = Context.Service<RunningContainer>('RunningContainer')
+// WRONG: an acquired entity modeled as an ambient singleton service
+export class RunningContainer extends Context.Service<RunningContainer, Container>()('RunningContainer') {}
 
-// RIGHT: Cold Resource builder compiling to live Handle value inside Scope
-const redisSpec = Container.make('redis:7').withPort(6379)
-const postgresSpec = Container.make('postgres:16').withPort(5432)
-
+// RIGHT: two resources, two handle values, one Scope
 Effect.scoped(
   Effect.gen(function*() {
-    const redis = yield* redisSpec.scoped // Handle 1
-    const postgres = yield* postgresSpec.scoped // Handle 2
+    const redis = yield* Container.make('redis:7').pipe(Container.withPort(6379)).scoped
+    const postgres = yield* Container.make('postgres:16').pipe(Container.withPort(5432)).scoped
     yield* redis.pipe(Container.exec('redis-cli ping'))
     yield* postgres.pipe(Container.exec('pg_isready'))
   }),
 )
 ```
 
-Gate: `review` — verify runtime instances are modeled as `Pipeable` handles with nominal `TypeId`s rather than `Context.Service` tags.
+Where the driver may travel is prescribed by `handle-state-privacy.md`.
+
+Gate: `@systemfsoftware/oxlint-plugin-cell-architecture` rules `kind-file-construction` (a `*.resource.ts` file calls `Resource.make`, a `*.handle.ts` file calls `Handle.make`), `kind-construction-location` (neither constructor anywhere else), and `kind-file-declares-no-service` (no `Context.Service` in either file). The branded record, the private driver slot, and the built duals are the constructor's output, so `pnpm --filter @systemfsoftware/effect-cell-types test:types` holds their shape.

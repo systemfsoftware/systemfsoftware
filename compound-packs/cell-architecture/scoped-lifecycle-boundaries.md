@@ -11,50 +11,48 @@ Resource acquisition must be bound directly to native Effect `Scope` lifecycles,
 
 ### 1. Scoped Acquisition at the Edge
 
-The resource specification exposes a scoped execution primitive (`spec.scoped`) returning `Effect<Resource, Error, Scope | ...>`. The composition root or execution runner wraps the cell or resource execution in `Effect.scoped`. This guarantees all resources acquired across the interaction are finalized reliably on exit, error, or interruption.
+A resource exposes `resource.scoped`, returning `Effect<Handle, Error, Scope | …>`. The kind runs the handle's `create` and registers its release in the caller's `Scope` in one uninterruptible step, so no interruption lands between the two. The composition root or runner wraps the interaction in `Effect.scoped`, and every handle acquired inside it is released on success, failure, or interruption. A resource's `prepare` (probes, port allocation, planning) runs before the driver exists; it may be interrupted and may close its own scopes.
 
-### 2. No Mid-Pipeline Scope Closure
+### 2. No Lifecycle in Cells
 
-Never call `Effect.scoped` or `Effect.acquireRelease` inside domain cells, workflows, or inner sandwich phases. A scope closed mid-pipeline causes acquired resources to vanish prematurely, triggering silent failures in downstream steps. Unclosed scopes leave `Scope` in the `R` channel until wrapped at the process edge.
+A `*.cell.ts` file neither registers a release nor closes a scope: no `Effect.acquireRelease`, `Effect.addFinalizer`, `Effect.scoped`, or `Scope.close`. A scope closed mid-pipeline releases a handle a later step still needs. Cells take the handle as data; the resource and handle kinds own both ends of its life.
 
-### 3. Automatic Finalization & Escalation
+### 3. Staged, Escalating Release
 
-Teardown must be automatic and resilient against fiber interruption. When an acquiring fiber is cancelled or exits, cleanup finalizers execute in reverse acquisition order. Teardown should escalate through progressive termination stages:
+A release is a list of stages, and each stage is an escalation chain. A step runs only when the step before it in its stage failed or died, and every stage runs. A stage whose last attempted step failed dies with that failure, so the `Scope`'s exit carries it beside any failure of the body. Nothing is discarded:
 
 ```ts
-const teardown = (handle: ExternalProcessHandle): Effect.Effect<void> =>
-  Effect.gen(function*() {
-    // 1. Attempt graceful shutdown:
-    yield* Effect.promise(() => handle.stopWithTimeout(GRACEFUL_TIMEOUT_MS)).pipe(
-      // 2. Escalate to force-kill on timeout or defect:
-      Effect.catchDefect(() =>
-        Effect.promise(() => handle.killWithTimeout(FORCE_KILL_TIMEOUT_MS)).pipe(
-          Effect.catchDefect(() => Effect.void),
-        )
-      ),
-    )
-    // 3. Final resource cleanup:
-    yield* Effect.promise(() => handle.cleanup({ force: true })).pipe(
-      Effect.catchDefect(() => Effect.void),
-    )
-  }).pipe(Effect.uninterruptible)
+release: ;
+;[
+  // stage 1: graceful stop, escalating to a forced kill only if the stop fails
+  [
+    (sandbox) => Effect.tryPromise(() => sandbox.stopWithTimeout(STOP_TIMEOUT_MS)),
+    (sandbox) => Effect.tryPromise(() => sandbox.killWithTimeout(KILL_TIMEOUT_MS)),
+  ],
+  // stage 2: always runs; if destroy fails, the Scope's exit carries the defect
+  [(sandbox) => Effect.tryPromise(() => sandbox.destroy())],
+]
 ```
 
+A handle whose driver needs no release (an in-memory volume) declares none. A handle acquired through another handle (a file opened from a file system) is a child entry of the parent's definition and gets the same release in the caller's `Scope`. An operation called after release has started dies with `Handle.HandleReleased` before touching the driver.
+
 ```ts
-// WRONG: Imperative start/stop or premature scope closure inside cell
+// WRONG: a teardown that swallows every failure
+Effect.promise(() => handle.cleanup()).pipe(Effect.catchDefect(() => Effect.void))
+
+// WRONG: imperative start/stop that leaks when the test crashes
 let instance: RunningInstance
 beforeAll(async () => {
-  instance = await driver.start(spec) // Leaks if test crashes!
+  instance = await driver.start(spec)
 })
 
-// RIGHT: Scoped execution with automatic finalization
+// RIGHT: scoped acquisition; the kind releases on exit or interruption
 Effect.scoped(
   Effect.gen(function*() {
-    const instance = yield* resource.scoped // Automatically finalized on scope exit or interruption
-    yield* instance.exec('ping')
+    const vm = yield* resource.scoped
+    yield* vm.pipe(MicroVM.exec('ping'))
   }),
 )
 ```
 
-Gate: `type-checker` — unclosed scopes track `Scope` in `R` until wrapped in `Effect.scoped`.
-Review: verify resources provide `.scoped` with finalizers and do not expose unmanaged imperative lifecycle hooks.
+Gate: `Handle.make` builds the acquire-and-register step, the staged release, and the released flag; `pnpm --filter @systemfsoftware/effect-cell-types test` holds their behaviour (lifecycle scenarios and the staged-release property). `@systemfsoftware/oxlint-plugin-cell-architecture` rule `cell-file-owns-no-lifecycle` refuses release registration and scope closing in `*.cell.ts`. The type checker keeps `Scope` in `R` until `Effect.scoped` wraps it. The microsandbox smoke journeys in CI prove a real sandbox is gone after a closed and after an interrupted scope.

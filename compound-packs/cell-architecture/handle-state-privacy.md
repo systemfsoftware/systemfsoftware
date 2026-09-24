@@ -12,39 +12,44 @@ Handles and services both encapsulate **state**; neither encapsulates **behavior
 > **State lifetime = acquisition lifetime. Storage travels inside the instance.**
 > Module-level mutable registries (`WeakMap`, global maps, module `let`) are a second source of truth: shared across every fiber, scope, and test in the process, surviving the instance, and splitting under dual-bundle installs. They are forbidden.
 
-### 1. The three lineage mechanisms for handle state
+### 1. The kind owns the handle's state
 
-A handle record is transparent data by default; encapsulation is opt-in per field:
+A handle is transparent data plus one private slot. `Handle.make` mints both, so no handle file declares its own `TypeId`, driver symbol, or guard:
 
-| Mechanism                   | Shape                                                   | Use when                                                                                                   | Lineage evidence (`repos/effect`)            |
-| :-------------------------- | :------------------------------------------------------ | :--------------------------------------------------------------------------------------------------------- | :------------------------------------------- |
-| Nominal branding            | `readonly [TypeId]: typeof TypeId`                      | Always; identity and forgery resistance, not secrecy                                                       | `Fiber.ts`, `Queue.ts`, `Socket.ts`          |
-| Readonly opaque-typed field | `readonly ref: MutableRef.MutableRef<A>`                | The token is Effect-owned and its only escapes are Effect-shaped (`unsafe*`-named)                         | `Ref.ts` publishes its raw mutable container |
-| Module-private symbol slot  | `readonly [DriverId]: RawDriver`, symbol never exported | The token is a third-party imperative object whose public methods bypass your error and lifecycle channels | stronger form of the `TypeId` pattern        |
+| State         | Where it lives                                             | Who can read it                                                                   |
+| :------------ | :--------------------------------------------------------- | :-------------------------------------------------------------------------------- |
+| Brand         | the kind's `TypeId` on every handle; `Def.is(u)` checks it | anyone; identity, not secrecy                                                     |
+| Data          | plain readonly fields `create` returns                     | anyone; the kind refuses data holding a function or the driver                    |
+| Driver        | a slot keyed by a symbol `effect-cell-types` never exports | only the definition's own operations, streams, children, release, and integration |
+| Released flag | the same private slot                                      | only the kind; an operation that finds it set dies with `HandleReleased`          |
+
+A third-party driver's public methods (`stop()`, `kill()`) bypass your error and lifecycle channels. The driver therefore arrives only as the first parameter of a function written inline in the `Handle.make` call, and it may appear there in two positions:
+
+- the head of a member chain that ends in a call other than `bind`: `sandbox.exec(cmd)`;
+- inside `integration`, a call argument, bare or as a member chain: `Layer.succeed(Driver, sandbox)`.
+
+Any function between the reference and the definition function must be a zero-parameter thunk given to an Effect constructor such as `Effect.tryPromise`.
 
 ```ts
-// RIGHT: third-party driver in a module-private symbol slot
-const DriverId: unique symbol = Symbol.for('~my-org/package/RunningInstance/driver')
-
-export interface RunningInstance extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [DriverId]: RawDriver // unnameable and unreachable from consumer code
-  readonly id: string
+// RIGHT: the driver stays inside the definition's own operation
+operations: {
+  exec: (sandbox, _vm, cmd: string) => Effect.tryPromise(() => sandbox.exec(cmd)),
 }
 
-// WRONG: publishing the third-party object as a plain readonly field
-export interface RunningInstance extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly driver: RawDriver // consumer calls driver.stop() behind your back
+// WRONG: lending the driver to caller code through a callback
+operations: {
+  use: (sandbox, _vm, f: (s: Sandbox) => Promise<A>) => Effect.tryPromise(() => f(sandbox)),
 }
 
-// WRONG: module-level registry hiding the leak in global state
-const drivers = new WeakMap<RunningInstance, RawDriver>() // second source of truth; forbidden
+// WRONG: a module-level registry holding drivers beside the instances
+const drivers = new WeakMap<RunningVM, Sandbox>() // second source of truth; forbidden
 ```
 
-### 2. Services get closure scope; handles get symbol slots
+**Unenforced guidance.** A driver method whose own result controls the driver (a method returning a handle to the same process, say) passes both the kind's types and the confinement rule. No instrument sees it; review keeps such results out of operation outputs.
 
-A service record is a dictionary of closures, so its private state lives in the closure scope of its factory (`make`), created per acquisition and never visible on any record:
+### 2. Services get closure scope
+
+A service record is a dictionary of closures, so its private state lives in the closure scope of its factory, created per acquisition and never visible on any record:
 
 ```ts
 // RIGHT: per-instance state as Ref inside the service factory (closure scope)
@@ -54,8 +59,8 @@ const make = Effect.gen(function*() {
   return { tryConsume }
 })
 export class RateLimiter extends Context.Service<RateLimiter, RateLimiter.Definition>() {
-  static readonly Default = Layer.scoped(RateLimiter, make)
+  static readonly Default = Layer.effect(RateLimiter, make)
 }
 ```
 
-Gate: `review` — verify per-instance state travels inside the instance (symbol slot, opaque field, or factory closure), third-party drivers are never public record fields, and no module-level mutable registry exists.
+Gate: `Handle.make` refuses handle data, operation results, stream elements, and callback arguments that can hold the driver, and integration outputs that are not class-declared services or can hold it (`pnpm --filter @systemfsoftware/effect-cell-types test:types`). `@systemfsoftware/oxlint-plugin-cell-architecture` rules `handle-driver-confinement` (driver positions, thunks, inline definition functions) and `kind-file-holds-no-module-state` (no module-level `let`, `var`, mutable collection, or `Ref` in a resource or handle file). Driver results that control the driver are unenforced: `review`.

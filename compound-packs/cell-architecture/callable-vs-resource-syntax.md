@@ -25,7 +25,7 @@ Use an interface object with properties when the instance represents **an entity
 
 - **Resources and Sandboxes**: A database, container, daemon, socket, or `Scope` is an active entity with lifecycle and identity, not a mathematical function. Calling `resource()` makes no semantic sense; accessing `.scoped` or `.layer` explicitly communicates resource acquisition.
 - **Immutable Configurations and Builders**: Objects whose identity consists of their fields, combinators, and compilation targets.
-- **Handles with Multiple Operations**: When an acquired resource exposes distinct capabilities (e.g. `vm.exec(...)`, `vm.port(...)`, `vm.logs(...)`), it is an object dictionary of operations, not a single evaluation function.
+- **Handles with Multiple Operations**: an acquired handle exposes distinct capabilities (`exec`, `port`, `logs`). The handle is data, and each capability is a dual over it: `vm.pipe(MicroVM.exec(cmd))`, never a callable handle.
 
 ```ts
 // WRONG: Forcing a callable function on an entity/resource
@@ -42,4 +42,4 @@ const evaluate = Policy.make(...)
 const verdict = yield* evaluate(payload) // Evaluator IS the function
 ```
 
-Gate: `review` — verify evaluators/policies use callable syntax with attached introspection properties, while resources and entities use interface objects with explicit lifecycle properties (`.scoped`, `.layer`).
+Gate: the type checker. `Resource.make` and `Handle.make` return records with no call signature (`scoped`, `layer`, `bind`, and built duals), and `Workflow.make` returns a callable decider, so the shape follows from the constructor. Evaluators and policies built outside those constructors: `review`.

@@ -59,6 +59,18 @@ The system error generated automatically in Phase 2 (`decode`) when raw input fr
 
 _Gate:_ Compiler failure if `CommandRejected` is missing from `Sandwich.write({ ... })`.
 
+### Resource
+
+A cell kind: an inert, schema-declared spec for an external target, plus projections of one scoped acquisition (`scoped`, `layer`, `bind(key)`). Declared with `Resource.make({ spec, handle, prepare?, ready? })` in a `*.resource.ts` file. `prepare` turns the spec into the handle's create input before the driver exists; `ready` receives the acquired handle. Configuration is dual-only.
+
+_Gate:_ `Resource.make` type refusals (`pnpm --filter @systemfsoftware/effect-cell-types test:types`) and `@systemfsoftware/oxlint-plugin-cell-architecture` rules `kind-file-construction`, `kind-construction-location`, `kind-file-declares-no-service`, and `kind-file-holds-no-module-state`.
+
+### Handle
+
+A cell kind: branded, pipeable data for a live instance, whose third-party driver sits in a slot only the handle's own definition reads. Declared with `Handle.make` in a `*.handle.ts` file. Acquisition registers the release in the caller's `Scope` in the same step; the release is a list of escalating stages whose unrecovered failure surfaces as a defect; an operation run after release dies with `HandleReleased`. Operations, streams, and child handles are duals the kind builds. A driver method whose own result controls the driver is unenforced guidance.
+
+_Gate:_ `Handle.make` type refusals and lifecycle scenarios (`pnpm --filter @systemfsoftware/effect-cell-types test:types` and `test`) and `@systemfsoftware/oxlint-plugin-cell-architecture` rules `handle-driver-confinement`, `handle-imports-no-resource`, and `cell-file-owns-no-lifecycle`.
+
 ### Grain Table
 
 The three-way classification of operations by their relationship to service requirements (`R`):

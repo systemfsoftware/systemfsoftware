@@ -7,31 +7,30 @@ applies_when:
 tags: [cell, resource, lawful-builder, staged-phases]
 ---
 
-A resource definition (e.g. Container, Database, Daemon, Worker, Browser, Sandbox) is an immutable data blueprint describing an external target. It must never perform side-effects or initiate network/process operations upon creation.
+A resource (Container, Database, Daemon, Worker, Browser, Sandbox) is an immutable, schema-declared spec describing an external target. Building one performs no side effect and starts no process or connection.
 
 ### The Lawful Staged Builder Rule
 
-Resource definitions must enforce lawful order of operations through staged builder phases:
+`Resource.make({ spec, handle, prepare?, ready? })` declares a resource kind; the kind orders every phase:
 
-1. **Mandatory Identity Entrypoint**: The initial factory function (`Resource.make(id)` or `Resource.spec(id)`) requires the mandatory identifier (e.g. image tag, connection string, command path, or target name). It returns a configured builder instance. It is prohibited to begin configuration without an established target identity.
-2. **Configuration Phase (Pure Combinators)**: The builder exposes pure, chainable methods (`.withPort`, `.withEnv`, `.withMount`, `.withTimeout`) that return a new immutable specification value.
-3. **Terminal Execution Phase (Projections)**: Execution handles (`.scoped` and `.layer`) exist **only** on the configured builder returned after identity has been established. Free-floating standalone execution functions that accept unvalidated or headless inputs are forbidden.
+1. **Identity first**: `kind.of(spec)` takes the type of the spec's Schema class, so the identifying field (image tag, connection string, command path, file contents) is required before a resource value exists. A package's entry point, such as `MicroVM.service(image)`, fills that field.
+2. **Configuration is pure**: each option is a `dual(2, …)` that returns a new resource value (`pipeable-dual-parity.md`). Configuration never touches a driver.
+3. **Projections exist only on the resource**: `scoped`, `layer`, and `bind(key)` are properties of a built resource, all derived from one scoped acquisition. No free-floating function acquires from a headless config.
 
 ```ts
-// WRONG: Untyped configuration object passed to ambient singleton service
-const rawConfig = { ports: [5432] } // Missing database/image identity — illegal headless state!
+// WRONG: an untyped config handed to an ambient service
+const rawConfig = { ports: [5432] } // no image identity
 const service = yield * DatabaseService
 const db = yield * service.start(rawConfig)
 
-// RIGHT: Lawful staged builder; identity required before execution exists
-const postgres = Database.make('postgres:16-alpine')
-  .withPort(5432)
-  .withEnv({ POSTGRES_DB: 'app' })
-  .withWaitStrategy(Database.Wait.forPort(5432))
-
-// Execution properties exist only on the configured definition:
-const db = yield * postgres.scoped // Scoped acquisition with managed lifecycle
-const DbLayer = postgres.layer // Parameterized Layer for test/production composition
+// RIGHT: identity, then configuration, then a projection
+const postgres = Database.make('postgres:16-alpine').pipe(
+  Database.withPort(5432),
+  Database.withEnv({ POSTGRES_DB: 'app' }),
+  Database.withWaitStrategy(Database.Wait.forPort(5432)),
+)
+const db = yield * postgres.scoped
+const DbLayer = postgres.layer
 ```
 
-Gate: `type-checker` — verify terminal execution properties (`.scoped`, `.layer`) exist only on the configured builder instance, making uninitialized resource acquisition impossible to compile.
+Gate: `Resource.make` builds `of`, `scoped`, `layer`, and `bind`, and `of` accepts only the spec's Schema-declared type (`pnpm --filter @systemfsoftware/effect-cell-types test:types` refuses a spec missing its identity and pins the projections). `@systemfsoftware/oxlint-plugin-cell-architecture` rule `kind-file-construction` requires every `*.resource.ts` file to build its resource with `Resource.make`.
