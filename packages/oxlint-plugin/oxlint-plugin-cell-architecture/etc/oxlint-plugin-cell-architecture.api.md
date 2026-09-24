@@ -15,7 +15,14 @@ const _default: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
         'ban-unknown': Rule;
+        'cell-file-owns-no-lifecycle': Rule;
+        'handle-driver-confinement': Rule;
+        'handle-imports-no-resource': Rule;
         'internal-export-jsdoc': Rule;
+        'kind-construction-location': Rule;
+        'kind-file-construction': Rule;
+        'kind-file-declares-no-service': Rule;
+        'kind-file-holds-no-module-state': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-bodyless-status-assertion': Rule;
         'no-context-generic-tag': Rule;

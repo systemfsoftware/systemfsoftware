@@ -1,7 +1,14 @@
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { banUnknown } from './rules/ban-unknown.js'
+import { cellFileOwnsNoLifecycle } from './rules/cell-file-owns-no-lifecycle.js'
+import { handleDriverConfinement } from './rules/handle-driver-confinement.js'
+import { handleImportsNoResource } from './rules/handle-imports-no-resource.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
+import { kindConstructionLocation } from './rules/kind-construction-location.js'
+import { kindFileConstruction } from './rules/kind-file-construction.js'
+import { kindFileDeclaresNoService } from './rules/kind-file-declares-no-service.js'
+import { kindFileHoldsNoModuleState } from './rules/kind-file-holds-no-module-state.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
@@ -32,7 +39,14 @@ export default {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'ban-unknown': banUnknown,
+    'cell-file-owns-no-lifecycle': cellFileOwnsNoLifecycle,
+    'handle-driver-confinement': handleDriverConfinement,
+    'handle-imports-no-resource': handleImportsNoResource,
     'internal-export-jsdoc': internalExportJsdoc,
+    'kind-construction-location': kindConstructionLocation,
+    'kind-file-construction': kindFileConstruction,
+    'kind-file-declares-no-service': kindFileDeclaresNoService,
+    'kind-file-holds-no-module-state': kindFileHoldsNoModuleState,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,
