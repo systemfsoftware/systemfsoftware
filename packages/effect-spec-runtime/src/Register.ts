@@ -53,12 +53,19 @@ const skipKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (nam
   methodsIt.skip(name, () => undefined)
 }
 
+/**
+ * An explored case has no wall-clock limit: every run is bounded in steps, and
+ * the kernel reports a hang (deadlock, runaway, or a wait it cannot observe)
+ * deterministically. A timer would only measure how busy the machine is.
+ */
+const UNTIMED = { timeout: 0 } as const
+
 const runKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name, body) => {
-  methodsIt(name, exploredBody(body))
+  methodsIt(name, UNTIMED, exploredBody(body))
 }
 
 const onlyKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name, body) => {
-  methodsIt.only(name, exploredBody(body))
+  methodsIt.only(name, UNTIMED, exploredBody(body))
 }
 
 const registerKernelCase = (methodsIt: Vitest.Methods, mode: RegisterMode): Vitest.Test<Scope.Scope> =>
