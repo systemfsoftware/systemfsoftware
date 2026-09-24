@@ -127,8 +127,9 @@ const firstDefined = <V, Kept>(value: V | undefined, keep: (defined: V) => Kept)
 
 const searchOptionsOf = <C, S, R, E, REnv>(
   specification: Specification<C, S, R, E, REnv>,
+  preemptions: number | undefined,
 ): Kernel.SearchOptions<ReadonlyArray<Operation<C, R>>, E> => ({
-  ...firstDefined(specification.preemptions, (preemptions) => ({ preemptions })),
+  ...firstDefined(preemptions, (bound) => ({ preemptions: bound })),
   ...firstDefined(specification.maxSchedules, (maxSchedules) => ({ maxSchedules })),
   isFailure: failsWhen(specification.model),
 })
@@ -138,8 +139,16 @@ const searchedOutcome = <C, S, R, E, REnv>(
   implementation: Layer.Layer<REnv, E>,
   assignments: ReadonlyArray<ReadonlyArray<C>>,
 ): Effect.Effect<Kernel.SearchReport<ReadonlyArray<Operation<C, R>>, E>> =>
-  Effect.promise(() =>
-    Kernel.search(provided(specification, implementation, assignments), searchOptionsOf(specification))
+  Kernel.currentPreemptionsFor(specification.preemptions).pipe(
+    Effect.orDie,
+    Effect.flatMap((preemptions) =>
+      Effect.promise(() =>
+        Kernel.search(
+          provided(specification, implementation, assignments),
+          searchOptionsOf(specification, preemptions),
+        )
+      )
+    ),
   )
 
 const deviationsOf = <C, R, X>(result: Kernel.RunResult<ReadonlyArray<Operation<C, R>>, X>): number =>
@@ -219,7 +228,7 @@ const stillFailsWith = <C, S, R, E, REnv>(
   implementation: Layer.Layer<REnv, E>,
 ): (candidate: ReadonlyArray<Draw<C>>) => Promise<boolean> =>
 (candidate) =>
-  Kernel.search(provided(specification, implementation, unflattened(candidate)), searchOptionsOf(specification)).then(
+  Effect.runPromise(searchedOutcome(specification, implementation, unflattened(candidate))).then(
     (searched) => searched.failures.length > 0,
   )
 

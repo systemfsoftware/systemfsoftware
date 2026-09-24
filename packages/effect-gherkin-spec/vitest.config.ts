@@ -7,5 +7,6 @@ export default defineConfig({
     includeSource: ['src/**/*.ts'],
     passWithNoTests: false,
     setupFiles: ['./vitest.setup.ts'],
+    env: { CONFORMANCE_PROFILE: 'per-change' },
   },
 })

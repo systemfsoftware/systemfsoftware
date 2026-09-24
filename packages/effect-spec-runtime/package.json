@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown -l warn",
+    "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
