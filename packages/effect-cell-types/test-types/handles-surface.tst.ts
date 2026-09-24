@@ -9,12 +9,14 @@ import { describe, expect, it } from 'tstyche'
 
 import { type DeviceInput, RecordingDevice } from '../tests/__fixtures__/recording-device.handle.js'
 import type {
+  DeviceLog,
   DeviceRefused,
   FileDriver,
   ProbeService,
   RecordingDriver,
   StepFailed,
   TallyService,
+  VolumeSpec,
 } from '../tests/__fixtures__/recording-driver.js'
 import { RecordingFile } from '../tests/__fixtures__/recording-file.handle.js'
 import { RecordingVolume } from '../tests/__fixtures__/recording-volume.handle.js'
@@ -37,7 +39,7 @@ declare const fileDriver: FileDriver
 declare const opaque: Top
 declare const create: (input: Label) => Effect.Effect<Handle.Acquired<Driver, Label>>
 declare const device: Device
-declare const volume: Handle.Handle<'RecordingVolume', { readonly label: string }>
+declare const volume: Handle.Handle<'RecordingVolume', { label: string }>
 
 class Tracer extends Context.Service<Tracer, { readonly span: (name: string) => Effect.Effect<void> }>()('Tracer') {}
 
@@ -230,6 +232,11 @@ describe('Handle.Definition', () => {
       Effect.Effect<Context.Context<ProbeService | TallyService>, never, Scope.Scope>
     >()
     expect(RecordingVolume.context(volume)).type.toBe<Effect.Effect<Context.Context<never>, never, Scope.Scope>>()
+    expect(RecordingVolume.acquire).type.toBe<
+      (
+        input: VolumeSpec,
+      ) => Effect.Effect<Handle.Handle<'RecordingVolume', { label: string }>, never, DeviceLog | Scope.Scope>
+    >()
   })
 
   it('Should_ReleaseWithTypedSteps_When_TheStepsFail', () => {

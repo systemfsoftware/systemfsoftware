@@ -54,6 +54,12 @@ export const recordingDriver = ({ log, failing }: Recording): RecordingDriver =>
   lines: (since) => Effect.map(Ref.get(log), (lines) => lines.slice(since)),
 })
 
+export class DeviceLog extends Context.Service<DeviceLog, Log>()('DeviceLog') {}
+
+export class VolumeSpec extends Schema.Class<VolumeSpec>('VolumeSpec')({
+  label: Schema.String,
+}) {}
+
 export interface Tally {
   readonly lines: Effect.Effect<ReadonlyArray<string>>
 }

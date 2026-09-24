@@ -13,17 +13,15 @@ import * as Stream from 'effect/Stream'
 import { expect } from 'vitest'
 
 import { echo, open, RecordingDevice, ticks } from './__fixtures__/recording-device.handle.js'
-import { type Log, ProbeService, TallyService } from './__fixtures__/recording-driver.js'
+import { DeviceLog, ProbeService, TallyService, VolumeSpec } from './__fixtures__/recording-driver.js'
 import { read } from './__fixtures__/recording-file.handle.js'
 import { lines, RecordingVolume } from './__fixtures__/recording-volume.handle.js'
 
 const Feature = makeFeature({ it, layer })
 
-class DriverLog extends Context.Service<DriverLog, Log>()('DriverLog') {}
+const FreshLog = Layer.effect(DeviceLog)(Ref.make<ReadonlyArray<string>>([]))
 
-const FreshLog = Layer.effect(DriverLog)(Ref.make<ReadonlyArray<string>>([]))
-
-const heard = Effect.flatMap(DriverLog, Ref.get)
+const heard = Effect.flatMap(DeviceLog, Ref.get)
 
 type Top<A = unknown> = A
 
@@ -43,7 +41,7 @@ const heldThenLetGo = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   })
 
 const switchedOn = (name: string, failing: ReadonlyArray<string>) =>
-  Effect.flatMap(DriverLog, (log) => RecordingDevice.acquire({ log, name, failing }))
+  Effect.flatMap(DeviceLog, (log) => RecordingDevice.acquire({ log, name, failing }))
 
 Feature('Reaching a device only while it is held')
   .withScenarioLayer(FreshLog)
@@ -116,8 +114,7 @@ Feature('Reaching a device only while it is held')
           () =>
             Effect.scoped(
               Effect.gen(function*() {
-                const log = yield* DriverLog
-                const volume = yield* RecordingVolume.acquire({ log, label: 'scratch' })
+                const volume = yield* RecordingVolume.acquire(new VolumeSpec({ label: 'scratch' }))
                 const context = yield* RecordingVolume.context(volume)
                 return { read: yield* lines(volume, 0), lends: Context.getOption(context, ProbeService) }
               }),

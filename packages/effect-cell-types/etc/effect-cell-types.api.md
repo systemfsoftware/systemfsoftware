@@ -6,7 +6,17 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
+    export { Cell, CellTypeId, Do, Kind$2 as Kind, Run, TypeLambda$1 as TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
+}
+
+// @public (undocumented)
+export namespace Handle {
+    export { Acquired, AnyChildDefinition, AnyRootDefinition, Brand$1 as Brand, Built, BuiltChild, BuiltChildren, BuiltOperations, ChildDefinition, ChildEntry, ChildOptions, ChildShapeMismatch, CommonOptions, DataHoldsDriver, DataIsFunction, Definition, DefinitionBrand, DefinitionTypeId, Handle, HandleOf$1 as HandleOf, HandleReleased, HandleTypeId, Holds, InputHoldsDriver, IntegrationOutputLendsDriver, IntegrationOutputUndeclared, Members, Operation, OperationLendsDriver, OperationTakesDriverCallback, Release, ReleaseStep, RootDefinition, RootOptions, Shape, StreamLendsDriver, StreamOperation, Witness, make$2 as make, shape };
+}
+
+// @public (undocumented)
+export namespace Resource {
+    export { Brand, Handle, Kind$1 as Kind, KindTypeId, Of, Resource, ResourceTypeId, make$1 as make };
 }
 
 // @public (undocumented)
