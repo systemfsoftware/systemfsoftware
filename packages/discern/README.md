@@ -78,7 +78,7 @@ console.log(verdict) // block: rename User.id to User.key
 
 A deterministic pattern that already settles an `and` keeps the model out of the call entirely.
 
-`criteria` must be a finite set of literal labels: an inline object or array, or a value declared `as const`. A set typed `string`, one with a template label such as `` `tone-${string}` ``, or an empty set does not compile, because `.is`, `.atLeast`, `Discern.case`, and `Discern.exhaustive` could no longer refuse a wrong label. For labels known only at runtime, wrap an effect `Decision.classify` with `Discern.decision` and read it with `Discern.where`, or route with `Discern.Procedure.registry`.
+`criteria` must be a finite set of literal labels: an inline object or array, or a value declared `as const`. A set typed `string`, one with a template label such as `` `tone-${string}` ``, or an empty set does not compile, because `.is`, `.atLeast`, `Discern.case`, and `Discern.exhaustive` could no longer refuse a wrong label. For labels known only at runtime, use `Discern.decision` to wrap an effect `Decision.classify`, then read it with `Discern.where`, or route with `Discern.Procedure.registry`.
 
 Every method has a standalone twin for `pipe`: `impact.is('breaking')` and `impact.pipe(Discern.is('breaking'))` build the same pattern, as do `desk.invoke(input)` and `desk.pipe(Discern.Procedure.invoke(input))`.
 

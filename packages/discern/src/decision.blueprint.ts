@@ -657,7 +657,7 @@ export const on = <S extends Schema.Constraint>(schema: S): DecisionScope<S> => 
     rateFor<S['Type'], Level, S>(options, schema),
 })
 
-export const classifyOpenOn =
+export const openClassifyOn =
   <S extends Schema.Constraint>(schema: S) =>
   (options: ClassifyOptions<string>): ClassifyDecision<S['Type'], string, S> =>
     classifyFor<S['Type'], string, S>(options, schema)
