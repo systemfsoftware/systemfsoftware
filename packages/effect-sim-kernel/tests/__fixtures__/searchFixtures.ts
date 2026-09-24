@@ -37,6 +37,25 @@ export const scopedProgram: Effect.Effect<ReadonlyArray<string>> = Effect.gen(fu
   return events
 })
 
+export const sharedScopeProgram: Effect.Effect<ReadonlyArray<string>> = Effect.gen(function*() {
+  const events: Array<string> = []
+  const acquire = Effect.sync(() => {
+    events.push('acquired')
+    return 'resource'
+  })
+  const release = () =>
+    Effect.sync(() => {
+      events.push('released')
+    })
+  const helper = Effect.sync(() => {
+    events.push('helped')
+  })
+  yield* Effect.scoped(
+    Effect.andThen(Effect.acquireRelease(acquire, release), Effect.flatMap(Effect.forkChild(helper), Fiber.join)),
+  )
+  return events
+})
+
 export const isOverBudget = <A, E>(outcome: Kernel.SearchReport<A, E>): boolean => 'limit' in outcome
 
 export const budgetLimitOf = <A, E>(outcome: Kernel.SearchReport<A, E>): Kernel.BudgetLimit | undefined =>

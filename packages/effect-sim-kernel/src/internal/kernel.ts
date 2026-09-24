@@ -490,6 +490,8 @@ export interface Kernel {
   observeGlobalWork(): void
   /** Records a primitive the run reached without observing it (pruning seam). */
   unobserved(name: string): void
+  /** Tells the kernel `holder` holds `scope`; a second holder makes its finalizers unobserved. */
+  holdScope(scope: object, holder: Field): void
   /** Drains the recorded names; each run's records are read once. */
   takeUnobserved(): ReadonlyArray<string>
   resolveTarget(target: FiberTarget): AnyFiber | undefined
@@ -519,6 +521,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   const escapes: Array<Escape> = []
   const touches = new Set<object>()
   const unobservedNames = new Set<string>()
+  const scopeHolders = new WeakMap<object, Field>()
   const clocks = makeRunClocks()
   /**
    * The limit starts at one operation so every adjacent primitive is separated
@@ -593,6 +596,14 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
   const opLimitOf = (fiber: AnyFiber): number => seededLimit(fiber) ?? 1
 
   const opLimitExceeded = (fiber: AnyFiber): boolean => fiber.currentOpCount > opLimitOf(fiber)
+
+  const firstHolderOf = (scope: object, holder: Field): Field => {
+    if (scopeHolders.has(scope)) return scopeHolders.get(scope)
+    scopeHolders.set(scope, holder)
+    return holder
+  }
+
+  const heldByAnother = (scope: object, holder: Field): boolean => firstHolderOf(scope, holder) !== holder
 
   const noteFirstRan = (fiber: AnyFiber): void => {
     if (ranInTask === undefined) ranInTask = fiber
@@ -797,6 +808,9 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     },
     unobserved: (name: string): void => {
       unobservedNames.add(name)
+    },
+    holdScope: (scope: object, holder: Field): void => {
+      if (heldByAnother(scope, holder)) unobservedNames.add('Scope finalizer')
     },
     takeUnobserved: (): ReadonlyArray<string> => {
       const found = [...unobservedNames].sort()

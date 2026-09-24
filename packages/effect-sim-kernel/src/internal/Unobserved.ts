@@ -103,21 +103,32 @@ const scopedContext = (fiber: Field): Context.Context<Scope.Scope> | undefined =
   return isScopeContext(context) ? context : undefined
 }
 
-const holdsScope = (context: Context.Context<Scope.Scope>): boolean =>
-  Option.isSome(Context.getOption(context, Scope.Scope))
-
-const enteredScope = (fiber: Field): boolean => {
+const heldScope = (fiber: Field): Scope.Scope | undefined => {
   const context = scopedContext(fiber)
-  return context === undefined ? false : holdsScope(context)
+  return context === undefined ? undefined : Option.getOrUndefined(Context.getOption(context, Scope.Scope))
 }
 
+const holdIn = (scope: Scope.Scope, holder: Field): void => {
+  currentKernel()?.holdScope(scope, holder)
+}
+
+const noteHeldScope = (self: Field): void => {
+  const scope = heldScope(self)
+  if (scope !== undefined) holdIn(scope, self)
+}
+
+/**
+ * A scope's finalizers live in plain object state the kernel cannot watch, but
+ * only a scope two fibers hold can race: the kernel is told who holds each
+ * scope and records the finalizer as unobserved once a second fiber does.
+ */
 const setAndNote = (
   original: (...args: ReadonlyArray<Field>) => void,
   self: Field,
   args: ReadonlyArray<Field>,
 ): void => {
   Reflect.apply(original, self, args)
-  if (enteredScope(self)) note('Scope finalizer')
+  noteHeldScope(self)
 }
 
 const originalSetContext = (proto: object): ((...args: ReadonlyArray<Field>) => void) | undefined => {

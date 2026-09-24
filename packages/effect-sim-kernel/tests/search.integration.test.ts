@@ -13,6 +13,7 @@ import {
   raceDetected,
   replayValueOf,
   scopedProgram,
+  sharedScopeProgram,
 } from './__fixtures__/searchFixtures.js'
 
 const Feature = makeFeature({ it })
@@ -101,10 +102,33 @@ const twiceWithSeed = (
   )
 }
 
+const resourceHolders: ReadonlyArray<{
+  readonly held: string
+  readonly pruning: string
+  readonly program: Effect.Effect<ReadonlyArray<string>>
+  readonly pruned: boolean
+  readonly names: ReadonlyArray<string>
+}> = [
+  {
+    held: 'one worker opens and closes by itself',
+    pruning: 'on',
+    program: scopedProgram,
+    pruned: true,
+    names: [],
+  },
+  {
+    held: 'a worker opens and a helper it starts inside also holds',
+    pruning: 'off, naming the shared cleanup',
+    program: sharedScopeProgram,
+    pruned: false,
+    names: ['Scope finalizer'],
+  },
+]
+
 Feature('Searching schedules until a concurrency fault shows')
   .live('drives its own simulation-kernel run')
   .withLayer(Layer.empty)
-  .body(({ scenario }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A queue the search cannot watch turns pruning off, and the result says so',
       Gherkin.Do.pipe(
@@ -308,22 +332,22 @@ Feature('Searching schedules until a concurrency fault shows')
       ),
     )
 
-    scenario(
-      'A resource cleaned up through its own lifetime turns pruning off, and the result names it',
-      Gherkin.Do.pipe(
-        Given('a program that opens and closes a resource within one lifetime')(
-          'target',
-          () => Effect.succeed(scopedProgram),
+    scenarioOutline(
+      'A resource <held> leaves pruning <pruning>',
+      resourceHolders,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given(`a program with a resource ${row.held}`)('target', () => Effect.succeed(row.program)),
+          When('the program is searched with one pause allowed')(
+            'outcome',
+            (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
+          ),
+          Then(`the bound reports pruning ${row.pruning}`)((s) => {
+            expect(outcomeBound(s.outcome).pruning.enabled).toBe(row.pruned)
+          }),
+          And('the bound names only the cleanup two workers share')((s) => {
+            expect(outcomeBound(s.outcome).pruning.disabledBy).toEqual(row.names)
+          }),
         ),
-        When('the program is searched with one pause allowed')(
-          'outcome',
-          (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
-        ),
-        Then('the bound reports pruning is off and names the cleanup')((s) => {
-          const bound = outcomeBound(s.outcome)
-          expect(bound.pruning.enabled).toBe(false)
-          expect(bound.pruning.disabledBy).toContain('Scope finalizer')
-        }),
-      ),
     )
   })
