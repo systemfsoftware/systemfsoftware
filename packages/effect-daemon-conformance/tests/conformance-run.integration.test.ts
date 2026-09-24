@@ -4,6 +4,7 @@ import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Duration, Effect, Layer, Match } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
+import { LateStopMedium, LateStopMediumLayer } from './__fixtures__/late-stop-medium.js'
 import { PlantedMedium, PlantedMediumLayer } from './__fixtures__/planted-medium.js'
 
 const namingMedium = (result: Conformance.ScenarioResult): ReadonlyArray<string> =>
@@ -70,6 +71,11 @@ const planted = Conformance.prove(PlantedMedium).pipe(
   advancing,
 )
 
+const lateStop = Conformance.prove(LateStopMedium).pipe(
+  Effect.provide(Layer.merge(Conformance.FiberReferenceLayer, LateStopMediumLayer)),
+  advancing,
+)
+
 it.effect(
   'The fiber reference conforms on every scenario',
   () =>
@@ -87,6 +93,15 @@ it.effect(
     Effect.map(planted, (report) => {
       expect(Conformance.isConforming(report)).toBe(false)
       expect(namedMediums(report)).toContain('planted')
+    }),
+  60_000,
+)
+
+it.effect(
+  'A medium whose stop outlives the harness step that ordered it conforms on every scenario',
+  () =>
+    Effect.map(lateStop, (report) => {
+      expect(report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
     }),
   60_000,
 )

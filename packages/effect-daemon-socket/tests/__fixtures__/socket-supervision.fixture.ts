@@ -163,7 +163,7 @@ export const observeSocketChild = (parts: {
       Stream.runForEach(Supervisor.traceOf(handle), (entry) => Ref.update(seen, (entries) => [...entries, entry])),
     )
     yield* parts.drive({
-      advance: fixture.advance,
+      advance: (step) => fixture.advance(step, 0),
       awaitReady: awaitWhere(seen, readyIn),
       awaitTermination: awaitWhere(seen, terminatedIn),
       awaitFrames: (count) =>

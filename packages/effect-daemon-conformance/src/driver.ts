@@ -5,7 +5,12 @@ import type { ChildId } from './Trace.schema.js'
 
 /** The channel that advances one child's steps, reaching the child and never the supervisor's mailbox (KTD14). */
 export interface ChildControl {
-  readonly advance: (step: ChildStep) => Effect.Effect<void>
+  /**
+   * Hands one step to the incarnation the kernel ordered for it. A driver whose channel is
+   * per incarnation addresses by that generation; a driver whose incarnation stops its own
+   * consumer when the kernel stops it may ignore the generation.
+   */
+  readonly advance: (step: ChildStep, generation: number) => Effect.Effect<void>
 }
 
 /** One child role launched before the supervisor starts: its program and the control that drives it. */

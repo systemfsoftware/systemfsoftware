@@ -74,13 +74,15 @@ export const Scenarios: ReadonlyArray<Scenario> = [
     intensity: 1,
     periodMillis: 1_000,
     children: [
-      worker('alpha', [{ _tag: 'BecomeReady' }, { _tag: 'ExitAbnormal' }]),
-      worker('beta', [{ _tag: 'BecomeReady' }]),
+      worker('alpha', [{ _tag: 'BecomeReady' }, { _tag: 'ExitAbnormal' }, { _tag: 'BecomeReady' }]),
+      worker('beta', [{ _tag: 'BecomeReady' }, { _tag: 'BecomeReady' }]),
     ],
     control: [
       { _tag: 'AdvanceChild', childId: 'alpha' },
       { _tag: 'AdvanceChild', childId: 'beta' },
       { _tag: 'AdvanceChild', childId: 'alpha' },
+      { _tag: 'AdvanceChild', childId: 'alpha' },
+      { _tag: 'AdvanceChild', childId: 'beta' },
       { _tag: 'ShutdownSupervisor' },
     ],
   },

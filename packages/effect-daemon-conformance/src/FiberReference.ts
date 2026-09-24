@@ -28,13 +28,16 @@ const launch = (
 ): Effect.Effect<LaunchedChild<Supervisor.FiberProgram>, never, never> =>
   Effect.map(Queue.unbounded<ChildStep>(), (steps) => ({
     program: fiberProgramOf(steps),
-    control: { advance: (step) => Effect.asVoid(Queue.offer(steps, step)) },
+    control: { advance: (step, _generation) => Effect.asVoid(Queue.offer(steps, step)) },
   }))
 
 /**
  * The fiber medium as the reference every other medium is compared against. It
  * satisfies the driver contract trivially: one unbounded queue per child, a
  * program that takes steps from it, and a control that offers to the same queue.
+ * The generation goes unread because the fiber medium stops a child by
+ * interrupting its program, so the incarnation a step is for is the only one that
+ * can be taking from that queue.
  */
 export const FiberReference: ConformanceDriver<Supervisor.FiberProgram, never, never> = {
   name: 'fiber',

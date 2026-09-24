@@ -85,7 +85,7 @@ const launch = (
 ): Effect.Effect<LaunchedChild<Supervisor.FiberProgram>, never, never> =>
   Effect.map(Queue.unbounded<ChildStep>(), (steps) => ({
     program: (ready) => consume(steps, ready),
-    control: { advance: (step) => Effect.asVoid(Queue.offer(steps, step)) },
+    control: { advance: (step, _generation) => Effect.asVoid(Queue.offer(steps, step)) },
   }))
 
 /** A medium that reports a child ready without starting it — the AE10 plant, which must diverge. */

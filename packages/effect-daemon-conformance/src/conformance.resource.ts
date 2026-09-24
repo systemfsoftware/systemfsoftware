@@ -36,22 +36,54 @@ const terminatesIn = (decision: Supervisor.TraceEntry['decision']): boolean =>
     Match.orElse(() => false),
   )
 
-const startedOf = (childId: string) => (entry: Supervisor.TraceEntry): boolean =>
-  Match.value(entry.event).pipe(
-    Match.tag('ChildStarted', (started) => started.childId === childId),
-    Match.orElse(() => false),
+interface NamedChild {
+  readonly childId: string
+  readonly generation: number
+}
+
+interface OrderedChild extends NamedChild {
+  readonly kind: 'StartChild' | 'StopChild'
+}
+
+interface OrderedCommands {
+  readonly starts: ReadonlyArray<NamedChild>
+  readonly stops: ReadonlyArray<NamedChild>
+}
+
+const commandsOf = (decision: Supervisor.TraceEntry['decision']): OrderedCommands =>
+  Match.value(decision).pipe(
+    Match.tag('Continue', (live) => live.commands),
+    Match.tag('RestartChildren', (restart) => restart.commands),
+    Match.tag('StartChildren', (started) => started.commands),
+    Match.tag('CoolDown', (cool) => cool.commands),
+    Match.tag('StopChildren', (stopped) => stopped.commands),
+    Match.tag('Terminate', (terminate) => terminate.commands),
+    Match.tag('RefuseDynamicStart', (refused) => refused.commands),
+    Match.tag('Stale', () => ({ starts: [], stops: [] })),
+    Match.exhaustive,
   )
 
-const generationOf = (entry: Supervisor.TraceEntry): number =>
-  Match.value(entry.event).pipe(
-    Match.tag('ChildStarted', (started) => started.generation),
-    Match.orElse(() => 0),
+/** Every start and stop the kernel has ordered, in trace order. */
+const orderedChildrenIn = (trace: Trace): ReadonlyArray<OrderedChild> =>
+  Arr.flatMap(trace, (entry) => {
+    const { starts, stops } = commandsOf(entry.decision)
+    return [
+      ...Arr.map(starts, (start): OrderedChild => ({ kind: 'StartChild', ...start })),
+      ...Arr.map(stops, (stop): OrderedChild => ({ kind: 'StopChild', ...stop })),
+    ]
+  })
+
+/** The newest incarnation the kernel has ordered started for one child. */
+const latestOrderedGenerationIn = (childId: string) => (trace: Trace): number =>
+  Option.getOrElse(
+    Option.map(
+      Arr.findLast(orderedChildrenIn(trace), (ordered) =>
+        holds([ordered.kind === 'StartChild', ordered.childId === childId])),
+      (ordered) =>
+        ordered.generation,
+    ),
+    () => 0,
   )
-
-const currentGenerationOf = (childId: string) => (trace: Trace): number =>
-  Option.getOrElse(Option.map(Arr.findLast(trace, startedOf(childId)), generationOf), () => 0)
-
-const incarnationStartedIn = (childId: string) => (trace: Trace): boolean => Arr.some(trace, startedOf(childId))
 
 const endingEventOf = (childId: string, generation: number) => (entry: Supervisor.TraceEntry): boolean =>
   Match.value(entry.event).pipe(
@@ -174,15 +206,14 @@ const advanceEffectOf = <Program>(
   childId: string,
 ): Effect.Effect<void> =>
   Effect.gen(function*() {
-    yield* awaitPredicate(seen, incarnationStartedIn(childId))
-    const generation = yield* Effect.map(Ref.get(seen), currentGenerationOf(childId))
+    const generation = yield* Effect.map(Ref.get(seen), latestOrderedGenerationIn(childId))
     const index = yield* currentCursorOf(cursors, childId)
     yield* Ref.update(cursors, (known) => HashMap.set(known, childId, index + 1))
     yield* Option.match(Arr.get(scriptOf(scenario, childId), index), {
       onNone: () => Effect.void,
       onSome: (step) =>
         Effect.andThen(
-          controlOf(launched, childId).advance(step),
+          controlOf(launched, childId).advance(step, generation),
           awaitPredicate(seen, stepSettledIn(childId, generation, step._tag)),
         ),
     })

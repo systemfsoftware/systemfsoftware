@@ -41,7 +41,7 @@ const report = yield* Conformance.prove({
   launch: (childId, script) =>
     Effect.succeed({
       program: processSpecOf(childId, script),
-      control: { advance: (step) => writeStepToChild(childId, step) },
+      control: { advance: (step, generation) => writeStepToChild(childId, generation, step) },
     }),
 }).pipe(Effect.provide(ProcessMedium.layer(options)))
 
@@ -52,6 +52,11 @@ Conformance.isConforming(report)
 advances it — a queue for the fiber reference, stdin or a fixture socket for another medium. The
 control channel reaches the child directly and never the supervisor's mailbox, so no control step
 appears in a trace.
+
+A step is addressed to the generation of the incarnation it is for. A medium whose incarnation stops
+its own consumer when the kernel stops it may ignore the generation, as the fiber reference does; a
+medium whose channel outlives the stop it was told about must not, or the step a restarted child is
+for reaches the incarnation on its way out.
 
 The reference is `Conformance.FiberReference`, proven against itself by construction:
 

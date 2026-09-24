@@ -28,7 +28,7 @@ const terminationAfter = (step: Conformance.ChildStep) =>
     const launched = yield* launchedChildOf
     const medium = yield* mediumOf
     const evidence = yield* medium.start(launched.program)
-    yield* launched.control.advance(step)
+    yield* launched.control.advance(step, 0)
     return yield* medium.report(evidence)
   }))
 
@@ -36,7 +36,7 @@ const readinessAndProbe = Effect.scoped(Effect.gen(function*() {
   const launched = yield* launchedChildOf
   const medium = yield* mediumOf
   const evidence = yield* medium.start(launched.program)
-  yield* launched.control.advance({ _tag: 'BecomeReady' })
+  yield* launched.control.advance({ _tag: 'BecomeReady' }, 0)
   yield* evidence.ready
   return yield* medium.probe(evidence)
 }))
