@@ -54,6 +54,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/oxlint-import-origin": "workspace:^",
     "@systemfsoftware/stryker-config": "workspace:^",
     "@systemfsoftware/stryker-ignorer-effect-schema-declarations": "catalog:stryker",
     "@systemfsoftware/stryker-ignorer-in-source-vitest-block": "catalog:stryker",

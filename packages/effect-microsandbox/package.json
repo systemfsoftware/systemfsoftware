@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-microsandbox#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Effect-native microVM integration testing via microsandbox — pure-data container specs, Scope/Layer lifecycle, Schedule-driven waits, zero Docker.",
+  "description": "Effect-native microVM integration testing via microsandbox \u2014 pure-data container specs, Scope/Layer lifecycle, Schedule-driven waits, zero Docker.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -78,6 +78,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "tstyche": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
