@@ -10,16 +10,21 @@ export interface DifferentialBuilder<Input, OutputA, OutputB> {
   }
 }
 
+export interface Comparison<Input, OutputA, OutputB, E> {
+  readonly name: string
+  readonly reference: (input: Input) => Effect.Effect<OutputA, E>
+  readonly candidate: (input: Input) => Effect.Effect<OutputB, E>
+}
+
 export const compare = <Input, OutputA, OutputB, E>(
-  name: string,
-  targets: {
-    readonly reference: (input: Input) => Effect.Effect<OutputA, E>
-    readonly candidate: (input: Input) => Effect.Effect<OutputB, E>
-  },
+  comparison: Comparison<Input, OutputA, OutputB, E>,
 ): DifferentialBuilder<Input, OutputA, OutputB> => ({
   on: (arb, options) => ({
     assert: (oracle) => {
-      it.effect(name, () => runDifferentialWithShrink(targets.reference, targets.candidate, arb, oracle, options))
+      it.effect(
+        comparison.name,
+        () => runDifferentialWithShrink(comparison.reference, comparison.candidate, arb, oracle, options),
+      )
     },
   }),
 })

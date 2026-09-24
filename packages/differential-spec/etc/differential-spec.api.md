@@ -12,7 +12,7 @@ import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
 export namespace Differential {
-    export { DifferentialBuilder, compare };
+    export { Comparison, DifferentialBuilder, compare };
 }
 
 // Warning: (ae-forgotten-export) The symbol "DisparityError_base" needs to be exported by the entry point index.d.ts
@@ -47,7 +47,7 @@ export const formatDisparity: (record: DisparityRecord) => string;
 
 // @public (undocumented)
 export namespace Metamorphic {
-    export { MetamorphicBuilder, on };
+    export { MetamorphicBuilder, MetamorphicTarget, on };
 }
 
 // @public (undocumented)

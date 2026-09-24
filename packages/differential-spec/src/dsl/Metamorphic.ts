@@ -13,13 +13,17 @@ export interface MetamorphicBuilder<Input, Output> {
   }
 }
 
+export interface MetamorphicTarget<Input, Output, E> {
+  readonly name: string
+  readonly system: (input: Input) => Effect.Effect<Output, E>
+}
+
 export const on = <Input, Output, E>(
-  name: string,
-  system: (input: Input) => Effect.Effect<Output, E>,
+  target: MetamorphicTarget<Input, Output, E>,
 ): MetamorphicBuilder<Input, Output> => ({
   relation: ({ transformInput, assertOutput }) => ({
     on: (arb, options) => {
-      it.effect(name, () => runMetamorphicWithShrink(system, arb, transformInput, assertOutput, options))
+      it.effect(target.name, () => runMetamorphicWithShrink(target.system, arb, transformInput, assertOutput, options))
     },
   }),
 })
