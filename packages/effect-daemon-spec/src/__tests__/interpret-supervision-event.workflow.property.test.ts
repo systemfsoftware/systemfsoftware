@@ -318,6 +318,15 @@ const isStopChildren = (decision: SupervisionDecision): boolean =>
     Match.orElse(() => false),
   )
 
+const terminatesOnce = (decision: SupervisionDecision): boolean =>
+  Match.value(decision).pipe(
+    Match.tag('Terminate', (terminated) =>
+      Arr.length(terminated.commands.terminates) === 1 && Arr.length(terminated.commands.stops) === 0),
+    Match.orElse(() =>
+      false
+    ),
+  )
+
 const isStartChildren = (decision: SupervisionDecision): boolean =>
   Match.value(decision).pipe(
     Match.tag('StartChildren', () => true),
@@ -645,7 +654,19 @@ it.prop(
         hasNoCommands(continued) &&
         sameSeq(idSeqOf(continued.core.children), ['c1'])),
       Match.orElse(() => false),
-    ) && isStopChildren(lastDecisionOf(second))
+    ) && terminatesOnce(lastDecisionOf(second))
+  },
+)
+
+it.prop(
+  '∀t_EmptyTreeShutdown_=Terminate',
+  [RestartStrategy, EventTime],
+  ([strategy, at]) => {
+    const policy = policyWith({ strategy, childDeclarations: [] })
+    const outcome = folded(runningOf(coreWith(policy, [], [])), [
+      { _tag: 'ShutdownRequested', at, reason: { _tag: 'Shutdown' } },
+    ])
+    return terminatesOnce(lastDecisionOf(outcome))
   },
 )
 

@@ -353,14 +353,22 @@ const holdOf = (core: SupervisorCore): SupervisionDecision => new Continue({ cor
 
 const terminatedReason: TerminationReason = { _tag: 'Shutdown' }
 
-const stopEverything = (core: SupervisorCore, reason: TerminationReason): SupervisionDecision => {
-  const stops = Arr.map(Arr.reverse(core.children), (child) => stopCommandOf(core.policy, child))
-  return new StopChildren({
-    core: withChildren(core, Arr.map(core.children, stoppingOf)),
-    reason,
-    commands: commandsIn({ stops }),
-  })
-}
+const terminateDecisionOf = (reason: TerminationReason): SupervisionDecision =>
+  new Terminate({ reason, commands: commandsIn({ terminates: [terminateCommandOf(reason)] }) })
+
+const stopEverything = (core: SupervisorCore, reason: TerminationReason): SupervisionDecision =>
+  Match.value(Arr.isReadonlyArrayNonEmpty(core.children)).pipe(
+    Match.when(true, () =>
+      new StopChildren({
+        core: withChildren(core, Arr.map(core.children, stoppingOf)),
+        reason,
+        commands: commandsIn({
+          stops: Arr.map(Arr.reverse(core.children), (child) => stopCommandOf(core.policy, child)),
+        }),
+      })),
+    Match.when(false, () => terminateDecisionOf(reason)),
+    Match.exhaustive,
+  )
 
 type Termination = {
   readonly childId: ChildId
@@ -688,10 +696,7 @@ const stoppedInShuttingDown = (
 ): SupervisionDecision => {
   const next = removalOf(core, childId, generation)
   return Match.value(Arr.every(next.children, (child) => child.status !== 'stopping')).pipe(
-    Match.when(
-      true,
-      () => new Terminate({ reason, commands: commandsIn({ terminates: [terminateCommandOf(reason)] }) }),
-    ),
+    Match.when(true, () => terminateDecisionOf(reason)),
     Match.when(false, () => new Continue({ core: next, commands: noCommands })),
     Match.exhaustive,
   )
