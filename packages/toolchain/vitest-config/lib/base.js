@@ -35,6 +35,12 @@ export const sourceResolveConditions = {
  */
 export const sharedConfig = {
   ...sourceResolveConditions,
+  // Effect v3's `effect/TestClock` path, which models keep writing, resolves to
+  // the fork's compat module; on its virtual time `adjust` lets that much time pass.
+  resolve: {
+    ...sourceResolveConditions.resolve,
+    alias: { 'effect/TestClock': '@effect/vitest/TestClock' },
+  },
   test: {
     globals: true,
     environment: 'node',
