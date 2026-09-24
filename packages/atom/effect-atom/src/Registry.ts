@@ -24,7 +24,7 @@ import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import type * as Atom from './Atom.js'
 import { NodeImpl, runInternalBatch } from './AtomNode.js'
-import { hostNow, hostScheduleTimer } from './internal/HostTimer.js'
+import { hostScheduleTimer, makeHostNow } from './internal/HostTimer.js'
 import * as Result from './Result.js'
 import type { Failure, Success } from './Result.js'
 
@@ -442,7 +442,7 @@ type TimeoutBucket = readonly [nodes: Set<NodeImpl>, cancel: () => void]
 
 function nowOrHost(now: (() => number) | undefined): () => number {
   if (now === undefined) {
-    return hostNow
+    return makeHostNow()
   }
   return now
 }

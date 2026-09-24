@@ -1242,4 +1242,72 @@ Feature('Keeping a value that is still loading available to every reader')
         }),
       ),
     )
+    scenario(
+      'Two pages that keep their own time let an idle value expire on their own schedules',
+      Gherkin.Do.pipe(
+        Given('two pages that each keep their own time, both holding the same idle value')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const value = Atom.make(1)
+              const early = manualClock()
+              const late = manualClock()
+              const first = Registry.make({ defaultIdleTTL: 100, timeoutResolution: 10, ...early })
+              const second = Registry.make({ defaultIdleTTL: 100, timeoutResolution: 10, ...late })
+              first.get(value)
+              second.get(value)
+              return { value, early, late, first, second }
+            }),
+        ),
+        When("only the first page's time passes the cleanup window")('held', (s) =>
+          Effect.sync(() => {
+            s.ctx.early.advance(200)
+            s.ctx.late.advance(50)
+            return {
+              first: s.ctx.first.getNodes().has(s.ctx.value),
+              second: s.ctx.second.getNodes().has(s.ctx.value),
+            }
+          })),
+        Then('the first page has let the value go while the second still holds it')((s) => {
+          expect(s.held.first).toBe(false)
+          expect(s.held.second).toBe(true)
+        }),
+      ),
+    )
   })
+
+function manualClock() {
+  const state: {
+    time: number
+    tasks: ReadonlyArray<() => void>
+    timers: ReadonlyArray<{ readonly due: number; readonly run: () => void }>
+  } = { time: 0, tasks: [], timers: [] }
+  const scheduleTask = (task: () => void): () => void => {
+    state.tasks = [...state.tasks, task]
+    return () => {
+      state.tasks = state.tasks.filter((pending) => pending !== task)
+    }
+  }
+  const runTasks = (): void => {
+    const pending = state.tasks
+    state.tasks = []
+    pending.forEach((task) => task())
+  }
+  const now = (): number => state.time
+  const scheduleTimer = (run: () => void, delayMillis: number): () => void => {
+    const timer = { due: state.time + delayMillis, run }
+    state.timers = [...state.timers, timer]
+    return () => {
+      state.timers = state.timers.filter((pending) => pending !== timer)
+    }
+  }
+  const advance = (millis: number): void => {
+    runTasks()
+    state.time += millis
+    const due = state.timers.filter((timer) => timer.due <= state.time)
+    state.timers = state.timers.filter((timer) => timer.due > state.time)
+    due.forEach((timer) => timer.run())
+    runTasks()
+  }
+  return { now, scheduleTask, scheduleTimer, advance }
+}

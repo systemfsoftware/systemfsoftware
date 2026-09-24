@@ -6,9 +6,10 @@
  * need deterministic idle eviction pass their own `now` / `scheduleTimer` to
  * `Registry.make` / `Registry.layerOptions`. The defaults here route through
  * the Effect-native primitives — the default `Clock` reference's wall clock,
- * and `Effect.sleep` forked on the default runtime — so a caller who does not
- * configure scheduling still lands on the platform's clock without this
- * boundary reaching for the `Date` or timer globals directly.
+ * resolved once per registry, and `Effect.sleep` forked on the default
+ * runtime — so a caller who does not configure scheduling still lands on the
+ * platform's clock without this boundary holding module state or reaching for
+ * the `Date` or timer globals directly.
  *
  * @since 4.0.0
  */
@@ -17,14 +18,10 @@ import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import { dual } from 'effect/Function'
 
-let hostClock: Clock.Clock | undefined
-
 /** @internal */
-export const hostNow = (): number => {
-  if (hostClock === undefined) {
-    hostClock = Clock.Clock.defaultValue()
-  }
-  return hostClock.currentTimeMillisUnsafe()
+export const makeHostNow = (): () => number => {
+  const clock = Clock.Clock.defaultValue()
+  return () => clock.currentTimeMillisUnsafe()
 }
 
 /** @internal */
