@@ -11,7 +11,7 @@
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as React from 'react'
-import { RegistryContext } from './RegistryContext.js'
+import { useRegistry } from './RegistryContext.js'
 
 /**
  * Props for a boundary that applies dehydrated Atom values to the nearest
@@ -119,7 +119,7 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
   children,
   state,
 }) => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
 
   // This useMemo is for performance reasons only, everything inside it must
   // be safe to run in every render and code here should be read as "in render".

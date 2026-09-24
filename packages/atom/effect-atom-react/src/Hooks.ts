@@ -13,10 +13,11 @@ import type * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import * as Cause from 'effect/Cause'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { constVoid, dual } from 'effect/Function'
 import * as React from 'react'
-import { RegistryContext } from './RegistryContext.js'
+import { useRegistry } from './RegistryContext.js'
 
 function useStore<A>(registry: Registry.Registry, atom: Atom.Atom<A>): A {
   const subscribe = React.useMemo(
@@ -35,24 +36,14 @@ type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
 type AnyPromiseMap<Val = unknown> = WeakMap<AnyAtom<Val>, Promise<void>>
 type AnyValue<Val = unknown> = Val
 
-const initialValuesSet = new WeakMap<Registry.Registry, WeakSet<AnyAtom>>()
+class InitialValuesSet extends Context.Service<InitialValuesSet, WeakSet<AnyAtom>>()(
+  '@systemfsoftware/effect-atom-react/Hooks/InitialValuesSet',
+) {}
 
 function initialValuesSetFor(
   registry: Registry.Registry,
 ): WeakSet<AnyAtom> {
-  const existing = initialValuesSet.get(registry)
-  if (existing !== undefined) {
-    return existing
-  }
-  return createInitialValuesSet(registry)
-}
-
-function createInitialValuesSet(
-  registry: Registry.Registry,
-): WeakSet<AnyAtom> {
-  const set = new WeakSet<AnyAtom>()
-  initialValuesSet.set(registry, set)
-  return set
+  return Registry.storage(registry, InitialValuesSet, () => new WeakSet<AnyAtom>())
 }
 
 function seedInitialValueIfNew(
@@ -94,7 +85,7 @@ function seedInitialValues(
  * @since 4.0.0
  */
 export const useAtomInitialValues = (initialValues: Iterable<AnyInitialValue>): void => {
-  seedInitialValues(React.useContext(RegistryContext), initialValues)
+  seedInitialValues(useRegistry(), initialValues)
 }
 
 /**
@@ -123,7 +114,7 @@ export const useAtomValue: {
 } = dual(
   (args) => typeof args[0] !== 'function',
   <A>(atom: Atom.Atom<A>, f?: (_: A) => A): A => {
-    const registry = React.useContext(RegistryContext)
+    const registry = useRegistry()
     if (f !== undefined) {
       const atomB = React.useMemo(() => Atom.map(atom, f), [atom, f])
       return useStore(registry, atomB)
@@ -157,7 +148,7 @@ function mountAtom<A>(registry: Registry.Registry, atom: Atom.Atom<A>): void {
  * @since 4.0.0
  */
 export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
   mountAtom(registry, atom)
 }
 
@@ -179,7 +170,7 @@ export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
  * @since 4.0.0
  */
 export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback((value: W) => {
     Registry.set(registry, atom, value)
@@ -207,7 +198,7 @@ export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void 
 export const useAtomSetResult = <A, E, W>(
   atom: Atom.Writable<AsyncResult.Result<A, E>, W>,
 ): (value: W) => Effect.Effect<A, E> => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback((value: W) => {
     Registry.set(registry, atom, value)
@@ -229,7 +220,7 @@ export const useAtomSetResult = <A, E, W>(
  * @since 4.0.0
  */
 export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R) => W) => void => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback((f: (previous: R) => W) => {
     Registry.update(registry, atom, f)
@@ -255,7 +246,7 @@ export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R
  * @since 4.0.0
  */
 export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
   mountAtom(registry, atom)
   return React.useCallback(() => {
     Registry.refresh(registry, atom)
@@ -279,23 +270,21 @@ export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
 export const useAtom = <R, W>(
   atom: Atom.Writable<R, W>,
 ): readonly [value: R, write: (value: W) => void] => {
-  const registry = React.useContext(RegistryContext)
+  const registry = useRegistry()
   return [
     useStore(registry, atom),
     React.useCallback((value: W) => Registry.set(registry, atom, value), [registry, atom]),
   ]
 }
 
-const atomPromiseMap = {
-  suspendOnWaiting: new WeakMap<
-    Registry.Registry,
-    AnyPromiseMap
-  >(),
-  default: new WeakMap<
-    Registry.Registry,
-    AnyPromiseMap
-  >(),
+type AtomPromiseMaps = {
+  readonly suspendOnWaiting: AnyPromiseMap
+  readonly default: AnyPromiseMap
 }
+
+class AtomPromiseMapsKey extends Context.Service<AtomPromiseMapsKey, AtomPromiseMaps>()(
+  '@systemfsoftware/effect-atom-react/Hooks/AtomPromiseMapsKey',
+) {}
 
 function booleanOrFalse(value: boolean | undefined): boolean {
   if (value === undefined) {
@@ -322,34 +311,15 @@ function includeFailureFrom(options?: {
   return booleanOrFalse(options.includeFailure)
 }
 
-function promiseRegistries(
-  suspendOnWaiting: boolean,
-): WeakMap<Registry.Registry, AnyPromiseMap> {
-  if (suspendOnWaiting) {
-    return atomPromiseMap.suspendOnWaiting
-  }
-  return atomPromiseMap.default
-}
-
-function createAtomPromiseMap(
-  registries: WeakMap<Registry.Registry, AnyPromiseMap>,
-  registry: Registry.Registry,
-): AnyPromiseMap {
-  const map = new WeakMap<AnyAtom, Promise<void>>()
-  registries.set(registry, map)
-  return map
-}
-
 function promiseMapFor(
   registry: Registry.Registry,
   suspendOnWaiting: boolean,
 ): AnyPromiseMap {
-  const registries = promiseRegistries(suspendOnWaiting)
-  const existing = registries.get(registry)
-  if (existing !== undefined) {
-    return existing
-  }
-  return createAtomPromiseMap(registries, registry)
+  const maps = Registry.storage(registry, AtomPromiseMapsKey, () => ({
+    suspendOnWaiting: new WeakMap<AnyAtom, Promise<void>>(),
+    default: new WeakMap<AnyAtom, Promise<void>>(),
+  }))
+  return suspendOnWaiting ? maps.suspendOnWaiting : maps.default
 }
 
 function waitingBlocks<A, E>(
@@ -449,10 +419,6 @@ function isReadyResult<A, E>(
   return waitingBlocks(value, suspendOnWaiting) === false
 }
 
-function throwForSuspense(error: Error): never {
-  throw error
-}
-
 function atomResultOrSuspend<A, E>(
   registry: Registry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
@@ -462,8 +428,20 @@ function atomResultOrSuspend<A, E>(
   if (isReadyResult(value, suspendOnWaiting)) {
     return value
   }
-  // @ts-expect-error React Suspense requires throwing a thenable promise.
-  throwForSuspense(atomToPromise(registry, atom, suspendOnWaiting))
+  return suspendUntilReady(registry, atom, suspendOnWaiting)
+}
+
+function suspendUntilReady<A, E>(
+  registry: Registry.Registry,
+  atom: Atom.Atom<AsyncResult.Result<A, E>>,
+  suspendOnWaiting: boolean,
+): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
+  React.use(atomToPromise(registry, atom, suspendOnWaiting))
+  const current = Registry.get(registry, atom)
+  if (isReadyResult(current, suspendOnWaiting)) {
+    return current
+  }
+  return suspendUntilReady(registry, atom, suspendOnWaiting)
 }
 
 function failureResultOrThrow<A, E>(
@@ -536,7 +514,7 @@ export const useAtomSuspense: {
       readonly includeFailure?: boolean | undefined
     },
   ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> => {
-    const registry = React.useContext(RegistryContext)
+    const registry = useRegistry()
     return resolveAtomSuspense(
       atomResultOrSuspend(registry, atom, suspendOnWaitingFrom(options)),
       options,
@@ -580,7 +558,7 @@ export const useAtomSubscribe: {
     f: (_: A) => void,
     options?: { readonly immediate?: boolean },
   ): void => {
-    const registry = React.useContext(RegistryContext)
+    const registry = useRegistry()
     const fRef = React.useRef(f)
     fRef.current = f
     React.useEffect(

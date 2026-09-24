@@ -26,8 +26,8 @@ export function scheduleTask(f: () => void): () => void {
 
 /**
  * Provides a React context that supplies the `Registry` used by Atom hooks and
- * hydration helpers, defaulting to a standalone registry when no provider is
- * present.
+ * hydration helpers. The context has no default, so reading it outside a
+ * provider yields nothing for {@link useRegistry} to return.
  *
  * **When to use**
  *
@@ -36,13 +36,37 @@ export function scheduleTask(f: () => void): () => void {
  * `RegistryProvider`.
  *
  * @see {@link RegistryProvider} for creating and providing a registry for a React subtree
+ * @see {@link useRegistry} for reading the registry supplied to the nearest provider
  *
  * @since 4.0.0
  */
-export const RegistryContext = React.createContext<Registry.Registry>(Registry.make({
-  scheduleTask,
-  defaultIdleTTL: 400,
-}))
+export const RegistryContext = React.createContext<Registry.Registry | undefined>(undefined)
+
+/**
+ * Returns the `Registry` supplied by the nearest provider of
+ * {@link RegistryContext}.
+ *
+ * **When to use**
+ *
+ * Use inside a hook or component that needs the current registry and can
+ * require a provider to exist.
+ *
+ * **Gotchas**
+ *
+ * Throws when no registry is in context. Wrap the component tree in a
+ * {@link RegistryProvider} to supply one.
+ *
+ * @see {@link RegistryContext} for supplying the registry directly
+ *
+ * @since 4.0.0
+ */
+export function useRegistry(): Registry.Registry {
+  const registry = React.useContext(RegistryContext)
+  if (registry === undefined) {
+    throw new Error('No registry found in context: wrap the component tree in a RegistryProvider.')
+  }
+  return registry
+}
 
 type AnyAtom<Val = unknown> = Atom.Atom<Val>
 type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]

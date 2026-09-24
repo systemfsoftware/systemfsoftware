@@ -50,6 +50,49 @@ Feature('Seeding and listening to shared values')
     )
 
     scenario(
+      'Two pages backed by different data sources each see their own starting value',
+      Gherkin.Do.pipe(
+        Given('two pages under separate data sources, each seeded with its own starting value')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const balance = Atom.make(0)
+              function Page({ id, seed }: { readonly id: string; readonly seed: number }) {
+                useAtomInitialValues([[balance, seed]])
+                const value = useAtomValue(balance)
+                return React.createElement('div', { 'data-testid': id }, value)
+              }
+              render(
+                React.createElement(
+                  RegistryContext.Provider,
+                  { value: AtomRegistry.make() },
+                  React.createElement(Page, { id: 'first-balance', seed: 3 }),
+                ),
+              )
+              render(
+                React.createElement(
+                  RegistryContext.Provider,
+                  { value: AtomRegistry.make() },
+                  React.createElement(Page, { id: 'second-balance', seed: 8 }),
+                ),
+              )
+              return {}
+            }),
+        ),
+        When('both pages are shown')('shown', () => Effect.succeed(true)),
+        Then('each page shows its own starting value')(() =>
+          Effect.promise(function firstBalance() {
+            return expect.element(screen.getByTestId('first-balance')).toHaveTextContent('3').then(
+              function secondBalance() {
+                return expect.element(screen.getByTestId('second-balance')).toHaveTextContent('8')
+              },
+            )
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'A listener attached without the immediate flag hears only later changes',
       Gherkin.Do.pipe(
         Given('a listener watching a value without asking for the current value')('ctx', () =>

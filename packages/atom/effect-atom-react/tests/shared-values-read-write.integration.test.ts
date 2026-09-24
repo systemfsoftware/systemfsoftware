@@ -18,6 +18,7 @@ import {
   useAtomSubscribe,
   useAtomSuspense,
   useAtomValue,
+  useRegistry,
 } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -364,7 +365,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             vi.useFakeTimers()
             let registry: AtomRegistry.Registry = AtomRegistry.make()
             function Probe() {
-              registry = React.useContext(RegistryContext)
+              registry = useRegistry()
               return null
             }
             const { unmount } = render(
@@ -399,7 +400,7 @@ Feature('Reading and changing shared values from on-screen widgets')
               const savedValue = Atom.make(41)
               let registry: AtomRegistry.Registry = AtomRegistry.make()
               function Probe() {
-                registry = React.useContext(RegistryContext)
+                registry = useRegistry()
                 return null
               }
               render(

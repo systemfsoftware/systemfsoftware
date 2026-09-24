@@ -10,7 +10,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'browser',
-          include: ['./tests/**/*.integration.test.ts', '!./tests/ssr.integration.test.ts'],
+          include: [
+            './tests/**/*.integration.test.ts',
+            './tests/**/*.contract.test.ts',
+            '!./tests/ssr.integration.test.ts',
+          ],
           setupFiles: ['./vitest-setup.ts'],
           browser: {
             enabled: true,

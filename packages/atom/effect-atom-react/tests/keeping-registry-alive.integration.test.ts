@@ -1,11 +1,13 @@
-import { RegistryContext, RegistryProvider, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { RegistryProvider, useAtomInitialValues, useAtomValue, useRegistry } from '@systemfsoftware/effect-atom-react'
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { act, render } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
+import '@vitest/browser/matchers'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
+import { ErrorBoundary, getErrorMessage } from 'react-error-boundary'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -13,6 +15,114 @@ const Feature = makeFeature({ it, layer })
 Feature('Keeping a shared registry alive')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
+    scenario(
+      'A widget under a provider reads the value that provider holds',
+      Gherkin.Do.pipe(
+        Given('a widget showing a value under its own provider')('ctx', () =>
+          Effect.sync(() => {
+            const rating = Atom.make(0)
+            function Widget() {
+              const value = useAtomValue(rating)
+              return React.createElement('div', { 'data-testid': 'provided-rating' }, value)
+            }
+            render(React.createElement(RegistryProvider, null, React.createElement(Widget)))
+            return {}
+          })),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
+        Then('the value the provider starts with is on screen')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('provided-rating')).toHaveTextContent('0')
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A widget shown without any provider reports that a provider is required',
+      Gherkin.Do.pipe(
+        Given('a widget reading a value with no provider anywhere above it, inside an error boundary')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const rating = Atom.make(0)
+              function Widget() {
+                const value = useAtomValue(rating)
+                return React.createElement('div', { 'data-testid': 'unprovided-value' }, value)
+              }
+              render(
+                React.createElement(
+                  ErrorBoundary,
+                  {
+                    fallbackRender: ({ error }) =>
+                      React.createElement(
+                        'div',
+                        { 'data-testid': 'missing-registry' },
+                        getErrorMessage(error) ?? 'no message given',
+                      ),
+                  },
+                  React.createElement(Widget),
+                ),
+              )
+              return {}
+            }),
+        ),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
+        Then('the error message says a provider is what supplies the data source')(() =>
+          Effect.promise(function() {
+            return screen.findByTestId('missing-registry').then((notice) => {
+              expect(notice.textContent).toContain('RegistryProvider')
+              expect(screen.queryByTestId('unprovided-value')).toBeNull()
+            })
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Two providers side by side keep their own values for the same shared value',
+      Gherkin.Do.pipe(
+        Given('two providers next to each other, each holding a different starting value for one shared value')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const rating = Atom.make(0)
+              function Widget({ id, starting }: { readonly id: string; readonly starting: number }) {
+                useAtomInitialValues([[rating, starting]])
+                const value = useAtomValue(rating)
+                return React.createElement('div', { 'data-testid': id }, value)
+              }
+              render(
+                React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement(
+                    RegistryProvider,
+                    null,
+                    React.createElement(Widget, { id: 'left-rating', starting: 2 }),
+                  ),
+                  React.createElement(
+                    RegistryProvider,
+                    null,
+                    React.createElement(Widget, { id: 'right-rating', starting: 6 }),
+                  ),
+                ),
+              )
+              return {}
+            }),
+        ),
+        When('both widgets are shown')('shown', () => Effect.succeed(true)),
+        Then('each widget shows the value its own provider holds')(() =>
+          Effect.promise(function leftProvider() {
+            return expect.element(screen.getByTestId('left-rating')).toHaveTextContent('2').then(
+              function rightProvider() {
+                return expect.element(screen.getByTestId('right-rating')).toHaveTextContent('6')
+              },
+            )
+          })
+        ),
+      ),
+    )
+
     scenario(
       'A provider that re-renders keeps serving the same registry',
       Gherkin.Do.pipe(
@@ -24,7 +134,7 @@ Feature('Keeping a shared registry alive')
               throw new Error('tick called before the page rendered')
             }
             function Page() {
-              seenRegistries.push(React.useContext(RegistryContext))
+              seenRegistries.push(useRegistry())
               const [n, setN] = React.useState(0)
               tick = () => setN((x) => x + 1)
               const value = useAtomValue(count)
