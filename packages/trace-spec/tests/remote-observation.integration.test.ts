@@ -75,7 +75,6 @@ const readBack = (script: Script, options: RemoteObservation.Options): Effect.Ef
         Effect.provide(reader),
       ),
     )
-    yield* Effect.yieldNow
     yield* TestClock.adjust(Duration.seconds(10))
     const outcome = yield* Effect.result(Fiber.join(asked))
     return { outcome, served: yield* Ref.get(reads) }
