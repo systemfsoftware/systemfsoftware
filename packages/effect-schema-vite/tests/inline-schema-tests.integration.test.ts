@@ -8,8 +8,8 @@
 import { afterAll } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Equal } from 'effect'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { Effect } from 'effect'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -109,6 +109,14 @@ const callsIn = (code: string): ReadonlyArray<string> =>
 /** The module specifiers the suite imports, in the order it imports them. */
 const importsIn = (code: string): ReadonlyArray<string> =>
   [...code.matchAll(/from '([^']+)'/g)].map(([, specifier]) => specifier ?? '')
+
+/** The budget-hook call the transform spliced in, with the formatter's whitespace collapsed. */
+const hookCallIn = (code: string): string | undefined =>
+  /toCodecArbitrary: __esRecursionBudget\(\(\) => RecursiveExpr, \{[\s\S]*?\}\)/.exec(code)?.[0]?.replace(/\s+/g, ' ')
+
+/** The specifier of the import that binds the injected budget-hook alias. */
+const hookImportSpecifierIn = (code: string): string | undefined =>
+  /import \{ budgetToArbitrary as __esRecursionBudget \} from "([^"]+)";/.exec(code)?.[1]
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -328,22 +336,18 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       ),
       Then('the plugin honors the budget, resolving its hook on disk and exporting the schema')((s, expect) =>
         expect({
-          code: s.driven.code,
+          hookCall: hookCallIn(s.driven.code),
+          hookImportSpecifier: hookImportSpecifierIn(s.driven.code),
           runtime: s.driven.runtime,
+          runtimeContents: readFileSync(s.driven.runtime ?? '', 'utf8'),
           exportedSchemas: s.driven.exportedSchemas,
-        }).toSatisfy(
-          ({ code, runtime, exportedSchemas }) =>
-            /toCodecArbitrary: __esRecursionBudget\(\(\) => RecursiveExpr, \{\s*maxDepth: 6,\s*depthSize: "medium"\s*\}\)/
-              .test(
-                code,
-              ) &&
-            /import \{ budgetToArbitrary as __esRecursionBudget \} from "[^"]*recursion-budget-runtime\.[a-z]+";/.test(
-              code,
-            ) &&
-            runtime !== null && /recursion-budget-runtime\.(ts|mjs)$/.test(runtime) && existsSync(runtime) &&
-            Equal.equals(exportedSchemas, ['RecursiveExpr']),
-          'the transformed module carries toCodecArbitrary for the declared budget, imports it from the budget-runtime module the plugin resolves on disk, and exports RecursiveExpr; the rest of the transformed source carries the checkout-specific module paths',
-        )
+        }).toMatchObject({
+          hookCall: 'toCodecArbitrary: __esRecursionBudget(() => RecursiveExpr, { maxDepth: 6, depthSize: "medium" })',
+          hookImportSpecifier: expect.stringMatching(/recursion-budget-runtime\.[a-z]+$/),
+          runtime: expect.stringMatching(/recursion-budget-runtime\.(ts|mjs)$/),
+          runtimeContents: expect.stringMatching(/export const budgetToArbitrary/),
+          exportedSchemas: ['RecursiveExpr'],
+        })
       ),
     ),
   )
