@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   ...quietBuild,
-  entry: { mod: './src/mod.ts' },
+  entry: { mod: './src/mod.ts', main: './src/main.ts' },
   define: { 'import.meta.vitest': 'undefined' },
   format: 'esm',
   platform: 'node',
@@ -13,4 +13,5 @@ export default defineConfig({
   outExtensions: () => ({ js: '.mjs' }),
   deps: { onlyBundle: false },
   copy: [{ from: 'src/drivers/review-page.html', to: 'dist', flatten: true }],
+  exports: { devExports: '@systemfsoftware/source', exclude: ['main'], bin: false },
 })
