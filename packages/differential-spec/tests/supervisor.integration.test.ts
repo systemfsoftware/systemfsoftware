@@ -1,5 +1,5 @@
 import { runDifferentialWithShrink } from '@systemfsoftware/differential-spec'
-import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer } from 'effect'
 import { expect } from 'vitest'
 import { integers } from './__fixtures__/arbitraries.js'
@@ -18,7 +18,7 @@ const sameOutcome = (a: number, b: number): boolean => a === b
 
 Feature('Proving two implementations agree under generated schedules')
   .withLayer(Layer.empty)
-  .live('the supervisor explores its own kernel schedules')
+  .live('the supervisor explores its own generated schedules')
   .body(({ scenario }) => {
     scenario(
       'A diverging candidate is reduced to the smallest failing input in the report',
@@ -85,7 +85,7 @@ Feature('Proving two implementations agree under generated schedules')
           expect(report).toContain('Output A: 2')
           expect(report).toContain('Output B: 1')
         }),
-        Then('the schedule in the report carries the single choice that decides the race')((s) => {
+        And('the schedule in the report carries the single choice that decides the race')((s) => {
           const report = disparityReportOf(s.outcome)
           expect(report).toMatch(/schedule: search with 1 preemption, deviations 1,/)
           expect(report).toMatch(/path \[.+\]/)

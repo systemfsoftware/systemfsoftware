@@ -64,21 +64,21 @@ const firstLineOf = (report: string): string => {
   return first ?? ''
 }
 
-const observeTheRunner = 'the case reads the runner’s own report, so it stays out of the runner’s way'
+const observeTheRunner = 'the spec reads the report of its own run, so it stays out of the run’s way'
 
 Feature('Two clerks shelve without an agreed order')
   .withScenarioLayer(shelfLayer)
   .body(({ scenario }) => {
     scenario(
-      'An unstated order fails and names the order the runner explored',
+      'A spec where two clerks shelve with no agreed order fails and names the order the run took',
       { live: observeTheRunner },
       Gherkin.Do.pipe(
-        Given('a shelving scenario with no agreed order')(
+        Given('a spec where two clerks shelve with no agreed order')(
           'program',
           () => Effect.succeed(caseProgramOf('the second clerk')),
         ),
-        When('the runner explores every generated order')('report', (s) => reportOfProgram(s.program)),
-        Then('the failure names the generated order it explored')((s) => {
+        When('the spec is run')('report', (s) => reportOfProgram(s.program)),
+        Then('the failure names the order the run took')((s) => {
           expect(s.report).toMatch(/schedule: seed \d+/u)
           expect(s.report).toMatch(/CONFORMANCE_REPLAY="seed=\d+;path=\d+(,\d+)*"/u)
         }),
@@ -86,10 +86,10 @@ Feature('Two clerks shelve without an agreed order')
     )
 
     scenario(
-      'The reported order repeats the same failure',
+      'Running the spec again with the reported order repeats the failure',
       { live: observeTheRunner },
       Gherkin.Do.pipe(
-        Given('the failure report of a scenario with no agreed order')(
+        Given('the failure report of a spec where two clerks shelve with no agreed order')(
           'report',
           () =>
             Effect.map(reportOfProgram(caseProgramOf('the second clerk')), (failure) => ({
@@ -97,7 +97,7 @@ Feature('Two clerks shelve without an agreed order')
               replay: replayOfReport(failure),
             })),
         ),
-        When('the runner repeats the order the report names')('repeated', (s) =>
+        When('the spec is run again with the order its report names')('repeated', (s) =>
           Effect.gen(function*() {
             yield* Effect.sync(() => {
               vi.stubEnv('CONFORMANCE_REPLAY', s.report.replay)
@@ -112,21 +112,21 @@ Feature('Two clerks shelve without an agreed order')
     )
 
     scenario(
-      'Two scenarios with an unstated order each report their own failure',
+      'Two specs where two clerks shelve with no agreed order each report their own failure',
       { live: observeTheRunner },
       Gherkin.Do.pipe(
-        Given('two shelving scenarios whose top baskets disagree')('programs', () =>
+        Given('two specs whose top baskets disagree')('programs', () =>
           Effect.succeed({
             namesTheSecond: caseProgramOf('the second clerk'),
             namesTheFirst: caseProgramOf('the first clerk'),
           })),
-        When('the runner explores both scenarios')('reports', (s) =>
+        When('both specs are run')('reports', (s) =>
           Effect.gen(function*() {
             const second = yield* reportOfProgram(s.programs.namesTheSecond)
             const first = yield* reportOfProgram(s.programs.namesTheFirst)
             return { second, first }
           })),
-        Then('each scenario reports its own failing order')((s) => {
+        Then('each spec reports its own failing order')((s) => {
           expect(s.reports.second).toMatch(/CONFORMANCE_REPLAY="/u)
           expect(s.reports.first).toMatch(/CONFORMANCE_REPLAY="/u)
           expect(s.reports.second).not.toBe(s.reports.first)

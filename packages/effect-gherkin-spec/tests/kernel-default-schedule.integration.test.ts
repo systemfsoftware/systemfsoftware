@@ -63,9 +63,13 @@ Feature('A checkout opens under the shop clock')
 
     scenario(
       'The front desk reads the real wall clock instead of the shop clock',
-      { live: 'the front desk reads the real wall clock, which lives outside the process' },
+      { live: 'the front desk reads the real wall clock, which the shop clock cannot move' },
       Gherkin.Do.pipe(
-        Given('the time the front desk reads')('now', () => Clock.currentTimeMillis),
+        Given('a front desk that reports the wall clock outside the shop')(
+          'frontDesk',
+          () => Effect.succeed({ readTime: Clock.currentTimeMillis }),
+        ),
+        When('the front desk reads the time')('now', (s) => s.frontDesk.readTime),
         Then('the reading is a real date, not the start of the trading day')((s) => {
           expect(s.now).toBeGreaterThan(CLOSING_MILLIS)
         }),

@@ -1,4 +1,4 @@
-import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber } from 'effect'
 import { expect } from 'vitest'
 import type { SavedBasket } from './__fixtures__/clerk-shelf.fixture.js'
@@ -40,7 +40,7 @@ Feature('A bell settles who shelves first')
       'Two clerks shelve in bell order and the second basket is on top',
       Gherkin.Do.pipe(
         Given('a service bell and two full baskets')('order', () => bellOrderOf()),
-        When('the first clerk shelves the first basket and rings the bell')('rang', (s) => shelveThenRing(s.order)),
+        And('the first clerk has shelved the first basket and rung the bell')((s) => shelveThenRing(s.order)),
         When('the second clerk shelves after hearing the bell')('shelved', (s) => shelveAfterTheBell(s.order)),
         Then('the basket on top of the shelf is the second clerk’s')(() =>
           Effect.gen(function*() {
