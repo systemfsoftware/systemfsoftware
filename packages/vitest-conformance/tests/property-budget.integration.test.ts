@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import * as Layer from 'effect/Layer'
@@ -35,9 +34,11 @@ Feature('Configuring how many times properties run')
           'report',
           () => reportOf([INHERITS], configured({ runs: 7 })),
         ),
-        Then('the property is reported as having run seven times')((s) => {
-          expect(messagesOf(s.report, PROVIDED_RUNS)).toContain('0/7')
-        }),
+        Then('the property is reported as having run seven times')((s, expect) =>
+          expect({ messages: messagesOf(s.report, PROVIDED_RUNS) }).toMatchObject({
+            messages: expect.stringContaining('0/7'),
+          })
+        ),
       ),
     )
 
@@ -45,9 +46,11 @@ Feature('Configuring how many times properties run')
       'A property with no budget of its own and no configured size runs a hundred times',
       Gherkin.Do.pipe(
         Given('a run that configures nothing')('report', () => reportOf([INHERITS])),
-        Then('the property is reported as having run a hundred times')((s) => {
-          expect(messagesOf(s.report, PROVIDED_RUNS)).toContain('0/100')
-        }),
+        Then('the property is reported as having run a hundred times')((s, expect) =>
+          expect({ messages: messagesOf(s.report, PROVIDED_RUNS) }).toMatchObject({
+            messages: expect.stringContaining('0/100'),
+          })
+        ),
       ),
     )
 
@@ -62,11 +65,17 @@ Feature('Configuring how many times properties run')
           'uncapped',
           () => reportOf([OVERRIDE], configured({ runs: 7 })),
         ),
-        Then('the property reports its own three draws and the configured cap holds')((s) => {
-          expect(messagesOf(s.capped, EXPLICIT_RUNS)).toContain('0/3')
-          expect(messagesOf(s.capped, FALSIFIED)).toContain('0 shrink(s)')
-          expect(messagesOf(s.uncapped, FALSIFIED)).not.toContain('0 shrink(s)')
-        }),
+        Then('the property reports its own three draws and the configured cap holds')((s, expect) =>
+          expect({
+            cappedRuns: messagesOf(s.capped, EXPLICIT_RUNS),
+            cappedShrinks: messagesOf(s.capped, FALSIFIED),
+            uncappedShrinks: messagesOf(s.uncapped, FALSIFIED),
+          }).toMatchObject({
+            cappedRuns: expect.stringContaining('0/3'),
+            cappedShrinks: expect.stringContaining('0 shrink(s)'),
+            uncappedShrinks: expect.stringContaining('Shrunk input: [10]'),
+          })
+        ),
       ),
     )
 
@@ -77,10 +86,12 @@ Feature('Configuring how many times properties run')
           'report',
           () => reportOf([INHERITS], configured({ runs: 0 })),
         ),
-        Then('the property fails and names the configuration key')((s) => {
+        Then('the property fails and names the configuration key')((s, expect) => {
           const messages = messagesOf(s.report, PROVIDED_RUNS)
-          expect(messages).toContain(CHECK_DEFAULTS)
-          expect(messages).toContain('positive integer')
+          return expect({ namesTheKey: messages, namesTheReason: messages }).toMatchObject({
+            namesTheKey: expect.stringContaining(CHECK_DEFAULTS),
+            namesTheReason: expect.stringContaining('positive integer'),
+          })
         }),
       ),
     )

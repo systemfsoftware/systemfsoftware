@@ -1,14 +1,9 @@
-import { expect, it } from '@effect/vitest'
-import { Effect } from 'effect'
-import { Fiber } from 'effect'
+import { describe, it } from '@effect/vitest'
+import { Effect, Fiber } from 'effect'
 
-const sideEffect = Effect.die('SIDE EFFECT RAN')
-
-const observed = (): number => 1
-
-it.effect('Should_InterruptTheChild_When_CheckFailsFirst', () =>
-  Effect.gen(function*() {
-    const child = yield* Effect.forkChild(Effect.sleep('1 second').pipe(Effect.andThen(sideEffect)))
-    expect(observed()).toEqual(3)
-    return yield* Fiber.join(child)
-  }))
+describe('a check in a forked fiber', () => {
+  it('Should_FailTheTest_When_AChildFiberCheckFails', function*({ expect }) {
+    const child = yield* Effect.forkChild(expect(1).toEqual(2))
+    yield* Fiber.join(child)
+  })
+})

@@ -1,23 +1,28 @@
-import { describe, expect, it } from '@effect/vitest'
+import { describe, it } from '@effect/vitest'
 import { Effect } from 'effect'
 
-const interleavedFailure = (actual: string, expected: string) =>
-  Effect.gen(function*() {
+describe('interleaved concurrent failures', () => {
+  it('Should_ReportOnlyItsFailure_When_FirstTestFails', function*({ expect }) {
     yield* Effect.yieldNow
     yield* Effect.yieldNow
-    yield* Effect.sync(() => expect(actual).toEqual(expected))
+    yield* expect('first-marker').toEqual('first-expected-marker')
   })
 
-describe('interleaved concurrent failures', () => {
-  it.effect('Should_ReportOnlyItsFailure_When_FirstTestFails', () =>
-    interleavedFailure('first-marker', 'first-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_SecondTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect('second-marker').toEqual('second-expected-marker')
+  })
 
-  it.effect('Should_ReportOnlyItsFailure_When_SecondTestFails', () =>
-    interleavedFailure('second-marker', 'second-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_ThirdTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect('third-marker').toEqual('third-expected-marker')
+  })
 
-  it.effect('Should_ReportOnlyItsFailure_When_ThirdTestFails', () =>
-    interleavedFailure('third-marker', 'third-expected-marker'))
-
-  it.effect('Should_ReportOnlyItsFailure_When_FourthTestFails', () =>
-    interleavedFailure('fourth-marker', 'fourth-expected-marker'))
+  it('Should_ReportOnlyItsFailure_When_FourthTestFails', function*({ expect }) {
+    yield* Effect.yieldNow
+    yield* Effect.yieldNow
+    yield* expect('fourth-marker').toEqual('fourth-expected-marker')
+  })
 })

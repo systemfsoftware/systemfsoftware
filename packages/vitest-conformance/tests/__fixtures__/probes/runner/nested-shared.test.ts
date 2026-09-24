@@ -1,4 +1,4 @@
-import { expect, layer } from '@effect/vitest'
+import { layer } from '@effect/vitest'
 import { Context } from 'effect'
 import { Effect } from 'effect'
 import { Layer } from 'effect'
@@ -25,18 +25,15 @@ class Inner extends Context.Service<Inner, { readonly tag: string }>()(
 
 layer(countingOuter, { shared: true })('nested inside shared', (it) => {
   it.layer(Inner.layer)('nested block', (nested) => {
-    nested.effect('Should_SeeOuterState_When_NestedInsideShared', () =>
-      Effect.gen(function*() {
-        const outer = yield* BuildCount
-        const inner = yield* Inner
-        expect(inner.tag).toEqual('inner')
-        expect(outer.count).toEqual(1)
-      }))
+    nested('Should_SeeOuterState_When_NestedInsideShared', function*({ expect }) {
+      const outer = yield* BuildCount
+      const inner = yield* Inner
+      yield* expect({ inner: inner.tag, outer: outer.count }).toEqual({ inner: 'inner', outer: 1 })
+    })
 
-    nested.effect('Should_KeepOuterBuild_When_ANestedTestAlreadyRan', () =>
-      Effect.gen(function*() {
-        const outer = yield* BuildCount
-        expect(outer.count).toEqual(1)
-      }))
+    nested('Should_KeepOuterBuild_When_ANestedTestAlreadyRan', function*({ expect }) {
+      const outer = yield* BuildCount
+      yield* expect(outer.count).toEqual(1)
+    })
   })
 })

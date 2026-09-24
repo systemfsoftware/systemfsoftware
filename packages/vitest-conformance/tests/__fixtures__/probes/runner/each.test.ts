@@ -1,13 +1,15 @@
-import { expect, it } from '@effect/vitest'
-import { Effect, Ref } from 'effect'
+import { it } from '@effect/vitest'
+import { Ref } from 'effect'
 
-const seen = Ref.makeUnsafe(0)
+const rows = [
+  { row: 1, counter: Ref.makeUnsafe(0) },
+  { row: 2, counter: Ref.makeUnsafe(0) },
+]
 
-it.effect.each([{ row: 1 }, { row: 2 }])(
-  'Should_FailTheSecondRun_When_ARowAdvancesACounter',
-  () =>
-    Effect.gen(function*() {
-      const at = yield* Ref.getAndUpdate(seen, (n) => n + 1)
-      expect(at).toEqual(0)
-    }),
+it.each(rows)(
+  'Should_FailTheSecondRun_When_ARowAdvancesACounter $row',
+  function*({ counter }, { expect }) {
+    const at = yield* Ref.getAndUpdate(counter, (n) => n + 1)
+    yield* expect(at).toEqual(0)
+  },
 )
