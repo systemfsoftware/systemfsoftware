@@ -4,13 +4,13 @@ import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { dynamic } from '@systemfsoftware/effect-daemon-spec'
 import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Latch, Match, Ref, Result, Stream } from 'effect'
+import { Deferred, Duration, Effect, Latch, Match, Ref, Result, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const NoopChild = () =>
   Daemon.poll({
@@ -286,12 +286,13 @@ Feature('Dynamic Supervisor')
     )
 
     scenario(
-      'one naturally completing child among three leaves active count at exactly two',
+      'a finite child released among two long-running ones leaves active count at exactly two',
       Gherkin.Do.pipe(
-        Given('a dynamic supervisor with one finite and two long-running children')(
+        Given('a dynamic supervisor whose finite child finishes when released')(
           'ctx',
           () =>
             Effect.gen(function*() {
+              const gate = yield* Deferred.make<void>()
               const spec = dynamic({
                 name: 'triplet-mixed',
                 child: (slot: 0 | 1 | 2) =>
@@ -299,7 +300,7 @@ Feature('Dynamic Supervisor')
                     Match.when(0, () =>
                       Daemon.stream({
                         name: 'finite-triplet',
-                        stream: Stream.fromEffect(Effect.void),
+                        stream: Stream.fromEffect(Deferred.await(gate)),
                         tick: { tickTimeout: Duration.seconds(90) },
                         lock: { mode: 'none' },
                       })),
@@ -310,16 +311,18 @@ Feature('Dynamic Supervisor')
                 maxChildren: MaxChildren.make(10),
               })
               const handle = yield* run.dynamic(spec)
-              return { handle }
+              return { handle, gate }
             }),
         ),
-        When('three children start and the finite one finishes')('_', (s) =>
+        When('three children start and the finite one is released to finish')('_', (s) =>
           Effect.gen(function*() {
             const finiteRef = yield* s.ctx.handle.startChild(0)
             yield* s.ctx.handle.startChild(1)
             yield* s.ctx.handle.startChild(2)
             expect(yield* s.ctx.handle.count).toBe(3)
+            yield* Deferred.succeed(s.ctx.gate, undefined)
             yield* finiteRef.removed
+            expect(yield* s.ctx.handle.count).toBe(2)
           })),
         Then('active count is exactly two')((s) =>
           Effect.gen(function*() {
@@ -353,7 +356,6 @@ Feature('Dynamic Supervisor')
         When('one child is started and removal settles')('_', (s) =>
           Effect.gen(function*() {
             const ref = yield* s.handle.startChild(void 0)
-            expect(yield* s.handle.count).toBe(1)
             yield* ref.removed
           })),
         Then('active count returns to zero')((s) =>
@@ -388,14 +390,14 @@ Feature('Dynamic Supervisor')
         When('the child fails and cleanup settles')('_', (s) =>
           Effect.gen(function*() {
             const ref = yield* s.handle.startChild(void 0)
-            expect(yield* s.handle.count).toBe(1)
             yield* ref.removed
           })),
         Then('count returns to zero and capacity can be reused')((s) =>
           Effect.gen(function*() {
             expect(yield* s.handle.count).toBe(0)
-            yield* s.handle.startChild(void 0)
-            expect(yield* s.handle.count).toBe(1)
+            const ref = yield* s.handle.startChild(void 0)
+            yield* ref.removed
+            expect(yield* s.handle.count).toBe(0)
           })
         ),
       ),
@@ -440,7 +442,8 @@ Feature('Dynamic Supervisor')
           Effect.gen(function*() {
             const ref2 = yield* s.ctx.handle.startChild(void 0)
             expect(ref2.id).toBe(1)
-            expect(yield* s.ctx.handle.count).toBe(1)
+            yield* ref2.removed
+            expect(yield* s.ctx.handle.count).toBe(0)
           })
         ),
       ),

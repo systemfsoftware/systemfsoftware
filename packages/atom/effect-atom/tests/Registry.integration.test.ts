@@ -1,9 +1,21 @@
-import { expect, vi } from '@effect/vitest'
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Context, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Scope, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+class FirstRegistry extends Context.Service<FirstRegistry, Atom.Registry.Registry>()(
+  '@systemfsoftware/effect-atom/tests/Registry.integration.test/FirstRegistry',
+) {}
+class SecondRegistry extends Context.Service<SecondRegistry, Atom.Registry.Registry>()(
+  '@systemfsoftware/effect-atom/tests/Registry.integration.test/SecondRegistry',
+) {}
+
+class VisitLog extends Context.Service<VisitLog, { readonly visits: Array<string> }>()(
+  '@systemfsoftware/effect-atom/tests/Registry.integration.test/VisitLog',
+) {}
 
 /** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
 const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
@@ -11,7 +23,7 @@ const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
 
 Feature('Keeping a value that is still loading available to every reader')
   .withLayer(Layer.empty)
-  .body(({ scenario }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A value that never finishes loading is not started over after several readers check it',
       Gherkin.Do.pipe(
@@ -19,7 +31,6 @@ Feature('Keeping a value that is still loading available to every reader')
           'setup',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               let startCount = 0
               const atom = Atom.make(
                 Effect.callback<number>(() => {
@@ -33,13 +44,12 @@ Feature('Keeping a value that is still loading available to every reader')
         When('two readers check the value while it is still loading, and the cleanup timer runs')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               const firstReading = Atom.Registry.get(s.setup.registry, s.setup.atom)
               const secondReading = Atom.Registry.get(s.setup.registry, s.setup.atom)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const readingAfterCleanup = Atom.Registry.get(s.setup.registry, s.setup.atom)
               const started = s.setup.timesStarted()
-              vi.useRealTimers()
               return { firstReading, secondReading, readingAfterCleanup, started }
             }),
         ),
@@ -60,7 +70,6 @@ Feature('Keeping a value that is still loading available to every reader')
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               let startCount = 0
               const atom = Atom.keepAlive(
                 Atom.make(Effect.callback(() => {
@@ -74,12 +83,11 @@ Feature('Keeping a value that is still loading available to every reader')
         When('a reader checks the value and the cleanup timer runs, then checks it again')(
           'res',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               const firstReading = Atom.Registry.get(s.ctx.registry, s.ctx.atom)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const secondReading = Atom.Registry.get(s.ctx.registry, s.ctx.atom)
               const started = s.ctx.timesStarted()
-              vi.useRealTimers()
               return { firstReading, secondReading, started }
             }),
         ),
@@ -95,7 +103,6 @@ Feature('Keeping a value that is still loading available to every reader')
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               let useFirst = true
               const first = Atom.make('first')
               const second = Atom.make('second')
@@ -118,14 +125,13 @@ Feature('Keeping a value that is still loading available to every reader')
             }),
         ),
         When('the derived value switches sources and the cleanup timer runs')('nodes', (s) =>
-          Effect.sync(() => {
+          Effect.gen(function*() {
             const before = Atom.Registry.get(s.ctx.page, s.ctx.switching)
             s.ctx.flip()
             Atom.Registry.refresh(s.ctx.page, s.ctx.switching)
             const after = Atom.Registry.get(s.ctx.page, s.ctx.switching)
-            vi.advanceTimersByTime(100)
+            yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            vi.useRealTimers()
             return {
               before,
               after,
@@ -168,7 +174,6 @@ Feature('Keeping a value that is still loading available to every reader')
           (s) =>
             Effect.gen(function*() {
               s.ctx.latch.openUnsafe()
-              yield* Effect.yieldNow
               const first = Atom.Registry.get(s.ctx.page, s.ctx.source)
               s.ctx.setStored(2)
               s.ctx.latch.closeUnsafe()
@@ -213,19 +218,17 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('two values with the same short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const first = Atom.make(1)
             const second = Atom.make(2)
             const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
             return { page, first, second }
           })),
         When('both are read and the cleanup timer runs')('nodes', (s) =>
-          Effect.sync(() => {
+          Effect.gen(function*() {
             Atom.Registry.get(s.ctx.page, s.ctx.first)
             Atom.Registry.get(s.ctx.page, s.ctx.second)
-            vi.advanceTimersByTime(100)
+            yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            vi.useRealTimers()
             return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
         Then('both are gone')((s) => {
@@ -239,7 +242,6 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a value with a short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let starts = 0
             const value = Atom.make(Effect.sync(() => {
               starts++
@@ -251,16 +253,15 @@ Feature('Keeping a value that is still loading available to every reader')
         When('the value is read again while its cleanup is pending, then left alone')(
           'readings',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               Atom.Registry.get(s.ctx.page, s.ctx.value)
-              vi.advanceTimersByTime(50)
+              yield* TestClock.adjust('50 millis')
               Atom.Registry.get(s.ctx.page, s.ctx.value)
-              vi.advanceTimersByTime(60)
+              yield* TestClock.adjust('60 millis')
               const afterFirstWindow = s.ctx.starts()
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               Atom.Registry.get(s.ctx.page, s.ctx.value)
               const afterSecondWindow = s.ctx.starts()
-              vi.useRealTimers()
               return { afterFirstWindow, afterSecondWindow }
             }),
         ),
@@ -282,7 +283,12 @@ Feature('Keeping a value that is still loading available to every reader')
         When('the lifetime closes')('nodes', (s) =>
           Effect.gen(function*() {
             yield* Effect.scoped(Atom.Registry.mount(s.ctx.page, s.ctx.value))
-            yield* Effect.yieldNow
+            yield* Effect.eventually(
+              Effect.flatMap(
+                Effect.sync(() => Atom.Registry.getNodes(s.ctx.page).has(s.ctx.value)),
+                (stillMounted) => stillMounted ? Effect.fail('the value is still mounted') : Effect.void,
+              ),
+            )
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
             return { hasValue: HashSet.has(keys, s.ctx.value) }
           })),
@@ -336,6 +342,7 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             const value = Atom.make<Atom.AsyncResult.Result<number, string>>(Atom.AsyncResult.initial(false))
             const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, value, () => {})
             return { page, value }
           })),
         When('a stream of the settled results is collected through all of its states')(
@@ -354,14 +361,13 @@ Feature('Keeping a value that is still loading available to every reader')
                       if (n === 2) second.openUnsafe()
                     })),
                 ),
+                { startImmediately: true },
               )
-              yield* Effect.yieldNow
               Atom.Registry.set(s.ctx.page, s.ctx.value, Atom.AsyncResult.success(1))
               yield* first.await
               Atom.Registry.set(s.ctx.page, s.ctx.value, Atom.AsyncResult.success(2))
               yield* second.await
               Atom.Registry.set(s.ctx.page, s.ctx.value, Atom.AsyncResult.success(2))
-              yield* Effect.yieldNow
               const afterDuplicate = heard.length
               Atom.Registry.set(s.ctx.page, s.ctx.value, Atom.AsyncResult.failure<number, string>(Cause.fail('boom')))
               const exit = yield* Effect.exit(Fiber.join(fiber))
@@ -476,19 +482,23 @@ Feature('Keeping a value that is still loading available to every reader')
           'answers',
           (s) =>
             Effect.gen(function*() {
-              const fromLoading = yield* Effect.forkChild(Atom.Registry.getResult(s.ctx.page, s.ctx.loading))
-              yield* Effect.yieldNow
+              const fromLoading = yield* Effect.forkChild(
+                Atom.Registry.getResult(s.ctx.page, s.ctx.loading),
+                { startImmediately: true },
+              )
               Atom.Registry.set(s.ctx.page, s.ctx.loading, Atom.AsyncResult.success(20))
               const waited = yield* Fiber.join(fromLoading)
               const fromWaiting = yield* Effect.forkChild(
                 Atom.Registry.getResult(s.ctx.page, s.ctx.waiting, { suspendOnWaiting: true }),
+                { startImmediately: true },
               )
-              yield* Effect.yieldNow
               Atom.Registry.set(s.ctx.page, s.ctx.waiting, Atom.AsyncResult.successWith(1, { waiting: true }))
               Atom.Registry.set(s.ctx.page, s.ctx.waiting, Atom.AsyncResult.success(2))
               const waitedThrough = yield* Fiber.join(fromWaiting)
-              const fromFlicker = yield* Effect.forkChild(Atom.Registry.getResult(s.ctx.page, s.ctx.flickering))
-              yield* Effect.yieldNow
+              const fromFlicker = yield* Effect.forkChild(
+                Atom.Registry.getResult(s.ctx.page, s.ctx.flickering),
+                { startImmediately: true },
+              )
               Atom.Registry.set(s.ctx.page, s.ctx.flickering, Atom.AsyncResult.initial(true))
               Atom.Registry.set(s.ctx.page, s.ctx.flickering, Atom.AsyncResult.success(30))
               const waitedPastFlicker = yield* Fiber.join(fromFlicker)
@@ -879,14 +889,13 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a value derived from a source, both idle on one cleanup schedule')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const source = Atom.make(1)
             const derived = Atom.readable((get) => get(source))
             const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
             return { page, source, derived }
           })),
         When('both fall idle and the shared cleanup timer runs')('result', (s) =>
-          Effect.sync(() => {
+          Effect.gen(function*() {
             Atom.Registry.get(s.ctx.page, s.ctx.derived)
             const maybeNode = Atom.Registry.getNodes(s.ctx.page).get(s.ctx.derived)
             if (maybeNode === undefined) {
@@ -894,10 +903,9 @@ Feature('Keeping a value that is still loading available to every reader')
             }
             const node = maybeNode
             const before = node.currentState()
-            vi.advanceTimersByTime(100)
+            yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
             const after = node.currentState()
-            vi.useRealTimers()
             return {
               before,
               after,
@@ -918,7 +926,6 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a source with a listener, and a derived value that reads it')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const source = Atom.make(1)
             const derived = Atom.readable((get) => get(source))
             const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
@@ -927,12 +934,11 @@ Feature('Keeping a value that is still loading available to every reader')
         When('both fall idle while the source is still listened to, and the cleanup timer runs')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               Atom.Registry.get(s.ctx.page, s.ctx.derived)
               Atom.Registry.subscribe(s.ctx.page, s.ctx.source, () => {})
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-              vi.useRealTimers()
               return {
                 hasDerived: HashSet.has(keys, s.ctx.derived),
                 hasSource: HashSet.has(keys, s.ctx.source),
@@ -950,20 +956,18 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a value derived from a source that keeps its value twice as long')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const source = Atom.setIdleTTL(20)(Atom.make(1))
             const derived = Atom.readable((get) => get(source))
             const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
             return { page, source, derived }
           })),
         When('both fall idle and the cleanup timers run past both windows')('result', (s) =>
-          Effect.sync(() => {
+          Effect.gen(function*() {
             Atom.Registry.get(s.ctx.page, s.ctx.derived)
-            vi.advanceTimersByTime(15)
+            yield* TestClock.adjust('15 millis')
             const afterFirstWindow = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            vi.advanceTimersByTime(100)
+            yield* TestClock.adjust('100 millis')
             const afterSecondWindow = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            vi.useRealTimers()
             return {
               hasDerivedAfterFirst: HashSet.has(afterFirstWindow, s.ctx.derived),
               hasDerivedAfterSecond: HashSet.has(afterSecondWindow, s.ctx.derived),
@@ -983,22 +987,20 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('two values sharing one cleanup window')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const first = Atom.make(1)
             const second = Atom.make(2)
             const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
             return { page, first, second }
           })),
         When('both fall idle and are read again before their window')('result', (s) =>
-          Effect.sync(() => {
+          Effect.gen(function*() {
             Atom.Registry.get(s.ctx.page, s.ctx.first)
             Atom.Registry.get(s.ctx.page, s.ctx.second)
-            vi.advanceTimersByTime(1)
+            yield* TestClock.adjust('1 millis')
             Atom.Registry.get(s.ctx.page, s.ctx.first)
             Atom.Registry.get(s.ctx.page, s.ctx.second)
-            vi.advanceTimersByTime(100)
+            yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
-            vi.useRealTimers()
             return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
         Then('both are swept only after being left alone again')((s) => {
@@ -1025,7 +1027,12 @@ Feature('Keeping a value that is still loading available to every reader')
             }
             const before = maybeNode.currentState()
             cancel()
-            yield* Effect.yieldNow
+            yield* Effect.eventually(
+              Effect.flatMap(
+                Effect.sync(() => Atom.Registry.getNodes(s.ctx.page).has(s.ctx.value)),
+                (stillThere) => stillThere ? Effect.fail('the value is still there') : Effect.void,
+              ),
+            )
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
             return { before, hasValue: HashSet.has(keys, s.ctx.value) }
           })),
@@ -1245,7 +1252,6 @@ Feature('Keeping a value that is still loading available to every reader')
           (s) =>
             Effect.gen(function*() {
               Atom.Registry.get(s.ctx.registry, s.ctx.value)
-              yield* Effect.yieldNow
               Atom.Registry.set(s.ctx.registry, s.ctx.loading, Atom.AsyncResult.initial(false))
               Atom.Registry.set(s.ctx.registry, s.ctx.loading, Atom.AsyncResult.success(7))
               Atom.Registry.set(s.ctx.registry, s.ctx.waiting, Atom.AsyncResult.successWith(2, { waiting: true }))
@@ -1321,11 +1327,6 @@ Feature('Keeping a value that is still loading available to every reader')
         }),
       ),
     )
-  })
-
-Feature('Keeping computed values current while unused values are forgotten')
-  .withLayer(Layer.empty)
-  .body(({ scenario }) => {
     scenario(
       'A group of changes that ends where it started tells no listener anything',
       Gherkin.Do.pipe(
@@ -1396,7 +1397,6 @@ Feature('Keeping computed values current while unused values are forgotten')
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const counter = Atom.make(0)
               const total = Atom.make((get) => get(counter)).pipe(Atom.keepAlive)
               const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
@@ -1407,14 +1407,13 @@ Feature('Keeping computed values current while unused values are forgotten')
         When('the counter is set to 1 and the page sits idle well past its cleanup time')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               Atom.Registry.set(s.ctx.page, s.ctx.counter, 1)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const result = {
                 counter: Atom.Registry.get(s.ctx.page, s.ctx.counter),
                 total: Atom.Registry.get(s.ctx.page, s.ctx.total),
               }
-              vi.useRealTimers()
               return result
             }),
         ),
@@ -1489,7 +1488,6 @@ Feature('Keeping computed values current while unused values are forgotten')
       Gherkin.Do.pipe(
         Given('a doubled counter that was read once')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const counter = Atom.make(0)
             const doubled = Atom.make((get) => get(counter) * 2)
             const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
@@ -1499,11 +1497,10 @@ Feature('Keeping computed values current while unused values are forgotten')
         When('the counter is set to 1 and the page sits idle well past its cleanup time')(
           'counter',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               Atom.Registry.set(s.ctx.page, s.ctx.counter, 1)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const counter = Atom.Registry.get(s.ctx.page, s.ctx.counter)
-              vi.useRealTimers()
               return counter
             }),
         ),
@@ -1512,18 +1509,6 @@ Feature('Keeping computed values current while unused values are forgotten')
         }),
       ),
     )
-  })
-
-class FirstRegistry extends Context.Service<FirstRegistry, Atom.Registry.Registry>()(
-  '@systemfsoftware/effect-atom/tests/Registry.integration.test/FirstRegistry',
-) {}
-class SecondRegistry extends Context.Service<SecondRegistry, Atom.Registry.Registry>()(
-  '@systemfsoftware/effect-atom/tests/Registry.integration.test/SecondRegistry',
-) {}
-
-Feature('Providing registries by name')
-  .withLayer(Layer.empty)
-  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'Two registries provided side by side keep their values separate',
       Gherkin.Do.pipe(
@@ -1678,15 +1663,6 @@ Feature('Providing registries by name')
           }),
         ),
     )
-  })
-
-class VisitLog extends Context.Service<VisitLog, { readonly visits: Array<string> }>()(
-  '@systemfsoftware/effect-atom/tests/Registry.integration.test/VisitLog',
-) {}
-
-Feature('Keeping private notes per page')
-  .withLayer(Layer.empty)
-  .body(({ scenario }) => {
     scenario(
       'Each page keeps its own notes, and a closed page starts over',
       Gherkin.Do.pipe(

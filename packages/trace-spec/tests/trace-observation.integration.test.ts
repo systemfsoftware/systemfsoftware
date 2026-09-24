@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Result, Schema } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const settleOrder = (orderId: string, total: number) =>
   Span.start(Settle, { 'app.order.id': orderId, 'app.order.total': total })(
@@ -27,7 +27,6 @@ const observedGraph = (traceId: string) =>
 
 Feature('Holding a settlement to the trace it produced')
   .withScenarioLayer(ObservationWindow.make('trace-spec').layer)
-  .liveClock()
   .body(({ scenario }) => {
     scenario(
       'A settlement that charges credit records the charge beneath it',

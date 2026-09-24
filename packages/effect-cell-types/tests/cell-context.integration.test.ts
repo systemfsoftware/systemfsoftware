@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -10,7 +10,7 @@ import * as Scope from 'effect/Scope'
 import { acceptTaggedCommand } from './__fixtures__/accept-tagged-command.workflow.js'
 import { TaggedCmd } from './__fixtures__/Command.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface Probe {
   readonly events: Effect.Effect<ReadonlyArray<string>>

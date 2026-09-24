@@ -2,7 +2,8 @@ import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Crypto, Deferred, Effect, Fiber, Layer, Match, Schema } from 'effect'
+import { Config, Crypto, Deferred, Effect, Fiber, Layer, Match, Random, Schema } from 'effect'
+import type * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
@@ -139,6 +140,35 @@ const assertNoLeftovers = (label: string): Effect.Effect<void> =>
     const names = yield* sandboxNamesFrom(undefined)
     const leftovers = names.filter((name) => name.startsWith(sandboxPrefix))
     assert.deepStrictEqual(leftovers, [], `${label}: no ${sandboxPrefix}* sandbox may remain`)
+  })
+
+/**
+ * Interruption points for the VM-release journey (R26): delays, in
+ * milliseconds, measured from the moment a boot starts. The delays span the
+ * whole boot so a run probes starting before, during, and after the sandbox
+ * exists on the host.
+ */
+const INTERRUPTION_CANDIDATES = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512] as const
+const INTERRUPTIONS_PER_RUN = 5
+
+const interruptionPointsFor = (seed: number): Effect.Effect<ReadonlyArray<number>> =>
+  Effect.replicateEffect(Random.choice(INTERRUPTION_CANDIDATES), INTERRUPTIONS_PER_RUN).pipe(Random.withSeed(seed))
+
+const interruptBootAt = (
+  point: number,
+): Effect.Effect<
+  void,
+  never,
+  Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
+> =>
+  Effect.gen(function*() {
+    yield* Effect.logInfo(`[smoke] J14: boot starting, interruption scheduled at ${point}ms`)
+    const boot = yield* Effect.forkChild(
+      Effect.scoped(alpine.withEnv({ SMOKE_JOURNEY: 'j14' }).scoped.pipe(Effect.andThen(Effect.never))),
+    )
+    yield* Effect.sleep(point)
+    yield* Fiber.interrupt(boot)
+    yield* assertNoLeftovers(`J14@${point}ms`)
   })
 
 const j1 = Effect.scoped(
@@ -358,6 +388,32 @@ const j13 = Effect.gen(function*() {
   yield* assertNoLeftovers('J13')
 })
 
+const REFUSED_IMAGE = 'effect-microsandbox-refusal-does-not-exist:0.0.0'
+
+const j14 = Effect.gen(function*() {
+  const seed = yield* Config.Number('SANDBOX_SMOKE_SEED').pipe(Config.withDefault(0))
+  const points = yield* interruptionPointsFor(seed)
+  yield* Effect.logInfo(
+    `[smoke] J14: VM release at seeded interruption points (seed=${seed}, points=${points.join(',')})`,
+  )
+  yield* Effect.forEach(points, interruptBootAt)
+  yield* assertNoLeftovers('J14')
+})
+
+const j15 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J15: a refused start is reported as a failure, never passed')
+    const refusal = yield* Effect.flip(MicroVM.spec(REFUSED_IMAGE).scoped).pipe(Effect.orDie)
+    const reported = Match.value(refusal).pipe(
+      Match.tag('VirtualizationUnsupportedError', () => 'virtualization refused'),
+      Match.tag('SandboxBootError', () => 'boot refused'),
+      Match.tag('LoopbackViolationError', () => 'plan refused'),
+      Match.orElse(() => assert.fail('expected the start to be refused, not to succeed')),
+    )
+    yield* Effect.logInfo(`[smoke] J15: start refused — ${reported}`)
+  }),
+)
+
 const main = Effect.gen(
   function*() {
     const j1Name = yield* j1
@@ -374,6 +430,8 @@ const main = Effect.gen(
     yield* j10
     yield* j11
     yield* j12
+    yield* j14
+    yield* j15
     yield* j13
     yield* Effect.logInfo('[smoke] all journeys green')
   },

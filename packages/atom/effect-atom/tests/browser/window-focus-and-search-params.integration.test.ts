@@ -11,10 +11,10 @@
  */
 import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 let pageIsInView: DocumentVisibilityState = document.visibilityState
 
@@ -129,6 +129,7 @@ const browserCleanupLayer = Layer.effectDiscard(
 )
 
 Feature('Keeping watched values in step with the browser page')
+  .live('dispatches real browser events and waits on the registry timer to sweep idle values')
   .withLayer(Layer.empty)
   .withScenarioLayer(browserCleanupLayer)
   .body(({ scenario, scenarioOutline }) => {

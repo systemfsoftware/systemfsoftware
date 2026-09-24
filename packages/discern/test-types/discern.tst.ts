@@ -124,7 +124,7 @@ describe('the labels a classification accepts', () => {
 })
 
 describe('the thresholds probability and rate bands accept', () => {
-  it('Should_AcceptABandThreshold_When_AProbabilityMissBelowIsGiven', () => {
+  it('Should_AcceptABandThreshold_When_ProbabilityMissBelowIsGiven', () => {
     expect(risky.above).type.toBeCallableWith(0.8, { missBelow: 0.5 })
     expect(risky.above).type.not.toBeCallableWith('high')
   })
@@ -175,7 +175,7 @@ describe('the exhaustive classification match', () => {
     expect(Discern.exhaustive).type.toBeCallableWith(matchedAll)
   })
 
-  it('Should_RejectAnIncompleteClassification_When_ALabelIsMissing', () => {
+  it('Should_RejectAnIncompleteClassification_When_LabelIsMissing', () => {
     expect(Discern.exhaustive).type.toBeCallableWith(matchedAll)
     expect(Discern.exhaustive).type.not.toBeCallableWith(incomplete)
   })
@@ -205,19 +205,19 @@ describe('the immediate value match', () => {
 })
 
 describe('the questions ask and match accept', () => {
-  it('Should_AcceptASchemaScopedNode_When_AQuestionIsAsked', () => {
+  it('Should_AcceptASchemaScopedNode_When_QuestionIsAsked', () => {
     expect(Discern.ask).type.toBeCallableWith(scopedProbability, 'change')
   })
 
-  it('Should_RejectAnUnscopedNode_When_AQuestionIsAsked', () => {
+  it('Should_RejectAnUnscopedNode_When_QuestionIsAsked', () => {
     expect(Discern.ask).type.not.toBeCallableWith(unscopedProbability, 'change')
   })
 
-  it('Should_AcceptASchemaScopedNode_When_AMatchIsStarted', () => {
+  it('Should_AcceptASchemaScopedNode_When_MatchIsStarted', () => {
     expect(Discern.match).type.toBeCallableWith(scopedImpact)
   })
 
-  it('Should_RejectAnUnscopedNode_When_AMatchIsStarted', () => {
+  it('Should_RejectAnUnscopedNode_When_MatchIsStarted', () => {
     expect(Discern.match).type.not.toBeCallableWith(unscopedImpact)
   })
 })
@@ -246,13 +246,13 @@ describe('the values a calibration sweeps', () => {
 })
 
 describe('the input every handler infers', () => {
-  it('Should_InferTheHandlerInput_When_AWhenHandlerIsWrittenWithoutAnnotation', () => {
+  it('Should_InferTheHandlerInput_When_WhenHandlerIsWrittenWithoutAnnotation', () => {
     expect(matcher).type.toBe<
       Discern.Policy<string, string | number | boolean, never, never, typeof Schema.String>
     >()
   })
 
-  it('Should_InferTheCaseHandlerInput_When_ACaHandlerIsWrittenWithoutAnnotation', () => {
+  it('Should_InferTheCaseHandlerInput_When_CaseHandlerIsWrittenWithoutAnnotation', () => {
     expect(exhaustive).type.toBe<
       Discern.Policy<string, number, Discern.ExhaustiveMatchError, never, typeof Schema.String>
     >()
@@ -272,15 +272,15 @@ describe('the DecisionModel middleware', () => {
     ])
   })
 
-  it('Should_AcceptALiveStore_When_AReplayLayerIsBuilt', () => {
+  it('Should_AcceptALiveStore_When_ReplayLayerIsBuilt', () => {
     expect(Discern.Model.replayLayer).type.toBeCallableWith(observations)
   })
 
-  it('Should_RejectAnUnawaitedSnapshot_When_AReplayLayerIsBuilt', () => {
+  it('Should_RejectAnUnawaitedSnapshot_When_ReplayLayerIsBuilt', () => {
     expect(Discern.Model.replayLayer).type.not.toBeCallableWith(Discern.Model.snapshot(observations))
   })
 
-  it('Should_DropDecisionModelFromR_When_APolicyRunsOnAReplayLayer', () => {
+  it('Should_DropDecisionModelFromR_When_PolicyRunsOnAReplayLayer', () => {
     expect(Effect.provide(matcher('change'), Discern.Model.replayLayer(observations))).type.toBe<
       Effect.Effect<
         string | number | boolean,
@@ -296,7 +296,7 @@ describe('the DecisionModel middleware', () => {
 })
 
 describe('the dual counterpart every decision kind exposes', () => {
-  it('Should_BuildTheSamePattern_When_AClassifyDualIsUsedInEitherDirection', () => {
+  it('Should_BuildTheSamePattern_When_ClassifyDualIsUsedInEitherDirection', () => {
     expect(impact.pipe(Discern.is('breaking'))).type.toBe<Discern.Pattern<string>>()
     expect(Discern.is(impact, 'breaking', { match: 0.8 })).type.toBe<Discern.Pattern<string>>()
   })
@@ -305,7 +305,7 @@ describe('the dual counterpart every decision kind exposes', () => {
     expect(Discern.is).type.not.toBeCallableWith(impact, 'critical')
   })
 
-  it('Should_BuildTheSamePattern_When_AProbabilityDualIsUsedInEitherDirection', () => {
+  it('Should_BuildTheSamePattern_When_ProbabilityDualIsUsedInEitherDirection', () => {
     expect(risky.pipe(Discern.above(0.8))).type.toBe<Discern.Pattern<string>>()
     expect(Discern.above(risky, 0.8, { missBelow: 0.5 })).type.toBe<Discern.Pattern<string>>()
   })
@@ -314,7 +314,7 @@ describe('the dual counterpart every decision kind exposes', () => {
     expect(Discern.above).type.not.toBeCallableWith(risky, 'high')
   })
 
-  it('Should_BuildTheSamePattern_When_ARateDualIsUsedInEitherDirection', () => {
+  it('Should_BuildTheSamePattern_When_RateDualIsUsedInEitherDirection', () => {
     expect(severe.pipe(Discern.atLeast('medium'))).type.toBe<Discern.Pattern<string>>()
     expect(Discern.atLeast(severe, 'medium')).type.toBe<Discern.Pattern<string>>()
   })
@@ -385,7 +385,7 @@ describe('the model builder', () => {
 })
 
 describe('the three forms of a blueprint operation', () => {
-  it('Should_AgreeAcrossMethodAndBothDuals_When_ACaseIsAdded', () => {
+  it('Should_AgreeAcrossMethodAndBothDuals_When_CaseIsAdded', () => {
     const base = Discern.type(Schema.String)
     const byMethod = base.when(impact.is('breaking'), (input) => input.length)
     const byDual = Discern.when(base, impact.is('breaking'), (input) => input.length)
@@ -395,7 +395,7 @@ describe('the three forms of a blueprint operation', () => {
     expect(byPipe).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
   })
 
-  it('Should_ShrinkTheRemainingLabels_When_ACaseIsAddedInAnyForm', () => {
+  it('Should_ShrinkTheRemainingLabels_When_CaseIsAddedInAnyForm', () => {
     const start = Discern.match(impact)
     const byMethod = start.caseOf('none', (input) => input.length)
     const byDual = Discern.case(start, 'none', (input) => input.length)
@@ -418,7 +418,7 @@ describe('the three forms of a blueprint operation', () => {
     expect(handled.caseOf).type.not.toBeCallableWith('none', () => 1)
   })
 
-  it('Should_AgreeAcrossMethodAndBothDuals_When_AProbabilityIsRead', () => {
+  it('Should_AgreeAcrossMethodAndBothDuals_When_ProbabilityIsRead', () => {
     expect(risky.above(0.8)).type.toBe<Discern.Pattern<string>>()
     expect(Discern.above(risky, 0.8)).type.toBe<Discern.Pattern<string>>()
     expect(pipe(risky, Discern.above(0.8))).type.toBe<Discern.Pattern<string>>()

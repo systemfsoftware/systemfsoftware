@@ -176,7 +176,6 @@ const runSupervisionEpochWithBackoff = <R>(
 
 const openAllReady = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
   Effect.gen(function*() {
-    yield* Effect.yieldNow
     yield* Effect.forEach(ctx.booted, (b) => b.health.ready.await, { concurrency: 'unbounded' })
     yield* Effect.andThen(
       ctx.health.ready.open,

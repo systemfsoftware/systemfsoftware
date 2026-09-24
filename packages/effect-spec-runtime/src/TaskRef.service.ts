@@ -55,15 +55,19 @@ if (import.meta.vitest !== void 0) {
 
   const Labelled = Schema.Struct({ tag: Schema.String })
 
+  const sameReference = (left: object | null, right: object | null): boolean => left === right
+
+  const isMissing = (value: object | null): boolean => value === null
+
   it.prop(
     '∀o_ReadTaskContext_=Identity',
     { of: [Labelled], subject: readTaskContext },
-    (read, [record]) => read(record) === record,
+    (read, [record]) => sameReference(read(record), record),
   )
 
   it.prop(
     '∀p_ReadTaskContext_=Null',
     { of: [Schema.String], subject: readTaskContext },
-    (read, [primitive]) => read(primitive) === null,
+    (read, [primitive]) => isMissing(read(primitive)),
   )
 }

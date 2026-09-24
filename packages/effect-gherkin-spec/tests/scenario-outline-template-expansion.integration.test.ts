@@ -8,7 +8,7 @@
  * exactly as a downstream consumer would import them.
  */
 import { expect } from '@effect/vitest'
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   expandOutline,
   Gherkin,
@@ -20,7 +20,7 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Scenario outline — template expansion')
   .withLayer(Layer.empty)

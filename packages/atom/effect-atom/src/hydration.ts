@@ -11,7 +11,6 @@
  * @since 4.0.0
  */
 import * as Cause from 'effect/Cause'
-import * as Clock from 'effect/Clock'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -131,7 +130,7 @@ export const dehydrate: {
   ): DehydratedAtomValue[] => {
     const encodeInitialResultMode = encodeInitialMode(options)
     const arr: DehydratedAtomValue[] = []
-    const now = Effect.runSync(Clock.currentTimeMillis)
+    const now = Registry.now(registry)
     Registry.getNodes(registry).forEach((node, key) => {
       dehydrateNode(registry, node, key, encodeInitialResultMode, now, arr)
     })

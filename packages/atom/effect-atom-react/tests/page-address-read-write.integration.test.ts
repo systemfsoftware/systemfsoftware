@@ -1,11 +1,11 @@
 import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import { constVoid } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 /**
  * A registry whose deferred address-bar rewrites are held back so a scenario
@@ -28,6 +28,7 @@ const recordAddressBarWrites = () => {
 }
 
 Feature('Remembering page choices in the address bar')
+  .live('renders real components in Chromium and reads the address bar')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(

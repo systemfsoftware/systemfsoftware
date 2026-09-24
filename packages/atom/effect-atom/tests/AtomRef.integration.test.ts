@@ -1,9 +1,9 @@
 import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Equal, Layer } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface RefBundle {
   readonly value: Atom.Ref.AtomRef<number>

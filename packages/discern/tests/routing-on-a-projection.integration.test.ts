@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema } from 'effect'
 import { answering, CountingModel, withProvider } from './__fixtures__/counting-model.fixture.js'
 import { ReleaseTicket, ticket } from './__fixtures__/release-ticket.schema.js'
@@ -12,7 +12,7 @@ import {
   watchingRouting,
 } from './__fixtures__/routing-model.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const inspect = Discern.Procedure.make({
   description: 'Look at what a ticket is about',

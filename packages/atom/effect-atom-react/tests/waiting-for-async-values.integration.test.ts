@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
@@ -14,9 +14,10 @@ import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 import { Unavailable } from './__fixtures__/Unavailable.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Waiting for asynchronous values')
+  .live('renders real components in Chromium and waits on React commits in the browser')
   .withLayer(Layer.empty)
   .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {

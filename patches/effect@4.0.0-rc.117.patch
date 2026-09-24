@@ -1,0 +1,32 @@
+diff --git a/dist/Queue.js b/dist/Queue.js
+index ae73d48ce79a317715947abf32e137d5144e62f9..6367386c3168b4edabc5b46e13c23e266de82416 100644
+--- a/dist/Queue.js
++++ b/dist/Queue.js
+@@ -1671,6 +1671,11 @@ const awaitTake = self => internalEffect.callback(resume => {
+   if (self.state._tag === "Done") {
+     return resume(self.state.exit);
+   }
++  // A message or pending offer that arrived after the caller's emptiness check,
++  // while it was yielded, would otherwise never wake this taker (Effect-TS/effect#8471).
++  if (self.messages.length > 0 || self.state.offers.size > 0) {
++    return resume(internalEffect.exitVoid);
++  }
+   self.state.takers.add(resume);
+   return internalEffect.sync(() => {
+     if (self.state._tag !== "Done") {
+diff --git a/src/Queue.ts b/src/Queue.ts
+index 0320738154375ddbb2fd2b4b92098e024d3b2819..d3d527ee5db70153b6052fc152ad122617a28fa5 100644
+--- a/src/Queue.ts
++++ b/src/Queue.ts
+@@ -2167,6 +2167,11 @@ const awaitTake = <A, E>(self: Dequeue<A, E>) =>
+     if (self.state._tag === "Done") {
+       return resume(self.state.exit)
+     }
++    // A message or pending offer that arrived after the caller's emptiness check,
++    // while it was yielded, would otherwise never wake this taker (Effect-TS/effect#8471).
++    if (self.messages.length > 0 || self.state.offers.size > 0) {
++      return resume(internalEffect.exitVoid)
++    }
+     self.state.takers.add(resume)
+     return internalEffect.sync(() => {
+       if (self.state._tag !== "Done") {

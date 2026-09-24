@@ -4,7 +4,6 @@ import {
   Gherkin,
   Given,
   it,
-  layer,
   makeFeature,
   renderTitle,
   stringifyForTitle,
@@ -13,7 +12,7 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Scenario outline — edge cases and title stringification')
   .withLayer(Layer.empty)

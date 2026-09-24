@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from '@effect/vitest'
+import { afterEach, beforeEach, describe, it, recordAssertion } from '@effect/vitest'
 import { Effect } from 'effect'
 
 describe('per-test hooks are refused', () => {
@@ -6,5 +6,5 @@ describe('per-test hooks are refused', () => {
 
   afterEach(() => Effect.void)
 
-  it.effect('Should_ReachTheBody_When_HooksAreRefused', () => Effect.sync(() => expect(1).toEqual(1)))
+  it.effect('Should_ReachTheBody_When_HooksAreRefused', () => Effect.sync(() => recordAssertion()))
 })

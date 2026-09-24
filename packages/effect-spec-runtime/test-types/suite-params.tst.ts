@@ -1,5 +1,5 @@
 import { it as vitestIt, layer } from '@effect/vitest'
-import { Suite } from '@systemfsoftware/effect-spec-runtime'
+import { KernelCase, Suite } from '@systemfsoftware/effect-spec-runtime'
 import { Context, Effect, Layer } from 'effect'
 import { describe, expect, it } from 'tstyche'
 
@@ -18,7 +18,7 @@ interface CaseError {
 }
 
 const bindings = { it: vitestIt, layer }
-const config: Suite.Config = { name: 'suite params', describe: 'describe', options: undefined, liveClock: false }
+const config: Suite.Config = { name: 'suite params', describe: 'describe', options: undefined }
 const freshFixtureLayer: Layer.Layer<FreshFixture> = Layer.effect(
   FreshFixture,
   Effect.acquireRelease(Effect.succeed(true), () => Effect.void),
@@ -36,7 +36,7 @@ declare const numericRegister: Suite.RegisterFn<number, CaseError, never>
 declare const freshRegister: Suite.RegisterFn<void, never, FreshFixture>
 
 describe('Suite.open', () => {
-  it("accepts a registrar of the caller's own error and body channels", () => {
+  it('Should_AcceptARegistrar_When_ItCarriesTheCallerErrorAndBodyChannels', () => {
     expect(Suite.open).type.toBeCallableWith(
       bindings,
       config,
@@ -45,25 +45,25 @@ describe('Suite.open', () => {
     expect(Suite.openShared).type.toBeCallableWith(
       bindings,
       config,
-      { layer: sharedFixtureLayer, excludeTestServices: false },
+      { layer: sharedFixtureLayer },
       (_register: Suite.RegisterFn<void, CaseError, SharedFixture>) => {},
     )
     expect(Suite.openShared).type.not.toBeCallableWith(
       bindings,
       config,
-      { layer: otherFixtureLayer, excludeTestServices: false },
+      { layer: otherFixtureLayer },
       (_register: Suite.RegisterFn<void, CaseError, SharedFixture>) => {},
     )
   })
 
-  it('routes the body and error channels the registrar advertises', () => {
+  it('Should_RouteTheBodyAndErrorChannels_When_TheRegistrarAdvertisesThem', () => {
     expect(numericRegister).type.toBeCallableWith('counting case', Effect.succeed(42), 'run')
     expect(numericRegister).type.not.toBeCallableWith('string case', Effect.succeed('42'), 'run')
     expect(numericRegister).type.not.toBeCallableWith('failing case', Effect.fail('plain string'), 'run')
     expect(numericRegister).type.toBeCallableWith('failing case', Effect.fail<CaseError>({ message: 'nope' }), 'run')
   })
 
-  it('does not erase the error channel into a broader one', () => {
+  it('Should_KeepTheErrorChannelNarrow_When_ComparedToABroaderSignature', () => {
     type ErasedRegister = (
       name: string,
       body: Effect.Effect<number, string, never>,
@@ -74,7 +74,7 @@ describe('Suite.open', () => {
 })
 
 describe('Suite.openCase', () => {
-  it('accepts a registrar whose requirement is the case layer service', () => {
+  it('Should_AcceptARegistrar_When_ItsRequirementIsTheCaseLayerService', () => {
     expect(Suite.openCase).type.toBeCallableWith(
       bindings,
       config,
@@ -83,13 +83,50 @@ describe('Suite.openCase', () => {
     )
   })
 
-  it('routes the case layer service into the registrar without widening', () => {
+  it('Should_RouteTheCaseLayerServiceIntoTheRegistrar_When_ItNeedsTheFreshFixture', () => {
     expect(freshRegister).type.toBeCallableWith('needing the fresh fixture', Effect.asVoid(FreshFixture), 'run')
     expect(freshRegister).type.not.toBeCallableWith('needing another fixture', Effect.asVoid(OtherFixture), 'run')
   })
 
-  it('pins the register and describe mode unions exactly', () => {
+  it('Should_PinTheRegisterAndDescribeModeUnions_When_TheModesAreDeclared', () => {
     expect<Suite.RegisterMode>().type.toBe<'run' | 'skip' | 'only'>()
     expect<Suite.DescribeMode>().type.toBe<'describe' | 'skip' | 'only'>()
+  })
+})
+
+describe('Suite.Config live declaration', () => {
+  it('Should_CarryTheLiveDeclarationAsAReasonOnly_When_TheConfigIsBuilt', () => {
+    expect<Suite.LiveCase>().type.toBe<{ readonly reason: string }>()
+    expect<Suite.Config>().type.toBeAssignableTo<{ readonly live?: Suite.LiveCase }>()
+    expect<Suite.Config>().type.not.toBeAssignableTo<{ readonly liveClock: boolean }>()
+  })
+
+  it('Should_AcceptACaseLevelLiveDeclaration_When_ItCarriesItsReason', () => {
+    expect(numericRegister).type.toBeCallableWith(
+      'driving its own kernel',
+      Effect.succeed(42),
+      'run',
+      { reason: 'drives its own kernel run' },
+    )
+    expect(numericRegister).type.not.toBeCallableWith(
+      'driving its own kernel',
+      Effect.succeed(42),
+      'run',
+      {},
+    )
+    expect(numericRegister).type.not.toBeCallableWith('counting case', Effect.succeed(42), 'run', {
+      reason: 42,
+    })
+  })
+})
+
+describe('KernelCase.caseProgram', () => {
+  it('Should_RunOnceDataFirstAndOnceDataLast_When_TheCaseProgramIsCurried', () => {
+    expect(KernelCase.caseProgram(Effect.asVoid(FreshFixture), Layer.fresh(freshFixtureLayer))).type.toBe<
+      Effect.Effect<void, never, never>
+    >()
+    expect(
+      Effect.asVoid(FreshFixture).pipe(KernelCase.caseProgram(Layer.fresh(freshFixtureLayer))),
+    ).type.toBe<Effect.Effect<void, never, never>>()
   })
 })

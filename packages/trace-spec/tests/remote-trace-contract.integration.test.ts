@@ -1,5 +1,5 @@
 import { expect } from '@effect/vitest'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, Rel, RemoteObservation, Stimulus, TempoTraceStore } from '@systemfsoftware/trace-spec'
 import { Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
@@ -302,11 +302,11 @@ const unfinishedOf = (failure: StoreFailure): Contract.IncompleteObservationErro
   return failure
 }
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Holding a settlement to a trace contract through a remote store')
   .withScenarioLayer(judgingLayer)
-  .liveClock()
+  .live('binds a real loopback socket and judges through the store behind it')
   .body(({ scenario }) => {
     scenario(
       'A settlement whose charge the store recorded satisfies the contract',

@@ -52,15 +52,17 @@ const predicateImpl = <Input, Output, E, Provided, Required>(
   title: string,
   contract: Contract.Contract<Input, Output, E, Provided>,
   scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+  shared: Layer.Layer<Required, never, never>,
 ): (
   subject: Stimulus<Input, Output, E, Provided>,
   input: Input,
-) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required> => {
+) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope> => {
+  const provided = scenario.pipe(Layer.provideMerge(shared))
   const checked = (subject: Stimulus<Input, Output, E, Provided>, input: Input) =>
     Contract.judge(judgedOver(contract, subject), input, { dumpName: title }).pipe(
       Effect.tap((judgment) => announce(judgment.verdict, judgment.dumpPath)),
       Effect.map((judgment) => isHold(judgment.verdict) && consumedInput(judgment, input)),
-      Effect.provide(Layer.fresh(scenario)),
+      Effect.provide(Layer.fresh(provided)),
     )
 
   return (subject, input) => checked(subject, input)
@@ -70,21 +72,23 @@ export const predicate: {
   <Input, Output, E, Provided, Required>(
     contract: Contract.Contract<Input, Output, E, Provided>,
     scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+    shared: Layer.Layer<Required, never, never>,
   ): (
     title: string,
   ) => (
     subject: Stimulus<Input, Output, E, Provided>,
     input: Input,
-  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required>
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
   <Input, Output, E, Provided, Required>(
     title: string,
     contract: Contract.Contract<Input, Output, E, Provided>,
     scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+    shared: Layer.Layer<Required, never, never>,
   ): (
     subject: Stimulus<Input, Output, E, Provided>,
     input: Input,
-  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required>
-} = dual(3, predicateImpl)
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
+} = dual(4, predicateImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.

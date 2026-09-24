@@ -30,7 +30,7 @@ let runtime: ManagedRuntime.ManagedRuntime<AppLive, never> | undefined
 export const getRuntime = () => (runtime ??= ManagedRuntime.make(AppLive))
 ```
 
-And `cell.run(input)` is work, not wiring: an arrow application any module may perform at any depth. The five rules below keep those three facts mechanical, so a file that violates them fails lint instead of review.
+And `cell.run(input)` is work, not wiring: an arrow application any module may perform at any depth. The six rules below keep those three facts mechanical, so a file that violates them fails lint instead of review.
 
 ## Install
 
@@ -55,7 +55,7 @@ export default defineConfig({
 pnpm oxlint src
 ```
 
-All five rules are in the recommended set, so the spread enables them at `error`. To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-entrypoint/<rule>': 'warn'`; entries placed after the spread override it.
+All six rules are in the recommended set, so the spread enables them at `error`. To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-entrypoint/<rule>': 'warn'`; entries placed after the spread override it.
 
 ## Rules
 
@@ -66,6 +66,7 @@ All five rules are in the recommended set, so the spread enables them at `error`
 | `entrypoint-not-imported`        | Any static import, re-export, or dynamic `import()` of a `main` module, reported in the importing file — production, barrel, or test                                                                                                                                                                                                                             |
 | `entrypoint-no-promise-wrapper`  | `runMain(Effect.tryPromise(...))` or `runMain(Effect.promise(...))`: the outer edge awaits a promise while the real fibers run in a runtime it cannot interrupt                                                                                                                                                                                                  |
 | `runtime-construction-placement` | `ManagedRuntime.make` or `Layer.provide` inside a function body — wiring rebuilt per call — and `ManagedRuntime.make` at module scope, where importing the module starts fibers nothing can interrupt. It judges runtime code: a file under a `src/` directory segment, or a `*.test.ts` file; a package-root hook, config, or setup file is outside its subject |
+| `no-unported-time-source`        | A direct `Date.now`, `performance.now`, `process.hrtime`, `Math.random`, `crypto.getRandomValues`, `crypto.randomUUID`, `setTimeout`, `setInterval`, or `setImmediate` call, an argument-less `new Date()`, or a static or dynamic import of `node:timers` in production source outside a file listed in the rule's `ports` option                               |
 
 What the placement rule leaves alone, each a shape the rule's own fixtures pin:
 
@@ -78,10 +79,18 @@ What the placement rule leaves alone, each a shape the rule's own fixtures pin:
 
 Callers resolve through their import specifier — aliased, namespaced, or destructured from `await import('effect')`. A call reached through a re-export chain is not seen: the receiver must resolve to a direct import in the same file.
 
+What the time-source rule leaves alone, each a shape the rule's own fixtures pin:
+
+- `queueMicrotask(...)`: it yields to the microtask queue and reads no clock, so it is not a time source.
+- `new Date(0)` and any `new Date(arg)`: the argument fixes the instant, so there is nothing for a clock port to own.
+- A source injected as a parameter, shadowed by a local declaration, or imported from another module: the call crosses the boundary instead of reading the process, so the port — not the call site — owns the verdict.
+- A file listed in the rule's `ports` option, matched by repo-relative path or path suffix: the recommended config registers `packages/atom/effect-atom/src/internal/HostTimer.ts` and `packages/effect-schema-law/src/recursion-laws.ts`.
+- Test and fixture files (`.test.ts`, `.spec.ts`, `__tests__/`, `__fixtures__/`, `tests/`, `testResources/`): the regime binds production code.
+
 ## FAQ
 
 **Q: Installed, but nothing is reported.**
-A: Three of the five rules are filename-gated to the exact basename `main.ts`. The other two run on runtime code, and a clean file reports nothing: `cell.run(input)` at any depth, module-scope layer composition, module-scope composition in a package-root hook, and a memoized bootstrap are all outside the rules' verdicts.
+A: Three of the entrypoint rules are filename-gated to the exact basename `main.ts`. The rest judge production code, and a clean file reports nothing: `cell.run(input)` at any depth, module-scope layer composition, module-scope composition in a package-root hook, a memoized bootstrap, a timer reached through a port, and `queueMicrotask` are all outside the rules' verdicts.
 
 **Q: Does `runtime-construction-placement` report my module-scope lazy thunk?**
 A: No, when the thunk memoizes: `const getRuntime = () => (runtime ??= ManagedRuntime.make(AppLive))` writes the construction into a cache binding, so every call reads the one runtime. A closure that merely wraps the call — `const getRuntime = () => ManagedRuntime.make(AppLive)` — caches nothing and reports as wiring built per call, as does a runtime built inside any other function body or evaluated at import time.
@@ -100,6 +109,12 @@ A: A test importing `main.ts` proves what a production import proves: behavior l
 
 **Q: A construction reached through a re-export chain is not reported. Why?**
 A: The rule reads syntax only, so a receiver must resolve to a direct import in the same file. Import the constructing module directly, or the construction stays invisible to this rule.
+
+**Q: Why does `no-unported-time-source` report `setTimeout` but not `queueMicrotask`?**
+A: `queueMicrotask` only yields to the microtask queue — it reads no clock, so no kernel port can or must own it. `setTimeout` reads the process schedule, so it reports unless the file is a registered port.
+
+**Q: My function takes `setTimeout` as a parameter. Is that still unported?**
+A: No. A timer injected as a parameter crosses the port boundary at the call site; the rule stays silent wherever the name resolves to a parameter, a local declaration, or an import. Only a reference that resolves to nothing — the process global — reports.
 
 ## Requirements
 

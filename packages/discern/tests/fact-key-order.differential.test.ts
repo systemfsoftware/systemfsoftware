@@ -58,7 +58,10 @@ const factSets: fc.Arbitrary<FactSet> = fc
 
 const reorderKeys = (facts: FactSet): FactSet => Object.fromEntries(Object.entries(facts).reverse())
 
-Metamorphic.on(triagedFacts)
+Metamorphic.on({
+  name: 'reordering the keys of a fact set reuses the cached verdict without asking the model again',
+  system: triagedFacts,
+})
   .relation({
     transformInput: reorderKeys,
     assertOutput: (baseline, followUp) => followUp.calls === 0 && baseline.verdict === followUp.verdict,

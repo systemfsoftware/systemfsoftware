@@ -6,5 +6,6 @@ export default defineConfig({
     ...sharedConfig.test,
     includeSource: ['src/**/*.ts'],
     passWithNoTests: false,
+    env: { CONFORMANCE_PROFILE: 'per-change' },
   },
 })

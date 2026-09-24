@@ -1,12 +1,34 @@
 import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+/** Blocks until the registry reports a settled value for the atom, resuming from the subscription. */
+const waitForSettled = <A, E, W>(
+  registry: Atom.Registry.Registry,
+  atom: Atom.Writable<Atom.AsyncResult.Result<A, E>, W> | Atom.Atom<Atom.AsyncResult.Result<A, E>>,
+  holds: (value: Atom.AsyncResult.Result<A, E>) => boolean = (value) =>
+    !Atom.AsyncResult.isInitial(value) && !Atom.AsyncResult.isWaiting(value),
+): Effect.Effect<Atom.AsyncResult.Result<A, E>> =>
+  Effect.callback((resume) => {
+    let unsubscribe = (): void => {}
+    unsubscribe = Atom.Registry.subscribe(
+      registry,
+      atom,
+      (value) => {
+        if (!holds(value)) return
+        resume(Effect.succeed(value))
+        unsubscribe()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(unsubscribe)
+  })
 
 /** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
 const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
@@ -90,9 +112,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) =>
             Effect.gen(function*() {
               const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
+              yield* waitForSettled(s.ctx.registry, s.ctx.profile)
               const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
               unmount()
               const freshPage = Atom.Registry.make()
@@ -162,9 +182,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
             Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
@@ -203,9 +221,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
             Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.create, Atom.AsyncResult.isFailure)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as failed')((s) => {
@@ -234,9 +250,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         When('the profile is read')('outcome', (s) =>
           Effect.gen(function*() {
             const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
             const outcome = Atom.Registry.get(s.ctx.registry, s.ctx.profile)
             unmount()
             return outcome
@@ -285,18 +299,13 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         )('readings', (s) =>
           Effect.gen(function*() {
             const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
             const first = Atom.Registry.get(s.ctx.registry, s.ctx.profile)
             Atom.Registry.set(s.ctx.registry, s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['profiles'],
             })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
             const second = Atom.Registry.get(s.ctx.registry, s.ctx.profile)
             const calls = s.ctx.callsMade()
             unmount()
@@ -337,9 +346,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
             Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the raw response is reported')((s) => {
@@ -389,9 +396,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) =>
             Effect.gen(function*() {
               const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
+              yield* waitForSettled(s.ctx.registry, s.ctx.profile)
               const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
               unmount()
               const freshPage = Atom.Registry.make()
@@ -440,9 +445,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
             Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a defect rather than a normal failure')((s) => {
@@ -482,9 +485,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
             Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a normal failure with the described error')((s) => {
@@ -537,9 +538,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.first.profile, () => {}, {
                 immediate: true,
               })
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
+              yield* waitForSettled(s.ctx.registry, s.ctx.first.profile)
               const profile = Atom.Registry.get(s.ctx.registry, s.ctx.first.profile)
               unmount()
               return {

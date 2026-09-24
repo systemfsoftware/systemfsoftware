@@ -4,13 +4,13 @@ import { describe, expect, it } from 'tstyche'
 import { PlaceOrder, PlaceOrderAttrs } from '../tests/__fixtures__/declared-span.schema.js'
 
 describe('Span.start', () => {
-  it('data-last start takes the full declared attribute record and the effect', () => {
+  it('Should_AcceptFullDeclaredRecord_When_StartIsDataLast', () => {
     expect(Span.start(PlaceOrder, { 'app.user.id': 'u', 'app.order.items.count': 1 })).type.toBeCallableWith(
       Effect.succeed(7),
     )
   })
 
-  it('data-first start carries the same dual signature and pins every channel', () => {
+  it('Should_CarryDualSignatureAndPinChannels_When_StartIsDataFirst', () => {
     expect(Span.start).type.toBeCallableWith(
       Effect.succeed(7),
       PlaceOrder,
@@ -21,7 +21,7 @@ describe('Span.start', () => {
     ).type.toBe<Effect.Effect<number, never, never>>()
   })
 
-  it('data-last start preserves the wrapped outcome and pins every channel', () => {
+  it('Should_PreserveOutcomeAndPinChannels_When_StartIsPipedDataLast', () => {
     expect(
       Effect.succeed(7).pipe(Span.start(PlaceOrder, { 'app.user.id': 'u', 'app.order.items.count': 1 })),
     ).type.toBe<Effect.Effect<number, never, never>>()
@@ -30,7 +30,7 @@ describe('Span.start', () => {
     ).type.toBe<Effect.Effect<never, string, never>>()
   })
 
-  it('start refuses a record missing a declared attribute, next to its positive control', () => {
+  it('Should_RefuseRecord_When_DeclaredAttributeMissing', () => {
     expect(Span.start).type.toBeCallableWith(
       Effect.succeed(7),
       PlaceOrder,
@@ -39,7 +39,7 @@ describe('Span.start', () => {
     expect(Span.start).type.not.toBeCallableWith(Effect.succeed(7), PlaceOrder, { 'app.user.id': 'u' })
   })
 
-  it('start refuses a record mistyping a declared attribute', () => {
+  it('Should_RefuseRecord_When_DeclaredAttributeMistyped', () => {
     expect(Span.start).type.not.toBeCallableWith(
       Effect.succeed(7),
       PlaceOrder,
@@ -47,19 +47,19 @@ describe('Span.start', () => {
     )
   })
 
-  it('start refuses an empty record when attributes are declared', () => {
+  it('Should_RefuseEmptyRecord_When_AttributesDeclared', () => {
     expect(Span.start).type.not.toBeCallableWith(Effect.succeed(7), PlaceOrder, {})
   })
 
-  it('AttrsOf reads the declared attribute type back', () => {
+  it('Should_ReadDeclaredAttributeType_When_AttrsOfQueried', () => {
     expect<Span.AttrsOf<typeof PlaceOrder>>().type.toBe<S.Schema.Type<typeof PlaceOrderAttrs>>()
   })
 
-  it('a specific declaration is assignable to the identity face a taxonomy cites', () => {
+  it('Should_BeAssignableToIdentityFace_When_SpecificDeclarationCitesTaxonomy', () => {
     expect(PlaceOrder).type.toBeAssignableTo<Span.Span>()
   })
 
-  it('declare keeps the span name a literal, not a widened string', () => {
+  it('Should_KeepSpanNameLiteral_When_DeclareCalled', () => {
     expect(PlaceOrder.name).type.toBe<'checkout.place_order'>()
   })
 })

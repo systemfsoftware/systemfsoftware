@@ -1,11 +1,31 @@
 import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import * as RpcTest from 'effect/unstable/rpc/RpcTest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+/** Blocks until the registry reports a settled value for the atom, resuming from the subscription. */
+const waitForSettled = <A, E, W>(
+  registry: Atom.Registry.Registry,
+  atom: Atom.Writable<Atom.AsyncResult.Result<A, E>, W> | Atom.Atom<Atom.AsyncResult.Result<A, E>>,
+): Effect.Effect<Atom.AsyncResult.Result<A, E>> =>
+  Effect.callback((resume) => {
+    let unsubscribe = (): void => {}
+    unsubscribe = Atom.Registry.subscribe(
+      registry,
+      atom,
+      (value) => {
+        if (Atom.AsyncResult.isInitial(value) || Atom.AsyncResult.isWaiting(value)) return
+        resume(Effect.succeed(value))
+        unsubscribe()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(unsubscribe)
+  })
 
 const Group = RpcGroup.make(
   Rpc.make('getUser', {
@@ -75,10 +95,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         When('the user is read, the page is reloaded, and read again on the fresh page')(
           'result',
           (s) =>
-            Effect.gen(function*() {
+            Effect.sync(() => {
               const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
               const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
               unmount()
               const freshPage = Atom.Registry.make()
@@ -118,11 +136,9 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return { first, second, registry, callsMade: () => callCount }
           })),
         When('both queries are mounted and read')('result', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.first, () => {}, { immediate: true })
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.second, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             return { sameAtom: s.ctx.first === s.ctx.second, calls: s.ctx.callsMade() }
           })),
         Then('both queries share one atom and the server is called once')((s) => {
@@ -154,9 +170,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
           Effect.gen(function*() {
             Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
             Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
@@ -193,14 +207,10 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         When('the feed is mounted and pulled until the server finishes')('final', (s) =>
           Effect.gen(function*() {
             const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.feed, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             Atom.Registry.set(s.ctx.registry, s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             Atom.Registry.set(s.ctx.registry, s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             Atom.Registry.set(s.ctx.registry, s.ctx.feed, void 0)
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.feed)
             const final = Atom.Registry.get(s.ctx.registry, s.ctx.feed)
             unmount()
             return final
@@ -254,18 +264,13 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         )('readings', (s) =>
           Effect.gen(function*() {
             const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.user)
             const first = Atom.Registry.get(s.ctx.registry, s.ctx.user)
             Atom.Registry.set(s.ctx.registry, s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['users'],
             })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.user)
             const second = Atom.Registry.get(s.ctx.registry, s.ctx.user)
             const calls = s.ctx.callsMade()
             unmount()
@@ -300,8 +305,7 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         When('the user is read')('outcome', (s) =>
           Effect.gen(function*() {
             const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.user)
             const outcome = Atom.Registry.get(s.ctx.registry, s.ctx.user)
             unmount()
             return outcome
@@ -356,10 +360,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             }
           })),
         When('the user is read and the page is reloaded')('result', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.user, () => {}, { immediate: true })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
             unmount()
             const freshPage = Atom.Registry.make()

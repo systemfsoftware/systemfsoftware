@@ -56,7 +56,7 @@ type CellHandle<A> = Handle.Handle<typeof CellId, { readonly key: string }, Cell
 declare const numberCell: CellHandle<number>
 
 describe('Blueprint', () => {
-  it('Should_AgreeAcrossMethodAndDual_When_ACombinatorIsApplied', () => {
+  it('Should_AgreeAcrossMethodAndDual_When_CombinatorIsApplied', () => {
     expect(make('redis:7').withPort(6379)).type.toBe<Container>()
     expect(withPort(make('redis:7'), 6379)).type.toBe<Container>()
     expect(pipe(make('redis:7'), withPort(6379))).type.toBe<Container>()
@@ -90,12 +90,12 @@ describe('Blueprint', () => {
     expect(withWorkdir).type.not.toBeCallableWith(make('redis:7'), '/srv')
   })
 
-  it('Should_KeepTheVariant_When_ASharedDualConfiguresIt', () => {
+  it('Should_KeepTheVariant_When_SharedDualConfiguresIt', () => {
     expect(withPort(job('alpine'), 80)).type.toBe<Job>()
     expect(pipe(job('alpine'), withPort(80))).type.toBe<Job>()
   })
 
-  it('Should_StandInForItsBaseBlueprint_When_AVariantSharesTheBrand', () => {
+  it('Should_StandInForItsBaseBlueprint_When_VariantSharesTheBrand', () => {
     expect<Job>().type.toBeAssignableTo<Container>()
     expect<Container>().type.not.toBeAssignableTo<Job>()
   })
@@ -151,7 +151,7 @@ describe('Blueprint over a type index', () => {
     expect<Question<Change, string>>().type.not.toHaveProperty('above')
   })
 
-  it('Should_DropTheErrorChannel_When_AFallbackIsGiven', () => {
+  it('Should_DropTheErrorChannel_When_FallbackIsGiven', () => {
     const change: Change = { title: 'x' }
     expect(impact.ask(change)).type.toBe<Effect.Effect<'breaking' | 'minor', Unsure>>()
     expect(ask(impact, change, { onUnsure: () => 'escalate' as const })).type.toBe<
@@ -199,7 +199,7 @@ describe('Blueprint over a type index', () => {
     expect(pipe(block, concat(score))).type.toBe<Matcher<Change, 'block' | number>>()
   })
 
-  it('Should_CompileToACallablePolicy_When_AFallbackFinishesIt', () => {
+  it('Should_CompileToACallablePolicy_When_FallbackFinishesIt', () => {
     const cases = matcher<Change>().when(impact.is('breaking'), () => 'block' as const)
     expect(cases.orElse(() => true)).type.toBe<Policy<Change, 'block' | boolean>>()
     expect(orElse(cases, () => true)).type.toBe<Policy<Change, 'block' | boolean>>()
@@ -251,12 +251,12 @@ describe('Handle over a type index', () => {
     expect(Cells.make<number>({ key: 'n' }, { current: 1 })).type.toBe<CellHandle<number>>()
   })
 
-  it('Should_RefuseASlotOfAnotherIndex_When_AHandleIsMinted', () => {
+  it('Should_RefuseASlotOfAnotherIndex_When_HandleIsMinted', () => {
     expect(Cells.make<number>).type.toBeCallableWith({ key: 'n' }, { current: 1 })
     expect(Cells.make<number>).type.not.toBeCallableWith({ key: 'n' }, { current: 'one' })
   })
 
-  it('Should_KeepTheIndexCovariant_When_AHandleIsWidened', () => {
+  it('Should_KeepTheIndexCovariant_When_HandleIsWidened', () => {
     expect<CellHandle<1>>().type.toBeAssignableTo<CellHandle<number>>()
     expect<CellHandle<number>>().type.not.toBeAssignableTo<CellHandle<string>>()
   })

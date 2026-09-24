@@ -12,4 +12,4 @@ const needsMissing = Effect.gen(function*() {
 })
 
 // @ts-expect-error the runtime, not the compiler, refuses a body that needs a service nothing provides
-it.effect('Should_RefuseTheUnprovidedBody_When_AServiceIsMissing', () => needsMissing)
+it.effect('Should_RefuseTheUnprovidedBody_When_ServiceIsMissing', () => needsMissing)

@@ -1,10 +1,10 @@
 import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result, Schema } from 'effect'
 import { Layer } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Keeping routing evidence well formed')
   .withLayer(Layer.empty)

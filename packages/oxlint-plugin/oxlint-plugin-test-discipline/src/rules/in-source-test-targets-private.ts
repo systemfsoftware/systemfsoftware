@@ -59,6 +59,34 @@ const collectPrivateNames = (
   }
 }
 
+const collectModuleNames = (
+  body: readonly (ESTree.Statement | ESTree.ModuleDeclaration)[],
+  out: Set<string>,
+): void => {
+  for (const node of body) {
+    if (node.type === 'ExportNamedDeclaration') {
+      if (node.source === null && node.declaration !== null && isCollectable(node.declaration)) {
+        collectDeclaration(node.declaration, out)
+      }
+      continue
+    }
+    if (node.type === 'ExportDefaultDeclaration' && isCollectable(node.declaration)) {
+      collectDeclaration(node.declaration, out)
+      continue
+    }
+    if (isCollectable(node)) collectDeclaration(node, out)
+  }
+}
+
+const isSubjectValue = (node: ESTree.IdentifierReference): boolean => {
+  const parent = node.parent
+  return parent.type === 'Property' &&
+    parent.computed !== true &&
+    parent.key.type === 'Identifier' &&
+    parent.key.name === 'subject' &&
+    parent.value === node
+}
+
 type GuardRecord = { node: ESTree.IfStatement; hit: boolean }
 
 export const inSourceTestTargetsPrivate = defineRule({
@@ -70,11 +98,13 @@ export const inSourceTestTargetsPrivate = defineRule({
     const inTestFile = isTestFile(basename)
     if (!underSrc || inTestFile) return {}
     const privateNames = new Set<string>()
+    const moduleNames = new Set<string>()
     const guards: GuardRecord[] = []
 
     return {
       Program(node: ESTree.Program) {
         collectPrivateNames(node.body, privateNames)
+        collectModuleNames(node.body, moduleNames)
       },
       IfStatement(node: ESTree.IfStatement) {
         if (!isVitestGuard(node.test)) return
@@ -97,7 +127,9 @@ export const inSourceTestTargetsPrivate = defineRule({
         })
       },
       Identifier(node: ESTree.IdentifierReference) {
-        if (!privateNames.has(node.name)) return
+        const target = privateNames.has(node.name) ||
+          (moduleNames.has(node.name) && isSubjectValue(node))
+        if (!target) return
         const guard = guards.find((g) => isInsideConsequent(node, g.node.consequent))
         if (guard !== undefined) guard.hit = true
       },

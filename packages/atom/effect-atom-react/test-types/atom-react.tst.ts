@@ -6,7 +6,7 @@ const count = Atom.make(0)
 const readOnly = Atom.readable((get) => get(count) * 2)
 
 describe('useAtomValue with a selector', () => {
-  it('returns the selector output type', () => {
+  it('Should_ReturnTheSelectorOutputType_When_UseAtomValueIsGivenASelector', () => {
     expect(
       AtomReact.useAtomValue(count, (n) => {
         expect(n).type.toBe<number>()
@@ -15,18 +15,18 @@ describe('useAtomValue with a selector', () => {
     ).type.toBe<string>()
   })
 
-  it('accepts the selector in data-last composition', () => {
+  it('Should_AcceptTheSelectorInDataLastComposition_When_UseAtomValueIsPiped', () => {
     expect(AtomReact.useAtomValue((n: number) => n > 0)).type.toBeCallableWith(count)
     expect(AtomReact.useAtomValue(count, (n) => n > 0)).type.toBe<boolean>()
   })
 })
 
 describe('useAtomSet', () => {
-  it('accepts a writable atom', () => {
+  it('Should_AcceptAWritableAtom_When_UseAtomSetIsGivenAnAtom', () => {
     expect(AtomReact.useAtomSet).type.toBeCallableWith(count)
   })
 
-  it('rejects a read-only derived atom', () => {
+  it('Should_RejectAReadOnlyDerivedAtom_When_UseAtomSetIsGivenOne', () => {
     expect(AtomReact.useAtomSet).type.not.toBeCallableWith(readOnly)
   })
 })

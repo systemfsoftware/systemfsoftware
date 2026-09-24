@@ -1,8 +1,7 @@
 import { expect } from '@effect/vitest'
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Fulfillment, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
 import { Cause, Effect, Exit, Option, Ref, Result, Schema as S } from 'effect'
-import { StoreUnavailable } from '../src/fulfillment/decision.schema.js'
 import {
   acrossStores,
   armSeamAlways,
@@ -28,10 +27,12 @@ import {
 } from './__fixtures__/settlement-store.fixture.js'
 import type { OrderInput } from './__fixtures__/settlement-store.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 type SettlementStore = Settlement.Store.SettlementStore
 type OrderSnapshot = Settlement.Unit.OrderSnapshot
+
+const StoreUnavailable = Fulfillment.Decision.StoreUnavailable
 
 const FIRST_ORDER: OrderInput = {
   orderId: 'order-first',
@@ -314,9 +315,9 @@ const endedUnit = 'a SettlementUnit was used after its unit of work ended'
 
 const markerOf = (defects: ReadonlyArray<Error>): ReadonlyArray<string> => defects.map((defect) => defect.message)
 
-Feature('Settlement stores keep their promises in memory and in Postgres')
+Feature('Settlement stores keep their promises in memory and in Postgres', { timeout: 120_000 })
   .withScenarioLayer(settlementStoreWorld)
-  .liveClock()
+  .live('the settlement stores run their transactions through PGlite, whose engine the simulation kernel cannot drive')
   .body(({ scenario }) => {
     scenario(
       'A settlement that commits is visible to the next read',

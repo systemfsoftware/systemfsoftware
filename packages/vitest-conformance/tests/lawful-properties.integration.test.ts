@@ -1,10 +1,19 @@
 import { expect } from '@effect/vitest'
-import { Effect } from 'effect'
-import { describe, it } from 'vitest'
-import { assertionOf, fileOf, type JsonReport, messagesOf, namesOf, runFixtures } from './support/run-fixtures'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import * as Layer from 'effect/Layer'
+import { assertionOf, fileOf, type JsonReport, messagesOf, namesOf, runFixtures } from './__fixtures__/run-fixtures'
 
-const CHEATS = ['cheats/property-shape.test.ts']
+const Feature = makeFeature({ it })
+
+const CHEATS = ['cheats/property-shape.property.test.ts']
 const LAW_KINDS = 'property/law-kinds.test.ts'
+const VACUOUS = 'no property in this file refuted'
+
+const GENUINE = '∀xs_KeepsEveryElement_⊆Input'
+const IMPOSTOR = '∀xs_BuggySortIsStable_⊆Input'
+const INVALID_BUDGET = '∀xs_InvalidBudget_⊥Accepted'
+const NON_BOOLEAN = '∀xs_NonBooleanVerdict_⊥Accepted'
+const COVERAGE = '∀xs_SingletonCoverage_⊇Minimum'
 
 const LAWS_THAT_HOLD = [
   'Should_AgreeWithItself_When_TheInputOrderIsReversed',
@@ -18,92 +27,139 @@ const LAWS_THAT_FALSIFY = [
   'Should_Falsify_When_TheSubjectAppendsAnElement',
 ] as const
 
-const messagesFor = (report: JsonReport, fullName: string): string => messagesOf(report, fullName)
-
-const assertFileFailedWith = (report: JsonReport, needle: string): void => {
-  const file = fileOf(report, 'property-shape.test.ts')
+const expectCheatFileRefused = (report: JsonReport): void => {
+  expect(report.numTotalTests).toBeGreaterThan(0)
+  const file = fileOf(report, 'property-shape.property.test.ts')
   expect(file.status).toBe('failed')
-  expect(file.message).toContain(needle)
+  expect(file.message).toContain(VACUOUS)
 }
 
-const runCheats = (): Promise<void> =>
-  Effect.gen(function*() {
-    const report = yield* runFixtures(CHEATS)
-    expect(report.numTotalTests).toBeGreaterThan(0)
-    assertFileFailedWith(report, 'no property in this file refuted')
-  }).pipe(Effect.runPromise)
+const expectRefusal = (report: JsonReport, fullName: string, needle: string): void => {
+  expect(messagesOf(report, fullName)).toContain(needle)
+  expect(report.numFailedTests).toBeGreaterThan(0)
+}
 
-const shouldContain = (fullName: string, needle: string): Promise<void> =>
-  Effect.gen(function*() {
-    const report = yield* runFixtures(CHEATS)
-    expect(messagesFor(report, fullName)).toContain(needle)
-    expect(report.numFailedTests).toBeGreaterThan(0)
-  }).pipe(Effect.runPromise)
+Feature('Judging a property suite')
+  .live(
+    'each scenario starts a nested Vitest run over probe fixtures, whose file reads the simulation kernel cannot observe',
+  )
+  .withLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'A genuine property passes while the constant-impostor cheat is refused',
+      Gherkin.Do.pipe(
+        Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
+        Then('the genuine property passed, the impostor file is refused, and both are named')((s) => {
+          expect(assertionOf(s.report, GENUINE).status).toBe('passed')
+          expectCheatFileRefused(s.report)
+          expect(namesOf(s.report)).toContain(IMPOSTOR)
+        }),
+      ),
+    )
 
-describe('lawful properties (R11-R15)', () => {
-  it('passes a genuine property and fails the constant-impostor cheat with VacuousProperty', () =>
-    Effect.gen(function*() {
-      const report = yield* runFixtures(CHEATS)
-      expect(assertionOf(report, 'sort keeps every element').status).toBe('passed')
-      expect(fileOf(report, 'property-shape.test.ts').status).toBe('failed')
-      expect(fileOf(report, 'property-shape.test.ts').message).toContain('no property in this file refuted')
-      expect(namesOf(report)).toContain('sort is stable-ish')
-    }).pipe(Effect.runPromise))
+    scenario(
+      'The model law is reported as a pinned property',
+      Gherkin.Do.pipe(
+        Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
+        Then('the corpus holds exactly one file and it is refused for refuting no property')((s) => {
+          expect(CHEATS.length).toBe(1)
+          expectCheatFileRefused(s.report)
+        }),
+      ),
+    )
 
-  it('reports the model law as a pinned property', () => {
-    expect(CHEATS.length).toBe(1)
-    return runCheats()
+    scenario(
+      'A budget that is not a positive count is refused, naming the configuration key',
+      Gherkin.Do.pipe(
+        Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
+        Then('the invalid budget is refused with the positive-integer rewrite')((s) => {
+          expectRefusal(s.report, INVALID_BUDGET, 'positive integer `runs`')
+        }),
+      ),
+    )
+
+    scenario(
+      'A verdict that is not a boolean on the sync lane is refused',
+      Gherkin.Do.pipe(
+        Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
+        Then('the non-boolean verdict is refused with the no-boolean rewrite')((s) => {
+          expectRefusal(s.report, NON_BOOLEAN, 'no boolean')
+        }),
+      ),
+    )
+
+    scenario(
+      'A coverage class below its minimum is refused, naming the label and its share',
+      Gherkin.Do.pipe(
+        Given('the corpus of property suites a runner must judge')('report', () => runFixtures(CHEATS)),
+        Then('the uncovered class is named in the refusal')((s) => {
+          expectRefusal(s.report, COVERAGE, 'singletons')
+        }),
+      ),
+    )
+
+    scenario(
+      'A subject whose first output is undefined still passes the impostor check',
+      Gherkin.Do.pipe(
+        Given('a property over a subject that answers undefined once')(
+          'report',
+          () => runFixtures(['property/undefined-output.property.test.ts']),
+        ),
+        Then('the file passes and the property is judged genuine')((s) => {
+          expect(fileOf(s.report, 'undefined-output.property.test.ts').status).toBe('passed')
+          expect(assertionOf(s.report, '∀x_UndefinedFirstOutput_≠Impostor').status).toBe('passed')
+        }),
+      ),
+    )
+
+    scenario(
+      'A coverage failure is reported once, on the property that declared it',
+      Gherkin.Do.pipe(
+        Given('a property whose declared coverage class is never reached')(
+          'report',
+          () => runFixtures(['property/coverage-once.property.test.ts']),
+        ),
+        Then('the property carries the share and the file carries no coverage message of its own')((s) => {
+          const file = fileOf(s.report, 'coverage-once.property.test.ts')
+          expect(file.status).toBe('failed')
+          const messages = messagesOf(s.report, '∀xs_CoverageShareNamed_≠Twice')
+          expect(messages).toContain('singletons')
+          expect(messages).toContain('below the required')
+          expect(file.message).not.toContain('coverage')
+        }),
+      ),
+    )
+
+    scenario(
+      'Metamorphic, round-trip and invariant laws hold over correct subjects',
+      Gherkin.Do.pipe(
+        Given('one suite per law kind, each over a correct subject')(
+          'report',
+          () => runFixtures([LAW_KINDS]),
+        ),
+        Then('every law passes and the file is not refused')((s) => {
+          const passed = LAWS_THAT_HOLD.filter((name) => assertionOf(s.report, name).status === 'passed')
+          expect(passed).toEqual([...LAWS_THAT_HOLD])
+          expect(fileOf(s.report, 'law-kinds.test.ts').message).not.toContain(VACUOUS)
+        }),
+      ),
+    )
+
+    scenario(
+      'The same laws are falsified with a shrunk counterexample',
+      Gherkin.Do.pipe(
+        Given('the same suite of law kinds, each over an incorrect subject')(
+          'report',
+          () => runFixtures([LAW_KINDS]),
+        ),
+        Then('every law is falsified and every failure carries a shrunk input')((s) => {
+          const verdicts = LAWS_THAT_FALSIFY.map((name) => ({
+            name,
+            status: assertionOf(s.report, name).status,
+            shrunk: messagesOf(s.report, name).includes('Shrunk input:'),
+          }))
+          expect(verdicts).toEqual(LAWS_THAT_FALSIFY.map((name) => ({ name, status: 'failed', shrunk: true })))
+        }),
+      ),
+    )
   })
-
-  it('fails a property whose runs is not a positive integer (InvalidBudget)', () => {
-    expect(CHEATS[0]).toContain('property-shape')
-    return shouldContain('invalid budget', 'positive integer `runs`')
-  })
-
-  it('fails a property whose verdict is an Effect on the sync lane (NonBooleanVerdict)', () => {
-    expect(CHEATS).toHaveLength(1)
-    return shouldContain('non boolean verdict', 'no boolean')
-  })
-
-  it('fails a coverage class below its minimum, naming the label and the observed share', () => {
-    expect(CHEATS[0]).not.toBe('')
-    return shouldContain('sorts singletons', 'singletons')
-  })
-
-  it('judges a subject whose first output is undefined against a constant impostor', () =>
-    Effect.gen(function*() {
-      const report = yield* runFixtures(['property/undefined-output.test.ts'])
-      expect(fileOf(report, 'undefined-output.test.ts').status).toBe('passed')
-      expect(assertionOf(report, 'a subject whose first output is undefined').status).toBe('passed')
-    }).pipe(Effect.runPromise))
-
-  it('reports a coverage failure once, on the property that declared it', () =>
-    Effect.gen(function*() {
-      const report = yield* runFixtures(['property/coverage-once.test.ts'])
-      const file = fileOf(report, 'coverage-once.test.ts')
-      expect(file.status).toBe('failed')
-      const messages = messagesOf(report, 'Should_NameTheCoverageShare_When_AClassIsBelowItsMinimum')
-      expect(messages).toContain('singletons')
-      expect(messages).toContain('below the required')
-      expect(file.message).not.toContain('coverage')
-    }).pipe(Effect.runPromise))
-
-  it('passes metamorphic, roundTrip and invariant laws over correct subjects', () =>
-    Effect.gen(function*() {
-      const report = yield* runFixtures([LAW_KINDS])
-      const passed = LAWS_THAT_HOLD.filter((name) => assertionOf(report, name).status === 'passed')
-      expect(passed).toEqual([...LAWS_THAT_HOLD])
-      expect(fileOf(report, 'law-kinds.test.ts').message).not.toContain('no property in this file refuted')
-    }).pipe(Effect.runPromise))
-
-  it('falsifies metamorphic, roundTrip and invariant laws with a shrunk counterexample', () =>
-    Effect.gen(function*() {
-      const report = yield* runFixtures([LAW_KINDS])
-      const verdicts = LAWS_THAT_FALSIFY.map((name) => ({
-        name,
-        status: assertionOf(report, name).status,
-        shrunk: messagesOf(report, name).includes('Shrunk input:'),
-      }))
-      expect(verdicts).toEqual(LAWS_THAT_FALSIFY.map((name) => ({ name, status: 'failed', shrunk: true })))
-    }).pipe(Effect.runPromise))
-})

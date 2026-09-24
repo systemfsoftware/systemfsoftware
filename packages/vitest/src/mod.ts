@@ -376,6 +376,16 @@ export const owned: <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, 
 export const recordAssertion: () => void = ownedInternal.recordAssertion
 
 /**
+ * The run binding of the test the effect is executing in. `bind` re-provides it
+ * to an effect a library runs on a runtime of its own — its own scheduler, a
+ * worker, a simulation kernel — so the checks inside it count as this test's
+ * assertions, report softly, and see the same `owned` regions as the test.
+ *
+ * @since 4.0.0
+ */
+export const captureRunBinding: Effect.Effect<ownedInternal.RunBinding> = ownedInternal.captureRunBinding
+
+/**
  * The key the running test's context is published under. A library that carries its own view of the task
  * context builds that view on this key, so the context a case lane sees and a property lane sees agree.
  *

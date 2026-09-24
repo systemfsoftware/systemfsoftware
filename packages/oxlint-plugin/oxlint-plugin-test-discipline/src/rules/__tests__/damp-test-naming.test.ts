@@ -25,6 +25,11 @@ ruleTester.run('damp-test-naming', dampTestNaming, {
       `,
     },
     {
+      name: 'Should_Ignore_When_TypeTestNamesCasesInProse',
+      code: `test('exports the integration API unchanged', () => {})`,
+      filename: '/repo/packages/vitest/test-types/surface.tst.ts',
+    },
+    {
       name: 'Should_Pass_When_BehaviorAndConditionHaveNumbers',
       code: `it('Should_ParseJson123_When_InputValid456', () => {})`,
     },

@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Match, Result, Schema } from 'effect'
 import {
   type AnswerFor,
@@ -13,7 +13,7 @@ import {
   withProvider,
 } from './__fixtures__/counting-model.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const Change = Discern.on(Schema.String)
 

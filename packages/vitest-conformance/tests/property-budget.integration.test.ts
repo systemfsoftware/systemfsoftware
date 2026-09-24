@@ -1,16 +1,17 @@
 import { expect } from '@effect/vitest'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
+import * as Layer from 'effect/Layer'
 import type { ProvidedContext } from 'vitest'
-import { messagesOf, runProbes } from './support/run-fixtures'
+import { messagesOf, runProbes } from './__fixtures__/run-fixtures'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
-const INHERITS = 'property-budget/inherits.test.ts'
-const OVERRIDE = 'property-budget/override.test.ts'
-const PROVIDED_RUNS = 'Should_RunTheProvidedBudget_When_RunsIsOmitted'
-const EXPLICIT_RUNS = 'Should_RunTheExplicitBudget_When_RunsIsGiven'
-const FALSIFIED = 'Should_Falsify_When_TheSubjectKeepsLargeValues'
+const INHERITS = 'property-budget/inherits.property.test.ts'
+const OVERRIDE = 'property-budget/override.property.test.ts'
+const PROVIDED_RUNS = '∀n_RunTheProvidedBudget_=Configured'
+const EXPLICIT_RUNS = '∀n_RunTheExplicitBudget_=Given'
+const FALSIFIED = '∀n_KeepsLargeValues_⊥Small'
 
 const CHECK_DEFAULTS = '@systemfsoftware/vitest:property-check'
 
@@ -22,6 +23,10 @@ const reportOf = (globs: ReadonlyArray<string>, provide?: Partial<ProvidedContex
   runProbes({ globs, ...(provide === undefined ? {} : { provide }) }).pipe(Effect.map((run) => run.report))
 
 Feature('Configuring how many times properties run')
+  .live(
+    'each scenario starts a nested Vitest run over probe fixtures, whose file reads the simulation kernel cannot observe',
+  )
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A property with no budget of its own runs the configured number of times',

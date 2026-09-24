@@ -58,14 +58,14 @@ describe('the procedure registry', () => {
     expect(Discern.Procedure.registry).type.not.toBeCallableWith(Request, { find, numeric })
   })
 
-  it('Should_KeepIdsLiteral_When_AGetIsCheckedAgainstMembership', () => {
+  it('Should_KeepIdsLiteral_When_GetIsCheckedAgainstMembership', () => {
     expect(code.get).type.toBeCallableWith('find')
     expect(code.get).type.not.toBeCallableWith('test-gaps')
     expect(code.get('find')).type.toBe<typeof find>()
     expect(code.ids).type.toBe<ReadonlyArray<'find' | 'review'>>()
   })
 
-  it('Should_ReadMembersThroughTheDual_AsItDoesThroughTheMethod', () => {
+  it('Should_ReadMembersThroughTheDual_When_ReadThroughTheMethod', () => {
     expect(Discern.Procedure.get).type.toBeCallableWith(code, 'find')
     expect(Discern.Procedure.get).type.not.toBeCallableWith(code, 'test-gaps')
     expect(Discern.Procedure.get(code, 'find')).type.toBe<typeof find>()
@@ -91,7 +91,7 @@ describe('the procedure registry', () => {
     >()
   })
 
-  it('Should_InvokeThroughTheDual_AsItDoesThroughTheMethod', () => {
+  it('Should_InvokeThroughTheDual_When_InvokedThroughTheMethod', () => {
     expect(Discern.Procedure.invoke).type.toBeCallableWith(code, 'x')
     expect(
       Discern.Procedure.invoke(code, 'x'),
@@ -121,7 +121,7 @@ describe('the procedure registry', () => {
     >()
   })
 
-  it('Should_WidenTheSuccessType_When_AValueFallbackIsGiven', () => {
+  it('Should_WidenTheSuccessType_When_ValueFallbackIsGiven', () => {
     const uncertainOf = (input: string, route: UncertainRoute): 'escalated' => {
       expect(input).type.toBe<string>()
       expect(route._tag).type.toBe<'RouteUncertain'>()
@@ -219,7 +219,7 @@ describe('the procedure registry', () => {
     >()
   })
 
-  it('Should_RouteThroughTheDual_AsItDoesThroughTheMethod', () => {
+  it('Should_RouteThroughTheDual_When_RoutedThroughTheMethod', () => {
     expect(Discern.Procedure.route).type.toBeCallableWith(code, 'x')
     expect(Discern.Procedure.route(code, 'x')).type.toBe<
       Effect.Effect<

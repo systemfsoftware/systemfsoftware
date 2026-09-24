@@ -44,6 +44,10 @@ ruleTester.run('pbt-naming', pbtNaming, {
       code: "it.prop('∀x_AllExhausted_⊥', { of: [Schema.Number], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)",
     },
     {
+      name: 'Should_Pass_When_ForAll_Batch_SatisfiesDeclaredModel',
+      code: "it.prop('∀spec_Env_⊨Drawn', { of: [Schema.String], subject: (s) => s, runs: 100 }, (s, [v]) => v === v)",
+    },
+    {
       name: 'Should_Pass_When_ForAll_FilterSubset_SubsetOfInput',
       code:
         "it.prop('∀items_Filter_⊆Input', { of: [Schema.Number], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)",

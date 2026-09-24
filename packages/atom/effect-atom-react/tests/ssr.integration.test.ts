@@ -12,15 +12,16 @@
 import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { renderToString } from 'react-dom/server'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Server-side rendering of React atom hooks')
   .withLayer(Layer.empty)
@@ -252,21 +253,17 @@ Feature('Server-side rendering of React atom hooks')
                 ),
               ),
             )
-            return { atom, before, hydrationRegistry, latch, ssrHtml, readCounters: () => ({ start, stop }) }
+            const readerRegistry = Atom.Registry.make()
+            const applied = Atom.Hydration.hydrate(readerRegistry, dehydratedState)
+            return { applied, atom, before, latch, readerRegistry, ssrHtml, readCounters: () => ({ start, stop }) }
           })),
         When('the server-side value settles and the streaming data is applied')(
           'settled',
           (s) =>
-            Effect.promise(() => {
-              Effect.runSync(s.ctx.latch.open)
-              return Effect.runPromise(s.ctx.latch.await)
-                .then(() =>
-                  vi.waitFor(() => {
-                    const snapshot = Atom.Registry.get(s.ctx.hydrationRegistry, s.ctx.atom)
-                    expect(snapshot).toSatisfy(Atom.AsyncResult.isSuccess)
-                  })
-                )
-                .then(() => Atom.AsyncResult.getOrThrow(Atom.Registry.get(s.ctx.hydrationRegistry, s.ctx.atom)))
+            Effect.gen(function*() {
+              s.ctx.latch.openUnsafe()
+              yield* Fiber.join(s.ctx.applied)
+              return Atom.AsyncResult.getOrThrow(Atom.Registry.get(s.ctx.readerRegistry, s.ctx.atom))
             }),
         ),
         Then('the deferred value is applied to the hydration registry once')((s) => {

@@ -1,20 +1,19 @@
 import { expect } from '@effect/vitest'
 import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Fiber, Result } from 'effect'
-import { TestClock } from 'effect/testing'
+import { Deferred, Duration, Effect, Fiber, Layer, Result } from 'effect'
 import {
   mkBlockingStatefulLockPrimitive,
   mkFailingLockPrimitive,
   mkStatefulLockPrimitive,
 } from './__fixtures__/LockPrimitiveFakes.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Lock Primitive Contract')
-  .withScenarioLayer(TestClock.layer())
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'Acquire free lock',
@@ -53,15 +52,17 @@ Feature('Lock Primitive Contract')
         Given('the lock key "task-1" is held by another caller')('holder', () =>
           Effect.gen(function*() {
             const prim = yield* LockPrimitive
+            const holderAcquired = yield* Deferred.make<void>()
             const fiber = yield* Effect.forkChild(
               Effect.scoped(
                 Effect.gen(function*() {
                   yield* prim.tryAcquire('task-1')
+                  yield* Deferred.succeed(holderAcquired, undefined)
                   return yield* Effect.never
                 }),
               ),
             )
-            yield* Effect.yieldNow
+            yield* Deferred.await(holderAcquired)
             return fiber
           })),
         When('the caller attempts to acquire key "task-1" within a scope')(
@@ -244,15 +245,17 @@ Feature('Lock Primitive Contract')
         Given('the lock key "task-1" is held by another caller')('holder', () =>
           Effect.gen(function*() {
             const prim = yield* LockPrimitive
+            const holderAcquired = yield* Deferred.make<void>()
             const fiber = yield* Effect.forkChild(
               Effect.scoped(
                 Effect.gen(function*() {
                   yield* prim.tryAcquire('task-1')
+                  yield* Deferred.succeed(holderAcquired, undefined)
                   return yield* Effect.never
                 }),
               ),
             )
-            yield* Effect.yieldNow
+            yield* Deferred.await(holderAcquired)
             return fiber
           })),
         When('another caller attempts to acquire key "task-1" with a timeout')(

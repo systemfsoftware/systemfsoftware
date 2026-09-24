@@ -1,19 +1,17 @@
 import { expect } from '@effect/vitest'
 import { LeaderLockFromPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Fiber, Layer, Option, Result } from 'effect'
-import { TestClock } from 'effect/testing'
+import { Deferred, Duration, Effect, Fiber, Layer, Option, Result } from 'effect'
 import { mkStatefulLockPrimitive } from './__fixtures__/LockPrimitiveFakes.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const LeaderLockFromStatefulPrimitive = Layer.provide(LeaderLockFromPrimitive, mkStatefulLockPrimitive)
 
 Feature('LeaderLock Contract')
   .withLayer(LeaderLockFromStatefulPrimitive)
-  .withScenarioLayer(TestClock.layer())
   .body(({ scenario }) => {
     scenario(
       'Acquire free lock and run work',
@@ -48,8 +46,11 @@ Feature('LeaderLock Contract')
         Given('a fiber holds the lock for key "task-1"')('holder', () =>
           Effect.gen(function*() {
             const lock = yield* LeaderLock
-            const fiber = yield* Effect.forkChild(lock.withLock('task-1', Effect.never))
-            yield* Effect.yieldNow
+            const holderAcquired = yield* Deferred.make<void>()
+            const fiber = yield* Effect.forkChild(
+              lock.withLock('task-1', Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never)),
+            )
+            yield* Deferred.await(holderAcquired)
             return fiber
           })),
         When('a second caller attempts to acquire the same lock on key "task-1"')(
@@ -73,18 +74,26 @@ Feature('LeaderLock Contract')
       "Mutual exclusion when one fiber holds during another fiber's acquire attempt (S1)",
       Gherkin.Do.pipe(
         Given('no lock is held for key "task"')(() => Effect.void),
-        When('one fiber holds the lock across a sleep while another fiber attempts to acquire')(
+        When('one fiber holds the lock until it is let go while another fiber attempts to acquire')(
           'results',
           () =>
             Effect.gen(function*() {
               const lock = yield* LeaderLock
+              const holderAcquired = yield* Deferred.make<void>()
+              const release = yield* Deferred.make<void>()
               const holder = yield* Effect.forkChild(
-                lock.withLock('task', Effect.sleep(Duration.millis(10)).pipe(Effect.as('a'))),
+                lock.withLock(
+                  'task',
+                  Effect.andThen(
+                    Deferred.succeed(holderAcquired, undefined),
+                    Effect.as(Deferred.await(release), 'a'),
+                  ),
+                ),
               )
-              yield* Effect.yieldNow
+              yield* Deferred.await(holderAcquired)
               const challenger = yield* Effect.forkChild(lock.withLock('task', Effect.succeed('b')))
               const b = yield* Fiber.join(challenger)
-              yield* TestClock.adjust(Duration.millis(20))
+              yield* Deferred.succeed(release, undefined)
               const a = yield* Fiber.join(holder)
               return { a, b }
             }),
@@ -104,8 +113,11 @@ Feature('LeaderLock Contract')
         Given('a fiber holds the lock for key "task" indefinitely')('holder', () =>
           Effect.gen(function*() {
             const lock = yield* LeaderLock
-            const fiber = yield* Effect.forkChild(lock.withLock('task', Effect.never))
-            yield* Effect.yieldNow
+            const holderAcquired = yield* Deferred.make<void>()
+            const fiber = yield* Effect.forkChild(
+              lock.withLock('task', Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never)),
+            )
+            yield* Deferred.await(holderAcquired)
             return fiber
           })),
         When('a second caller attempts to acquire the lock on key "task" with a 1-second timeout')(
@@ -184,8 +196,11 @@ Feature('LeaderLock Contract')
           () =>
             Effect.gen(function*() {
               const lock = yield* LeaderLock
-              const fiber = yield* Effect.forkChild(lock.withLock('task-1', Effect.never))
-              yield* Effect.yieldNow
+              const holderAcquired = yield* Deferred.make<void>()
+              const fiber = yield* Effect.forkChild(
+                lock.withLock('task-1', Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never)),
+              )
+              yield* Deferred.await(holderAcquired)
               return fiber
             }),
         ),

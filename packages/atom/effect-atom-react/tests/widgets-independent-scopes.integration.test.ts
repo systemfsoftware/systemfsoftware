@@ -1,7 +1,7 @@
 import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -9,9 +9,10 @@ import * as React from 'react'
 import { Suspense } from 'react'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Keeping two on-screen widgets showing values from separate data sources independent of each other')
+  .live('renders real components in Chromium and advances the browser timer queue')
   .withLayer(Layer.empty)
   .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {

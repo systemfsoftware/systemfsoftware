@@ -2,7 +2,7 @@
 
 A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packages/vitest) whose defaults make the lazy test a good test. Write the obvious thing and you get a fresh build of your services, a second run that catches leaked state, virtual time, checks that stop the test at its next step, and properties refuted against a constant impostor. Write the slop form and the refusal names the rewrite.
 
-Everything upstream exports is still exported: `it`, `test`, `it.effect`, `it.live`, `it.scoped`, `it.each`, `it.layer`, `layer`, `describe`, `expect`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods`, `describeWrapped`, and `export * from "vitest"`. Two things do differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower — both are listed under [Compatibility](#compatibility-with-effectvitest). On top of that surface the fork adds five things: `owned`, `recordAssertion`, `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `layer`, `it.layer`, `flakyTest`, `it.prop`, `it.effect`, `it.live`, `describeWrapped` and `it` itself also take a data-last form (`it.effect(body, timeout?)(name)`, `layer(options)(L)`, `flakyTest(timeout?)(effect)`), so they pipe.
+Everything upstream exports is still exported: `it`, `test`, `it.effect`, `it.live`, `it.scoped`, `it.each`, `it.layer`, `layer`, `describe`, `expect`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods`, `describeWrapped`, and `export * from "vitest"`. Two things do differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower — both are listed under [Compatibility](#compatibility-with-effectvitest). On top of that surface the fork adds six things: `owned`, `recordAssertion`, `captureRunBinding`, `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `layer`, `it.layer`, `flakyTest`, `it.prop`, `it.effect`, `it.live`, `describeWrapped` and `it` itself also take a data-last form (`it.effect(body, timeout?)(name)`, `layer(options)(L)`, `flakyTest(timeout?)(effect)`), so they pipe.
 
 The defaults are forced, not opted into. Every package in this workspace resolves `@effect/vitest` here through a pnpm alias, so libraries keep importing from `@effect/vitest` and never name this package.
 
@@ -195,6 +195,21 @@ import { recordAssertion } from '@effect/vitest'
 import { Effect } from 'effect'
 
 export const recordVerdict = (): Effect.Effect<void> => Effect.sync(recordAssertion)
+```
+
+`captureRunBinding` is the test's run binding. `bind` re-provides it to an effect a library runs on a runtime of its own — its own scheduler, a worker, a simulation kernel — so the checks inside it count as that test's assertions, report softly, and see the same `owned` regions as the test. Capture it from the test's own fiber and bind the effect before handing it to the other runtime:
+
+```ts
+import { captureRunBinding } from '@effect/vitest'
+import { Effect } from 'effect'
+
+export const runOnOwnScheduler = <A, E>(
+  program: Effect.Effect<A, E>,
+): Effect.Effect<A, E> =>
+  Effect.gen(function*() {
+    const binding = yield* captureRunBinding
+    return yield* Effect.promise(() => Kernel.run(binding.bind(program)))
+  })
 ```
 
 `VitestTestContext` is the running Vitest `TestContext` under the key `vitestTestContextKey`, provided on every test the fork runs. A library that carries its own view of the task context builds it on that key, so a case lane and a property lane read the same context:

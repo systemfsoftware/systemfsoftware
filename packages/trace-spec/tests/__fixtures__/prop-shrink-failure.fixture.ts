@@ -1,11 +1,11 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { it, layer } from '@effect/vitest'
+import { it } from '@effect/vitest'
 import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Schema } from 'effect'
 import { probeInputs } from './probe-arbitrary.schema.js'
 
-const TraceSuite = Suite.make({ it, layer })
+const TraceSuite = Suite.make({ it })
 
 const Probe = Span.declare({
   id: 'probe.shrink',

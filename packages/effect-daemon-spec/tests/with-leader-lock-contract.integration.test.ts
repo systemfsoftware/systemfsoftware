@@ -2,10 +2,9 @@ import { expect } from '@effect/vitest'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Fiber, Layer, Result } from 'effect'
-import { TestClock } from 'effect/testing'
+import { Deferred, Effect, Fiber, Layer, Result } from 'effect'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
 const withLock = <A, E, R>(
@@ -17,14 +16,13 @@ const withLock = <A, E, R>(
     return yield* withLeaderLock(self, options, lock)
   })
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('withLeaderLock Combinator Contract')
   .withLayer(Noop)
   .withScenarioLayer(
     Layer.mergeAll(
       LeaderLockFake,
-      TestClock.layer(),
     ),
   )
   .body(({ scenario }) => {
@@ -63,10 +61,14 @@ Feature('withLeaderLock Combinator Contract')
       Gherkin.Do.pipe(
         Given('another fiber holds the lock for key "task"')('holder', () =>
           Effect.gen(function*() {
+            const holderAcquired = yield* Deferred.make<void>()
             const fiber = yield* Effect.forkChild(
-              withLock(Effect.never, { key: 'task', mode: 'required' }),
+              withLock(
+                Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never),
+                { key: 'task', mode: 'required' },
+              ),
             )
-            yield* Effect.yieldNow
+            yield* Deferred.await(holderAcquired)
             return fiber
           })),
         When('the application attempts to acquire the lock on key "task" in required mode')(
@@ -87,10 +89,14 @@ Feature('withLeaderLock Combinator Contract')
       Gherkin.Do.pipe(
         Given('another fiber holds the lock for key "task"')('holder', () =>
           Effect.gen(function*() {
+            const holderAcquired = yield* Deferred.make<void>()
             const fiber = yield* Effect.forkChild(
-              withLock(Effect.never, { key: 'task', mode: 'required' }),
+              withLock(
+                Effect.andThen(Deferred.succeed(holderAcquired, undefined), Effect.never),
+                { key: 'task', mode: 'required' },
+              ),
             )
-            yield* Effect.yieldNow
+            yield* Deferred.await(holderAcquired)
             return fiber
           })),
         When('the application attempts to acquire the lock on key "task" in optional mode')(

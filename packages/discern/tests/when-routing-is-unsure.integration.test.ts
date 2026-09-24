@@ -1,12 +1,12 @@
 import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { answering, CountingModel, withProvider } from './__fixtures__/counting-model.fixture.js'
 import { Request } from './__fixtures__/request.schema.js'
 import { matchedRouteOf, routingTo, uncertainRouteOf } from './__fixtures__/routing-model.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const find = Discern.Procedure.make({
   description: 'Locate code relevant to a behavior, feature or concept',

@@ -4,9 +4,8 @@ import { SpanStatusCode } from '@opentelemetry/api'
 import {
   AlwaysOnSampler,
   BasicTracerProvider,
-  InMemorySpanExporter,
   type ReadableSpan,
-  SimpleSpanProcessor,
+  type SpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
 import { Handle } from '@systemfsoftware/effect-cell-types'
 import type { Span } from '@systemfsoftware/trace-taxonomy'
@@ -20,22 +19,55 @@ import type { SpanEvent, SpanLink, SpanRecord, Status } from './TraceGraph.schem
 export const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindow')
 export type TypeId = typeof TypeId
 
+/**
+ * The finished-span storage a window reads back through.
+ */
+interface SpanRecordStore {
+  readonly getFinishedSpans: () => ReadonlyArray<ReadableSpan>
+}
+
 const ObservationWindow = Handle.make<
   { readonly serviceName: string },
-  { readonly exporter: InMemorySpanExporter; readonly provider: BasicTracerProvider }
+  { readonly store: SpanRecordStore; readonly provider: BasicTracerProvider }
 >()(TypeId)
 
 export type ObservationWindow = Handle.Of<typeof ObservationWindow>
 
+/**
+ * Records every finished span the moment it ends, and answers `shutdown`
+ * inline. The OpenTelemetry `InMemorySpanExporter` defers its result callback
+ * to a `setTimeout`, a real timer the kernel must fail as an escaped schedule;
+ * a window records nothing that waits, so it records synchronously.
+ */
+const spanRecorder = (): { readonly processor: SpanProcessor; readonly store: SpanRecordStore } => {
+  const finishedSpans: Array<ReadableSpan> = []
+  let stopped = false
+  return {
+    processor: {
+      onStart: () => undefined,
+      onEnd: (span) => {
+        if (!stopped) finishedSpans.push(span)
+      },
+      shutdown: () => {
+        stopped = true
+        finishedSpans.length = 0
+        return Promise.resolve()
+      },
+      forceFlush: () => Promise.resolve(),
+    },
+    store: { getFinishedSpans: () => finishedSpans },
+  }
+}
+
 export const isObservationWindow = ObservationWindow.is
 
 export const make = (spec: ObservationWindowSpec): ObservationWindow => {
-  const exporter = new InMemorySpanExporter()
+  const { processor, store } = spanRecorder()
   const provider = new BasicTracerProvider({
     sampler: new AlwaysOnSampler(),
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [processor],
   })
-  return ObservationWindow.make({ serviceName: spec.serviceName }, { exporter, provider })
+  return ObservationWindow.make({ serviceName: spec.serviceName }, { store, provider })
 }
 
 export const shutdown = (self: ObservationWindow): Effect.Effect<void> =>
@@ -116,7 +148,7 @@ const emptyObservation = (traceId: string): EmptyObservationError =>
   })
 
 const recordsOf = (self: ObservationWindow, traceId: string): ReadonlyArray<SpanRecord> =>
-  ObservationWindow.slot(self).exporter.getFinishedSpans()
+  ObservationWindow.slot(self).store.getFinishedSpans()
     .filter((span) => span.spanContext().traceId === traceId)
     .map(spanRecordOf)
 

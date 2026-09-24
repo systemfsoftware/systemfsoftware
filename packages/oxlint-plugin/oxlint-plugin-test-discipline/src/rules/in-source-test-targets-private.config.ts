@@ -5,9 +5,10 @@ export const NOT_MODULE_LEVEL_ACTUAL = 'an `import.meta.vitest` block nested ins
 export const NOT_MODULE_LEVEL_FIX =
   'move the block to module level — a nested block does not run under vitest includeSource' as const
 
-export const NO_PRIVATE_TARGET_NAME = 'an `import.meta.vitest` block touching no private binding' as const
-export const NO_PRIVATE_TARGET_EXPECTED = 'an in-source test exercising a non-exported module-level binding' as const
-export const NO_PRIVATE_TARGET_ACTUAL = 'an in-source block referencing only exported or imported names' as const
+export const NO_PRIVATE_TARGET_NAME = 'an `import.meta.vitest` block touching no module-level binding' as const
+export const NO_PRIVATE_TARGET_EXPECTED =
+  "an in-source test exercising this module's own code — a private helper, or a module-level function the lawful prop's `subject` names" as const
+export const NO_PRIVATE_TARGET_ACTUAL = 'an in-source block referencing only exported-call or imported names' as const
 export const NO_PRIVATE_TARGET_FIX =
   'test the public surface from tests/ as *.integration.test.ts; in-source blocks exist for private helpers only — if the public behaviour you meant to cover is a pure function, delete the assertion: the type system already proves it' as const
 

@@ -1,5 +1,5 @@
 import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { Graph } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
 import { Context, Effect, Layer } from 'effect'
@@ -78,11 +78,11 @@ const readBack = (baseUrl: string, traceId: string) => TempoTraceStore.source({ 
 const namedSpan = (spans: ReadonlyArray<Graph.SpanRecord>, name: string): Graph.SpanRecord | undefined =>
   spans.find((span) => span.name === name)
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Reading a finished trace back out of a remote trace store')
   .withScenarioLayer(LoopbackLive)
-  .liveClock()
+  .live('binds a real loopback socket to serve the trace store')
   .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A finished trace comes back as exactly the spans that were pushed',

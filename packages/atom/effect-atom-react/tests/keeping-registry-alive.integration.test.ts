@@ -1,7 +1,7 @@
 import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import * as Effect from 'effect/Effect'
@@ -10,9 +10,10 @@ import * as React from 'react'
 import { ErrorBoundary, getErrorMessage } from 'react-error-boundary'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Keeping a shared registry alive')
+  .live('renders a real page in Chromium and waits on browser timers')
   .withLayer(Layer.empty)
   .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {

@@ -1,12 +1,12 @@
 import { expect } from '@effect/vitest'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, SchemaAST } from 'effect'
 
 import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
 import { budgetToArbitrary } from '@systemfsoftware/effect-schema-recursion-budget/runtime'
 import { Chain } from './__fixtures__/chain.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const RUNTIME_SPECIFIER = '@systemfsoftware/effect-schema-recursion-budget/runtime'
 
@@ -144,6 +144,7 @@ Feature('Declaring a generation budget on a recursive schema').body(({ scenario 
 
   scenario(
     'A malformed budget refuses the module when it loads',
+    { live: 'the schema module is loaded from a real file on disk by the module loader' },
     Gherkin.Do.pipe(
       Given('a schema module whose declared ceiling is not a whole number')(
         'fixture',

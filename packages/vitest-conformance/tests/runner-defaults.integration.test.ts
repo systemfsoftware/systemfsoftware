@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
 import { refuseAsync, refuseBareEffect, refuseNoAssertion } from '@effect/vitest/refusals'
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures, runProbes } from './support/run-fixtures'
+import * as Layer from 'effect/Layer'
+import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures, runProbes } from './__fixtures__/run-fixtures'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const reportHas = (report: JsonReport, fullName: string): void => {
   expect(report.testResults.flatMap((file) => file.assertionResults.map((assertion) => assertion.fullName))).toContain(
@@ -14,6 +14,10 @@ const reportHas = (report: JsonReport, fullName: string): void => {
 }
 
 Feature('Fork runner defaults')
+  .live(
+    'each scenario starts a nested Vitest run over probe fixtures, whose file reads the simulation kernel cannot observe',
+  )
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'two tests in one fresh layer each see an empty store',
@@ -29,7 +33,7 @@ Feature('Fork runner defaults')
         Then('each test passes and each run saw the empty store')((s) => {
           expect(s.file.status).toBe('passed')
           expect(s.file.assertionResults).toHaveLength(2)
-          reportHas(s.report, 'layer store isolation Should_SeeAnEmptyStore_When_ARunningTestAlreadyWrote')
+          reportHas(s.report, 'layer store isolation Should_SeeAnEmptyStore_When_RunningTestAlreadyWrote')
           reportHas(s.report, 'layer store isolation Should_SeeAnEmptyStore_When_AnotherTestWroteFirst')
           expect(
             assertionOf(s.report, 'layer store isolation Should_SeeAnEmptyStore_When_AnotherTestWroteFirst').status,
@@ -85,11 +89,11 @@ Feature('Fork runner defaults')
         ),
         When('it passes once')(
           'assertion',
-          (s) => Effect.succeed(assertionOf(s.report, 'Should_FailTheSecondRun_When_AVisibleCounterAdvances')),
+          (s) => Effect.succeed(assertionOf(s.report, 'Should_FailTheSecondRun_When_VisibleCounterAdvances')),
         ),
         Then('the report is LeakedState carrying the second run failure')((s) => {
           expect(s.assertion.status).toBe('failed')
-          expect(messagesOf(s.report, 'Should_FailTheSecondRun_When_AVisibleCounterAdvances')).toContain('LeakedState')
+          expect(messagesOf(s.report, 'Should_FailTheSecondRun_When_VisibleCounterAdvances')).toContain('LeakedState')
         }),
       ),
     )

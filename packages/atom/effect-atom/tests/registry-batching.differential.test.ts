@@ -14,7 +14,7 @@ const heardLines = (log: ReadonlyArray<string>): ReadonlyArray<string> =>
 const writeDecidedReads = (log: ReadonlyArray<string>): ReadonlyArray<string> =>
   log.filter((line) => line.startsWith('read ') && !line.startsWith(mirrorRead))
 
-Metamorphic.on(observed)
+Metamorphic.on({ name: 'a batched program decides writes the same as the split program', system: observed })
   .relation({
     transformInput: unbatched,
     assertOutput: (batched, split) => {
@@ -25,7 +25,7 @@ Metamorphic.on(observed)
   })
   .on(programs, { runBudget: 500 })
 
-Metamorphic.on(observed)
+Metamorphic.on({ name: 'batching never lets a listener hear more than the split program', system: observed })
   .relation({
     transformInput: unbatched,
     assertOutput: (batched, split) => heardLines(batched).length <= heardLines(split).length,

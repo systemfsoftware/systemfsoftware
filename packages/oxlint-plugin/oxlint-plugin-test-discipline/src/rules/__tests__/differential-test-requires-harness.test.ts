@@ -4,7 +4,7 @@ import { createRuleTester } from './_tester.js'
 const ruleTester = createRuleTester()
 
 const HP =
-  'import { Differential, Metamorphic } from @systemfsoftware/differential-spec and express the test as Differential.compare({ reference, candidate }).on(arb).assert(oracle) or Metamorphic.on(system).relation({ transformInput, assertOutput }).on(arb)'
+  'import { Differential, Metamorphic } from @systemfsoftware/differential-spec and express the test as Differential.compare({ name, reference, candidate }).on(arb).assert(oracle) or Metamorphic.on({ name, system }).relation({ transformInput, assertOutput }).on(arb)'
 
 const rawRunnerError = (name: string) => ({
   messageId: 'rawRunnerCall' as const,
@@ -60,7 +60,7 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       name: 'Should_Allow_HarnessBuilder_When_DifferentialTestInvokesNamespace',
       code: `
         import { Differential } from '@systemfsoftware/differential-spec'
-        Differential.compare({ reference: a, candidate: b }).on(arb).assert((x, y) => x === y)
+        Differential.compare({ name, reference: a, candidate: b }).on(arb).assert((x, y) => x === y)
       `,
       filename: '/repo/pkg/tests/a.differential.test.ts',
     },
@@ -68,7 +68,7 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       name: 'Should_Allow_HarnessBuilder_When_DifferentialTestInvokesMetamorphic',
       code: `
         import { Metamorphic } from '@systemfsoftware/differential-spec'
-        Metamorphic.on(system).relation({ transformInput: t, assertOutput: r }).on(arb)
+        Metamorphic.on({ name, system }).relation({ transformInput: t, assertOutput: r }).on(arb)
       `,
       filename: '/repo/pkg/tests/a.differential.test.ts',
     },

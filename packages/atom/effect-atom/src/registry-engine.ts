@@ -8,7 +8,7 @@ import { MixedScheduler, type Scheduler, type SchedulerDispatcher } from 'effect
 import * as Schema from 'effect/Schema'
 import { batchRunner, type BatchState, makeBatchState, NodeImpl } from './atom-node.js'
 import type * as Atom from './atom.blueprint.js'
-import { hostScheduleTimer, makeHostNow } from './internal/host-timer.js'
+import { hostPorts } from './internal/host-timer.js'
 import type { Node, PreloadRefused, Registry } from './registry.handle.js'
 
 type AnyValue<A = unknown> = A
@@ -40,21 +40,7 @@ const isNodeImplFor = <A>(atom: Atom.Atom<A>, node: NodeImpl): node is NodeImpl<
 
 type TimeoutBucket = readonly [nodes: Set<NodeImpl>, cancel: () => void]
 
-function nowOrHost(now: (() => number) | undefined): () => number {
-  if (now === undefined) {
-    return makeHostNow()
-  }
-  return now
-}
-
-function scheduleTimerOrHost(
-  scheduleTimer: ((f: () => void, delayMillis: number) => () => void) | undefined,
-): (f: () => void, delayMillis: number) => () => void {
-  if (scheduleTimer === undefined) {
-    return hostScheduleTimer
-  }
-  return scheduleTimer
-}
+const configuredOr = <F>(configured: F | undefined, host: F): F => configured ?? host
 
 function timeoutResolutionFromIdleTTL(defaultIdleTTL: number | undefined): number {
   if (defaultIdleTTL === undefined) {
@@ -233,6 +219,15 @@ function notifyNodeRemoved(registry: RegistryImpl, node: NodeImpl): void {
   registry.onNodeRemoved(node)
 }
 
+function applySeededValue(registry: RegistryImpl, node: NodeImpl, key: Atom.Atom | string): void {
+  if (registry.seededValues.has(key) === false) {
+    return
+  }
+  const value = registry.seededValues.get(key)
+  registry.seededValues.delete(key)
+  node.setInitialValue(value)
+}
+
 function createAndStoreNode<A>(
   registry: RegistryImpl,
   atom: Atom.Atom<A>,
@@ -240,6 +235,7 @@ function createAndStoreNode<A>(
 ): NodeImpl<A> {
   const node = registry.createNode(atom)
   registry.nodes.set(key, node)
+  applySeededValue(registry, node, key)
   notifyNodeAdded(registry, node)
   return node
 }
@@ -485,22 +481,31 @@ export class RegistryImpl extends Pipeable.Class {
     super()
     this.handle = mint(this)
     this.batch = makeBatchState()
-    this.scheduler = new MixedScheduler('sync', scheduleTask)
-    this.schedulerAsync = new MixedScheduler('async', scheduleTask)
+    const host = hostPorts()
+    const scheduled = configuredOr(scheduleTask, host.scheduleTask)
+    this.scheduler = new MixedScheduler('sync', scheduled)
+    this.schedulerAsync = new MixedScheduler('async', scheduled)
     this.dispatcher = this.schedulerAsync.makeDispatcher()
     this.defaultIdleTTL = defaultIdleTTL
-    this.now = nowOrHost(now)
-    this.scheduleTimer = scheduleTimerOrHost(scheduleTimer)
+    this.now = configuredOr(now, host.now)
+    this.scheduleTimer = configuredOr(scheduleTimer, host.scheduleTimer)
     this.timeoutResolution = resolveTimeoutResolution(timeoutResolution, defaultIdleTTL)
     applyInitialValues(this, initialValues)
   }
 
   setInitialValue<A>(atom: Atom.Atom<A>, value: A): void {
-    this.ensureNode(resolveInitialValueTarget(atom)).setInitialValue(value)
+    const target = resolveInitialValueTarget(atom)
+    const key = atomKey(target)
+    if (this.nodes.has(key)) {
+      this.ensureNode(target).setInitialValue(value)
+      return
+    }
+    this.seededValues.set(key, value)
   }
 
   readonly nodes = new Map<Atom.Atom | string, NodeImpl>()
   readonly preloadedSerializable = new Map<string, AnyValue>()
+  readonly seededValues = new Map<Atom.Atom | string, AnyValue>()
   readonly timeoutBuckets = new Map<number, TimeoutBucket>()
   readonly nodeTimeoutBucket = new Map<NodeImpl, number>()
   disposed = false

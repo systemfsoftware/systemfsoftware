@@ -2,11 +2,13 @@ import { banRawSpanNameEmit } from './rules/ban-raw-span-name-emit.js'
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
+import { conformanceTestRequiresHarness } from './rules/conformance-test-requires-harness.js'
 import { dampTestNaming } from './rules/damp-test-naming.js'
 import { differentialTestRequiresHarness } from './rules/differential-test-requires-harness.js'
 import { expectBooleanPredicate } from './rules/expect-boolean-predicate.js'
 import { inSourceTestPropOnly } from './rules/in-source-test-prop-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
+import { modelFixtureImportsSubject } from './rules/model-fixture-imports-subject.js'
 import { noAssertInProperty } from './rules/no-assert-in-property.js'
 import { noBehaviourlessAssertion } from './rules/no-behaviourless-assertion.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
@@ -57,6 +59,8 @@ const recommendedRules = {
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
   [rule('differential-test-requires-harness')]: 'error',
+  [rule('conformance-test-requires-harness')]: 'error',
+  [rule('model-fixture-imports-subject')]: 'error',
   [rule('no-pseudo-gherkin-unit-tests')]: 'error',
   [rule('ban-raw-span-name-emit')]: 'error',
   [rule('trace-test-requires-taxonomy')]: 'error',
@@ -93,6 +97,8 @@ export default {
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,
     'differential-test-requires-harness': differentialTestRequiresHarness,
+    'conformance-test-requires-harness': conformanceTestRequiresHarness,
+    'model-fixture-imports-subject': modelFixtureImportsSubject,
     'ban-raw-span-name-emit': banRawSpanNameEmit,
     'trace-test-requires-taxonomy': traceTestRequiresTaxonomy,
   },

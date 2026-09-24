@@ -1,14 +1,14 @@
 import { expect } from '@effect/vitest'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Ref, Result, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { CounterRef } from './__fixtures__/TestUtils.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Poll Worker Lifecycle')
   .withLayer(NoopLayer)
@@ -81,11 +81,9 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(5))
             const countBeforePause = yield* CounterRef.read(s.counterRef)
             yield* health.paused.close
-            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countWhilePaused = yield* CounterRef.read(s.counterRef)
             yield* health.paused.open
-            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(50))
             const countAfterResume = yield* CounterRef.read(s.counterRef)
             return { countBeforePause, countWhilePaused, countAfterResume }

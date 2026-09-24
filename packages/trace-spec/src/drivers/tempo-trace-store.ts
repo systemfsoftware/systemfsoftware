@@ -99,7 +99,6 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
 
   const HexIdCodec = { encode: encodeId, decode: decodeId }
-
   it.effect.prop(
     '∀id_HexId_∘Base64RoundTrip',
     { of: [Schema.BigInt, Schema.BigInt], subject: HexIdCodec },

@@ -1,10 +1,11 @@
-import { expect, vi } from '@effect/vitest'
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
+import { TestClock } from 'effect/testing'
 import { SavedText } from './__fixtures__/SavedText.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const throughText = (saved: ReadonlyArray<Atom.Hydration.DehydratedAtomValue>) =>
   Schema.encodeUnknownEffect(SavedText)(saved).pipe(
@@ -22,7 +23,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(42)
               const savedValue = base.pipe(
                 Atom.serializable({
@@ -31,7 +31,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const page = Atom.Registry.make({ defaultIdleTTL: 5 })
-              Atom.Registry.get(page, savedValue)
+              Atom.Registry.subscribe(page, savedValue, () => {})
               const saved = Atom.Hydration.dehydrate(page)
               const reloadedPage = Atom.Registry.make({ defaultIdleTTL: 5 })
               Atom.Hydration.hydrate(reloadedPage, saved)
@@ -41,11 +41,10 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         When('the value is read on the reloaded page, then read again after the cleanup timer runs')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               const firstReading = Atom.Registry.get(s.ctx.reloadedPage, s.ctx.savedValue)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const secondReading = Atom.Registry.get(s.ctx.reloadedPage, s.ctx.savedValue)
-              vi.useRealTimers()
               return { firstReading, secondReading }
             }),
         ),
@@ -62,7 +61,6 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(Effect.succeed(123))
               const savedValue = base.pipe(
                 Atom.serializable({
@@ -71,7 +69,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const page = Atom.Registry.make({ defaultIdleTTL: 5 })
-              Atom.Registry.get(page, savedValue)
+              Atom.Registry.subscribe(page, savedValue, () => {})
               const saved = Atom.Hydration.dehydrate(page)
               const reloadedPage = Atom.Registry.make({ defaultIdleTTL: 5 })
               Atom.Hydration.hydrate(reloadedPage, saved)
@@ -81,10 +79,9 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         When('the value is read on the reloaded page after the cleanup timer runs')(
           'reading',
           (s) =>
-            Effect.sync(() => {
-              vi.advanceTimersByTime(100)
+            Effect.gen(function*() {
+              yield* TestClock.adjust('100 millis')
               const reading = Atom.Registry.get(s.ctx.reloadedPage, s.ctx.savedValue)
-              vi.useRealTimers()
               return reading
             }),
         ),
@@ -108,7 +105,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const savedPage = Atom.Registry.make()
-              Atom.Registry.get(savedPage, stillLoading)
+              Atom.Registry.subscribe(savedPage, stillLoading, () => {})
               const saved = Atom.Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
               const reloadedPage = Atom.Registry.make()
               const applied = Atom.Hydration.hydrate(reloadedPage, saved)
@@ -145,7 +142,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               }),
             )
             const page = Atom.Registry.make()
-            Atom.Registry.get(page, stillLoading)
+            Atom.Registry.subscribe(page, stillLoading, () => {})
             return { page, stillLoading }
           })),
         When('the page is saved')('saved', (s) => Effect.sync(() => Atom.Hydration.dehydrate(s.ctx.page))),
@@ -160,25 +157,20 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
         Given('a page with a still-loading value, saved so a reloaded page receives it once it finishes')(
           'ctx',
           () =>
-            Effect.sync(() => {
-              const gate = Atom.make('loading')
-              const stillLoading = Atom.readable<Atom.AsyncResult.Result<number, never>>((get) => {
-                if (get(gate) === 'ready') {
-                  return Atom.AsyncResult.success(42)
-                }
-                return Atom.AsyncResult.initial(true)
-              }).pipe(
+            Effect.gen(function*() {
+              const source = yield* Deferred.make<number>()
+              const stillLoading = Atom.make(Deferred.await(source)).pipe(
                 Atom.serializable({
                   key: 'k-refresh',
                   schema: Atom.AsyncResult.Schema({ success: Schema.Finite }),
                 }),
               )
               const savedPage = Atom.Registry.make()
-              Atom.Registry.get(savedPage, stillLoading)
+              Atom.Registry.subscribe(savedPage, stillLoading, () => {})
               const saved = Atom.Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
               const reloadedPage = Atom.Registry.make()
               const applied = Atom.Hydration.hydrate(reloadedPage, saved)
-              return { savedPage, reloadedPage, stillLoading, gate, applied }
+              return { savedPage, reloadedPage, stillLoading, source, applied }
             }),
         ),
         When(
@@ -189,7 +181,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             Effect.gen(function*() {
               const beforeItFinishes = Atom.Registry.get(s.ctx.reloadedPage, s.ctx.stillLoading)
               Atom.Registry.refresh(s.ctx.savedPage, s.ctx.stillLoading)
-              Atom.Registry.set(s.ctx.savedPage, s.ctx.gate, 'ready')
+              yield* Deferred.succeed(s.ctx.source, 42)
               yield* Fiber.join(s.ctx.applied)
               const afterItFinishes = Atom.Registry.get(s.ctx.reloadedPage, s.ctx.stillLoading)
               return { beforeItFinishes, afterItFinishes }
@@ -214,8 +206,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             )
             const plainValue = Atom.make('not saved')
             const page = Atom.Registry.make()
-            Atom.Registry.get(page, savedValue)
-            Atom.Registry.get(page, plainValue)
+            Atom.Registry.subscribe(page, savedValue, () => {})
+            Atom.Registry.subscribe(page, plainValue, () => {})
             return { page }
           })),
         When('the page is saved')('saved', (s) => Effect.sync(() => Atom.Hydration.dehydrate(s.ctx.page))),
@@ -280,8 +272,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               )
               const label = Atom.make('hello').pipe(Atom.serializable({ key: 'label', schema: Schema.String }))
               const page = Atom.Registry.make()
-              Atom.Registry.get(page, count)
-              Atom.Registry.get(page, label)
+              Atom.Registry.subscribe(page, count, () => {})
+              Atom.Registry.subscribe(page, label, () => {})
               return { page }
             }),
         ),
@@ -391,7 +383,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               }),
             )
             const savedPage = Atom.Registry.make()
-            Atom.Registry.get(savedPage, stillLoading)
+            Atom.Registry.subscribe(savedPage, stillLoading, () => {})
             const saved = Atom.Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
             return { savedPage, stillLoading, source, saved }
           })),
@@ -428,7 +420,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               }),
             )
             const page = Atom.Registry.make()
-            Atom.Registry.get(page, finished)
+            Atom.Registry.subscribe(page, finished, () => {})
             return { page, finished }
           })),
         When('the saved state travels through a text copy onto a reloaded page')(

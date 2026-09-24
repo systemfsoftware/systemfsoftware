@@ -10,7 +10,7 @@ class Store extends Context.Service<Store, { readonly values: Array<number> }>()
 }
 
 layer(Store.layer)('layer store isolation', (it) => {
-  it.effect('Should_SeeAnEmptyStore_When_ARunningTestAlreadyWrote', () =>
+  it.effect('Should_SeeAnEmptyStore_When_RunningTestAlreadyWrote', () =>
     Effect.gen(function*() {
       const store = yield* Store
       expect(store.values).toEqual([])

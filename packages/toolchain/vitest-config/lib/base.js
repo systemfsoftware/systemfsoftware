@@ -1,6 +1,52 @@
 import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { defineConfig as defineVitestConfig } from 'vitest/config'
 
-export { defineConfig } from 'vitest/config'
+import { CONFORMANCE_SETUP, conformanceCoverage } from './conformance-coverage.js'
+
+/** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
+/** @typedef {NonNullable<ViteUserConfig['test']>} TestConfig */
+/** @typedef {NonNullable<TestConfig['projects']>} Projects */
+
+/**
+ * @param {TestConfig | undefined} test
+ * @returns {TestConfig}
+ */
+const withConformanceSetup = (test) => {
+  const setupFiles = test?.setupFiles === undefined ? [] : [test.setupFiles].flat()
+  return { ...test, setupFiles: [...setupFiles, CONFORMANCE_SETUP] }
+}
+
+/**
+ * An inline project gets the setup file itself: vitest does not carry the
+ * root's setup files into `test.projects`, and a project without it records
+ * sites but never hands them to the reporter.
+ * @param {unknown} project
+ * @returns {unknown}
+ */
+const projectWithSetup = (project) => {
+  if (typeof project !== 'object' || project === null || !('test' in project)) return project
+  return { ...project, test: withConformanceSetup(/** @type {TestConfig | undefined} */ (project.test)) }
+}
+
+/**
+ * Vitest's `defineConfig` with the conformance coverage gate added to the
+ * config's own plugins and its per-test handoff added to the root and every
+ * inline project, so no package config can leave it out by setting `plugins`
+ * or `setupFiles` after spreading `sharedConfig`.
+ * @param {ViteUserConfig} config
+ * @returns {ViteUserConfig}
+ */
+export const defineConfig = (config) => {
+  const test = withConformanceSetup(config.test)
+  const projects = config.test?.projects
+  return defineVitestConfig({
+    ...config,
+    plugins: [...(config.plugins ?? []), conformanceCoverage()],
+    test: projects === undefined
+      ? test
+      : { ...test, projects: /** @type {Projects} */ (projects.map(projectWithSetup)) },
+  })
+}
 
 // Workspace packages expose their source under this condition in `exports`, so a
 // test resolves a sibling's `src/` instead of a `dist/` this run may not have built.

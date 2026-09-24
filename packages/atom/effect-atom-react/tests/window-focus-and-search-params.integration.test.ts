@@ -11,7 +11,7 @@
 import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -20,7 +20,7 @@ import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 let pageIsInView: DocumentVisibilityState = document.visibilityState
 
@@ -82,6 +82,7 @@ function AddressTracker({ atom }: { readonly atom: Atom.Atom<string> }) {
 }
 
 Feature('Keeping on-screen values in step with the browser page')
+  .live('renders real components in Chromium and reacts to page focus and search params')
   .withLayer(Layer.empty)
   .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario, scenarioOutline }) => {

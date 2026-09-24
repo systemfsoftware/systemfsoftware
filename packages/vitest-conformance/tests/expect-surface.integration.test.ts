@@ -1,17 +1,21 @@
 import { expect } from '@effect/vitest'
 import { presenceMessage, refuseAsync, refuseHook, refuseNoAssertion, refuseUnprovided } from '@effect/vitest/refusals'
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures } from './support/run-fixtures'
+import * as Layer from 'effect/Layer'
+import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures } from './__fixtures__/run-fixtures'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const expectSuiteFailed = (report: JsonReport, stem: string): void => {
   expect(fileOf(report, stem).status).toBe('failed')
 }
 
 Feature('Fork expect surface')
+  .live(
+    'each scenario starts a nested Vitest run over probe fixtures, whose file reads the simulation kernel cannot observe',
+  )
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'two failing checks in one step are both reported and the side effect never runs',
@@ -39,7 +43,7 @@ Feature('Fork expect surface')
         ),
         Then('the write never lands')((s) => {
           expectSuiteFailed(s.report, 'expect/forked-fiber.test.ts')
-          const messages = messagesOf(s.report, 'Should_InterruptTheChild_When_ACheckFailsFirst')
+          const messages = messagesOf(s.report, 'Should_InterruptTheChild_When_CheckFailsFirst')
           expect(messages).toContain('expected 1 to deeply equal 3')
           expect(messages).not.toContain('SIDE EFFECT RAN')
         }),
@@ -55,7 +59,7 @@ Feature('Fork expect surface')
         ),
         Then('the report names AfterFailedExpect beside the check, and nothing else')((s) => {
           expectSuiteFailed(s.report, 'expect/after-failed.test.ts')
-          const assertion = assertionOf(s.report, 'Should_ReportAfterFailedExpect_When_AThrowFollowsAFailedCheck')
+          const assertion = assertionOf(s.report, 'Should_ReportAfterFailedExpect_When_ThrowFollowsAFailedCheck')
           expect(assertion.failureMessages).toHaveLength(2)
           expect(assertion.failureMessages.join('\n')).toContain('AfterFailedExpect')
         }),
@@ -81,10 +85,10 @@ Feature('Fork expect surface')
     scenario(
       'a property false verdict still shrinks to the boundary',
       Gherkin.Do.pipe(
-        Given('a property failing past 100')('report', () => runFixtures(['expect/shrink.test.ts'])),
+        Given('a property failing past 100')('report', () => runFixtures(['expect/shrink.property.test.ts'])),
         Then('the counterexample is the boundary value')((s) => {
-          expectSuiteFailed(s.report, 'expect/shrink.test.ts')
-          expect(messagesOf(s.report, 'Should_ShrinkToTheBoundary_When_AWideInputFails')).toContain('100')
+          expectSuiteFailed(s.report, 'expect/shrink.property.test.ts')
+          expect(messagesOf(s.report, '∀n_ShrinkToTheBoundary_=Boundary')).toContain('100')
         }),
       ),
     )
@@ -94,13 +98,11 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a property that checks its input softly before returning its verdict')(
           'report',
-          () => runFixtures(['property/soft-check-shrink.test.ts']),
+          () => runFixtures(['property/soft-check-shrink.property.test.ts']),
         ),
         Then('the counterexample is the boundary value')((s) => {
-          expectSuiteFailed(s.report, 'property/soft-check-shrink.test.ts')
-          expect(messagesOf(s.report, 'Should_ShrinkToTheBoundary_When_ASoftCheckFailsFirst')).toContain(
-            'Shrunk input: [100]',
-          )
+          expectSuiteFailed(s.report, 'property/soft-check-shrink.property.test.ts')
+          expect(messagesOf(s.report, '∀n_ShrinkToTheBoundary_=Boundary')).toContain('Shrunk input: [100]')
         }),
       ),
     )
@@ -139,20 +141,20 @@ Feature('Fork expect surface')
         Given('the five narrowed forms')('report', () => runFixtures(['expect/narrowed.test.ts'])),
         Then('each failure states the rewrite')((s) => {
           expectSuiteFailed(s.report, 'expect/narrowed.test.ts')
-          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseToBeDefined_When_APresenceCheckRuns')).toContain(
+          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseToBeDefined_When_PresenceCheckRuns')).toContain(
             presenceMessage('toBeDefined'),
           )
-          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseToBeTruthy_When_APresenceCheckRuns')).toContain(
+          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseToBeTruthy_When_PresenceCheckRuns')).toContain(
             presenceMessage('toBeTruthy'),
           )
-          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseToBeFalsy_When_APresenceCheckRuns')).toContain(
+          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseToBeFalsy_When_PresenceCheckRuns')).toContain(
             presenceMessage('toBeFalsy'),
           )
-          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseNotToBeNull_When_ANegatedPresenceCheckRuns'))
+          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseNotToBeNull_When_NegatedPresenceCheckRuns'))
             .toContain(
               presenceMessage('toBeNull'),
             )
-          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseNotToBeUndefined_When_ANegatedPresenceCheckRuns'))
+          expect(messagesOf(s.report, 'narrowed refusals Should_RefuseNotToBeUndefined_When_NegatedPresenceCheckRuns'))
             .toContain(
               presenceMessage('toBeUndefined'),
             )
@@ -176,7 +178,7 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a body returning a promise')('report', () => runFixtures(['expect/async-body.test.ts'])),
         Then('the report carries the async message')((s) => {
-          expect(messagesOf(s.report, 'Should_RefuseTheAsyncBody_When_ABodyReturnsAPromise')).toContain(refuseAsync)
+          expect(messagesOf(s.report, 'Should_RefuseTheAsyncBody_When_BodyReturnsAPromise')).toContain(refuseAsync)
         }),
       ),
     )
@@ -186,7 +188,7 @@ Feature('Fork expect surface')
       Gherkin.Do.pipe(
         Given('a body reading a missing service')('report', () => runFixtures(['expect/unprovided.test.ts'])),
         Then('the report carries the unprovided message')((s) => {
-          expect(messagesOf(s.report, 'Should_RefuseTheUnprovidedBody_When_AServiceIsMissing')).toContain(
+          expect(messagesOf(s.report, 'Should_RefuseTheUnprovidedBody_When_ServiceIsMissing')).toContain(
             refuseUnprovided,
           )
         }),

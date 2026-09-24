@@ -14,23 +14,23 @@ declare const loading: Atom.Atom<Atom.AsyncResult.Result<number, string>>
 declare const writeContext: Atom.WriteContext<number>
 
 describe('Atom.make', () => {
-  it('a plain initial value makes a writable atom of that value', () => {
+  it('Should_MakeAWritableAtomOfThatValue_When_TheInitialValueIsPlain', () => {
     expect(Atom.make(0)).type.toBe<Atom.Writable<number>>()
   })
 
-  it('an Effect initial value reads as an AsyncResult with every channel pinned', () => {
+  it('Should_ReadAsAnAsyncResultWithEveryChannelPinned_When_TheInitialValueIsAnEffect', () => {
     expect(Atom.make(Effect.succeed(1))).type.toBe<Atom.Atom<Atom.AsyncResult.Result<number, never>>>()
   })
 })
 
 describe('Atom.get', () => {
-  it('answers through the Current registry service with every channel pinned', () => {
+  it('Should_AnswerThroughTheCurrentRegistryServiceWithEveryChannelPinned_When_GetIsCalled', () => {
     expect(Atom.get(count)).type.toBe<Effect.Effect<number, never, Atom.Registry.Current>>()
   })
 })
 
 describe('Atom.Registry.layer', () => {
-  it('accepts the Current registry tag and refuses a tag of another shape', () => {
+  it('Should_AcceptTheCurrentRegistryTagAndRefuseAnotherShape_When_LayerIsCalled', () => {
     expect(Atom.Registry.layer).type.toBeCallableWith(Atom.Registry.Current)
     expect(Atom.Registry.layer(Atom.Registry.Current)).type.toBe<Layer.Layer<Atom.Registry.Current>>()
     expect(Atom.Registry.layer).type.not.toBeCallableWith(NotRegistry)
@@ -38,14 +38,14 @@ describe('Atom.Registry.layer', () => {
 })
 
 describe('dual operations', () => {
-  it('registry get accepts data-first and data-last calls', () => {
+  it('Should_AcceptDataFirstAndDataLastCalls_When_RegistryGetIsCalled', () => {
     expect(Atom.Registry.get).type.toBeCallableWith(registry, count)
     expect(Atom.Registry.get(registry, count)).type.toBe<number>()
     expect(Atom.Registry.get(count)).type.toBe<(self: Atom.Registry.Registry) => number>()
     expect(pipe(registry, Atom.Registry.get(count))).type.toBe<number>()
   })
 
-  it('ref set accepts data-first and data-last calls', () => {
+  it('Should_AcceptDataFirstAndDataLastCalls_When_RefSetIsCalled', () => {
     expect(Atom.Ref.make(0)).type.toBe<Atom.Ref.AtomRef<number>>()
     expect(Atom.Ref.set).type.toBeCallableWith(ref, 1)
     expect(Atom.Ref.set(ref, 1)).type.toBe<Atom.Ref.AtomRef<number>>()
@@ -55,7 +55,7 @@ describe('dual operations', () => {
 })
 
 describe('an atom is a blueprint', () => {
-  it('a configuration step keeps the writable variant in the method, data-first, and piped forms', () => {
+  it('Should_KeepTheWritableVariantInEveryForm_When_ConfigurationStepIsApplied', () => {
     expect(draft.keepAlive()).type.toBe<Atom.Writable<number, string>>()
     expect(Atom.keepAlive(draft)).type.toBe<Atom.Writable<number, string>>()
     expect(pipe(draft, Atom.keepAlive)).type.toBe<Atom.Writable<number, string>>()
@@ -64,7 +64,7 @@ describe('an atom is a blueprint', () => {
     expect(pipe(count, Atom.setLazy(false), Atom.withLabel('count'))).type.toBe<Atom.Atom<number>>()
   })
 
-  it('an equality step types its callback by the atom value and refuses another value type', () => {
+  it('Should_TypeItsCallbackByTheAtomValueAndRefuseAnotherValueType_When_AnEqualityStepIsApplied', () => {
     expect(
       pipe(
         count,
@@ -78,7 +78,7 @@ describe('an atom is a blueprint', () => {
     expect(Atom.withEquality).type.not.toBeCallableWith(count, (value: string, next: string) => value === next)
   })
 
-  it('a server value is typed by the atom value, and the initial server value needs an AsyncResult atom', () => {
+  it('Should_TypeTheServerValueByTheAtomValueAndRequireAnAsyncResultAtomForTheInitialValue_When_WithServerValueIsApplied', () => {
     expect(pipe(draft, Atom.withServerValue((get) => get(count) + 1))).type.toBe<Atom.Writable<number, string>>()
     expect(Atom.withServerValue).type.toBeCallableWith(count, () => 1)
     expect(Atom.withServerValue).type.not.toBeCallableWith(count, () => 'one')
@@ -87,7 +87,7 @@ describe('an atom is a blueprint', () => {
     >()
   })
 
-  it('serialization adds the schema to the atom it configures', () => {
+  it('Should_AddTheSchemaToTheAtomItConfigures_When_SerializableIsApplied', () => {
     expect(Atom.serializable(draft, { key: 'draft', schema: Schema.Finite })).type.toBe<
       Atom.Writable<number, string> & Atom.Serializable<typeof Schema.Finite>
     >()
@@ -96,21 +96,21 @@ describe('an atom is a blueprint', () => {
     >()
   })
 
-  it('the read and write targets are typed by the atom', () => {
+  it('Should_TypeTheReadAndWriteTargetsByTheAtom_When_TheBlueprintIsRead', () => {
     expect(count.read).type.toBe<(get: Atom.AtomContext) => number>()
     expect(draft.write).type.toBe<(ctx: Atom.WriteContext<number>, value: string) => void>()
     expect(draft.write).type.toBeCallableWith(writeContext, 'text')
     expect(draft.write).type.not.toBeCallableWith(writeContext, 1)
   })
 
-  it('a writable atom stands in for an atom of its value, never the reverse', () => {
+  it('Should_StandInForAnAtomOfItsValueAndNeverTheReverse_When_TheAtomIsWritable', () => {
     expect<Atom.Writable<number, string>>().type.toBeAssignableTo<Atom.Atom<number>>()
     expect<Atom.Atom<1>>().type.toBeAssignableTo<Atom.Atom<number>>()
     expect<Atom.Atom<number>>().type.not.toBeAssignableTo<Atom.Writable<number>>()
     expect<Atom.Atom<number>>().type.not.toBeAssignableTo<Atom.Atom<string>>()
   })
 
-  it('a derived atom keeps the write input of a writable source', () => {
+  it('Should_KeepTheWriteInputOfAWritableSource_When_TheAtomIsDerived', () => {
     expect(Atom.transform(draft, (get, self) => get(self) > 0)).type.toBe<Atom.Writable<boolean, string>>()
     expect(pipe(count, Atom.transform((get, self) => String(get(self))))).type.toBe<Atom.Atom<string>>()
     expect<Atom.Type<typeof draft>>().type.toBe<number>()

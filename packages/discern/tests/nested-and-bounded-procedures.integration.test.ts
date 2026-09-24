@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, MutableRef, Option } from 'effect'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -14,7 +14,7 @@ import {
 import { Request } from './__fixtures__/request.schema.js'
 import { refusalOf, routingAnswer, routingTo } from './__fixtures__/routing-model.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 type RoutingFailure =
   | AiError.AiError

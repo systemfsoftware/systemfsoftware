@@ -6,8 +6,8 @@
  * schemas earned a law pair and which module each law binds.
  */
 import { afterAll, expect } from '@effect/vitest'
-import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -21,7 +21,7 @@ import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@syste
 
 const LAW_PKG = '@systemfsoftware/effect-schema-law'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const MIXED_DECLARATIONS = [
   `export const StructConst = Schema.Struct({ x: Schema.String })`,
   `export const PipedFromMember = S.String.pipe(S.pattern(/x/))`,
@@ -297,6 +297,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
 
   scenario(
     'Registering the one plugin materializes a declared generation budget, not only the laws',
+    { live: 'the plugin is driven through a real Vite development server over real files on disk' },
     Gherkin.Do.pipe(
       Given('a package whose recursive schema declares its generation budget')(
         'pkg',
@@ -309,16 +310,14 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       Then('the transformed module carries the derivation hook that honors the budget')((s) => {
         expect(s.driven.code).toContain('toCodecArbitrary')
       }),
-      Then('the hook is imported from the budget runtime the plugin resolves')((s) => {
+      And('the hook imports the budget runtime, which resolves to a file on disk')((s) => {
         expect(s.driven.code).toMatch(
           /import \{ \w+ as \w+ \} from "[^"]*recursion-budget-runtime\.[a-z]+";/,
         )
-      }),
-      Then('the runtime the hook imports resolves to a module on disk')((s) => {
         expect(s.driven.runtime).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
         expect(s.driven.runtime).toSatisfy((runtime: string | null) => runtime !== null && existsSync(runtime))
       }),
-      Then('the transformed module runs and exports its schema for the consumer')((s) => {
+      And('the transformed module runs and exports its schema for the consumer')((s) => {
         expect(s.driven.exportedSchemas).toContain('RecursiveExpr')
       }),
     ),

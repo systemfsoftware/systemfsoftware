@@ -5,7 +5,6 @@ import {
   Gherkin,
   Given,
   it,
-  layer,
   makeFeature,
   StepError,
   Then,
@@ -16,7 +15,7 @@ import {
 import { Effect, Fiber, Layer, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Gherkin pipeline execution semantics')
   .withLayer(Layer.empty)
@@ -133,11 +132,8 @@ Feature('Gherkin pipeline execution semantics')
         )
 
         const fiber = yield* Effect.forkChild(pipeline)
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
         yield* Fiber.join(fiber)
 

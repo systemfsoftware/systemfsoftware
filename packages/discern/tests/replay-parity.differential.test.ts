@@ -71,6 +71,10 @@ const recordedThenReplayed = (review: Review) =>
 // ∀review: what a live policy answers, a policy replayed from that same run's
 // recording answers too — including the rating label Effect re-derives from the
 // stored probabilities.
-Differential.compare({ reference: liveRun, candidate: recordedThenReplayed })
+Differential.compare({
+  name: 'a policy replayed from its recording answers what the live run answered',
+  reference: liveRun,
+  candidate: recordedThenReplayed,
+})
   .on(reviews)
   .assert((live, replayed) => live === replayed)

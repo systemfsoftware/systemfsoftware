@@ -13,7 +13,7 @@ describe('deliberate assertions stay legal', () => {
     Effect.gen(function*() {
       const refusal = new RangeError('epoch out of range')
       return yield* Effect.sync(() => {
-        expect('value').toBeTypeOf('string')
+        expect(refusal.message).toBeTypeOf('string')
         expect(refusal).toBeInstanceOf(RangeError)
       })
     }))

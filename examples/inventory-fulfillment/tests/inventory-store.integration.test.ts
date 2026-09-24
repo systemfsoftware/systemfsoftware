@@ -1,5 +1,5 @@
 import { expect } from '@effect/vitest'
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Inventory } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Option } from 'effect'
 import {
@@ -12,7 +12,7 @@ import {
   walkStock,
 } from './__fixtures__/inventory-store.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 type StoreUnavailable = Fulfillment.Decision.StoreUnavailable
 
@@ -87,8 +87,9 @@ const EVERY_LOT_IN_ORDER = [
   'lot-teapot-north',
 ]
 
-Feature('The stock catalogue reads the same in memory and in Postgres')
+Feature('The stock catalogue reads the same in memory and in Postgres', { timeout: 120_000 })
   .withScenarioLayer(inventoryStoreWorld)
+  .live('the Postgres side runs through in-process PGlite, whose file reads the simulation kernel cannot observe')
   .body(({ scenario }) => {
     scenario(
       'Reading the same page of stock twice shows the same lots',

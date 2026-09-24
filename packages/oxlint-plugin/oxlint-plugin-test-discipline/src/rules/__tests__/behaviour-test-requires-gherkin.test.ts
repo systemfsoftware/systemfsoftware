@@ -18,7 +18,7 @@ import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect
 import { Effect } from 'effect'
 import { expect, vi } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 `
 
 ruleTester.run('behaviour-test-requires-gherkin', behaviourTestRequiresGherkin, {

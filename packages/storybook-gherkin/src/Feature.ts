@@ -156,6 +156,7 @@ const runStep = <TArgs>(
             Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.asVoid)),
           )
         ),
+        Effect.ensuring(Deferred.interrupt(done).pipe(Effect.asVoid)),
       )
     }),
   )

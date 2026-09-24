@@ -36,49 +36,49 @@ type PlaceOrderOutcome = Effect.Effect<
 >
 
 describe('SettlementStore.unitOfWork', () => {
-  it('runs the cell over the unit it hands out, needing no service', () => {
+  it('Should_RunTheCellOverTheUnitItHandsOut_When_NoServiceIsNeeded', () => {
     expect(store.unitOfWork((opened) => placeOrderCell(opened).run(request))).type.toBe<PlaceOrderOutcome>()
   })
 
-  it('hands its callback the open unit', () => {
+  it('Should_HandItsCallbackTheOpenUnit_When_UnitOfWorkRuns', () => {
     expect(store.unitOfWork((opened) => {
       expect(opened).type.toBe<SettlementUnit>()
       return Effect.void
     })).type.toBe<Effect.Effect<void, StoreUnavailable, never>>()
   })
 
-  it('takes a function of the unit, never an effect built outside it', () => {
+  it('Should_TakeAFunctionOfTheUnit_When_AnEffectBuiltOutsideItIsPassed', () => {
     expect(store.unitOfWork).type.toBeCallableWith((opened: SettlementUnit) => placeOrderCell(opened).run(request))
     expect(store.unitOfWork).type.not.toBeCallableWith(placeOrderCell(unit).run(request))
   })
 })
 
 describe('placeOrderCell', () => {
-  it('exists only over a unit', () => {
+  it('Should_ExistOnlyOverAUnit_When_CalledWithAUnit', () => {
     expect(placeOrderCell).type.toBeCallableWith(unit)
     expect(placeOrderCell).type.not.toBeCallableWith(forged)
   })
 })
 
 describe('SettlementUnit.load', () => {
-  it('reads through a unit in both dual forms', () => {
+  it('Should_ReadThroughAUnit_When_CalledInBothDualForms', () => {
     expect(load(unit, key)).type.toBe<Effect.Effect<OrderSnapshot, SettlementFailure, never>>()
     expect(pipe(unit, load(key))).type.toBe<Effect.Effect<OrderSnapshot, SettlementFailure, never>>()
   })
 
-  it('refuses a record that carries the brand but not the unit it came from', () => {
+  it('Should_RefuseARecordCarryingTheBrand_When_ItDidNotComeFromAUnit', () => {
     expect(load).type.toBeCallableWith(unit, key)
     expect(load).type.not.toBeCallableWith(forged, key)
   })
 })
 
 describe('SettlementUnit.settle', () => {
-  it('writes through a unit in both dual forms', () => {
+  it('Should_WriteThroughAUnit_When_CalledInBothDualForms', () => {
     expect(settle(unit, plan)).type.toBe<Effect.Effect<void, StoreUnavailable, never>>()
     expect(pipe(unit, settle(plan))).type.toBe<Effect.Effect<void, StoreUnavailable, never>>()
   })
 
-  it('refuses a record that carries the brand but not the unit it came from', () => {
+  it('Should_RefuseARecordCarryingTheBrand_When_ItDidNotComeFromAUnit', () => {
     expect(settle).type.toBeCallableWith(unit, plan)
     expect(settle).type.not.toBeCallableWith(forged, plan)
   })

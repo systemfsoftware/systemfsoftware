@@ -49,6 +49,10 @@ const twiceCachedRun = (review: Review) =>
     return { first, second, calls: model.calls() }
   }).pipe(Effect.provide(answering(answersForReview(review))))
 
-Differential.compare({ reference: uncachedRun, candidate: twiceCachedRun })
+Differential.compare({
+  name: 'a second run of the same review is answered from cache, asking the model once',
+  reference: uncachedRun,
+  candidate: twiceCachedRun,
+})
   .on(reviews)
   .assert((uncached, cached) => uncached === cached.second && cached.first === cached.second && cached.calls === 1)

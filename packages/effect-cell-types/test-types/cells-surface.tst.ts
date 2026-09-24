@@ -166,7 +166,7 @@ describe('the sandwich the chain builds', () => {
 })
 
 describe('the handler record the write holds exhaustive', () => {
-  it('Should_RefuseTheWrite_When_ADecisionTagHasNoHandler', () => {
+  it('Should_RefuseTheWrite_When_OneDecisionTagHasNoHandler', () => {
     const decided = Sandwich.named('cell.surface')(readTagged).decide(acceptTaggedCommand)
     expect<typeof decided.write>().type.toBeCallableWith(answerTagged)
     expect<typeof decided.write>().type.not.toBeCallableWith({
@@ -194,7 +194,7 @@ describe('the handler record the write holds exhaustive', () => {
     })
   })
 
-  it('Should_RefuseTheWrite_When_AHandlerKeyNamesNoVariant', () => {
+  it('Should_RefuseTheWrite_When_OneHandlerKeyNamesNoVariant', () => {
     const decided = Sandwich.named('cell.surface')(readTagged).decide(acceptTaggedCommand)
     expect<typeof decided.write>().type.toBeCallableWith(answerTagged)
     expect<typeof decided.write>().type.not.toBeCallableWith({

@@ -11,7 +11,7 @@ const PURE_ONLY = `import { it, layer } from '@systemfsoftware/effect-gherkin-sp
 import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { normalizeToolName } from './ToolName.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 Feature('x', () => {
   normalizeToolName('write')
 })

@@ -7,7 +7,7 @@
  * `StepError`, and the pipeline can be pre-seeded via `Gherkin.startWith`.
  */
 import { expect } from '@effect/vitest'
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   And,
   But,
@@ -25,7 +25,7 @@ import { Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Gherkin step combinators')
   .withLayer(Layer.empty)
@@ -423,11 +423,8 @@ Feature('Gherkin step combinators')
           }),
         )
         const fiber = yield* Effect.forkChild(pipeline)
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
         yield* Fiber.join(fiber)
         expect(attempts).toBe(3)
@@ -447,7 +444,6 @@ Feature('Gherkin step combinators')
           }),
         )
         const fiber = yield* Effect.forkChild(pipeline)
-        yield* Effect.yieldNow
         yield* TestClock.adjust('100 millis')
         const result = yield* Fiber.join(fiber).pipe(Effect.result)
         Result.match(result, {
@@ -483,11 +479,8 @@ Feature('Gherkin step combinators')
           }),
         )
         const fiber = yield* Effect.forkChild(pipeline)
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
         yield* Fiber.join(fiber)
         expect(calls).toBe(3)

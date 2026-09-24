@@ -217,6 +217,19 @@ export const layer: {
 export const getNodes = (self: Registry): ReadonlyMap<Atom.Atom | string, Node> => engineOf(self).getNodes()
 
 /**
+ * The current time according to the registry's clock.
+ *
+ * **Details**
+ *
+ * The clock is resolved once when the registry is built — from the fiber that
+ * builds it, or the platform clock outside any fiber — so a registry on the
+ * simulation kernel dehydrates with the kernel's time, not the wall clock.
+ *
+ * @since 4.0.0
+ */
+export const now = (self: Registry): number => engineOf(self).now()
+
+/**
  * Reads the current value of an atom.
  *
  * @since 4.0.0

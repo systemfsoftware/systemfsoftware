@@ -16,14 +16,14 @@
  */
 import { expect } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 
 import { fromObservable } from '@systemfsoftware/rx-effect'
 import { Observable, ReplaySubject } from 'rxjs'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<readonly A[], E, never> =>
   Stream.runCollect(stream).pipe(Effect.map((chunk) => Array.from(chunk)))

@@ -80,6 +80,14 @@ ${GUARD_END}`,
       filename: FILENAME,
     },
     {
+      name: 'Should_StaySilent_When_PredicateCallsTheGivenSubject',
+      code: `${SCHEMA_IMPORTS}
+${GUARD}
+it.prop('p', { of: [roundTrips], subject: decide, runs: 100 }, (subject, [v]) => subject(v) !== v || v.length >= 0)
+${GUARD_END}`,
+      filename: FILENAME,
+    },
+    {
       name: 'Should_StaySilent_When_CodecWrapsADomainFunction',
       code: `${SCHEMA_IMPORTS}
 ${GUARD}
@@ -89,6 +97,15 @@ ${GUARD_END}`,
     },
   ],
   invalid: [
+    {
+      name: 'Should_Report_When_PredicateIgnoresTheGivenSubject',
+      code: `${SCHEMA_IMPORTS}
+${GUARD}
+it.prop('p', { of: [roundTrips], subject: decide, runs: 100 }, (_subject, [v]) => v.length >= 0)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'noDomainFunction', data: NO_FUNCTION_DATA }],
+    },
     {
       name: 'Should_Report_When_PredicateIsDecodeAcceptanceOnly',
       code: `${SCHEMA_IMPORTS}

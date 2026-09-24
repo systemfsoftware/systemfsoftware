@@ -4,7 +4,7 @@ export const FOREIGN_RUNNER_EXPECTED = 'it and layer imported from @systemfsoftw
 export const FOREIGN_RUNNER_ACTUAL =
   'a test runner imported directly from vitest or @effect/vitest in a behaviour file' as const
 export const FOREIGN_RUNNER_FIX =
-  'import { it, layer } from @systemfsoftware/effect-gherkin-spec and build the suite with makeFeature({ it, layer })' as const
+  'import { it } from @systemfsoftware/effect-gherkin-spec and build the suite with makeFeature({ it })' as const
 
 export const MISSING_MAKE_FEATURE_NAME = 'a *.integration.test.ts without makeFeature' as const
 export const MISSING_MAKE_FEATURE_EXPECTED = 'makeFeature imported from @systemfsoftware/effect-gherkin-spec' as const

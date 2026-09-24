@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect, Equal, Hash, Layer, Option, Predicate, Result as EffectResult, Schema } from 'effect'
 import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.schema.js'
 
@@ -139,7 +139,7 @@ const taggedErrorCode = (result: TaggedSample): number => {
   )
 }
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Keeping the last good answer on screen when a retry fails')
   .withLayer(Layer.empty)

@@ -26,6 +26,11 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       filename: '/repo/pkg/tests/a.trace.test.ts',
     },
     {
+      name: 'Should_Allow_ConformanceTest_When_ConformanceSuffixIsSanctioned',
+      code: '',
+      filename: '/repo/pkg/tests/a.conformance.test.ts',
+    },
+    {
       name: 'Should_Allow_AnyFileInSrc_When_RuleInactiveUnderSrc',
       code: '',
       filename: '/repo/pkg/src/widget.ts',
@@ -34,6 +39,16 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       name: 'Should_Allow_BareTestUnderSrc_When_SuffixRuleIsOutsideSrcOnly',
       code: '',
       filename: '/repo/pkg/src/a.test.ts',
+    },
+    {
+      name: 'Should_Allow_BareTest_When_RunnerPackageDrivesVitestDirectly',
+      code: '',
+      filename: '/repo/packages/vitest/tests/runner.test.ts',
+    },
+    {
+      name: 'Should_Allow_ProbeFixture_When_RunnerPackageHoldsNestedRunProbes',
+      code: '',
+      filename: '/repo/packages/vitest-conformance/tests/__fixtures__/probes/expect/allowed.test.ts',
     },
   ],
   invalid: [

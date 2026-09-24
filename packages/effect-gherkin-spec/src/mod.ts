@@ -1,4 +1,4 @@
-export * from '@effect/vitest'
+export { it, layer } from '@effect/vitest'
 export { And, But, Gherkin, Given, Then, When } from './DoNotation.js'
 export type {
   AssertedPipeline,
@@ -35,7 +35,6 @@ export {
   type FeatureBuilderWithLayer,
   type FeatureBuilderWithScenarioLayer,
   type FeatureFn,
-  type FeatureLayerOptions,
   type FeatureSuiteOptions,
   makeFeature,
 } from './Feature.js'

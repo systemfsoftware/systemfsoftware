@@ -6,8 +6,10 @@ const readMissing = (record: { readonly missing?: number }): number => {
   return record.missing
 }
 
-it.effect('Should_ReportAfterFailedExpect_When_AThrowFollowsAFailedCheck', () =>
+const observed = (): number => 1
+
+it.effect('Should_ReportAfterFailedExpect_When_ThrowFollowsAFailedCheck', () =>
   Effect.gen(function*() {
     yield* Effect.acquireRelease(Effect.void, () => Effect.sync(() => readMissing({})))
-    expect(1).toEqual(2)
+    expect(observed()).toEqual(2)
   }))

@@ -13,7 +13,7 @@ const atSlot = (label: string, slot: number): Effect.Effect<void> =>
   })
 
 layer(Layer.empty, { concurrent: false })('a layer block shuffles by default', (it) => {
-  it.effect('T_One', () => atSlot('one', 1))
-  it.effect('T_Two', () => atSlot('two', 0))
-  it.effect('T_Three', () => atSlot('three', 2))
+  it.effect('Should_LandInItsSeededSlot_When_One', () => atSlot('one', 1))
+  it.effect('Should_LandInItsSeededSlot_When_Two', () => atSlot('two', 0))
+  it.effect('Should_LandInItsSeededSlot_When_Three', () => atSlot('three', 2))
 })

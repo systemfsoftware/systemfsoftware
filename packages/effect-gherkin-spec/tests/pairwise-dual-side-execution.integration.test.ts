@@ -7,11 +7,11 @@
  * behaviours are covered through the same scenario surface.
  */
 import { expect } from '@effect/vitest'
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, pairwiseFor, StepError, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref, Result } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 class Widget extends Context.Service<Widget, { readonly value: string }>()(
   '@systemfsoftware/effect-gherkin-spec/tests/pairwise-dual-side-execution.integration.test/Widget',

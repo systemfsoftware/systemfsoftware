@@ -49,6 +49,18 @@ if (import.meta.vitest !== undefined) {
       filename: '/repo/pkg/src/widget.ts',
     },
     {
+      name: 'Should_Allow_ExportedModuleBinding_When_LawfulPropNamesItAsSubject',
+      code: `
+export const decode = (x: number): number => x + 1
+const helper = (x: number): number => x + 1
+if (import.meta.vitest !== undefined) {
+  const { it } = await import('vitest')
+  it.prop('∀x_Decode_=Drawn', { of: [], subject: decode }, (subject, [x]) => subject(x) === helper(x))
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
       name: 'Should_Allow_NoVitestBlock_When_FileHasNone',
       code: `
 const helper = (x: number): number => x + 1

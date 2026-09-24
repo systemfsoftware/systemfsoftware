@@ -1,10 +1,10 @@
 import { expect } from '@effect/vitest'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { toDirectoryJSON } from '@systemfsoftware/npm-package'
 import { Effect, Exit, Layer } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
 
 Feature('Package tree memfs projection — DirectoryJSON to MemoryFileSystem')
