@@ -4,7 +4,6 @@ import {
   Gherkin,
   Given,
   it,
-  layer,
   makeFeature,
   Then,
   When,
@@ -13,7 +12,7 @@ import { Effect, Exit, Fiber, Layer, Ref } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Step lifecycle finalizers and fiber supervision')
   .withLayer(Layer.empty)

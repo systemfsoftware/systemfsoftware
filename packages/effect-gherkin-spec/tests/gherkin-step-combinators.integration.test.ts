@@ -6,7 +6,7 @@
  * Then/And/But tap the scope without binding, all failures surface as
  * `StepError`, and the pipeline can be pre-seeded via `Gherkin.startWith`.
  */
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   And,
   But,
@@ -25,7 +25,7 @@ import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Gherkin step combinators')
   .withLayer(Layer.empty)

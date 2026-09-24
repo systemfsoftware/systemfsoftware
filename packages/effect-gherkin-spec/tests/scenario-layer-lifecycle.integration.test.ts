@@ -1,4 +1,4 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
 import { expect } from 'vitest'
 
@@ -38,9 +38,9 @@ const scenarioWorkspaceLayer = Layer.effect(
   }),
 )
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
-Feature('A scenario fixture is opened and closed for each scenario')
+Feature('A scenario fixture is opened fresh for each scenario')
   .withLayer(lifecycleLayer)
   .withScenarioLayer(scenarioWorkspaceLayer)
   .body(({ scenario }) => {
@@ -63,18 +63,18 @@ Feature('A scenario fixture is opened and closed for each scenario')
     )
 
     scenario(
-      'A later scenario receives the next workspace after the previous one was released',
+      'A later scenario opens a fresh workspace instead of inheriting the earlier one',
       Gherkin.Do.pipe(
         Given('a fresh workspace for the later scenario')('workspace', () => Workspace),
         When('the later scenario reads its workspace marker')((s) =>
           Effect.sync(() => {
-            expect(s.workspace.marker).toBe('workspace-2')
+            expect(s.workspace.marker).toBe('workspace-1')
           })
         ),
-        Then('the previous workspace was released before this one opened')(() =>
+        Then('the earlier scenario left no open or released workspace behind')(() =>
           Effect.gen(function*() {
             const counters = yield* Lifecycle
-            expect(yield* Ref.get(counters)).toEqual({ opened: 2, closed: 1 })
+            expect(yield* Ref.get(counters)).toEqual({ opened: 1, closed: 0 })
           })
         ),
       ),

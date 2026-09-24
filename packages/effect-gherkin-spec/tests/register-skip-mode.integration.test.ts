@@ -1,10 +1,10 @@
-import { Gherkin, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { afterAll, expect } from 'vitest'
 
 const executions = { ran: 0 }
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature.skip('A suite registered in skip mode is not executed')
   .body(({ scenario }) => {

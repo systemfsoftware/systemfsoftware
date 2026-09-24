@@ -1,9 +1,12 @@
 /// <reference types="vitest/globals" />
 /// <reference types="vitest/importMeta" />
 import type { Vitest } from '@effect/vitest'
-import { Match, Option } from 'effect'
+import { Effect, Match, Option } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
+import type { TestContext } from 'vitest'
+import * as KernelCase from './KernelCase.js'
+import type { LiveCase } from './KernelCase.js'
 import type { Options } from './Suite.js'
 
 export type RegisterMode = 'run' | 'skip' | 'only'
@@ -38,38 +41,47 @@ export const invokeDescribe: {
   (mode: DescribeMode, suiteName: string, suiteOpts: Options | undefined): (fn: () => void) => void
   (mode: DescribeMode, suiteName: string, suiteOpts: Options | undefined, fn: () => void): void
 } = dual(4, invokeDescribeImpl)
-
 const pickTester = <R>(family: Vitest.Tester<R>, mode: RegisterMode): Vitest.Test<R> =>
   ({ skip: family.skip, only: family.only, run: family })[mode]
 
-/**
- * The live-clock case runner observes wall-clock time; the test-clock runner
- * shares the suite's controlled clock.
- */
-const caseClockFamily = (methodsIt: Vitest.Methods, useLiveClock: boolean): Vitest.Tester<Scope.Scope> =>
-  Match.value(useLiveClock).pipe(
-    Match.when(true, () => methodsIt.live),
-    Match.when(false, () => methodsIt.effect),
+const exploredBody = <A, E>(
+  body: (ctx: TestContext) => Effect.Effect<A, E, Scope.Scope>,
+): (ctx: TestContext) => Promise<void> =>
+(ctx) => KernelCase.explore(Effect.scoped(body(ctx)))
+
+const skipKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name) => {
+  methodsIt.skip(name, () => undefined)
+}
+
+const runKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name, body) => {
+  methodsIt(name, exploredBody(body))
+}
+
+const onlyKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name, body) => {
+  methodsIt.only(name, exploredBody(body))
+}
+
+const registerKernelCase = (methodsIt: Vitest.Methods, mode: RegisterMode): Vitest.Test<Scope.Scope> =>
+  Match.value(mode).pipe(
+    Match.when('skip', () => skipKernel(methodsIt)),
+    Match.when('only', () => onlyKernel(methodsIt)),
+    Match.when('run', () => runKernel(methodsIt)),
     Match.exhaustive,
   )
-
+/**
+ * A live-declared case runs on the live clock as before; a case without a
+ * live declaration runs under the kernel, exploring the profile's schedules.
+ */
 const selectCaseRunnerImpl = (
   methodsIt: Vitest.Methods,
   mode: RegisterMode,
-  useLiveClock: boolean,
-): Vitest.Test<Scope.Scope> => pickTester(caseClockFamily(methodsIt, useLiveClock), mode)
+  live: LiveCase | undefined,
+): Vitest.Test<Scope.Scope> => {
+  if (live !== undefined) return pickTester(methodsIt.live, mode)
+  return registerKernelCase(methodsIt, mode)
+}
 
 export const selectCaseRunner: {
-  (mode: RegisterMode, useLiveClock: boolean): (methodsIt: Vitest.Methods) => Vitest.Test<Scope.Scope>
-  (methodsIt: Vitest.Methods, mode: RegisterMode, useLiveClock: boolean): Vitest.Test<Scope.Scope>
+  (mode: RegisterMode, live: LiveCase | undefined): (methodsIt: Vitest.Methods) => Vitest.Test<Scope.Scope>
+  (methodsIt: Vitest.Methods, mode: RegisterMode, live: LiveCase | undefined): Vitest.Test<Scope.Scope>
 } = dual(3, selectCaseRunnerImpl)
-
-const selectLayeredRunnerImpl = <R>(
-  scopedIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>,
-  mode: RegisterMode,
-): Vitest.Test<R | Scope.Scope> => pickTester(scopedIt.effect, mode)
-
-export const selectLayeredRunner: {
-  <R>(mode: RegisterMode): (scopedIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>) => Vitest.Test<R | Scope.Scope>
-  <R>(scopedIt: Pick<Vitest.MethodsNonLive<R>, 'effect'>, mode: RegisterMode): Vitest.Test<R | Scope.Scope>
-} = dual(2, selectLayeredRunnerImpl)

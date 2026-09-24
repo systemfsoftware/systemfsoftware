@@ -39,9 +39,15 @@
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-sim-kernel": "workspace:^"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",

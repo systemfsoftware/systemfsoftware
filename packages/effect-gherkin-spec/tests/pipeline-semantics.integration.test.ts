@@ -4,7 +4,6 @@ import {
   Gherkin,
   Given,
   it,
-  layer,
   makeFeature,
   StepError,
   Then,
@@ -16,7 +15,7 @@ import { Effect, Fiber, Layer, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Gherkin pipeline execution semantics')
   .withLayer(Layer.empty)
