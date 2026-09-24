@@ -4,9 +4,9 @@
  * One Feature drives withLayer + live + withScope together so the
  * layered live path is exercised as a consumer would call it.
  */
-import { expect } from '@effect/vitest'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Clock, Context, Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })

@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { type EvalScore, ScoreEvalRecord, scoreEvalRecord } from '../score-eval-record.workflow.js'

@@ -22,7 +22,7 @@ const recordHarnessBindings = (node: ESTree.ImportDeclaration, bindings: Set<str
 }
 
 const isForeignRunnerImport = (node: ESTree.ImportDeclaration): boolean =>
-  typeof node.source.value === 'string' && FOREIGN_RUNNERS.has(node.source.value)
+  typeof node.source.value === 'string' && FOREIGN_RUNNERS[node.source.value] === true
 
 export const differentialTestRequiresHarness = defineRule({
   meta,
@@ -43,7 +43,8 @@ export const differentialTestRequiresHarness = defineRule({
             data: {
               name: `runner import from ${String(node.source.value)} in a differential test file`,
               expected: HARNESS_PRESCRIPTION,
-              actual: 'a direct vitest / @effect/vitest runner import bypasses the differential oracle',
+              actual:
+                'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the differential oracle',
               fix: `delete the runner import; ${HARNESS_PRESCRIPTION}`,
             },
           })

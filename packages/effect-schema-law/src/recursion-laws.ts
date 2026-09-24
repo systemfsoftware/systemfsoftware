@@ -1,5 +1,5 @@
 /// <reference types="vitest/import-meta" />
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Effect, Function, Schema as S, SchemaAST } from 'effect'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 
@@ -383,7 +383,7 @@ export const recursionLaws: {
 )
 
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Schema: S, Exit } = await import('effect')
   type Codec = S.Codec<unknown, unknown>
   const MAX_DEPTH = 8

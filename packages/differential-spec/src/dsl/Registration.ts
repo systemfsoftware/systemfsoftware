@@ -1,4 +1,4 @@
-import type { TestContext, TestOptions } from '@effect/vitest'
+import type { TestContext, TestOptions } from '@systemfsoftware/vitest'
 import { Effect, Option } from 'effect'
 import type { DualExecutionSupervisorOptions, HostBound } from '../core/DualExecutionSupervisor.js'
 

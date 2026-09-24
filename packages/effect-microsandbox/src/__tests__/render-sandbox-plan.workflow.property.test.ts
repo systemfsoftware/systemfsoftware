@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'

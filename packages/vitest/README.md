@@ -4,7 +4,7 @@ A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packa
 
 Everything upstream exports is still exported: `it`, `test`, `it.effect`, `it.live`, `it.scoped`, `it.each`, `it.layer`, `layer`, `describe`, `expect`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods`, `describeWrapped`, and `export * from "vitest"`. Two things do differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower — both are listed under [Compatibility](#compatibility-with-effectvitest). On top of that surface the fork adds six things: `owned`, `recordAssertion`, `captureRunBinding`, `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `layer`, `it.layer`, `flakyTest`, `it.prop`, `it.effect`, `it.live`, `describeWrapped` and `it` itself also take a data-last form (`it.effect(body, timeout?)(name)`, `layer(options)(L)`, `flakyTest(timeout?)(effect)`), so they pipe.
 
-The defaults are forced, not opted into. Every package in this workspace resolves `@effect/vitest` here through a pnpm alias, so libraries keep importing from `@effect/vitest` and never name this package.
+The defaults are forced, not opted into. Every package in this workspace imports `@systemfsoftware/vitest` by its own name, and published packages peer on it directly — nothing resolves through an alias to the upstream specifier.
 
 ## Install
 
@@ -12,16 +12,11 @@ The defaults are forced, not opted into. Every package in this workspace resolve
 pnpm add -D @systemfsoftware/vitest
 ```
 
-To keep the upstream specifier — the one every library published against `@effect/vitest` expects — alias it:
-
-```jsonc
-// package.json
-{ "devDependencies": { "@effect/vitest": "workspace:@systemfsoftware/vitest@*" } }
-```
+Every workspace package and published library imports `@systemfsoftware/vitest` by its own name — there is no alias to the upstream specifier, so a manifest names the runner its tests actually run. Outside a pnpm workspace, install it directly:
 
 ```bash
 # outside a pnpm workspace
-npm install -D @effect/vitest@npm:@systemfsoftware/vitest
+npm install -D @systemfsoftware/vitest
 ```
 
 > [!NOTE]
@@ -30,7 +25,7 @@ npm install -D @effect/vitest@npm:@systemfsoftware/vitest
 ## Quick start
 
 ```ts
-import { expect, it, layer } from '@effect/vitest'
+import { expect, it, layer } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 class Store extends Context.Service<Store, Ref.Ref<ReadonlyArray<string>>>()('Store') {
@@ -80,7 +75,7 @@ A failure in a shuffled block names the seed the run used. Pass that seed back w
 Effect bodies run on virtual time that advances only when the test's fibers are idle. `Effect.sleep("3 seconds")` returns without waiting; on a deadline tie the background sleepers wake before the test fiber; fractional-millisecond schedules work.
 
 ```ts
-import { expect, it } from '@effect/vitest'
+import { expect, it } from '@systemfsoftware/vitest'
 import { Clock, Effect } from 'effect'
 
 it.effect('three seconds pass at once', () =>
@@ -92,7 +87,7 @@ it.effect('three seconds pass at once', () =>
   }))
 ```
 
-`TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@effect/vitest/TestClock`, through the shared Vitest config's `effect/TestClock` alias.
+`TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@systemfsoftware/vitest/TestClock`, through the shared Vitest config's `effect/TestClock` alias.
 
 ## Refusals
 
@@ -118,7 +113,7 @@ A presence refusal reads exactly like this:
 A property names the function under test. It runs `runs` times; omit `runs` and the run's configured default applies:
 
 ```ts
-import { expect, it } from '@effect/vitest'
+import { expect, it } from '@systemfsoftware/vitest'
 import { Schema as S } from 'effect'
 
 const sort = (xs: ReadonlyArray<number>): ReadonlyArray<number> => [...xs].sort((a, b) => a - b)
@@ -181,7 +176,7 @@ A library that registers tests for its users wires in with two calls.
 `owned(effect)` marks a region where `expect` throws instead of recording softly, so the enclosing Effect sees a failed check as a failure in its cause:
 
 ```ts
-import { owned } from '@effect/vitest'
+import { owned } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 // A library wraps the user's step; a failed check inside fails the step.
@@ -191,7 +186,7 @@ export const runStep = <A, E, R>(step: Effect.Effect<A, E, R>): Effect.Effect<A,
 `recordAssertion()` counts an Effect-native check as an assertion, so a test whose only judgement is the library's own passes the no-assertion gate:
 
 ```ts
-import { recordAssertion } from '@effect/vitest'
+import { recordAssertion } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 export const recordVerdict = (): Effect.Effect<void> => Effect.sync(recordAssertion)
@@ -200,7 +195,7 @@ export const recordVerdict = (): Effect.Effect<void> => Effect.sync(recordAssert
 `captureRunBinding` is the test's run binding. `bind` re-provides it to an effect a library runs on a runtime of its own — its own scheduler, a worker, a simulation kernel — so the checks inside it count as that test's assertions, report softly, and see the same `owned` regions as the test. Capture it from the test's own fiber and bind the effect before handing it to the other runtime:
 
 ```ts
-import { captureRunBinding } from '@effect/vitest'
+import { captureRunBinding } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 export const runOnOwnScheduler = <A, E>(
@@ -215,7 +210,7 @@ export const runOnOwnScheduler = <A, E>(
 `VitestTestContext` is the running Vitest `TestContext` under the key `vitestTestContextKey`, provided on every test the fork runs. A library that carries its own view of the task context builds it on that key, so a case lane and a property lane read the same context:
 
 ```ts
-import { vitestTestContextKey } from '@effect/vitest'
+import { vitestTestContextKey } from '@systemfsoftware/vitest'
 import { Context } from 'effect'
 
 export const TaskRef = Context.Reference<{ annotate?: (message: string) => void } | null>(vitestTestContextKey, {
@@ -232,7 +227,7 @@ Everything upstream exports is still exported, and the fork adds behaviour rathe
 - `skipIf` and `runIf` take a `boolean` condition where upstream took `unknown`, and `each` cases must be objects (`T extends object`). An `unknown` or `any` condition is refused by this repo's lint.
 - `assertTrue` takes a `boolean` where upstream took `unknown`, for the same reason.
 
-What else differs is what runs by default, what `expect` refuses, and what `toEqual` means — that is the reason for the alias.
+What else differs is what runs by default, what `expect` refuses, and what `toEqual` means — that is why the fork is imported under its own name rather than aliasing upstream.
 
 This package is part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
 

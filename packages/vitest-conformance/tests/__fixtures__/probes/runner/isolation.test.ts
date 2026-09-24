@@ -1,4 +1,4 @@
-import { expect, layer } from '@effect/vitest'
+import { expect, layer } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { Context } from 'effect'
 import { Layer } from 'effect'

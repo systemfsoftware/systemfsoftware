@@ -54,7 +54,11 @@ export const CONFORMANCE_PACKAGE = '@systemfsoftware/conformance-spec' as const
 
 export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 
-export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
+export const FOREIGN_RUNNERS: Record<string, true> = {
+  'vitest': true,
+  '@effect/vitest': true,
+  '@systemfsoftware/vitest': true,
+}
 
 export const RAW_VITEST_PACKAGES: Record<string, true> = {
   'effect-spec-runtime': true,

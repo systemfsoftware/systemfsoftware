@@ -117,7 +117,7 @@ export const chooseRestartStrategy = Workflow.make({
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const previousOrNegInf = (xs: readonly number[], i: number): number =>
     Option.getOrElse(Option.fromNullishOr(xs[i - 1]), () => Number.NEGATIVE_INFINITY)

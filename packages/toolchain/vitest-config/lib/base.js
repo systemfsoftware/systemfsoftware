@@ -93,7 +93,7 @@ export const sharedConfig = {
   // the fork's compat module; on its virtual time `adjust` lets that much time pass.
   resolve: {
     ...sourceResolveConditions.resolve,
-    alias: { 'effect/TestClock': '@effect/vitest/TestClock' },
+    alias: { 'effect/TestClock': '@systemfsoftware/vitest/TestClock' },
   },
   test: {
     globals: false,

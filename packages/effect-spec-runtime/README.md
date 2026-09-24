@@ -21,7 +21,7 @@ Suite.openShared(bindings, config, { layer: DatabaseFixture, excludeTestServices
   register('reads through the shared database', effect, 'run')
 })
 
-- `bindings` (`Suite.Bindings`) are the `@effect/vitest` `it` methods you run under.
+- `bindings` (`Suite.Bindings`) are the `@systemfsoftware/vitest` `it` methods you run under.
 - `config` (`Suite.Config`) names the suite, picks the describe collector (`describe` | `skip` | `only`, `Suite.DescribeMode`), carries Vitest `options`, and optionally declares the whole suite live with `live: { reason }`.
 - A live case carries a required reason instead of a boolean, so the run report can name every live case: `config` takes it as `live: { reason }` and a registration takes it as `register('waits on real I/O', effect, 'run', { reason: 'waits on a socket' })`; a case that waits on the kernel's test clock calls `TestClock.adjust` or `TestClock.setTime` inside its body.
 - Each entry point hands `use` a registrar (`Suite.RegisterFn<B, E, R>`); the registrar's body and error channels are yours to declare, and its requirement channel is the union of the layer services it hands you. A shared layer is acquired once for the whole suite; a per-case layer is acquired and finalized around every case.
@@ -41,4 +41,4 @@ pnpm add @systemfsoftware/effect-spec-runtime@workspace:^
 ````
 
 > [!NOTE]
-> `effect`, `@effect/vitest`, and `vitest` are peer dependencies — you bring your own.
+> `effect`, `@systemfsoftware/vitest`, and `vitest` are peer dependencies — you bring your own.

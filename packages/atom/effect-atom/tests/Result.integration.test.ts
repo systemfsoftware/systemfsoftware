@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Cause, Effect, Equal, Hash, Layer, Option, Predicate, Result as EffectResult, Schema } from 'effect'
 import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.schema.js'
 

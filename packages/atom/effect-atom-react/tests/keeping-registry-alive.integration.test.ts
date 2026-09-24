@@ -1,7 +1,7 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import * as Effect from 'effect/Effect'

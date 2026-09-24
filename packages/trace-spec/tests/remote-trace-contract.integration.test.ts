@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, Rel, RemoteObservation, Stimulus, TempoTraceStore } from '@systemfsoftware/trace-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
 import type { HttpClientError } from 'effect/unstable/http/HttpClientError'

@@ -47,7 +47,6 @@
     "mutation:full": "stryker run --force"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -62,6 +61,7 @@
     "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",

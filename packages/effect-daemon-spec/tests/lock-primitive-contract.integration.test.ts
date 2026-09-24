@@ -1,8 +1,8 @@
-import { expect } from '@effect/vitest'
 import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Duration, Effect, Fiber, Layer, Result } from 'effect'
 import {
   mkBlockingStatefulLockPrimitive,

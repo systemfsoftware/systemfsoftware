@@ -2,13 +2,13 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { isRawVitestPackage } from './path.js'
 import {
+  FOREIGN_VITEST_SOURCES,
   meta,
   VIOLATION_ACTUAL,
   VIOLATION_EXPECTED,
   VIOLATION_FIX,
   VIOLATION_NAME,
-  VITEST_SOURCE,
-} from './vitest-from-effect-vitest.config.js'
+} from './vitest-from-systemfsoftware-vitest.config.js'
 
 export type MessageIds = 'vitestImport'
 
@@ -20,10 +20,10 @@ const isTypeOnly = (node: ESTree.ImportDeclaration): boolean => {
   )
 }
 
-const isVitestLiteral = (node: ESTree.Expression): boolean =>
-  node.type === 'Literal' && typeof node.value === 'string' && node.value === VITEST_SOURCE
+const isForeignVitestLiteral = (node: ESTree.Expression): boolean =>
+  node.type === 'Literal' && typeof node.value === 'string' && FOREIGN_VITEST_SOURCES[node.value] === true
 
-export const vitestFromEffectVitest = defineRule({
+export const vitestFromSystemfsoftwareVitest = defineRule({
   meta,
   create(context: Context) {
     if (isRawVitestPackage(context.filename)) return {}
@@ -41,12 +41,12 @@ export const vitestFromEffectVitest = defineRule({
     }
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
-        if (node.source.value !== VITEST_SOURCE) return
+        if (FOREIGN_VITEST_SOURCES[node.source.value] !== true) return
         if (isTypeOnly(node)) return
         report(node)
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        if (!isVitestLiteral(node.source)) return
+        if (!isForeignVitestLiteral(node.source)) return
         report(node)
       },
     }

@@ -5,9 +5,9 @@
  * generates that package's law suite and reads the emitted body: which
  * schemas earned a law pair and which module each law binds.
  */
-import { afterAll, expect } from '@effect/vitest'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
+import { afterAll, expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

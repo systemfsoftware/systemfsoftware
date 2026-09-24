@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import * as Schema from 'effect/Schema'
 
 const sorted = (xs: ReadonlyArray<number>): ReadonlyArray<number> => [...xs].sort((a, b) => a - b)

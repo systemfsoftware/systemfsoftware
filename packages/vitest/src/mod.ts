@@ -320,7 +320,7 @@ export const live: Vitest.Tester<Scope.Scope> = internal.live
  * @since 4.0.0
  *
  * ```ts
- * import { assert, layer } from "@effect/vitest"
+ * import { assert, layer } from "@systemfsoftware/vitest"
  * import { Effect, Layer, Context } from "effect"
  *
  * class Foo extends Context.Service<Foo, "foo">()("Foo") {

@@ -1,5 +1,5 @@
 /// <reference types="vitest/importMeta" />
-import { vitestTestContextKey } from '@effect/vitest'
+import { vitestTestContextKey } from '@systemfsoftware/vitest'
 import { Context, Effect, Option, Schema } from 'effect'
 import { dual } from 'effect/Function'
 
@@ -51,7 +51,7 @@ export const provideTaskRef: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const Labelled = Schema.Struct({ tag: Schema.String })
 

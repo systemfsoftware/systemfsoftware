@@ -1,4 +1,4 @@
-import { describe, it } from '@effect/vitest'
+import { describe, it } from '@systemfsoftware/vitest'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Num from 'effect/Number'

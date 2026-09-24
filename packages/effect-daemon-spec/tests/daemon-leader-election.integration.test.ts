@@ -1,8 +1,8 @@
-import { expect } from '@effect/vitest'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import type { LockConfig } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Duration, Effect, Fiber, Layer, Match, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 

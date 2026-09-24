@@ -1,7 +1,7 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Layer, Path } from 'effect'
 
 import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'

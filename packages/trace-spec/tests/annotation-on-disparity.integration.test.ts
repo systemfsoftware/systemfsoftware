@@ -1,6 +1,6 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Layer } from 'effect'
 import { startVitest } from 'vitest/node'
 import type { Reporter, RunnerTestFile } from 'vitest/node'

@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
+import { expect } from '@systemfsoftware/vitest'
 import { DateTime, Effect, Encoding, Result, Schema as S } from 'effect'
 import {
   AllocatedSplit,

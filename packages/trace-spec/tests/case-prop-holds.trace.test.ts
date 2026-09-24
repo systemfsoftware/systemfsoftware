@@ -1,6 +1,6 @@
-import { it } from '@effect/vitest'
 import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import { it } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { singleProbeInputs } from './__fixtures__/probe-arbitrary.schema.js'
 

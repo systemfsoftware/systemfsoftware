@@ -1,9 +1,9 @@
-import { expect } from '@effect/vitest'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Fiber, Layer, Result } from 'effect'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 

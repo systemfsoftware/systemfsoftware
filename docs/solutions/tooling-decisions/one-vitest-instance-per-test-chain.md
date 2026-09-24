@@ -6,7 +6,7 @@ problem_type: tooling_decision
 component: tooling
 severity: medium
 applies_when:
-  - A workspace package declares `@effect/vitest` (or any vitest plugin that imports vitest internals) while the workspace resolves more than one vitest build
+  - A workspace package declares `@systemfsoftware/vitest` (or any vitest plugin that imports vitest internals) while the workspace resolves more than one vitest build
   - Snapshot matchers throw "SnapshotClient.setup()" errors that most cases in the same file do not reproduce
   - pnpm install output or `pnpm why vitest` shows two vitest paths differing only in peer-suffix hash
 root_cause: dependency_duplicate
@@ -42,7 +42,7 @@ Repair is deduplicating the peer driver — `pnpm dedupe` when the contexts are 
 
 ## Architectural invariants
 
-- **Single-instance invariant:** for every workspace importer whose link closure reaches `@effect/vitest` — as a declarer or as a consumer that links one — the vitest copy `@effect/vitest` loads and the vitest copy the importer runs must realpath to the same file. A consumer without its own `@effect/vitest` inherits the edge of the nearest declarer in its link reach. Equality is per-importer and per-physical-path; version-string equality proves nothing.
+- **Single-instance invariant:** for every workspace importer whose link closure reaches `@systemfsoftware/vitest` — as a declarer or as a consumer that links one — the vitest copy `@systemfsoftware/vitest` loads and the vitest copy the importer runs must realpath to the same file. A consumer without its own `@systemfsoftware/vitest` inherits the edge of the nearest declarer in its link reach. Equality is per-importer and per-physical-path; version-string equality proves nothing.
 - **The invariant lives in the install, not the tests.** No test-level workaround can reunify two module registries. Repair where the fork is created: deduplicate the peer driver (`pnpm dedupe` when the peer contexts are accidental, a single-version override in the workspace settings when a transitive peer genuinely forks them).
 - **Detecting relapse without a standing gate:** `pnpm why vitest` listing two physical paths (same version, different `.pnpm` suffix) is the fork, already present. `pnpm dedupe --check` fails when overlapping ranges resolve to separate builds — run it when snapshot-state errors appear, not as a standing chain member; the guard class that re-derives pnpm's resolution by hand was rejected in review as cargo cult.
 

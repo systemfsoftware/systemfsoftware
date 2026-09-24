@@ -93,7 +93,7 @@ export const forbid: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published module graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const DeclaredSpan = Schema.Struct({ id: Schema.String, name: Schema.String })
   const LAW_ATTRS = Schema.Struct({})

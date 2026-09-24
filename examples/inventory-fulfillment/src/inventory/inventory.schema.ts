@@ -134,7 +134,7 @@ const stockPageSizeDecodes = (value: number): boolean => Result.isSuccess(S.deco
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so a static
   // import would enter the published module graph (packages/effect-memfs/src/driver-values.ts).
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   it.prop(
     '∀s_SkuIdRefusal_≡NonEmpty',

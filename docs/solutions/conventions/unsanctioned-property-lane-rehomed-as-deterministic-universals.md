@@ -63,7 +63,7 @@ Place Cell arrow-law coverage in `tests/*.integration.test.ts` as deterministic-
 
 ```ts
 // src/__tests__/cell-arrows.property.test.ts — never sanctioned
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 
 it.prop(
   'id is both-sided identity',

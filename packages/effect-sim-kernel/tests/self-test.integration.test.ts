@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { firstRaceFinding, guardedInOneStep, raceValueOf, wrapperVariants } from './__fixtures__/selfTestFixtures.js'
 import type { RaceFinding, WrapperVariant } from './__fixtures__/selfTestFixtures.js'

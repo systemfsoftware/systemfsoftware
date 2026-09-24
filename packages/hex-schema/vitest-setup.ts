@@ -1,3 +1,3 @@
-import { addEqualityTesters } from '@effect/vitest'
+import { addEqualityTesters } from '@systemfsoftware/vitest'
 
 addEqualityTesters()

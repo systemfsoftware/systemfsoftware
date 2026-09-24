@@ -1,4 +1,4 @@
-import { describe, it, recordAssertion } from '@effect/vitest'
+import { describe, it, recordAssertion } from '@systemfsoftware/vitest'
 import { Deferred } from 'effect'
 import { Effect } from 'effect'
 

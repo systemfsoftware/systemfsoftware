@@ -28,8 +28,8 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/effect-sim-kernel": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "effect": "catalog:",
     "fast-check": "catalog:"
   },

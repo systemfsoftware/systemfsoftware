@@ -6,7 +6,6 @@
  * Then/And/But tap the scope without binding, all failures surface as
  * `StepError`, and the pipeline can be pre-seeded via `Gherkin.startWith`.
  */
-import { expect } from '@effect/vitest'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   And,
@@ -20,6 +19,7 @@ import {
   VitestTaskRef,
   When,
 } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Chunk, Effect, Fiber, Layer, Result } from 'effect'
 import { Schema } from 'effect'
 import { TestClock } from 'effect/testing'
