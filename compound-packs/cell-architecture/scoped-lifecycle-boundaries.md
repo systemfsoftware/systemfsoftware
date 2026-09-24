@@ -56,4 +56,19 @@ Effect.scoped(
 )
 ```
 
+### 4. Supervisor-Owned Child Scopes
+
+A supervisor's job is to close child lifetimes, so rule 2 needs its boundary stated. The supervisor forks one sub-scope per child incarnation from the scope its own running handle was acquired in (`Scope.fork`). A child's resources live in that sub-scope and nowhere else. The only operation that closes it is the medium's owned shutdown, executed by the supervisor's `write` phase after the pure decide phase chose the stop. That write-phase closure is the lawful exception to rule 2: it closes a scope the supervisor owns and the pipeline downstream of it does not read. Closing the supervisor's own scope still finalizes every child sub-scope in reverse start order, so a supervisor never leaks a child when its caller exits.
+
+```ts
+// WRONG: the child lives in the supervisor's scope, so stopping it means closing the supervisor
+yield * Effect.forkScoped(child.run)
+
+// RIGHT: one sub-scope per incarnation, closed only by the medium's owned shutdown in `write`
+const childScope = yield * Scope.fork(supervisorScope)
+const started = yield * medium.start(program).pipe(Scope.provide(childScope))
+// later, in the write handler for a Stop decision:
+yield * medium.stop(started, mode) // uninterruptible; closes childScope
+```
+
 Gate: `type-checker`, `review` — unclosed scopes track `Scope` in `R` until wrapped in `Effect.scoped`; review that a blueprint provides `.scoped` with finalizers and exposes no unmanaged imperative lifecycle hooks, and that teardown escalates through the handle's operations in reverse acquisition order.
