@@ -6,37 +6,7 @@
 
 // @public (undocumented)
 export namespace Atom {
-    export { Atom, AtomContext, AtomResultFn, AtomRuntime, Failure, FnContext, Interrupt, PullResult, PullSuccess, RegistryRuntimeFactory, Reset, RuntimeFactory, Serializable, SerializableJson, SerializableTypeId, ServerValue, ServerValueTypeId, SharedRuntimeFactory, Success, Type, TypeId$1 as TypeId, With, WithoutSerializable, Writable, WritableTypeId, WriteContext, autoDispose, batch, context, debounce, family, fn, fnSync, get, getResult, getServerValue, initialValue, isAtom, isSerializable, isWritable, keepAlive, kvs, make, makeRead, makeReadWith, makeRefreshOnSignal, makeWith, map, mapResult, modify, mount, optimistic, optimisticFn, pull, readable, refresh, refreshOnWindowFocus, runtime, searchParam, serializable, set, setIdleTTL, setLazy, subscriptionRef, swr, toStream, toStreamResult, transform, update, windowFocusSignal, withEquality, withFallback, withLabel, withReactivity, withRefresh, withServerValue, withServerValueInitial, writable };
-}
-
-// @public (undocumented)
-export namespace AtomHttpApi {
-    export { AtomHttpApiClient, Service };
-}
-
-// @public (undocumented)
-export namespace AtomRef {
-    export { AtomRef, Collection, ReadonlyRef, TypeId, collection, make };
-}
-
-// @public (undocumented)
-export namespace AtomRpc {
-    export { AtomRpcClient, Service };
-}
-
-// @public (undocumented)
-export namespace Hydration {
-    export { DehydratedAtom, DehydratedAtomValue, dehydrate, hydrate };
-}
-
-// @public (undocumented)
-export namespace Registry {
-    export { AtomRegistry, Node, Registry, RegistryImpl, TypeId, batch$1 as batch, getResult$1 as getResult, isAtomRegistry, layer, layerOptions, make$1 as make, mount$1 as mount, toStream$1 as toStream, toStreamResult$1 as toStreamResult };
-}
-
-// @public (undocumented)
-export namespace Result {
-    export { Builder, Defect, Failure, Initial, Interrupt, Result, Schema, Success, TypeId, With, all, builder, cause, error, fail, failWith, failWithPrevious, failure, failureWithPrevious, flatMap, fromExit, fromExitWithPrevious, getOrElse, getOrThrow, initial, isResult as isAsyncResult, isFailure, isInitial, isInterrupted, isNotInitial, isResult, isSuccess, isWaiting, map, match, matchWithError, matchWithWaiting, replacePrevious, success, successWith, toExit, touch, value, waiting, waitingFrom };
+    export { async_result_d_exports as AsyncResult, Atom, AtomContext, AtomResultFn, AtomRuntime, Failure, FnContext, atom_http_api_service_d_exports as HttpApi, hydration_d_exports as Hydration, Interrupt, PullResult, PullSuccess, atom_ref_handle_d_exports as Ref, registry_handle_d_exports as Registry, RegistryRuntimeFactory, Reset, atom_rpc_service_d_exports as Rpc, RuntimeFactory, Serializable, SerializableJson, SharedRuntimeFactory, Success, Type, TypeId$1 as TypeId, With, WithoutSerializable, Writable, WriteContext, autoDispose, batch, context, debounce, family, fn, fnSync, get$1 as get, getResult, getServerValue, initialValue, isAtom, isSerializable, isWritable, keepAlive, kvs, make$1 as make, makeRead, makeReadWith, makeRefreshOnSignal, makeWith, map$1 as map, mapResult, modify, mount, optimistic, optimisticFn, pull, readable, refresh, refreshOnWindowFocus, searchParam, serializable, set$1 as set, setIdleTTL, setLazy, subscriptionRef, swr, toStream, toStreamResult, transform, update$1 as update, windowFocusSignal, withEquality, withFallback, withLabel, withReactivity, withRefresh, withServerValue, withServerValueInitial, writable };
 }
 
 // (No @packageDocumentation comment for this package)

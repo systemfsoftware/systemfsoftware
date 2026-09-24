@@ -4,14 +4,7 @@ import { defineConfig } from 'tsdown'
 type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
-  '.': './dist/index.d.ts',
-  './Atom': './dist/Atom.d.ts',
-  './AtomRef': './dist/AtomRef.d.ts',
-  './AtomRpc': './dist/AtomRpc.d.ts',
-  './AtomHttpApi': './dist/AtomHttpApi.d.ts',
-  './Hydration': './dist/Hydration.d.ts',
-  './Registry': './dist/Registry.d.ts',
-  './Result': './dist/Result.d.ts',
+  '.': './dist/mod.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -34,14 +27,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 export default defineConfig({
   ...quietBuild,
   entry: {
-    index: './src/index.ts',
-    Atom: './src/Atom.ts',
-    AtomRef: './src/AtomRef.ts',
-    AtomRpc: './src/AtomRpc.ts',
-    AtomHttpApi: './src/AtomHttpApi.ts',
-    Hydration: './src/Hydration.ts',
-    Registry: './src/Registry.ts',
-    Result: './src/Result.ts',
+    mod: './src/mod.ts',
   },
   format: 'esm',
   dts: true,

@@ -1,7 +1,5 @@
-import { RegistryContext, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
@@ -26,8 +24,8 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
             Effect.sync(() => {
               vi.useFakeTimers()
               const atom = Atom.make<number, never>(Effect.never)
-              const first = AtomRegistry.make({ defaultIdleTTL: 5 })
-              const second = AtomRegistry.make({ defaultIdleTTL: 5 })
+              const first = Atom.Registry.make({ defaultIdleTTL: 5 })
+              const second = Atom.Registry.make({ defaultIdleTTL: 5 })
               return { atom, first, second }
             }),
         ),
@@ -36,9 +34,9 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
           (s) =>
             Effect.sync(() => {
               function Comp({ id }: { readonly id: string }) {
-                const result = useAtomSuspense(s.ctx.atom)
+                const result = AtomReact.useAtomSuspense(s.ctx.atom)
                 let value = 0
-                if (AsyncResult.isSuccess(result)) {
+                if (Atom.AsyncResult.isSuccess(result)) {
                   value = result.value
                 }
                 return React.createElement('div', { 'data-testid': `${id}-value` }, value)
@@ -46,7 +44,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
 
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: s.ctx.first },
                   React.createElement(
                     Suspense,
@@ -57,7 +55,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
               )
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: s.ctx.second },
                   React.createElement(
                     Suspense,
