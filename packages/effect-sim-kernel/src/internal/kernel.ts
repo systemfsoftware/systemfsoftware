@@ -389,7 +389,16 @@ const resumeExternallyThrough = (
   return undefined
 }
 
-const dispatchEvaluate = (
+/**
+ * A fiber's first evaluation inside a step is a start, not a resume: Effect runs
+ * it on the caller's stack (`startImmediately`, `runFork`), and a child that
+ * finishes there never joins its parent's children. Queuing it would let the
+ * parent exit first and interrupt a child Effect had already finished.
+ */
+const startsInStep = (fiber: AnyFiber, kernel: Kernel): boolean =>
+  kernel.firstEvaluation(fiber) && kernel.phase === 'step'
+
+const queuedOrObserved = (
   fiber: AnyFiber,
   kernel: Kernel,
   original: MethodFunction,
@@ -397,6 +406,16 @@ const dispatchEvaluate = (
 ): Field => {
   if (isResumingRun(fiber, kernel)) return resumeExternallyThrough(fiber, kernel, original, args)
   return dispatchObserved(fiber, kernel, original, args)
+}
+
+const dispatchEvaluate = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field => {
+  if (startsInStep(fiber, kernel)) return dispatchObserved(fiber, kernel, original, args)
+  return queuedOrObserved(fiber, kernel, original, args)
 }
 
 const interruptAgain = (fiber: AnyFiber, args: ReadonlyArray<Field>) => (): void => {
@@ -463,6 +482,8 @@ export interface Kernel {
   effectDefault(): Decision
   step(input: StepInput): void
   resumeExternally(fiber: AnyFiber, run: () => void): void
+  /** True the first time `fiber` is evaluated in this run, false after. */
+  firstEvaluation(fiber: AnyFiber): boolean
   /** Runs `after` right after `fiber`'s queued resume; false when none is queued. */
   afterQueuedResume(fiber: AnyFiber, after: () => void): boolean
   observeShared(target: object): void
@@ -492,6 +513,7 @@ export interface MakeKernelOptions {
 export const makeKernel = (options: MakeKernelOptions): Kernel => {
   const pending: Array<Task> = []
   const fibers = new Set<AnyFiber>()
+  const evaluated = new WeakSet<AnyFiber>()
   const steps: Array<StepRecord> = []
   const decisions: Array<Decision> = []
   const escapes: Array<Escape> = []
@@ -581,14 +603,26 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     forcing = fiber
   }
 
+  /**
+   * A fiber evaluated inside another fiber's slice (`startImmediately`, a nested
+   * runtime) runs on its parent's stack: a slice would hand control straight
+   * back to the parent, which Effect never does within its op budget, so such a
+   * fiber yields only where Effect's own scheduler would.
+   */
+  const runsNested = (fiber: AnyFiber): boolean => ranInTask !== fiber
+
+  const effectWouldYield = (fiber: AnyFiber): boolean => fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield
+
+  const slicedByUs = (fiber: AnyFiber): boolean => {
+    if (!opLimitExceeded(fiber)) return false
+    noteYieldedByUs(fiber)
+    return true
+  }
+
   const shouldYield = (fiber: AnyFiber): boolean => {
     fibers.add(fiber)
     noteFirstRan(fiber)
-    if (opLimitExceeded(fiber)) {
-      noteYieldedByUs(fiber)
-      return true
-    }
-    return false
+    return runsNested(fiber) ? effectWouldYield(fiber) : slicedByUs(fiber)
   }
 
   const isForcing = (owner: AnyFiber | undefined): boolean => owner !== undefined && owner === forcing
@@ -748,6 +782,11 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     resumeExternally: (fiber: AnyFiber, run: () => void): void => {
       pending.push({ owner: fiber, run, external: true, forced: false, step: stepCount })
       scheduledInStep++
+    },
+    firstEvaluation: (fiber: AnyFiber): boolean => {
+      if (evaluated.has(fiber)) return false
+      evaluated.add(fiber)
+      return true
     },
     afterQueuedResume,
     observeShared: (target: object): void => {

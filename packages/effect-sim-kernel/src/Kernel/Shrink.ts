@@ -69,6 +69,11 @@ const withoutAt = (
   return candidate
 }
 
+const withoutFrom = (
+  path: ReadonlyArray<Decision | undefined>,
+  position: number,
+): ReadonlyArray<Decision | undefined> => clonedEntries(path).slice(0, position)
+
 const deviationAt = (step: StepRecord): boolean => step.deviation
 
 const nextOffset = <A, E>(result: RunResult<A, E>, from: number): number =>
@@ -103,13 +108,41 @@ interface PassState<A, E> {
   readonly passes: number
 }
 
-const attemptReset = <A, E>(progress: PassState<A, E>, position: number): Promise<Attempt> => {
-  const candidate = withoutAt(progress.path, position)
-  const round: Round<A, E> = { ...progress.state, path: candidate }
-  return runRound<A, E>(round).then(
+const attemptPath = <A, E>(
+  progress: PassState<A, E>,
+  candidate: ReadonlyArray<Decision | undefined>,
+): Promise<Attempt> =>
+  runRound<A, E>({ ...progress.state, path: candidate }).then(
     (reset) => (progress.state.isFailure(reset) ? { kept: candidate } : { kept: undefined }),
   )
+
+/**
+ * Deviations can hold each other up: a later detour that only matters because
+ * of an earlier one survives every single reset, yet the schedule fails
+ * without either. Resetting a deviation together with every later one first
+ * clears such a chain in one attempt; the single reset follows only when
+ * later deviations exist, since otherwise both candidates are the same.
+ */
+const singleAfterMissedSuffix = <A, E>(
+  progress: PassState<A, E>,
+  position: number,
+  suffix: Attempt,
+): Promise<Attempt> => {
+  if (nextPosition(progress.result, position + 1) === undefined) return Promise.resolve(suffix)
+  return attemptPath<A, E>(progress, withoutAt(progress.path, position))
 }
+
+const attemptSingleAfterSuffix = <A, E>(
+  progress: PassState<A, E>,
+  position: number,
+  suffix: Attempt,
+): Promise<Attempt> =>
+  suffix.kept === undefined ? singleAfterMissedSuffix<A, E>(progress, position, suffix) : Promise.resolve(suffix)
+
+const attemptReset = <A, E>(progress: PassState<A, E>, position: number): Promise<Attempt> =>
+  attemptPath<A, E>(progress, withoutFrom(progress.path, position)).then((suffix) =>
+    attemptSingleAfterSuffix<A, E>(progress, position, suffix)
+  )
 
 const settled = <A, E>(progress: PassState<A, E>): Promise<ReadonlyArray<Decision | undefined>> =>
   Promise.resolve(progress.path)
