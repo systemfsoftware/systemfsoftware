@@ -50,13 +50,6 @@ interface QueryKey<Rpcs extends Rpc.Any> {
   serializationKey: string | undefined
 }
 
-const orDefined = <A>(value: A | undefined, fallback: A): A => {
-  if (value === undefined) {
-    return fallback
-  }
-  return value
-}
-
 const orElse = <A>(value: A | undefined, fallback: () => A): A => {
   if (value === undefined) {
     return fallback()
@@ -339,7 +332,7 @@ export const Service = <Self>() =>
     return Layer.provide(layer, Layer.orDie(protocol))
   }
 
-  const runtime = orDefined(options.runtime, Atom.runtime)(
+  const runtime = orElse(options.runtime, () => Atom.context())(
     protocolToLayer(options.protocol),
   )
 

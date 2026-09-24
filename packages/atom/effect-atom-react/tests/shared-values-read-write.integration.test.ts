@@ -196,13 +196,13 @@ Feature('Reading and changing shared values from on-screen widgets')
         When('the field is edited through the view')('done', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.nameRef().set('grace')
+              s.ctx.nameRef().pipe(AtomRef.set('grace'))
             })
           })),
         Then('the view shows the new value and the rest of the record is untouched')((s) =>
           Effect.promise(function() {
             return expect.element(screen.getByTestId('name')).toHaveTextContent('grace').then(() => {
-              expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
+              expect(AtomRef.get(s.ctx.record)).toEqual({ name: 'grace', age: 36 })
             })
           })
         ),

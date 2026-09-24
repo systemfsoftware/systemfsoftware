@@ -11,6 +11,7 @@
  */
 import * as Equal from 'effect/Equal'
 import type { Equal as EqualType } from 'effect/Equal'
+import { dual } from 'effect/Function'
 import * as Hash from 'effect/Hash'
 import * as Pipeable from 'effect/Pipeable'
 import { hasProperty } from 'effect/Predicate'
@@ -32,22 +33,41 @@ export type TypeId = '~effect/reactivity/AtomRef'
 export const TypeId: TypeId = '~effect/reactivity/AtomRef'
 
 /**
+ * Module-private slot holding the state behind a ref handle.
+ */
+const engine: unique symbol = Symbol('~effect/reactivity/AtomRef/engine')
+
+/**
  * A read-only reactive reference.
  *
  * **Details**
  *
- * It exposes a stable key, the current value, subscriptions to value changes, and
- * `map` for creating derived read-only references. Equality and hashing are based
- * on the current value.
+ * It is a minimal handle record: the type id, a stable identity key, and a
+ * module-private slot holding the state behind it. The current value, the
+ * subscriptions, and the derived views are reached through the `dual`
+ * functions in this module, never through methods on the handle.
+ *
+ * Equality and hashing are based on the current value.
  *
  * @since 4.0.0
  */
-export interface ReadonlyRef<A> extends EqualType {
+export interface ReadonlyRef<A> extends EqualType, Pipeable.Pipeable {
   readonly [TypeId]: TypeId
-  readonly key: string
-  readonly value: A
-  readonly subscribe: (f: (a: A) => void) => () => void
-  readonly map: <B>(f: (a: A) => B) => ReadonlyRef<B>
+  readonly [engine]: ReadonlyRefEngine<A>
+  readonly key: symbol
+}
+
+/**
+ * The internal machinery behind a read-only ref handle.
+ *
+ * @since 4.0.0
+ */
+export interface ReadonlyRefEngine<A> {
+  value(): A
+  subscribe(f: (a: A) => void): () => void
+  map<B>(f: (a: A) => B): ReadonlyRef<B>
+  equals(that: EqualType): boolean
+  hash(): number
 }
 
 /**
@@ -55,15 +75,25 @@ export interface ReadonlyRef<A> extends EqualType {
  *
  * **Details**
  *
- * It supports replacing the whole value, updating it from the current value, and
- * creating mutable references to nested properties.
+ * The whole value can be replaced, updated from the current value, and
+ * mutable references to nested properties can be created. All of that is
+ * reached through the `dual` functions in this module.
  *
  * @since 4.0.0
  */
 export interface AtomRef<A> extends ReadonlyRef<A> {
-  readonly prop: <K extends keyof A>(prop: K) => AtomRef<A[K]>
-  readonly set: (value: A) => AtomRef<A>
-  readonly update: (f: (value: A) => A) => AtomRef<A>
+  readonly [engine]: AtomRefEngine<A>
+}
+
+/**
+ * The internal machinery behind a mutable ref handle.
+ *
+ * @since 4.0.0
+ */
+export interface AtomRefEngine<A> extends ReadonlyRefEngine<A> {
+  set(value: A): void
+  update(f: (value: A) => A): void
+  prop<K extends keyof A>(prop: K): AtomRef<A[K]>
 }
 
 /**
@@ -71,16 +101,25 @@ export interface AtomRef<A> extends ReadonlyRef<A> {
  *
  * **Details**
  *
- * The collection can push, insert, and remove item refs, and `toArray` returns the
- * current raw item values.
+ * Items can be added and removed and the raw item values can be listed. Every
+ * collection operation is a `dual` function in this module.
  *
  * @since 4.0.0
  */
 export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
-  readonly push: (item: A) => Collection<A>
-  readonly insertAt: (index: number, item: A) => Collection<A>
-  readonly remove: (ref: AtomRef<A>) => Collection<A>
-  readonly toArray: () => A[]
+  readonly [engine]: CollectionEngine<A>
+}
+
+/**
+ * The internal machinery behind a collection handle.
+ *
+ * @since 4.0.0
+ */
+export interface CollectionEngine<A> extends ReadonlyRefEngine<readonly AtomRef<A>[]> {
+  push(item: A): void
+  insertAt(index: number, item: A): void
+  remove(ref: AtomRef<A>): void
+  toArray(): A[]
 }
 
 /**
@@ -88,7 +127,7 @@ export interface Collection<A> extends ReadonlyRef<readonly AtomRef<A>[]> {
  *
  * @since 4.0.0
  */
-export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
+export const make = <A>(value: A): AtomRef<A> => new AtomRefEngineImpl(value).handle
 
 /**
  * Creates a reactive collection from an iterable of initial item values.
@@ -100,9 +139,135 @@ export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
  *
  * @since 4.0.0
  */
-export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items)
+export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items).handle
+
+/**
+ * Reads the current value of a reactive reference.
+ *
+ * @since 4.0.0
+ */
+export const get = <A>(self: ReadonlyRef<A>): A => self[engine].value()
+
+/**
+ * Replaces the whole value of a mutable reactive reference. Equal values leave
+ * the ref untouched.
+ *
+ * @since 4.0.0
+ */
+export const set: {
+  <A>(value: A): (self: AtomRef<A>) => AtomRef<A>
+  <A>(self: AtomRef<A>, value: A): AtomRef<A>
+} = dual(2, <A>(self: AtomRef<A>, value: A): AtomRef<A> => {
+  self[engine].set(value)
+  return self
+})
+
+/**
+ * Replaces the whole value using the current value of a mutable reactive
+ * reference. Equal results leave the ref untouched.
+ *
+ * @since 4.0.0
+ */
+export const update: {
+  <A>(f: (value: A) => A): (self: AtomRef<A>) => AtomRef<A>
+  <A>(self: AtomRef<A>, f: (value: A) => A): AtomRef<A>
+} = dual(2, <A>(self: AtomRef<A>, f: (value: A) => A): AtomRef<A> => {
+  self[engine].update(f)
+  return self
+})
+
+/**
+ * Listens to value changes of a reactive reference and returns a function that
+ * removes the listener again.
+ *
+ * @since 4.0.0
+ */
+export const subscribe: {
+  <A>(f: (a: A) => void): (self: ReadonlyRef<A>) => () => void
+  <A>(self: ReadonlyRef<A>, f: (a: A) => void): () => void
+} = dual(2, <A>(self: ReadonlyRef<A>, f: (a: A) => void): () => void => self[engine].subscribe(f))
+
+/**
+ * Creates a read-only reactive reference derived from the current value.
+ *
+ * @since 4.0.0
+ */
+export const map: {
+  <A, B>(f: (a: A) => B): (self: ReadonlyRef<A>) => ReadonlyRef<B>
+  <A, B>(self: ReadonlyRef<A>, f: (a: A) => B): ReadonlyRef<B>
+} = dual(2, <A, B>(self: ReadonlyRef<A>, f: (a: A) => B): ReadonlyRef<B> => self[engine].map(f))
+
+/**
+ * Creates a mutable reactive reference to one property of the current value.
+ *
+ * @since 4.0.0
+ */
+export const prop: {
+  <A, K extends keyof A>(prop: K): (self: AtomRef<A>) => AtomRef<A[K]>
+  <A, K extends keyof A>(self: AtomRef<A>, prop: K): AtomRef<A[K]>
+} = dual(2, <A, K extends keyof A>(self: AtomRef<A>, prop: K): AtomRef<A[K]> => self[engine].prop(prop))
+
+/**
+ * Appends an item to the end of a reactive collection.
+ *
+ * @since 4.0.0
+ */
+export const push: {
+  <A>(item: A): (self: Collection<A>) => Collection<A>
+  <A>(self: Collection<A>, item: A): Collection<A>
+} = dual(2, <A>(self: Collection<A>, item: A): Collection<A> => {
+  self[engine].push(item)
+  return self
+})
+
+/**
+ * Inserts an item into a reactive collection at the supplied index.
+ *
+ * @since 4.0.0
+ */
+export const insertAt: {
+  <A>(index: number, item: A): (self: Collection<A>) => Collection<A>
+  <A>(self: Collection<A>, index: number, item: A): Collection<A>
+} = dual(3, <A>(self: Collection<A>, index: number, item: A): Collection<A> => {
+  self[engine].insertAt(index, item)
+  return self
+})
+
+/**
+ * Removes a reactive reference from a reactive collection. Removing a reference
+ * that is not part of the collection leaves the collection untouched.
+ *
+ * @since 4.0.0
+ */
+export const remove: {
+  <A>(ref: AtomRef<A>): (self: Collection<A>) => Collection<A>
+  <A>(self: Collection<A>, ref: AtomRef<A>): Collection<A>
+} = dual(2, <A>(self: Collection<A>, ref: AtomRef<A>): Collection<A> => {
+  self[engine].remove(ref)
+  return self
+})
+
+/**
+ * Lists the current item values of a reactive collection.
+ *
+ * @since 4.0.0
+ */
+export const toArray = <A>(self: Collection<A>): A[] => self[engine].toArray()
 
 const isReadonlyRef = (u: unknown): u is AnyReadonlyRef => hasProperty(u, TypeId)
+
+/**
+ * Builds the handle record of one ref engine: the type id, the module-private
+ * slot, the identity key, piping, and value-based equality and hashing.
+ */
+const refHandle = <A, E extends ReadonlyRefEngine<A>>(self: E): ReadonlyRef<A> & { readonly [engine]: E } => ({
+  [TypeId]: TypeId,
+  [engine]: self,
+  key: Symbol(TypeId),
+  ...Pipeable.Prototype,
+  [Equal.symbol]: (that: EqualType): boolean => isReadonlyRef(that) && self.equals(that),
+  [Hash.symbol]: (): number => self.hash(),
+})
 
 const isArrayWithProp = <A, K extends keyof A>(value: A, _prop: K): value is A & Array<A[K]> => Array.isArray(value)
 
@@ -152,25 +317,23 @@ const emitPropIfPresent = <A, K extends keyof A>(
   return previous
 }
 
-const keyState = {
-  count: 0,
-  generate() {
-    return `AtomRef-${this.count++}`
-  },
-}
 type Listener<A> = {
   readonly f: (a: A) => void
   prev: Listener<A> | null
   next: Listener<A> | null
 }
 
-const linkListener = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): void => {
+interface Listeners<A> {
+  listeners: Listener<A> | null
+}
+
+const linkListener = <A>(self: Listeners<A>, listener: Listener<A>): void => {
   if (self.listeners !== null) {
     self.listeners.prev = listener
   }
 }
 
-const unlinkIfHead = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): void => {
+const unlinkIfHead = <A>(self: Listeners<A>, listener: Listener<A>): void => {
   if (self.listeners === listener) {
     self.listeners = listener.next
   }
@@ -188,31 +351,34 @@ const unlinkNext = <A>(listener: Listener<A>): void => {
   }
 }
 
-const unlinkListener = <A>(self: ReadonlyRefImpl<A>, listener: Listener<A>): void => {
+const unlinkListener = <A>(self: Listeners<A>, listener: Listener<A>): void => {
   unlinkIfHead(self, listener)
   unlinkPrev(listener)
   unlinkNext(listener)
 }
 
-class ReadonlyRefImpl<A> extends Pipeable.Class implements ReadonlyRef<A> {
-  readonly [TypeId]: TypeId
-  readonly key = keyState.generate()
-  public value: A
+class ValueRefEngine<A> extends Pipeable.Class implements ReadonlyRefEngine<A>, Listeners<A> {
+  current: A
+  listeners: Listener<A> | null = null
+  readonly handle: ReadonlyRef<A>
+
   constructor(value: A) {
     super()
-    this[TypeId] = TypeId
-    this.value = value
+    this.current = value
+    this.handle = refHandle(this)
   }
 
-  [Equal.symbol](that: Equal.Equal) {
-    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
+  value(): A {
+    return this.current
   }
 
-  [Hash.symbol]() {
-    return Hash.hash(this.value)
+  equals(that: EqualType): boolean {
+    return isReadonlyRef(that) && Equal.equals(this.current, that[engine].value())
   }
 
-  listeners: Listener<A> | null = null
+  hash(): number {
+    return Hash.hash(this.current)
+  }
 
   notify(a: A) {
     let listener = this.listeners
@@ -237,50 +403,61 @@ class ReadonlyRefImpl<A> extends Pipeable.Class implements ReadonlyRef<A> {
   }
 
   map<B>(f: (a: A) => B): ReadonlyRef<B> {
-    return new MapRefImpl(this, f)
+    return new MapRefEngine(this, f).handle
   }
 }
 
-class AtomRefImpl<A> extends ReadonlyRefImpl<A> implements AtomRef<A> {
-  prop<K extends keyof A>(prop: K): AtomRef<A[K]> {
-    return new PropRefImpl(this, prop)
+class AtomRefEngineImpl<A> extends ValueRefEngine<A> implements AtomRefEngine<A> {
+  override readonly handle: AtomRef<A>
+
+  constructor(value: A) {
+    super(value)
+    this.handle = refHandle(this)
   }
+
   set(value: A) {
-    if (Equal.equals(value, this.value)) {
-      return this
+    if (Equal.equals(value, this.current)) {
+      return
     }
-    this.value = value
+    this.current = value
     this.notify(value)
-    return this
   }
 
   update(f: (value: A) => A) {
-    return this.set(f(this.value))
+    this.set(f(this.current))
+  }
+
+  prop<K extends keyof A>(prop: K): AtomRef<A[K]> {
+    return new PropRefEngine(this, prop).handle
   }
 }
 
-class MapRefImpl<A, B> extends Pipeable.Class implements ReadonlyRef<B> {
-  readonly [TypeId]: TypeId
-  readonly key = keyState.generate()
-  readonly parent: ReadonlyRef<A>
+class MapRefEngine<A, B> extends Pipeable.Class implements ReadonlyRefEngine<B> {
+  readonly handle: ReadonlyRef<B>
+  readonly parent: ReadonlyRefEngine<A>
   readonly transform: (a: A) => B
-  constructor(parent: ReadonlyRef<A>, transform: (a: A) => B) {
+
+  constructor(parent: ReadonlyRefEngine<A>, transform: (a: A) => B) {
     super()
-    this[TypeId] = TypeId
     this.parent = parent
     this.transform = transform
+    this.handle = refHandle(this)
   }
-  [Equal.symbol](that: Equal.Equal) {
-    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
+
+  value(): B {
+    return this.transform(this.parent.value())
   }
-  [Hash.symbol]() {
-    return Hash.hash(this.value)
+
+  equals(that: EqualType): boolean {
+    return isReadonlyRef(that) && Equal.equals(this.value(), that[engine].value())
   }
-  get value() {
-    return this.transform(this.parent.value)
+
+  hash(): number {
+    return Hash.hash(this.value())
   }
+
   subscribe(f: (a: B) => void): () => void {
-    let previous = this.transform(this.parent.value)
+    let previous = this.transform(this.parent.value())
     return this.parent.subscribe((a) => {
       const next = this.transform(a)
       if (Equal.equals(next, previous)) {
@@ -290,135 +467,159 @@ class MapRefImpl<A, B> extends Pipeable.Class implements ReadonlyRef<B> {
       f(next)
     })
   }
+
   map<C>(f: (a: B) => C): ReadonlyRef<C> {
-    return new MapRefImpl(this, f)
+    return new MapRefEngine(this, f).handle
   }
 }
 
-class PropRefImpl<A, K extends keyof A> extends Pipeable.Class implements AtomRef<A[K]> {
-  readonly [TypeId]: TypeId
-  readonly key = keyState.generate()
+class PropRefEngine<A, K extends keyof A> extends Pipeable.Class implements AtomRefEngine<A[K]> {
+  readonly handle: AtomRef<A[K]>
   private previous: A[K]
-  readonly parent: AtomRef<A>
+  readonly parent: AtomRefEngine<A>
   readonly _prop: K
 
-  constructor(parent: AtomRef<A>, _prop: K) {
+  constructor(parent: AtomRefEngine<A>, _prop: K) {
     super()
-    this[TypeId] = TypeId
     this.parent = parent
     this._prop = _prop
-    this.previous = parent.value[_prop]
+    this.previous = parent.value()[_prop]
+    this.handle = refHandle(this)
   }
-  [Equal.symbol](that: Equal.Equal) {
-    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
+
+  equals(that: EqualType): boolean {
+    return isReadonlyRef(that) && Equal.equals(this.value(), that[engine].value())
   }
-  [Hash.symbol]() {
-    return Hash.hash(this.value)
+
+  hash(): number {
+    return Hash.hash(this.value())
   }
-  get value() {
-    const parentValue = this.parent.value
+
+  value(): A[K] {
+    const parentValue = this.parent.value()
     if (hasProp(parentValue, this._prop)) {
       this.previous = parentValue[this._prop]
     }
     return this.previous
   }
+
   subscribe(f: (a: A[K]) => void): () => void {
-    let previous = this.value
+    let previous = this.value()
     return this.parent.subscribe((a) => {
       previous = emitPropIfPresent(this._prop, a, previous, f)
     })
   }
+
   map<C>(f: (a: A[K]) => C): ReadonlyRef<C> {
-    return new MapRefImpl(this, f)
+    return new MapRefEngine(this, f).handle
   }
+
   prop<CK extends keyof A[K]>(prop: CK): AtomRef<A[K][CK]> {
-    return new PropRefImpl(this, prop)
+    return new PropRefEngine(this, prop).handle
   }
-  set(value: A[K]): AtomRef<A[K]> {
-    if (isArrayWithProp(this.parent.value, this._prop)) {
-      const newArray = Object.assign(new Array<A[K]>(), this.parent.value)
-      newArray[Number(this._prop)] = value
-      this.parent.set(newArray)
-    } else {
-      this.parent.set({
-        ...this.parent.value,
+
+  set(value: A[K]): void {
+    this.writeParent((current) => {
+      if (isArrayWithProp(current, this._prop)) {
+        const newArray = Object.assign(new Array<A[K]>(), current)
+        newArray[Number(this._prop)] = value
+        return newArray
+      }
+      return {
+        ...current,
         [this._prop]: value,
-      })
-    }
-    return this
+      }
+    })
   }
-  update(f: (value: A[K]) => A[K]): AtomRef<A[K]> {
-    if (isArrayWithProp(this.parent.value, this._prop)) {
-      const newArray = Object.assign(new Array<A[K]>(), this.parent.value)
-      newArray[Number(this._prop)] = f(this.parent.value[this._prop])
-      this.parent.set(newArray)
-    } else {
-      this.parent.set({
-        ...this.parent.value,
-        [this._prop]: f(this.parent.value[this._prop]),
-      })
-    }
-    return this
+
+  update(f: (value: A[K]) => A[K]): void {
+    this.writeParent((current) => {
+      if (isArrayWithProp(current, this._prop)) {
+        const newArray = Object.assign(new Array<A[K]>(), current)
+        newArray[Number(this._prop)] = f(current[this._prop])
+        return newArray
+      }
+      return {
+        ...current,
+        [this._prop]: f(current[this._prop]),
+      }
+    })
+  }
+
+  writeParent(write: (current: A) => A): void {
+    this.parent.set(write(this.parent.value()))
   }
 }
 
-class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collection<A> {
-  private readonly linked = new Set<AtomRef<A>>()
+class CollectionImpl<A> extends ValueRefEngine<readonly AtomRef<A>[]> implements CollectionEngine<A> {
+  override readonly handle: Collection<A>
+  private readonly linked = new Set<CollectionItemEngine<A>>()
+  private items: AtomRef<A>[] = []
+
+  override value(): readonly AtomRef<A>[] {
+    return this.items
+  }
 
   constructor(items: Iterable<A>) {
     super([])
+    this.handle = refHandle<readonly AtomRef<A>[], CollectionEngine<A>>(this)
     for (const item of items) {
-      this.value.push(this.makeRef(item))
+      this.items.push(this.makeRef(item))
     }
   }
 
-  makeRef(value: A) {
-    const ref = new AtomRefImpl(value)
-    let proxy!: AtomRef<A>
-    const notify = (value: A) => {
-      ref.notify(value)
-      if (this.linked.has(proxy)) {
-        this.notify(this.value)
-      }
+  makeRef(value: A): AtomRef<A> {
+    const itemEngine = new CollectionItemEngine<A>(value, this)
+    this.linked.add(itemEngine)
+    return itemEngine.handle
+  }
+
+  itemChanged(itemEngine: CollectionItemEngine<A>) {
+    if (this.linked.has(itemEngine)) {
+      this.notify(this.value())
     }
-    proxy = new Proxy(ref, {
-      get(target, p, receiver) {
-        if (p === 'notify') {
-          return notify
-        }
-        const value: AnyValue = Reflect.get(target, p, receiver)
-        return value
-      },
-    })
-    this.linked.add(proxy)
-    return proxy
   }
 
   push(item: A) {
-    const ref = this.makeRef(item)
-    this.value.push(ref)
-    this.notify(this.value)
-    return this
+    this.items.push(this.makeRef(item))
+    this.notify(this.value())
   }
 
   insertAt(index: number, item: A) {
-    const ref = this.makeRef(item)
-    this.value.splice(index, 0, ref)
-    this.notify(this.value)
-    return this
+    this.items.splice(index, 0, this.makeRef(item))
+    this.notify(this.value())
   }
 
   remove(ref: AtomRef<A>) {
-    const index = this.value.indexOf(ref)
+    const index = this.items.indexOf(ref)
     if (index !== -1) {
-      this.value.splice(index, 1)
-      this.linked.delete(ref)
-      this.notify(this.value)
+      this.items.splice(index, 1)
+      this.unlink(ref)
+      this.notify(this.value())
     }
-    return this
   }
 
-  toArray() {
-    return this.value.map((ref) => ref.value)
+  unlink(ref: AtomRef<A>) {
+    const itemEngine = ref[engine]
+    if (isCollectionItemEngine(itemEngine)) {
+      this.linked.delete(itemEngine)
+    }
+  }
+
+  toArray(): A[] {
+    return this.items.map((ref) => ref[engine].value())
+  }
+}
+const isCollectionItemEngine = <A>(itemEngine: AtomRefEngine<A>): itemEngine is CollectionItemEngine<A> =>
+  itemEngine instanceof CollectionItemEngine
+
+class CollectionItemEngine<A> extends AtomRefEngineImpl<A> {
+  constructor(value: A, private readonly collection: CollectionImpl<A>) {
+    super(value)
+  }
+
+  override notify(a: A) {
+    super.notify(a)
+    this.collection.itemChanged(this)
   }
 }

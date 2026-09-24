@@ -9,7 +9,7 @@
 'use client'
 
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import type * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
+import * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import * as Cause from 'effect/Cause'
@@ -578,8 +578,8 @@ export const useAtomSubscribe: {
  *
  * **Details**
  *
- * The hook subscribes with `ref.subscribe`, triggers re-renders through React
- * state, and returns the current `ref.value`.
+ * The hook subscribes with `AtomRef.subscribe`, triggers re-renders through
+ * React state, and returns the current `AtomRef.get(ref)` value.
  *
  * @see {@link useAtomValue} for reading an `Atom` from the current registry
  * @see {@link useAtomRefPropValue} for reading a property ref value
@@ -587,9 +587,9 @@ export const useAtomSubscribe: {
  * @since 4.0.0
  */
 export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
-  const [, setValue] = React.useState(ref.value)
-  React.useEffect(() => ref.subscribe(setValue), [ref])
-  return ref.value
+  const [, setValue] = React.useState(() => AtomRef.get(ref))
+  React.useEffect(() => AtomRef.subscribe(ref, setValue), [ref])
+  return AtomRef.get(ref)
 }
 
 /**
@@ -601,10 +601,9 @@ export const useAtomRef = <A>(ref: AtomRef.ReadonlyRef<A>): A => {
  *
  * **Details**
  *
- * The hook memoizes `ref.prop(prop)` for the `[ref, prop]` dependency pair and
- * returns the property ref so callers can read, set, update, or subscribe to
- * that nested property.
- *
+ * The hook memoizes `AtomRef.prop(ref, prop)` for the `[ref, prop]`
+ * dependency pair and returns the property ref so callers can read, set,
+ * update, or subscribe to that nested property.
  * @see {@link useAtomRef} for subscribing to an atom ref value
  * @see {@link useAtomRefPropValue} for subscribing directly to a property value
  *
@@ -616,7 +615,7 @@ export const useAtomRefProp: {
 } = dual(
   2,
   <A, K extends keyof A>(ref: AtomRef.AtomRef<A>, prop: K): AtomRef.AtomRef<A[K]> =>
-    React.useMemo(() => ref.prop(prop), [ref, prop]),
+    React.useMemo(() => AtomRef.prop(ref, prop), [ref, prop]),
 )
 
 /**
@@ -632,7 +631,7 @@ export const useAtomRefProp: {
  *
  * The hook composes `useAtomRefProp(ref, prop)` with `useAtomRef`, so the
  * property ref is memoized for the `[ref, prop]` pair and then subscribed
- * through `ref.subscribe`.
+ * through `AtomRef.subscribe`.
  *
  * @see {@link useAtomRefProp} for returning the property ref directly
  * @see {@link useAtomRef} for subscribing to a whole atom ref value

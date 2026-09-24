@@ -1980,4 +1980,40 @@ Feature('Deriving values from other values on a page')
         ),
       ),
     )
+    scenario(
+      'Two runtimes built from separate factories each see only the extra service they were given',
+      Gherkin.Do.pipe(
+        Given('two runtimes from separate factories, each given its own extra service')('ctx', () =>
+          Effect.sync(() => {
+            class StationName extends Context.Service<StationName, string>()(
+              '@systemfsoftware/effect-atom/tests/Atom.integration.test/StationName',
+            ) {}
+            const stationOf = (runtime: Atom.RuntimeFactory) =>
+              runtime(Layer.empty).atom(
+                Effect.contextWith((services: Context.Context<never>) =>
+                  Effect.succeed(Option.getOrNull(Context.getOption(services, StationName)))
+                ),
+              )
+            const first = Atom.context()
+            first.addGlobalLayer(Layer.succeed(StationName, 'first'))
+            const second = Atom.context()
+            second.addGlobalLayer(Layer.succeed(StationName, 'second'))
+            const page = Registry.make()
+            return {
+              page,
+              firstStation: stationOf(first),
+              secondStation: stationOf(second),
+            }
+          })),
+        When('the extra service is read through both runtimes on the same page')('readings', (s) =>
+          Effect.sync(() => ({
+            first: Registry.get(s.ctx.page, s.ctx.firstStation),
+            second: Registry.get(s.ctx.page, s.ctx.secondStation),
+          }))),
+        Then('each runtime reports only the extra service it was given')((s) => {
+          expect(Result.isSuccess(s.readings.first) && s.readings.first.value === 'first').toBe(true)
+          expect(Result.isSuccess(s.readings.second) && s.readings.second.value === 'second').toBe(true)
+        }),
+      ),
+    )
   })

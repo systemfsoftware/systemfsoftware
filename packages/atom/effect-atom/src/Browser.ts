@@ -8,12 +8,13 @@
  *
  * @since 4.0.0
  */
-import * as Effect from 'effect/Effect'
+import * as Context from 'effect/Context'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
 import { readable, transform, writable } from './AtomCore.js'
+import * as Registry from './Registry.js'
 
 type AnyAtom<A = unknown> = Atom<A>
 type StringCodec<Type = unknown, Encoded extends string = string> = Schema.ConstraintCodec<Type, Encoded>
@@ -161,11 +162,13 @@ function makeSearchParam<S extends StringCodec = never>(
 
   function readWithWindow(get: {
     readonly addFinalizer: (f: () => void) => void
+    readonly registry: Registry.RegistryImpl
     readonly setSelf: (value: R) => void
     readonly self: () => Option.Option<R>
   }): R {
+    const coordinator = coordinatorOf(get.registry.handle)
     const handleUpdate = () => {
-      if (searchParamState.updating === true) {
+      if (coordinator.updating === true) {
         return
       }
       applyWindowUpdate(get)
@@ -212,33 +215,35 @@ function makeSearchParam<S extends StringCodec = never>(
   }
 
   function writeWithWindow(ctx: WriteContext<R>, value: W): void {
+    const coordinator = ctx.get(searchParamCoordinator)
     const encoder = encode
     if (encoder !== undefined) {
-      writeEncoded(ctx, value, encoder)
+      writeEncoded(ctx, value, encoder, coordinator)
     } else {
-      writePlain(ctx, value)
+      writePlain(ctx, value, coordinator)
     }
-    scheduleSearchParamUpdate()
+    scheduleSearchParamUpdate(coordinator)
   }
 
   function writeEncoded(
     ctx: WriteContext<R>,
     value: W,
     encoder: NonNullable<typeof encode>,
+    coordinator: SearchParamCoordinator,
   ): void {
     const encoded = Option.flatMap(
       optionValue(value),
       (v) => Exit.getSuccess(encoder(v)),
     )
-    searchParamState.updates.set(name, Option.getOrElse(encoded, () => ''))
+    coordinator.updates.set(name, Option.getOrElse(encoded, () => ''))
     if (Option.isOption(value)) {
       ctx.setSelf(Option.zipRight(encoded, value))
     }
   }
 
-  function writePlain(ctx: WriteContext<R>, value: W): void {
+  function writePlain(ctx: WriteContext<R>, value: W, coordinator: SearchParamCoordinator): void {
     if (typeof value === 'string') {
-      searchParamState.updates.set(name, value)
+      coordinator.updates.set(name, value)
       ctx.setSelf(value)
     }
   }
@@ -251,23 +256,73 @@ const optionValue = <A>(value: A | Option.Option<A>): Option.Option<A> => {
   return Option.none()
 }
 
-const scheduleSearchParamUpdate = (): void => {
-  const generation = ++searchParamState.generation
-  Effect.runFork(
-    Effect.sleep('500 millis').pipe(
-      Effect.andThen(
-        Effect.sync(() => {
-          runScheduledSearchParamUpdate(generation)
-        }),
-      ),
-    ),
-  )
+/**
+ * Batches URL search parameter writes for one registry.
+ *
+ * **Details**
+ *
+ * Several search parameter atoms can be written in the same tick; the
+ * coordinator collects their values and rewrites the address bar once. It lives
+ * in the registry's own storage, so two registries never share pending writes
+ * and the state dies with its registry.
+ */
+interface SearchParamCoordinator {
+  generation: number
+  readonly updates: Map<string, string>
+  updating: boolean
+  readonly registry: Registry.Registry
 }
 
-const runScheduledSearchParamUpdate = (generation: number): void => {
-  if (searchParamState.generation === generation) {
-    updateSearchParams()
+class SearchParamUpdates extends Context.Service<SearchParamUpdates, SearchParamCoordinator>()(
+  '@systemfsoftware/effect-atom/Browser/SearchParamUpdates',
+) {}
+
+const makeSearchParamCoordinator = (registry: Registry.Registry): SearchParamCoordinator => ({
+  generation: 0,
+  updates: new Map<string, string>(),
+  updating: false,
+  registry,
+})
+
+const coordinatorOf = (registry: Registry.Registry): SearchParamCoordinator =>
+  Registry.storage(registry, SearchParamUpdates, () => makeSearchParamCoordinator(registry))
+
+/**
+ * Resolves the evaluating registry's coordinator.
+ *
+ * **Details**
+ *
+ * Write contexts cannot see the registry they run in, so a write reads this
+ * atom to reach the coordinator that batches its URL update.
+ */
+const searchParamCoordinator: Atom<SearchParamCoordinator> = readable((get) => coordinatorOf(get.registry.handle))
+
+const SEARCH_PARAM_UPDATE_DELAY_MILLIS = 500
+
+const scheduleSearchParamUpdate = (coordinator: SearchParamCoordinator): void => {
+  coordinator.generation++
+  const generation = coordinator.generation
+  Registry.scheduleTimer(coordinator.registry, () => {
+    runScheduledSearchParamUpdate(coordinator, generation)
+  }, SEARCH_PARAM_UPDATE_DELAY_MILLIS)
+}
+
+const runScheduledSearchParamUpdate = (coordinator: SearchParamCoordinator, generation: number): void => {
+  if (coordinator.generation === generation) {
+    updateSearchParams(coordinator)
   }
+}
+
+function updateSearchParams(coordinator: SearchParamCoordinator): void {
+  coordinator.updating = true
+  const searchParams = new URLSearchParams(window.location.search)
+  for (const [key, value] of coordinator.updates.entries()) {
+    applySearchParam(searchParams, key, value)
+  }
+  coordinator.updates.clear()
+  const newUrl = `${window.location.pathname}?${searchParams.toString()}`
+  window.history.pushState({}, '', newUrl)
+  coordinator.updating = false
 }
 
 const schemaDecoder = <S extends StringCodec>(
@@ -314,24 +369,6 @@ const emptyToEmpty = (value: string): string => {
     return ''
   }
   return value
-}
-
-const searchParamState = {
-  generation: 0,
-  updates: new Map<string, string>(),
-  updating: false,
-}
-
-function updateSearchParams() {
-  searchParamState.updating = true
-  const searchParams = new URLSearchParams(window.location.search)
-  for (const [key, value] of searchParamState.updates.entries()) {
-    applySearchParam(searchParams, key, value)
-  }
-  searchParamState.updates.clear()
-  const newUrl = `${window.location.pathname}?${searchParams.toString()}`
-  window.history.pushState({}, '', newUrl)
-  searchParamState.updating = false
 }
 
 const applySearchParam = (searchParams: URLSearchParams, key: string, value: string): void => {

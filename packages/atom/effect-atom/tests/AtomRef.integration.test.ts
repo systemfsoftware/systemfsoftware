@@ -1,13 +1,35 @@
 import { AtomRef } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer } from 'effect'
+import { Effect, Equal, Layer } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
+interface RefBundle {
+  readonly value: AtomRef.AtomRef<number>
+  readonly record: AtomRef.AtomRef<{ readonly name: string; readonly other: string }>
+  readonly items: AtomRef.Collection<number>
+}
+
+interface Call {
+  readonly direct: PairValue
+  readonly piped: PairValue
+}
+
+type PairValue =
+  | number
+  | string
+  | ReadonlyArray<number>
+  | ReadonlyArray<ReadonlyArray<number>>
+
+interface RefCall {
+  readonly operation: string
+  readonly attempt: (refs: RefBundle) => Call
+}
+
 Feature('Keeping a piece of shared local state in sync across several parts of the page')
   .withLayer(Layer.empty)
-  .body(({ scenario }) => {
+  .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A derived read-only value only notifies when its own computed value actually changes',
       Gherkin.Do.pipe(
@@ -16,9 +38,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           () =>
             Effect.sync(() => {
               const count = AtomRef.make(0)
-              const isOverFive = count.map((n) => n > 5)
+              const isOverFive = AtomRef.map(count, (n) => n > 5)
               const notifications: boolean[] = []
-              const cancel = isOverFive.subscribe((v) => notifications.push(v))
+              const cancel = AtomRef.subscribe(isOverFive, (v) => notifications.push(v))
               return { count, notifications, cancel }
             }),
         ),
@@ -26,10 +48,10 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           'ctx',
           (s) =>
             Effect.sync(() => {
-              s.ctx.count.set(1)
-              s.ctx.count.set(2)
-              s.ctx.count.set(3)
-              s.ctx.count.set(6)
+              AtomRef.set(s.ctx.count, 1)
+              AtomRef.set(s.ctx.count, 2)
+              AtomRef.set(s.ctx.count, 3)
+              AtomRef.set(s.ctx.count, 6)
               s.ctx.cancel()
               return s.ctx
             }),
@@ -45,16 +67,16 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a list of three shared items, with a view into the middle one')('ctx', () =>
           Effect.sync(() => {
             const list = AtomRef.make([10, 20, 30])
-            const middleItem = list.prop(1)
+            const middleItem = AtomRef.prop(list, 1)
             return { list, middleItem }
           })),
         When('the middle item is set to a new value')('ctx', (s) =>
           Effect.sync(() => {
-            s.ctx.middleItem.set(99)
+            AtomRef.set(s.ctx.middleItem, 99)
             return s.ctx
           })),
         Then('only the middle item changed, its neighbours are untouched')((s) => {
-          expect(s.ctx.list.value).toEqual([10, 99, 30])
+          expect(AtomRef.get(s.ctx.list)).toEqual([10, 99, 30])
         }),
       ),
     )
@@ -65,7 +87,7 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           Effect.sync(() => {
             const items = AtomRef.collection([1, 2, 3])
             let notifications = 0
-            const cancel = items.subscribe(() => {
+            const cancel = AtomRef.subscribe(items, () => {
               notifications++
             })
             return { items, getNotifications: () => notifications, cancel }
@@ -74,14 +96,18 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           'result',
           (s) =>
             Effect.sync(() => {
-              const removed = s.ctx.items.value[1]
+              const removed = AtomRef.get(s.ctx.items)[1]
               if (removed === undefined) throw new Error('expected a middle item')
-              s.ctx.items.remove(removed)
+              AtomRef.remove(s.ctx.items, removed)
               const afterRemoveNotifications = s.ctx.getNotifications()
-              removed.set(999)
+              AtomRef.set(removed, 999)
               const afterStaleEditNotifications = s.ctx.getNotifications()
               s.ctx.cancel()
-              return { afterRemoveNotifications, afterStaleEditNotifications, remaining: s.ctx.items.toArray() }
+              return {
+                afterRemoveNotifications,
+                afterStaleEditNotifications,
+                remaining: AtomRef.toArray(s.ctx.items),
+              }
             }),
         ),
         Then('the collection reflects the removal, and editing the removed item no longer notifies the collection')(
@@ -101,15 +127,15 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             const first: number[] = []
             const second: number[] = []
             const third: number[] = []
-            value.subscribe((v) => first.push(v))
-            const cancelSecond = value.subscribe((v) => second.push(v))
-            value.subscribe((v) => third.push(v))
+            AtomRef.subscribe(value, (v) => first.push(v))
+            const cancelSecond = AtomRef.subscribe(value, (v) => second.push(v))
+            AtomRef.subscribe(value, (v) => third.push(v))
             return { value, first, second, third, cancelSecond }
           })),
         When('the middle listener leaves and the value changes')('ctx', (s) =>
           Effect.sync(() => {
             s.ctx.cancelSecond()
-            s.ctx.value.set(1)
+            AtomRef.set(s.ctx.value, 1)
             return s.ctx
           })),
         Then('the departed listener heard nothing while the others heard the change')((s) => {
@@ -125,15 +151,15 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a shared record with no name yet, and a view into its name')('ctx', () =>
           Effect.sync(() => {
             const record = AtomRef.make<{ name?: string; other?: string }>({ other: 'o' })
-            const name = record.prop('name')
+            const name = AtomRef.prop(record, 'name')
             const heard: (string | undefined)[] = []
-            name.subscribe((v) => heard.push(v))
+            AtomRef.subscribe(name, (v) => heard.push(v))
             return { record, heard }
           })),
         When('an unrelated key changes, then the name appears')('ctx', (s) =>
           Effect.sync(() => {
-            s.ctx.record.set({ other: 'changed' })
-            s.ctx.record.set({ other: 'changed', name: 'arrived' })
+            AtomRef.set(s.ctx.record, { other: 'changed' })
+            AtomRef.set(s.ctx.record, { other: 'changed', name: 'arrived' })
             return s.ctx
           })),
         Then('the view stayed quiet until the name existed, then reported it')((s) => {
@@ -147,16 +173,16 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a list of three shared items, with a view into the middle one')('ctx', () =>
           Effect.sync(() => {
             const list = AtomRef.make([10, 20, 30])
-            const middleItem = list.prop(1)
+            const middleItem = AtomRef.prop(list, 1)
             return { list, middleItem }
           })),
         When('the middle item is updated by adding one')('ctx', (s) =>
           Effect.sync(() => {
-            s.ctx.middleItem.update((n) => n + 1)
+            AtomRef.update(s.ctx.middleItem, (n) => n + 1)
             return s.ctx
           })),
         Then('only the middle item changed, its neighbours are untouched')((s) => {
-          expect(s.ctx.list.value).toEqual([10, 21, 30])
+          expect(AtomRef.get(s.ctx.list)).toEqual([10, 21, 30])
         }),
       ),
     )
@@ -166,18 +192,18 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a shared collection, being watched by a listener')('ctx', () =>
           Effect.sync(() => {
             const items = AtomRef.collection([1, 2, 3])
-            const stranger = AtomRef.collection([9]).value[0]
+            const stranger = AtomRef.get(AtomRef.collection([9]))[0]
             if (stranger === undefined) throw new Error('expected an item in the other collection')
             let notifications = 0
-            const cancel = items.subscribe(() => {
+            const cancel = AtomRef.subscribe(items, () => {
               notifications++
             })
             return { items, stranger, getNotifications: () => notifications, cancel }
           })),
         When('an item that belongs to another collection is removed from this one')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.items.remove(s.ctx.stranger)
-            const result = { remaining: s.ctx.items.toArray(), notifications: s.ctx.getNotifications() }
+            AtomRef.remove(s.ctx.items, s.ctx.stranger)
+            const result = { remaining: AtomRef.toArray(s.ctx.items), notifications: s.ctx.getNotifications() }
             s.ctx.cancel()
             return result
           })),
@@ -193,16 +219,16 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a shared record with a view into one of its fields')('ctx', () =>
           Effect.sync(() => {
             const record = AtomRef.make({ name: 'ada', other: 'x' })
-            const name = record.prop('name')
+            const name = AtomRef.prop(record, 'name')
             return { record, name }
           })),
         When('that field is updated by turning it uppercase')('ctx', (s) =>
           Effect.sync(() => {
-            s.ctx.name.update((n) => n.toUpperCase())
+            AtomRef.update(s.ctx.name, (n) => n.toUpperCase())
             return s.ctx
           })),
         Then('only that field changed, its neighbour is untouched')((s) => {
-          expect(s.ctx.record.value).toEqual({ name: 'ADA', other: 'x' })
+          expect(AtomRef.get(s.ctx.record)).toEqual({ name: 'ADA', other: 'x' })
         }),
       ),
     )
@@ -217,12 +243,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
                 { name: 'ada', address: { city: 'london' } },
                 { name: 'grace', address: { city: 'paris' } },
               ])
-              const first = items.value[0]
+              const first = AtomRef.get(items)[0]
               if (first === undefined) throw new Error('expected a first item')
-              const firstName = first.prop('name')
-              const city = first.prop('address').prop('city')
+              const firstName = AtomRef.prop(first, 'name')
+              const address = AtomRef.prop(first, 'address')
+              const city = AtomRef.prop(address, 'city')
               let notifications = 0
-              const cancel = items.subscribe(() => {
+              const cancel = AtomRef.subscribe(items, () => {
                 notifications++
               })
               return { items, firstName, city, getNotifications: () => notifications, cancel }
@@ -232,15 +259,18 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           'result',
           (s) =>
             Effect.sync(() => {
-              s.ctx.firstName.set('bob')
-              const afterFieldSet = { notifications: s.ctx.getNotifications(), city: s.ctx.city.value }
-              s.ctx.city.update((c) => c.toUpperCase())
-              const afterNestedUpdate = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
-              const removed = s.ctx.items.value[0]
+              AtomRef.set(s.ctx.firstName, 'bob')
+              const afterFieldSet = { notifications: s.ctx.getNotifications(), city: AtomRef.get(s.ctx.city) }
+              AtomRef.update(s.ctx.city, (c) => c.toUpperCase())
+              const afterNestedUpdate = {
+                notifications: s.ctx.getNotifications(),
+                items: AtomRef.toArray(s.ctx.items),
+              }
+              const removed = AtomRef.get(s.ctx.items)[0]
               if (removed === undefined) throw new Error('expected a first item')
-              s.ctx.items.remove(removed)
-              removed.prop('name').set('zed')
-              const afterRemoval = { notifications: s.ctx.getNotifications(), items: s.ctx.items.toArray() }
+              AtomRef.remove(s.ctx.items, removed)
+              AtomRef.set(AtomRef.prop(removed, 'name'), 'zed')
+              const afterRemoval = { notifications: s.ctx.getNotifications(), items: AtomRef.toArray(s.ctx.items) }
               s.ctx.cancel()
               return { afterFieldSet, afterNestedUpdate, afterRemoval }
             }),
@@ -267,15 +297,15 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           Effect.sync(() => {
             const value = AtomRef.make(5)
             const heard: number[] = []
-            value.subscribe((v) => heard.push(v))
+            AtomRef.subscribe(value, (v) => heard.push(v))
             return { value, heard }
           })),
         When('the value is set to the number it already holds, then set to a different number')(
           'result',
           (s) =>
             Effect.sync(() => {
-              const sameRef = s.ctx.value.set(5)
-              s.ctx.value.set(6)
+              const sameRef = AtomRef.set(s.ctx.value, 5)
+              AtomRef.set(s.ctx.value, 6)
               return { heard: s.ctx.heard, sameRef, value: s.ctx.value }
             }),
         ),
@@ -293,19 +323,19 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         Given('a shared record that has no name yet, with a view into its name')('ctx', () =>
           Effect.sync(() => {
             const record = AtomRef.make<{ name?: string; other?: string }>({ other: 'x' })
-            const name = record.prop('name')
+            const name = AtomRef.prop(record, 'name')
             const heard: (string | undefined)[] = []
-            name.subscribe((v) => heard.push(v))
+            AtomRef.subscribe(name, (v) => heard.push(v))
             return { record, name, heard }
           })),
         When('the record is updated to add the name, then the name is read and changed')(
           'result',
           (s) =>
             Effect.sync(() => {
-              s.ctx.record.update((r) => ({ ...r, name: 'ada' }))
-              const afterAppearing = s.ctx.name.value
-              s.ctx.record.update((r) => ({ ...r, name: 'bob' }))
-              return { heard: s.ctx.heard, afterAppearing, current: s.ctx.name.value }
+              AtomRef.update(s.ctx.record, (r) => ({ ...r, name: 'ada' }))
+              const afterAppearing = AtomRef.get(s.ctx.name)
+              AtomRef.update(s.ctx.record, (r) => ({ ...r, name: 'bob' }))
+              return { heard: s.ctx.heard, afterAppearing, current: AtomRef.get(s.ctx.name) }
             }),
         ),
         Then('the view reported the name when it appeared and always reads the current name')((s) => {
@@ -323,9 +353,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           () =>
             Effect.sync(() => {
               const record = AtomRef.make({ name: 'ada', other: 'x' })
-              const name = record.prop('name')
+              const name = AtomRef.prop(record, 'name')
               const heard: string[] = []
-              name.subscribe((v) => heard.push(v))
+              AtomRef.subscribe(name, (v) => heard.push(v))
               return { record, name, heard }
             }),
         ),
@@ -333,9 +363,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           'result',
           (s) =>
             Effect.sync(() => {
-              s.ctx.record.set({ name: 'ada', other: 'y' })
+              AtomRef.set(s.ctx.record, { name: 'ada', other: 'y' })
               const afterUnrelatedChange = [...s.ctx.heard]
-              s.ctx.record.set({ name: 'bob', other: 'y' })
+              AtomRef.set(s.ctx.record, { name: 'bob', other: 'y' })
               return { afterUnrelatedChange, heard: s.ctx.heard }
             }),
         ),
@@ -344,5 +374,164 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
           expect(s.result.heard).toEqual(['bob'])
         }),
       ),
+    )
+    scenario(
+      'Two equally valued pieces of shared state keep their own identity',
+      Gherkin.Do.pipe(
+        Given('two pieces of shared state holding the same number, created one after the other')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const first = AtomRef.make(7)
+              const second = AtomRef.make(7)
+              return { first, second }
+            }),
+        ),
+        When('the two pieces are compared and their identities are read')('result', (s) =>
+          Effect.sync(() => ({
+            firstKey: s.ctx.first.key,
+            secondKey: s.ctx.second.key,
+            equal: Equal.equals(s.ctx.first, s.ctx.second),
+          }))),
+        Then('each piece has its own identity while equal values still compare as equal')((s) => {
+          expect(s.result.firstKey).not.toBe(s.result.secondKey)
+          expect(s.result.equal).toBe(true)
+        }),
+      ),
+    )
+    scenario(
+      'Changing a shared value notifies every listener exactly once with the new value',
+      Gherkin.Do.pipe(
+        Given('a shared value being watched by two listeners')('ctx', () =>
+          Effect.sync(() => {
+            const value = AtomRef.make(0)
+            const first: number[] = []
+            const second: number[] = []
+            AtomRef.subscribe(value, (v) => first.push(v))
+            AtomRef.subscribe(value, (v) => second.push(v))
+            return { value, first, second }
+          })),
+        When('the value changes for real')('ctx', (s) =>
+          Effect.sync(() => {
+            AtomRef.set(s.ctx.value, 9)
+            return s.ctx
+          })),
+        Then('each listener heard the new value exactly once')((s) => {
+          expect(s.ctx.first).toEqual([9])
+          expect(s.ctx.second).toEqual([9])
+        }),
+      ),
+    )
+    scenario(
+      'Changing a nested field updates its parent and notifies whoever watches the parent',
+      Gherkin.Do.pipe(
+        Given('a shared record whose whole content is being watched')('ctx', () =>
+          Effect.sync(() => {
+            const record = AtomRef.make({ name: 'ada', other: 'x' })
+            const heard: { name: string; other: string }[] = []
+            AtomRef.subscribe(record, (v) => heard.push(v))
+            return { record, heard }
+          })),
+        When('the nested field is changed through its own view')('ctx', (s) =>
+          Effect.sync(() => {
+            AtomRef.set(AtomRef.prop(s.ctx.record, 'name'), 'grace')
+            return s.ctx
+          })),
+        Then('the parent carries the new field and its watchers heard the whole parent')((s) => {
+          expect(AtomRef.get(s.ctx.record)).toEqual({ name: 'grace', other: 'x' })
+          expect(s.ctx.heard).toEqual([{ name: 'grace', other: 'x' }])
+        }),
+      ),
+    )
+    scenario(
+      'Adding and removing items of a shared collection notifies whoever watches the collection',
+      Gherkin.Do.pipe(
+        Given('a shared collection of two items, being watched by a listener')('ctx', () =>
+          Effect.sync(() => {
+            const items = AtomRef.collection([1, 2])
+            const heard: number[][] = []
+            AtomRef.subscribe(items, (refs) => heard.push(refs.map((ref) => AtomRef.get(ref))))
+            return { items, heard }
+          })),
+        When('an item is added and then removed again')('result', (s) =>
+          Effect.sync(() => {
+            AtomRef.push(s.ctx.items, 3)
+            const added = AtomRef.get(s.ctx.items)[2]
+            if (added === undefined) throw new Error('expected an added item')
+            AtomRef.remove(s.ctx.items, added)
+            return { heard: s.ctx.heard, remaining: AtomRef.toArray(s.ctx.items) }
+          })),
+        Then('the listener heard the addition and the removal, and only the original items remain')((s) => {
+          expect(s.result.heard).toEqual([[1, 2, 3], [1, 2]])
+          expect(s.result.remaining).toEqual([1, 2])
+        }),
+      ),
+    )
+    scenarioOutline(
+      'Reading and changing shared state with the <operation> helper gives the same answer however it is called',
+      [
+        {
+          operation: 'read',
+          attempt: (refs: RefBundle): Call => ({
+            direct: AtomRef.get(refs.value),
+            piped: refs.value.pipe(AtomRef.get),
+          }),
+        },
+        {
+          operation: 'view a field',
+          attempt: (refs: RefBundle): Call => ({
+            direct: AtomRef.get(AtomRef.prop(refs.record, 'name')),
+            piped: refs.record.pipe(AtomRef.prop('name'), AtomRef.get),
+          }),
+        },
+        {
+          operation: 'derive a value',
+          attempt: (refs: RefBundle): Call => ({
+            direct: AtomRef.get(AtomRef.map(refs.value, (n) => n + 1)),
+            piped: refs.value.pipe(AtomRef.map((n) => n + 1), AtomRef.get),
+          }),
+        },
+        {
+          operation: 'replace the value',
+          attempt: (refs: RefBundle): Call => {
+            AtomRef.set(refs.value, 5)
+            return { direct: AtomRef.get(refs.value), piped: AtomRef.get(refs.value) }
+          },
+        },
+        {
+          operation: 'update the value',
+          attempt: (refs: RefBundle): Call => {
+            AtomRef.update(refs.value, (n) => n + 1)
+            return { direct: AtomRef.get(refs.value), piped: AtomRef.get(refs.value) }
+          },
+        },
+        {
+          operation: 'listen',
+          attempt: (refs: RefBundle): Call => {
+            const first: Array<number> = []
+            const second: Array<number> = []
+            const cancelFirst = AtomRef.subscribe(refs.value, (v) => first.push(v))
+            const cancelSecond = refs.value.pipe(AtomRef.subscribe((v) => second.push(v)))
+            AtomRef.set(refs.value, 9)
+            cancelFirst()
+            cancelSecond()
+            return { direct: first, piped: second }
+          },
+        },
+      ],
+      (row: RefCall) =>
+        Gherkin.Do.pipe(
+          Given('a shared value, a shared record, and a shared collection')('ctx', () =>
+            Effect.sync(() => ({
+              value: AtomRef.make(4),
+              record: AtomRef.make({ name: 'ada', other: 'x' }),
+              items: AtomRef.collection([1]),
+            }))),
+          When('the helper is called directly and through a pipe')('result', (s) =>
+            Effect.sync(() => row.attempt(s.ctx))),
+          Then('both calls agreed with each other')((s) => {
+            expect(s.result.piped).toEqual(s.result.direct)
+          }),
+        ),
     )
   })

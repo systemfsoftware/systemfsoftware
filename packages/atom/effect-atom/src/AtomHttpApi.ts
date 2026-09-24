@@ -174,7 +174,7 @@ const catchErrors = Effect.catch(catchError)
 
 const runtimeFactoryOf = (runtime: Atom.RuntimeFactory | undefined): Atom.RuntimeFactory => {
   if (runtime === undefined) {
-    return Atom.runtime
+    return Atom.context()
   }
   return runtime
 }

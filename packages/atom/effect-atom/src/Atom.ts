@@ -705,11 +705,19 @@ function asReadableAtom<A = unknown>(
   return readable(readOrAtom)
 }
 
+/**
+ * A registry-scoped memo map: the atom is evaluated once per registry, so each
+ * registry memoizes its own layer builds.
+ */
+function makeRegistryMemoMap(): Atom<Layer.MemoMap> {
+  return removeTtl(make(() => Layer.makeMemoMapUnsafe()))
+}
+
 function contextMemoMap(
   options?: { readonly memoMap: Atom<Layer.MemoMap> | Layer.MemoMap },
 ): Atom<Layer.MemoMap> | Layer.MemoMap {
   if (options === undefined) {
-    return removeTtl(make(() => Layer.makeMemoMapUnsafe()))
+    return makeRegistryMemoMap()
   }
   return options.memoMap
 }
@@ -723,6 +731,52 @@ function resolveContextMemoMap(
   }
   return memoMap
 }
+
+/**
+ * The `Reactivity` service of the registry evaluating an atom, built in that
+ * atom's scope through the supplied memo map.
+ */
+function makeReactivityAtom(
+  resolveMemoMap: (get: AtomContext) => Layer.MemoMap,
+): Atom<AsyncResult.Result<Reactivity.Reactivity>> {
+  return removeTtl(
+    make((get) =>
+      Effect.contextWith((services: Context.Context<Scope.Scope>) =>
+        Layer.buildWithMemoMap(Reactivity.layer, resolveMemoMap(get), Context.get(services, Scope.Scope))
+      ).pipe(
+        Effect.map(Context.get(Reactivity.Reactivity)),
+      )
+    ),
+  )
+}
+
+/**
+ * Builds the combinator that refreshes an atom whenever the supplied keys change
+ * in the `Reactivity` service the supplied atom resolves to.
+ */
+function makeWithReactivity(
+  reactivityAtom: Atom<AsyncResult.Result<Reactivity.Reactivity>>,
+): (
+  keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
+) => <A extends Atom<Top>>(atom: A) => A {
+  return (keys) => <A extends Atom<Top>>(atom: A): A => {
+    const read = (get: AtomContext): Top => {
+      const store = AsyncResult.getOrThrow(get(reactivityAtom))
+      get.addFinalizer(store.registerUnsafe(keys, () => {
+        get.refresh(atom)
+      }))
+      get.subscribe(atom, (value) => get.setSelf(value))
+      return atom.read(get)
+    }
+    return { ...atom, read }
+  }
+}
+
+const defaultReactivityMemoMap: Atom<Layer.MemoMap> = makeRegistryMemoMap()
+
+const defaultReactivityAtom: Atom<AsyncResult.Result<Reactivity.Reactivity>> = makeReactivityAtom((get) =>
+  get(defaultReactivityMemoMap)
+)
 
 function runtimeLayerAtom<R, E, RIn>(
   create: Layer.Layer<R, E, RIn> | ((get: AtomContext) => Layer.Layer<R, E, RIn>),
@@ -2475,29 +2529,8 @@ export function context(options?: {
   const addGlobalLayer = <A, E>(layer: Layer.Layer<A, E, Current | Reactivity.Reactivity>): void => {
     globalLayer = Layer.provideMerge(globalLayer, Layer.orDie(Layer.provide(layer, Reactivity.layer)))
   }
-  const reactivityAtom = removeTtl(
-    make((get) =>
-      Effect.contextWith((services: Context.Context<Scope.Scope>) =>
-        Layer.buildWithMemoMap(Reactivity.layer, resolveMemoMap(get), Context.get(services, Scope.Scope))
-      ).pipe(
-        Effect.map(Context.get(Reactivity.Reactivity)),
-      )
-    ),
-  )
-  const withReactivity = (
-    keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
-  ): <A extends Atom<Top>>(atom: A) => A =>
-  <A extends Atom<Top>>(atom: A): A => {
-    const read = (get: AtomContext): Top => {
-      const store = AsyncResult.getOrThrow(get(reactivityAtom))
-      get.addFinalizer(store.registerUnsafe(keys, () => {
-        get.refresh(atom)
-      }))
-      get.subscribe(atom, (value) => get.setSelf(value))
-      return atom.read(get)
-    }
-    return { ...atom, read }
-  }
+  const reactivityAtom = makeReactivityAtom(resolveMemoMap)
+  const withReactivity = makeWithReactivity(reactivityAtom)
   const factoryFn = function makeRuntime<R, E, RIn = never>(
     create:
       | Layer.Layer<R, E, RIn>
@@ -2544,26 +2577,20 @@ function assignRuntimeFactory(
 }
 
 /**
- * Default registry-scoped `RuntimeFactory`.
- *
- * @since 4.0.0
- */
-export const runtime: RegistryRuntimeFactory = context()
-
-/**
- * Returns `Rx.runtime.withReactivity` for refreshing an atom whenever the
- * keys change in the `Reactivity` service.
+ * Refreshes an atom whenever one or more invalidation keys change in the
+ * `Reactivity` service.
  *
  * **When to use**
  *
- * Use to refresh an atom whenever one or more invalidation keys change in the
- * default reactivity runtime.
+ * Use to refresh an atom whenever the keys change. The reactivity service is
+ * resolved per registry, so each registry refreshes against its own
+ * invalidation keys.
  *
  * @since 4.0.0
  */
 export const withReactivity: (
   keys: readonly Top[] | ReadonlyRecord<string, readonly Top[]>,
-) => <A extends Atom<Top>>(atom: A) => A = runtime.withReactivity
+) => <A extends Atom<Top>>(atom: A) => A = makeWithReactivity(defaultReactivityAtom)
 
 // -----------------------------------------------------------------------------
 // constructors - stream

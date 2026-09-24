@@ -3,7 +3,7 @@ import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Option, Schema } from 'effect'
+import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
@@ -490,6 +490,69 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           expect(Result.isFailure(s.outcome)).toBe(true)
           expect(Result.error(s.outcome)).toEqual(Option.some({ message: 'nope' }))
         }),
+      ),
+    )
+    scenario(
+      'Two clients defined without their own runtime each keep the extra service added to their own runtime factory',
+      Gherkin.Do.pipe(
+        Given(
+          'two API clients defined without their own runtime, each runtime factory later given its own extra service',
+        )(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              class Greeting extends Context.Service<Greeting, string>()(
+                '@systemfsoftware/effect-atom/tests/AtomHttpApi.integration.test/Greeting',
+              ) {}
+              const httpClient = stubHttpClient((request) =>
+                Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+              )
+              const clientWithGreeting = (greeting: string) => {
+                const Client = AtomHttpApi.Service()('Client', {
+                  api: Api,
+                  httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+                })
+                Client.runtime.factory.addGlobalLayer(Layer.succeed(Greeting, greeting))
+                return {
+                  greeting: Client.runtime.factory(Layer.empty).atom(
+                    Effect.contextWith((services: Context.Context<never>) =>
+                      Effect.succeed(Option.getOrNull(Context.getOption(services, Greeting)))
+                    ),
+                  ),
+                  profile: Client.query('group', 'get', { params: { id: 1 } }),
+                }
+              }
+              return {
+                registry: Registry.make(),
+                first: clientWithGreeting('first'),
+                second: clientWithGreeting('second'),
+              }
+            }),
+        ),
+        When('the extra service is read from each runtime factory, and one client answers a request')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              const unmount = Registry.subscribe(s.ctx.registry, s.ctx.first.profile, () => {}, { immediate: true })
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+              const profile = Registry.get(s.ctx.registry, s.ctx.first.profile)
+              unmount()
+              return {
+                firstGreeting: Registry.get(s.ctx.registry, s.ctx.first.greeting),
+                secondGreeting: Registry.get(s.ctx.registry, s.ctx.second.greeting),
+                profile,
+              }
+            }),
+        ),
+        Then('each runtime factory reports only the extra service it was given itself, and the request is answered')(
+          (s) => {
+            expect(Result.getOrThrow(s.readings.firstGreeting)).toBe('first')
+            expect(Result.getOrThrow(s.readings.secondGreeting)).toBe('second')
+            expect(Result.isSuccess(s.readings.profile)).toBe(true)
+          },
+        ),
       ),
     )
   })
