@@ -69,6 +69,18 @@ The three-way classification of operations by their relationship to service requ
 
 _Gate:_ `review` — verified by code review that `Cell.provideContext` and `Effect.provide` do not appear inside domain cells or workflow modules.
 
+### Store
+
+A port over shared state that outlives one interaction and ships a law suite that its in-memory fake and its real adapter both pass. A port with no law suite is not a store.
+
+_Gate:_ `review` — `compound-packs/boundary-testing/fake-and-real-store-laws.md`.
+
+### Unit of Work
+
+A store-owned SERIALIZABLE transaction that runs one sandwich's read, decision, and save together and re-runs the whole sandwich when Postgres reports a serialization failure (40001) or a deadlock (40P01). A store's decision-serving reads and saves require a `UnitOfWork` service, and only the store's `unitOfWork` removes it.
+
+_Gate:_ TypeScript compiler rejects a read or save that runs outside `unitOfWork`.
+
 ---
 
 ## Boundary Testing & System Oracles
