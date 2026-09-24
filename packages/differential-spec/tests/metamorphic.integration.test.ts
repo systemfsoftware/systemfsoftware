@@ -1,14 +1,15 @@
 import { runMetamorphicWithShrink } from '@systemfsoftware/differential-spec'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { integers } from './__fixtures__/arbitraries.js'
 import { disparityReportOf } from './__fixtures__/disparityReport.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Proving a system obeys a relation when its input is transformed')
   .withLayer(Layer.empty)
+  .live('the metamorphic check explores its own kernel schedules')
   .body(({ scenario }) => {
     scenario(
       'A system whose outputs break the relation is caught with the seed and its follow-up',

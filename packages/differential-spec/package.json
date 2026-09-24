@@ -17,17 +17,21 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown -l warn",
+    "build": "tsdown -l warn && pnpm api:check",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "api-extractor-quiet run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-sim-kernel": "workspace:^",
     "effect": "catalog:",
     "fast-check": "catalog:"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

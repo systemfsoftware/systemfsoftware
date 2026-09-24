@@ -2,11 +2,11 @@ import { Metamorphic } from '@systemfsoftware/differential-spec'
 import { Effect } from 'effect'
 import { integerLists } from './__fixtures__/arbitraries.js'
 
-const keepPositives = (xs: number[]) => Effect.succeed(xs.filter((x) => x > 0))
+const keepPositives = (amounts: Array<number>) => Effect.succeed(amounts.filter((amount) => amount > 0))
 
-Metamorphic.on(keepPositives)
+Metamorphic.on('a system that keeps the positive amounts keeps one entry per positive amount', keepPositives)
   .relation({
-    transformInput: (xs) => xs.map((x) => x * 2),
-    assertOutput: (baseline, followUp) => followUp.length === baseline.length,
+    transformInput: (amounts: Array<number>) => amounts.map((amount) => amount * 2),
+    assertOutput: (baseline: Array<number>, followUp: Array<number>) => followUp.length === baseline.length,
   })
   .on(integerLists)

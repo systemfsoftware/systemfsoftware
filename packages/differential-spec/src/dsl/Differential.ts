@@ -5,22 +5,21 @@ import type { DualExecutionSupervisorOptions } from '../core/DualExecutionSuperv
 import { runDifferentialWithShrink } from '../core/DualExecutionSupervisor.js'
 
 export interface DifferentialBuilder<Input, OutputA, OutputB> {
-  on: (arb: fc.Arbitrary<Input>, options?: DualExecutionSupervisorOptions) => {
-    assert: (oracle: (outputA: OutputA, outputB: OutputB) => boolean) => void
+  readonly on: (arb: fc.Arbitrary<Input>, options?: DualExecutionSupervisorOptions) => {
+    readonly assert: (oracle: (outputA: OutputA, outputB: OutputB) => boolean) => void
   }
 }
 
-export const compare = <Input, OutputA, OutputB, E>({
-  reference,
-  candidate,
-}: {
-  reference: (input: Input) => Effect.Effect<OutputA, E>
-  candidate: (input: Input) => Effect.Effect<OutputB, E>
-}): DifferentialBuilder<Input, OutputA, OutputB> => ({
+export const compare = <Input, OutputA, OutputB, E>(
+  name: string,
+  targets: {
+    readonly reference: (input: Input) => Effect.Effect<OutputA, E>
+    readonly candidate: (input: Input) => Effect.Effect<OutputB, E>
+  },
+): DifferentialBuilder<Input, OutputA, OutputB> => ({
   on: (arb, options) => ({
     assert: (oracle) => {
-      it.effect('Should_HoldForAllGeneratedInputs_When_OracleRelationApplied', () =>
-        runDifferentialWithShrink(reference, candidate, arb, oracle, options))
+      it.effect(name, () => runDifferentialWithShrink(targets.reference, targets.candidate, arb, oracle, options))
     },
   }),
 })
