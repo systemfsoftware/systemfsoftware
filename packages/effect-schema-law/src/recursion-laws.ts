@@ -454,7 +454,20 @@ if (import.meta.vitest !== void 0) {
     maxNestingDepthOf,
     deepShareOf,
     coversEveryVariant,
+    assertDerivationHook,
   }
+
+  const refusesOf = (run: () => void): boolean => Exit.isFailure(Effect.runSyncExit(Effect.try(run)))
+
+  it.prop(
+    '∀b_BudgetWithoutHook_RequiresTransform',
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT },
+    (subject, [maxDepth]) => {
+      const unhooked = S.String.annotate({ recursionBudget: { maxDepth } }).ast
+      return refusesOf(() => subject.assertDerivationHook('Unhooked', unhooked, { maxDepth })) &&
+        !refusesOf(() => subject.assertDerivationHook('Unbudgeted', unhooked, undefined))
+    },
+  )
 
   it.prop(
     '∀v_Measure_DepthPlusOne',

@@ -72,6 +72,14 @@ export * from 'vitest'`,
       code: `import { describe } from 'vitest'`,
       filename: '/repo/packages/effect-spec-runtime/src/Register.ts',
     },
+    {
+      name: 'Should_Allow_TypeReExport_When_SourceIsUpstreamEffectVitest',
+      code: `export type { TestAPI } from '@effect/vitest'`,
+    },
+    {
+      name: 'Should_Allow_ReExport_When_SourceIsSystemfsoftwareVitest',
+      code: `export * from '@systemfsoftware/vitest'`,
+    },
   ],
   invalid: [
     {
@@ -138,6 +146,16 @@ export * from 'vitest'`,
     {
       name: 'Should_Report_DynamicImport_When_SourceIsUpstreamEffectVitest',
       code: `const V = await import('@effect/vitest')`,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_StarReExport_When_SourceIsUpstreamEffectVitest',
+      code: `export * from '@effect/vitest'`,
+      errors: [refusal],
+    },
+    {
+      name: 'Should_Report_NamedReExport_When_SourceIsVitest',
+      code: `export { it } from 'vitest'`,
       errors: [refusal],
     },
   ],

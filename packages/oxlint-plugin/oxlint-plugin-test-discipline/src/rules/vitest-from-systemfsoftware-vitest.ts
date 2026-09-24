@@ -49,6 +49,16 @@ export const vitestFromSystemfsoftwareVitest = defineRule({
         if (!isForeignVitestLiteral(node.source)) return
         report(node)
       },
+      ExportAllDeclaration(node: ESTree.ExportAllDeclaration) {
+        if (node.exportKind === 'type') return
+        if (FOREIGN_VITEST_SOURCES[node.source.value] !== true) return
+        report(node)
+      },
+      ExportNamedDeclaration(node: ESTree.ExportNamedDeclaration) {
+        if (node.source === null || node.exportKind === 'type') return
+        if (FOREIGN_VITEST_SOURCES[node.source.value] !== true) return
+        report(node)
+      },
     }
   },
 })
