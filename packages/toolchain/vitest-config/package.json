@@ -19,7 +19,8 @@
     "lib"
   ],
   "scripts": {
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "test": "vitest run"
   },
   "dependencies": {
     "magic-string": "catalog:",

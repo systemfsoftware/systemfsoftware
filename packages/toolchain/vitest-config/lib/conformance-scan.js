@@ -24,6 +24,7 @@
  * }} Site
  */
 /** @typedef {{ readonly start: number, readonly end: number }} Span */
+/** @typedef {{ readonly start: number, readonly end: number, readonly object: string }} KernelCall */
 /** @typedef {{ readonly type: string, readonly start: number, readonly end: number, readonly [key: string]: unknown }} AstNode */
 /** @typedef {(filename: string, code: string, options: object) => { program: object, errors: ReadonlyArray<unknown> }} Parse */
 /** @typedef {{ readonly module: string } | { readonly callable: Primitive }} Binding */
@@ -312,15 +313,16 @@ export const scanSites = (parse, file, code) => {
 
 /**
  * Every `Kernel.run(…)` / `Kernel.search(…)` call in a checker's source: the
- * programs a check drives go through these.
+ * programs a check drives go through these. Each carries the identifier the
+ * call was made on, so the runtime is handed the kernel namespace itself.
  * @param {Parse} parse
  * @param {string} file
  * @param {string} code
- * @returns {ReadonlyArray<Span>}
+ * @returns {ReadonlyArray<KernelCall>}
  */
 export const scanKernelCalls = (parse, file, code) => {
   const program = programOf(parse, file, code)
-  /** @type {Array<Span>} */
+  /** @type {Array<KernelCall>} */
   const calls = []
   walk(program, (node) => {
     if (node.type !== 'CallExpression') return
@@ -328,7 +330,9 @@ export const scanKernelCalls = (parse, file, code) => {
     if (callee?.type !== 'MemberExpression') return
     if (nameOf(callee['object']) !== 'Kernel') return
     const member = nameOf(callee['property'])
-    if (member === 'run' || member === 'search') calls.push({ start: node.start, end: node.end })
+    if (member === 'run' || member === 'search') {
+      calls.push({ start: node.start, end: node.end, object: 'Kernel' })
+    }
   })
   return calls
 }

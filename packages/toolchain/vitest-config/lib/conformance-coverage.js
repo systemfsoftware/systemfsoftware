@@ -7,6 +7,10 @@
  * executed inside a program a checker drove through `Kernel.run` or
  * `Kernel.search`. A checker cannot check itself or a package it depends on,
  * so those packages are judged by whether their own tests ran each site.
+ *
+ * An include that matched nothing is a misconfiguration only when the package
+ * keeps source of its own: a test-only package has no `src/`, so nothing was
+ * missed and it passes with an empty source set.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
@@ -33,6 +37,7 @@ import { scanKernelCalls, scanSites } from './conformance-scan.js'
  *   readonly name: string,
  *   readonly role: Role,
  *   readonly sources: ReadonlySet<string>,
+ *   readonly sourceRoot: ReadonlyArray<string>,
  *   readonly checkerSources: ReadonlyMap<string, string>,
  * }} RunState
  */
@@ -117,25 +122,74 @@ const workspaceGlobs = (workspaceRoot) => {
 }
 
 /**
- * name → { dir, dependencies } for every workspace package.
+ * The bare package a `workspace:` / `npm:` specifier names, with any version
+ * suffix dropped: `workspace:@systemfsoftware/vitest@*` is
+ * `@systemfsoftware/vitest`, and a bare scoped name with no `@` after the first
+ * character is itself.
+ * @param {string} specifier
+ * @returns {string}
+ */
+const bareTarget = (specifier) => {
+  const at = specifier.lastIndexOf('@')
+  return at > 0 ? specifier.slice(0, at) : specifier
+}
+
+/**
+ * The workspace package a dependency specifier aliases, or undefined when it is
+ * a plain version range. A pnpm workspace reaches a sibling through
+ * `workspace:<name>@…` or `npm:<name>@…`, in a manifest or in a catalog.
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+const aliasedTarget = (value) => {
+  if (typeof value !== 'string') return undefined
+  const match = /^(?:workspace|npm):(.+)$/.exec(value)
+  return match?.[1] === undefined ? undefined : bareTarget(match[1])
+}
+
+/**
+ * name (and alias) → { name, dir, dependencies } for every workspace package.
+ * Alias keys are added for the fork specifier (`@effect/vitest`) as well as the
+ * package's own name, so a checker that depends on the fork only through the
+ * alias still places the fork in its closure.
  * @param {string} workspaceRoot
- * @returns {Promise<Map<string, { dir: string, dependencies: ReadonlyArray<string> }>>}
+ * @returns {Promise<Map<string, { name: string, dir: string, dependencies: ReadonlyArray<string> }>>}
  */
 const workspacePackages = async (workspaceRoot) => {
   const manifests = await glob(
     workspaceGlobs(workspaceRoot).map((pattern) => `${pattern.replace(/\/$/, '')}/package.json`),
     { cwd: workspaceRoot, absolute: true, ignore: ['**/node_modules/**'] },
   )
-  /** @type {Map<string, { dir: string, dependencies: ReadonlyArray<string> }>} */
+  /** @type {Map<string, { name: string, dir: string, dependencies: ReadonlyArray<string> }>} */
   const out = new Map()
+  /** @type {Map<string, string>} */
+  const aliases = new Map()
   for (const manifest of manifests) {
     const json = readJson(manifest)
     const name = nameField(json)
-    const dependencies = [
-      ...Object.keys(recordAt(json, 'dependencies')),
-      ...Object.keys(recordAt(json, 'devDependencies')),
-    ]
-    if (name !== '') out.set(name, { dir: dirname(manifest), dependencies })
+    const declared = {
+      ...recordAt(json, 'dependencies'),
+      ...recordAt(json, 'devDependencies'),
+    }
+    const dependencies = Object.keys(declared)
+    for (const [dependency, value] of Object.entries({ ...declared, ...recordAt(json, 'peerDependencies') })) {
+      const target = aliasedTarget(value)
+      if (target !== undefined) aliases.set(dependency, target)
+    }
+    if (name !== '') out.set(name, { name, dir: dirname(manifest), dependencies })
+  }
+  // The catalog holds the workspace's alias table too; read it textually so a
+  // `catalog:` dependency resolves without a YAML parser.
+  const workspaceManifest = readFileSync(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8')
+  for (const line of workspaceManifest.split('\n')) {
+    const entry = /^\s+['"]?([^'":\s]+)['"]?:\s*['"]?((?:workspace|npm):[^'"\s]+)['"]?\s*(?:#.*)?$/.exec(line)
+    if (entry?.[1] === undefined || entry[2] === undefined) continue
+    const target = aliasedTarget(entry[2])
+    if (target !== undefined) aliases.set(entry[1], target)
+  }
+  for (const [alias, target] of aliases) {
+    const found = out.get(target)
+    if (found !== undefined) out.set(alias, found)
   }
   return out
 }
@@ -144,7 +198,7 @@ const workspacePackages = async (workspaceRoot) => {
  * The checkers and every workspace package they depend on, dev dependencies
  * included: a checker cannot check a package it is built or tested with,
  * because that package cannot take the checker as a dependency without a cycle.
- * @param {Map<string, { dir: string, dependencies: ReadonlyArray<string> }>} packages
+ * @param {Map<string, { name: string, dir: string, dependencies: ReadonlyArray<string> }>} packages
  * @returns {Set<string>}
  */
 const harnessNames = (packages) => {
@@ -152,9 +206,10 @@ const harnessNames = (packages) => {
   const pending = [...CHECKERS]
   for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
     for (const dependency of packages.get(name)?.dependencies ?? []) {
-      if (packages.has(dependency) && !out.has(dependency)) {
-        out.add(dependency)
-        pending.push(dependency)
+      const resolved = packages.get(dependency)
+      if (resolved !== undefined && !out.has(resolved.name)) {
+        out.add(resolved.name)
+        pending.push(resolved.name)
       }
     }
   }
@@ -177,6 +232,22 @@ const sourceSetOf = async (vitest) => {
   return new Set(
     files.map(posix).filter((/** @type {string} */ file) => SOURCE_FILE.test(file) && !TEST_FILE.test(file)),
   )
+}
+
+/**
+ * The package's own source root, `src/`, as source files minus test files. A run
+ * whose `coverage.include` matched nothing is judged against this: nothing was
+ * missed when the package declares no source of its own.
+ * @param {Vitest} vitest
+ * @returns {Promise<ReadonlyArray<string>>}
+ */
+const sourceRootOf = async (vitest) => {
+  const files = await glob(['src/**'], {
+    cwd: vitest.config.root,
+    absolute: true,
+    ignore: ['**/node_modules/**', '**/dist/**'],
+  })
+  return files.map(posix).filter((/** @type {string} */ file) => SOURCE_FILE.test(file) && !TEST_FILE.test(file))
 }
 
 /**
@@ -307,8 +378,9 @@ const verdict = (run, sites, unreadable, evidence) => {
   for (const file of unreadable) {
     lines.push(`  ${C.red}✗ ${file}  could not be parsed, so its sites are unknown${C.off}`)
   }
-  if (run.sources.size === 0) lines.push(`  ${C.red}✗ coverage.include matched no source file${C.off}`)
-  const failed = uncovered > 0 || unreadable.length > 0 || run.sources.size === 0
+  const missedSourceRoot = run.sources.size === 0 ? run.sourceRoot : []
+  if (missedSourceRoot.length > 0) lines.push(`  ${C.red}✗ coverage.include matched no source file${C.off}`)
+  const failed = uncovered > 0 || unreadable.length > 0 || missedSourceRoot.length > 0
   const summary = sites.length === 0
     ? `${C.dim}no concurrency primitive in ${run.sources.size} source files${C.off}`
     : uncovered === 0
@@ -392,7 +464,7 @@ const instrument = (run, code, id) => {
   const s = new MagicString(code)
   for (const site of sites) wrapSite(s, site)
   for (const call of kernelCalls) {
-    s.prependLeft(call.start, `__ccDuring(${JSON.stringify(kind)}, () => `)
+    s.prependLeft(call.start, `__ccDuring(${JSON.stringify(kind)}, ${call.object}, () => `)
     s.appendRight(call.end, ')')
   }
   s.prepend(`import { at as __ccAt, during as __ccDuring } from ${JSON.stringify(RUNTIME)};\n`)
@@ -421,6 +493,7 @@ const runStateOf = async (vitest) => {
     name,
     role: harness.has(name) ? 'harness' : 'consumer',
     sources: await sourceSetOf(vitest),
+    sourceRoot: await sourceRootOf(vitest),
     checkerSources,
   }
 }
