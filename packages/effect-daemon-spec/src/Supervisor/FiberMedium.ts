@@ -64,20 +64,18 @@ const closedChild = (self: FiberStarted): Effect.Effect<void> => Scope.close(sel
 
 const forcedChild = (self: FiberStarted): Effect.Effect<void> => Fiber.interrupt(self.fiber)
 
-const departedChild = (self: FiberStarted): Effect.Effect<Exit.Exit<void, never>> => Fiber.await(self.fiber)
-
-const closedOnceWarned = (self: FiberStarted, millis: number): Effect.Effect<void> =>
-  Effect.ignoreCause(
-    Effect.andThen(
-      Effect.timeoutOption(departedChild(self), Duration.millis(millis)),
-      closedChild(self),
-    ),
-  )
+/**
+ * OTP's timed shutdown: the signal (interruption) goes out at once, and the window
+ * bounds only how long the stop waits for the child's finalizers before closing its
+ * scope.
+ */
+const signalledWithin = (self: FiberStarted, millis: number): Effect.Effect<void> =>
+  Effect.andThen(Effect.timeoutOption(forcedChild(self), Duration.millis(millis)), closedChild(self))
 
 const stopOf = (self: FiberStarted, mode: ShutdownMode): Effect.Effect<void> =>
   Match.value(mode).pipe(
     Match.tag('Brutal', () => Effect.andThen(forcedChild(self), closedChild(self))),
-    Match.tag('Graceful', (graceful) => closedOnceWarned(self, graceful.millis)),
+    Match.tag('Graceful', (graceful) => signalledWithin(self, graceful.millis)),
     Match.tag('Infinity', () => Effect.andThen(forcedChild(self), closedChild(self))),
     Match.exhaustive,
   )

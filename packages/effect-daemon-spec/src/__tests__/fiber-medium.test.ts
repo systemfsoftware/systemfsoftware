@@ -110,6 +110,18 @@ describe('the owned shutdown a fiber child accepts', () => {
       expect(yield* FiberMedium.medium.probe(started)).toBe(false)
     }))
 
+  it.effect('Should_SignalTheChildAtOnce_When_GracefulStopBegins', () =>
+    Effect.gen(function*() {
+      const entered = yield* Ref.make(false)
+      const { started } = yield* startInChildScope(
+        Effect.never.pipe(Effect.onInterrupt(() => Ref.set(entered, true))),
+      )
+      yield* Effect.yieldNow
+      yield* FiberMedium.medium.stop(started, { _tag: 'Graceful', millis: 5_000 })
+      expect(yield* Ref.get(entered)).toBe(true)
+      expect(yield* FiberMedium.medium.probe(started)).toBe(false)
+    }))
+
   it.effect('Should_InterruptAndAwaitTheFinalizer_When_Infinity', () =>
     Effect.gen(function*() {
       const entered = yield* Ref.make(false)
