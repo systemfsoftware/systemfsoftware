@@ -38,12 +38,40 @@ const anchorTaskOf = (index: number, split: WorldTaskSplit): WorldTask => ({
   dimensions: {},
 })
 
-const judgedAnchorTaskOf = (index: number): WorldTask => ({
+/**
+ * One clash word per judged task, each starting with a different letter.
+ * First-letter distinctness makes no task text a substring of another, which
+ * KTD7 needs: the loopback finds a request's question by locating the world's
+ * own strings in the prompt, so an overlapping text would make two scripted
+ * answers match one request and the unknown 500 answers would corrupt the run.
+ */
+const judgedClashWords: ReadonlyArray<string> = [
+  'amber',
+  'cobalt',
+  'dune',
+  'ember',
+  'flint',
+  'garnet',
+  'harbor',
+  'indigo',
+  'juniper',
+  'kestrel',
+  'larch',
+  'marble',
+  'nimbus',
+  'onyx',
+]
+
+const judgedAnchorTaskOf = (index: number, word: string): WorldTask => ({
   id: `anchor-task-${index}`,
-  text: `anchor clash number ${index} between the two rules`,
+  text: `anchor clash ${word} between the two rules`,
   split: 'dev',
   dimensions: {},
 })
+
+const judgedAnchorTasks: ReadonlyArray<WorldTask> = judgedClashWords.map((word, position) =>
+  judgedAnchorTaskOf(position + 1, word)
+)
 
 const anchorRoutingOf = (
   index: number,
@@ -144,7 +172,7 @@ const insufficientEvidenceWorld = anchorWorld({
 
 const judgedPairWorld = anchorWorld({
   packs: [{ id: anchorPackId, rules: [anchorRuleOf(alphaRuleStem), anchorRuleOf(betaRuleStem)] }],
-  tasks: oneThrough(14).map((index) => judgedAnchorTaskOf(index)),
+  tasks: judgedAnchorTasks,
   routingLabels: oneThrough(14).map((index) => anchorRoutingOf(index, [alphaRuleStem, betaRuleStem], [])),
   pairLabels: [1, 2, 3, 4, 5, 6, 7, 8]
     .map((index) => anchorPairLabelOf(index, alphaRuleStem, betaRuleStem, 'Pass'))
@@ -269,7 +297,7 @@ export const validatedJudgeAnchor: ValidatedJudgeAnchor = {
   world: judgedPairWorld,
   tpr: 7 / 8,
   tnr: 1,
-  correctedRate: 4 / 7,
+  correctedRate: 1 - 4 / 7,
   exitCode: 1,
   derivation: [
     'Product plan R10: the judge counts as validated when its test TPR and TNR both reach the configured',
@@ -277,12 +305,15 @@ export const validatedJudgeAnchor: ValidatedJudgeAnchor = {
     'Pass labels and Fail on all 6 Fail labels, so with validate-evaluator Step 3, TPR = 7/8 = 0.875 and',
     'TNR = 6/6 = 1.0, and the judge is validated. Both rules govern every one of the 14 tasks, so the pair',
     '(alpha-rule, beta-rule) is witnessed by all 14 tasks; judgy treats the witnessed verdicts as the',
-    'unlabelled sample, so p_obs = judge Pass share among witnessed verdicts = 7/14 = 0.5. The Rogan-Gladen',
-    'correction (validate-evaluator Step 7, judgy estimate_success_rate) is theta = (p_obs + TNR - 1) /',
-    '(TPR + TNR - 1) = (0.5 + 1.0 - 1) / (0.875 + 1.0 - 1) = 0.5 / 0.875 = 4/7, already inside [0, 1] so',
-    'the clip does not move it. Every count is dyadic, so the hand value 4/7 is the exact IEEE double the',
-    'oracle computes. Product plan R11: a validated judge returning Fail on a witnessed pair fails the run,',
-    'and 7 witnessed verdicts are Fail, so the exit code is 1.',
+    'unlabelled sample, so the judge Pass share among witnessed verdicts is 7/14 = 0.5. The corrected',
+    'contradiction rate (pack-evaluator plan R12) is 1 - theta where theta is the Rogan-Gladen success rate',
+    '(validate-evaluator Step 7, judgy estimate_success_rate): theta = (p_pass + TNR - 1) / (TPR + TNR - 1)',
+    '= (0.5 + 1.0 - 1) / (0.875 + 1.0 - 1) = 0.5 / 0.875 = 4/7, so the hand value is 1 - 4/7. This is the',
+    'same real number as the Fail-side form 3/7 by the Rogan-Gladen symmetry, but in IEEE doubles 1 - 4/7',
+    'rounds to 0.4285714285714286 while the Fail-side quotient rounds to 0.42857142857142855, so the hand',
+    'value pins the evaluated 1 - theta form the oracle and product share.',
+    'Product plan R11: a validated judge returning Fail on a witnessed pair fails the run, and 7 witnessed',
+    'verdicts are Fail, so the exit code is 1.',
   ].join(' '),
 }
 
@@ -292,8 +323,8 @@ export const bootstrapIntervalAnchor: BootstrapIntervalAnchor = {
   seed: 42,
   iterations: 20000,
   confidence: 0.95,
-  lower: 0,
-  upper: 1,
+  lower: 0.2142857142857143,
+  upper: 0.7857142857142857,
   pinnedFromProduct: true,
   derivation: [
     'judgy estimate_success_rate computes the interval by resampling the test labels with replacement, holding',
@@ -304,8 +335,9 @@ export const bootstrapIntervalAnchor: BootstrapIntervalAnchor = {
     'this oracle reports point estimates only (rebuild plan KTD5 keeps interval checks as relations plus one',
     "pinned anchor). Neither a hand derivation nor an independent recomputation can settle the product's",
     'bounds, so the expected lower and upper bounds are pinned from a product run at the recorded seed (20000',
-    'iterations, confidence 0.95) by the evaluate command-level suite and are marked pinnedFromProduct; once',
-    'pinned, they must lie in [0, 1] and contain the corrected rate 4/7.',
+    'iterations, confidence 0.95) by the evaluate command-level suite — observed 0.2142857142857143 to',
+    '0.7857142857142857 — and are marked pinnedFromProduct; once pinned, they must lie in [0, 1] and contain',
+    'the corrected rate 3/7.',
   ].join(' '),
 }
 

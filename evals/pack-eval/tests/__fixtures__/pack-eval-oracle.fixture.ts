@@ -445,6 +445,7 @@ const judgeValidityImpl = (world: World, options: OracleOptions): OracleJudgeVal
   if (tp + fn === 0 || tn + fp === 0) return judgeRefusalOf('test pair labels hold one class')
   const tpr = tp / (tp + fn)
   const tnr = tn / (tn + fp)
+  if (tpr + tnr <= 1) return judgeRefusalOf(`judge is no better than chance (tpr ${tpr} + tnr ${tnr} <= 1)`)
   const minimum = minimumOf(options)
   return tpr >= minimum && tnr >= minimum
     ? { tag: 'validated', tpr, tnr, reason: undefined }
@@ -461,6 +462,9 @@ const witnessVerdictsOf = (world: World): ReadonlyArray<WorldVerdict> =>
     pair.taskIds.flatMap((taskId) => verdictsOf(world, pair.packId, taskId, pair.ruleA, pair.ruleB))
   )
 
+// Pack-evaluator plan R12 names the corrected contradiction rate among witnessed
+// pairs. judgy estimates the success rate, so the contradiction rate is one minus
+// that estimate.
 const correctedRateImpl = (world: World, options: OracleOptions): OracleCorrectedRate => {
   const validity = judgeValidityImpl(world, options)
   if (validity.tag !== 'validated' || validity.tpr === undefined || validity.tnr === undefined) {
@@ -471,7 +475,7 @@ const correctedRateImpl = (world: World, options: OracleOptions): OracleCorrecte
   const observed = verdicts.filter((verdict) => verdict === 'Pass').length / verdicts.length
   const denominator = validity.tpr + validity.tnr - 1
   if (denominator <= 0) return { tag: 'not-applicable', reason: 'judge is no better than random' }
-  return { tag: 'reported', rate: clamp01((observed + validity.tnr - 1) / denominator) }
+  return { tag: 'reported', rate: 1 - clamp01((observed + validity.tnr - 1) / denominator) }
 }
 
 export const oracleCorrectedRate: {
