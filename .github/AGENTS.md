@@ -16,6 +16,8 @@ Read this file when a check fails, not before.
 - **An intent file is not a pending release.** pnpm unlinks a consumed intent only after the registry confirms its version; `scripts/tools/pending-intents.ts` counts stems absent from `ledger.yaml`, so a surviving `.md` file alone never pins the version phase.
 - **A never-published package cannot be released by CI** (OIDC cannot debut one); the remedy is a maintainer's `pnpm publish:unpublished` plus trusted-publisher registration, never CI's.
 - **`changeset-check.yml` enforces release intent** via `scripts/guards/check-changeset.ts`: fails if a publishable package's turbo `build` hash changed without an intent, or if any pending intent names a non-live workspace member.
+- **`nightly-conformance.yml` explores the nightly budget on a schedule (plus `workflow_dispatch`).** It builds once, then runs the workspace tests with `CONFORMANCE_PROFILE=nightly`; it owns its turbo cache key prefix (`turbo-<os>-nightly-<sha>`).
+- **Publishing needs a fresh green nightly on main.** The `nightly-gate` job in `release.yml` runs `scripts/guards/check-nightly-freshness.ts` against the GitHub API and fails when the latest completed nightly run on main is missing, failed, or 48h or older; `publish` sits behind it. With no nightly run yet, publishing stays blocked until a manually started run passes: `gh workflow run nightly-conformance.yml`.
 
 ## Local Reproduction
 
@@ -27,11 +29,13 @@ pnpm check:contract   # exactly what CI's contract runner runs (needs container 
 
 ## Failure Runbook
 
-| Failure                                         | Root Cause                                                      | Remedy                                                                                                         |
-| ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `install-deps` fails (`specifiers don't match`) | `package.json` changed without lockfile update                  | `pnpm install` and commit `pnpm-lock.yaml`                                                                     |
-| `api:check` fails                               | Public API surface changed in package with committed golden     | `pnpm --filter <pkg> api:update` and commit `etc/*.api.md`                                                     |
-| `format:check` fails                            | Unformatted files in commit                                     | `pnpm format`                                                                                                  |
-| `Failed to find tsgolint executable`            | Missing `oxlint-tsgolint` peer in package using type-aware lint | Ensure `@systemfsoftware/oxlint-config-dmmf` provides it transitively                                          |
-| Git step exits 128                              | Dirty workspace cascade from prior step                         | Inspect the first failing step, not the git step                                                               |
-| Log download gives HTTP 403                     | GitHub API restricts log download without push access           | Open `https://github.com/systemfsoftware/systemfsoftware/actions/runs/<run_id>` and read the step log directly |
+| Failure                                         | Root Cause                                                                  | Remedy                                                                                                         |
+| ----------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `install-deps` fails (`specifiers don't match`) | `package.json` changed without lockfile update                              | `pnpm install` and commit `pnpm-lock.yaml`                                                                     |
+| `api:check` fails                               | Public API surface changed in package with committed golden                 | `pnpm --filter <pkg> api:update` and commit `etc/*.api.md`                                                     |
+| `format:check` fails                            | Unformatted files in commit                                                 | `pnpm format`                                                                                                  |
+| `nightly-gate` fails (missing)                  | No nightly run on main yet; publishing has no evidence at the nightly bound | `gh workflow run nightly-conformance.yml`, wait for green, re-run release                                      |
+| `nightly-gate` fails (stale)                    | Latest green nightly on main is 48h or older                                | `gh workflow run nightly-conformance.yml`, wait for green, re-run release                                      |
+| `nightly-gate` fails (failed)                   | Latest nightly run on main did not pass                                     | Fix the failure, re-run the nightly workflow, then re-run release                                              |
+| Git step exits 128                              | Dirty workspace cascade from prior step                                     | Inspect the first failing step, not the git step                                                               |
+| Log download gives HTTP 403                     | GitHub API restricts log download without push access                       | Open `https://github.com/systemfsoftware/systemfsoftware/actions/runs/<run_id>` and read the step log directly |
