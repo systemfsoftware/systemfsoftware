@@ -34,6 +34,7 @@ interface WorkloadStarted extends Supervisor.Medium.Started {
   readonly sandbox: MicroVM.RunningVM
   readonly childScope: Scope.Scope
   readonly exited: Deferred.Deferred<number>
+  readonly stopping: Deferred.Deferred<void>
 }
 
 const isWorkloadStarted = (evidence: Supervisor.Medium.Started): evidence is WorkloadStarted =>
@@ -171,13 +172,29 @@ const startedOf = (
   childScope: Scope.Scope,
   ready: Deferred.Deferred<void>,
   exited: Deferred.Deferred<number>,
+  stopping: Deferred.Deferred<void>,
 ): WorkloadStarted => ({
   ...Supervisor.Medium.started(Deferred.await(ready)),
   [WorkloadTypeId]: WorkloadTypeId,
   sandbox,
   childScope,
   exited,
+  stopping,
 })
+
+const shutdownTermination = (): Supervisor.Medium.TerminationReason => Supervisor.Medium.ShutdownTermination.make({})
+
+/**
+ * Owned shutdown, as the process medium gives it: the stop latch answers the report as a
+ * `Shutdown` before any teardown signal goes out, and the report races that latch against
+ * the exit the session observed — so a workload the supervisor ordered stopped is never
+ * mistaken for one that died on its own.
+ */
+const stopOf = (self: WorkloadStarted, mode: Supervisor.Medium.ShutdownMode): Effect.Effect<void> =>
+  Effect.andThen(
+    Deferred.succeed(self.stopping, void 0),
+    Effect.andThen(self.sandbox.pipe(teardownOf(mode)), Scope.close(self.childScope, Exit.void)),
+  )
 
 const startOf =
   (options: MicroVMMediumOptions) =>
@@ -189,6 +206,7 @@ const startOf =
       const readyToken = Option.fromNullishOr(program.workload.readyOnStdout)
       const ready = yield* Deferred.make<void>()
       const exited = yield* Deferred.make<number>()
+      const stopping = yield* Deferred.make<void>()
       const tail = yield* Ref.make('')
       yield* Option.isNone(readyToken) ? Deferred.succeed(ready, void 0) : Effect.void
       yield* Effect.forkIn(readSession(session, sandbox, readyToken, ready, exited, tail), childScope)
@@ -196,7 +214,7 @@ const startOf =
         onNone: () => Effect.void,
         onSome: (bytes) => Effect.asVoid(Effect.forkIn(pumpStdin(session, bytes), childScope)),
       })
-      return startedOf(sandbox, childScope, ready, exited)
+      return startedOf(sandbox, childScope, ready, exited, stopping)
     })
 
 const terminationOf = (code: number): Supervisor.Medium.TerminationReason =>
@@ -214,8 +232,12 @@ const mediumFor = (
     start: startOf(options),
     report: (evidence) =>
       Option.match(workloadStartedOf(evidence), {
-        onNone: () => Effect.succeed(Supervisor.Medium.ShutdownTermination.make({})),
-        onSome: (self) => Effect.map(Deferred.await(self.exited), terminationOf),
+        onNone: () => Effect.succeed(shutdownTermination()),
+        onSome: (self) =>
+          Effect.raceFirst(
+            Effect.as(Deferred.await(self.stopping), shutdownTermination()),
+            Effect.map(Deferred.await(self.exited), terminationOf),
+          ),
       }),
     probe: (evidence) =>
       Option.match(workloadStartedOf(evidence), {
@@ -225,14 +247,7 @@ const mediumFor = (
     stop: (evidence, mode) =>
       Option.match(workloadStartedOf(evidence), {
         onNone: () => Effect.succeed(Supervisor.Medium.stopped),
-        onSome: (self) =>
-          Effect.as(
-            Effect.andThen(
-              self.sandbox.pipe(teardownOf(mode)),
-              Scope.close(self.childScope, Exit.void),
-            ),
-            Supervisor.Medium.stopped,
-          ),
+        onSome: (self) => Effect.as(stopOf(self, mode), Supervisor.Medium.stopped),
       }),
   })
 
