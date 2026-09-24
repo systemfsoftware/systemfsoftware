@@ -17,6 +17,10 @@ on:
         description: "OpenRouter model id for the selector (default: the PACK_EVAL_SELECTOR_MODEL variable)"
         required: false
         default: ""
+      judge_model:
+        description: "OpenRouter model id for the contradiction judge; needed once pair labels exist (default: the PACK_EVAL_JUDGE_MODEL variable)"
+        required: false
+        default: ""
 
 concurrency:
   group: pack-eval-${{ github.ref }}
@@ -35,6 +39,7 @@ jobs:
       PACKS: ${{ inputs.packs || vars.PACK_EVAL_PACKS }}
       DATASET: ${{ inputs.dataset || 'evals/compound-packs' }}
       SELECTOR_MODEL: ${{ inputs.selector_model || vars.PACK_EVAL_SELECTOR_MODEL }}
+      JUDGE_MODEL: ${{ inputs.judge_model || vars.PACK_EVAL_JUDGE_MODEL }}
       CLI: evals/pack-eval/dist/main.mjs
     steps:
       - uses: actions/checkout@v7
@@ -57,7 +62,9 @@ jobs:
         run: |
           pack_flags=()
           for pack in $PACKS; do pack_flags+=(--pack "$pack"); done
-          digest=$(node "$CLI" fingerprint "${pack_flags[@]}" --dataset "$DATASET" \
+          judge_flags=()
+          if [ -n "$JUDGE_MODEL" ]; then judge_flags=(--judge-model "$JUDGE_MODEL"); fi
+          digest=$(node "$CLI" fingerprint "${pack_flags[@]}" "${judge_flags[@]}" --dataset "$DATASET" \
             --code-root evals/pack-eval --lockfile pnpm-lock.yaml --selector-model "$SELECTOR_MODEL" | tail -n 1)
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "fingerprint $digest"
@@ -90,8 +97,10 @@ jobs:
         run: |
           pack_flags=()
           for pack in $PACKS; do pack_flags+=(--pack "$pack"); done
+          judge_flags=()
+          if [ -n "$JUDGE_MODEL" ]; then judge_flags=(--judge-model "$JUDGE_MODEL"); fi
           set +e
-          node "$CLI" evaluate "${pack_flags[@]}" --dataset "$DATASET" --work-dir .pack-eval \
+          node "$CLI" evaluate "${pack_flags[@]}" "${judge_flags[@]}" --dataset "$DATASET" --work-dir .pack-eval \
             --report .pack-eval/report.json --selector-model "$SELECTOR_MODEL" > .pack-eval-card.md
           code=$?
           set -e
