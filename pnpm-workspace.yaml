@@ -13,14 +13,14 @@ catalog:
   typescript: ^7
   microsandbox: 0.7.2
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
-  "@effect/platform-node": 4.0.0-rc.116
-  "@effect/platform-node-shared": 4.0.0-rc.116
-  effect: 4.0.0-rc.116
-  "@effect/vitest": 4.0.0-rc.116
-  "@effect/sql-pg": 4.0.0-rc.116
-  "@effect/sql-pglite": 4.0.0-rc.116
+  "@effect/platform-node": 4.0.0-rc.117
+  "@effect/platform-node-shared": 4.0.0-rc.117
+  effect: 4.0.0-rc.117
+  "@effect/vitest": 4.0.0-rc.117
+  "@effect/sql-pg": 4.0.0-rc.117
+  "@effect/sql-pglite": 4.0.0-rc.117
   "@effect/tsgo": ^0.45.0
-  "@effect/opentelemetry": 4.0.0-rc.116
+  "@effect/opentelemetry": 4.0.0-rc.117
   "@opentelemetry/sdk-trace-base": ^2
   "@opentelemetry/api": ^1.9.0
   "@opentelemetry/resources": ^2
@@ -73,8 +73,8 @@ catalog:
 catalogMode: prefer
 catalogs:
   peers:
-    effect: 4.0.0-rc.116
-    "@effect/vitest": 4.0.0-rc.116
+    effect: 4.0.0-rc.117
+    "@effect/vitest": 4.0.0-rc.117
   oxlint:
     oxlint: ~1.82.0
     "@oxlint/plugins": ~1.82.0
