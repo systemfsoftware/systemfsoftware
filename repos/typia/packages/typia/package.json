@@ -1,6 +1,6 @@
 {
   "name": "typia",
-  "version": "14.0.6",
+  "version": "15.0.0",
   "description": "Superfast runtime validators with only one line",
   "main": "src/index.ts",
   "exports": {
@@ -17,8 +17,7 @@
   },
   "scripts": {
     "build": "rimraf lib && ttsc && rolldown -c && cp ../../README.md README.md",
-    "dev": "ttsc --watch",
-    "prepack": "pnpm run build"
+    "dev": "ttsc --watch"
   },
   "repository": {
     "type": "git",

@@ -95,7 +95,7 @@ yield* TestClock.adjust('91 seconds')
 
 ## Pinned Effect version
 
-The hooks read Effect runtime internals (the `Scheduler` service, `FiberImpl` methods, `Ref`/`Deferred` fields), which is allowed only inside this package. They are pinned to `effect` 4.0.0-rc.116 and throw loudly if a field or method moves. A version change must re-run the kernel's checks.
+The hooks read Effect runtime internals (the `Scheduler` service, `FiberImpl` methods, `Ref`/`Deferred` fields), which is allowed only inside this package. They are pinned to `effect` 4.0.0-rc.117 and throw loudly if a field or method moves. A version change must re-run the kernel's checks.
 
 ## Development
 

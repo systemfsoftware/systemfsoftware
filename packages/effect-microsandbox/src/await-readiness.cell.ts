@@ -45,7 +45,7 @@ const awaitReadinessForStrategy = (
       pollMs: WAIT_POLL_MS,
     })
     const condition = conditionOf(strategy)
-    const verdict = yield* Readiness.awaitCondition(target, condition).pipe(
+    const verdict = yield* target.awaitCondition(condition).pipe(
       Effect.provideService(Readiness.LogSource, logSourceOf(vm.sandbox)),
       Effect.mapError((cause) => new SandboxBootError({ sandboxName: vm.sandbox.name, cause })),
     )

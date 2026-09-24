@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/trace-spec",
   "license": "Apache-2.0",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -48,6 +48,7 @@
     "@opentelemetry/resources": "catalog:",
     "@opentelemetry/sdk-trace-base": "catalog:",
     "@opentelemetry/semantic-conventions": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/trace-taxonomy": "workspace:^"
   },

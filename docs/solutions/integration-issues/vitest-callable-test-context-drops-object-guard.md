@@ -1,5 +1,6 @@
 ---
 title: Vitest 5 Passes a Callable Test Context, So an Object-Shape Guard Silently Drops It
+date: "2026-09-22"
 track: knowledge
 problem_type: integration_issue
 category: integration-issues

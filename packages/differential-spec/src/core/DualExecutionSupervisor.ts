@@ -5,9 +5,12 @@ import * as fc from 'fast-check'
 import { DisparityError } from './DisparityError.schema.js'
 import { formatDisparity, renderExit, renderUnknown } from './DisparityReporter.js'
 
+/**
+ * How many generated inputs a check runs. Every case runs on the simulation
+ * kernel, which bounds it in steps, so the check has no wall-clock limit.
+ */
 export interface DualExecutionSupervisorOptions {
   readonly runBudget?: number
-  readonly interruptAfterTimeLimit?: number
 }
 
 type Exits<OutputA, OutputB, E> = readonly [Exit.Exit<OutputA, E>, Exit.Exit<OutputB, E>]
@@ -121,17 +124,11 @@ const disagreementOf = <OutputA, OutputB, E>(
   return attemptOn(runs.seeded, `pct seed ${seed}`, oracle)
 }
 
-const DEFAULT_OPTIONS = {
-  runBudget: 100,
-  interruptAfterTimeLimit: 5000,
-} as const
+const DEFAULT_OPTIONS = { runBudget: 100 } as const
 
 const toFcParameters = <Input>(
   options?: DualExecutionSupervisorOptions,
-): fc.Parameters<[Input, number]> => {
-  const merged = { ...DEFAULT_OPTIONS, ...options }
-  return { numRuns: merged.runBudget, interruptAfterTimeLimit: merged.interruptAfterTimeLimit }
-}
+): fc.Parameters<[Input, number]> => ({ numRuns: { ...DEFAULT_OPTIONS, ...options }.runBudget })
 
 const reproOf = (seed: number, path: string | undefined): string =>
   `fc.check(property, { seed: ${seed}, path: "${path ?? ''}" })`
@@ -153,7 +150,7 @@ const inconclusiveReport = <Input>(details: fc.RunDetails<[Input, number]>): Dis
       outputB: '(not executed)',
       trace:
         `seed ${details.seed}, runs ${details.numRuns}, skipped ${details.numSkips}, interrupted ${details.interrupted}`,
-      reproSnippet: 'raise runBudget / interruptAfterTimeLimit, or loosen the arbitrary so draws stop skipping',
+      reproSnippet: 'loosen the arbitrary so draws stop skipping, or raise runBudget',
     }),
   })
 
@@ -355,7 +352,7 @@ const failureReportOf = <Input, Described, OutputA, OutputB, E>(
   return counterexampleReport(comparison, details, input, seed)
 }
 
-const isReported = <Input>(details: fc.RunDetails<[Input, number]>): boolean => details.failed || details.interrupted
+const isReported = <Input>(details: fc.RunDetails<[Input, number]>): boolean => details.failed
 
 const checked = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,

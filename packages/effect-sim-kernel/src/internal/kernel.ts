@@ -8,7 +8,7 @@
  * module-level mutable state survives a release.
  *
  * The hooks read Effect runtime internals, which the plan allows only inside this
- * package (R17). They are pinned to `effect` 4.0.0-rc.116 and fail loudly when a
+ * package (R17). They are pinned to `effect` 4.0.0-rc.117 and fail loudly when a
  * field or method moves.
  */
 import { Clock, Context, Deferred, Match, Ref, Scheduler } from 'effect'

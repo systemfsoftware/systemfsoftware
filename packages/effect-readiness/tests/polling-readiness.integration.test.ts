@@ -12,7 +12,7 @@ const TIGHT_WAIT = { timeoutMs: 300, pollMs: 25 } as const
 
 const target = Readiness.target([{ guest: GUEST_PORT, host: '127.0.0.1', hostPort: 1 }], TIGHT_WAIT)
 
-const awaitOver = Readiness.awaitCondition(target, Readiness.Wait.forTcp(GUEST_PORT))
+const awaitOver = target.awaitCondition(Readiness.Wait.forTcp(GUEST_PORT))
 
 const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boolean =>
   Match.value(verdict).pipe(
@@ -83,6 +83,31 @@ Feature('Waiting for a guest service to answer before the check gives up')
         }),
         And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBe(1)
+        }),
+      ),
+    )
+
+    scenario(
+      'A wait shortened on an already built target gives up at the shortened deadline',
+      Gherkin.Do.pipe(
+        Given('a guest service that refuses every connection on its mapped port')(() => answerWith('refused')),
+        When('the target is shortened to give up after 100 millis and checked for connection acceptance')(
+          'outcome',
+          () =>
+            Effect.gen(function*() {
+              const shortened = target.withTimeout(100).withPoll(20)
+              const checking = yield* Effect.forkChild(shortened.awaitCondition(Readiness.Wait.forTcp(GUEST_PORT)))
+              yield* Effect.yieldNow
+              yield* TestClock.adjust(Duration.millis(150))
+              const verdict = yield* Fiber.join(checking)
+              return { verdict, attempts: yield* dialCount }
+            }),
+        ),
+        Then('the shortened check gives up reporting the service is not ready')(({ outcome }) => {
+          expect(reportedReady(outcome.verdict)).toBe(false)
+        }),
+        And('the shortened check retried the connection before giving up')(({ outcome }) => {
+          expect(outcome.attempts).toBeGreaterThan(1)
         }),
       ),
     )

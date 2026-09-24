@@ -16,7 +16,7 @@ const bindingOf = (hostPort: number): Readiness.PortBinding => ({
   hostPort,
 })
 
-const targetOf = (bindings: ReadonlyArray<Readiness.PortBinding>): Readiness.ProbeTarget =>
+const targetOf = (bindings: ReadonlyArray<Readiness.PortBinding>): Readiness.ProbeTargetBlueprint =>
   Readiness.target(bindings, TIGHT_WAIT)
 
 const targetOfMappedGuest = Effect.gen(function*() {
@@ -24,8 +24,8 @@ const targetOfMappedGuest = Effect.gen(function*() {
   return targetOf([bindingOf(guest.hostPort)])
 })
 
-const awaitOver = (target: Readiness.ProbeTarget, condition: Readiness.Condition) =>
-  Readiness.awaitCondition(target, condition)
+const awaitOver = (target: Readiness.ProbeTargetBlueprint, condition: Readiness.Condition) =>
+  target.awaitCondition(condition)
 
 Feature('Releasing every probe connection after repeated readiness checks')
   .live('scenarios open real loopback sockets to a real guest service the kernel cannot observe')

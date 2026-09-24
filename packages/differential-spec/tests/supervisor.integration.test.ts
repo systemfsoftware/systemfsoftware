@@ -110,31 +110,76 @@ Feature('Proving two implementations agree under generated schedules')
       ),
     )
     scenario(
-      'A parity check cut short by its time budget is reported instead of silently passing',
+      'Two implementations that settle through promises still agree',
       Gherkin.Do.pipe(
-        Given('two agreeing implementations and a run budget far larger than the time limit')(
+        Given('a reference and a candidate that both settle their doubling through a promise')(
           'targets',
           () =>
             Effect.succeed({
-              reference: (x: number) => Effect.succeed(x * 2),
-              candidate: (x: number) => Effect.succeed(x + x),
-              options: { runBudget: 1_000_000_000, interruptAfterTimeLimit: 50 },
+              reference: (x: number) => Effect.promise(() => Promise.resolve(x * 2)),
+              candidate: (x: number) => Effect.promise(() => Promise.resolve(x + x)),
             }),
         ),
-        When('the parity check runs until the time limit stops it')('outcome', (s) =>
+        When('the parity check runs over generated integers')('outcome', (s) =>
           Effect.exit(
-            runDifferentialWithShrink(
-              s.targets.reference,
-              s.targets.candidate,
-              integers,
-              sameOutcome,
-              s.targets.options,
-            ),
+            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
           )),
-        Then('the failure is reported as inconclusive with the interrupt marked')((s) => {
+        Then('the asynchronous run completes without complaint')((s) => {
+          expect(Exit.isSuccess(s.outcome)).toBe(true)
+        }),
+      ),
+    )
+
+    scenario(
+      'An asynchronous candidate that is always one more is reduced to the smallest failing input',
+      Gherkin.Do.pipe(
+        Given('a candidate that settles one more than the reference through a promise')(
+          'targets',
+          () =>
+            Effect.succeed({
+              reference: (x: number) => Effect.promise(() => Promise.resolve(x * 2)),
+              candidate: (x: number) => Effect.promise(() => Promise.resolve(x * 2 + 1)),
+            }),
+        ),
+        When('the parity check runs over generated integers')('outcome', (s) =>
+          Effect.exit(
+            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
+          )),
+        Then('the report names zero as the minimal input with both sides shown')((s) => {
           const report = disparityReportOf(s.outcome)
-          expect(report).toContain('inconclusive')
-          expect(report).toContain('interrupted true')
+          expect(report).toContain('Input: 0')
+          expect(report).toContain('Output A: 0')
+          expect(report).toContain('Output B: 1')
+          expect(report).toContain('seed')
+        }),
+      ),
+    )
+
+    scenario(
+      'Targets that pause on a sleep before settling are compared like any other',
+      Gherkin.Do.pipe(
+        Given('a reference and a candidate that both pause briefly before settling their doubling')(
+          'targets',
+          () =>
+            Effect.succeed({
+              reference: (x: number) =>
+                Effect.gen(function*() {
+                  yield* Effect.sleep('1 millis')
+                  return yield* Effect.promise(() => Promise.resolve(x * 2))
+                }),
+              candidate: (x: number) =>
+                Effect.gen(function*() {
+                  yield* Effect.sleep('1 millis')
+                  return yield* Effect.promise(() => Promise.resolve(x + x))
+                }),
+            }),
+        ),
+        When('the parity check runs over generated integers')('outcome', (s) =>
+          Effect.exit(
+            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
+          )),
+        Then('the deferred run completes without complaint')((s) => {
+          expect(Exit.isSuccess(s.outcome)).toBe(true)
         }),
       ),
     )

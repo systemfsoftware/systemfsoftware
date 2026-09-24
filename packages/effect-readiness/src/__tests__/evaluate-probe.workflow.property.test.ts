@@ -6,7 +6,7 @@ import { Condition } from '../Condition.schema.js'
 import { EvaluateProbe, evaluateProbe } from '../evaluate-probe.workflow.js'
 import { PortNumber } from '../Port.schema.js'
 import { ProbeEvidence } from '../ProbeEvidence.schema.js'
-import { Wait } from '../readiness.resource.js'
+import { Wait } from '../readiness.blueprint.js'
 
 const verdictOf = (condition: Condition, evidence: ProbeEvidence): string =>
   Result.getOrThrow(evaluateProbe(new EvaluateProbe({ condition, evidence })))._tag

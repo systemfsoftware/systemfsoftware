@@ -7,7 +7,16 @@ export { LogSource } from '../log-source.service.js'
 export { PortBinding, PortNumber } from '../Port.schema.js'
 export { Absent, LogEntries, ProbeEvidence } from '../ProbeEvidence.schema.js'
 export { ProbeTarget } from '../ProbeTarget.schema.js'
-export { awaitCondition, target, type TargetOptions, Wait } from '../readiness.resource.js'
+export {
+  isTarget,
+  type ProbeTargetBlueprint,
+  target,
+  type TargetOptions,
+  TypeId,
+  Wait,
+  withPoll,
+  withTimeout,
+} from '../readiness.blueprint.js'
 export { LogSourceError, ProbeInputInvalid } from '../ReadinessError.schema.js'
 export type { ProbePlan } from '../resolve-probe.workflow.js'
 export { TimedOut } from '../verdict.schema.js'

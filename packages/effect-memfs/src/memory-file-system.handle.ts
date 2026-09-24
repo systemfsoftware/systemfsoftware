@@ -1,6 +1,6 @@
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Queue, type Scope, Stream, SubscriptionRef } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Error from 'effect/PlatformError'
 import * as Random from 'effect/Random'
 import * as Result from 'effect/Result'
@@ -31,15 +31,16 @@ import type { WatcherShape, WatchEvents } from './watcher.service.js'
 export const TypeId = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem')
 export type TypeId = typeof TypeId
 
-const DriverId: unique symbol = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem/driver')
-const OpenWatchesId: unique symbol = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem/openWatches')
-
-export interface MemoryFileSystem extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [DriverId]: memfs.IFs
-  readonly [OpenWatchesId]: SubscriptionRef.SubscriptionRef<ReadonlyArray<WatchEntry>>
-  readonly cwd: string
+interface MemoryFileSystemSlot {
+  readonly driver: memfs.IFs
+  readonly openWatches: SubscriptionRef.SubscriptionRef<ReadonlyArray<WatchEntry>>
 }
+
+const MemoryFileSystem = Handle.make<{ readonly cwd: string }, MemoryFileSystemSlot>()(TypeId)
+
+export type MemoryFileSystem = Handle.Of<typeof MemoryFileSystem>
+
+export const isMemoryFileSystem = MemoryFileSystem.is
 
 const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
   const driver = memfs.createFsFromVolume(memfs.Volume.fromJSON(volumeJSONOf(spec.contents), spec.cwd))
@@ -48,13 +49,10 @@ const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
 }
 
 export const make = (spec: MemoryFileSystemSpec): Effect.Effect<MemoryFileSystem> =>
-  Effect.map(SubscriptionRef.make<ReadonlyArray<WatchEntry>>([]), (openWatches) => ({
-    [TypeId]: TypeId,
-    [DriverId]: mounted(spec),
-    [OpenWatchesId]: openWatches,
-    cwd: spec.cwd,
-    ...Prototype,
-  }))
+  Effect.map(
+    SubscriptionRef.make<ReadonlyArray<WatchEntry>>([]),
+    (openWatches) => MemoryFileSystem.make({ cwd: spec.cwd }, { driver: mounted(spec), openWatches }),
+  )
 
 // ---------------------------------------------------------------------------
 // What the port asks for, translated into what the driver takes
@@ -327,9 +325,9 @@ const decideEvent = (nfs: memfs.IFs, directory: string) => (event: DriverEvent):
 
 const openWatch = (self: MemoryFileSystem, path: string, options?: FileSystem.WatchOptions) =>
   Effect.gen(function*() {
-    const directory = watchedDirectoryOf(self[DriverId], path)
+    const directory = watchedDirectoryOf(MemoryFileSystem.slot(self).driver, path)
     const events = yield* Queue.unbounded<DriverEvent>()
-    const watcher = self[DriverId].watch(
+    const watcher = MemoryFileSystem.slot(self).driver.watch(
       path,
       { persistent: false, recursive: isRecursive(options) },
       (eventType, filename) => {
@@ -337,14 +335,15 @@ const openWatch = (self: MemoryFileSystem, path: string, options?: FileSystem.Wa
       },
     )
     const entry: WatchEntry = { path }
-    yield* SubscriptionRef.update(self[OpenWatchesId], (entries) => [...entries, entry])
+    yield* SubscriptionRef.update(MemoryFileSystem.slot(self).openWatches, (entries) => [...entries, entry])
     return { watcher, events, directory, entry } satisfies OpenWatch
   })
 
 const closeWatch = (self: MemoryFileSystem) => (open: OpenWatch): Effect.Effect<void> =>
   Effect.andThen(
     Effect.sync(() => open.watcher.close()),
-    SubscriptionRef.update(self[OpenWatchesId], (entries) => entries.filter((entry) => entry !== open.entry)),
+    SubscriptionRef.update(MemoryFileSystem.slot(self).openWatches, (entries) =>
+      entries.filter((entry) => entry !== open.entry)),
   )
 
 const startWatch = (
@@ -354,7 +353,8 @@ const startWatch = (
 ): Effect.Effect<WatchEvents, never, Scope.Scope> =>
   Effect.map(
     Effect.acquireRelease(openWatch(self, path, options), closeWatch(self)),
-    (open) => Stream.mapEffect(Stream.fromQueue(open.events), decideEvent(self[DriverId], open.directory)),
+    (open) =>
+      Stream.mapEffect(Stream.fromQueue(open.events), decideEvent(MemoryFileSystem.slot(self).driver, open.directory)),
   )
 
 const isOpenAt = (path: string) => (entries: ReadonlyArray<WatchEntry>): boolean =>
@@ -362,9 +362,16 @@ const isOpenAt = (path: string) => (entries: ReadonlyArray<WatchEntry>): boolean
 
 export const watcher = (self: MemoryFileSystem): WatcherShape => ({
   start: (path, options) => startWatch(self, path, options),
-  openWatches: Effect.map(SubscriptionRef.get(self[OpenWatchesId]), (entries) => entries.map((entry) => entry.path)),
+  openWatches: Effect.map(
+    SubscriptionRef.get(MemoryFileSystem.slot(self).openWatches),
+    (entries) => entries.map((entry) => entry.path),
+  ),
   awaitOpen: (path) =>
-    SubscriptionRef.changes(self[OpenWatchesId]).pipe(Stream.filter(isOpenAt(path)), Stream.runHead, Effect.asVoid),
+    SubscriptionRef.changes(MemoryFileSystem.slot(self).openWatches).pipe(
+      Stream.filter(isOpenAt(path)),
+      Stream.runHead,
+      Effect.asVoid,
+    ),
 })
 
 // ---------------------------------------------------------------------------
@@ -372,7 +379,7 @@ export const watcher = (self: MemoryFileSystem): WatcherShape => ({
 // ---------------------------------------------------------------------------
 
 export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
-  const nfs = self[DriverId]
+  const nfs = MemoryFileSystem.slot(self).driver
 
   const access: FileSystem.FileSystem['access'] = (path, options) =>
     Effect.tryPromise({

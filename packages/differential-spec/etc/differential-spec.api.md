@@ -34,10 +34,8 @@ export interface DisparityRecord<Input = unknown> {
     readonly trace: string;
 }
 
-// @public (undocumented)
+// @public
 export interface DualExecutionSupervisorOptions {
-    // (undocumented)
-    readonly interruptAfterTimeLimit?: number;
     // (undocumented)
     readonly runBudget?: number;
 }

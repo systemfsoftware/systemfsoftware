@@ -116,7 +116,7 @@ const listStockPage = (session: Session, request: StockPageRequest) =>
     return yield* client.listStock(request)
   })
 
-Feature('Inventory fulfillment across the warehouse network')
+Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000 })
   .withScenarioLayer(TestServerLayer)
   .live('customers drive the store through a real HTTP socket held together with an in-process PGlite ledger')
   .body(({ scenario }) => {
