@@ -1,17 +1,13 @@
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
+import { defineConfig, sourceResolveConditions } from '@systemfsoftware/vitest-config'
 import { playwright } from '@vitest/browser-playwright'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defaultClientConditions, defaultServerConditions } from 'vite'
-import { defineConfig } from 'vitest/config'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const sourceCondition = '@systemfsoftware/source'
-
 export default defineConfig({
-  resolve: { conditions: [...defaultClientConditions, sourceCondition] },
-  ssr: { resolve: { conditions: [...defaultServerConditions, sourceCondition] } },
+  ...sourceResolveConditions,
   test: {
     projects: [
       {
@@ -30,6 +26,15 @@ export default defineConfig({
             headless: true,
             instances: [{ browser: 'chromium' }],
           },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'conformance',
+          environment: 'jsdom',
+          globals: true,
+          include: ['tests/**/*.test.ts'],
         },
       },
     ],

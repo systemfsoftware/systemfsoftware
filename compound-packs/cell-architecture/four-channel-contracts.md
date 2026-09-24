@@ -29,10 +29,12 @@ export const orderCell: Cell.Cell<
   DatabaseConnectionError | SchemaError,
   OrderStore | CustomerGate
 > = Sandwich.named('order.submit')(readContext)
-  .decode(Sandwich.pure(decodeContext))
   .decide(decideWorkflow)
-  .encode(Sandwich.pure(encodeOutcome))
-  .write(writeCommit)
+  .write({
+    OrderApproved: (approved, req) => commitOrder(approved, req),
+    OrderRejected: (rejected, req) => logRefusal(rejected, req),
+    CommandRejected: (rejected, req) => Effect.fail(new SchemaError({ issue: rejected.issue })),
+  })
 ```
 
 Gate: `type-checker` — validates assignability to `Cell<in I, out A, out E, out R>`.

@@ -1,3 +1,4 @@
+import { dual } from 'effect/Function'
 import * as Result from 'effect/Result'
 
 export type TemplateToken = { tag: string; rest: string }
@@ -76,11 +77,23 @@ const replaceTags = (
   return result
 }
 
-export const renderTitle = (
+const renderTitleImpl = (
   template: string,
   row: AnyRow,
   stringify: <V = unknown>(value: V) => string = stringifyForTitle,
 ): string => replaceTags(template, row, stringify)
+
+export const renderTitle: {
+  (
+    row: AnyRow,
+    stringify?: <V = unknown>(value: V) => string,
+  ): (template: string) => string
+  (
+    template: string,
+    row: AnyRow,
+    stringify?: <V = unknown>(value: V) => string,
+  ): string
+} = dual((args: IArguments) => typeof args[0] === 'string', renderTitleImpl)
 
 const formatAvailableKeys = (rowKeys: Set<string>): string => {
   const joined = [...rowKeys].join(', ')
@@ -129,8 +142,20 @@ const expandNonEmpty = <Row extends AnyRow>(
   return expandRows(name, rows, stringify)
 }
 
-export const expandOutline = <Row extends AnyRow>(
+const expandOutlineImpl = <Row extends AnyRow>(
   name: string,
   rows: readonly Row[],
   stringify: <V = unknown>(value: V) => string = stringifyForTitle,
 ): Result.Result<readonly OutlineRow<Row>[], string> => expandNonEmpty(name, rows, stringify)
+
+export const expandOutline: {
+  <Row extends AnyRow>(
+    rows: readonly Row[],
+    stringify?: <V = unknown>(value: V) => string,
+  ): (name: string) => Result.Result<readonly OutlineRow<Row>[], string>
+  <Row extends AnyRow>(
+    name: string,
+    rows: readonly Row[],
+    stringify?: <V = unknown>(value: V) => string,
+  ): Result.Result<readonly OutlineRow<Row>[], string>
+} = dual((args: IArguments) => typeof args[0] === 'string', expandOutlineImpl)

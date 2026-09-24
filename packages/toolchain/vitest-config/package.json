@@ -19,7 +19,13 @@
     "lib"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit --incremental"
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "magic-string": "catalog:",
+    "oxc-parser": "catalog:",
+    "tinyglobby": "catalog:"
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",

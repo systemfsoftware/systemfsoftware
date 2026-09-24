@@ -6,10 +6,14 @@ export interface Annotate {
   (message: string, type?: string): Promise<void> | void
 }
 
+const forget = (annotation: Promise<void> | void): void => {
+  void Promise.resolve(annotation)
+}
+
 const dispatchAnnotate = (annotate: Annotate | undefined, message: string, type: string): Effect.Effect<void> =>
   Option.match(Option.fromNullishOr(annotate), {
     onNone: () => Effect.void,
-    onSome: (record) => Effect.promise(() => Promise.resolve(record(message, type))),
+    onSome: (record) => Effect.sync(() => forget(record(message, type))),
   })
 
 const announcement = (

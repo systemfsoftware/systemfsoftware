@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-microsandbox",
   "license": "Apache-2.0",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -37,7 +37,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run --config vitest.config.ts",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
@@ -58,6 +58,7 @@
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

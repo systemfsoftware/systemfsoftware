@@ -1,0 +1,7 @@
+## 10.2.0
+
+### Minor Changes
+
+- Adds the `Blueprint` and `Handle` cell kinds. A blueprint is a cold, immutable description of an external target that never acquires anything. `Blueprint.make<Spec>()(TypeId).steps({ steps, targets })` gives each step a method and a same-name `dual`, and exposes targets such as `scoped` and `layer` as properties. `.operations<Ops>()({ operations, targets })` declares each operation once as a type-level transition, so its method and both `dual` forms agree even when the result type depends on the arguments. An operation or target that also extends `Blueprint.Conditional` is absent wherever its type is `never` for the blueprint's type index; every other member stays present, including in code that is generic over the index. `Handle.make<Data, Slot>()(TypeId)` mints a pipeable handle record with its own brand, a guard, and a private slot only its module can read.
+
+- A handle kind can type its slot by the handle's index. Declare the slot as an interface extending `Handle.Indexed` whose `slot` reads `this['Index']`, and pass the index bound as the third type argument of `Handle.make<Data, Slot, X>()`. `Definition.make<A>(data, slot)` mints a handle at index `A`, and `Definition.slot(handle)` returns the slot typed at that handle's index, so a handle generic over a value (a reference cell over `A`) keeps `A` when its slot is read back. Handles with a plain slot or no slot are unchanged.

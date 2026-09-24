@@ -63,7 +63,7 @@ if (real === null) {
 const result = spawnSync(real, process.argv.slice(2), {
   encoding: 'utf8',
   stdio: ['inherit', 'pipe', 'inherit'],
-  env: { ...process.env, PATH: `${dirname(real)}:${process.env.PATH ?? ''}` },
+  env: { ...process.env, PATH: `${dirname(real)}:${process.env['PATH'] ?? ''}` },
 })
 
 const exitCode = result.status ?? 1

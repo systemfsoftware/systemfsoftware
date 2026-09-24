@@ -1,6 +1,6 @@
-import { And, But, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { And, But, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Exit, Layer, Ref } from 'effect'
-import { expect } from 'vitest'
 import { InsufficientFundsError, OutOfStockError } from './__fixtures__/OrderFulfillment.schema.js'
 
 interface WalletService {
@@ -82,7 +82,7 @@ const makeOrderFulfillmentLayer = (initialBalance: number, initialStock: number)
     ),
   )
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Order fulfillment and wallet debiting')
   .withScenarioLayer(makeOrderFulfillmentLayer(100, 5))

@@ -1,17 +1,22 @@
+import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import { Effect, Layer, Option, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
-import type { TestContext } from 'vitest'
 import * as Contract from './Contract.js'
+import type { Stimulus } from './Stimulus.js'
 import { Break, Hold } from './Verdict.schema.js'
 import type { Verdict } from './Verdict.schema.js'
 
 const isHold = Schema.is(Hold)
 const isBreak = Schema.is(Break)
 
-const annotate = (context: TestContext | undefined, message: string): Effect.Effect<void> =>
-  Option.match(Option.flatMap(Option.fromNullishOr(context), (task) => Option.fromNullishOr(task.annotate)), {
-    onNone: () => Effect.void,
-    onSome: (record) => Effect.promise(() => Promise.resolve(record(message, 'info'))),
+const annotate = (message: string): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const task = yield* TaskRef.RawVitestTaskRef
+    return yield* Option.match(Option.fromNullishOr(task?.annotate), {
+      onNone: () => Effect.void,
+      onSome: (record) => Effect.promise(() => Promise.resolve(record(message, 'info'))),
+    })
   })
 
 const dumpMessageOf = (verdict: Verdict, dumpPath: string | null): Option.Option<string> =>
@@ -20,42 +25,70 @@ const dumpMessageOf = (verdict: Verdict, dumpPath: string | null): Option.Option
     (path) => `trace contract failed; observed graph dumped to ${path}`,
   )
 
-const announce = (
-  context: TestContext | undefined,
-  verdict: Verdict,
-  dumpPath: string | null,
-): Effect.Effect<void> =>
+const announce = (verdict: Verdict, dumpPath: string | null): Effect.Effect<void> =>
   Option.match(dumpMessageOf(verdict, dumpPath), {
     onNone: () => Effect.void,
-    onSome: (message) => annotate(context, message),
+    onSome: (message) => annotate(message),
   })
 
 /**
- * The generated-case predicate for one case: a factory that runs the contract's cell with
- * the dump named after the case — so every failing draw overwrites one file and the last
- * failing draw is the shrunk counterexample the runner reports — and answers the verdict as
- * the boolean: `true` while the relation held, `false` on a break, falsifying the property.
- * Only infrastructure refusals — a failing behaviour, an undecodable span, an empty
- * observation — stay on the error channel. The scenario layer is built fresh per draw, so
- * each draw owns its observation window.
+ * The contract with its stimulus replaced by the function the property was handed: the impostor gate
+ * swaps in a constant fake, so the judgement must reach the stimulus through the argument, never the
+ * closure.
  */
-export function predicate<Input, Output, E, Provided, Required>(
+const judgedOver = <Input, Output, E, Provided>(
+  contract: Contract.Contract<Input, Output, E, Provided>,
+  subject: Stimulus<Input, Output, E, Provided>,
+): Contract.Contract<Input, Output, E, Provided> => ({ ...contract, stimulus: subject })
+
+/**
+ * The run must be the run of the generated input: a stimulus that ignores its input and answers with one
+ * frozen run satisfies every relation about that run, so the input pin is what refutes it.
+ */
+const consumedInput = <Input, Output>(judgment: Contract.Judgment<Input, Output>, input: Input): boolean =>
+  judgment.run.input === input
+
+const predicateImpl = <Input, Output, E, Provided, Required>(
   title: string,
   contract: Contract.Contract<Input, Output, E, Provided>,
   scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+  shared: Layer.Layer<Required, never, never>,
 ): (
+  subject: Stimulus<Input, Output, E, Provided>,
   input: Input,
-  context: TestContext | undefined,
-) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required> {
-  const checked = (input: Input, context: TestContext | undefined) =>
-    Contract.judge(contract, input, { dumpName: title }).pipe(
-      Effect.tap((judgment) => announce(context, judgment.verdict, judgment.dumpPath)),
-      Effect.map((judgment) => isHold(judgment.verdict)),
-      Effect.provide(Layer.fresh(scenario)),
+) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope> => {
+  const provided = scenario.pipe(Layer.provideMerge(shared))
+  const checked = (subject: Stimulus<Input, Output, E, Provided>, input: Input) =>
+    Contract.judge(judgedOver(contract, subject), input, { dumpName: title }).pipe(
+      Effect.tap((judgment) => announce(judgment.verdict, judgment.dumpPath)),
+      Effect.map((judgment) => isHold(judgment.verdict) && consumedInput(judgment, input)),
+      Effect.provide(Layer.fresh(provided)),
     )
 
-  return (input, context) => checked(input, context)
+  return (subject, input) => checked(subject, input)
 }
+
+export const predicate: {
+  <Input, Output, E, Provided, Required>(
+    contract: Contract.Contract<Input, Output, E, Provided>,
+    scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+    shared: Layer.Layer<Required, never, never>,
+  ): (
+    title: string,
+  ) => (
+    subject: Stimulus<Input, Output, E, Provided>,
+    input: Input,
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
+  <Input, Output, E, Provided, Required>(
+    title: string,
+    contract: Contract.Contract<Input, Output, E, Provided>,
+    scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+    shared: Layer.Layer<Required, never, never>,
+  ): (
+    subject: Stimulus<Input, Output, E, Provided>,
+    input: Input,
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
+} = dual(4, predicateImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
@@ -63,19 +96,19 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀e_BreakWithDump_∈Messages',
-    [Break, Schema.String],
-    ([verdict, path]) => Option.exists(dumpMessageOf(verdict, path), (message) => message.includes(path)),
+    { of: [Break, Schema.String], subject: dumpMessageOf },
+    (messageOf, [verdict, path]) => Option.exists(messageOf(verdict, path), (message) => message.includes(path)),
   )
 
   it.prop(
     '∀h_Hold_⊥Messages',
-    [Hold, Schema.String],
-    ([verdict, path]) => Option.isNone(dumpMessageOf(verdict, path)),
+    { of: [Hold, Schema.String], subject: dumpMessageOf },
+    (messageOf, [verdict, path]) => Option.isNone(messageOf(verdict, path)),
   )
 
   it.prop(
     '∀b_BreakWithoutDump_⊥Messages',
-    [Break],
-    ([verdict]) => Option.isNone(dumpMessageOf(verdict, null)),
+    { of: [Break], subject: dumpMessageOf },
+    (messageOf, [verdict]) => Option.isNone(messageOf(verdict, null)),
   )
 }

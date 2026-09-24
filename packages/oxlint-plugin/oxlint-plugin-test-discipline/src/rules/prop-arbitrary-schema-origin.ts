@@ -329,19 +329,42 @@ const checkArbitraryFactory = (provenance: Provenance, context: Context, call: E
   }
 }
 
-const checkPropCall = (provenance: Provenance, context: Context, call: ESTree.CallExpression): void => {
-  const arbitraries = call.arguments.find(
-    (argument): argument is ESTree.ArrayExpression => argument.type === 'ArrayExpression',
-  )
-  if (arbitraries === undefined) return
-  for (const element of arbitraries.elements) {
+const reportHandBuilt = (provenance: Provenance, context: Context, node: ESTree.Node): void => {
+  if (provenance.verdictOf(node, 0) !== 'handBuilt') return
+  context.report({
+    node,
+    messageId: 'handBuiltArbitrary',
+    data: { name: VIOLATION_NAME, expected: EXPECTED, actual: ACTUAL, fix: FIX },
+  })
+}
+
+const checkArrayOf = (provenance: Provenance, context: Context, of: ESTree.ArrayExpression): void => {
+  for (const element of of.elements) {
     if (element === null) continue
-    if (provenance.verdictOf(element, 0) !== 'handBuilt') continue
-    context.report({
-      node: element,
-      messageId: 'handBuiltArbitrary',
-      data: { name: VIOLATION_NAME, expected: EXPECTED, actual: ACTUAL, fix: FIX },
-    })
+    reportHandBuilt(provenance, context, element)
+  }
+}
+
+const checkRecordOf = (provenance: Provenance, context: Context, of: ESTree.ObjectExpression): void => {
+  for (const member of of.properties) {
+    if (member.type !== 'Property' || member.computed) continue
+    reportHandBuilt(provenance, context, member.value)
+  }
+}
+const checkPropCall = (provenance: Provenance, context: Context, call: ESTree.CallExpression): void => {
+  const options = call.arguments[1]
+  if (options === undefined || options.type !== 'ObjectExpression') return
+  for (const property of options.properties) {
+    if (property.type !== 'Property' || property.computed) continue
+    if (property.key.type !== 'Identifier' || property.key.name !== 'of') continue
+    if (property.value.type === 'ArrayExpression') {
+      checkArrayOf(provenance, context, property.value)
+      return
+    }
+    if (property.value.type === 'ObjectExpression') {
+      checkRecordOf(provenance, context, property.value)
+      return
+    }
   }
 }
 

@@ -1,6 +1,52 @@
 import { defaultClientConditions, defaultServerConditions } from 'vite'
+import { defineConfig as defineVitestConfig } from 'vitest/config'
 
-export { defineConfig } from 'vitest/config'
+import { CONFORMANCE_SETUP, conformanceCoverage } from './conformance-coverage.js'
+
+/** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
+/** @typedef {NonNullable<ViteUserConfig['test']>} TestConfig */
+/** @typedef {NonNullable<TestConfig['projects']>} Projects */
+
+/**
+ * @param {TestConfig | undefined} test
+ * @returns {TestConfig}
+ */
+const withConformanceSetup = (test) => {
+  const setupFiles = test?.setupFiles === undefined ? [] : [test.setupFiles].flat()
+  return { ...test, setupFiles: [...setupFiles, CONFORMANCE_SETUP] }
+}
+
+/**
+ * An inline project gets the setup file itself: vitest does not carry the
+ * root's setup files into `test.projects`, and a project without it records
+ * sites but never hands them to the reporter.
+ * @param {unknown} project
+ * @returns {unknown}
+ */
+const projectWithSetup = (project) => {
+  if (typeof project !== 'object' || project === null || !('test' in project)) return project
+  return { ...project, test: withConformanceSetup(/** @type {TestConfig | undefined} */ (project.test)) }
+}
+
+/**
+ * Vitest's `defineConfig` with the conformance coverage gate added to the
+ * config's own plugins and its per-test handoff added to the root and every
+ * inline project, so no package config can leave it out by setting `plugins`
+ * or `setupFiles` after spreading `sharedConfig`.
+ * @param {ViteUserConfig} config
+ * @returns {ViteUserConfig}
+ */
+export const defineConfig = (config) => {
+  const test = withConformanceSetup(config.test)
+  const projects = config.test?.projects
+  return defineVitestConfig({
+    ...config,
+    plugins: [...(config.plugins ?? []), conformanceCoverage()],
+    test: projects === undefined
+      ? test
+      : { ...test, projects: /** @type {Projects} */ (projects.map(projectWithSetup)) },
+  })
+}
 
 // Workspace packages expose their source under this condition in `exports`, so a
 // test resolves a sibling's `src/` instead of a `dist/` this run may not have built.
@@ -20,6 +66,14 @@ export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process
 
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 
+// One tier table decides how many draws every property gets: a Stryker worker wants fast mutant runs,
+// CI wants the thorough tier, and a local run sits between them. The fork merges this over its own
+// `runs: 100` unless a property sets its own.
+const propertyRuns = process.env['STRYKER_MUTATOR_WORKER'] !== undefined ? 30 : isCI ? 1000 : 100
+
+// The fork reads these under `inject`; the key is its published `ProvidedContext` key.
+const propertyCheckDefaults = { runs: propertyRuns }
+
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
  * Both pipelines need the condition, and Vite replaces its defaults when they are set.
@@ -35,14 +89,21 @@ export const sourceResolveConditions = {
  */
 export const sharedConfig = {
   ...sourceResolveConditions,
+  // Effect v3's `effect/TestClock` path, which models keep writing, resolves to
+  // the fork's compat module; on its virtual time `adjust` lets that much time pass.
+  resolve: {
+    ...sourceResolveConditions.resolve,
+    alias: { 'effect/TestClock': '@effect/vitest/TestClock' },
+  },
   test: {
-    globals: true,
+    globals: false,
     environment: 'node',
     includeSource: ['src/**/*.{js,ts}'],
     exclude: ['**/.stryker-tmp/**', '**/node_modules/**', '**/.repo/**'],
     passWithNoTests: true,
     testTimeout: sharedTestTimeout,
     silent: isAgent ? 'passed-only' : false,
+    provide: { '@systemfsoftware/vitest:property-check': propertyCheckDefaults },
     ...(isAgent ? { bail: 1 } : {}),
     coverage: {
       enabled: isCI || process.env['COVERAGE'] === 'true',

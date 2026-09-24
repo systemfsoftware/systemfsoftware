@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": [
-    "dist/AtomHttpApi.d.ts"
-  ],
-  "compilerOptions": {
-    "customConditions": []
-  }
-}

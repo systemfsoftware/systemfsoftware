@@ -161,7 +161,7 @@ if (import.meta.vitest !== void 0) {
 c. Preserve suite/test **names** (`'∀…'`, `Should_*`) and case counts; `FastCheck as fc` from `'effect/testing'`; `output-mode.kernel.test.ts` converts its `vitest` imports to the dynamic form.
 d. Ensure `import.meta.vitest` types resolve in the host's tsconfig the way `effect-purity-law`/`effect-gherkin-spec` do (their existing in-source blocks are the live example; if a host's tsconfig lacks it, add the same `/// <reference types="vitest/importMeta" />` convention — copy from `packages/effect-purity-law`).
 e. Multi-subject suites (refutation style): host each `refutes(...)` in ONE covered module, preferring one without a block yet; the block may import sibling subjects via the same relative `.js` specifiers used today.
-f. Exclude-io boundary: keep `test-hygiene` and `property-testing` rules satisfied inside blocks identically to file suites; no `no-io-boundary-tests` on shells.
+f. Exclude-io boundary: keep `test-hygiene` and `property-testing` rules satisfied inside blocks identically to file suites; no test may be declared in a shell that performs I/O, in-source or beside it (`no-io-module-in-source-test`).
 
 | #  | Package            | Deleted suite (recover via `git show HEAD:<path>`)                                                     | Host module                                                                                                                                                                      |
 | -- | ------------------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -215,7 +215,6 @@ import base from '@systemfsoftware/oxlint-config/base'
 import { defineConfig } from 'oxlint'
 export default defineConfig({
   extends: [base],
-  rules: { '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error' },
   overrides: [
     { files: ['src/**'], rules: { 'no-ternary': 'error' } },
     { files: ['**/*.test.ts', '**/*.spec.ts', '**/tests/**'], rules: {/* sanctioned block */} },

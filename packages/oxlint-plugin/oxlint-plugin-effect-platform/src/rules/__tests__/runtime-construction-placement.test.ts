@@ -2,7 +2,6 @@ import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
 import {
-  CELL_NAMESPACE,
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
@@ -30,7 +29,6 @@ const ruleTester = new RuleTester({
 
 const MANAGED_RUNTIME_MAKE = `${MANAGED_RUNTIME_NAMESPACE}.${MAKE_MEMBER}`
 const LAYER_PROVIDE = `${LAYER_NAMESPACE}.${PROVIDE_MEMBER}`
-const CELL_PROVIDE = `${CELL_NAMESPACE}.${PROVIDE_MEMBER}`
 
 const wiringPerCall = (name: string) => ({
   messageId: 'wiringPerCall',
@@ -84,7 +82,7 @@ export const runtime = import('./AppLive.js').then((module) => ManagedRuntime.ma
       code: `import { Layer } from 'effect'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 
-export const configured = Layer.provide(Cell.provide(verdictCell, ledgerLayer), baseLayer)`,
+export const configured = Layer.provide(Cell.provideContext(context), baseLayer)`,
       filename: 'src/AppLive.ts',
     },
     {
@@ -117,8 +115,8 @@ export const program = Effect.gen(function* () {
       name: 'Should_Pass_When_TheCellNamespaceComesFromAnotherModule',
       code: `import { Cell } from './ledger-cell.js'
 
-export function build() {
-  return Cell.provide(ledgerCell, ledgerLayer)
+export function build(context) {
+  return Cell.provideContext(context)
 }`,
       filename: 'src/ledger.ts',
     },
@@ -154,7 +152,7 @@ export function build(provide) {
       code: `import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 
 export function build() {
-  return Sandwich.named('ledger.post')(read).decide(decide).write(write).provide(ledgerLayer)
+  return Sandwich.named('ledger.post')(read).decide(decide).write(write).provideContext(context)
 }`,
       filename: 'src/ledger.ts',
     },
@@ -210,13 +208,24 @@ runtime.runPromise(program)`,
     {
       name: 'Should_Pass_When_TheFactoryHandsTheWiredCellToItsReturnedClosures',
       code: `import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Layer } from 'effect'
 
 export const makeCheckerService = (deps) => {
-  const verify = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, deps.compiler))
+  const verify = Cell.provideContext(deps.context)
   return { check: (mutants) => verify.run(new CheckMutantsCommand({ mutants })) }
 }`,
       filename: 'src/Checker.ts',
+    },
+    {
+      // Passing a context built once at the composition root rebuilds nothing:
+      // `provideContext` binds a value, it constructs no runtime, so a function
+      // body is a lawful place for it.
+      name: 'Should_Pass_When_TheCellContextIsBoundInsideAFunction',
+      code: `import { Cell } from '@systemfsoftware/effect-cell-types'
+
+export function build(context) {
+  return Cell.provideContext(context)
+}`,
+      filename: 'src/ledger.ts',
     },
   ],
   invalid: [
@@ -240,16 +249,6 @@ export function build(base) {
 }`,
       filename: 'src/AppLive.ts',
       errors: [wiringPerCall(LAYER_PROVIDE)],
-    },
-    {
-      name: 'Should_Report_When_TheCellIsProvidedInsideAFunctionDeclaration',
-      code: `import { Cell } from '@systemfsoftware/effect-cell-types'
-
-export function build() {
-  return Cell.provide(verdictCell, ledgerLayer)
-}`,
-      filename: 'src/ledger.ts',
-      errors: [wiringPerCall(CELL_PROVIDE)],
     },
     {
       // Kills the mutant that exempts every module-scope binding initializer.
@@ -294,16 +293,6 @@ export function build() {
       errors: [wiringPerCall(LAYER_PROVIDE)],
     },
     {
-      name: 'Should_Report_When_TheNamespaceImportProvidesTheCellInsideAFunction',
-      code: `import * as CellTypes from '@systemfsoftware/effect-cell-types'
-
-export function build() {
-  return CellTypes.provide(verdictCell, ledgerLayer)
-}`,
-      filename: 'src/ledger.ts',
-      errors: [wiringPerCall(CELL_PROVIDE)],
-    },
-    {
       // Kills the mutant that drops the string arm of the imported name. The arm now lives
       // in the shared import-origin resolver, graded through this suite (IO4).
       name: 'Should_Report_When_TheStringNamedImportMakesTheRuntime',
@@ -338,19 +327,6 @@ export function build() {
 }`,
       filename: 'src/AppLive.ts',
       errors: [wiringPerCall(LAYER_PROVIDE)],
-    },
-    {
-      // Kills the mutant that exempts a generator body because it sits inside a
-      // module-scope binding initializer.
-      name: 'Should_Report_When_TheCellIsProvidedInsideAGeneratorBodyAtModuleScope',
-      code: `import { Effect } from 'effect'
-import { Cell } from '@systemfsoftware/effect-cell-types'
-
-export const program = Effect.gen(function* () {
-  return yield* Cell.provide(verdictCell, ledgerLayer)
-})`,
-      filename: 'src/program.ts',
-      errors: [wiringPerCall(CELL_PROVIDE)],
     },
     {
       // Kills the mutant that exempts every module-scope closure: a closure handed

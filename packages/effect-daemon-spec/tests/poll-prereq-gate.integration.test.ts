@@ -1,13 +1,13 @@
+import { expect } from '@effect/vitest'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Option, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 type AnyAttr<V = unknown> = V
 const SPAN_NAME = 'test.work.span' as const
@@ -76,7 +76,7 @@ Feature('Poll Prereq Gate')
             Effect.flatMap((seen) =>
               Effect.sync(() => {
                 expect(seen.length).toBeGreaterThan(0)
-                expect(seen.every((value) => value === false)).toBe(true)
+                expect(seen).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === false))
               })
             ),
           )
@@ -118,7 +118,7 @@ Feature('Poll Prereq Gate')
             Effect.flatMap((names) =>
               Effect.sync(() => {
                 expect(names.length).toBeGreaterThan(0)
-                expect(names.every((name) => name === SPAN_NAME)).toBe(true)
+                expect(names).toSatisfy((values: ReadonlyArray<string>) => values.every((name) => name === SPAN_NAME))
               })
             ),
           )
@@ -127,7 +127,7 @@ Feature('Poll Prereq Gate')
           Ref.get(s.probes.workData).pipe(
             Effect.flatMap((data) =>
               Effect.sync(() => {
-                expect(data.every((value) => value === 42)).toBe(true)
+                expect(data).toSatisfy((values: ReadonlyArray<number>) => values.every((value) => value === 42))
               })
             ),
           )
@@ -136,7 +136,7 @@ Feature('Poll Prereq Gate')
           Ref.get(s.probes.prereqSpanSeen).pipe(
             Effect.flatMap((seen) =>
               Effect.sync(() => {
-                expect(seen.every((value) => value === false)).toBe(true)
+                expect(seen).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === false))
               })
             ),
           )
@@ -170,7 +170,7 @@ Feature('Poll Prereq Gate')
             Effect.flatMap((rooted) =>
               Effect.sync(() => {
                 expect(rooted.length).toBeGreaterThan(0)
-                expect(rooted.every((value) => value === true)).toBe(true)
+                expect(rooted).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === true))
               })
             ),
           )
@@ -207,7 +207,7 @@ Feature('Poll Prereq Gate')
           Ref.get(s.attrs).pipe(
             Effect.flatMap((attrs) =>
               Effect.sync(() => {
-                expect(Option.isSome(attrs)).toBe(true)
+                expect(attrs).toSatisfy(Option.isSome)
                 expect(Option.getOrThrow(attrs).get('app.gate')).toBe('on')
               })
             ),
@@ -269,7 +269,7 @@ Feature('Poll Prereq Gate')
             Effect.flatMap((names) =>
               Effect.sync(() => {
                 expect(names.length).toBeGreaterThanOrEqual(3)
-                expect(names.every((name) => name === SPAN_NAME)).toBe(true)
+                expect(names).toSatisfy((values: ReadonlyArray<string>) => values.every((name) => name === SPAN_NAME))
               })
             ),
           )

@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/trace-spec",
   "license": "Apache-2.0",
-  "version": "0.0.0",
+  "version": "0.3.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace-spec#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Trace contracts as executable specs \u2014 own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
+  "description": "Trace contracts as executable specs — own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -36,7 +36,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
@@ -48,6 +48,7 @@
     "@opentelemetry/resources": "catalog:",
     "@opentelemetry/sdk-trace-base": "catalog:",
     "@opentelemetry/semantic-conventions": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-spec-runtime": "workspace:^",
     "@systemfsoftware/trace-taxonomy": "workspace:^"
   },
@@ -55,6 +56,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

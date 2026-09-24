@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-config-cell-architecture",
   "license": "Apache-2.0",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },

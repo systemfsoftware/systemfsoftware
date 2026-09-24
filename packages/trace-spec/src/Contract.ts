@@ -1,3 +1,4 @@
+import { recordAssertion } from '@effect/vitest'
 import type { Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Match, Option, Predicate } from 'effect'
 import { dual } from 'effect/Function'
@@ -6,13 +7,21 @@ import { ContractDecodeError } from './ContractDecodeError.schema.js'
 import { EmptyObservationError } from './EmptyObservationError.schema.js'
 import * as FailureDump from './FailureDump.js'
 import * as Graph from './Graph.js'
-import { Observation } from './Observation.service.js'
+import { IncompleteObservationError } from './IncompleteObservationError.schema.js'
+import { Observation, type ObservationFailure } from './Observation.service.js'
 import type * as Rel from './Rel.js'
 import type { Run, Stimulus } from './Stimulus.js'
 import { TraceDisparityError } from './TraceDisparityError.schema.js'
+import { TransportObservationError } from './TransportObservationError.schema.js'
 import type { Verdict } from './Verdict.schema.js'
 
-export { ContractDecodeError, EmptyObservationError, TraceDisparityError }
+export {
+  ContractDecodeError,
+  EmptyObservationError,
+  IncompleteObservationError,
+  TraceDisparityError,
+  TransportObservationError,
+}
 
 export const TypeId = Symbol.for('@systemfsoftware/trace-spec/Contract')
 export type TypeId = typeof TypeId
@@ -103,7 +112,7 @@ export interface CheckOptions {
   readonly dumpName?: string | undefined
 }
 
-export type JudgeFailure<E> = E | ContractDecodeError | EmptyObservationError
+export type JudgeFailure<E> = E | ContractDecodeError | ObservationFailure
 
 export type CheckFailure<E> = JudgeFailure<E> | TraceDisparityError
 
@@ -178,7 +187,10 @@ const checkDual = <Input, Output, E, R>(
   input: Input,
   options?: CheckOptions,
 ): Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, Services<R>> =>
-  Effect.flatMap(judgeDual(self, input, options), (judgment) => refuseBreak(self.relation.id, judgment))
+  Effect.flatMap(
+    judgeDual(self, input, options),
+    (judgment) => Effect.andThen(Effect.sync(recordAssertion), refuseBreak(self.relation.id, judgment)),
+  )
 
 export const check: {
   <Input>(

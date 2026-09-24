@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/npm-package",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
@@ -33,7 +33,7 @@
   "scripts": {
     "build": "tsdown -l warn && pnpm api:check",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",

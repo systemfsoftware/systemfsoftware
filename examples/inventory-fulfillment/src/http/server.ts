@@ -2,7 +2,7 @@ import { NodeHttpServer } from '@effect/platform-node'
 import { Config, Layer } from 'effect'
 import { HttpRouter } from 'effect/unstable/http'
 import { RpcSerialization, RpcServer } from 'effect/unstable/rpc'
-import { AuthMiddleware } from '../rpc/auth.middleware.js'
+import { layer as authMiddlewareLayer } from '../rpc/AuthMiddlewareLive.js'
 import { FulfillmentRpcs, handlers } from '../rpc/inventory-fulfillment.rpc.js'
 import { AuthRoutesLive } from './auth.routes.js'
 
@@ -14,7 +14,7 @@ export const httpServerLayer = NodeHttpServer.layerConfig(nodeServerFactory, {
 
 const rpcLayer = RpcServer.layerHttp({ group: FulfillmentRpcs, path: '/rpc', protocol: 'http' }).pipe(
   Layer.provide(handlers),
-  Layer.provide(AuthMiddleware.Live),
+  Layer.provide(authMiddlewareLayer),
   Layer.provide(RpcSerialization.layerJson),
 )
 

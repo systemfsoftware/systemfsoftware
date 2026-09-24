@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": [
-    "dist/Result.d.ts"
-  ],
-  "compilerOptions": {
-    "customConditions": []
-  }
-}

@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-daemon-spec",
   "license": "Apache-2.0",
-  "version": "4.0.0",
+  "version": "4.1.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -32,7 +32,12 @@
       "types": "./dist/effect-daemon-spec.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./testing": {
+      "@systemfsoftware/source": "./src/testing/LockPrimitiveConformance.ts",
+      "types": "./dist/lock-primitive-conformance.d.ts",
+      "default": "./dist/lock-primitive-conformance.mjs"
+    }
   },
   "files": [
     "dist"
@@ -40,13 +45,13 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "api:check": "api-extractor-quiet run",
-    "api:update": "api-extractor run --local",
+    "api:check": "api-extractor-quiet run && api-extractor-quiet run --config api-extractor.testing.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.testing.json",
     "attw": "attw --pack ."
   },
   "dependencies": {
@@ -56,6 +61,7 @@
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.59.1",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
@@ -81,7 +87,13 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "effect": "catalog:peers"
+  },
+  "peerDependenciesMeta": {
+    "@systemfsoftware/conformance-spec": {
+      "optional": true
+    }
   },
   "publishConfig": {
     "exports": {
@@ -89,7 +101,11 @@
         "types": "./dist/effect-daemon-spec.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./package.json": "./package.json"
+      "./package.json": "./package.json",
+      "./testing": {
+        "types": "./dist/lock-primitive-conformance.d.ts",
+        "default": "./dist/lock-primitive-conformance.mjs"
+      }
     },
     "provenance": true
   }

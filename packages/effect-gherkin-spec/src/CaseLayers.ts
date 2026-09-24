@@ -1,4 +1,5 @@
 import { Effect, Layer, Option } from 'effect'
+import { dual } from 'effect/Function'
 
 export interface Layers {
   readonly scenarioLayer: Layer.Layer<never> | undefined
@@ -22,12 +23,17 @@ const layerToProvide = (layers: Layers): Option.Option<Layer.Layer<never>> =>
     onSome: (scenarioLayer) => Option.some(withScenarioLayer(scenarioLayer, layers.extra)),
   })
 
-/**
- * Freshens the scenario layer around every composition, keeps the extra layer
- * shared, and leaves the body untouched when neither is declared.
- */
-export const compose = <B, E, R>(body: Effect.Effect<B, E, R>, layers: Layers): Effect.Effect<B, E, R> =>
+const composeImpl = <B, E, R>(body: Effect.Effect<B, E, R>, layers: Layers): Effect.Effect<B, E, R> =>
   Option.match(layerToProvide(layers), {
     onNone: () => body,
     onSome: (layer) => body.pipe(Effect.provide(layer)),
   })
+
+/**
+ * Freshens the scenario layer around every composition, keeps the extra layer
+ * shared, and leaves the body untouched when neither is declared.
+ */
+export const compose: {
+  <B, E, R>(layers: Layers): (body: Effect.Effect<B, E, R>) => Effect.Effect<B, E, R>
+  <B, E, R>(body: Effect.Effect<B, E, R>, layers: Layers): Effect.Effect<B, E, R>
+} = dual(2, composeImpl)

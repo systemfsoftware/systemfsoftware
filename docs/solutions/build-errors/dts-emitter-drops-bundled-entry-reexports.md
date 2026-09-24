@@ -21,6 +21,7 @@ tags:
   - shipped-surface
   - silent-pass
 fix_prs: [830671e3c37]
+last_updated: 2026-09-24
 ---
 
 # tsgo dts emit drops public names from bundled entry re-exports
@@ -37,6 +38,7 @@ Boundary: the drop occurs only when the dts bundle inlines a non-entry leaf modu
 2. **`@internal` + `stripInternal: true` statement removal.** A JSDoc `@internal` tag above a re-export statement removes the entire statement from the emitted dts. This is additive on top of (1): a clause that survives one trap dies in the other; a local-binding export died from neither.
 3. **Silent-pass triad.** No in-repo gate reads the shipped entry through a consumer lens: tests import the built runtime, which keeps the names, `dts:check` never imports the names, and `attw` checks path resolution only. All three green while the surface is broken — the exact shape of a silent-pass verification gap.
 4. **Asymmetric surface.** Runtime `.mjs` still exports the names (the JS bundler keeps the clause); only the types drop. Downstream failure mode then depends on the consumer's own `stripInternal` and TS settings — nondeterministic breakage across consumer builds.
+5. **`@internal` types reached through a public signature.** In a package where every export in an internal folder must carry `/** @internal */` (the cell-architecture `internal-export-jsdoc` rule), a public type declared there and used by an entry signature does not survive `stripInternal: true`. The dts bundle keeps the reference and drops the declaration, so tsdown warns `IMPORT_IS_UNDEFINED` and emits `type Values<G> = undefined<G>`, a built entry dts consumers cannot parse (`TS1005`/`TS1109`). Consumers that resolve the source condition typecheck cleanly, so only a package that reads the built dts (in this repo, `hex-schema`) sees it. `@systemfsoftware/vitest` hit this with `Gens`, `Values`, `PropertySpec`, `LawApi` and the `expect` statics declared under `packages/vitest/src/internal/`. The lint rule and `stripInternal` cannot both hold for such a package: drop `stripInternal`, because the dts bundler already keeps only what the entry reaches.
 
 ## Architectural Invariants
 
@@ -76,6 +78,7 @@ Anti-pattern code smells to lint for:
 - Assert the shipped surface on every build: a strict-consumer compile (no source condition, no `skipLibCheck`) importing every documented public name. Tracked as pending gate in issue 177; until it lands, re-run the probe manually on any dts-adjacent change.
 - When touching dts-affecting machinery, always emit into a clean, empty output directory and diff the entry export lists against the module's `export` statements — never trust an incremental cache (`clean: false` in tsdown config hides stale artifact errors).
 - Namespace type members: keep the merge in one module and verify with a consumer compile that `Result.Success<R>` and `Result.Failure<R>` resolve — the old per-entry split dropped them silently.
+- Treat any `IMPORT_IS_UNDEFINED` warning from tsdown's dts pass as a build failure: it names exactly the declaration the shipped dts lost.
 
 ## Related
 

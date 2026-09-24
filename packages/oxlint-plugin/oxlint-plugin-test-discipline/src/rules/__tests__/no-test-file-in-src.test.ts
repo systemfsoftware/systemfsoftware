@@ -91,6 +91,12 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       errors: unsanctioned('hook-timeout.test.ts'),
     },
     {
+      name: 'Should_Report_ConformanceTestInSrc_When_LaneIsOutsideSrcOnly',
+      code: '',
+      filename: '/repo/pkg/src/linearizable.conformance.test.ts',
+      errors: unsanctioned('linearizable.conformance.test.ts'),
+    },
+    {
       name: 'Should_Report_FooTestInSrc_When_Arbitrary',
       code: '',
       filename: '/repo/pkg/src/foo.test.ts',

@@ -1,12 +1,12 @@
+import { expect } from '@effect/vitest'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Ref } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Subscription Worker Lifecycle')
   .withLayer(NoopLayer)
@@ -27,7 +27,7 @@ Feature('Subscription Worker Lifecycle')
             const health = yield* run.worker(worker)
             yield* TestClock.adjust(Duration.millis(5))
             const acquired = yield* Ref.get(s.acquiredRef)
-            expect(acquired).toBe(true)
+            expect(acquired).toEqual(true)
             return health
           })),
         Then('ready is open')((s) => s.health.ready.await),
@@ -49,9 +49,8 @@ Feature('Subscription Worker Lifecycle')
             const health = yield* run.worker(worker)
             yield* TestClock.adjust(Duration.millis(5))
             const acquired = yield* Ref.get(s.acquiredRef)
-            expect(acquired).toBe(true)
+            expect(acquired).toEqual(true)
             yield* health.paused.close
-            yield* Effect.yieldNow
             yield* TestClock.adjust(Duration.millis(5))
             return health
           })),

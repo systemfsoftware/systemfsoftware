@@ -59,6 +59,16 @@ export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhau
 }
 
 /**
+ * The decision channel: the two outcomes a cooldown-or-restart choice is made between, as
+ * one schema the workflow declares. The error channel carries `RestartDecisionExhausted`, so
+ * the compiler holds the three-way dispatch over the encoded tags of both channels.
+ */
+/** @internal */
+export const RestartDecision = S.Union([RestartDecisionContinue, RestartDecisionRestart])
+/** @internal */
+export type RestartDecision = typeof RestartDecision.Type
+
+/**
  * The outcome a restart decision produces. Named here, at the module that owns the
  * decision, so consumers import the contract instead of reconstructing it with
  * `ReturnType<…>` — which couples them to this signature's shape and attaches no
@@ -77,10 +87,20 @@ export type RestartDecisionWorkflow = Workflow.Workflow<
   RestartDecisionExhausted
 >
 
+/**
+ * The restart decision's encoded form: what a cell's `write` handler receives once the
+ * library has encoded the decision. Named here so a handler types against the edge the
+ * library enforces instead of restating the payload.
+ */
 /** @internal */
-export const chooseRestartStrategy = Workflow.make(
-  DecideInput,
-  (command): RestartDecisionOutcome =>
+export type RestartDecisionRestartEncoded = (typeof RestartDecisionRestart)['Encoded']
+
+/** @internal */
+export const chooseRestartStrategy = Workflow.make({
+  command: DecideInput,
+  decision: RestartDecision,
+  error: RestartDecisionExhausted,
+  decide: (command): RestartDecisionOutcome =>
     Match.value(command).pipe(
       Match.when({ exitSuccess: true }, () => Result.succeed(RestartDecisionContinue.make())),
       Match.when({ exitSuccess: false, intensityExceeded: true }, () => Result.fail(RestartDecisionExhausted.make())),
@@ -92,23 +112,12 @@ export const chooseRestartStrategy = Workflow.make(
         )
       ),
     ),
-)
+})
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
-
-  /**
-   * A supervision tree with a failed child: a total, and a failed index inside it. The schema's
-   * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
-   * rather than a wider one the decision never sees.
-   */
-  const tree = Arbitrary.map(
-    Arbitrary.schema(DecideInput),
-    (input) => [input.totalChildren, input.failedIndex] as const,
-  )
 
   const previousOrNegInf = (xs: readonly number[], i: number): number =>
     Option.getOrElse(Option.fromNullishOr(xs[i - 1]), () => Number.NEGATIVE_INFINITY)
@@ -134,56 +143,66 @@ if (import.meta.vitest !== void 0) {
   const allIndicesInTree = (indices: readonly number[], total: number): boolean =>
     indices.every((x) => isChildIndex(x, total))
 
-  const restartSetIsValid = (
-    strategy: RestartStrategyName,
-    failedIndex: number,
-    total: number,
-  ): boolean => {
-    const indices = restartIndicesFor(strategy, failedIndex, total)
-    return Match.value(ascendingDistinct(indices)).pipe(
+  const restartSetIsValid = (indices: readonly number[], total: number): boolean =>
+    Match.value(ascendingDistinct(indices)).pipe(
       Match.when(true, () => allIndicesInTree(indices, total)),
       Match.when(false, () => false),
       Match.exhaustive,
     )
-  }
 
   /**
+   * A supervision tree with a failed child: a total, and a failed index inside it. The schema's
+   * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
+   * rather than a wider one the decision never sees.
+   *
    * Whatever the strategy, a restart set is a set of real child indices in a stable order: a
    * mutant that reversed the order, repeated an index, or ran one past the last child breaks it.
    */
   it.prop(
     '∀t_RestartSet_⊆Children',
-    [tree],
-    ([[total, failedIndex]]) => RESTART_STRATEGIES.every((strategy) => restartSetIsValid(strategy, failedIndex, total)),
+    { of: [DecideInput], subject: restartIndicesFor },
+    (subject, [input]) =>
+      RESTART_STRATEGIES.every((strategy) =>
+        restartSetIsValid(subject(strategy, input.failedIndex, input.totalChildren), input.totalChildren)
+      ),
   )
 
-  const blastRadiusWidens = (total: number, failedIndex: number): boolean => {
-    const one = restartIndicesFor('one_for_one', failedIndex, total)
-    const rest = restartIndicesFor('rest_for_one', failedIndex, total)
-    const all = restartIndicesFor('one_for_all', failedIndex, total)
-    return Match.value(subset(one, rest)).pipe(
+  const blastRadiusWidens = (one: readonly number[], rest: readonly number[], all: readonly number[]): boolean =>
+    Match.value(subset(one, rest)).pipe(
       Match.when(true, () => subset(rest, all)),
       Match.when(false, () => false),
       Match.exhaustive,
     )
-  }
 
   /**
    * The three strategies are ordered by blast radius, and the ordering is containment:
    * one_for_one restarts the failed child, rest_for_one that child and its juniors, one_for_all
    * every child. An off-by-one in any branch breaks a containment the branch itself cannot see.
    */
-  it.prop('∀t_BlastRadius_⊆Widening', [tree], ([[total, failedIndex]]) => blastRadiusWidens(total, failedIndex))
+  it.prop(
+    '∀t_BlastRadius_⊆Widening',
+    { of: [DecideInput], subject: restartIndicesFor },
+    (subject, [input]) =>
+      blastRadiusWidens(
+        subject('one_for_one', input.failedIndex, input.totalChildren),
+        subject('rest_for_one', input.failedIndex, input.totalChildren),
+        subject('one_for_all', input.failedIndex, input.totalChildren),
+      ),
+  )
 
-  const oneForAllCoversTree = (total: number, failedIndex: number): boolean =>
-    restartIndicesFor('one_for_all', failedIndex, total).length === total
+  const oneForAllCoversTree = (forAll: readonly number[], total: number): boolean => forAll.length === total
 
-  const restForOneIsSuffix = (total: number, failedIndex: number): boolean =>
-    restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex
+  const restForOneIsSuffix = (restForOne: readonly number[], total: number, failedIndex: number): boolean =>
+    restForOne.length === total - failedIndex
 
-  const cardinalityMatchesStrategy = (total: number, failedIndex: number): boolean =>
-    Match.value(oneForAllCoversTree(total, failedIndex)).pipe(
-      Match.when(true, () => restForOneIsSuffix(total, failedIndex)),
+  const cardinalityMatchesStrategy = (
+    forAll: readonly number[],
+    restForOne: readonly number[],
+    total: number,
+    failedIndex: number,
+  ): boolean =>
+    Match.value(oneForAllCoversTree(forAll, total)).pipe(
+      Match.when(true, () => restForOneIsSuffix(restForOne, total, failedIndex)),
       Match.when(false, () => false),
       Match.exhaustive,
     )
@@ -191,7 +210,13 @@ if (import.meta.vitest !== void 0) {
   /** one_for_all covers the whole tree, and rest_for_one exactly the failed child's suffix. */
   it.prop(
     '∀t_Cardinality_=Strategy',
-    [tree],
-    ([[total, failedIndex]]) => cardinalityMatchesStrategy(total, failedIndex),
+    { of: [DecideInput], subject: restartIndicesFor },
+    (subject, [input]) =>
+      cardinalityMatchesStrategy(
+        subject('one_for_all', input.failedIndex, input.totalChildren),
+        subject('rest_for_one', input.failedIndex, input.totalChildren),
+        input.totalChildren,
+        input.failedIndex,
+      ),
   )
 }

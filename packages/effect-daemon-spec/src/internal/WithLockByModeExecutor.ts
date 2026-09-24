@@ -1,4 +1,4 @@
-import type { Effect } from 'effect'
+import { type Effect, Function } from 'effect'
 import type { LockConfig } from '../DaemonSpec.schema.js'
 import type { LeaderLockAcquireError } from '../LeaderLock.schema.js'
 import type { LeaderLock } from '../LeaderLockAdapter.js'
@@ -54,12 +54,23 @@ const withKeyedLock = <A, E, R>(
 }
 
 /** @internal */
-export const withLockByMode = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-  binding: LockBinding,
-): Effect.Effect<A | void, E | LeaderLockAcquireError, R> => {
-  if (binding.kind === 'unlocked') {
-    return self
-  }
-  return withKeyedLock(self, binding.spec, binding.lock)
-}
+export const withLockByMode: {
+  <A, E, R>(
+    binding: LockBinding,
+  ): (self: Effect.Effect<A, E, R>) => Effect.Effect<A | void, E | LeaderLockAcquireError, R>
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    binding: LockBinding,
+  ): Effect.Effect<A | void, E | LeaderLockAcquireError, R>
+} = Function.dual(
+  2,
+  <A, E, R>(
+    self: Effect.Effect<A, E, R>,
+    binding: LockBinding,
+  ): Effect.Effect<A | void, E | LeaderLockAcquireError, R> => {
+    if (binding.kind === 'unlocked') {
+      return self
+    }
+    return withKeyedLock(self, binding.spec, binding.lock)
+  },
+)

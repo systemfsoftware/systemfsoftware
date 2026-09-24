@@ -14,17 +14,16 @@
  *     enough values, including the boundary where the consumer takes a single
  *     element out of a long stream.
  */
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
-import { expect } from 'vitest'
-
-import { Observable, ReplaySubject } from 'rxjs'
 
 import { fromObservable } from '@systemfsoftware/rx-effect'
+import { Observable, ReplaySubject } from 'rxjs'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const collectValues = <A, E>(stream: Stream.Stream<A, E>): Effect.Effect<readonly A[], E, never> =>
   Stream.runCollect(stream).pipe(Effect.map((chunk) => Array.from(chunk)))
@@ -50,10 +49,13 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
             subject.complete()
             return subject
           })),
-        When('the stream is collected')('values', (s) =>
-          collectValues(
-            fromObservable(() => new UnknownError(new Error('unexpected')))(s.subject),
-          )),
+        When('the stream is collected')(
+          'values',
+          (s) =>
+            fromObservable(() => new UnknownError(new Error('unexpected')))(s.subject).pipe(
+              collectValues,
+            ),
+        ),
         Then('the stream yields exactly the emitted values in order')((s) => {
           expect(s.values).toEqual([10, 20, 30])
         }),
@@ -72,10 +74,13 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               })
             ),
         ),
-        When('the stream is collected')('values', (s) =>
-          collectValues(
-            fromObservable(() => new UnknownError(new Error('unexpected')))(s.observable),
-          )),
+        When('the stream is collected')(
+          'values',
+          (s) =>
+            fromObservable(() => new UnknownError(new Error('unexpected')))(s.observable).pipe(
+              collectValues,
+            ),
+        ),
         Then('the stream is empty')((s) => {
           expect(s.values).toEqual([])
         }),
@@ -97,10 +102,13 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               })
             ),
         ),
-        When('the stream is collected')('values', (s) =>
-          collectValues(
-            fromObservable(() => new UnknownError(new Error('unexpected')))(s.observable),
-          )),
+        When('the stream is collected')(
+          'values',
+          (s) =>
+            fromObservable(() => new UnknownError(new Error('unexpected')))(s.observable).pipe(
+              collectValues,
+            ),
+        ),
         Then('the stream yields exactly 0..99 in order')((s) => {
           expect(s.values).toEqual(Array.from({ length: 100 }, (_, i) => i))
         }),
@@ -119,10 +127,14 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               })
             ),
         ),
-        When('the stream is collected with a string mapper')('outcome', (s) =>
-          collectValues(
-            fromObservable(errorMessage)(s.observable),
-          ).pipe(Effect.result)),
+        When('the stream is collected with a string mapper')(
+          'outcome',
+          (s) =>
+            fromObservable(errorMessage)(s.observable).pipe(
+              collectValues,
+              Effect.result,
+            ),
+        ),
         Then('the call fails with the mapped message')((s) => {
           expect(s.outcome).toEqual(Result.fail('boom'))
         }),
@@ -141,10 +153,14 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               })
             ),
         ),
-        When('the stream is collected with a string mapper')('outcome', (s) =>
-          collectValues(
-            fromObservable(errorMessage)(s.observable),
-          ).pipe(Effect.result)),
+        When('the stream is collected with a string mapper')(
+          'outcome',
+          (s) =>
+            fromObservable(errorMessage)(s.observable).pipe(
+              collectValues,
+              Effect.result,
+            ),
+        ),
         Then('the call fails with the full multi-line string')((s) => {
           expect(s.outcome).toEqual(Result.fail('line one\nline two'))
         }),

@@ -1,16 +1,15 @@
 /**
- * Feature builder surfaces — layer, live clock, and scope.
+ * Feature builder surfaces — layer, live declaration, and scope.
  *
- * One Feature drives withLayer + liveClock + withScope together so the
- * layered live-clock path (no TestClock.withLive) is exercised as a
- * consumer would call it.
+ * One Feature drives withLayer + live + withScope together so the
+ * layered live path is exercised as a consumer would call it.
  */
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Context, Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 class Widget extends Context.Service<Widget, { readonly label: string }>()(
   '@systemfsoftware/effect-gherkin-spec/tests/feature-builder-surfaces.integration.test/Widget',
@@ -19,9 +18,9 @@ class Widget extends Context.Service<Widget, { readonly label: string }>()(
 const widgetLayer = Layer.succeed(Widget, { label: 'shared' })
 
 Feature('Feature builder — live clock with a shared layer')
-  .liveClock()
   .withLayer(widgetLayer)
   .withScope({ token: Effect.succeed('scoped') })
+  .live('the wall clock behind this suite reads wall time')
   .body(({ scenario, scope }) => {
     scenario(
       'A shared service is available inside the scenario',
@@ -38,7 +37,7 @@ Feature('Feature builder — live clock with a shared layer')
       Gherkin.Do.pipe(
         Given('the current time')('now', () => Clock.currentTimeMillis),
         Then('the time is a finite number')((s) => {
-          expect(Number.isFinite(s.now)).toBe(true)
+          expect(s.now).toSatisfy(Number.isFinite)
         }),
       ),
     )

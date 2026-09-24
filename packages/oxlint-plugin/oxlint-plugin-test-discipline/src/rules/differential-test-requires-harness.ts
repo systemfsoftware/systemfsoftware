@@ -6,7 +6,7 @@ import { DIFFERENTIAL_PACKAGE, DIFFERENTIAL_SUFFIX, FOREIGN_RUNNERS, RUNNER_NAME
 export type MessageIds = 'rawRunnerCall' | 'runnerImport' | 'missingHarnessImport' | 'missingHarnessUsage'
 
 const HARNESS_PRESCRIPTION =
-  'import { Differential, Metamorphic } from @systemfsoftware/differential-spec and express the test as Differential.compare({ reference, candidate }).on(arb).assert(oracle) or Metamorphic.on(system).relation({ transformInput, assertOutput }).on(arb)'
+  'import { Differential, Metamorphic } from @systemfsoftware/differential-spec and express the test as Differential.compare({ name, reference, candidate }).on(arb).assert(oracle) or Metamorphic.on({ name, system }).relation({ transformInput, assertOutput }).on(arb)'
 
 const memberObjectName = (callee: ESTree.CallExpression['callee']): string | undefined =>
   callee.type === 'MemberExpression' && callee.object.type === 'Identifier' ? callee.object.name : undefined

@@ -1,9 +1,9 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { createPackage } from '@systemfsoftware/npm-package'
+import { expect } from '@effect/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { createPackage, Package } from '@systemfsoftware/npm-package'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
 
 Feature('Package tree constructor — file-tree to Package projection (pure tree)')
@@ -22,7 +22,7 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
           (s) => Effect.sync(() => createPackage(s.tree, 'demo', '1.0.0')),
         ),
         Then('the prefixed path is accessible and preserves its contents')((s) => {
-          expect(s.pkg.fileExists('/node_modules/demo/index.d.ts')).toBe(true)
+          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/index.d.ts'))
           expect(s.pkg.readFile('/node_modules/demo/index.d.ts')).toBe('export declare const x: number')
         }),
       ),
@@ -93,7 +93,7 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
         ),
         Then('reading the file yields the decoded text identically')((s) => {
           expect(s.pkg.readFile('/node_modules/demo/index.d.ts')).toBe(s.ctx.content)
-          expect(s.pkg.fileExists('/node_modules/demo/index.d.ts')).toBe(true)
+          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/index.d.ts'))
         }),
       ),
     )
@@ -116,8 +116,8 @@ Feature('Package tree constructor — file-tree to Package projection (pure tree
         Then('the explicit arguments govern identity and mounting location')((s) => {
           expect(s.pkg.packageName).toBe('demo')
           expect(s.pkg.packageVersion).toBe('1.0.0')
-          expect(s.pkg.fileExists('/node_modules/demo/package.json')).toBe(true)
-          expect(s.pkg.fileExists('/node_modules/other/package.json')).toBe(false)
+          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/package.json'))
+          expect(s.pkg).not.toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/other/package.json'))
         }),
       ),
     )

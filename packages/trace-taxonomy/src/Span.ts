@@ -68,17 +68,25 @@ if (import.meta.vitest !== void 0) {
 
   const Checkout = declare({ id: CHECKOUT, name: CHECKOUT, attrs: CheckoutAttrs })
 
-  it.effect.prop('∀a_Start_=Declared', [CheckoutAttrs], ([attrs]) =>
-    Effect.gen(function*() {
-      const span = yield* started(Effect.currentSpan, Checkout, attrs)
-      return span.name === CHECKOUT &&
-        Object.entries(attrs).every(([key, value]) => span.attributes.get(key) === value)
-    }))
+  it.effect.prop(
+    '∀a_Start_=Declared',
+    { of: [CheckoutAttrs], subject: started },
+    (start, [attrs]) =>
+      Effect.gen(function*() {
+        const span = yield* start(Effect.currentSpan, Checkout, attrs)
+        return span.name === CHECKOUT &&
+          Object.entries(attrs).every(([key, value]) => span.attributes.get(key) === value)
+      }),
+  )
 
-  it.effect.prop('∀a_Start_=Identity', [CheckoutAttrs], ([attrs]) =>
-    Effect.gen(function*() {
-      const succeeded = yield* started(Effect.succeed(42), Checkout, attrs)
-      const failed = yield* Effect.flip(started(Effect.fail('boom'), Checkout, attrs))
-      return succeeded === 42 && failed === 'boom'
-    }))
+  it.effect.prop(
+    '∀a_Start_=Identity',
+    { of: [CheckoutAttrs], subject: started },
+    (start, [attrs]) =>
+      Effect.gen(function*() {
+        const succeeded = yield* start(Effect.succeed(42), Checkout, attrs)
+        const failed = yield* Effect.flip(start(Effect.fail('boom'), Checkout, attrs))
+        return succeeded === 42 && failed === 'boom'
+      }),
+  )
 }

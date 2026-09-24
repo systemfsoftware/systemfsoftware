@@ -1,10 +1,10 @@
+import { expect } from '@effect/vitest'
 import {
   And,
   checkSoftFailures,
   Gherkin,
   Given,
   it,
-  layer,
   makeFeature,
   StepError,
   Then,
@@ -14,9 +14,8 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Gherkin pipeline execution semantics')
   .withLayer(Layer.empty)
@@ -133,11 +132,8 @@ Feature('Gherkin pipeline execution semantics')
         )
 
         const fiber = yield* Effect.forkChild(pipeline)
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
-        yield* Effect.yieldNow
         yield* TestClock.adjust('10 millis')
         yield* Fiber.join(fiber)
 

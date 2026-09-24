@@ -1,20 +1,21 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
-import { expect } from 'vitest'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Restoring saved page state')
+  .live('renders real components in Chromium and waits on browser timers')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A page that receives a saved value for a fresh atom shows it immediately',
@@ -24,18 +25,18 @@ Feature('Restoring saved page state')
             const temperature = Atom.make(18).pipe(
               Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
             )
-            const savedPage = AtomRegistry.make()
-            savedPage.set(temperature, 23)
-            const saved = Hydration.dehydrate(savedPage)
+            const savedPage = Atom.Registry.make()
+            Atom.Registry.set(savedPage, temperature, 23)
+            const saved = Atom.Hydration.dehydrate(savedPage)
             function Page() {
-              const value = useAtomValue(temperature)
+              const value = AtomReact.useAtomValue(temperature)
               return React.createElement('div', { 'data-testid': 'fresh-temperature' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
-                React.createElement(HydrationBoundary, { state: saved }, React.createElement(Page)),
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
+                React.createElement(AtomReact.HydrationBoundary, { state: saved }, React.createElement(Page)),
               ),
             )
             return {}
@@ -57,17 +58,17 @@ Feature('Restoring saved page state')
           () =>
             Effect.sync(() => {
               const room = Atom.make(4)
-              const registry = AtomRegistry.make()
-              registry.set(room, 4)
+              const registry = Atom.Registry.make()
+              Atom.Registry.set(registry, room, 4)
               function Page() {
-                const value = useAtomValue(room)
+                const value = AtomReact.useAtomValue(room)
                 return React.createElement('div', { 'data-testid': 'plain-room' }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: registry },
-                  React.createElement(HydrationBoundary, null, React.createElement(Page)),
+                  React.createElement(AtomReact.HydrationBoundary, null, React.createElement(Page)),
                 ),
               )
               return {}

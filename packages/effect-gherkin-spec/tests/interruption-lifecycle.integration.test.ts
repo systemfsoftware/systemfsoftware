@@ -1,19 +1,18 @@
+import { expect } from '@effect/vitest'
 import {
   And,
   checkSoftFailures,
   Gherkin,
   Given,
   it,
-  layer,
   makeFeature,
   Then,
   When,
 } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Exit, Fiber, Layer, Ref } from 'effect'
+import { Deferred, Effect, Exit, Fiber, Layer, Ref } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Step lifecycle finalizers and fiber supervision')
   .withLayer(Layer.empty)
@@ -37,7 +36,7 @@ Feature('Step lifecycle finalizers and fiber supervision')
 
         const exit = yield* Effect.scoped(Effect.exit(pipeline))
 
-        expect(Exit.isFailure(exit)).toBe(true)
+        expect(exit).toSatisfy(Exit.isFailure)
 
         const history = yield* Ref.get(finalizerLog)
         expect(history).toEqual([
@@ -53,6 +52,7 @@ Feature('Step lifecycle finalizers and fiber supervision')
       'An interrupted polling step halts background retries and cleans up fibers',
       Effect.gen(function*() {
         const pollAttempts = yield* Ref.make(0)
+        const secondAttempt = yield* Deferred.make<void>()
 
         const pipeline = Gherkin.Do.pipe(
           Given('a service readiness check')('active', () => Effect.succeed(true)),
@@ -60,19 +60,18 @@ Feature('Step lifecycle finalizers and fiber supervision')
             interval: '20 millis',
             timeout: '500 millis',
           })(() =>
-            Ref.update(pollAttempts, (n) => n + 1).pipe(
+            Ref.updateAndGet(pollAttempts, (n) => n + 1).pipe(
+              Effect.tap((attempt) =>
+                attempt >= 2 ? Effect.asVoid(Deferred.succeed(secondAttempt, undefined)) : Effect.void
+              ),
               Effect.flatMap(() => Effect.fail('not_ready_yet')),
             )
           ),
         )
 
         const fiber = yield* Effect.forkChild(pipeline)
-
-        yield* Effect.yieldNow
-        yield* TestClock.adjust('20 millis')
-        yield* Effect.yieldNow
-        yield* TestClock.adjust('20 millis')
-        yield* Effect.yieldNow
+        yield* Effect.forkChild(Effect.andThen(TestClock.adjust('20 millis'), TestClock.adjust('20 millis')))
+        yield* Deferred.await(secondAttempt)
 
         const attemptsBeforeInterrupt = yield* Ref.get(pollAttempts)
         expect(attemptsBeforeInterrupt).toBeGreaterThanOrEqual(2)
@@ -80,7 +79,6 @@ Feature('Step lifecycle finalizers and fiber supervision')
         yield* Fiber.interrupt(fiber)
 
         yield* TestClock.adjust('100 millis')
-        yield* Effect.yieldNow
 
         const attemptsAfterInterrupt = yield* Ref.get(pollAttempts)
         expect(attemptsAfterInterrupt).toBe(attemptsBeforeInterrupt)
@@ -112,7 +110,7 @@ Feature('Step lifecycle finalizers and fiber supervision')
 
         const exit = yield* Effect.scoped(Effect.exit(checkSoftFailures(pipeline.pipe(Effect.asVoid))))
 
-        expect(Exit.isFailure(exit)).toBe(true)
+        expect(exit).toSatisfy(Exit.isFailure)
 
         const log = yield* Ref.get(lifecycleEvents)
         expect(log).toEqual([

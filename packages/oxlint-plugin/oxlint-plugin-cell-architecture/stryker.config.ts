@@ -1,7 +1,7 @@
 import { sharedConfig } from '@systemfsoftware/stryker-config'
-import { defineConfig } from '@systemfsoftware/stryker-js/config'
+import { defineConfig, type StrykerConfig } from '@systemfsoftware/stryker-js/config'
 
-export default defineConfig({
+const config: StrykerConfig = defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
@@ -23,3 +23,5 @@ export default defineConfig({
   ],
   thresholds: { high: 100, low: 100, break: 100 },
 })
+
+export default config

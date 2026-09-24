@@ -1,15 +1,38 @@
-import * as AtomHttpApi from '@systemfsoftware/effect-atom/AtomHttpApi'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as Registry from '@systemfsoftware/effect-atom/Registry'
-import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Option, Schema } from 'effect'
+import { expect } from '@effect/vitest'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+/** Blocks until the registry reports a settled value for the atom, resuming from the subscription. */
+const waitForSettled = <A, E, W>(
+  registry: Atom.Registry.Registry,
+  atom: Atom.Writable<Atom.AsyncResult.Result<A, E>, W> | Atom.Atom<Atom.AsyncResult.Result<A, E>>,
+  holds: (value: Atom.AsyncResult.Result<A, E>) => boolean = (value) =>
+    !Atom.AsyncResult.isInitial(value) && !Atom.AsyncResult.isWaiting(value),
+): Effect.Effect<Atom.AsyncResult.Result<A, E>> =>
+  Effect.callback((resume) => {
+    let unsubscribe = (): void => {}
+    unsubscribe = Atom.Registry.subscribe(
+      registry,
+      atom,
+      (value) => {
+        if (!holds(value)) return
+        resume(Effect.succeed(value))
+        unsubscribe()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(unsubscribe)
+  })
+
+/** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
+const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
+  Atom.AsyncResult.isInitial(reading) || Atom.AsyncResult.isWaiting(reading)
 
 /**
  * A test double that answers every request through the same preprocess and
@@ -76,27 +99,25 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               callCount++
               return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
             })
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
             })
             const profile = Client.query('group', 'get', { params: { id: 1 }, serializationKey: '1' })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { profile, registry, callsMade: () => callCount }
           })),
         When('the profile is read, the page is reloaded, and the profile is read again on the fresh page')(
           'result',
           (s) =>
             Effect.gen(function*() {
-              const unmount = s.ctx.registry.mount(s.ctx.profile)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const savedPage = Hydration.dehydrate(s.ctx.registry)
+              const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
+              yield* waitForSettled(s.ctx.registry, s.ctx.profile)
+              const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
               unmount()
-              const freshPage = Registry.make()
-              Hydration.hydrate(freshPage, savedPage)
-              const secondReading = freshPage.get(s.ctx.profile)
+              const freshPage = Atom.Registry.make()
+              Atom.Hydration.hydrate(freshPage, savedPage)
+              const secondReading = Atom.Registry.get(freshPage, s.ctx.profile)
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
@@ -111,25 +132,25 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         Given('a page that fetches a user profile from a server that never answers')('ctx', () =>
           Effect.sync(() => {
             const httpClient = stubHttpClient((_request) => Effect.never)
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
             })
             const profile = Client.query('group', 'get', { params: { id: 1 } })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { profile, registry }
           })),
         When('two parts of the page read the profile while the request is still pending')(
           'result',
           (s) =>
             Effect.sync(() => ({
-              firstReading: s.ctx.registry.get(s.ctx.profile),
-              secondReading: s.ctx.registry.get(s.ctx.profile),
+              firstReading: Atom.Registry.get(s.ctx.registry, s.ctx.profile),
+              secondReading: Atom.Registry.get(s.ctx.registry, s.ctx.profile),
             })),
         ),
         Then('both parts agree the profile is still loading, not a stale or broken value')((s) => {
-          expect(s.result.firstReading.waiting || Result.isInitial(s.result.firstReading)).toBe(true)
-          expect(s.result.secondReading.waiting || Result.isInitial(s.result.secondReading)).toBe(true)
+          expect(s.result.firstReading).toSatisfy(isLoading)
+          expect(s.result.secondReading).toSatisfy(isLoading)
         }),
       ),
     )
@@ -149,26 +170,24 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                 ),
               )
             )
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
             })
             const create = Client.mutation('group', 'create')
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
+            return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
-          expect(Result.isSuccess(s.outcome)).toBe(true)
-          if (Result.isSuccess(s.outcome)) {
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
+          if (Atom.AsyncResult.isSuccess(s.outcome)) {
             expect(s.outcome.value).toEqual({ id: 1, name: 'grace' })
           }
         }),
@@ -190,25 +209,23 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                 ),
               )
             )
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
             })
             const create = Client.mutation('group', 'create')
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
+            yield* waitForSettled(s.ctx.registry, s.ctx.create, Atom.AsyncResult.isFailure)
+            return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as failed')((s) => {
-          expect(Result.isFailure(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
         }),
       ),
     )
@@ -222,26 +239,24 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               callCount++
               return Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
             })
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: Api,
               httpClient: () => Layer.succeed(HttpClient.HttpClient, httpClient),
             })
             const profile = Client.query('group', 'get', { params: { id: 1 } })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { profile, registry, callsMade: () => callCount }
           })),
         When('the profile is read')('outcome', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.profile)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const outcome = s.ctx.registry.get(s.ctx.profile)
+            const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
+            const outcome = Atom.Registry.get(s.ctx.registry, s.ctx.profile)
             unmount()
             return outcome
           })),
         Then('the profile is reported from the derived client')((s) => {
-          expect(Result.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
           expect(s.ctx.callsMade()).toBe(1)
         }),
       ),
@@ -269,13 +284,13 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                   ),
                 )
               })
-              const Client = AtomHttpApi.Service()('Client', {
+              const Client = Atom.HttpApi.Service()('Client', {
                 api: QueryAndMutationApi,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
               })
               const profile = Client.query('group', 'get', { params: { id: 1 }, reactivityKeys: ['profiles'] })
               const create = Client.mutation('group', 'create')
-              const registry = Registry.make()
+              const registry = Atom.Registry.make()
               return { profile, create, registry, callsMade: () => callCount }
             }),
         ),
@@ -283,27 +298,22 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'the profile is read, a record is submitted while invalidating the profiles key, and the profile is read again',
         )('readings', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.profile)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const first = s.ctx.registry.get(s.ctx.profile)
-            s.ctx.registry.set(s.ctx.create, {
+            const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
+            const first = Atom.Registry.get(s.ctx.registry, s.ctx.profile)
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['profiles'],
             })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const second = s.ctx.registry.get(s.ctx.profile)
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
+            const second = Atom.Registry.get(s.ctx.registry, s.ctx.profile)
             const calls = s.ctx.callsMade()
             unmount()
             return { first, second, calls }
           })),
         Then('the submission ran and the watched profile was fetched again')((s) => {
-          expect(Result.isSuccess(s.readings.first)).toBe(true)
-          expect(Result.isSuccess(s.readings.second)).toBe(true)
+          expect(s.readings.first).toSatisfy(Atom.AsyncResult.isSuccess)
+          expect(s.readings.second).toSatisfy(Atom.AsyncResult.isSuccess)
           expect(s.readings.calls).toBe(3)
         }),
       ),
@@ -324,26 +334,24 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                 ),
               )
             )
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: MutationApi,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
             })
             const create = Client.mutation('group', 'create', { responseMode: 'response-only' })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
+            return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the raw response is reported')((s) => {
-          expect(Result.isSuccess(s.outcome)).toBe(true)
-          if (Result.isSuccess(s.outcome)) {
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
+          if (Atom.AsyncResult.isSuccess(s.outcome)) {
             expect(s.outcome.value).toMatchObject({ status: 200 })
           }
         }),
@@ -359,7 +367,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             const httpClient = stubHttpClient((request) =>
               Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
             )
-            const Client = AtomHttpApi.Service()('Client', {
+            const Client = Atom.HttpApi.Service()('Client', {
               api: Api,
               httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
             })
@@ -374,28 +382,26 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               timeToLive: 'Infinity',
               serializationKey: 'keep',
             })
-            const registry = Registry.make()
+            const registry = Atom.Registry.make()
             return {
               profile,
               keptProfile,
               registry,
-              idleTTL: profile.idleTTL,
-              keepAlive: keptProfile.keepAlive,
+              idleTTL: profile.spec.idleTTL,
+              keepAlive: keptProfile.spec.keepAlive,
             }
           })),
         When('the profile is read, the page is reloaded, and the profile is read again')(
           'result',
           (s) =>
             Effect.gen(function*() {
-              const unmount = s.ctx.registry.mount(s.ctx.profile)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const savedPage = Hydration.dehydrate(s.ctx.registry)
+              const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
+              yield* waitForSettled(s.ctx.registry, s.ctx.profile)
+              const savedPage = Atom.Hydration.dehydrate(s.ctx.registry)
               unmount()
-              const freshPage = Registry.make()
-              Hydration.hydrate(freshPage, savedPage)
-              const secondReading = freshPage.get(s.ctx.profile)
+              const freshPage = Atom.Registry.make()
+              Atom.Hydration.hydrate(freshPage, savedPage)
+              const secondReading = Atom.Registry.get(freshPage, s.ctx.profile)
               return { secondReading }
             }),
         ),
@@ -403,7 +409,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) => {
             expect(s.ctx.idleTTL).toBe(60_000)
             expect(s.ctx.keepAlive).toBe(true)
-            expect(Result.isSuccess(s.result.secondReading)).toBe(true)
+            expect(s.result.secondReading).toSatisfy(Atom.AsyncResult.isSuccess)
           },
         ),
       ),
@@ -426,27 +432,25 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                   ),
                 )
               )
-              const Client = AtomHttpApi.Service()('Client', {
+              const Client = Atom.HttpApi.Service()('Client', {
                 api: MutationApi,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
               })
               const create = Client.mutation('group', 'create')
-              const registry = Registry.make()
+              const registry = Atom.Registry.make()
               return { create, registry }
             }),
         ),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
+            return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a defect rather than a normal failure')((s) => {
-          expect(Result.isFailure(s.outcome)).toBe(true)
-          expect(Result.error(s.outcome)).toEqual(Option.none())
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(Atom.AsyncResult.error(s.outcome)).toEqual(Option.none())
         }),
       ),
     )
@@ -468,28 +472,89 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
                   ),
                 )
               )
-              const Client = AtomHttpApi.Service()('Client', {
+              const Client = Atom.HttpApi.Service()('Client', {
                 api: ApiWithRejection,
                 httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
               })
               const create = Client.mutation('group', 'create')
-              const registry = Registry.make()
+              const registry = Atom.Registry.make()
               return { create, registry }
             }),
         ),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            Atom.Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
+            yield* waitForSettled(s.ctx.registry, s.ctx.create)
+            return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a normal failure with the described error')((s) => {
-          expect(Result.isFailure(s.outcome)).toBe(true)
-          expect(Result.error(s.outcome)).toEqual(Option.some({ message: 'nope' }))
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(Atom.AsyncResult.error(s.outcome)).toEqual(Option.some({ message: 'nope' }))
         }),
+      ),
+    )
+    scenario(
+      'Two clients defined without their own runtime each keep the extra service added to their own runtime factory',
+      Gherkin.Do.pipe(
+        Given(
+          'two API clients defined without their own runtime, each runtime factory later given its own extra service',
+        )(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              class Greeting extends Context.Service<Greeting, string>()(
+                '@systemfsoftware/effect-atom/tests/AtomHttpApi.integration.test/Greeting',
+              ) {}
+              const httpClient = stubHttpClient((request) =>
+                Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 204 })))
+              )
+              const clientWithGreeting = (greeting: string) => {
+                const Client = Atom.HttpApi.Service()('Client', {
+                  api: Api,
+                  httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+                })
+                Client.runtime.factory.addGlobalLayer(Layer.succeed(Greeting, greeting))
+                return {
+                  greeting: Client.runtime.factory(Layer.empty).atom(
+                    Effect.contextWith((services: Context.Context<never>) =>
+                      Effect.succeed(Option.getOrNull(Context.getOption(services, Greeting)))
+                    ),
+                  ),
+                  profile: Client.query('group', 'get', { params: { id: 1 } }),
+                }
+              }
+              return {
+                registry: Atom.Registry.make(),
+                first: clientWithGreeting('first'),
+                second: clientWithGreeting('second'),
+              }
+            }),
+        ),
+        When('the extra service is read from each runtime factory, and one client answers a request')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              const unmount = Atom.Registry.subscribe(s.ctx.registry, s.ctx.first.profile, () => {}, {
+                immediate: true,
+              })
+              yield* waitForSettled(s.ctx.registry, s.ctx.first.profile)
+              const profile = Atom.Registry.get(s.ctx.registry, s.ctx.first.profile)
+              unmount()
+              return {
+                firstGreeting: Atom.Registry.get(s.ctx.registry, s.ctx.first.greeting),
+                secondGreeting: Atom.Registry.get(s.ctx.registry, s.ctx.second.greeting),
+                profile,
+              }
+            }),
+        ),
+        Then('each runtime factory reports only the extra service it was given itself, and the request is answered')(
+          (s) => {
+            expect(Atom.AsyncResult.getOrThrow(s.readings.firstGreeting)).toBe('first')
+            expect(Atom.AsyncResult.getOrThrow(s.readings.secondGreeting)).toBe('second')
+            expect(s.readings.profile).toSatisfy(Atom.AsyncResult.isSuccess)
+          },
+        ),
       ),
     )
   })

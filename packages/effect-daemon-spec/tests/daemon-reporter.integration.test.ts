@@ -1,17 +1,17 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter, run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Duration, Effect, Layer, Option, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Supervisor exhaustion via DaemonReporter')
   .withLayer(LeaderLock.Noop)
@@ -62,14 +62,14 @@ Feature('Supervisor exhaustion via DaemonReporter')
           })),
         Then('healthy latch is closed and spy records one exhaustion for the supervisor')((s) =>
           Effect.sync(() => {
-            expect(s.out.healthyOpen).toBe(false)
+            expect(s.out.healthyOpen).toEqual(false)
             expect(s.out.exhaustions).toHaveLength(1)
             const exhaustion = Option.getOrThrowWith(
               Option.fromNullishOr(s.out.exhaustions[0]),
               () => new Error('expected one supervisor exhaustion event'),
             )
             expect(exhaustion.name).toBe('exhaust-sup')
-            expect(Cause.hasDies(exhaustion.cause)).toBe(true)
+            expect(exhaustion.cause).toSatisfy(Cause.hasDies)
           })
         ),
       ),

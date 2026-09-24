@@ -16,7 +16,9 @@
 // directories are workspace projects. Reading it re-implements no glob
 // semantics, needs no install (the discover job runs on a bare checkout, with
 // no `node_modules`), and cannot drift from the workspace the build installs,
-// because CI installs from this same lockfile.
+// because CI installs from this same lockfile. Since pnpm 12 that block sits
+// in the stream's second document, behind the env lockfile —
+// `mainLockfileDocument` makes the same cut pnpm's reader makes.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -24,6 +26,29 @@ import path from 'node:path'
 const IMPORTERS_KEY = 'importers:'
 const ROOT_IMPORTER = '.'
 const STRYKER_CONFIGS = ['stryker.config.ts', 'stryker.config.json']
+const DOCUMENT_START = '---\n'
+const DOCUMENT_SEPARATOR = '\n---\n'
+
+/**
+ * The project lockfile document of a `pnpm-lock.yaml` stream.
+ *
+ * Since pnpm 12 the file is a two-document YAML stream: the leading document
+ * is the *env lockfile* (config dependencies plus the `packageManager` /
+ * `devEngines` bootstrap deps), and the workspace's own `importers` block is
+ * in the document after it. pnpm's own reader makes exactly this cut — the
+ * main document is everything after the first `\n---\n` separator following a
+ * leading `---\n`, and a file with no leading marker is the main document
+ * already (pnpm/crates/lockfile/src/yaml_documents.rs, `extract_main_document`).
+ * Reading the stream's first `importers` block instead answers with the env
+ * document, whose only importer is the root.
+ */
+export function mainLockfileDocument(lockfileText) {
+  const normalized = lockfileText.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n')
+  if (!normalized.startsWith(DOCUMENT_START)) return normalized
+  const rest = normalized.slice(DOCUMENT_START.length)
+  const separator = rest.indexOf(DOCUMENT_SEPARATOR)
+  return separator === -1 ? '' : rest.slice(separator + DOCUMENT_SEPARATOR.length)
+}
 
 /**
  * The workspace project directories pnpm resolved, excluding the root.
@@ -98,7 +123,7 @@ export function discoverMutationTargets(root, changedPaths = null) {
   if (!fs.existsSync(lockfile)) {
     throw new Error(`No pnpm-lock.yaml at ${root}, so the workspace projects cannot be read.`)
   }
-  const targets = readWorkspaceProjects(fs.readFileSync(lockfile, 'utf8'))
+  const targets = readWorkspaceProjects(mainLockfileDocument(fs.readFileSync(lockfile, 'utf8')))
     .filter((project) => STRYKER_CONFIGS.some((name) => fs.existsSync(path.join(root, project, name))))
     .sort()
   assertNoNestedTargets(targets)
@@ -172,6 +197,31 @@ function selftest() {
       '    resolution: {integrity: sha512-x}',
     ].join('\n')
 
+  // The pnpm 12 stream shape: the env document (config deps and the pinned
+  // package manager) ahead of the project document.
+  const envDocument = (mainDoc) =>
+    [
+      '---',
+      "lockfileVersion: '9.0'",
+      '',
+      'importers:',
+      '',
+      '  .:',
+      '    configDependencies: {}',
+      '    packageManagerDependencies:',
+      '      pnpm:',
+      '        specifier: 12.6.0',
+      '        version: 12.6.0',
+      '',
+      'packages:',
+      '',
+      '  pnpm@12.6.0:',
+      '    resolution: {integrity: sha512-x}',
+      '',
+      '---',
+      mainDoc,
+    ].join('\n')
+
   record('a fixture project inside a package tree is not a target', () => {
     // The exact regression: the fixture owns a stryker.config.json and lives
     // under the CLI's test tree, but pnpm never resolved it as a project.
@@ -215,6 +265,18 @@ function selftest() {
 
   record('a lockfile with no importers block fails loudly', () => {
     const root = build('no-importers', "lockfileVersion: '9.0'\n\npackages:\n", [])
+    expectThrows(() => discoverMutationTargets(root), 'declares no `importers:` block')
+  })
+
+  record('the env document ahead of the project document is skipped', () => {
+    // The regression this pins: the env document carries the stream's first
+    // `importers:` block, and its only importer is the root.
+    const root = build('env-first', envDocument(lockOf(['packages/a', 'packages/b'])), ['packages/a'])
+    expect(discoverMutationTargets(root), ['packages/a'], 'targets')
+  })
+
+  record('a stream whose leading document has no project document fails loudly', () => {
+    const root = build('env-only', envDocument(''), [])
     expectThrows(() => discoverMutationTargets(root), 'declares no `importers:` block')
   })
 

@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -5,16 +6,15 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForAll, oneForOne, restForOne } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Match, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 Feature('Uniform Supervisor Behavior')
   .withScenarioLayer(NoopLayer)
   .body(({ scenarioOutline }) => {

@@ -1,7 +1,10 @@
 import { sharedConfig } from '@systemfsoftware/stryker-config'
-import { defineConfig } from '@systemfsoftware/stryker-js/config'
+import { defineConfig, type StrykerConfig } from '@systemfsoftware/stryker-js/config'
 
-export default defineConfig({
+// Composite node projects emit declarations, and the inferred `defineConfig` return type is not
+// nameable from outside `@systemfsoftware/stryker-js`'s internal chunks (TS2883); naming it here
+// keeps the emitted declaration portable.
+const config: StrykerConfig = defineConfig({
   ...sharedConfig,
   testRunner: {
     plugin: import.meta.resolve('@systemfsoftware/stryker-js-vitest-runner'),
@@ -32,3 +35,5 @@ export default defineConfig({
   dryRunTimeoutMinutes: 10,
   ignorePatterns: [],
 })
+
+export default config

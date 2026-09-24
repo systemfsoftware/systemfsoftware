@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsdown -l warn",
     "lint": "oxlint .",
+    "race": "node scripts/race.ts",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "typecheck": "tsc -b"
@@ -26,6 +27,7 @@
     "@effect/sql-pg": "catalog:",
     "@effect/sql-pglite": "catalog:",
     "@electric-sql/pglite": "catalog:",
+    "@electric-sql/pglite-socket": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/trace-taxonomy": "workspace:^",
     "better-auth": "catalog:",
@@ -34,6 +36,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

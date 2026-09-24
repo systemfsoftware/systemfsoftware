@@ -26,7 +26,7 @@ const PROPERTY_FILE_KIND: PropertyFileKind = {
   rawFcExpected: 'it.prop(...) or it.effect.prop(...) from @effect/vitest',
   rawFcActualSuffix: 'bypasses the vitest/Effect integration',
   rawFcFix:
-    'rewrite as it.prop(name, [arbitraries], predicate) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',
+    'rewrite as it.prop(name, { of, subject, runs }, holds) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',
 }
 
 const DIFFERENTIAL_FILE_KIND: PropertyFileKind = {

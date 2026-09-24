@@ -1,7 +1,7 @@
 import { capture, feature, Given, Then, When } from '@systemfsoftware/storybook-gherkin'
 import { expect } from 'storybook/test'
 
-const f = feature({})
+const f = feature({}, {})
 
 export default {
   ...f,

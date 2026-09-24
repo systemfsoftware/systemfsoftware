@@ -18,32 +18,24 @@ const ruleTester = new RuleTester({
 
 const IMPORT = `import { Workflow } from '@systemfsoftware/effect-cell-types'`
 
+const MAKE = `Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`
+
 ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
   valid: [
     {
       name: 'Should_Pass_When_WorkflowFileConstructsOnce',
-      code: `${IMPORT}\nexport const admitOrder = Workflow.make((input: number) => input)`,
+      code: `${IMPORT}\nexport const admitOrder = ${MAKE}`,
       filename: '/repo/pkg/src/admit-order.workflow.ts',
     },
     {
       name: 'Should_Pass_When_MakeLivesOutsideAWorkflowFile',
-      code: `${IMPORT}\nexport const adapter = Workflow.make((input: number) => input)`,
+      code: `${IMPORT}\nexport const adapter = ${MAKE}`,
       filename: '/repo/pkg/src/executor.ts',
     },
     {
       name: 'Should_Pass_When_StemCarriesAnExtraPeriod',
-      code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
+      code: `${IMPORT}\nexport const decide = ${MAKE}`,
       filename: '/repo/pkg/src/place.order.workflow.ts',
-    },
-    {
-      name: 'Should_Pass_When_AWorkflowFileConstructsWithAndThenOnly',
-      code: `${IMPORT}\nexport const decide = Workflow.andThen(Cmd, upstream, NextCmd, session, downstream)`,
-      filename: '/repo/pkg/src/admit-order.workflow.ts',
-    },
-    {
-      name: 'Should_Pass_When_AWorkflowFileConstructsWithTotalOnly',
-      code: `${IMPORT}\nexport const decide = Workflow.total(Cmd, (input: number) => input)`,
-      filename: '/repo/pkg/src/admit-order.workflow.ts',
     },
   ],
   invalid: [
@@ -66,7 +58,7 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
     {
       name: 'Should_Report_When_MakeOriginIsForeign',
       code:
-        `const LocalWorkflow = { make: (body: unknown) => body }\nexport const admitOrder = LocalWorkflow.make((input: number) => input)`,
+        `const LocalWorkflow = { make: (options: unknown) => options }\nexport const admitOrder = LocalWorkflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/admit-order.workflow.ts',
       errors: [
         {
@@ -82,7 +74,7 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
     },
     {
       name: 'Should_Report_When_TheOnlyWorkflowMemberCalledIsUnrecognized',
-      code: `${IMPORT}\nexport const admitOrder = Workflow.compose((input: number) => input)`,
+      code: `${IMPORT}\nexport const admitOrder = Workflow.compose({ command: Cmd, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/admit-order.workflow.ts',
       errors: [
         {
@@ -98,7 +90,8 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
     },
     {
       name: 'Should_Report_When_WorkflowFileHoldsOnlyATypePositionConstruction',
-      code: `${IMPORT}\ntype Key = { [Workflow.total(Cmd, decide)]: string }`,
+      code:
+        `${IMPORT}\ntype Key = { [Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide })]: string }`,
       filename: '/repo/pkg/src/admit-order.workflow.ts',
       errors: [
         {

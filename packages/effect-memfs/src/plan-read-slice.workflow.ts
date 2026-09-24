@@ -7,6 +7,12 @@ const ReadSliceDecisionTypeId: unique symbol = Symbol.for(
 )
 type ReadSliceDecisionTypeId = typeof ReadSliceDecisionTypeId
 
+/**
+ * The decision variants are declared here rather than in a sibling `*.schema.ts`:
+ * a decision's pure body may import no other module's values (`make-body-purity`),
+ * so the workflow owns the decision it constructs. The schema-law generator picks
+ * the exported schemas up from this module like any other in `src/`.
+ */
 export class ReadWhole extends Schema.TaggedClass<ReadWhole>()('ReadWhole', {}) {
   readonly [ReadSliceDecisionTypeId] = ReadSliceDecisionTypeId
 }
@@ -21,7 +27,8 @@ export class ReadExhausted extends Schema.TaggedClass<ReadExhausted>()('ReadExha
   readonly [ReadSliceDecisionTypeId] = ReadSliceDecisionTypeId
 }
 
-export type ReadSliceDecision = ReadWhole | ReadPartial | ReadExhausted
+export const ReadSliceDecision = Schema.Union([ReadWhole, ReadPartial, ReadExhausted])
+export type ReadSliceDecision = typeof ReadSliceDecision.Type
 
 export class ReadSlice extends Schema.TaggedClass<ReadSlice>()('ReadSlice', {
   bytesRead: Schema.Finite,
@@ -50,13 +57,15 @@ const classifyRead = (bytesRead: number, requested: number): ReadStepOutcome =>
     Match.exhaustive,
   )
 
-export const planReadSlice = Workflow.total(
-  ReadSlice,
-  (command): Result.Result<ReadSliceDecision, never> =>
+export const planReadSlice = Workflow.make({
+  command: ReadSlice,
+  decision: ReadSliceDecision,
+  error: Schema.Never,
+  decide: (command): Result.Result<ReadSliceDecision, never> =>
     Match.value(classifyRead(command.bytesRead, command.requested)).pipe(
       Match.tag('ReadExhaustedOutcome', () => Result.succeed(new ReadExhausted())),
       Match.tag('ReadWholeOutcome', () => Result.succeed(new ReadWhole())),
       Match.tag('ReadPartialOutcome', () => Result.succeed(new ReadPartial({ bytesRead: command.bytesRead }))),
       Match.exhaustive,
     ),
-)
+})

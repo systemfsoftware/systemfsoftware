@@ -1,9 +1,9 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage, createPackageFromTarballData, packPackage } from '@systemfsoftware/npm-package'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
 
 const uint8Of = (value: string | Uint8Array | undefined): Uint8Array => {

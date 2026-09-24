@@ -1,12 +1,38 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as Registry from '@systemfsoftware/effect-atom/Registry'
-import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, SubscriptionRef } from 'effect'
+import { TestClock } from 'effect/testing'
 import { KeyValueStore } from 'effect/unstable/persistence'
-import { expect, vi } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+/** Blocks until the registry reports a value the predicate holds for, resuming from the subscription. */
+const waitForValue = <A>(
+  registry: Atom.Registry.Registry,
+  atom: Atom.Atom<A>,
+  holds: (value: A) => boolean,
+): Effect.Effect<A> =>
+  Effect.callback((resume) => {
+    let unsubscribe = (): void => {}
+    unsubscribe = Atom.Registry.subscribe(
+      registry,
+      atom,
+      (value) => {
+        if (!holds(value)) return
+        resume(Effect.succeed(value))
+        unsubscribe()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(unsubscribe)
+  })
+
+const isSuccessfulResult = (value: unknown): value is Atom.AsyncResult.Success<number, never> =>
+  Atom.AsyncResult.isResult(value) && Atom.AsyncResult.isSuccess(value)
+
+const isFailureResult = (value: unknown): value is Atom.AsyncResult.Failure<number, string> =>
+  Atom.AsyncResult.isResult(value) && Atom.AsyncResult.isFailure(value)
 
 Feature('Deriving values from other values on a page')
   .withLayer(Layer.empty)
@@ -17,12 +43,33 @@ Feature('Deriving values from other values on a page')
         Given('a page holding a constant value')('ctx', () =>
           Effect.sync(() => {
             const value = Atom.make(42)
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, value }
           })),
-        When('the value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.value))),
+        When('the value is read')('reading', (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.value))),
         Then('it matches what was set')((s) => {
           expect(s.reading).toBe(42)
+        }),
+      ),
+    )
+    scenario(
+      'A page value built from an empty object holds that object and can be replaced',
+      Gherkin.Do.pipe(
+        Given('a page whose value starts as an empty object')('ctx', () =>
+          Effect.sync(() => {
+            const value = Atom.make({})
+            const page = Atom.Registry.make()
+            return { page, value }
+          })),
+        When('the value is read, replaced, and read again')('readings', (s) =>
+          Effect.sync(() => {
+            const before = Atom.Registry.get(s.ctx.page, s.ctx.value)
+            Atom.Registry.set(s.ctx.page, s.ctx.value, { filled: true })
+            return { before, after: Atom.Registry.get(s.ctx.page, s.ctx.value) }
+          })),
+        Then('the page first held the empty object and then the replacement')((s) => {
+          expect(s.readings.before).toEqual({})
+          expect(s.readings.after).toEqual({ filled: true })
         }),
       ),
     )
@@ -33,12 +80,44 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const base = Atom.make(10)
             const doubled = Atom.map(base, (n) => n * 2)
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, doubled }
           })),
-        When('the doubled value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.doubled))),
+        When('the doubled value is read')(
+          'reading',
+          (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.doubled)),
+        ),
         Then('it reflects the source value doubled')((s) => {
           expect(s.reading).toBe(20)
+        }),
+      ),
+    )
+    scenario(
+      'A value that also refreshes on named changes keeps showing every change to the value it wraps',
+      Gherkin.Do.pipe(
+        Given('a page watching a count that is also refreshed whenever "counts" change')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const count = Atom.make(0)
+              const watched = Atom.withReactivity(['counts'])(count)
+              const page = Atom.Registry.make()
+              return { page, count, watched }
+            }),
+        ),
+        When('the count is changed to 1 and then to 2')('heard', (s) =>
+          Effect.sync(() => {
+            const heard: Array<number> = []
+            const stop = Atom.Registry.subscribe(s.ctx.page, s.ctx.watched, (value) => heard.push(value), {
+              immediate: true,
+            })
+            Atom.Registry.set(s.ctx.page, s.ctx.count, 1)
+            Atom.Registry.set(s.ctx.page, s.ctx.count, 2)
+            stop()
+            return heard
+          })),
+        Then('the watcher heard 0, then 1, then 2')((s) => {
+          expect(s.heard).toEqual([0, 1, 2])
         }),
       ),
     )
@@ -48,13 +127,13 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value that depends on which item is being shown')('ctx', () =>
           Effect.sync(() => {
             const lengthOfName = Atom.family((name: string) => Atom.make(name.length))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, lengthOfName }
           })),
         When('the value is read for two different items')('readings', (s) =>
           Effect.sync(() => ({
-            first: s.ctx.page.get(s.ctx.lengthOfName('foo')),
-            second: s.ctx.page.get(s.ctx.lengthOfName('bar')),
+            first: Atom.Registry.get(s.ctx.page, s.ctx.lengthOfName('foo')),
+            second: Atom.Registry.get(s.ctx.page, s.ctx.lengthOfName('bar')),
           }))),
         Then('each item keeps its own value')((s) => {
           expect(s.readings.first).toBe(3)
@@ -68,22 +147,22 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value that never finishes loading')('ctx', () =>
           Effect.sync(() => {
             const value = Atom.make(Effect.never)
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, value }
           })),
         When('the value is read, then the page is asked to refresh it, then read again')(
           'readings',
           (s) =>
             Effect.sync(() => {
-              const firstReading = s.ctx.page.get(s.ctx.value)
-              s.ctx.page.refresh(s.ctx.value)
-              const secondReading = s.ctx.page.get(s.ctx.value)
+              const firstReading = Atom.Registry.get(s.ctx.page, s.ctx.value)
+              Atom.Registry.refresh(s.ctx.page, s.ctx.value)
+              const secondReading = Atom.Registry.get(s.ctx.page, s.ctx.value)
               return { firstReading, secondReading }
             }),
         ),
         Then('both readings show it is still loading')((s) => {
-          expect(Result.isInitial(s.readings.firstReading)).toBe(true)
-          expect(Result.isInitial(s.readings.secondReading)).toBe(true)
+          expect(s.readings.firstReading).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.secondReading).toSatisfy(Atom.AsyncResult.isInitial)
         }),
       ),
     )
@@ -93,16 +172,16 @@ Feature('Deriving values from other values on a page')
         Given('a source that is still loading and a stand-in value')('ctx', () =>
           Effect.sync(() => {
             const source = Atom.make(Effect.never)
-            const withStandIn = source.pipe(Atom.withFallback(Atom.make(Result.success('cached' as const))))
-            const page = Registry.make()
+            const withStandIn = source.pipe(Atom.withFallback(Atom.make(Atom.AsyncResult.success('cached' as const))))
+            const page = Atom.Registry.make()
             return { page, withStandIn }
           })),
         When('the value is read before the source finishes')(
           'reading',
-          (s) => Effect.sync(() => s.ctx.page.get(s.ctx.withStandIn)),
+          (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)),
         ),
         Then('the stand-in is shown, marked as still loading')((s) => {
-          expect(Result.isSuccess(s.reading) && s.reading.value === 'cached' && s.reading.waiting).toBe(true)
+          expect(s.reading).toMatchObject({ _tag: 'Success', value: 'cached', waiting: true })
         }),
       ),
     )
@@ -112,18 +191,18 @@ Feature('Deriving values from other values on a page')
         Given('a source that fails and a stand-in value')('ctx', () =>
           Effect.sync(() => {
             const source = Atom.make(Effect.fail('down' as const))
-            const withStandIn = source.pipe(Atom.withFallback(Atom.make(Result.success('cached' as const))))
-            const page = Registry.make()
+            const withStandIn = source.pipe(Atom.withFallback(Atom.make(Atom.AsyncResult.success('cached' as const))))
+            const page = Atom.Registry.make()
             return { page, withStandIn }
           })),
         When('the value is read after the source has settled')('reading', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.withStandIn)
-            s.ctx.page.refresh(s.ctx.withStandIn)
-            return s.ctx.page.get(s.ctx.withStandIn)
+            Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)
+            Atom.Registry.refresh(s.ctx.page, s.ctx.withStandIn)
+            return Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)
           })),
         Then('the real failure is shown, not the stand-in')((s) => {
-          expect(Result.isFailure(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(Atom.AsyncResult.isFailure)
         }),
       ),
     )
@@ -148,7 +227,7 @@ Feature('Deriving values from other values on a page')
                 }),
                 Atom.keepAlive,
               )
-              const page = Registry.make()
+              const page = Atom.Registry.make()
               return {
                 page,
                 save,
@@ -161,14 +240,12 @@ Feature('Deriving values from other values on a page')
             }),
         ),
         When('the change is made and the rejection arrives')('readings', (s) =>
-          Effect.gen(function*() {
-            const before = s.ctx.page.get(s.ctx.optimisticValue)
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
+          Effect.sync(() => {
+            const before = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            Atom.Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterRejection = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterRejection = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { before, whilePending, afterRejection }
           })),
         Then('the change showed immediately, then rolled back to the stored value')((s) => {
@@ -198,7 +275,7 @@ Feature('Deriving values from other values on a page')
                 }),
                 Atom.keepAlive,
               )
-              const page = Registry.make()
+              const page = Atom.Registry.make()
               return {
                 page,
                 save,
@@ -211,14 +288,12 @@ Feature('Deriving values from other values on a page')
             }),
         ),
         When('the change is made and the store accepts it')('readings', (s) =>
-          Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
+          Effect.sync(() => {
+            Atom.Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
         Then('the confirmed value stays on screen')((s) => {
@@ -232,24 +307,25 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a value that only updates after things quiet down')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const base = Atom.make(0)
             const quieted = base.pipe(Atom.debounce(100))
-            const page = Registry.make()
-            page.mount(quieted)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, quieted, () => {}, { immediate: true })
             return { page, base, quieted }
           })),
-        When('several edits happen in quick succession, then things go quiet')('readings', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.set(s.ctx.base, 1)
-            s.ctx.page.set(s.ctx.base, 2)
-            s.ctx.page.set(s.ctx.base, 3)
-            const duringBurst = s.ctx.page.get(s.ctx.quieted)
-            vi.advanceTimersByTime(150)
-            const afterQuiet = s.ctx.page.get(s.ctx.quieted)
-            vi.useRealTimers()
-            return { duringBurst, afterQuiet }
-          })),
+        When('several edits happen in quick succession, then things go quiet')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              Atom.Registry.set(s.ctx.page, s.ctx.base, 1)
+              Atom.Registry.set(s.ctx.page, s.ctx.base, 2)
+              Atom.Registry.set(s.ctx.page, s.ctx.base, 3)
+              const duringBurst = Atom.Registry.get(s.ctx.page, s.ctx.quieted)
+              yield* TestClock.adjust('150 millis')
+              const afterQuiet = Atom.Registry.get(s.ctx.page, s.ctx.quieted)
+              return { duringBurst, afterQuiet }
+            }),
+        ),
         Then('nothing changed during the burst, and the final edit arrived once it was quiet')((s) => {
           expect(s.readings.duringBurst).toBe(0)
           expect(s.readings.afterQuiet).toBe(3)
@@ -261,24 +337,25 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a value with its own short cleanup timer on a page with a long default')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let starts = 0
             const value = Atom.make(Effect.sync(() => {
               starts++
               return 1
             })).pipe(Atom.setIdleTTL(10))
-            const page = Registry.make({ defaultIdleTTL: 10_000, timeoutResolution: 10 })
+            const page = Atom.Registry.make({ defaultIdleTTL: 10_000, timeoutResolution: 10 })
             return { page, value, starts: () => starts }
           })),
-        When('the value is read, its short timer runs out, and it is read again')('readings', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.get(s.ctx.value)
-            vi.advanceTimersByTime(100)
-            s.ctx.page.get(s.ctx.value)
-            const starts = s.ctx.starts()
-            vi.useRealTimers()
-            return { starts }
-          })),
+        When('the value is read, its short timer runs out, and it is read again')(
+          'readings',
+          (s) =>
+            Effect.gen(function*() {
+              Atom.Registry.get(s.ctx.page, s.ctx.value)
+              yield* TestClock.adjust('100 millis')
+              Atom.Registry.get(s.ctx.page, s.ctx.value)
+              const starts = s.ctx.starts()
+              return { starts }
+            }),
+        ),
         Then('the value was cleaned up on its own schedule and started over')((s) => {
           expect(s.readings.starts).toBe(2)
         }),
@@ -289,7 +366,6 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a family of values with a short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let starts = 0
             const family = Atom.family((id: number) =>
               Atom.make(Effect.callback<number>((resume) => {
@@ -297,16 +373,15 @@ Feature('Deriving values from other values on a page')
                 resume(Effect.succeed(id))
               }))
             )
-            const page = Registry.make({ defaultIdleTTL: 10 })
+            const page = Atom.Registry.make({ defaultIdleTTL: 10 })
             return { page, family, starts: () => starts }
           })),
         When('one member is read, the timer runs out, and it is read again')('readings', (s) =>
-          Effect.sync(() => {
-            const first = s.ctx.page.get(s.ctx.family(7))
-            vi.advanceTimersByTime(100)
-            const second = s.ctx.page.get(s.ctx.family(7))
+          Effect.gen(function*() {
+            const first = Atom.Registry.get(s.ctx.page, s.ctx.family(7))
+            yield* TestClock.adjust('100 millis')
+            const second = Atom.Registry.get(s.ctx.page, s.ctx.family(7))
             const starts = s.ctx.starts()
-            vi.useRealTimers()
             return { first, second, starts }
           })),
         Then('the member was cleaned up and recreated on demand')((s) => {
@@ -320,25 +395,21 @@ Feature('Deriving values from other values on a page')
         Given('a feed of three updates')('ctx', () =>
           Effect.sync(() => {
             const feed = Atom.pull(Stream.make(1, 2, 3))
-            const page = Registry.make()
-            page.mount(feed)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
         When('the reader pulls until the feed finishes')('final', (s) =>
-          Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+          Effect.sync(() => {
+            Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+            Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+            Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+            Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+            return Atom.Registry.get(s.ctx.page, s.ctx.feed)
           })),
         Then('every update arrived in order and the feed is marked finished')((s) => {
-          expect(Result.isSuccess(s.final)).toBe(true)
-          if (Result.isSuccess(s.final)) {
+          expect(s.final).toSatisfy(Atom.AsyncResult.isSuccess)
+          if (Atom.AsyncResult.isSuccess(s.final)) {
             expect(s.final.value.done).toBe(true)
             expect([...s.final.value.items]).toEqual([1, 2, 3])
           }
@@ -352,16 +423,16 @@ Feature('Deriving values from other values on a page')
           Effect.gen(function*() {
             const ref = yield* SubscriptionRef.make(0)
             const view = Atom.subscriptionRef(ref)
-            const page = Registry.make()
-            page.mount(view)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, view, () => {}, { immediate: true })
             return { ref, view, page }
           })),
         When('the reference changes twice')('readings', (s) =>
           Effect.gen(function*() {
             yield* SubscriptionRef.set(s.ctx.ref, 5)
-            const first = s.ctx.page.get(s.ctx.view)
+            const first = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 5)
             yield* SubscriptionRef.set(s.ctx.ref, 9)
-            const second = s.ctx.page.get(s.ctx.view)
+            const second = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 9)
             return { first, second }
           })),
         Then('the view tracked both changes')((s) => {
@@ -383,25 +454,16 @@ Feature('Deriving values from other values on a page')
               schema: Schema.Finite,
               defaultValue: () => 0,
             })
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { remembered, page }
           })),
         When('the value is changed and a fresh page reads it')('readings', (s) =>
-          Effect.gen(function*() {
-            s.ctx.page.mount(s.ctx.remembered)
-            yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.remembered, 42)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const freshPage = Registry.make()
-            freshPage.mount(s.ctx.remembered)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return { onFreshPage: freshPage.get(s.ctx.remembered) }
+          Effect.sync(() => {
+            Atom.Registry.subscribe(s.ctx.page, s.ctx.remembered, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.page, s.ctx.remembered, 42)
+            const freshPage = Atom.Registry.make()
+            Atom.Registry.subscribe(freshPage, s.ctx.remembered, () => {}, { immediate: true })
+            return { onFreshPage: Atom.Registry.get(freshPage, s.ctx.remembered) }
           })),
         Then('the fresh page sees the remembered value')((s) => {
           expect(s.readings.onFreshPage).toBe(42)
@@ -415,20 +477,20 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const plain = Atom.searchParam('q')
             const decoded = Atom.searchParam('n', { schema: Schema.FiniteFromString })
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { plain, decoded, page }
           })),
         When('the values are read and written with no address bar available')('readings', (s) =>
           Effect.sync(() => {
-            const plainBefore = s.ctx.page.get(s.ctx.plain)
-            const decodedBefore = s.ctx.page.get(s.ctx.decoded)
-            s.ctx.page.set(s.ctx.plain, 'hello')
-            const plainAfter = s.ctx.page.get(s.ctx.plain)
+            const plainBefore = Atom.Registry.get(s.ctx.page, s.ctx.plain)
+            const decodedBefore = Atom.Registry.get(s.ctx.page, s.ctx.decoded)
+            Atom.Registry.set(s.ctx.page, s.ctx.plain, 'hello')
+            const plainAfter = Atom.Registry.get(s.ctx.page, s.ctx.plain)
             return { plainBefore, decodedBefore, plainAfter }
           })),
         Then('both read as empty, and a write keeps the value locally')((s) => {
           expect(s.readings.plainBefore).toBe('')
-          expect(Option.isNone(s.readings.decodedBefore)).toBe(true)
+          expect(s.readings.decodedBefore).toSatisfy(Option.isNone)
           expect(s.readings.plainAfter).toBe('hello')
         }),
       ),
@@ -438,11 +500,10 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a stored value that goes stale quickly')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let stored = 1
             const source = Atom.make(Effect.sync(() => stored))
             const staleAware = source.pipe(Atom.swr({ staleTime: 100 }))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return {
               page,
               staleAware,
@@ -454,21 +515,20 @@ Feature('Deriving values from other values on a page')
         When('the value goes stale, the store changes, and the value is read again')(
           'readings',
           (s) =>
-            Effect.sync(() => {
-              s.ctx.page.get(s.ctx.staleAware)
-              s.ctx.page.refresh(s.ctx.staleAware)
-              const fresh = s.ctx.page.get(s.ctx.staleAware)
+            Effect.gen(function*() {
+              Atom.Registry.get(s.ctx.page, s.ctx.staleAware)
+              Atom.Registry.refresh(s.ctx.page, s.ctx.staleAware)
+              const fresh = Atom.Registry.get(s.ctx.page, s.ctx.staleAware)
               s.ctx.setStored(2)
-              vi.advanceTimersByTime(200)
-              s.ctx.page.get(s.ctx.staleAware)
-              const revalidated = s.ctx.page.get(s.ctx.staleAware)
-              vi.useRealTimers()
+              yield* TestClock.adjust('200 millis')
+              Atom.Registry.get(s.ctx.page, s.ctx.staleAware)
+              const revalidated = Atom.Registry.get(s.ctx.page, s.ctx.staleAware)
               return { fresh, revalidated }
             }),
         ),
         Then('the first read was fresh, and the stale read refreshed to the new value')((s) => {
-          expect(Result.isSuccess(s.readings.fresh) && s.readings.fresh.value === 1).toBe(true)
-          expect(Result.isSuccess(s.readings.revalidated) && s.readings.revalidated.value === 2).toBe(true)
+          expect(s.readings.fresh).toMatchObject({ _tag: 'Success', value: 1 })
+          expect(s.readings.revalidated).toMatchObject({ _tag: 'Success', value: 2 })
         }),
       ),
     )
@@ -500,14 +560,14 @@ Feature('Deriving values from other values on a page')
             const optimisticValue = source.pipe(Atom.optimistic)
             const save = optimisticValue.pipe(
               Atom.optimisticFn({
-                reducer: (_current, update: number) => Result.success(update, { waiting: true }),
+                reducer: (_current, update: number) => Atom.AsyncResult.successWith(update, { waiting: true }),
                 fn: Atom.fn(Effect.fnUntraced(function*() {
                   yield* latch.await
                 })),
               }),
               Atom.keepAlive,
             )
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return {
               page,
               save,
@@ -519,25 +579,17 @@ Feature('Deriving values from other values on a page')
             }
           })),
         When('the change is made and the store accepts it')('readings', (s) =>
-          Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
+          Effect.sync(() => {
+            Atom.Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
         Then('the change reported itself in flight, then settled on the stored value')((s) => {
-          expect(
-            Result.isSuccess(s.readings.whilePending) && s.readings.whilePending.waiting &&
-              s.readings.whilePending.value === 99,
-          ).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.afterConfirmation) && s.readings.afterConfirmation.value === 99 &&
-              !s.readings.afterConfirmation.waiting,
-          ).toBe(true)
+          expect(s.readings.whilePending).toMatchObject({ _tag: 'Success', waiting: true, value: 99 })
+          expect(s.readings.afterConfirmation).toMatchObject({ _tag: 'Success', value: 99, waiting: false })
         }),
       ),
     )
@@ -549,19 +601,19 @@ Feature('Deriving values from other values on a page')
             const base = Atom.make(10)
             const doubled = Atom.map(base, (n) => n * 2)
             const quadrupled = doubled.pipe(Atom.map((n) => n * 2))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, base, doubled, quadrupled }
           })),
         When('the derived values are read, then the doubled one is written through')(
           'readings',
           (s) =>
             Effect.sync(() => {
-              const beforeDouble = s.ctx.page.get(s.ctx.doubled)
-              const beforeQuad = s.ctx.page.get(s.ctx.quadrupled)
-              s.ctx.page.set(s.ctx.doubled, 100)
-              const baseAfter = s.ctx.page.get(s.ctx.base)
-              const afterDouble = s.ctx.page.get(s.ctx.doubled)
-              const afterQuad = s.ctx.page.get(s.ctx.quadrupled)
+              const beforeDouble = Atom.Registry.get(s.ctx.page, s.ctx.doubled)
+              const beforeQuad = Atom.Registry.get(s.ctx.page, s.ctx.quadrupled)
+              Atom.Registry.set(s.ctx.page, s.ctx.doubled, 100)
+              const baseAfter = Atom.Registry.get(s.ctx.page, s.ctx.base)
+              const afterDouble = Atom.Registry.get(s.ctx.page, s.ctx.doubled)
+              const afterQuad = Atom.Registry.get(s.ctx.page, s.ctx.quadrupled)
               return { beforeDouble, beforeQuad, baseAfter, afterDouble, afterQuad }
             }),
         ),
@@ -582,24 +634,24 @@ Feature('Deriving values from other values on a page')
             const count = Atom.fn((n: number) => Effect.succeed(n + 1))
             const mapped = count.pipe(Atom.mapResult((v) => v * 10))
             const mappedAgain = Atom.mapResult(mapped, (v) => v + 1)
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, count, mapped, mappedAgain }
           })),
         When('the mapped values are read before and after the source is asked to run')(
           'readings',
           (s) =>
             Effect.sync(() => {
-              const before = s.ctx.page.get(s.ctx.mapped)
-              s.ctx.page.set(s.ctx.count, 1)
-              const after = s.ctx.page.get(s.ctx.mapped)
-              const afterAgain = s.ctx.page.get(s.ctx.mappedAgain)
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.mapped)
+              Atom.Registry.set(s.ctx.page, s.ctx.count, 1)
+              const after = Atom.Registry.get(s.ctx.page, s.ctx.mapped)
+              const afterAgain = Atom.Registry.get(s.ctx.page, s.ctx.mappedAgain)
               return { before, after, afterAgain }
             }),
         ),
         Then('the mapped values stayed empty until the source ran, then showed the mapped outcomes')((s) => {
-          expect(Result.isInitial(s.readings.before)).toBe(true)
-          expect(Result.isSuccess(s.readings.after) && s.readings.after.value === 20).toBe(true)
-          expect(Result.isSuccess(s.readings.afterAgain) && s.readings.afterAgain.value === 21).toBe(true)
+          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.after).toMatchObject({ _tag: 'Success', value: 20 })
+          expect(s.readings.afterAgain).toMatchObject({ _tag: 'Success', value: 21 })
         }),
       ),
     )
@@ -612,23 +664,23 @@ Feature('Deriving values from other values on a page')
             const withInitial = Atom.fnSync<number>()((n) => n + 1, { initialValue: 0 })
             const plainFn = Atom.fn<number>()((n) => Effect.succeed(n * 10))
             const withInitialFn = Atom.fn((n: number) => Effect.succeed(n + 1), { initialValue: 0 })
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, plain, withInitial, plainFn, withInitialFn }
           })),
         When('each value is read before and after being asked to run')('readings', (s) =>
           Effect.sync(() => {
-            const plainBefore = s.ctx.page.get(s.ctx.plain)
-            const withInitialBefore = s.ctx.page.get(s.ctx.withInitial)
-            const plainFnBefore = s.ctx.page.get(s.ctx.plainFn)
-            const withInitialFnBefore = s.ctx.page.get(s.ctx.withInitialFn)
-            s.ctx.page.set(s.ctx.plain, 3)
-            s.ctx.page.set(s.ctx.withInitial, 4)
-            s.ctx.page.set(s.ctx.plainFn, 2)
-            s.ctx.page.set(s.ctx.withInitialFn, 5)
-            const plainAfter = s.ctx.page.get(s.ctx.plain)
-            const withInitialAfter = s.ctx.page.get(s.ctx.withInitial)
-            const plainFnAfter = s.ctx.page.get(s.ctx.plainFn)
-            const withInitialFnAfter = s.ctx.page.get(s.ctx.withInitialFn)
+            const plainBefore = Atom.Registry.get(s.ctx.page, s.ctx.plain)
+            const withInitialBefore = Atom.Registry.get(s.ctx.page, s.ctx.withInitial)
+            const plainFnBefore = Atom.Registry.get(s.ctx.page, s.ctx.plainFn)
+            const withInitialFnBefore = Atom.Registry.get(s.ctx.page, s.ctx.withInitialFn)
+            Atom.Registry.set(s.ctx.page, s.ctx.plain, 3)
+            Atom.Registry.set(s.ctx.page, s.ctx.withInitial, 4)
+            Atom.Registry.set(s.ctx.page, s.ctx.plainFn, 2)
+            Atom.Registry.set(s.ctx.page, s.ctx.withInitialFn, 5)
+            const plainAfter = Atom.Registry.get(s.ctx.page, s.ctx.plain)
+            const withInitialAfter = Atom.Registry.get(s.ctx.page, s.ctx.withInitial)
+            const plainFnAfter = Atom.Registry.get(s.ctx.page, s.ctx.plainFn)
+            const withInitialFnAfter = Atom.Registry.get(s.ctx.page, s.ctx.withInitialFn)
             return {
               plainBefore,
               withInitialBefore,
@@ -641,18 +693,14 @@ Feature('Deriving values from other values on a page')
             }
           })),
         Then('the plain values were empty until asked, and the ones with stand-ins started filled in')((s) => {
-          expect(Option.isNone(s.readings.plainBefore)).toBe(true)
+          expect(s.readings.plainBefore).toSatisfy(Option.isNone)
           expect(s.readings.withInitialBefore).toBe(0)
-          expect(Result.isInitial(s.readings.plainFnBefore)).toBe(true)
-          expect(Result.isSuccess(s.readings.withInitialFnBefore) && s.readings.withInitialFnBefore.value === 0).toBe(
-            true,
-          )
-          expect(Option.isSome(s.readings.plainAfter) && s.readings.plainAfter.value === 6).toBe(true)
+          expect(s.readings.plainFnBefore).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.withInitialFnBefore).toMatchObject({ _tag: 'Success', value: 0 })
+          expect(s.readings.plainAfter).toMatchObject({ _tag: 'Some', value: 6 })
           expect(s.readings.withInitialAfter).toBe(5)
-          expect(Result.isSuccess(s.readings.plainFnAfter) && s.readings.plainFnAfter.value === 20).toBe(true)
-          expect(Result.isSuccess(s.readings.withInitialFnAfter) && s.readings.withInitialFnAfter.value === 6).toBe(
-            true,
-          )
+          expect(s.readings.plainFnAfter).toMatchObject({ _tag: 'Success', value: 20 })
+          expect(s.readings.withInitialFnAfter).toMatchObject({ _tag: 'Success', value: 6 })
         }),
       ),
     )
@@ -663,37 +711,35 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const latch = Latch.makeUnsafe()
             const task = Atom.fn(() => latch.await)
-            const page = Registry.make()
-            page.mount(task)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, task, () => {}, { immediate: true })
             return { page, task, latch }
           })),
         When('the computation is started, interrupted, reset, and started again')(
           'readings',
           (s) =>
-            Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, void 0)
-              const running = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, Atom.Interrupt)
-              const interrupted = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, Atom.Reset)
-              const reset = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, void 0)
-              const restarted = s.ctx.page.get(s.ctx.task)
+            Effect.sync(() => {
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.task)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, void 0)
+              const running = Atom.Registry.get(s.ctx.page, s.ctx.task)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, Atom.Interrupt)
+              const interrupted = Atom.Registry.get(s.ctx.page, s.ctx.task)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, Atom.Reset)
+              const reset = Atom.Registry.get(s.ctx.page, s.ctx.task)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, void 0)
+              const restarted = Atom.Registry.get(s.ctx.page, s.ctx.task)
               s.ctx.latch.openUnsafe()
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const finished = s.ctx.page.get(s.ctx.task)
+              const finished = Atom.Registry.get(s.ctx.page, s.ctx.task)
               return { before, running, interrupted, reset, restarted, finished }
             }),
         ),
         Then('the computation reported empty, waiting, interrupted, empty again, waiting again, then done')((s) => {
-          expect(Result.isInitial(s.readings.before)).toBe(true)
-          expect(Result.isInitial(s.readings.running) && s.readings.running.waiting).toBe(true)
-          expect(Result.isFailure(s.readings.interrupted)).toBe(true)
-          expect(Result.isInitial(s.readings.reset)).toBe(true)
-          expect(Result.isInitial(s.readings.restarted) && s.readings.restarted.waiting).toBe(true)
-          expect(Result.isSuccess(s.readings.finished)).toBe(true)
+          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.running).toMatchObject({ _tag: 'Initial', waiting: true })
+          expect(s.readings.interrupted).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.reset).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.restarted).toMatchObject({ _tag: 'Initial', waiting: true })
+          expect(s.readings.finished).toSatisfy(Atom.AsyncResult.isSuccess)
         }),
       ),
     )
@@ -709,37 +755,34 @@ Feature('Deriving values from other values on a page')
               latches.push(latch)
               return latch.await.pipe(Effect.tap(() => Effect.sync(() => done++)))
             }, { concurrent: true })
-            const page = Registry.make()
-            page.mount(task)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, task, () => {}, { immediate: true })
             return { page, task, latches: () => latches, done: () => done }
           })),
         When('the computation is asked to run three times before any of them finish')(
           'readings',
           (s) =>
-            Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, 1)
-              s.ctx.page.set(s.ctx.task, 2)
-              s.ctx.page.set(s.ctx.task, 3)
-              const during = s.ctx.page.get(s.ctx.task)
+            Effect.sync(() => {
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.task)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, 1)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, 2)
+              Atom.Registry.set(s.ctx.page, s.ctx.task, 3)
+              const during = Atom.Registry.get(s.ctx.page, s.ctx.task)
               const started = s.ctx.latches().length
               const finishedBefore = s.ctx.done()
               s.ctx.latches().forEach((latch) => latch.openUnsafe())
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
               const finishedAfter = s.ctx.done()
-              const after = s.ctx.page.get(s.ctx.task)
+              const after = Atom.Registry.get(s.ctx.page, s.ctx.task)
               return { before, during, started, finishedBefore, finishedAfter, after }
             }),
         ),
         Then('all three runs started and finished, and the value reflects the latest run')((s) => {
-          expect(Result.isInitial(s.readings.before)).toBe(true)
-          expect(Result.isInitial(s.readings.during) && s.readings.during.waiting).toBe(true)
+          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.during).toMatchObject({ _tag: 'Initial', waiting: true })
           expect(s.readings.started).toBe(3)
           expect(s.readings.finishedBefore).toBe(0)
           expect(s.readings.finishedAfter).toBe(3)
-          expect(Result.isSuccess(s.readings.after)).toBe(true)
+          expect(s.readings.after).toSatisfy(Atom.AsyncResult.isSuccess)
         }),
       ),
     )
@@ -749,28 +792,24 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value that fetches from a signal it cannot control yet')('ctx', () =>
           Effect.sync(() => {
             const gate = Deferred.makeUnsafe<number>()
-            const value = Atom.make(Deferred.await(gate), { initialValue: 0 })
-            const page = Registry.make()
-            page.mount(value)
+            const value = Atom.makeWith(Deferred.await(gate), { initialValue: 0 })
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, value, () => {}, { immediate: true })
             return { gate, page, value }
           })),
         When('the value is read, the fetch answers, and the value is read again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.value)
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.value)
               yield* Deferred.succeed(s.ctx.gate, 1)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const after = s.ctx.page.get(s.ctx.value)
+              const after = Atom.Registry.get(s.ctx.page, s.ctx.value)
               return { before, after }
             }),
         ),
         Then('the stand-in was shown while waiting, then the fetched answer replaced it')((s) => {
-          expect(Result.isSuccess(s.readings.before) && s.readings.before.waiting && s.readings.before.value === 0)
-            .toBe(true)
-          expect(Result.isSuccess(s.readings.after) && !s.readings.after.waiting && s.readings.after.value === 1)
-            .toBe(true)
+          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 0 })
+          expect(s.readings.after).toMatchObject({ _tag: 'Success', waiting: false, value: 1 })
         }),
       ),
     )
@@ -781,30 +820,26 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const gate = Deferred.makeUnsafe<number>()
             const count = Atom.fn((start: number) => Stream.fromEffect(Deferred.await(gate).pipe(Effect.as(start + 1))))
-            const page = Registry.make()
-            page.mount(count)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, count, () => {}, { immediate: true })
             return { gate, page, count }
           })),
         When('the value is read, the computation is asked to run, and the signal arrives before it is read again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.count)
-              s.ctx.page.set(s.ctx.count, 1)
-              const during = s.ctx.page.get(s.ctx.count)
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.count)
+              Atom.Registry.set(s.ctx.page, s.ctx.count, 1)
+              const during = Atom.Registry.get(s.ctx.page, s.ctx.count)
               yield* Deferred.succeed(s.ctx.gate, 1)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const after = s.ctx.page.get(s.ctx.count)
+              const after = Atom.Registry.get(s.ctx.page, s.ctx.count)
               return { before, during, after }
             }),
         ),
         Then('the value was empty, then waiting, then filled in with the streamed answer')((s) => {
-          expect(Result.isInitial(s.readings.before)).toBe(true)
-          expect(Result.isInitial(s.readings.during) && s.readings.during.waiting).toBe(true)
-          expect(Result.isSuccess(s.readings.after) && !s.readings.after.waiting && s.readings.after.value === 2)
-            .toBe(true)
+          expect(s.readings.before).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.during).toMatchObject({ _tag: 'Initial', waiting: true })
+          expect(s.readings.after).toMatchObject({ _tag: 'Success', waiting: false, value: 2 })
         }),
       ),
     )
@@ -814,37 +849,29 @@ Feature('Deriving values from other values on a page')
         Given('a page with a streamed value that waits for a signal before emitting')('ctx', () =>
           Effect.sync(() => {
             const gate = Deferred.makeUnsafe<number>()
-            const value = Atom.make(Stream.fromEffect(Deferred.await(gate)), { initialValue: 0 })
-            const page = Registry.make()
-            page.mount(value)
+            const value = Atom.makeWith(Stream.fromEffect(Deferred.await(gate)), { initialValue: 0 })
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, value, () => {}, { immediate: true })
             return { gate, page, value }
           })),
         When('the value is read, the signal arrives, and the value is read again before and after a refresh')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.value)
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.value)
               yield* Deferred.succeed(s.ctx.gate, 5)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.value)
-              s.ctx.page.refresh(s.ctx.value)
-              const afterRefresh = s.ctx.page.get(s.ctx.value)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const settled = s.ctx.page.get(s.ctx.value)
+              const loaded = Atom.Registry.get(s.ctx.page, s.ctx.value)
+              Atom.Registry.refresh(s.ctx.page, s.ctx.value)
+              const afterRefresh = Atom.Registry.get(s.ctx.page, s.ctx.value)
+              const settled = Atom.Registry.get(s.ctx.page, s.ctx.value)
               return { before, loaded, afterRefresh, settled }
             }),
         ),
         Then('the stand-in showed first, the streamed answer arrived, the refresh kept it, and it settled')((s) => {
-          expect(Result.isSuccess(s.readings.before) && s.readings.before.waiting && s.readings.before.value === 0)
-            .toBe(true)
-          expect(Result.isSuccess(s.readings.loaded) && s.readings.loaded.value === 5).toBe(true)
-          expect(Result.isSuccess(s.readings.afterRefresh) && s.readings.afterRefresh.value === 5).toBe(true)
-          expect(Result.isSuccess(s.readings.settled) && !s.readings.settled.waiting && s.readings.settled.value === 5)
-            .toBe(true)
+          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 0 })
+          expect(s.readings.loaded).toMatchObject({ _tag: 'Success', value: 5 })
+          expect(s.readings.afterRefresh).toMatchObject({ _tag: 'Success', value: 5 })
+          expect(s.readings.settled).toMatchObject({ _tag: 'Success', waiting: false, value: 5 })
         }),
       ),
     )
@@ -858,24 +885,20 @@ Feature('Deriving values from other values on a page')
               const empty = Atom.make(Stream.empty)
               const failing = Atom.make(Stream.fail('boom' as const))
               const streamed = Atom.make(() => Stream.succeed(7))
-              const page = Registry.make()
-              page.mount(empty)
-              page.mount(failing)
-              page.mount(streamed)
+              const page = Atom.Registry.make()
+              Atom.Registry.subscribe(page, empty, () => {}, { immediate: true })
+              Atom.Registry.subscribe(page, failing, () => {}, { immediate: true })
+              Atom.Registry.subscribe(page, streamed, () => {}, { immediate: true })
               return { page, empty, failing, streamed }
             }),
         ),
         When('all three are read after their streams have had a chance to finish')(
           'readings',
           (s) =>
-            Effect.gen(function*() {
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const emptyResult = s.ctx.page.get(s.ctx.empty)
-              const failingResult = s.ctx.page.get(s.ctx.failing)
-              const streamedResult = s.ctx.page.get(s.ctx.streamed)
+            Effect.sync(() => {
+              const emptyResult = Atom.Registry.get(s.ctx.page, s.ctx.empty)
+              const failingResult = Atom.Registry.get(s.ctx.page, s.ctx.failing)
+              const streamedResult = Atom.Registry.get(s.ctx.page, s.ctx.streamed)
               return { emptyResult, failingResult, streamedResult }
             }),
         ),
@@ -884,9 +907,9 @@ Feature('Deriving values from other values on a page')
         )((
           s,
         ) => {
-          expect(Result.isFailure(s.readings.emptyResult)).toBe(true)
-          expect(Result.isFailure(s.readings.failingResult)).toBe(true)
-          expect(Result.isSuccess(s.readings.streamedResult) && s.readings.streamedResult.value === 7).toBe(true)
+          expect(s.readings.emptyResult).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.failingResult).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.streamedResult).toMatchObject({ _tag: 'Success', value: 7 })
         }),
       ),
     )
@@ -900,25 +923,19 @@ Feature('Deriving values from other values on a page')
               const feed = Atom.pull(Stream.make(1, 2).pipe(Stream.concat(Stream.make(3, 4))), {
                 disableAccumulation: true,
               })
-              const page = Registry.make()
-              page.mount(feed)
+              const page = Atom.Registry.make()
+              Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
               return { page, feed }
             }),
         ),
         When('the feed is pulled twice')('result', (s) =>
-          Effect.gen(function*() {
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+          Effect.sync(() => {
+            Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+            return Atom.Registry.get(s.ctx.page, s.ctx.feed)
           })),
         Then('the second batch replaced the first instead of joining it')((s) => {
-          expect(Result.isSuccess(s.result)).toBe(true)
-          if (Result.isSuccess(s.result)) {
+          expect(s.result).toSatisfy(Atom.AsyncResult.isSuccess)
+          if (Atom.AsyncResult.isSuccess(s.result)) {
             expect(s.result.value.done).toBe(false)
             expect([...s.result.value.items]).toEqual([3, 4])
           }
@@ -931,19 +948,16 @@ Feature('Deriving values from other values on a page')
         Given('a page with a feed that is empty')('ctx', () =>
           Effect.sync(() => {
             const feed = Atom.pull(Stream.empty)
-            const page = Registry.make()
-            page.mount(feed)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
-        When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
-          Effect.gen(function*() {
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
-          })),
+        When('the feed is read after its batch has had a chance to arrive')(
+          'result',
+          (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.feed)),
+        ),
         Then('the feed reports that there was nothing to show')((s) => {
-          expect(Result.isFailure(s.result)).toBe(true)
+          expect(s.result).toSatisfy(Atom.AsyncResult.isFailure)
         }),
       ),
     )
@@ -953,19 +967,16 @@ Feature('Deriving values from other values on a page')
         Given('a page with a feed that fails')('ctx', () =>
           Effect.sync(() => {
             const feed = Atom.pull(Stream.fail('boom' as const))
-            const page = Registry.make()
-            page.mount(feed)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
-        When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
-          Effect.gen(function*() {
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
-          })),
+        When('the feed is read after its batch has had a chance to arrive')(
+          'result',
+          (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.feed)),
+        ),
         Then('the feed reports the failure')((s) => {
-          expect(Result.isFailure(s.result)).toBe(true)
+          expect(s.result).toSatisfy(Atom.AsyncResult.isFailure)
         }),
       ),
     )
@@ -976,28 +987,27 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const gate = Deferred.makeUnsafe<number>()
             const feed = Atom.pull(() => Stream.fromEffectRepeat(Deferred.await(gate).pipe(Effect.as(7))))
-            const page = Registry.make()
-            page.mount(feed)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { gate, page, feed }
           })),
         When('the feed is asked for two batches at once, then the signal arrives')(
           'result',
           (s) =>
             Effect.gen(function*() {
-              s.ctx.page.set(s.ctx.feed, void 0)
-              s.ctx.page.set(s.ctx.feed, void 0)
+              Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+              Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
               yield* Deferred.succeed(s.ctx.gate, 7)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              return s.ctx.page.get(s.ctx.feed)
+              return yield* waitForValue(
+                s.ctx.page,
+                s.ctx.feed,
+                (value) => Atom.AsyncResult.isSuccess(value) && [...value.value.items].length === 3,
+              )
             }),
         ),
         Then('every batch that was asked for arrived once the signal came')((s) => {
-          expect(Result.isSuccess(s.result)).toBe(true)
-          if (Result.isSuccess(s.result)) {
+          expect(s.result).toSatisfy(Atom.AsyncResult.isSuccess)
+          if (Atom.AsyncResult.isSuccess(s.result)) {
             expect(s.result.value.done).toBe(false)
             expect([...s.result.value.items]).toEqual([7, 7, 7])
           }
@@ -1014,38 +1024,23 @@ Feature('Deriving values from other values on a page')
             const effectView = Atom.subscriptionRef(SubscriptionRef.make(0))
             const functionView = Atom.subscriptionRef((_get) => SubscriptionRef.make(0))
             const brokenView = Atom.subscriptionRef(Effect.fail('nope' as const))
-            const page = Registry.make()
-            page.mount(view)
-            page.mount(effectView)
-            page.mount(functionView)
-            page.mount(brokenView)
+            const page = Atom.Registry.make()
             return { ref, page, view, effectView, functionView, brokenView }
           })),
         When('the views are read, written through, and the underlying reference changes')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const viewBefore = s.ctx.page.get(s.ctx.view)
-              const effectBefore = s.ctx.page.get(s.ctx.effectView)
-              const functionBefore = s.ctx.page.get(s.ctx.functionView)
-              const brokenBefore = s.ctx.page.get(s.ctx.brokenView)
-              s.ctx.page.set(s.ctx.view, 5)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const viewWritten = s.ctx.page.get(s.ctx.view)
-              s.ctx.page.set(s.ctx.effectView, 3)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const effectWritten = s.ctx.page.get(s.ctx.effectView)
+              const viewBefore = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 0)
+              const effectBefore = yield* waitForValue(s.ctx.page, s.ctx.effectView, isSuccessfulResult)
+              const functionBefore = yield* waitForValue(s.ctx.page, s.ctx.functionView, isSuccessfulResult)
+              const brokenBefore = yield* waitForValue(s.ctx.page, s.ctx.brokenView, isFailureResult)
+              Atom.Registry.set(s.ctx.page, s.ctx.view, 5)
+              const viewWritten = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 5)
+              Atom.Registry.set(s.ctx.page, s.ctx.effectView, 3)
+              const effectWritten = yield* waitForValue(s.ctx.page, s.ctx.effectView, isSuccessfulResult)
               yield* SubscriptionRef.set(s.ctx.ref, 9)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const viewChanged = s.ctx.page.get(s.ctx.view)
+              const viewChanged = yield* waitForValue(s.ctx.page, s.ctx.view, (value) => value === 9)
               return { viewBefore, effectBefore, functionBefore, brokenBefore, viewWritten, effectWritten, viewChanged }
             }),
         ),
@@ -1055,11 +1050,19 @@ Feature('Deriving values from other values on a page')
           s,
         ) => {
           expect(s.readings.viewBefore).toBe(0)
-          expect(Result.isResult(s.readings.effectBefore) && Result.isSuccess(s.readings.effectBefore)).toBe(true)
-          expect(Result.isResult(s.readings.functionBefore) && Result.isSuccess(s.readings.functionBefore)).toBe(true)
-          expect(Result.isResult(s.readings.brokenBefore) && Result.isFailure(s.readings.brokenBefore)).toBe(true)
+          expect(s.readings.effectBefore).toSatisfy((result) =>
+            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isSuccess(result)
+          )
+          expect(s.readings.functionBefore).toSatisfy((result) =>
+            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isSuccess(result)
+          )
+          expect(s.readings.brokenBefore).toSatisfy((result) =>
+            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isFailure(result)
+          )
           expect(s.readings.viewWritten).toBe(5)
-          expect(Result.isResult(s.readings.effectWritten) && Result.isSuccess(s.readings.effectWritten)).toBe(true)
+          expect(s.readings.effectWritten).toSatisfy((result) =>
+            Atom.AsyncResult.isResult(result) && Atom.AsyncResult.isSuccess(result)
+          )
 
           expect(s.readings.viewChanged).toBe(9)
         }),
@@ -1088,7 +1091,7 @@ Feature('Deriving values from other values on a page')
             const streamed = counterRuntime.atom(Stream.succeed(1))
             const refView = counterRuntime.subscriptionRef(SubscriptionRef.make(0))
             const refFromFunction = counterRuntime.subscriptionRef(() => SubscriptionRef.make(0))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return {
               page,
               count,
@@ -1104,38 +1107,26 @@ Feature('Deriving values from other values on a page')
             }
           })),
         When('the values are read and the tasks are asked to run')('readings', (s) =>
-          Effect.gen(function*() {
-            const countResult = s.ctx.page.get(s.ctx.count)
-            const doubledResult = s.ctx.page.get(s.ctx.doubled)
-            s.ctx.page.set(s.ctx.add, 4)
-            const addResult = s.ctx.page.get(s.ctx.add)
-            s.ctx.page.set(s.ctx.curried, 2)
-            const curriedResult = s.ctx.page.get(s.ctx.curried)
-            s.ctx.page.set(s.ctx.reactive, 4)
-            const reactiveResult = s.ctx.page.get(s.ctx.reactive)
-            s.ctx.page.set(s.ctx.reactiveStream, 3)
-            const reactiveStreamResult = s.ctx.page.get(s.ctx.reactiveStream)
-            s.ctx.page.mount(s.ctx.feed)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const feedResult = s.ctx.page.get(s.ctx.feed)
-            s.ctx.page.mount(s.ctx.streamed)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const streamedResult = s.ctx.page.get(s.ctx.streamed)
-            s.ctx.page.mount(s.ctx.refView)
-            s.ctx.page.mount(s.ctx.refFromFunction)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const refResult = s.ctx.page.get(s.ctx.refView)
-            const refFunctionResult = s.ctx.page.get(s.ctx.refFromFunction)
+          Effect.sync(() => {
+            const countResult = Atom.Registry.get(s.ctx.page, s.ctx.count)
+            const doubledResult = Atom.Registry.get(s.ctx.page, s.ctx.doubled)
+            Atom.Registry.set(s.ctx.page, s.ctx.add, 4)
+            const addResult = Atom.Registry.get(s.ctx.page, s.ctx.add)
+            Atom.Registry.set(s.ctx.page, s.ctx.curried, 2)
+            const curriedResult = Atom.Registry.get(s.ctx.page, s.ctx.curried)
+            Atom.Registry.set(s.ctx.page, s.ctx.reactive, 4)
+            const reactiveResult = Atom.Registry.get(s.ctx.page, s.ctx.reactive)
+            Atom.Registry.set(s.ctx.page, s.ctx.reactiveStream, 3)
+            const reactiveStreamResult = Atom.Registry.get(s.ctx.page, s.ctx.reactiveStream)
+            Atom.Registry.subscribe(s.ctx.page, s.ctx.feed, () => {}, { immediate: true })
+            Atom.Registry.set(s.ctx.page, s.ctx.feed, void 0)
+            const feedResult = Atom.Registry.get(s.ctx.page, s.ctx.feed)
+            Atom.Registry.subscribe(s.ctx.page, s.ctx.streamed, () => {}, { immediate: true })
+            const streamedResult = Atom.Registry.get(s.ctx.page, s.ctx.streamed)
+            Atom.Registry.subscribe(s.ctx.page, s.ctx.refView, () => {}, { immediate: true })
+            Atom.Registry.subscribe(s.ctx.page, s.ctx.refFromFunction, () => {}, { immediate: true })
+            const refResult = Atom.Registry.get(s.ctx.page, s.ctx.refView)
+            const refFunctionResult = Atom.Registry.get(s.ctx.page, s.ctx.refFromFunction)
             return {
               countResult,
               doubledResult,
@@ -1150,18 +1141,16 @@ Feature('Deriving values from other values on a page')
             }
           })),
         Then('every value came from the services and every task ran against them')((s) => {
-          expect(Result.isSuccess(s.readings.countResult) && s.readings.countResult.value === 1).toBe(true)
-          expect(Result.isSuccess(s.readings.doubledResult) && s.readings.doubledResult.value === 2).toBe(true)
-          expect(Result.isSuccess(s.readings.addResult) && s.readings.addResult.value === 5).toBe(true)
-          expect(Result.isSuccess(s.readings.curriedResult) && s.readings.curriedResult.value === 21).toBe(true)
-          expect(Result.isSuccess(s.readings.reactiveResult) && s.readings.reactiveResult.value === 5).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.reactiveStreamResult) && s.readings.reactiveStreamResult.value === 3,
-          ).toBe(true)
-          expect(Result.isSuccess(s.readings.feedResult) && s.readings.feedResult.value.done).toBe(true)
-          expect(Result.isSuccess(s.readings.streamedResult) && s.readings.streamedResult.value === 1).toBe(true)
-          expect(Result.isSuccess(s.readings.refResult) && s.readings.refResult.value === 0).toBe(true)
-          expect(Result.isSuccess(s.readings.refFunctionResult) && s.readings.refFunctionResult.value === 0).toBe(true)
+          expect(s.readings.countResult).toMatchObject({ _tag: 'Success', value: 1 })
+          expect(s.readings.doubledResult).toMatchObject({ _tag: 'Success', value: 2 })
+          expect(s.readings.addResult).toMatchObject({ _tag: 'Success', value: 5 })
+          expect(s.readings.curriedResult).toMatchObject({ _tag: 'Success', value: 21 })
+          expect(s.readings.reactiveResult).toMatchObject({ _tag: 'Success', value: 5 })
+          expect(s.readings.reactiveStreamResult).toMatchObject({ _tag: 'Success', value: 3 })
+          expect(s.readings.feedResult).toMatchObject({ _tag: 'Success', value: { done: true } })
+          expect(s.readings.streamedResult).toMatchObject({ _tag: 'Success', value: 1 })
+          expect(s.readings.refResult).toMatchObject({ _tag: 'Success', value: 0 })
+          expect(s.readings.refFunctionResult).toMatchObject({ _tag: 'Success', value: 0 })
         }),
       ),
     )
@@ -1177,13 +1166,13 @@ Feature('Deriving values from other values on a page')
               ) {}
               const recipeRuntime = Atom.context()((_get) => Layer.sync(CounterFromRecipe, () => 7))
               const count = recipeRuntime.atom(CounterFromRecipe.use((n) => Effect.succeed(n)))
-              const page = Registry.make()
+              const page = Atom.Registry.make()
               return { page, count }
             }),
         ),
-        When('the value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.count))),
+        When('the value is read')('reading', (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.count))),
         Then('it reflects the number the recipe provided')((s) => {
-          expect(Result.isSuccess(s.reading) && s.reading.value === 7).toBe(true)
+          expect(s.reading).toMatchObject({ _tag: 'Success', value: 7 })
         }),
       ),
     )
@@ -1197,21 +1186,21 @@ Feature('Deriving values from other values on a page')
             const add = brokenRuntime.fn((n: number) => Effect.succeed(n))
             const feed = brokenRuntime.pull(Stream.make(1))
             const refView = brokenRuntime.subscriptionRef(SubscriptionRef.make(0))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, count, add, feed, refView }
           })),
         When('every value is read')('readings', (s) =>
           Effect.sync(() => ({
-            count: s.ctx.page.get(s.ctx.count),
-            add: s.ctx.page.get(s.ctx.add),
-            feed: s.ctx.page.get(s.ctx.feed),
-            refView: s.ctx.page.get(s.ctx.refView),
+            count: Atom.Registry.get(s.ctx.page, s.ctx.count),
+            add: Atom.Registry.get(s.ctx.page, s.ctx.add),
+            feed: Atom.Registry.get(s.ctx.page, s.ctx.feed),
+            refView: Atom.Registry.get(s.ctx.page, s.ctx.refView),
           }))),
         Then('every value reports the failure')((s) => {
-          expect(Result.isFailure(s.readings.count)).toBe(true)
-          expect(Result.isFailure(s.readings.add)).toBe(true)
-          expect(Result.isFailure(s.readings.feed)).toBe(true)
-          expect(Result.isFailure(s.readings.refView)).toBe(true)
+          expect(s.readings.count).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.add).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.feed).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.refView).toSatisfy(Atom.AsyncResult.isFailure)
         }),
       ),
     )
@@ -1221,14 +1210,14 @@ Feature('Deriving values from other values on a page')
         Given('a saved value and a fresh page seeded with it')('ctx', () =>
           Effect.sync(() => {
             const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
-            const page = Registry.make({ initialValues: [Atom.initialValue(count, 10)] })
+            const page = Atom.Registry.make({ initialValues: [Atom.initialValue(count, 10)] })
             return { page, count }
           })),
         When('the value is read and changed')('readings', (s) =>
           Effect.sync(() => {
-            const seeded = s.ctx.page.get(s.ctx.count)
-            s.ctx.page.set(s.ctx.count, 5)
-            const afterChange = s.ctx.page.get(s.ctx.count)
+            const seeded = Atom.Registry.get(s.ctx.page, s.ctx.count)
+            Atom.Registry.set(s.ctx.page, s.ctx.count, 5)
+            const afterChange = Atom.Registry.get(s.ctx.page, s.ctx.count)
             return { seeded, afterChange }
           })),
         Then('the page started with the saved value and kept the change')((s) => {
@@ -1243,14 +1232,14 @@ Feature('Deriving values from other values on a page')
         Given('a page already showing a saved value')('ctx', () =>
           Effect.sync(() => {
             const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, count }
           })),
         When('the value is shown, then the saved copy arrives')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.count)
-            s.ctx.page.setSerializable('count', 42)
-            const after = s.ctx.page.get(s.ctx.count)
+            const before = Atom.Registry.get(s.ctx.page, s.ctx.count)
+            Atom.Registry.setSerializable(s.ctx.page, 'count', 42)
+            const after = Atom.Registry.get(s.ctx.page, s.ctx.count)
             return { before, after }
           })),
         Then('the value on the page was replaced by the saved copy')((s) => {
@@ -1265,11 +1254,11 @@ Feature('Deriving values from other values on a page')
         Given('a saved value arriving before the page is asked about it')('ctx', () =>
           Effect.sync(() => {
             const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
-            const page = Registry.make()
-            page.setSerializable('count', 42)
+            const page = Atom.Registry.make()
+            Atom.Registry.setSerializable(page, 'count', 42)
             return { page, count }
           })),
-        When('the value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.count))),
+        When('the value is read')('reading', (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.count))),
         Then('it shows the saved value')((s) => {
           expect(s.reading).toBe(42)
         }),
@@ -1282,25 +1271,23 @@ Feature('Deriving values from other values on a page')
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(0)
               const derived = base.pipe(Atom.withRefresh(1000))
               const saved = derived.pipe(Atom.serializable({ key: 'derived', schema: Schema.Finite }))
-              const page = Registry.make()
-              const unmount = page.mount(saved)
+              const page = Atom.Registry.make()
+              const unmount = Atom.Registry.subscribe(page, saved, () => {}, { immediate: true })
               return { page, saved, unmount }
             }),
         ),
         When('the saved copy arrives, the value is read, then its refresh schedule runs out and it is read again')(
           'readings',
           (s) =>
-            Effect.sync(() => {
-              s.ctx.page.setSerializable('derived', 99)
-              const restored = s.ctx.page.get(s.ctx.saved)
-              vi.advanceTimersByTime(2000)
-              const afterRefresh = s.ctx.page.get(s.ctx.saved)
+            Effect.gen(function*() {
+              Atom.Registry.setSerializable(s.ctx.page, 'derived', 99)
+              const restored = Atom.Registry.get(s.ctx.page, s.ctx.saved)
+              yield* TestClock.adjust('2000 millis')
+              const afterRefresh = Atom.Registry.get(s.ctx.page, s.ctx.saved)
               s.ctx.unmount()
-              vi.useRealTimers()
               return { restored, afterRefresh }
             }),
         ),
@@ -1319,14 +1306,14 @@ Feature('Deriving values from other values on a page')
               Atom.withLabel('my-count'),
               Atom.serializable({ key: 'named', schema: Schema.Finite }),
             )
-            const page = Registry.make()
-            page.mount(named)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, named, () => {}, { immediate: true })
             return { page, named }
           })),
         When('the value is read and its name is asked for')('readings', (s) =>
           Effect.sync(() => ({
-            value: s.ctx.page.get(s.ctx.named),
-            name: s.ctx.named.label?.[0],
+            value: Atom.Registry.get(s.ctx.page, s.ctx.named),
+            name: s.ctx.named.spec.label?.[0],
           }))),
         Then('the value works normally and keeps the name it was given')((s) => {
           expect(s.readings.value).toBe(0)
@@ -1343,12 +1330,12 @@ Feature('Deriving values from other values on a page')
             const overridden = Atom.make(1).pipe(Atom.withServerValue(() => 7))
             const nested = Atom.make((get) => get(local) * 2).pipe(Atom.withServerValue((get) => get(local) * 3))
             const notYetLoaded = Atom.make(Effect.succeed(3)).pipe(Atom.withServerValueInitial)
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, local, overridden, nested, notYetLoaded }
           })),
         When('the local value is changed and every value is read for the server')('readings', (s) =>
           Effect.sync(() => {
-            s.ctx.page.set(s.ctx.local, 5)
+            Atom.Registry.set(s.ctx.page, s.ctx.local, 5)
             const plain = Atom.getServerValue(s.ctx.local, s.ctx.page)
             const overriddenValue = Atom.getServerValue(s.ctx.overridden, s.ctx.page)
             const nestedValue = Atom.getServerValue(s.ctx.nested, s.ctx.page)
@@ -1359,7 +1346,7 @@ Feature('Deriving values from other values on a page')
           expect(s.readings.plain).toBe(5)
           expect(s.readings.overriddenValue).toBe(7)
           expect(s.readings.nestedValue).toBe(15)
-          expect(Result.isInitial(s.readings.notYetLoadedValue) && s.readings.notYetLoadedValue.waiting).toBe(true)
+          expect(s.readings.notYetLoadedValue).toMatchObject({ _tag: 'Initial', waiting: true })
         }),
       ),
     )
@@ -1368,39 +1355,29 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a page with a writable value and a stored copy to fall back on')('ctx', () =>
           Effect.sync(() => {
-            const fallback = Atom.make(Result.success('cached' as const))
+            const fallback = Atom.make(Atom.AsyncResult.success('cached' as const))
             const source = Atom.fn((n: number) => Effect.succeed(String(n)))
             const withStandIn = source.pipe(Atom.withFallback(fallback))
             const mappedSource = source.pipe(Atom.mapResult((v) => `${v}!`))
             const mappedWithStandIn = mappedSource.pipe(Atom.withFallback(fallback))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, withStandIn, mappedWithStandIn }
           })),
         When('the values are read, written through, and read again')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.withStandIn)
-            const mappedBefore = s.ctx.page.get(s.ctx.mappedWithStandIn)
-            s.ctx.page.set(s.ctx.withStandIn, 1)
-            const after = s.ctx.page.get(s.ctx.withStandIn)
-            s.ctx.page.set(s.ctx.mappedWithStandIn, 2)
-            const mappedAfter = s.ctx.page.get(s.ctx.mappedWithStandIn)
+            const before = Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)
+            const mappedBefore = Atom.Registry.get(s.ctx.page, s.ctx.mappedWithStandIn)
+            Atom.Registry.set(s.ctx.page, s.ctx.withStandIn, 1)
+            const after = Atom.Registry.get(s.ctx.page, s.ctx.withStandIn)
+            Atom.Registry.set(s.ctx.page, s.ctx.mappedWithStandIn, 2)
+            const mappedAfter = Atom.Registry.get(s.ctx.page, s.ctx.mappedWithStandIn)
             return { before, after, mappedBefore, mappedAfter }
           })),
         Then('the stored copy showed until the value ran, then the real outcome replaced it')((s) => {
-          expect(
-            Result.isSuccess(s.readings.before) && s.readings.before.waiting && s.readings.before.value === 'cached',
-          )
-            .toBe(true)
-          expect(Result.isSuccess(s.readings.after) && !s.readings.after.waiting && s.readings.after.value === '1')
-            .toBe(true)
-          expect(
-            Result.isSuccess(s.readings.mappedBefore) && s.readings.mappedBefore.waiting &&
-              s.readings.mappedBefore.value === 'cached',
-          ).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.mappedAfter) && !s.readings.mappedAfter.waiting &&
-              s.readings.mappedAfter.value === '2!',
-          ).toBe(true)
+          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 'cached' })
+          expect(s.readings.after).toMatchObject({ _tag: 'Success', waiting: false, value: '1' })
+          expect(s.readings.mappedBefore).toMatchObject({ _tag: 'Success', waiting: true, value: 'cached' })
+          expect(s.readings.mappedAfter).toMatchObject({ _tag: 'Success', waiting: false, value: '2!' })
         }),
       ),
     )
@@ -1409,7 +1386,6 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a page with two values that refresh on attention, one only when stale')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let stored = 1
             const source = Atom.make(Effect.sync(() => stored))
             const focus = Atom.make(0)
@@ -1417,7 +1393,7 @@ Feature('Deriving values from other values on a page')
             const alwaysOnFocus = source.pipe(
               Atom.swr({ staleTime: 100, revalidateOnFocus: 'always', focusSignal: focus }),
             )
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return {
               page,
               onFocus,
@@ -1431,23 +1407,22 @@ Feature('Deriving values from other values on a page')
         When('the values are read, they go stale, the store changes, and the page regains attention')(
           'readings',
           (s) =>
-            Effect.sync(() => {
-              const first = s.ctx.page.get(s.ctx.onFocus)
-              const firstAlways = s.ctx.page.get(s.ctx.alwaysOnFocus)
+            Effect.gen(function*() {
+              const first = Atom.Registry.get(s.ctx.page, s.ctx.onFocus)
+              const firstAlways = Atom.Registry.get(s.ctx.page, s.ctx.alwaysOnFocus)
               s.ctx.setStored(2)
-              vi.advanceTimersByTime(200)
-              s.ctx.page.set(s.ctx.focus, 1)
-              const revalidated = s.ctx.page.get(s.ctx.onFocus)
-              const revalidatedAlways = s.ctx.page.get(s.ctx.alwaysOnFocus)
-              vi.useRealTimers()
+              yield* TestClock.adjust('200 millis')
+              Atom.Registry.set(s.ctx.page, s.ctx.focus, 1)
+              const revalidated = Atom.Registry.get(s.ctx.page, s.ctx.onFocus)
+              const revalidatedAlways = Atom.Registry.get(s.ctx.page, s.ctx.alwaysOnFocus)
               return { first, firstAlways, revalidated, revalidatedAlways }
             }),
         ),
         Then('both values refreshed to the new store value when attention returned')((s) => {
-          expect(Result.isSuccess(s.readings.first) && s.readings.first.value === 1).toBe(true)
-          expect(Result.isSuccess(s.readings.firstAlways) && s.readings.firstAlways.value === 1).toBe(true)
-          expect(Result.isSuccess(s.readings.revalidated) && s.readings.revalidated.value === 2).toBe(true)
-          expect(Result.isSuccess(s.readings.revalidatedAlways) && s.readings.revalidatedAlways.value === 2).toBe(true)
+          expect(s.readings.first).toMatchObject({ _tag: 'Success', value: 1 })
+          expect(s.readings.firstAlways).toMatchObject({ _tag: 'Success', value: 1 })
+          expect(s.readings.revalidated).toMatchObject({ _tag: 'Success', value: 2 })
+          expect(s.readings.revalidatedAlways).toMatchObject({ _tag: 'Success', value: 2 })
         }),
       ),
     )
@@ -1462,22 +1437,22 @@ Feature('Deriving values from other values on a page')
               return 1
             }))
             const quiet = source.pipe(Atom.swr({ staleTime: 0, revalidateOnMount: false }))
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, quiet, reads: () => reads }
           })),
         When('the value is read, then asked to refresh, and read again')('readings', (s) =>
           Effect.sync(() => {
-            const first = s.ctx.page.get(s.ctx.quiet)
+            const first = Atom.Registry.get(s.ctx.page, s.ctx.quiet)
             const readsAfterFirst = s.ctx.reads()
-            s.ctx.page.refresh(s.ctx.quiet)
-            const second = s.ctx.page.get(s.ctx.quiet)
+            Atom.Registry.refresh(s.ctx.page, s.ctx.quiet)
+            const second = Atom.Registry.get(s.ctx.page, s.ctx.quiet)
             const readsAfterSecond = s.ctx.reads()
             return { first, readsAfterFirst, second, readsAfterSecond }
           })),
         Then('the first sight did not fetch again, and only the later refresh did')((s) => {
-          expect(Result.isSuccess(s.readings.first) && s.readings.first.value === 1).toBe(true)
+          expect(s.readings.first).toMatchObject({ _tag: 'Success', value: 1 })
           expect(s.readings.readsAfterFirst).toBe(1)
-          expect(Result.isSuccess(s.readings.second) && s.readings.second.value === 1).toBe(true)
+          expect(s.readings.second).toMatchObject({ _tag: 'Success', value: 1 })
           expect(s.readings.readsAfterSecond).toBeGreaterThan(1)
         }),
       ),
@@ -1488,19 +1463,20 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value that failed and one that is still waiting')('ctx', () =>
           Effect.sync(() => {
             const failing = Atom.make(Effect.fail('down' as const)).pipe(Atom.swr({ staleTime: 100 }))
-            const waiting = Atom.make(() => Result.success(1, { waiting: true })).pipe(Atom.swr({ staleTime: 100 }))
-            const page = Registry.make()
+            const waiting = Atom.make(() => Atom.AsyncResult.successWith(1, { waiting: true })).pipe(
+              Atom.swr({ staleTime: 100 }),
+            )
+            const page = Atom.Registry.make()
             return { page, failing, waiting }
           })),
         When('both values are read')('readings', (s) =>
           Effect.sync(() => ({
-            failing: s.ctx.page.get(s.ctx.failing),
-            waiting: s.ctx.page.get(s.ctx.waiting),
+            failing: Atom.Registry.get(s.ctx.page, s.ctx.failing),
+            waiting: Atom.Registry.get(s.ctx.page, s.ctx.waiting),
           }))),
         Then('the failed value reports its failure and the waiting value stays waiting')((s) => {
-          expect(Result.isFailure(s.readings.failing)).toBe(true)
-          expect(Result.isSuccess(s.readings.waiting) && s.readings.waiting.waiting && s.readings.waiting.value === 1)
-            .toBe(true)
+          expect(s.readings.failing).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.readings.waiting).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
         }),
       ),
     )
@@ -1531,17 +1507,17 @@ Feature('Deriving values from other values on a page')
             const optimistic2 = source2.pipe(Atom.optimistic)
             const save2 = optimistic2.pipe(
               Atom.optimisticFn({
-                reducer: (_current, update: number) => Result.success(update, { waiting: true }),
+                reducer: (_current, update: number) => Atom.AsyncResult.successWith(update, { waiting: true }),
                 fn: (set) =>
                   Atom.fn(Effect.fnUntraced(function*(n: number) {
-                    set(Result.success(n * 10, { waiting: true }))
+                    set(Atom.AsyncResult.successWith(n * 10, { waiting: true }))
                     yield* latch2.await
                     return n
                   })),
               }),
               Atom.keepAlive,
             )
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return {
               page,
               optimisticValue,
@@ -1559,39 +1535,29 @@ Feature('Deriving values from other values on a page')
             }
           })),
         When('both changes are made, confirmed, and read throughout')('readings', (s) =>
-          Effect.gen(function*() {
-            const before = s.ctx.page.get(s.ctx.optimisticValue)
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
-            s.ctx.page.set(s.ctx.save, 99)
+          Effect.sync(() => {
+            const before = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            Atom.Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            Atom.Registry.set(s.ctx.page, s.ctx.save, 99)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
-            const before2 = s.ctx.page.get(s.ctx.optimistic2)
-            s.ctx.page.set(s.ctx.save2, 99)
-            const whilePending2 = s.ctx.page.get(s.ctx.optimistic2)
+            const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            const before2 = Atom.Registry.get(s.ctx.page, s.ctx.optimistic2)
+            Atom.Registry.set(s.ctx.page, s.ctx.save2, 99)
+            const whilePending2 = Atom.Registry.get(s.ctx.page, s.ctx.optimistic2)
             s.ctx.setStored2(99)
             s.ctx.latch2.openUnsafe()
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation2 = s.ctx.page.get(s.ctx.optimistic2)
+            const afterConfirmation2 = Atom.Registry.get(s.ctx.page, s.ctx.optimistic2)
             return { before, whilePending, afterConfirmation, before2, whilePending2, afterConfirmation2 }
           })),
         Then('each change showed its progress, then settled on the confirmed value')((s) => {
           expect(s.readings.before).toBe(1)
           expect(s.readings.whilePending).toBe(990)
           expect(s.readings.afterConfirmation).toBe(99)
-          expect(Result.isSuccess(s.readings.before2) && s.readings.before2.value === 1).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.whilePending2) && s.readings.whilePending2.waiting &&
-              s.readings.whilePending2.value === 990,
-          ).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.afterConfirmation2) && !s.readings.afterConfirmation2.waiting &&
-              s.readings.afterConfirmation2.value === 99,
-          ).toBe(true)
+          expect(s.readings.before2).toMatchObject({ _tag: 'Success', value: 1 })
+          expect(s.readings.whilePending2).toMatchObject({ _tag: 'Success', waiting: true, value: 990 })
+          expect(s.readings.afterConfirmation2).toMatchObject({ _tag: 'Success', waiting: false, value: 99 })
         }),
       ),
     )
@@ -1606,27 +1572,21 @@ Feature('Deriving values from other values on a page')
             const save = optimisticValue.pipe(
               Atom.optimisticFn({
                 reducer: (_current, update: number) => update,
-                fn: Atom.fn((n: number) => Effect.succeed(n)),
+                fn: Atom.fn((n: number) =>
+                  Effect.sync(() => {
+                    stored = n
+                  })
+                ),
               }),
               Atom.keepAlive,
             )
-            const page = Registry.make()
-            return {
-              page,
-              optimisticValue,
-              save,
-              setStored: (n: number) => {
-                stored = n
-              },
-            }
+            const page = Atom.Registry.make()
+            return { page, optimisticValue, save }
           })),
         When('the change is made and the store accepts it right away')('readings', (s) =>
-          Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.save, 99)
-            s.ctx.setStored(99)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+          Effect.sync(() => {
+            Atom.Registry.set(s.ctx.page, s.ctx.save, 99)
+            const afterConfirmation = Atom.Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { afterConfirmation }
           })),
         Then('the confirmed value settled on screen right away')((s) => {
@@ -1665,21 +1625,17 @@ Feature('Deriving values from other values on a page')
               schema: Schema.Finite,
               defaultValue: () => 0,
             })
-            const page = Registry.make()
-            page.mount(remembered)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, remembered, () => {}, { immediate: true })
             return { gate, page, remembered, storage }
           })),
         When('the value is read, the store answers, and the value is read again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const whileLoading = s.ctx.page.get(s.ctx.remembered)
+              const whileLoading = Atom.Registry.get(s.ctx.page, s.ctx.remembered)
               yield* Deferred.succeed(s.ctx.gate, void 0)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.remembered)
+              const loaded = Atom.Registry.get(s.ctx.page, s.ctx.remembered)
               const stored = s.ctx.storage.get('known-key')
               return { whileLoading, loaded, stored }
             }),
@@ -1725,19 +1681,15 @@ Feature('Deriving values from other values on a page')
               schema: Schema.Finite,
               defaultValue: () => 0,
             })
-            const page = Registry.make()
-            page.mount(remembered)
+            const page = Atom.Registry.make()
+            Atom.Registry.subscribe(page, remembered, () => {}, { immediate: true })
             return { gate, page, remembered }
           })),
         When('a write is made, then the store answers')('value', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.remembered, 99)
+            Atom.Registry.set(s.ctx.page, s.ctx.remembered, 99)
             yield* Deferred.succeed(s.ctx.gate, void 0)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.remembered)
+            return Atom.Registry.get(s.ctx.page, s.ctx.remembered)
           })),
         Then('the written value wins over the slower store read')((s) => {
           expect(s.value).toBe(99)
@@ -1777,8 +1729,8 @@ Feature('Deriving values from other values on a page')
                 schema: Schema.Finite,
                 defaultValue: () => 0,
               })
-              const page = Registry.make()
-              page.mount(remembered)
+              const page = Atom.Registry.make()
+              Atom.Registry.subscribe(page, remembered, () => {}, { immediate: true })
               return { gate, page, remembered, storage }
             }),
         ),
@@ -1786,23 +1738,19 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const whileLoading = s.ctx.page.get(s.ctx.remembered)
+              const whileLoading = Atom.Registry.get(s.ctx.page, s.ctx.remembered)
               yield* Deferred.succeed(s.ctx.gate, void 0)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.remembered)
-              s.ctx.page.set(s.ctx.remembered, 99)
-              const afterWrite = s.ctx.page.get(s.ctx.remembered)
+              const loaded = Atom.Registry.get(s.ctx.page, s.ctx.remembered)
+              Atom.Registry.set(s.ctx.page, s.ctx.remembered, 99)
+              const afterWrite = Atom.Registry.get(s.ctx.page, s.ctx.remembered)
               const stored = s.ctx.storage.get('fresh-key')
               return { whileLoading, loaded, afterWrite, stored }
             }),
         ),
         Then('the value reported loading, filled in the fallback, accepted the write, and wrote it through')((s) => {
-          expect(Result.isInitial(s.readings.whileLoading)).toBe(true)
-          expect(Result.isSuccess(s.readings.loaded) && s.readings.loaded.value === 0).toBe(true)
-          expect(Result.isSuccess(s.readings.afterWrite) && s.readings.afterWrite.value === 99).toBe(true)
+          expect(s.readings.whileLoading).toSatisfy(Atom.AsyncResult.isInitial)
+          expect(s.readings.loaded).toMatchObject({ _tag: 'Success', value: 0 })
+          expect(s.readings.afterWrite).toMatchObject({ _tag: 'Success', value: 99 })
           expect(s.readings.stored).toBe('99')
         }),
       ),
@@ -1812,37 +1760,28 @@ Feature('Deriving values from other values on a page')
       Gherkin.Do.pipe(
         Given('a page with a running value and one that must not be interrupted')('ctx', () =>
           Effect.sync(() => {
-            const running = Atom.make(Effect.never, { initialValue: 1 })
-            const guarded = Atom.make(Effect.never, { initialValue: 1, uninterruptible: true })
-            const page = Registry.make()
-            const stopRunning = page.mount(running)
-            const stopGuarded = page.mount(guarded)
+            const running = Atom.makeWith(Effect.never, { initialValue: 1 })
+            const guarded = Atom.makeWith(Effect.never, { initialValue: 1, uninterruptible: true })
+            const page = Atom.Registry.make()
+            const stopRunning = Atom.Registry.subscribe(page, running, () => {}, { immediate: true })
+            const stopGuarded = Atom.Registry.subscribe(page, guarded, () => {}, { immediate: true })
             return { page, running, guarded, stopRunning, stopGuarded }
           })),
         When('both values are read, then both are released')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.running)
-            const guardedBefore = s.ctx.page.get(s.ctx.guarded)
+            const before = Atom.Registry.get(s.ctx.page, s.ctx.running)
+            const guardedBefore = Atom.Registry.get(s.ctx.page, s.ctx.guarded)
             s.ctx.stopRunning()
             s.ctx.stopGuarded()
-            const restarted = s.ctx.page.get(s.ctx.running)
-            const restartedGuarded = s.ctx.page.get(s.ctx.guarded)
+            const restarted = Atom.Registry.get(s.ctx.page, s.ctx.running)
+            const restartedGuarded = Atom.Registry.get(s.ctx.page, s.ctx.guarded)
             return { before, guardedBefore, restarted, restartedGuarded }
           })),
         Then('both values showed their stand-in while running, and started over once read again')((s) => {
-          expect(Result.isSuccess(s.readings.before) && s.readings.before.waiting && s.readings.before.value === 1)
-            .toBe(true)
-          expect(
-            Result.isSuccess(s.readings.guardedBefore) && s.readings.guardedBefore.waiting &&
-              s.readings.guardedBefore.value === 1,
-          ).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.restarted) && s.readings.restarted.waiting && s.readings.restarted.value === 1,
-          ).toBe(true)
-          expect(
-            Result.isSuccess(s.readings.restartedGuarded) && s.readings.restartedGuarded.waiting &&
-              s.readings.restartedGuarded.value === 1,
-          ).toBe(true)
+          expect(s.readings.before).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
+          expect(s.readings.guardedBefore).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
+          expect(s.readings.restarted).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
+          expect(s.readings.restartedGuarded).toMatchObject({ _tag: 'Success', waiting: true, value: 1 })
         }),
       ),
     )
@@ -1852,22 +1791,22 @@ Feature('Deriving values from other values on a page')
         Given('a page with a value')('ctx', () =>
           Effect.sync(() => {
             const value = Atom.make(0)
-            const page = Registry.make()
+            const page = Atom.Registry.make()
             return { page, value }
           })),
         When('the value is worked on through the page service')('readings', (s) =>
           Effect.gen(function*() {
             const withPage = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-              Effect.provideService(Registry.AtomRegistry, s.ctx.page)(effect)
-            yield* withPage(Atom.mount(s.ctx.value))
-            const initial = yield* withPage(Atom.get(s.ctx.value))
+              Effect.provideService(Atom.Registry.Current, s.ctx.page)(effect)
+            yield* withPage(s.ctx.value.pipe(Atom.mount))
+            const initial = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.set(s.ctx.value, 5))
-            const afterSet = yield* withPage(Atom.get(s.ctx.value))
+            const afterSet = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.update(s.ctx.value, (n) => n + 1))
-            const afterUpdate = yield* withPage(Atom.get(s.ctx.value))
+            const afterUpdate = yield* withPage(s.ctx.value.pipe(Atom.get))
             const doubled = yield* withPage(Atom.modify(s.ctx.value, (n) => [n * 2, n * 2]))
-            yield* withPage(Atom.refresh(s.ctx.value))
-            const finalValue = yield* withPage(Atom.get(s.ctx.value))
+            yield* withPage(s.ctx.value.pipe(Atom.refresh))
+            const finalValue = yield* withPage(s.ctx.value.pipe(Atom.get))
             return { initial, afterSet, afterUpdate, doubled, finalValue }
           })),
         Then('each step saw the value the previous step left behind, and the refresh returned it to its start')((s) => {
@@ -1895,8 +1834,8 @@ Feature('Deriving values from other values on a page')
               const nothing = Atom.make<null>(() => null)
               const objectValue = Atom.make(() => ({ n: 1 }))
               const effectValue = Atom.make(() => Effect.succeed(5))
-              const page = Registry.make()
-              page.mount(tracked)
+              const page = Atom.Registry.make()
+              Atom.Registry.subscribe(page, tracked, () => {}, { immediate: true })
               return { page, source, tracked, nothing, objectValue, effectValue }
             }),
         ),
@@ -1904,12 +1843,12 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              const before = s.ctx.page.get(s.ctx.tracked)
-              s.ctx.page.set(s.ctx.source, 3)
-              const after = s.ctx.page.get(s.ctx.tracked)
-              const nullRead = s.ctx.page.get(s.ctx.nothing)
-              const objectRead = s.ctx.page.get(s.ctx.objectValue)
-              const effectRead = s.ctx.page.get(s.ctx.effectValue)
+              const before = Atom.Registry.get(s.ctx.page, s.ctx.tracked)
+              Atom.Registry.set(s.ctx.page, s.ctx.source, 3)
+              const after = Atom.Registry.get(s.ctx.page, s.ctx.tracked)
+              const nullRead = Atom.Registry.get(s.ctx.page, s.ctx.nothing)
+              const objectRead = Atom.Registry.get(s.ctx.page, s.ctx.objectValue)
+              const effectRead = Atom.Registry.get(s.ctx.page, s.ctx.effectValue)
               return { before, after, nullRead, objectRead, effectRead }
             }),
         ),
@@ -1918,7 +1857,7 @@ Feature('Deriving values from other values on a page')
           expect(s.readings.after).toBe(30)
           expect(s.readings.nullRead).toBeNull()
           expect(s.readings.objectRead).toEqual({ n: 1 })
-          expect(Result.isSuccess(s.readings.effectRead) && s.readings.effectRead.value === 5).toBe(true)
+          expect(s.readings.effectRead).toMatchObject({ _tag: 'Success', value: 5 })
         }),
       ),
     )
@@ -1929,26 +1868,24 @@ Feature('Deriving values from other values on a page')
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(0)
               const withPending = base.pipe(Atom.debounce(100))
               const quiet = base.pipe(Atom.debounce(100))
-              const page = Registry.make()
-              const stopPending = page.mount(withPending)
-              const stopQuiet = page.mount(quiet)
+              const page = Atom.Registry.make()
+              const stopPending = Atom.Registry.subscribe(page, withPending, () => {}, { immediate: true })
+              const stopQuiet = Atom.Registry.subscribe(page, quiet, () => {}, { immediate: true })
               return { page, base, withPending, stopPending, stopQuiet }
             }),
         ),
         When('the source changes, then both quieted values are released, then time passes')(
           'readings',
           (s) =>
-            Effect.sync(() => {
-              s.ctx.page.set(s.ctx.base, 1)
+            Effect.gen(function*() {
+              Atom.Registry.set(s.ctx.page, s.ctx.base, 1)
               s.ctx.stopPending()
               s.ctx.stopQuiet()
-              vi.advanceTimersByTime(200)
-              const after = s.ctx.page.get(s.ctx.withPending)
-              vi.useRealTimers()
+              yield* TestClock.adjust('200 millis')
+              const after = Atom.Registry.get(s.ctx.page, s.ctx.withPending)
               return { after }
             }),
         ),
@@ -1957,6 +1894,42 @@ Feature('Deriving values from other values on a page')
             expect(s.readings.after).toBe(0)
           },
         ),
+      ),
+    )
+    scenario(
+      'Two runtimes built from separate factories each see only the extra service they were given',
+      Gherkin.Do.pipe(
+        Given('two runtimes from separate factories, each given its own extra service')('ctx', () =>
+          Effect.sync(() => {
+            class StationName extends Context.Service<StationName, string>()(
+              '@systemfsoftware/effect-atom/tests/Atom.integration.test/StationName',
+            ) {}
+            const stationOf = (runtime: Atom.RuntimeFactory) =>
+              runtime(Layer.empty).atom(
+                Effect.contextWith((services: Context.Context<never>) =>
+                  Effect.succeed(Option.getOrNull(Context.getOption(services, StationName)))
+                ),
+              )
+            const first = Atom.context()
+            first.addGlobalLayer(Layer.succeed(StationName, 'first'))
+            const second = Atom.context()
+            second.addGlobalLayer(Layer.succeed(StationName, 'second'))
+            const page = Atom.Registry.make()
+            return {
+              page,
+              firstStation: stationOf(first),
+              secondStation: stationOf(second),
+            }
+          })),
+        When('the extra service is read through both runtimes on the same page')('readings', (s) =>
+          Effect.sync(() => ({
+            first: Atom.Registry.get(s.ctx.page, s.ctx.firstStation),
+            second: Atom.Registry.get(s.ctx.page, s.ctx.secondStation),
+          }))),
+        Then('each runtime reports only the extra service it was given')((s) => {
+          expect(s.readings.first).toMatchObject({ _tag: 'Success', value: 'first' })
+          expect(s.readings.second).toMatchObject({ _tag: 'Success', value: 'second' })
+        }),
       ),
     )
   })

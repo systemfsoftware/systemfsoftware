@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-cell-types",
   "license": "Apache-2.0",
-  "version": "10.0.0",
+  "version": "10.2.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -35,7 +35,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "api:check": "api-extractor-quiet run",
@@ -47,7 +47,9 @@
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:*",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

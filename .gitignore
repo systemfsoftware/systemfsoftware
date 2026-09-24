@@ -2,6 +2,8 @@ node_modules/
 dist/
 .turbo/
 coverage/
+# Vitest run output — context.annotate attachments and browser failure screenshots
+.vitest/
 reports/
 # Test fixtures ship a prior mutation report as tracked input data
 !**/test/**/fixtures/**/reports/

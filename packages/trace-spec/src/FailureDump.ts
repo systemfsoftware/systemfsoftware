@@ -1,5 +1,6 @@
 import type { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Option, Schema } from 'effect'
+import { dual } from 'effect/Function'
 import * as PlatformError from 'effect/PlatformError'
 import type { SpanRecord } from './TraceGraph.schema.js'
 import { Break, type Verdict } from './Verdict.schema.js'
@@ -53,12 +54,19 @@ const renderNode = (spans: ReadonlyArray<SpanRecord>, node: SpanRecord, depth: n
   return [head, ...tail].join('\n')
 }
 
+const documentImpl = (observed: Observed, report: string): string =>
+  [`trace ${observed.traceId}`, report, ...observed.spans.map((node) => renderNode(observed.spans, node, 0))].join(
+    '\n',
+  )
+
 /**
  * The dump document: the trace it belongs to, the break that refused it, and the recorded
  * spans as the observation window saw them.
  */
-export const document = (observed: Observed, report: string): string =>
-  [`trace ${observed.traceId}`, report, ...observed.spans.map((node) => renderNode(observed.spans, node, 0))].join('\n')
+export const document: {
+  (report: string): (observed: Observed) => string
+  (observed: Observed, report: string): string
+} = dual(2, documentImpl)
 
 const sanitize = (value: string): string => value.replace(/[^a-zA-Z0-9._-]+/g, '-')
 

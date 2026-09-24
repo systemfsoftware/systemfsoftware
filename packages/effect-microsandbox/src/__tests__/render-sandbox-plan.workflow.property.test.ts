@@ -3,40 +3,41 @@ import { Match, Option, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import { GuestPort, JobSpec, MicroVMSpec, ServiceSpec } from '../MicroVMSpec.schema.js'
+import { PortBinding, SandboxPlan } from '../render-sandbox-plan.schema.js'
 import {
   PlanRefused,
   PlanSandbox,
-  type PortBinding,
   renderSandboxPlan,
-  SandboxPlan,
   type SandboxPlanDecision,
 } from '../render-sandbox-plan.workflow.js'
+
+type Render = typeof renderSandboxPlan
 
 const holds = (clauses: ReadonlyArray<boolean>): boolean => clauses.every((clause) => clause)
 
 const isLoopbackHost = (host: string): boolean => [host === '127.0.0.1', host.startsWith('127.')].some(Boolean)
 
-const decisionOf = (command: PlanSandbox): SandboxPlanDecision => Result.getOrThrow(renderSandboxPlan(command))
+const decisionOf = (render: Render, command: PlanSandbox): SandboxPlanDecision => Result.getOrThrow(render(command))
 
-const approvedOf = (command: PlanSandbox): Option.Option<SandboxPlan> =>
-  Match.value(decisionOf(command)).pipe(
+const approvedOf = (render: Render, command: PlanSandbox): Option.Option<SandboxPlan> =>
+  Match.value(decisionOf(render, command)).pipe(
     Match.tag('PlanApproved', ({ plan }) => Option.some(plan)),
     Match.tag('PlanRefused', () => Option.none<SandboxPlan>()),
     Match.exhaustive,
   )
 
-const refusedOf = (command: PlanSandbox): Option.Option<PlanRefused> =>
-  Match.value(decisionOf(command)).pipe(
+const refusedOf = (render: Render, command: PlanSandbox): Option.Option<PlanRefused> =>
+  Match.value(decisionOf(render, command)).pipe(
     Match.tag('PlanApproved', () => Option.none<PlanRefused>()),
     Match.tag('PlanRefused', (refused) => Option.some(refused)),
     Match.exhaustive,
   )
 
-const planLaw = (command: PlanSandbox, law: (plan: SandboxPlan) => boolean): boolean =>
-  Option.match(approvedOf(command), { onNone: () => false, onSome: law })
+const planLaw = (render: Render, command: PlanSandbox, law: (plan: SandboxPlan) => boolean): boolean =>
+  Option.match(approvedOf(render, command), { onNone: () => false, onSome: law })
 
-const refusalLaw = (command: PlanSandbox, law: (refused: PlanRefused) => boolean): boolean =>
-  Option.match(refusedOf(command), { onNone: () => false, onSome: law })
+const refusalLaw = (render: Render, command: PlanSandbox, law: (refused: PlanRefused) => boolean): boolean =>
+  Option.match(refusedOf(render, command), { onNone: () => false, onSome: law })
 
 const octet = Arbitrary.schema(Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 255 }))))
 const guestPortArb = Arbitrary.schema(GuestPort)
@@ -92,48 +93,60 @@ const cmdEchoes = (plan: SandboxPlan, cmd: ReadonlyArray<string> | undefined): b
       }),
   })
 
-it.prop('∀outside_Render_=Refused', [refusalCase], ([{ command, offender }]) =>
-  refusalLaw(command, (refused) =>
-    holds([
-      refused.sandboxName === command.name,
-      refused.host === offender.host,
-      refused.guestPort === offender.guest,
-    ])))
+it.prop(
+  '∀outside_Render_=Refused',
+  { of: [refusalCase], subject: renderSandboxPlan },
+  (subject, [{ command, offender }]) =>
+    refusalLaw(subject, command, (refused) =>
+      holds([
+        refused.sandboxName === command.name,
+        refused.host === offender.host,
+        refused.guestPort === offender.guest,
+      ])),
+)
 
-it.prop('∀loopback_Render_=Approved', [successCase], ([command]) =>
-  planLaw(command, (plan) => {
-    const allLoopback = plan.portBindings.every((b) => isLoopbackHost(b.host))
-    const roleCorrect = Match.value(command.spec).pipe(
-      Match.tag('Service', () =>
-        holds([
-          plan.portBindings.length === command.bindings.length,
-          plan.cmd === undefined,
-          plan.workdir === undefined,
-        ])),
-      Match.tag('Job', (job) =>
-        holds([
-          plan.portBindings.length === 0,
-          cmdEchoes(plan, job.cmd),
-          plan.workdir === job.workdir,
-        ])),
-      Match.exhaustive,
-    )
-    return holds([allLoopback, roleCorrect])
-  }))
+it.prop(
+  '∀loopback_Render_=Approved',
+  { of: [successCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    planLaw(subject, command, (plan) => {
+      const allLoopback = plan.portBindings.every((b) => isLoopbackHost(b.host))
+      const roleCorrect = Match.value(command.spec).pipe(
+        Match.tag('Service', () =>
+          holds([
+            plan.portBindings.length === command.bindings.length,
+            plan.cmd === undefined,
+            plan.workdir === undefined,
+          ])),
+        Match.tag('Job', (job) =>
+          holds([
+            plan.portBindings.length === 0,
+            cmdEchoes(plan, job.cmd),
+            plan.workdir === job.workdir,
+          ])),
+        Match.exhaustive,
+      )
+      return holds([allLoopback, roleCorrect])
+    }),
+)
 
-it.prop('∀plan_Configuration_=Conserved', [successCase], ([command]) =>
-  planLaw(command, (plan) => {
-    const envKeys = Object.keys(command.spec.env)
-    return holds([
-      plan.name === command.name,
-      plan.image === command.spec.image,
-      plan.cpus === command.spec.vCPUs,
-      plan.memoryMiB === command.spec.memoryMb,
-      plan.mounts.length === command.spec.mounts.length,
-      envKeys.length === Object.keys(plan.envs).length,
-      envKeys.every((k) => plan.envs[k] === command.spec.env[k]),
-    ])
-  }))
+it.prop(
+  '∀plan_Configuration_=Conserved',
+  { of: [successCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    planLaw(subject, command, (plan) => {
+      const envKeys = Object.keys(command.spec.env)
+      return holds([
+        plan.name === command.name,
+        plan.image === command.spec.image,
+        plan.cpus === command.spec.vCPUs,
+        plan.memoryMiB === command.spec.memoryMb,
+        plan.mounts.length === command.spec.mounts.length,
+        envKeys.length === Object.keys(plan.envs).length,
+        envKeys.every((k) => plan.envs[k] === command.spec.env[k]),
+      ])
+    }),
+)
 
 const jobFields = (
   job: JobSpec,
@@ -203,15 +216,16 @@ const preChangeServiceArm = (
 
 it.prop(
   '∀noOptIn_Render_=NoProfiles',
-  [noOptInCase],
-  ([command]) => planLaw(command, (plan) => holds([plan.networkProfiles === undefined, plan.workdir === undefined])),
+  { of: [noOptInCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    planLaw(subject, command, (plan) => holds([plan.networkProfiles === undefined, plan.workdir === undefined])),
 )
 
 it.prop(
   '∀hostAccessTrue_Render_=HostAndPublicProfiles',
-  [hostAccessTrueCase],
-  ([command]) =>
-    planLaw(command, (plan) =>
+  { of: [hostAccessTrueCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    planLaw(subject, command, (plan) =>
       Option.match(Option.fromNullishOr(plan.networkProfiles), {
         onNone: () => false,
         onSome: (profiles) => holds([profiles.includes('public'), profiles.includes('host')]),
@@ -220,15 +234,15 @@ it.prop(
 
 it.prop(
   '∀hostAccessFalse_Render_=NoProfiles',
-  [hostAccessFalseCase],
-  ([command]) => planLaw(command, (plan) => plan.networkProfiles === undefined),
+  { of: [hostAccessFalseCase], subject: renderSandboxPlan },
+  (subject, [command]) => planLaw(subject, command, (plan) => plan.networkProfiles === undefined),
 )
 
 it.prop(
   '∀workdir_Render_=Workdir',
-  [workdirCase],
-  ([command]) =>
-    planLaw(command, (plan) =>
+  { of: [workdirCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    planLaw(subject, command, (plan) =>
       Match.value(command.spec).pipe(
         Match.tag('Job', (job) => plan.workdir === job.workdir),
         Match.tag('Service', () => false),
@@ -238,9 +252,9 @@ it.prop(
 
 it.prop(
   '∀serviceSpec_Render_=PreChangeServiceArm',
-  [serviceCase],
-  ([command]) =>
-    planLaw(command, (plan) =>
+  { of: [serviceCase], subject: renderSandboxPlan },
+  (subject, [command]) =>
+    planLaw(subject, command, (plan) =>
       Match.value(command.spec).pipe(
         Match.tag('Service', (service) =>
           holds([

@@ -1,15 +1,16 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
   createPackage,
   createPackageFromTarballData,
+  Package,
   packPackage,
   packTree,
   toDirectoryJSON,
 } from '@systemfsoftware/npm-package'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const jsonString = <V = unknown>(value: V): string => JSON.stringify(value)
 
 const uint8Of = (value: string | Uint8Array | null | undefined): Uint8Array => {
@@ -148,8 +149,8 @@ Feature('npm-package in-memory file tree and tarball round-trip')
         Then('the extracted package preserves scope in name, version, and file tree')((s) => {
           expect(s.extracted.packageName).toBe(s.ctx.scoped)
           expect(s.extracted.packageVersion).toBe('2.0.0')
-          expect(s.extracted.fileExists(`/node_modules/${s.ctx.scoped}/package.json`)).toBe(true)
-          expect(s.extracted.fileExists(`/node_modules/${s.ctx.scoped}/lib/util.js`)).toBe(true)
+          expect(s.extracted).toSatisfy((pkg: Package) => pkg.fileExists(`/node_modules/${s.ctx.scoped}/package.json`))
+          expect(s.extracted).toSatisfy((pkg: Package) => pkg.fileExists(`/node_modules/${s.ctx.scoped}/lib/util.js`))
         }),
       ),
     )
@@ -168,8 +169,8 @@ Feature('npm-package in-memory file tree and tarball round-trip')
           (s) => Effect.sync(() => createPackage(s.tree, 'demo', '1.0.0')),
         ),
         Then('both path forms are resolved and read cleanly under node_modules')((s) => {
-          expect(s.pkg.fileExists('/node_modules/demo/relative.js')).toBe(true)
-          expect(s.pkg.fileExists('/node_modules/demo/absolute.js')).toBe(true)
+          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/relative.js'))
+          expect(s.pkg).toSatisfy((pkg: Package) => pkg.fileExists('/node_modules/demo/absolute.js'))
           expect(s.pkg.tryReadFile('/node_modules/demo/relative.js')).toBe('rel')
           expect(s.pkg.tryReadFile('/node_modules/demo/absolute.js')).toBe('abs')
         }),
@@ -232,7 +233,7 @@ Feature('npm-package in-memory file tree and tarball round-trip')
             return s.ctx.pkg.tryReadBytes('/node_modules/bin-test/asset.bin')
           })),
         Then('the raw bytes are preserved without modification')((s) => {
-          expect(s.bytes instanceof Uint8Array).toBe(true)
+          expect(s.bytes).toBeInstanceOf(Uint8Array)
           expect(Array.from(uint8Of(s.bytes))).toEqual(Array.from(s.ctx.binary))
         }),
       ),
@@ -292,7 +293,7 @@ Feature('npm-package in-memory file tree and tarball round-trip')
         Then('the JSON map retains the paths, string contents, and raw binary buffers')((s) => {
           expect(s.dirJson['/node_modules/demo/index.js']).toBe('hi')
           const bin = uint8Of(s.dirJson['/node_modules/demo/asset.bin'])
-          expect(bin instanceof Uint8Array).toBe(true)
+          expect(bin).toBeInstanceOf(Uint8Array)
           expect(Array.from(bin)).toEqual([1, 2, 3])
         }),
       ),

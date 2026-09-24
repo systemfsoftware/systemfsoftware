@@ -6,12 +6,12 @@
  * each case — the kind of failure a downstream consumer would only see if a
  * step body or options object was supplied where it should not have been.
  */
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { resolveScenarioArgs, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result } from 'effect'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Scenario registration — argument resolution')
   .withLayer(Layer.empty)
@@ -43,6 +43,16 @@ Feature('Scenario registration — argument resolution')
             }),
           ),
         )
+      }),
+    )
+
+    scenario(
+      'A live reason in the options object resolves as options',
+      Effect.sync(() => {
+        const pipeline = Effect.succeed('ready')
+        const resolved = resolveScenarioArgs<never>({ live: 'waits on real I/O' }, pipeline)
+        expect(resolved.opts).toEqual({ live: 'waits on real I/O' })
+        expect(resolved.pipeline).toBe(pipeline)
       }),
     )
   })

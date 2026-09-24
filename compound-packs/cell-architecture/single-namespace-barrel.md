@@ -7,44 +7,44 @@ applies_when:
 tags: [cell, namespace-barrel, export-topology]
 ---
 
-In the Effect lineage, core domain abstractions are exported as cohesive, single-noun namespace barrels (e.g. `export * as Effect from './Effect.ts'`, `export * as Layer from './Layer.ts'`). Reusable capability packages follow this exact topology:
+In the Effect lineage, core domain abstractions are exported as cohesive, single-noun namespace barrels (e.g. `export * as Effect from './Effect.js'`, `export * as Layer from './Layer.js'`). Reusable capability packages follow this exact topology:
 
 ### 1. Single Primary Namespace Barrel
 
-The package root (`mod.ts`) exports its primary capability as a single namespace barrel (`export * as Resource from './Resource/mod.js'`). Consumers write `import { Resource } from '@org/effect-resource'`.
+The package root (`mod.ts`) re-exports its primary capability from the kind leaves as a single namespace barrel (`export * as Container from './Container/mod.js'`). Consumers write `import { Container } from '@org/effect-container'`. The underlying `*.blueprint.ts` and `*.handle.ts` modules are leaves under that namespace; they are not themselves the public surface.
 
 ### 2. Elimination of Fragmented Barrels
 
-Do not splinter a capability into artificial namespace buckets (e.g. `ResourceError`, `ResourceSpec`, `ResourceSandbox`, `ResourceConfig`). Errors, builders, combinators, and handles belong to the capability they describe:
+Do not splinter a capability into artificial namespace buckets (e.g. `ContainerError`, `ContainerBlueprint`, `ContainerSandbox`, `ContainerSchema`). Errors, blueprints, combinators, targets, and handles belong to the capability they describe:
 
-- **Constructors**: `Resource.make(...)`, `Resource.spec(...)`
-- **Builder DSL / Combinators**: `Resource.withOption(...)`, `Resource.Wait`
-- **Execution Handlers**: `Resource.scoped(...)`, `Resource.layer(...)`
-- **Handles & Tags**: `Resource.Running`, `type Resource.Running`, `type Resource.Handle`
-- **Errors**: `Resource.BootError`, `Resource.TimeoutError`, `type Resource.Error`
+- **Constructors**: `Container.make(...)`, `Container.spec(...)`
+- **Combinators**: `Container.withPort(...)`, `Container.Wait`
+- **Guards & Types**: `Container.isRunning`, `type Container.Running`, `type Container.Blueprint`
+- **Errors**: `Container.BootError`, `Container.TimeoutError`, `type Container.Error`
+
+Execution targets (`.scoped`, `.layer`) are properties on a minted blueprint, not namespace functions — the barrel exports the constructor that mints it.
 
 ### 3. Zero-Cycle Import Invariants
 
-The namespace barrel imports from non-cyclic leaf modules. Internal cycles are broken by extracting pure type contracts, schemas, and tags into dedicated leaf modules.
+The namespace barrel imports from non-cyclic leaf modules (`*.blueprint.ts`, `*.handle.ts`, `*.service.ts`). Internal cycles are broken by extracting pure type contracts, schemas, and tags into dedicated leaf modules.
 
 ```ts
-// WRONG: Fragmented, awkward namespace barrels
+// WRONG: fragmented, awkward namespace barrels
 import {
-  Resource,
-  ResourceError,
-  ResourceSandbox,
-  ResourceSpec,
-  ResourceSpecSchema,
-} from '@org/effect-resource'
+  Container,
+  ContainerError,
+  ContainerSandbox,
+  ContainerBlueprint,
+  ContainerSchema,
+} from '@org/effect-container'
 
-// RIGHT: Single cohesive namespace barrel matching Effect conventions
+// RIGHT: single cohesive namespace barrel matching Effect conventions
 import { Container } from '@org/effect-container'
 
 const container = Container.make('redis:7-alpine')
-  .withPort(6379)
-  .withWaitStrategy(Container.Wait.forPort(6379))
+  .pipe(Container.withPort(6379), Container.withWaitStrategy(Container.Wait.forPort(6379)))
 
 const vm = yield* container.scoped
 ```
 
-Gate: `review` — verify `mod.ts` exports only the primary domain namespace barrels and contains zero fragmented error or schema barrels.
+Gate: `review` — verify `mod.ts` exports only the primary domain namespace barrels and contains zero fragmented error, schema, or blueprint barrels.

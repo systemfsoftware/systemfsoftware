@@ -15,6 +15,7 @@ export const PREDICATE_SYMBOLS = new Set([
   '∩',
   '∪',
   '⊥',
+  '⊨',
 ])
 
 export const NULLARY_PREDICATE_SYMBOLS = new Set(['⊥'])
@@ -51,10 +52,10 @@ export const meta = {
       'Actual: domain "{{domain}}" contains "{{word}}" — that describes one case, not a universal law. ' +
       'Delete this test. It is not a property. Find the actual invariant and write that instead.',
     invalidPredicateSymbol:
-      'Expected: a relation symbol (≡ ≠ = ≤ ≥ ∈ ⊆ ⊇ → ¬ ∘ ∩ ∪ ⊥) starting the last segment of "{{actual}}". ' +
+      'Expected: a relation symbol (≡ ≠ = ≤ ≥ ∈ ⊆ ⊇ → ¬ ∘ ∩ ∪ ⊥ ⊨) starting the last segment of "{{actual}}". ' +
       'Actual: it ends with "{{firstChar}}". ' +
       "If this isn't a universal invariant, delete the test. " +
-      'Otherwise relate the output: = / ≡ (roundtrip or oracle), ⊆ / ∈ (invariant), ≠ (distinctness), ⊥ (impossibility).',
+      'Otherwise relate the output: = / ≡ (roundtrip or oracle), ⊆ / ∈ (invariant), ≠ (distinctness), ⊨ (satisfies a declared model), ⊥ (impossibility).',
     incompletePredicate: 'Expected: an operand after the relation symbol "{{symbol}}" in predicate "{{predicate}}", ' +
       'naming what the output is related to: =x / ≡Oracle (roundtrip or reference), ⊆Input / ∈Ignored (invariant), ' +
       '≠Zero (distinctness), ⊥Cancellable (impossibility — name the outcome that cannot occur). ' +

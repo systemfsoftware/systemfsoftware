@@ -8,7 +8,7 @@ export const mkStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer.effect(
     const held = yield* Ref.make(HashMap.empty<string, Scope.Scope>())
     return LockPrimitive.of({
       tryAcquire: (key) =>
-        Effect.gen(function*() {
+        Effect.uninterruptible(Effect.gen(function*() {
           const scope = yield* Effect.scope
           const acquired = yield* Ref.modify(held, (map) => {
             const current = HashMap.get(map, key)
@@ -24,7 +24,7 @@ export const mkStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer.effect(
             yield* Effect.addFinalizer(() => Ref.update(held, HashMap.remove(key)))
           }
           return acquired
-        }),
+        })),
     })
   }),
 )
@@ -35,7 +35,7 @@ export const mkBlockingStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer
     const held = yield* Ref.make(HashMap.empty<string, Scope.Scope>())
     return LockPrimitive.of({
       tryAcquire: (key) =>
-        Effect.gen(function*() {
+        Effect.uninterruptible(Effect.gen(function*() {
           const scope = yield* Effect.scope
           const map = yield* Ref.get(held)
           const current = HashMap.get(map, key)
@@ -47,8 +47,8 @@ export const mkBlockingStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer
           if (current.value === scope) {
             return true
           }
-          return yield* Effect.never
-        }),
+          return yield* Effect.interruptible(Effect.never)
+        })),
     })
   }),
 )

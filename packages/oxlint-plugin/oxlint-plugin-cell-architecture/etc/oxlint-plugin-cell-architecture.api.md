@@ -15,9 +15,15 @@ const _default: {
         'ban-classes': Rule;
         'ban-error-string': Rule;
         'ban-unknown': Rule;
+        'handle-definition-stays-private': Rule;
+        'handle-exports-guard': Rule;
         'internal-export-jsdoc': Rule;
+        'kind-file-construction': Rule;
+        'kind-file-declares-no-service': Rule;
+        'kind-file-holds-no-module-state': Rule;
+        'kind-record-minted-by-kind': Rule;
+        'kind-typeid-by-symbol-for': Rule;
         'no-internal-jsdoc-outside': Rule;
-        'no-io-boundary-tests': Rule;
         'no-bodyless-status-assertion': Rule;
         'no-context-generic-tag': Rule;
         'no-direct-tag-access': Rule;

@@ -12,7 +12,14 @@ Those are peer dependencies: this package declares them but does not install the
 
 ## Entry points
 
-- `@systemfsoftware/effect-atom-react`
+One entry, one namespace:
+
+```ts
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
+
+// inside a component under <AtomReact.RegistryProvider>
+const value = AtomReact.useAtomValue(count)
+```
 
 ## API
 

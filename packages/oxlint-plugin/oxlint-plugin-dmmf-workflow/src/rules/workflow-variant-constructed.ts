@@ -183,9 +183,10 @@ const declaredChannelsOf = (body: MakeBodyKind, facts: FileFacts): readonly Decl
  * nothing else: a local bound to a constructed value declares no variant class, so an
  * annotation that names such a local declares nothing and stays silent.
  *
- * A composing constructor (`Workflow.andThen`) opens no decision body in the file that
- * names it, and a variant whose class is imported is a name this file's AST cannot
- * resolve — both stay silent. `*.tst.ts` type probes run nowhere and are exempt.
+ * A decision whose body cannot be located from this file (an imported `decide`)
+ * opens nothing to judge here, and a variant whose class is imported is a name this
+ * file's AST cannot resolve — both stay silent. `*.tst.ts` type probes run nowhere
+ * and are exempt.
  */
 export const workflowVariantConstructed = defineRule({
   meta,
@@ -200,7 +201,6 @@ export const workflowVariantConstructed = defineRule({
         const reported = new Set<string>()
 
         for (const boundary of boundaries) {
-          if (!boundary.takesDeciderBody) continue
           const body = boundary.resolvedBody
           if (body === null) continue
 

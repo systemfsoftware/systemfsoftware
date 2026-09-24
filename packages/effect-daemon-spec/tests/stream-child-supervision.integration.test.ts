@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -5,16 +6,15 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 Feature('Stream child supervision')
   .withScenarioLayer(NoopLayer)
   .body(({ scenario }) => {
@@ -85,7 +85,7 @@ Feature('Stream child supervision')
         ),
         And('the supervisor healthy latch remains open')((s) =>
           Effect.sync(() => {
-            expect(s.result.healthyOpen).toBe(true)
+            expect(s.result.healthyOpen).toEqual(true)
           })
         ),
       ),
@@ -143,7 +143,7 @@ Feature('Stream child supervision')
         ),
         Then('the supervisor healthy latch is closed')((s) =>
           Effect.sync(() => {
-            expect(s.result.healthyOpen).toBe(false)
+            expect(s.result.healthyOpen).toEqual(false)
           })
         ),
         And('the reporter recorded one exhaustion for the supervisor')((s) =>

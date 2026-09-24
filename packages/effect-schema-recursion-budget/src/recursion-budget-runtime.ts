@@ -1,4 +1,4 @@
-import { Schema as S, SchemaAST, SchemaGetter } from 'effect'
+import { Function, Schema as S, SchemaAST, SchemaGetter } from 'effect'
 
 export interface RecursionBudget {
   readonly maxDepth: number
@@ -91,20 +91,23 @@ const planOf = (
   return { union, terminals }
 }
 
-export const budgetToArbitrary = (
-  getSelf: () => S.Top,
-  budget: unknown,
-): () => SchemaAST.Link => {
-  decodeBudget(budget)
-  return () => {
-    const plan = planOf(getSelf().ast)
-    if (typeof plan === 'string') throw new Error(plan)
-    return S.link<unknown>()(S.make(plan.union), {
-      decode: SchemaGetter.transform((value: unknown) => value),
-      encode: SchemaGetter.transform((value: unknown) => value),
-    })
-  }
-}
+export const budgetToArbitrary: {
+  (budget: unknown): (getSelf: () => S.Top) => () => SchemaAST.Link
+  (getSelf: () => S.Top, budget: unknown): () => SchemaAST.Link
+} = Function.dual(
+  2,
+  (getSelf: () => S.Top, budget: unknown): () => SchemaAST.Link => {
+    decodeBudget(budget)
+    return () => {
+      const plan = planOf(getSelf().ast)
+      if (typeof plan === 'string') throw new Error(plan)
+      return S.link<unknown>()(S.make(plan.union), {
+        decode: SchemaGetter.transform((value: unknown) => value),
+        encode: SchemaGetter.transform((value: unknown) => value),
+      })
+    }
+  },
+)
 
 const kindOf = (value: unknown): string => (isRecord(value) && typeof value['kind'] === 'string' ? value['kind'] : '')
 
@@ -165,16 +168,24 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀x_ChainNesting_≤Ceiling',
-    [Chain],
-    ([value]) => maxNestingDepthOf(value) <= NESTING_CEILING,
-    { arbitrary: { size: 3 } },
+    { of: [Chain], subject: maxNestingDepthOf },
+    (depth, [value]) => depth(value) <= NESTING_CEILING,
   )
 
   it.prop(
     '∀x_ChainDeepest_=DeclaredTerminal',
-    [Chain],
-    ([value]) => deepestKindOf(value) === 'Lit',
-    { arbitrary: { size: 3 } },
+    { of: [Chain], subject: deepestKindOf },
+    (deepest, [value]) => {
+      if (deepest({ kind: 'Lit', value: 42 }) !== 'Lit') return false
+      if (deepest({ kind: 'Wrap', inner: 5 }) !== 'Wrap') return false
+      return deepest(value) === 'Lit'
+    },
+  )
+
+  it.prop(
+    '∀x_NestingDepth_=ShiftedByWrap',
+    { of: [Chain], subject: maxNestingDepthOf },
+    (depth, [value]) => depth({ kind: 'Wrap', inner: value }) === depth(value) + 1,
   )
 
   const RefusedIndex = S.Int.pipe(
@@ -183,11 +194,12 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀i_RefusedDerivations_⊥Generation',
-    [RefusedIndex],
-    ([index]) => {
+    { of: [RefusedIndex], subject: planOf },
+    (plan, [index]) => {
+      if (typeof plan(Chain.ast) === 'string') return false
       const schema = REFUSED[index]
       if (schema === undefined) return false
-      return typeof planOf(schema.ast) === 'string'
+      return typeof plan(schema.ast) === 'string'
     },
   )
 }

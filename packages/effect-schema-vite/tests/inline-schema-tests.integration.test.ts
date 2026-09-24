@@ -5,8 +5,9 @@
  * generates that package's law suite and reads the emitted body: which
  * schemas earned a law pair and which module each law binds.
  */
-import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { afterAll, expect } from '@effect/vitest'
+import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,14 +15,13 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 import { createServer } from 'vite'
-import { afterAll, expect } from 'vitest'
 
-import { RECURSION_BUDGET_VIRTUAL_ID } from '@systemfsoftware/effect-schema-recursion-budget'
+import { RECURSION_BUDGET_RUNTIME_SPECIFIER } from '@systemfsoftware/effect-schema-recursion-budget'
 import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
 
 const LAW_PKG = '@systemfsoftware/effect-schema-law'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 const MIXED_DECLARATIONS = [
   `export const StructConst = Schema.Struct({ x: Schema.String })`,
   `export const PipedFromMember = S.String.pipe(S.pattern(/x/))`,
@@ -90,7 +90,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const drivenByPlugin = async (
   root: string,
-): Promise<{ readonly code: string; readonly runtime: string | null }> => {
+): Promise<{ readonly code: string; readonly runtime: string | null; readonly exportedSchemas: readonly string[] }> => {
   const server = await createServer({
     root,
     configFile: false,
@@ -101,8 +101,13 @@ const drivenByPlugin = async (
   })
   try {
     const transformed = await server.transformRequest('/src/recursive.schema.ts')
-    const resolved = await server.pluginContainer.resolveId(RECURSION_BUDGET_VIRTUAL_ID)
-    return { code: transformed?.code ?? '', runtime: resolved?.id ?? null }
+    const resolved = await server.pluginContainer.resolveId(RECURSION_BUDGET_RUNTIME_SPECIFIER)
+    const loaded = await server.ssrLoadModule('/src/recursive.schema.ts')
+    return {
+      code: transformed?.code ?? '',
+      runtime: resolved?.id ?? null,
+      exportedSchemas: Object.keys(loaded),
+    }
   } finally {
     await server.close()
   }
@@ -292,6 +297,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
 
   scenario(
     'Registering the one plugin materializes a declared generation budget, not only the laws',
+    { live: 'the plugin is driven through a real Vite development server over real files on disk' },
     Gherkin.Do.pipe(
       Given('a package whose recursive schema declares its generation budget')(
         'pkg',
@@ -304,14 +310,15 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       Then('the transformed module carries the derivation hook that honors the budget')((s) => {
         expect(s.driven.code).toContain('toCodecArbitrary')
       }),
-      Then('the hook is imported from the budget runtime the plugin resolves')((s) => {
+      And('the hook imports the budget runtime, which resolves to a file on disk')((s) => {
         expect(s.driven.code).toMatch(
           /import \{ \w+ as \w+ \} from "[^"]*recursion-budget-runtime\.[a-z]+";/,
         )
-      }),
-      Then('the runtime the hook imports resolves to a module on disk')((s) => {
         expect(s.driven.runtime).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
-        expect(s.driven.runtime === null ? false : existsSync(s.driven.runtime)).toBe(true)
+        expect(s.driven.runtime).toSatisfy((runtime: string | null) => runtime !== null && existsSync(runtime))
+      }),
+      And('the transformed module runs and exports its schema for the consumer')((s) => {
+        expect(s.driven.exportedSchemas).toContain('RecursiveExpr')
       }),
     ),
   )

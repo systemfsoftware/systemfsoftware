@@ -17,11 +17,13 @@ export const promoteWarnToError = (rules: Record<string, unknown> | undefined): 
   return out
 }
 
+const effectPlatformJsPlugin = import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-platform')
+
 export const jsPlugins: readonly string[] = [
   ...dmmfJsPlugins,
   ...cellJsPlugins,
-  import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-platform'),
   import.meta.resolve('@systemfsoftware/oxlint-plugin-test-discipline'),
+  effectPlatformJsPlugin,
 ]
 
 export const plugins: NonNullable<OxlintConfig['plugins']> = [
@@ -32,8 +34,8 @@ export const plugins: NonNullable<OxlintConfig['plugins']> = [
   'jsdoc',
   'node',
   'oxc',
-  'effecttsgo',
   'promise',
+  'effecttsgo',
 ]
 
 export const options: NonNullable<OxlintConfig['options']> = {
@@ -41,7 +43,6 @@ export const options: NonNullable<OxlintConfig['options']> = {
 }
 
 export const rules: NonNullable<OxlintConfig['rules']> = {
-  ...effectPlatform.configs.recommended.rules,
   ...testDiscipline.configs.recommended.rules,
 }
 
@@ -52,19 +53,29 @@ const testFilePatterns = [
   '**/tests/**',
 ] as const
 
-const sourceAndTestOverrides: NonNullable<OxlintConfig['overrides']> = [
-  {
-    files: ['**/src/**', ...testFilePatterns],
-    rules: {
-      ...rules,
-      ...promoteWarnToError(tsgoCorrectness.rules),
-      ...promoteWarnToError(tsgoRecommended.rules),
-      'effecttsgo/global-date-in-effect': 'error',
-      'effecttsgo/global-timers-in-effect': 'error',
-      'effecttsgo/new-promise': 'error',
-    },
-  },
-]
+const entryFilePatterns = [...testFilePatterns, '**/test-types/**', '**/examples/**'] as const
+
+const libraryRules: NonNullable<OxlintConfig['rules']> = {
+  ...promoteWarnToError(tsgoCorrectness.rules),
+  ...promoteWarnToError(tsgoRecommended.rules),
+  ...effectPlatform.configs.recommended.rules,
+  'effecttsgo/global-date-in-effect': 'error',
+  'effecttsgo/global-timers-in-effect': 'error',
+  'effecttsgo/new-promise': 'error',
+  'effecttsgo/strict-boolean-expressions': 'error',
+  'effecttsgo/missing-pipeable-signature': 'error',
+  'effecttsgo/missed-pipeable-opportunity': 'error',
+  'effecttsgo/process-env': 'error',
+  'effecttsgo/any-unknown-in-error-context': 'error',
+  'effecttsgo/global-date': 'error',
+  'effecttsgo/global-timers': 'error',
+  'effecttsgo/node-builtin-import': 'error',
+}
+
+const entryRules: NonNullable<OxlintConfig['rules']> = {
+  ...libraryRules,
+  'effecttsgo/node-builtin-import': 'off',
+}
 
 const observerOverrides: NonNullable<OxlintConfig['overrides']> = [
   {
@@ -85,11 +96,13 @@ const recommendedConfig: OxlintConfig = {
   plugins: [...plugins],
   jsPlugins: [...jsPlugins],
   options: { ...options },
+  rules: { ...rules },
   categories: { correctness: 'error' },
   ignorePatterns: [...ignorePatterns],
   overrides: [
-    ...sourceAndTestOverrides,
     ...observerOverrides,
+    { files: ['**/src/**'], rules: libraryRules },
+    { files: [...entryFilePatterns], rules: entryRules },
     ...effectPlatform.configs.recommended.overrides,
   ],
 }

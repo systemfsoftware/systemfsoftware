@@ -17,7 +17,7 @@ const FEATURE_DECL = `
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 `
 
 ruleTester.run('behaviour-one-feature-per-file', behaviourOneFeaturePerFile, {

@@ -48,7 +48,7 @@ Three facts about the current mechanism, read from source this session:
 - `cell-import-boundary.ts:107-108` — `cellOf()` derives a cell from the _imported specifier's_ filename and
   returns `null` for any bare package specifier, at which point the rule returns. **Every external import is
   invisible to the rule today**, in the hand-authored phase, before any generator arrives.
-- `cell-import-table.config.ts:17-145` — `CELL_IMPORT_TABLE` has no `.schema.ts` or `.acl.ts` key; `CellEdge`
+- `cell-import-table.config.ts:17-145` — `CELL_IMPORT_TABLE` has no `.schema.ts` or `.acl` key; `CellEdge`
   carries `forbid`, `forbidValue`, `exceptVia`, `forbidRuntime`, and no type-origin arm.
 - `cell-import-boundary.ts:49-55` — `hasValueBinding()` already separates type-only from value imports, so the
   channel distinction exists in the AST layer and is unused.
@@ -150,7 +150,7 @@ digest is computed from the pinned contract's bytes at check time. _Rung: the sa
 reach a construction form that skips refinements. _Rung: syntactic lint plus the constructor's signature._
 
 **R8 — Translation cells are decode-only, and the cited exemplar is repaired before it is cited.** An ACL's
-`encode` returns `Forbidden`; `.repos/identity-backend/packages/lib/hono-auth/src/play-integrity/play-integrity.acl.ts:38-67`
+`encode` returns `Forbidden`; `.repos/identity-backend/packages/lib/hono-auth/src/play-integrity/play-integrity.ts:38-67`
 currently fails open against vendor additions. _Rung: syntactic lint for the contract, R5 for the exemplar's hole._
 
 **Aggregates**
@@ -206,7 +206,7 @@ that can supply one, and no vendor in scope does yet; the type must not claim at
 the requirement stands unenforced rather than half-enforced.
 
 **Explicitly not done, and previously planned.** Widening the oxlint import table with `.schema.ts` and
-`.acl.ts` source keys. Those suffixes are targets in that table and never sources; the predicate is an
+`.acl` source keys. Those suffixes are targets in that table and never sources; the predicate is an
 interior property of a type rather than an edge between two named files; and the one known consumer runs none
 of our lint plugins. The earlier draft of this plan proposed it and was wrong.
 
@@ -225,7 +225,7 @@ multi-source failures instead of short-circuiting.
   `.repos/identity-backend/` registers only `@identity-backend/oxlint-plugin` in its own base config — no
   `effect-dmmf`, no `cell-imports` — and its lint ignores `**/repos/**`, so the vendored mirror of this repo is
   never linted by it. The consumer consumes our _types_. Any reach argument for the lint arm was false.
-- **`.schema.ts` and `.acl.ts` are targets in the import table, never sources.** Adding source entries would
+- **`.schema.ts` and `.acl` are targets in the import table, never sources.** Adding source entries would
   have been new taxonomy, not a widened rule. Most TypeScript files in this tree carry no cell suffix at all,
   so a suffix-keyed predicate cannot see them — `label-routed-rules-are-unfalsifiable`, measured again here.
 - **This repo already replaced its compiler.** `scripts/tools/patch-tsgo-if-needed.mjs`, wired into `prepare`,
@@ -425,7 +425,7 @@ compile-refusal cases fail the build when the mark is removed from `wire`'s para
 
 **Dependencies.** None.
 
-**Files.** `.repos/identity-backend/packages/lib/hono-auth/src/play-integrity/play-integrity.acl.ts` and its
+**Files.** `.repos/identity-backend/packages/lib/hono-auth/src/play-integrity/play-integrity.ts` and its
 test — **in the consumer repository, not this one.** This unit is a patch prepared here and landed there.
 
 **Approach.** C-05 measured `versionCode`, `accountRisk` and `recentDeviceActivity` present in the vendor

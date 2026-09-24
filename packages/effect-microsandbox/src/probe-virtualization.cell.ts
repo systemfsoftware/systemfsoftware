@@ -1,8 +1,6 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Config, Effect, FileSystem, Option } from 'effect'
 import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-import type { ResolvedRuntime } from 'microsandbox'
 import {
   AssessVirtualization,
   assessVirtualization,
@@ -12,11 +10,11 @@ import {
   KvmDenied,
   PlatformUnsupported,
   type ProbeObservation,
-  type VirtualizationVerdict,
   WHPUnavailable,
 } from './assess-virtualization.workflow.js'
 import { VirtualizationUnsupportedError } from './MicroVMError.schema.js'
 import type { MicroVMSpec } from './MicroVMSpec.schema.js'
+import { RuntimeResolver } from './RuntimeResolver.js'
 
 const KVM_DEVICE = '/dev/kvm'
 const WINDOWS_VMCOMPUTE = 'C:\\Windows\\System32\\vmcompute.dll'
@@ -78,38 +76,8 @@ const probeCapability = Effect.gen(function*() {
     onNone: () => unsupportedProbe(platform, arch),
   })
 }).pipe(Effect.orDie)
-const announce = (resolved: ResolvedRuntime) =>
-  Effect.logInfo(
-    `[effect-microsandbox] microsandbox runtime resolved: ${resolved.msbPath} (origin: ${resolved.origin})`,
-  )
 
-const writeProbe = (
-  verdict: Result.Result<VirtualizationVerdict, never>,
-  command: AssessVirtualization,
-): Effect.Effect<void, VirtualizationUnsupportedError> =>
-  Match.value(Result.getOrThrow(verdict)).pipe(
-    Match.tag('VirtualizationRefused', (refused) =>
-      Effect.andThen(
-        Effect.logDebug(`[effect-microsandbox] virtualization topology: ${refused.topology}`),
-        Effect.fail(
-          new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
-        ),
-      )),
-    Match.tag('VirtualizationEligible', () =>
-      Effect.tryPromise({
-        try: () => import('microsandbox'),
-        catch: (cause) =>
-          new VirtualizationUnsupportedError({
-            platform: command.platform,
-            remediation: 'Failed to load microsandbox native runtime',
-            cause,
-          }),
-      }).pipe(
-        Effect.flatMap(({ resolveRuntime }) => Effect.sync(() => resolveRuntime())),
-        Effect.flatMap(announce),
-      )),
-    Match.exhaustive,
-  )
+const runtimeLoad = (platform: string) => Effect.flatMap(RuntimeResolver, (resolver) => resolver.resolve(platform))
 
 export const probeVirtualization = Sandwich.named('probe_virtualization')((_spec: MicroVMSpec) =>
   Effect.gen(function*() {
@@ -119,4 +87,21 @@ export const probeVirtualization = Sandwich.named('probe_virtualization')((_spec
   }).pipe(Effect.orDie)
 )
   .decide(assessVirtualization)
-  .write(writeProbe)
+  .write({
+    VirtualizationEligible: (_eligible, command) => runtimeLoad(command.platform),
+    VirtualizationRefused: (refused, command) =>
+      Effect.andThen(
+        Effect.logDebug('virtualization topology refused', { 'virtualization.topology': refused.topology }),
+        Effect.fail(
+          new VirtualizationUnsupportedError({ platform: command.platform, remediation: refused.remediation }),
+        ),
+      ),
+    CommandRejected: (rejected, command) =>
+      Effect.fail(
+        new VirtualizationUnsupportedError({
+          platform: command.platform,
+          remediation: 'The virtualization command could not be understood',
+          cause: rejected,
+        }),
+      ),
+  })

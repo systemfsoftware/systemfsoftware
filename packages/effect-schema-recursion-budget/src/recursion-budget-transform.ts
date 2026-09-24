@@ -1,21 +1,17 @@
-import { existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 
 export interface RecursionBudgetPlugin {
   readonly name: string
   readonly enforce: 'pre'
-  readonly resolveId: (source: string) => string | null
   readonly transform: (code: string, id: string) => string | undefined
 }
 
-export const RECURSION_BUDGET_VIRTUAL_ID = 'virtual:effect-schema-recursion-budget' as const
-
-const RUNTIME_FILES: ReadonlyArray<string> = [
-  './recursion-budget-runtime.ts',
-  './recursion-budget-runtime.mjs',
-  './recursion-budget-runtime.js',
-]
+/**
+ * The package subpath the transform injects. Resolving it from this package's
+ * own location keeps the generated import working for consumers under strict
+ * node_modules, where this package is only a transitive dependency.
+ */
+export const RECURSION_BUDGET_RUNTIME_SPECIFIER = '@systemfsoftware/effect-schema-recursion-budget/runtime' as const
 
 const ANNOTATION_KEY = 'recursionBudget'
 const HOOK_KEY = 'toCodecArbitrary'
@@ -36,9 +32,9 @@ const isNode = (value: unknown): value is OxcNode => {
   return typeof value.type === 'string' && typeof value.start === 'number' && typeof value.end === 'number'
 }
 
-const childNodesOf = (node: OxcNode): ReadonlyArray<OxcNode> => {
+const childNodesOf = (current: OxcNode): ReadonlyArray<OxcNode> => {
   const children: OxcNode[] = []
-  for (const value of Object.values(node)) {
+  for (const value of Object.values(current)) {
     if (Array.isArray(value)) {
       for (const item of value) {
         if (isNode(item)) children.push(item)
@@ -52,18 +48,18 @@ const childNodesOf = (node: OxcNode): ReadonlyArray<OxcNode> => {
 
 const declaratorsOf = (program: OxcNode): ReadonlyArray<OxcNode> => {
   const found: OxcNode[] = []
-  const visit = (node: OxcNode): void => {
-    if (node.type === 'VariableDeclarator') found.push(node)
-    for (const child of childNodesOf(node)) visit(child)
+  const visit = (current: OxcNode): void => {
+    if (current.type === 'VariableDeclarator') found.push(current)
+    for (const child of childNodesOf(current)) visit(child)
   }
   visit(program)
   return found
 }
 
-const memberNameOf = (node: OxcNode): string | undefined => {
-  if (node.type === 'Identifier') return typeof node['name'] === 'string' ? node['name'] : undefined
-  if (node.type !== 'MemberExpression' || node['computed'] === true) return undefined
-  const property = node['property']
+const memberNameOf = (current: OxcNode): string | undefined => {
+  if (current.type === 'Identifier') return typeof current['name'] === 'string' ? current['name'] : undefined
+  if (current.type !== 'MemberExpression' || current['computed'] === true) return undefined
+  const property = current['property']
   if (!isNode(property) || property.type !== 'Identifier') return undefined
   return typeof property['name'] === 'string' ? property['name'] : undefined
 }
@@ -135,26 +131,13 @@ const splice = (code: string, injections: ReadonlyArray<Injection>, importAt: nu
   for (const injection of [...injections].sort((left, right) => right.insertAt - left.insertAt)) {
     out = out.slice(0, injection.insertAt) + hookTextFor(code, injection) + out.slice(injection.insertAt)
   }
-  const importLine = `import { budgetToArbitrary as ${INJECTED_ALIAS} } from '${RECURSION_BUDGET_VIRTUAL_ID}'\n`
+  const importLine = `import { budgetToArbitrary as ${INJECTED_ALIAS} } from '${RECURSION_BUDGET_RUNTIME_SPECIFIER}'\n`
   return out.slice(0, importAt) + importLine + out.slice(importAt)
-}
-
-let resolvedRuntimePath: string | null | undefined
-
-const runtimePath = (): string | null => {
-  if (resolvedRuntimePath !== undefined) return resolvedRuntimePath
-  const found =
-    RUNTIME_FILES.map((relative) => fileURLToPath(new URL(relative, import.meta.url))).find((path) =>
-      existsSync(path)
-    ) ?? null
-  resolvedRuntimePath = found
-  return found
 }
 
 export const recursionBudgetTransform = (): RecursionBudgetPlugin => ({
   name: '@systemfsoftware/recursion-budget',
   enforce: 'pre',
-  resolveId: (source) => (source === RECURSION_BUDGET_VIRTUAL_ID ? runtimePath() : null),
   transform: (code, id) => {
     const moduleId = id.split('?')[0] ?? id
     if (!moduleId.endsWith('.ts') || moduleId.startsWith('\0') || moduleId.includes('/node_modules/')) {

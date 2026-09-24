@@ -14,11 +14,11 @@ declare const Feature: FeatureFn
 
 describe('BDD Stage Transitions and Scenario Conformance', () => {
   describe('Stage Progression and Scope Identity Laws', () => {
-    it('initializes Gherkin.Do with InitialStage', () => {
+    it('Should_InitializeGherkinDoWithInitialStage_When_ThePipelineBegins', () => {
       expect(Gherkin.Do).type.toBe<GherkinEffect<InitialStage, never, never>>()
     })
 
-    it('transitions from InitialStage to GivenStage upon Given step and pins exact scope', () => {
+    it('Should_TransitionToGivenStageAndPinScope_When_TheGivenStepIsApplied', () => {
       const givenStep = Given('initial inventory record')('count', () => Effect.succeed(10))
       expect(givenStep).type.toBeCallableWith(Gherkin.Do)
 
@@ -32,7 +32,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       >()
     })
 
-    it('rejects Given step when invoked after When step', () => {
+    it('Should_RejectAGivenStep_When_InvokedAfterAWhenStep', () => {
       const givenStep = Given('setup')('count', () => Effect.succeed(10))
       const whenPipeline = Gherkin.Do.pipe(
         When('action')('status', () => Effect.succeed('active')),
@@ -41,7 +41,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       expect(givenStep).type.not.toBeCallableWith(whenPipeline)
     })
 
-    it('rejects Given step when invoked after Then step', () => {
+    it('Should_RejectAGivenStep_When_InvokedAfterAThenStep', () => {
       const givenStep = Given('setup')('count', () => Effect.succeed(10))
       const thenPipeline = Gherkin.Do.pipe(
         Given('prior setup')('seed', () => Effect.succeed(1)),
@@ -53,7 +53,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       expect(givenStep).type.not.toBeCallableWith(thenPipeline)
     })
 
-    it('accepts When step after Given step and transitions to WhenStage', () => {
+    it('Should_AcceptAWhenStepAndTransitionToWhenStage_When_AppliedAfterAGivenStep', () => {
       const whenStep = When('action')('status', () => Effect.succeed('active'))
       const givenPipeline = Gherkin.Do.pipe(
         Given('setup')('count', () => Effect.succeed(10)),
@@ -61,7 +61,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       expect(whenStep).type.toBeCallableWith(givenPipeline)
     })
 
-    it('accepts When step after Then step in multi-action scenarios', () => {
+    it('Should_AcceptAWhenStep_When_AppliedAfterAThenStepInAMultiActionScenario', () => {
       const whenStep = When('subsequent action')('metric', () => Effect.succeed(100))
       const thenPipeline = Gherkin.Do.pipe(
         Given('setup')('count', () => Effect.succeed(10)),
@@ -70,7 +70,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       expect(whenStep).type.toBeCallableWith(thenPipeline)
     })
 
-    it('accepts Then step after When step and transitions to ThenStage', () => {
+    it('Should_AcceptAThenStepAndTransitionToThenStage_When_AppliedAfterAWhenStep', () => {
       const thenStep = Then('verify outcome')(() => {})
       const whenPipeline = Gherkin.Do.pipe(
         When('action')('status', () => Effect.succeed('active')),
@@ -78,7 +78,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
       expect(thenStep).type.toBeCallableWith(whenPipeline)
     })
 
-    it('pins exact structural identity of accumulated scope inside step callbacks', () => {
+    it('Should_PinAccumulatedScopeInsideStepCallbacks_When_TheStepsAreChained', () => {
       const pipeline = Gherkin.Do.pipe(
         Given('user identity')('id', () => Effect.succeed('usr_42')),
         When('profile loaded')('name', () => Effect.succeed('Alice')),
@@ -99,7 +99,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
 
   describe('Scenario Acceptance Laws on Real Feature Surface', () => {
     Feature('Order fulfillment verification').body(({ scenario }) => {
-      it('accepts concluded pipeline ending on Then step', () => {
+      it('Should_AcceptAConcludedPipeline_When_ItEndsOnAThenStep', () => {
         const concluded = Gherkin.Do.pipe(
           Given('inventory in stock')('count', () => Effect.succeed(10)),
           When('order placed')('status', () => Effect.succeed('placed')),
@@ -108,7 +108,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         expect(scenario).type.toBeCallableWith('Order placed successfully', concluded)
       })
 
-      it('rejects scenario pipeline ending on Given step without Then', () => {
+      it('Should_RejectAScenarioPipeline_When_ItEndsOnAGivenStepWithoutAThen', () => {
         const givenOnly = Gherkin.Do.pipe(
           Given('inventory in stock')('count', () => Effect.succeed(10)),
         )
@@ -120,7 +120,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         expect(scenario).type.not.toBeCallableWith('Incomplete order setup', givenOnly)
       })
 
-      it('rejects scenario pipeline ending on When step without Then', () => {
+      it('Should_RejectAScenarioPipeline_When_ItEndsOnAWhenStepWithoutAThen', () => {
         const whenOnly = Gherkin.Do.pipe(
           Given('inventory in stock')('count', () => Effect.succeed(10)),
           When('order placed')('status', () => Effect.succeed('placed')),
@@ -134,7 +134,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         expect(scenario).type.not.toBeCallableWith('Order placed without check', whenOnly)
       })
 
-      it('rejects multi-action scenario pipeline ending on intermediate When without trailing Then', () => {
+      it('Should_RejectAMultiActionScenarioPipeline_When_ItEndsOnAnIntermediateWhen', () => {
         const intermediateWhen = Gherkin.Do.pipe(
           Given('order initialized')('count', () => Effect.succeed(10)),
           When('first payment attempted')('status', () => Effect.succeed('pending')),
@@ -152,7 +152,7 @@ describe('BDD Stage Transitions and Scenario Conformance', () => {
         expect(scenario).type.not.toBeCallableWith('Dangling multi-action payment', intermediateWhen)
       })
 
-      it('rejects plain object literal', () => {
+      it('Should_RejectAPlainObjectLiteral_When_ItIsPassedAsAScenarioPipeline', () => {
         const validConcluded = Gherkin.Do.pipe(
           Then('outcome verified')(() => {}),
         )

@@ -48,6 +48,12 @@ const MODULE_MUTATION_ACTUAL =
   'an assignment, update, delete or mutating container-method call that changes a module-scope object from inside the decision'
 const MODULE_MUTATION_FIX =
   'pass the container in as data and write it where the caller owns it — a decision reads its inputs and returns a value; it never writes shared state'
+const UNRESOLVABLE_MAKE_ARGUMENT_NAME = 'the decide property of this Workflow.make call'
+const UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED = 'a decision body the rules can locate in this file'
+const UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL =
+  'a Workflow.make decide property whose body is not visible from this file (missing, imported, a non-function value, or an unresolvable reference)'
+const UNRESOLVABLE_MAKE_ARGUMENT_FIX =
+  'write the decision body inline, or bind it to a module-scope function in this file, so the one-path and purity obligations bind'
 
 const referenceError = (
   messageId: string,
@@ -64,126 +70,150 @@ const controlError = (name: string): { readonly messageId: string; readonly data
   data: { name, expected: CONTROL_EXPECTED, actual: CONTROL_ACTUAL, fix: CONTROL_FIX },
 })
 
-ruleTester.run('make-body-purity', makeBodyPurity, {
-  valid: [
-    {
-      name: 'Should_Pass_When_AWorkflowFileComposesImportedWorkflowsWithAndThen',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { admitDecoded } from './admit-decoded-command.workflow.js'
-import { decideNext } from './decide-next.workflow.js'
+const unresolvableMakeArgumentError = {
+  messageId: 'unresolvableMakeArgument',
+  data: {
+    name: UNRESOLVABLE_MAKE_ARGUMENT_NAME,
+    expected: UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED,
+    actual: UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL,
+    fix: UNRESOLVABLE_MAKE_ARGUMENT_FIX,
+  },
+} as const
 
-export const chained = Workflow.andThen(Cmd, admitDecoded, NextCmd, session, decideNext)`,
-      filename: '/repo/pkg/src/chain-decisions.workflow.ts',
-    },
-    {
-      name: 'Should_Pass_When_BodyReferencesOnlyParamsAndPureImports',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make(
-  (command: { readonly tag: 'a' | 'b' }): Result.Result<string, never> =>
-    Match.value(command).pipe(
-      Match.tag('a', () => Result.succeed('a')),
-      Match.tag('b', () => Result.succeed('b')),
-      Match.exhaustive,
-    ),
-)`,
-    },
-    {
-      name: 'Should_Pass_When_BodyReferencesModuleSchemaClasses',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+/**
+ * The fixture prelude: the standard imports and the schema classes the options
+ * object names. `decide` is the decision slot the boundary resolves; every body
+ * under test is written as its value.
+ */
+const PRELUDE = `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+`
+
+const makeWorkflow = (decide: string, moduleLevel = ''): string =>
+  `${PRELUDE}
+${moduleLevel}
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: ${decide} })`
+
+ruleTester.run('make-body-purity', makeBodyPurity, {
+  valid: [
+    {
+      name: 'Should_Pass_When_BodyReferencesOnlyParamsAndPureImports',
+      code: makeWorkflow(`(command: { readonly tag: 'a' | 'b' }): Result.Result<string, never> =>
+    Match.value(command).pipe(
+      Match.tag('a', () => Result.succeed('a')),
+      Match.tag('b', () => Result.succeed('b')),
+      Match.exhaustive,
+    )`),
+    },
+    {
+      name: 'Should_Pass_When_BodyReferencesModuleSchemaClasses',
+      code: `${PRELUDE}
 export class DecisionA extends S.TaggedClass<DecisionA>()('DecisionA', {}) {}
 
-export const decide = Workflow.make(
-  (command: { readonly tag: 'a' }): Result.Result<DecisionA, never> =>
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (command: { readonly tag: 'a' }): Result.Result<DecisionA, never> =>
     Match.value(command).pipe(
       Match.tag('a', () => Result.succeed(DecisionA.make())),
       Match.exhaustive,
     ),
-)`,
+})`,
     },
     {
       name: 'Should_Pass_TheAliasedWorkflowImport',
       code: `import { Workflow as W } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
-export const decide = W.make(
-  (command: { readonly tag: 'a' }): Result.Result<string, never> =>
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+export const workflow = W.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (command: { readonly tag: 'a' }): Result.Result<string, never> =>
     Match.value(command).pipe(
       Match.tag('a', () => Result.succeed('a')),
       Match.exhaustive,
     ),
-)`,
+})`,
     },
     {
       name: 'Should_Pass_TheNamespaceWorkflowImport',
       code: `import * as Workflow from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
-export const decide = Workflow.make(
-  (command: { readonly tag: 'a' }): Result.Result<string, never> =>
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+export const workflow = Workflow.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (command: { readonly tag: 'a' }): Result.Result<string, never> =>
     Match.value(command).pipe(
       Match.tag('a', () => Result.succeed('a')),
       Match.exhaustive,
     ),
-)`,
+})`,
     },
     {
       name: 'Should_Follow_AModuleScopeFunctionReference',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
+      code: `${PRELUDE}
 const decide = (command: { readonly tag: 'a' }): Result.Result<string, never> =>
   Match.value(command).pipe(
     Match.tag('a', () => Result.succeed('a')),
     Match.exhaustive,
   )
 
-export const workflow = Workflow.make(decide)`,
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: decide })`,
+    },
+    {
+      // The shorthand property binds the same reference: `{ decide }` is `decide: decide`.
+      name: 'Should_Follow_AShorthandDecidePropertyReference',
+      code: `${PRELUDE}
+const decide = (command: { readonly tag: 'a' }): Result.Result<string, never> =>
+  Match.value(command).pipe(
+    Match.tag('a', () => Result.succeed('a')),
+    Match.exhaustive,
+  )
+
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
     },
     {
       name: 'Should_Pass_When_OnlyTheFirstStatementIsAConvergingGuard',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make((command: { readonly n?: number }) => {
+      code: makeWorkflow(`(command: { readonly n?: number }) => {
   if (command.n === undefined) return Result.fail('missing' as never)
   return Match.value(command).pipe(
     Match.when({ n: 0 }, () => Result.succeed('zero')),
     Match.orElse(() => Result.succeed('other')),
   )
-})`,
+}`),
     },
     {
       name: 'Should_Pass_When_FunctionExpressionBodyHasAConvergingFirstGuard',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make(function (command: { readonly n?: number }) {
+      code: makeWorkflow(`function (command: { readonly n?: number }) {
   if (command.n === undefined) return Result.fail('missing' as never)
   return Match.value(command).pipe(
     Match.when({ n: 0 }, () => Result.succeed('zero')),
     Match.orElse(() => Result.succeed('other')),
   )
-})`,
+}`),
     },
     {
       name: 'Should_Pass_When_GuardTestUsesOrAndNullishCoalescing',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make((command: { readonly n?: number }) => {
+      code: makeWorkflow(`(command: { readonly n?: number }) => {
   if (command.n === undefined || command.n === null) {
     throw new Error('unreachable: property-tested')
   }
@@ -191,21 +221,17 @@ export const decide = Workflow.make((command: { readonly n?: number }) => {
     Match.when({ n: 0 }, () => Result.succeed('zero')),
     Match.orElse(() => Result.succeed('other')),
   )
-})`,
+}`),
     },
     {
       name: 'Should_Pass_When_BodyDeclaresPureConstLocals',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make((input: { readonly n: number }) => {
+      code: makeWorkflow(`(input: { readonly n: number }) => {
   const doubled = input.n * 2
   return Match.value(input).pipe(
     Match.when({ n: 0 }, () => Result.succeed('zero')),
     Match.orElse(() => Result.succeed(\`other: \${doubled}\`)),
   )
-})`,
+}`),
     },
     {
       name: 'Should_Ignore_TheSameImpureCode_Outside_TheMakeBoundary',
@@ -226,8 +252,8 @@ const outside = (path: string): string => {
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as fs from 'node:fs'
 
-const Workflow = { make: (f: unknown) => f }
-Workflow.make((path: string) => fs.readFileSync(path, 'utf-8'))`,
+const Workflow = { make: (options: unknown) => options }
+Workflow.make({ command: null, decide: (path: string) => fs.readFileSync(path, 'utf-8') })`,
     },
     {
       name: 'Should_Ignore_When_TheFileImportsNoWorkflow',
@@ -239,158 +265,189 @@ const x = fs.readFileSync('/etc/hosts', 'utf-8')`,
       code: `import { Workflow } from 'some-other-package'
 import * as fs from 'node:fs'
 
-Workflow.make((path: string) => fs.readFileSync(path, 'utf-8'))`,
+Workflow.make({ command: null, decide: (path: string) => fs.readFileSync(path, 'utf-8') })`,
     },
     {
       name: 'Should_Pass_AProductionShapedBody_DespiteTheExecutorSuffix',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make(
-  (command: { readonly exitSuccess: boolean; readonly intensity: number }): Result.Result<string, never> =>
+      code: makeWorkflow(
+        `(command: { readonly exitSuccess: boolean; readonly intensity: number }): Result.Result<string, never> =>
     Match.value(command).pipe(
       Match.when({ exitSuccess: true }, () => Result.succeed('continue')),
       Match.when({ exitSuccess: false, intensity: 0 }, () => Result.fail('exhausted' as never)),
       Match.orElse(() => Result.succeed('restart')),
-    ),
-)`,
+    )`,
+      ),
       filename: 'CancelOrderExecutor.ts',
     },
     {
       name: 'Should_Pass_When_AFixtureInATestFileUsesATernary',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make(
-  (command: { readonly ok: boolean }): Result.Result<string, never> =>
-    command.ok ? Result.succeed('yes') : Result.fail('no' as never),
-)`,
+      code: makeWorkflow(`(command: { readonly ok: boolean }): Result.Result<string, never> =>
+    command.ok ? Result.succeed('yes') : Result.fail('no' as never)`),
       filename: 'interpreter.integration.test.ts',
     },
     {
       name: 'Should_Pass_When_BuiltinsAndAsConstAppearInTheBody',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-
-export const decide = Workflow.make((command: { readonly n: number | undefined }): Result.Result<number, never> => {
+      code: makeWorkflow(`(command: { readonly n: number | undefined }): Result.Result<number, never> => {
   if (command.n === undefined) return Result.fail('missing' as never)
   const input = { command } as const
   return Match.value(input).pipe(
     Match.when({ command: { n: 0 } }, () => Result.succeed(0)),
     Match.orElse(() => Result.succeed(command.n)),
   )
-})`,
+}`),
     },
     {
       // A same-file pure helper remains a pass: the classifier follows the
       // const-arrow and scans it like the body itself, and an impurity inside
       // would surface there.
       name: 'Should_Pass_When_BodyCallsASameFileConstArrowPureHelper',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-const double = (x: number): number => x * 2
-
-export const decide = Workflow.make((x: number): Result.Result<number, never> => Result.succeed(double(x)))`,
+      code: makeWorkflow(
+        `(x: number): Result.Result<number, never> => Result.succeed(double(x))`,
+        `const double = (x: number): number => x * 2`,
+      ),
     },
     {
       // Alias resolution must make the body get *scanned*, not make aliasing illegal.
       name: 'Should_Pass_When_AnAliasedMakeBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const W = Workflow
-export const decide = W.make((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+export const workflow = W.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(x + 1),
+})`,
     },
     {
       name: 'Should_Pass_When_AComputedMakeBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
-export const decide = Workflow['make']((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+export const workflow = Workflow['make']({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(x + 1),
+})`,
     },
     {
       name: 'Should_Pass_When_ABoundMakeBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
-export const decide = Workflow.make.bind(Workflow)((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+export const workflow = Workflow.make.bind(Workflow)({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(x + 1),
+})`,
     },
     {
       name: 'Should_Pass_When_ADestructuredMakeBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const { make } = Workflow
-export const decide = make((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+export const workflow = make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(x + 1),
+})`,
     },
     {
       name: 'Should_Pass_When_ADestructuredRenamedMakeBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const { make: m } = Workflow
-export const decide = m((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+export const workflow = m({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(x + 1),
+})`,
     },
     {
       name: 'Should_Pass_When_AnAliasChainBodyIsPure',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const W = Workflow
 const V = W
-export const decide = V.make((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+export const workflow = V.make({
+  command: Cmd,
+  decision: Decision,
+  error: S.Never,
+  decide: (x: number): Result.Result<number, never> => Result.succeed(x + 1),
+})`,
     },
     {
       // The one canonical way to alias a pure module is a renamed import; the
       // local name must never be what the sealed-pure verdict keys on.
       name: 'Should_Pass_When_ARenamedEffectRootImportIsPure',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr } from 'effect'
-
-export const decide = Workflow.make((x: number) => Arr.range(0, x).length)`,
+      code: makeWorkflow(`(x: number) => Arr.range(0, x).length`, `import { Array as Arr } from 'effect'`),
     },
     {
       name: 'Should_Pass_When_ANamespaceEffectSubpathImportIsPure',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Arr from 'effect/Array'
-
-export const decide = Workflow.make((x: number) => Arr.makeBy(x, (i) => i).length)`,
+      code: makeWorkflow(`(x: number) => Arr.makeBy(x, (i) => i).length`, `import * as Arr from 'effect/Array'`),
     },
     {
       // An object literal of only literal-valued properties is a constant
       // record; reading it from the decision is a pure module-value read.
       name: 'Should_Pass_When_BodyReadsAModuleConstantRecord',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const LIMITS = { max: 10, name: 'request' } as const
-export const decide = Workflow.make((x: number) => Number(x <= LIMITS.max))`,
+      code: makeWorkflow(
+        `(x: number) => Number(x <= LIMITS.max)`,
+        `const LIMITS = { max: 10, name: 'request' } as const`,
+      ),
     },
     {
       // A record carrying functions is only followed for the members the body
       // actually executes: reading a literal member never runs the method.
       name: 'Should_Pass_When_BodyReadsOnlyALiteralMemberOfAMixedRecord',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const helpers = {
+      code: makeWorkflow(
+        `(x: number) => Number(x <= helpers.LIMIT)`,
+        `const helpers = {
   LIMIT: 10,
   label: (x: number) => String(x),
-}
-export const decide = Workflow.make((x: number) => Number(x <= helpers.LIMIT))`,
+}`,
+      ),
     },
     {
       // A pure local container mutated by the decision stays exempt: the
       // module-scope container rule fires on shared state only.
       name: 'Should_Pass_When_BodyMutatesAConstLocalContainer',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-export const decide = Workflow.make((input: { readonly n: number }) => {
+      code: makeWorkflow(`(input: { readonly n: number }) => {
   const seen = { count: 0 }
   seen.count += input.n
   return seen.count
-})`,
+}`),
     },
   ],
   invalid: [
@@ -401,18 +458,14 @@ export const decide = Workflow.make((input: { readonly n: number }) => {
       // make bodies alone. The allowlist that once admitted these certified
       // modules it never opened and un-certified them on rename.
       name: 'Should_ReportUnsealedImport_When_BodyCallsASiblingModule',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-import { restartIndicesFor } from './RestartDecision.js'
-
-export const decide = Workflow.make(
-  (command: { readonly strategy: 'one_for_one' }): Result.Result<readonly number[], never> =>
+      code: makeWorkflow(
+        `(command: { readonly strategy: 'one_for_one' }): Result.Result<readonly number[], never> =>
     Match.value(command).pipe(
       Match.when({ strategy: 'one_for_one' }, () => Result.succeed(restartIndicesFor('one_for_one', 0, 1))),
       Match.orElse(() => Result.succeed([])),
-    ),
-)`,
+    )`,
+        `import { restartIndicesFor } from './RestartDecision.js'`,
+      ),
       errors: [
         referenceError(
           'unsealedImportReference',
@@ -425,14 +478,11 @@ export const decide = Workflow.make(
     {
       // A workflow wrapping a workflow is the same inversion one level up.
       name: 'Should_ReportUnsealedImport_When_ADecisionWrapsAnotherWorkflow',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-import { admitSurvivorsRun } from './Survivors.workflow.js'
-
-export const adapter = Workflow.make(
-  ({ input }: { readonly input: unknown }): Result.Result<unknown, never> =>
-    Result.map(admitSurvivorsRun(input), (decision) => decision),
-)`,
+      code: makeWorkflow(
+        `({ input }: { readonly input: unknown }): Result.Result<unknown, never> =>
+    Result.map(admitSurvivorsRun(input), (decision) => decision)`,
+        `import { admitSurvivorsRun } from './Survivors.workflow.js'`,
+      ),
       errors: [
         referenceError(
           'unsealedImportReference',
@@ -444,10 +494,10 @@ export const adapter = Workflow.make(
     },
     {
       name: 'Should_ReportUnsealedImport_When_BodyCallsAThirdPartyBinding',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { maxSatisfying } from 'semver'
-
-Workflow.make((command: { readonly versions: readonly string[] }) => maxSatisfying(command.versions, '*'))`,
+      code: makeWorkflow(
+        `(command: { readonly versions: readonly string[] }) => maxSatisfying(command.versions, '*')`,
+        `import { maxSatisfying } from 'semver'`,
+      ),
       errors: [
         referenceError(
           'unsealedImportReference',
@@ -460,9 +510,7 @@ Workflow.make((command: { readonly versions: readonly string[] }) => maxSatisfyi
     {
       // What `unresolvable` still means: a name bound by nothing this file can see.
       name: 'Should_ReportUnresolvable_When_BodyReferencesAnUnboundName',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-Workflow.make((path: string) => mystery(path))`,
+      code: makeWorkflow(`(path: string) => mystery(path)`),
       errors: [
         referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
       ],
@@ -471,144 +519,127 @@ Workflow.make((path: string) => mystery(path))`,
       name: 'Should_ReportIoImport_When_BodyReferencesANodeIoBinding',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as fs from 'node:fs'
-
-Workflow.make((path: string) => fs.readFileSync(path, 'utf-8'))`,
-      errors: [
-        referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
-      ],
-    },
-    {
-      name: 'Should_ReportIoImport_When_ATotalDecisionBodyReferencesANodeIoBinding',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
-import * as fs from 'node:fs'
 
 class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
-Workflow.total(Cmd, (command: Cmd) => fs.readFileSync('x', 'utf-8'))`,
+Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: (path: string) => fs.readFileSync(path, 'utf-8') })`,
       errors: [
         referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
       ],
     },
     {
       name: 'Should_ReportIoImport_When_BodyReferencesAnEffectCarrierSubpath',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Effect from 'effect/Effect'
-
-Workflow.make((command: { readonly n: number }) => Effect.succeed(command.n))`,
+      code: makeWorkflow(
+        `(command: { readonly n: number }) => Effect.succeed(command.n)`,
+        `import * as Effect from 'effect/Effect'`,
+      ),
       errors: [
         referenceError('ioImportReference', 'a reference to Effect', IO_ACTUAL, IO_FIX),
       ],
     },
     {
       name: 'Should_ReportIoImport_When_BodyReferencesAnEffectRootCarrier',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Effect } from 'effect'
-
-Workflow.make((command: { readonly n: number }) => Effect.succeed(command.n))`,
+      code: makeWorkflow(
+        `(command: { readonly n: number }) => Effect.succeed(command.n)`,
+        `import { Effect } from 'effect'`,
+      ),
       errors: [
         referenceError('ioImportReference', 'a reference to Effect', IO_ACTUAL, IO_FIX),
       ],
     },
     {
       name: 'Should_ReportIoGlobal_When_BodyInvokesConsole',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-Workflow.make((command: { readonly n: number }) => console.log(command.n))`,
+      code: makeWorkflow(`(command: { readonly n: number }) => console.log(command.n)`),
       errors: [
         referenceError('ioGlobalReference', 'a reference to console', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
     },
     {
       name: 'Should_ReportModuleState_When_BodyCapturesAModuleLet',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-let attempts = 0
-
-Workflow.make((command: { readonly n: number }) => (attempts += command.n))`,
+      code: makeWorkflow(`(command: { readonly n: number }) => (attempts += command.n)`, `let attempts = 0`),
       errors: [
         referenceError('moduleStateReference', 'a reference to attempts', MODULE_STATE_ACTUAL, MODULE_STATE_FIX),
       ],
     },
     {
       name: 'Should_ReportMutableLocal_When_BodyDeclaresALetLocal',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-Workflow.make((command: { readonly n: number }) => {
+      code: makeWorkflow(`(command: { readonly n: number }) => {
   let total = command.n
   return total
-})`,
+}`),
       errors: [
         referenceError('mutableLocalReference', 'a reference to total', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
       ],
     },
     {
       name: 'Should_ReportIoImport_When_BodyImportsAnUnauditedEffectRootCarrier',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Random } from 'effect'
-
-Workflow.make((command: { readonly n: number }) => Random.nextIntBetween(0, command.n))`,
+      code: makeWorkflow(
+        `(command: { readonly n: number }) => Random.nextIntBetween(0, command.n)`,
+        `import { Random } from 'effect'`,
+      ),
       errors: [
         referenceError('ioImportReference', 'a reference to Random', IO_ACTUAL, IO_FIX),
       ],
     },
     {
       name: 'Should_ReportIoImport_When_BodyCallsAModuleHelperThatPerformsIo',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as fs from 'node:fs'
+      code: makeWorkflow(
+        `(path: string) => readAll(path)`,
+        `import * as fs from 'node:fs'
 
-const readAll = (path: string): string => fs.readFileSync(path, 'utf-8')
-
-Workflow.make((path: string) => readAll(path))`,
+const readAll = (path: string): string => fs.readFileSync(path, 'utf-8')`,
+      ),
       errors: [
         referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
       ],
     },
     {
-      name: 'Should_ReportUnresolvableMakeArgument_When_TheArgumentIsImported',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+      // The decision slot is read by name: a missing `decide` property leaves no
+      // body to judge, and an unlocatable decision is a finding, not silence.
+      name: 'Should_ReportUnresolvableMakeArgument_When_TheDecidePropertyIsMissing',
+      code: `${PRELUDE}
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never })`,
+      errors: [unresolvableMakeArgumentError],
+    },
+    {
+      name: 'Should_ReportUnresolvableMakeArgument_When_TheDecisionIsImported',
+      code: `${PRELUDE}
 import { decideElsewhere } from './elsewhere.workflow.js'
 
-Workflow.make(decideElsewhere)`,
-      errors: [
-        {
-          messageId: 'unresolvableMakeArgument',
-          data: {
-            name: 'the argument of this Workflow.make call',
-            expected: 'a decision body the rules can locate in this file',
-            actual:
-              'a Workflow.make argument whose body is not visible from this file (imported, a non-function value, or an unresolvable reference)',
-            fix:
-              'move the decision body inline or into a module-scope function in this file so the one-path and purity obligations bind',
-          },
-        },
-      ],
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide: decideElsewhere })`,
+      errors: [unresolvableMakeArgumentError],
+    },
+    {
+      // A shorthand `decide` property whose only binding is an import resolves to
+      // no body in this file: the report fires exactly as for a written reference.
+      name: 'Should_ReportUnresolvableMakeArgument_When_TheShorthandDecisionIsImported',
+      code: `${PRELUDE}
+import { decide } from './elsewhere.workflow.js'
+
+export const workflow = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
+      errors: [unresolvableMakeArgumentError],
     },
     {
       name: 'Should_ReportControlFlow_When_BodyHasAnIfPastTheFirstStatement',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-Workflow.make((command: { readonly n: number }) => {
+      code: makeWorkflow(`(command: { readonly n: number }) => {
   const doubled = command.n * 2
   if (doubled === 0) return Result.succeed('zero')
   return Result.succeed('other')
-})`,
+}`),
       errors: [
         controlError('an if statement inside the decision body'),
       ],
     },
     {
       name: 'Should_ReportControlFlow_When_GuardDoesNotConvergeImmediately',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-Workflow.make((command: { readonly n: number }) => {
+      code: makeWorkflow(`(command: { readonly n: number }) => {
   if (command.n === 0) {
     Result.succeed('zero')
   }
   return Result.succeed('other')
-})`,
+}`),
       errors: [
         {
           messageId: 'controlFlowBanned',
@@ -623,35 +654,26 @@ Workflow.make((command: { readonly n: number }) => {
     },
     {
       name: 'Should_ReportControlFlow_When_BodyUsesATernary',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-Workflow.make((command: { readonly n: number }) =>
-  command.n === 0 ? Result.succeed('zero') : Result.succeed('other'))`,
+      code: makeWorkflow(`(command: { readonly n: number }) =>
+  command.n === 0 ? Result.succeed('zero') : Result.succeed('other')`),
       errors: [
         controlError('a ternary (? :) inside the decision body'),
       ],
     },
     {
       name: 'Should_ReportControlFlow_When_BodyUsesAndOrOr',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-Workflow.make((command: { readonly n?: number }) => Result.succeed(command.n && command.n))`,
+      code: makeWorkflow(`(command: { readonly n?: number }) => Result.succeed(command.n && command.n)`),
       errors: [
         controlError('a logical expression (&& or ||) inside the decision body'),
       ],
     },
     {
       name: 'Should_ReportControlFlow_When_BodyUsesAForLoop',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-Workflow.make((command: { readonly n: number }) => {
+      code: makeWorkflow(`(command: { readonly n: number }) => {
   let sum = 0
   for (let i = 0; i < command.n; i++) sum += i
   return Result.succeed(sum)
-})`,
+}`),
       errors: [
         referenceError('mutableLocalReference', 'a reference to sum', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
         controlError('a for loop inside the decision body'),
@@ -660,15 +682,12 @@ Workflow.make((command: { readonly n: number }) => {
     },
     {
       name: 'Should_ReportControlFlow_When_BodyUsesASwitchStatement',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-
-Workflow.make((command: { readonly tag: string }) => {
+      code: makeWorkflow(`(command: { readonly tag: string }) => {
   switch (command.tag) {
     case 'a': return Result.succeed('a')
     default: return Result.succeed('other')
   }
-})`,
+}`),
       errors: [
         controlError('a switch statement inside the decision body'),
       ],
@@ -679,9 +698,13 @@ Workflow.make((command: { readonly tag: string }) => {
       // body was never scanned and the construction never counted.
       name: 'Should_ReportIoGlobal_When_AnAliasedMakeBodyInvokesFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const W = Workflow
-export const d = W.make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+export const d = W.make({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { fetch(\`https://example.com/\${x}\`) } })`,
       errors: [
         referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
@@ -692,8 +715,12 @@ export const d = W.make((x: number) => { fetch(\`https://example.com/\${x}\`) })
       // resolving where the callee comes from. Every indirection walked past.
       name: 'Should_ReportIoGlobal_When_AComputedMakeBodyInvokesFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
 
-export const d = Workflow['make']((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+export const d = Workflow['make']({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { fetch(\`https://example.com/\${x}\`) } })`,
       errors: [
         referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
@@ -701,8 +728,12 @@ export const d = Workflow['make']((x: number) => { fetch(\`https://example.com/\
     {
       name: 'Should_ReportIoGlobal_When_ABoundMakeBodyInvokesFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
 
-export const d = Workflow.make.bind(Workflow)((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+export const d = Workflow.make.bind(Workflow)({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { fetch(\`https://example.com/\${x}\`) } })`,
       errors: [
         referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
@@ -710,9 +741,13 @@ export const d = Workflow.make.bind(Workflow)((x: number) => { fetch(\`https://e
     {
       name: 'Should_ReportIoGlobal_When_ADestructuredMakeBodyInvokesFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const { make } = Workflow
-export const d = make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+export const d = make({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { fetch(\`https://example.com/\${x}\`) } })`,
       errors: [
         referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
@@ -720,10 +755,32 @@ export const d = make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
     {
       name: 'Should_ReportIoGlobal_When_AnAliasChainBodyInvokesFetch',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
 
 const W = Workflow
 const V = W
-export const d = V.make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+export const d = V.make({ command: Cmd, decision: Decision, error: S.Never, decide: (x: number) => { fetch(\`https://example.com/\${x}\`) } })`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // The shorthand decision binds the same reference the written form does, so
+      // its body is scanned like any other: the fetch inside is a finding.
+      name: 'Should_ReportIoGlobal_When_AShorthandDecideBodyInvokesFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+class Decision extends S.TaggedClass<Decision>()('Decision', {}) {}
+
+const decide = (x: number) => {
+  fetch(\`https://example.com/\${x}\`)
+}
+export const d = Workflow.make({ command: Cmd, decision: Decision, error: S.Never, decide })`,
       errors: [
         referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
       ],
@@ -734,20 +791,20 @@ export const d = V.make((x: number) => { fetch(\`https://example.com/\${x}\`) })
       // Math.random inside the method stayed invisible. Referencing the member
       // follows exactly the touched function into the scan.
       name: 'Should_ReportUnresolvable_When_BodyCallsAMethodOfAModuleRecord',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const helpers = { bad(x: number): number { return Math.random() * x } }
-export const decide = Workflow.make((x: number) => helpers.bad(x))`,
+      code: makeWorkflow(
+        `(x: number) => helpers.bad(x)`,
+        `const helpers = { bad(x: number): number { return Math.random() * x } }`,
+      ),
       errors: [
         referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
       ],
     },
     {
       name: 'Should_ReportUnresolvable_When_BodyCallsAFunctionValuedRecordProperty',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const helpers = { bad: (x: number): number => Math.random() * x }
-export const decide = Workflow.make((x: number) => helpers.bad(x))`,
+      code: makeWorkflow(
+        `(x: number) => helpers.bad(x)`,
+        `const helpers = { bad: (x: number): number => Math.random() * x }`,
+      ),
       errors: [
         referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
       ],
@@ -757,24 +814,20 @@ export const decide = Workflow.make((x: number) => helpers.bad(x))`,
       // scope walk saw only a local const. A decision imports nothing at
       // runtime - this needs no exemption.
       name: 'Should_ReportRuntimeImport_When_BodyImportsDynamically',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-Workflow.make(async (x: number) => {
+      code: makeWorkflow(`async (x: number) => {
   const fs = await import('node:fs')
   return fs.readFileSync('/etc/hostname', 'utf-8').length + x
-})`,
+}`),
       errors: [
         referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
       ],
     },
     {
       name: 'Should_ReportRuntimeImport_When_BodyCallsRequire',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-Workflow.make((path: string) => {
+      code: makeWorkflow(`(path: string) => {
   const fs = require('node:fs')
   return fs.readFileSync(path, 'utf-8').length
-})`,
+}`),
       errors: [
         referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
       ],
@@ -784,10 +837,10 @@ Workflow.make((path: string) => {
       // field of a const object record passed. Writing a module-scope const
       // container from inside the decision is the same shared-state mutation.
       name: 'Should_ReportModuleMutation_When_BodyAssignsToAModuleConstField',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const state = { count: 0 }
-Workflow.make((x: number) => { state.count += x; return state.count })`,
+      code: makeWorkflow(
+        `(x: number) => { state.count += x; return state.count }`,
+        `const state = { count: 0 }`,
+      ),
       errors: [
         referenceError(
           'moduleMutationReference',
@@ -799,10 +852,10 @@ Workflow.make((x: number) => { state.count += x; return state.count })`,
     },
     {
       name: 'Should_ReportModuleMutation_When_BodyUpdatesAModuleConstField',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const state = { count: 0 }
-Workflow.make((x: number) => { state.count++; return state.count })`,
+      code: makeWorkflow(
+        `(x: number) => { state.count++; return state.count }`,
+        `const state = { count: 0 }`,
+      ),
       errors: [
         referenceError(
           'moduleMutationReference',
@@ -814,10 +867,10 @@ Workflow.make((x: number) => { state.count++; return state.count })`,
     },
     {
       name: 'Should_ReportModuleMutation_When_BodyPushesToAModuleConstContainer',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const state = { items: [] as readonly number[] }
-Workflow.make((x: number) => { state.items.push(x); return x })`,
+      code: makeWorkflow(
+        `(x: number) => { state.items.push(x); return x }`,
+        `const state = { items: [] as readonly number[] }`,
+      ),
       errors: [
         referenceError(
           'moduleMutationReference',
@@ -829,10 +882,10 @@ Workflow.make((x: number) => { state.items.push(x); return x })`,
     },
     {
       name: 'Should_ReportModuleMutation_When_BodyCallsMapSetOnAModuleConst',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const seen = new Map<string, number>()
-Workflow.make((x: number) => { seen.set('x', x); return x })`,
+      code: makeWorkflow(
+        `(x: number) => { seen.set('x', x); return x }`,
+        `const seen = new Map<string, number>()`,
+      ),
       errors: [
         referenceError(
           'moduleMutationReference',
@@ -844,10 +897,10 @@ Workflow.make((x: number) => { seen.set('x', x); return x })`,
     },
     {
       name: 'Should_ReportModuleMutation_When_BodyAddsToAModuleConstSet',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const seen = new Set<number>()
-Workflow.make((x: number) => { seen.add(x); return x })`,
+      code: makeWorkflow(
+        `(x: number) => { seen.add(x); return x }`,
+        `const seen = new Set<number>()`,
+      ),
       errors: [
         referenceError(
           'moduleMutationReference',
@@ -859,10 +912,10 @@ Workflow.make((x: number) => { seen.add(x); return x })`,
     },
     {
       name: 'Should_ReportModuleMutation_When_BodyDeletesAModuleConstField',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const state = { count: 1 }
-Workflow.make((x: number) => { delete state.count; return x })`,
+      code: makeWorkflow(
+        `(x: number) => { delete state.count; return x }`,
+        `const state = { count: 1 }`,
+      ),
       errors: [
         referenceError(
           'moduleMutationReference',
@@ -877,10 +930,10 @@ Workflow.make((x: number) => { delete state.count; return x })`,
       // the access, so entering the getter into the scan makes Math.random a
       // finding; a call-only follow would miss it.
       name: 'Should_ReportUnresolvable_When_BodyReadsAModuleGetterThatRunsIo',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-
-const obj = { get v() { return Math.random() } }
-export const decide = Workflow.make((x: number) => obj.v + x)`,
+      code: makeWorkflow(
+        `(x: number) => obj.v + x`,
+        `const obj = { get v() { return Math.random() } }`,
+      ),
       errors: [
         referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
       ],

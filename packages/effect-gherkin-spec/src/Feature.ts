@@ -1,4 +1,6 @@
 import { Suite } from '@systemfsoftware/effect-spec-runtime'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import type * as Scope from 'effect/Scope'
 import { Gherkin, type ScopeMap } from './DoNotation.js'
@@ -25,8 +27,6 @@ type EmptyScopeMap = Readonly<Record<string, never>>
 
 export { type RegisterMode } from './FeatureRuntime.js'
 
-export type FeatureLayerOptions = Suite.LayerOptions
-
 export type FeatureSuiteOptions = Suite.Options
 
 export type EffectVitestBindings = Suite.Bindings
@@ -34,39 +34,37 @@ export type EffectVitestBindings = Suite.Bindings
 export type FeatureBuilderBoth<
   RShared,
   RFresh,
-  RFreshReq extends RShared | Scope.Scope,
+  RFreshReq extends RShared,
   S extends ScopeMap = EmptyScopeMap,
 > = {
-  readonly liveClock: () => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
+  readonly live: (reason: string) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
   body: (body: FeatureBody<RShared, RFresh, RFreshReq, S>) => void
   withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S2>
 }
 
 export type FeatureBuilderWithLayer<RShared, S extends ScopeMap = EmptyScopeMap> = {
-  readonly liveClock: () => FeatureBuilderWithLayer<RShared, S>
+  readonly live: (reason: string) => FeatureBuilderWithLayer<RShared, S>
   body: (body: FeatureBody<RShared, never, never, S>) => void
-  withScenarioLayer: <RFresh, RFreshReq extends RShared | Scope.Scope = never>(
+  withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2>
+  withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(
     layer: Layer.Layer<RFresh, never, RFreshReq>,
   ) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
-  withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithLayer<RShared, S2>
 }
-
 export type FeatureBuilderWithScenarioLayer<
   RFresh,
   RFreshReq extends Scope.Scope,
   S extends ScopeMap = EmptyScopeMap,
 > = {
-  readonly liveClock: () => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
+  readonly live: (reason: string) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S>
   body: (body: FeatureBody<never, RFresh, RFreshReq, S>) => void
   withLayer: <RShared>(
     layer: Layer.Layer<RShared>,
-    opts?: FeatureLayerOptions,
-  ) => FeatureBuilderBoth<RShared, RFresh, RFreshReq, S>
+  ) => FeatureBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>
   withScope: <S2 extends ScopeMap>(map: S2) => FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S2>
 }
 
 export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
-  readonly liveClock: () => FeatureBuilder<S>
+  readonly live: (reason: string) => FeatureBuilder<S>
   body: (body: FeatureBody<never, never, never, S>) => void
   /**
    * Provide a shared fixture layer across all scenarios in this feature suite.
@@ -88,7 +86,7 @@ export type FeatureBuilder<S extends ScopeMap = EmptyScopeMap> = {
    * Feature('User management').withLayer(DatabaseFixture)
    * ```
    */
-  withLayer: <RShared>(layer: Layer.Layer<RShared>, opts?: FeatureLayerOptions) => FeatureBuilderWithLayer<RShared, S>
+  withLayer: <RShared>(layer: Layer.Layer<RShared>) => FeatureBuilderWithLayer<RShared, S>
   /**
    * Provide a per-scenario fresh fixture layer.
    *
@@ -124,19 +122,42 @@ export type FeatureFn = FeatureStarter & {
   readonly skip: FeatureStarter
   readonly only: FeatureStarter
 }
+const orphanContext = <Missing>(): Context.Context<Missing> => Context.makeUnsafe<Missing>(new Map())
+const withOrphanRequirements = <RShared, RFreshReq>(
+  layerDef: Layer.Layer<RShared>,
+): Layer.Layer<RShared | RFreshReq> =>
+  layerDef.pipe(
+    Layer.build,
+    Effect.map((built) =>
+      Layer.succeedContext(
+        built.pipe(Context.merge(orphanContext<RFreshReq>()), Context.merge(Context.empty())),
+      )
+    ),
+    Layer.unwrap,
+  )
 
 export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
+  const configOf = (
+    name: string,
+    describeMode: DescribeMode,
+    suiteOpts: FeatureSuiteOptions | undefined,
+    live: Suite.LiveCase | undefined,
+  ): Suite.Config =>
+    live === undefined
+      ? { name, describe: describeMode, options: suiteOpts }
+      : { name, describe: describeMode, options: suiteOpts, live }
+
   const runNothing = <S extends ScopeMap>(
     name: string,
     scopeMap: S,
     body: FeatureBody<never, never, never, S>,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
   ): void => {
     Suite.open<void, StepError, void>(
       deps,
-      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
+      configOf(name, describeMode, suiteOpts, live),
       (register) => {
         let bg: ScenarioBody<never> | null = null
         const scenario = createScenarioNoFresh<never>(register, () => bg)
@@ -164,12 +185,12 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     body: FeatureBody<never, RFresh, RFreshReq, S>,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
     Suite.openCase<void, StepError, RFresh, RFreshReq, void>(
       deps,
-      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
+      configOf(name, describeMode, suiteOpts, live),
       featureScenarioLayer,
       (register) => {
         let bg: ScenarioBody<RFresh | RFreshReq> | null = null
@@ -191,17 +212,16 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
   const runWithLayer = <RShared, S extends ScopeMap>(
     name: string,
     layerDef: Layer.Layer<RShared>,
-    excludeTestServices: boolean,
     scopeMap: S,
     body: FeatureBody<RShared, never, never, S>,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
   ): void => {
     Suite.openShared<void, StepError, RShared, void>(
       deps,
-      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
-      { layer: layerDef, excludeTestServices },
+      configOf(name, describeMode, suiteOpts, live),
+      { layer: layerDef },
       (register) => {
         let bg: ScenarioBody<RShared> | null = null
         const scenario = createScenarioNoFresh<RShared>(register, () => bg)
@@ -219,26 +239,20 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     )
   }
 
-  const runWithBoth = <
-    RShared,
-    RFresh,
-    RFreshReq extends RShared | Scope.Scope,
-    S extends ScopeMap,
-  >(
+  const runWithBoth = <RShared, RFresh, RFreshReq extends RShared, S extends ScopeMap>(
     name: string,
     layerDef: Layer.Layer<RShared>,
-    excludeTestServices: boolean,
     scopeMap: S,
     body: FeatureBody<RShared, RFresh, RFreshReq, S>,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
   ): void => {
     Suite.openSharedCase<void, StepError, RShared, RFresh, RFreshReq, void>(
       deps,
-      { name, describe: describeMode, options: suiteOpts, liveClock: useLiveClock },
-      { layer: layerDef, excludeTestServices },
+      configOf(name, describeMode, suiteOpts, live),
+      { layer: layerDef },
       featureScenarioLayer,
       (register) => {
         let bg: ScenarioBody<RShared | RFresh | RFreshReq> | null = null
@@ -260,26 +274,24 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
   const makeBuilderBoth = <
     RShared,
     RFresh,
-    RFreshReq extends RShared | Scope.Scope,
+    RFreshReq extends RShared,
     S extends ScopeMap,
   >(
     name: string,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
     layerDef: Layer.Layer<RShared>,
-    excludeTestServices: boolean,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     scopeMap: S,
   ): FeatureBuilderBoth<RShared, RFresh, RFreshReq, S> => ({
-    liveClock: () =>
+    live: (reason) =>
       makeBuilderBoth<RShared, RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
-        true,
+        { reason },
         layerDef,
-        excludeTestServices,
         featureScenarioLayer,
         scopeMap,
       ),
@@ -287,12 +299,11 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
       runWithBoth<RShared, RFresh, RFreshReq, S>(
         name,
         layerDef,
-        excludeTestServices,
         scopeMap,
         body,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         featureScenarioLayer,
       )
     },
@@ -301,9 +312,8 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         layerDef,
-        excludeTestServices,
         featureScenarioLayer,
         newMap,
       ),
@@ -313,43 +323,39 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     name: string,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
     layerDef: Layer.Layer<RShared>,
-    excludeTestServices: boolean,
     scopeMap: S,
   ): FeatureBuilderWithLayer<RShared, S> => ({
-    liveClock: () =>
+    live: (reason) =>
       makeBuilderWithLayer<RShared, S>(
         name,
         describeMode,
         suiteOpts,
-        true,
+        { reason },
         layerDef,
-        excludeTestServices,
         scopeMap,
       ),
     body: (body) => {
       runWithLayer<RShared, S>(
         name,
         layerDef,
-        excludeTestServices,
         scopeMap,
         body,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
       )
     },
-    withScenarioLayer: <RFresh, RFreshReq extends RShared | Scope.Scope = never>(
+    withScenarioLayer: <RFresh, RFreshReq extends RShared = never>(
       scenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     ) =>
       makeBuilderBoth<RShared, RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         layerDef,
-        excludeTestServices,
         scenarioLayer,
         scopeMap,
       ),
@@ -358,9 +364,8 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         layerDef,
-        excludeTestServices,
         newMap,
       ),
   })
@@ -373,16 +378,16 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     name: string,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
     featureScenarioLayer: Layer.Layer<RFresh, never, RFreshReq>,
     scopeMap: S,
   ): FeatureBuilderWithScenarioLayer<RFresh, RFreshReq, S> => ({
-    liveClock: () =>
+    live: (reason) =>
       makeBuilderWithScenarioLayer<RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
-        true,
+        { reason },
         featureScenarioLayer,
         scopeMap,
       ),
@@ -393,18 +398,17 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         body,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         featureScenarioLayer,
       )
     },
-    withLayer: <RShared>(layerDef: Layer.Layer<RShared>, opts?: FeatureLayerOptions) =>
-      makeBuilderBoth<RShared, RFresh, RFreshReq, S>(
+    withLayer: <RShared>(layerDef: Layer.Layer<RShared>) =>
+      makeBuilderBoth<RShared | RFreshReq, RFresh, RFreshReq, S>(
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
-        layerDef,
-        Boolean(opts?.excludeTestServices),
+        live,
+        withOrphanRequirements<RShared, RFreshReq>(layerDef),
         featureScenarioLayer,
         scopeMap,
       ),
@@ -413,7 +417,7 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         featureScenarioLayer,
         newMap,
       ),
@@ -423,21 +427,20 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
     name: string,
     describeMode: DescribeMode,
     suiteOpts: FeatureSuiteOptions | undefined,
-    useLiveClock: boolean,
+    live: Suite.LiveCase | undefined,
     scopeMap: S,
   ): FeatureBuilder<S> => ({
-    liveClock: () => makeBuilder<S>(name, describeMode, suiteOpts, true, scopeMap),
+    live: (reason) => makeBuilder<S>(name, describeMode, suiteOpts, { reason }, scopeMap),
     body: (body) => {
-      runNothing<S>(name, scopeMap, body, describeMode, suiteOpts, useLiveClock)
+      runNothing<S>(name, scopeMap, body, describeMode, suiteOpts, live)
     },
-    withLayer: <RShared>(layerDef: Layer.Layer<RShared>, opts?: FeatureLayerOptions) =>
+    withLayer: <RShared>(layerDef: Layer.Layer<RShared>) =>
       makeBuilderWithLayer<RShared, S>(
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         layerDef,
-        Boolean(opts?.excludeTestServices),
         scopeMap,
       ),
     withScenarioLayer: <RFresh, RFreshReq extends Scope.Scope = never>(
@@ -447,19 +450,18 @@ export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
         name,
         describeMode,
         suiteOpts,
-        useLiveClock,
+        live,
         scenarioLayer,
         scopeMap,
       ),
-    withScope: <S2 extends ScopeMap>(newMap: S2) =>
-      makeBuilder<S2>(name, describeMode, suiteOpts, useLiveClock, newMap),
+    withScope: <S2 extends ScopeMap>(newMap: S2) => makeBuilder<S2>(name, describeMode, suiteOpts, live, newMap),
   })
 
   const emptyMap: EmptyScopeMap = {}
 
   const starter =
     (describeMode: DescribeMode): FeatureStarter => (suiteName: string, suiteOpts?: FeatureSuiteOptions) =>
-      makeBuilder(suiteName, describeMode, suiteOpts, false, emptyMap)
+      makeBuilder(suiteName, describeMode, suiteOpts, undefined, emptyMap)
 
   return Object.assign(starter('describe'), {
     skip: starter('skip'),

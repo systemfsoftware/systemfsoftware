@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-vite",
   "license": "Apache-2.0",
-  "version": "2.2.1",
+  "version": "2.2.4",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -37,7 +37,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn && pnpm api:check",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "api:check": "api-extractor-quiet run",
     "api:update": "api-extractor run --local",
@@ -51,6 +51,7 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",

@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-test-discipline",
   "license": "Apache-2.0",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -41,7 +41,7 @@
   "scripts": {
     "build": "tsdown -l warn && pnpm api:check",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",

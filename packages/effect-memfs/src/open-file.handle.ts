@@ -1,8 +1,8 @@
 /// <reference types="vitest/importMeta" />
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Option, Predicate, Ref } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Error from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 import { CursorRefusal } from './MemoryFileSystemError.schema.js'
@@ -17,9 +17,6 @@ import {
 
 export const TypeId = Symbol.for('~systemfsoftware/memfs/OpenFile')
 export type TypeId = typeof TypeId
-
-const DriverId: unique symbol = Symbol.for('~systemfsoftware/memfs/OpenFile/driver')
-const CursorId: unique symbol = Symbol.for('~systemfsoftware/memfs/OpenFile/cursor')
 
 export interface Stat {
   isFile(): boolean
@@ -64,23 +61,21 @@ export interface Driver {
   close(): Promise<void>
 }
 
-export interface OpenFile extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [DriverId]: Driver
-  readonly [CursorId]: Ref.Ref<bigint>
-  readonly fd: number
-}
+const OpenFileDef = Handle.make<
+  { readonly fd: number },
+  { readonly driver: Driver; readonly cursor: Ref.Ref<bigint> }
+>()(TypeId)
 
-export const isOpenFile = (u: unknown): u is OpenFile => Predicate.hasProperty(u, TypeId)
+export type OpenFile = Handle.Of<typeof OpenFileDef>
+
+export const isOpenFile = OpenFileDef.is
 
 export const make = (driver: Driver): Effect.Effect<OpenFile> =>
-  Effect.map(Ref.make(0n), (cursor) => ({
-    [TypeId]: TypeId,
-    [DriverId]: driver,
-    [CursorId]: cursor,
-    fd: driver.fd,
-    ...Prototype,
-  }))
+  Effect.map(Ref.make(0n), (cursor) => OpenFileDef.make({ fd: driver.fd }, { driver, cursor }))
+
+const driverOf = (self: OpenFile): Driver => OpenFileDef.slot(self).driver
+
+const cursorOf = (self: OpenFile): Ref.Ref<bigint> => OpenFileDef.slot(self).cursor
 
 const failureOf = (method: string) => <E = unknown>(cause: E): Error.PlatformError =>
   Error.systemError({
@@ -127,7 +122,7 @@ const writeZeroRefusal = (cause: WriteZero): Error.PlatformError =>
   })
 
 const positioned = (self: OpenFile, position: bigint): Effect.Effect<bigint> =>
-  Ref.set(self[CursorId], position).pipe(Effect.as(position))
+  Ref.set(cursorOf(self), position).pipe(Effect.as(position))
 
 export const seek: {
   (offset: bigint, from: FileSystem.SeekMode): (self: OpenFile) => Effect.Effect<bigint, Error.PlatformError>
@@ -135,7 +130,7 @@ export const seek: {
 } = dual(
   3,
   (self: OpenFile, offset: bigint, from: FileSystem.SeekMode): Effect.Effect<bigint, Error.PlatformError> =>
-    Ref.get(self[CursorId]).pipe(
+    Ref.get(cursorOf(self)).pipe(
       Effect.flatMap((position) => Effect.fromResult(planSeekPosition(position, offset, from))),
       Effect.mapError(seekRefusal),
       Effect.flatMap((position) => positioned(self, position)),
@@ -146,10 +141,10 @@ const advance = (self: OpenFile, delta: bigint): Effect.Effect<bigint, Error.Pla
   seek(self, delta, 'current')
 
 export const stat = (self: OpenFile): Effect.Effect<Stat, Error.PlatformError> =>
-  Effect.tryPromise({ try: () => self[DriverId].stat(), catch: failureOf('stat') })
+  Effect.tryPromise({ try: () => driverOf(self).stat(), catch: failureOf('stat') })
 
 export const sync = (self: OpenFile): Effect.Effect<void, Error.PlatformError> =>
-  Effect.tryPromise({ try: () => self[DriverId].sync(), catch: failureOf('sync') })
+  Effect.tryPromise({ try: () => driverOf(self).sync(), catch: failureOf('sync') })
 
 export const read: {
   (buffer: Uint8Array): (self: OpenFile) => Effect.Effect<number, Error.PlatformError>
@@ -157,10 +152,10 @@ export const read: {
 } = dual(
   2,
   (self: OpenFile, buffer: Uint8Array): Effect.Effect<number, Error.PlatformError> =>
-    Ref.get(self[CursorId]).pipe(
+    Ref.get(cursorOf(self)).pipe(
       Effect.flatMap((position) =>
         Effect.tryPromise({
-          try: () => self[DriverId].read(buffer, 0, buffer.length, Number(position)),
+          try: () => driverOf(self).read(buffer, 0, buffer.length, Number(position)),
           catch: failureOf('read'),
         })
       ),
@@ -184,10 +179,10 @@ export const readAlloc: {
   (self: OpenFile, size: number): Effect.Effect<Option.Option<Uint8Array>, Error.PlatformError> =>
     Effect.suspend(() => {
       const buf = new Uint8Array(size)
-      return Ref.get(self[CursorId]).pipe(
+      return Ref.get(cursorOf(self)).pipe(
         Effect.flatMap((position) =>
           Effect.tryPromise({
-            try: () => self[DriverId].read(buf, 0, size, Number(position)),
+            try: () => driverOf(self).read(buf, 0, size, Number(position)),
             catch: failureOf('readAlloc'),
           })
         ),
@@ -207,10 +202,10 @@ export const write: {
 } = dual(
   2,
   (self: OpenFile, buffer: Uint8Array): Effect.Effect<number, Error.PlatformError> =>
-    Ref.get(self[CursorId]).pipe(
+    Ref.get(cursorOf(self)).pipe(
       Effect.flatMap((position) =>
         Effect.tryPromise({
-          try: () => self[DriverId].write(buffer, 0, buffer.length, Number(position)),
+          try: () => driverOf(self).write(buffer, 0, buffer.length, Number(position)),
           catch: failureOf('write'),
         })
       ),
@@ -229,10 +224,10 @@ const pendingAfter = (decision: WriteAllChunkDecision, pending: Uint8Array): Uin
   pending.subarray(writtenOf(decision, pending.length))
 
 const writeChunk = (self: OpenFile, pending: Uint8Array): Effect.Effect<WriteAllChunkDecision, Error.PlatformError> =>
-  Ref.get(self[CursorId]).pipe(
+  Ref.get(cursorOf(self)).pipe(
     Effect.flatMap((position) =>
       Effect.tryPromise({
-        try: () => self[DriverId].write(pending, 0, pending.length, Number(position)),
+        try: () => driverOf(self).write(pending, 0, pending.length, Number(position)),
         catch: failureOf('writeAll'),
       })
     ),
@@ -276,38 +271,39 @@ export const truncate: {
   (args) => isOpenFile(args[0]),
   (self: OpenFile, length?: number): Effect.Effect<void, Error.PlatformError> =>
     Effect.tryPromise({
-      try: () => self[DriverId].truncate(lengthOrZero(length)),
+      try: () => driverOf(self).truncate(lengthOrZero(length)),
       catch: failureOf('truncate'),
     }).pipe(
       Effect.flatMap(() =>
-        Ref.update(
-          self[CursorId],
-          (position) =>
-            clampedTo(
-              Result.getOrThrow(planTruncateCursor(new PlanTruncateCursor({ position, length: lengthOrZero(length) }))),
-            ),
-        )
+        Ref.update(cursorOf(self), (position) =>
+          planTruncateCursor(new PlanTruncateCursor({ position, length: lengthOrZero(length) })).pipe(
+            Result.getOrThrow,
+            clampedTo,
+          ))
       ),
     ),
 )
 
 export const close = (self: OpenFile): Effect.Effect<void, Error.PlatformError> =>
-  Effect.tryPromise({ try: () => self[DriverId].close(), catch: failureOf('close') })
+  Effect.tryPromise({ try: () => driverOf(self).close(), catch: failureOf('close') })
 
-export const file = (
-  self: OpenFile,
-  info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>,
-): FileSystem.File => ({
-  [FileSystem.FileTypeId]: FileSystem.FileTypeId,
-  stat: info,
-  sync: sync(self),
-  seek: (offset, from) => seek(self, offset, from),
-  read: (buffer) => read(self, buffer),
-  readAlloc: (size) => readAlloc(self, size),
-  truncate: (length) => truncate(self, length),
-  write: (buffer) => write(self, buffer),
-  writeAll: (buffer) => writeAll(self, buffer),
-})
+export const file: {
+  (info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): (self: OpenFile) => FileSystem.File
+  (self: OpenFile, info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): FileSystem.File
+} = dual(
+  (args) => isOpenFile(args[0]),
+  (self: OpenFile, info: Effect.Effect<FileSystem.File.Info, Error.PlatformError>): FileSystem.File => ({
+    [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+    stat: info,
+    sync: sync(self),
+    seek: (offset, from) => seek(self, offset, from),
+    read: (buffer) => read(self, buffer),
+    readAlloc: (size) => readAlloc(self, size),
+    truncate: (length) => truncate(self, length),
+    write: (buffer) => write(self, buffer),
+    writeAll: (buffer) => writeAll(self, buffer),
+  }),
+)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
@@ -317,11 +313,14 @@ if (import.meta.vitest !== void 0) {
 
   const magnitudeOf = (value: bigint): bigint => value < 0n ? -value : value
 
-  const seekOutcomeOf = (position: bigint, offset: bigint, from: FileSystem.SeekMode): bigint | string =>
-    Result.match(planSeekPosition(position, offset, from), {
+  const outcomeOf = (outcome: Result.Result<bigint, CursorRefusal>): bigint | string =>
+    Result.match(outcome, {
       onFailure: (refusal) => refusal._tag,
       onSuccess: (planned) => planned,
     })
+
+  const seekFromStart = (position: bigint, offset: bigint) => planSeekPosition(position, offset, 'start')
+  const seekFromCurrent = (position: bigint, offset: bigint) => planSeekPosition(position, offset, 'current')
 
   const stalled = (): Promise<{ bytesRead: number; bytesWritten: number; buffer: Uint8Array }> =>
     Promise.resolve({ bytesRead: 0, bytesWritten: 0, buffer: new Uint8Array(0) })
@@ -336,35 +335,39 @@ if (import.meta.vitest !== void 0) {
     close: Promise.resolve.bind(Promise),
   }
 
+  const basePositionOf = (from: 'start' | 'current', position: bigint): bigint => from === 'start' ? 0n : position
+
   it.prop(
     '∀s_SeekRefusal_≡NegativePosition',
-    [Schema.BigInt, Schema.BigInt],
-    ([pos, delta]) => {
+    {
+      of: [Schema.BigInt, Schema.BigInt, Schema.Literals(['start', 'current'])],
+      subject: planSeekPosition,
+    },
+    (subject, [pos, off, from]) => {
       const position = magnitudeOf(pos)
-      const span = magnitudeOf(delta)
-      return seekOutcomeOf(position, -(position + span + 1n), 'current') === 'CursorRefusal' &&
-        seekOutcomeOf(position, -1n - span, 'start') === 'CursorRefusal'
+      const target = basePositionOf(from, position) + off
+      return outcomeOf(subject(position, off, from)) === (target < 0n ? 'CursorRefusal' : target)
     },
   )
 
   it.prop(
     '∀s_SeekPlanned_≡ExactBigIntStart',
-    [Schema.BigInt, Schema.BigInt],
-    ([pos, off]) => seekOutcomeOf(magnitudeOf(pos), magnitudeOf(off), 'start') === magnitudeOf(off),
+    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromStart },
+    (subject, [pos, off]) => outcomeOf(subject(magnitudeOf(pos), magnitudeOf(off))) === magnitudeOf(off),
   )
 
   it.prop(
     '∀s_SeekPlanned_≡ExactBigIntCurrent',
-    [Schema.BigInt, Schema.BigInt],
-    ([pos, off]) =>
-      seekOutcomeOf(magnitudeOf(pos), magnitudeOf(off), 'current') === magnitudeOf(pos) + magnitudeOf(off),
+    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromCurrent },
+    (subject, [pos, off]) =>
+      outcomeOf(subject(magnitudeOf(pos), magnitudeOf(off))) === magnitudeOf(pos) + magnitudeOf(off),
   )
 
   it.effect.prop(
     '∀n_StalledDriver_≡RefusedNotLooped',
-    [Size],
-    ([size]) =>
-      Effect.flatMap(make(stalledDriver), (file) =>
+    { of: [Size], subject: make },
+    (subject, [size]) =>
+      Effect.flatMap(subject(stalledDriver), (file) =>
         Effect.map(
           Effect.all([Effect.flip(writeAll(file, new Uint8Array(size))), Effect.flip(stat(file))]),
           ([written, described]) =>
@@ -372,21 +375,41 @@ if (import.meta.vitest !== void 0) {
         )),
   )
 
+  it.effect.prop(
+    '∀d_Make_≡ItsDriverFd',
+    { of: [Schema.Int], subject: make },
+    (subject, [fd]) => Effect.map(subject({ ...stalledDriver, fd }), (file) => file.fd === fd),
+  )
+
   const sliceFor = (requested: number, bytesRead: number): Option.Option<Uint8Array> =>
-    sliceOf(new Uint8Array(requested))(Result.getOrThrow(planReadSlice(new ReadSlice({ bytesRead, requested }))))
+    planReadSlice(new ReadSlice({ bytesRead, requested })).pipe(
+      Result.getOrThrow,
+      sliceOf(new Uint8Array(requested)),
+    )
+
+  const pendingOf = (written: number, remaining: number) =>
+    planWriteContinuation(new WriteAllChunk({ fd: 3, written, remaining }))
 
   it.prop(
     '∀nr_Slice_≡MinReadRequested',
-    [Size, Size],
-    ([requested, bytesRead]) =>
-      Option.exists(sliceFor(requested, bytesRead), (bytes) => bytes.length === Math.min(bytesRead, requested)),
+    { of: [Size, Size], subject: sliceFor },
+    (subject, [requested, bytesRead]) =>
+      Option.exists(subject(requested, bytesRead), (bytes) => bytes.length === Math.min(bytesRead, requested)),
   )
 
-  it.prop('∀nr_Slice_≡NothingWhenNothingRead', [Size], ([requested]) => Option.isNone(sliceFor(requested, 0)))
+  it.prop(
+    '∀nr_Slice_≡NothingWhenNothingRead',
+    { of: [Size], subject: sliceFor },
+    (subject, [requested]) => Option.isNone(subject(requested, 0)),
+  )
 
-  it.prop('∀nw_Pending_≡Remainder', [Size, Size], ([remaining, written]) =>
-    Option.exists(
-      Result.getSuccess(planWriteContinuation(new WriteAllChunk({ fd: 3, written, remaining }))),
-      (decision) => pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
-    ))
+  it.prop(
+    '∀nw_Pending_≡Remainder',
+    { of: [Size, Size], subject: pendingOf },
+    (subject, [remaining, written]) =>
+      Option.exists(
+        Result.getSuccess(subject(written, remaining)),
+        (decision) => pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
+      ),
+  )
 }

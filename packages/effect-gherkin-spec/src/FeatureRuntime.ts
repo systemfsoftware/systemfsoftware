@@ -1,7 +1,10 @@
 /// <reference types="vitest/importMeta" />
+import { owned } from '@effect/vitest'
 import type { Suite } from '@systemfsoftware/effect-spec-runtime'
 import * as Effect from 'effect/Effect'
+import { dual } from 'effect/Function'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
 import * as CaseLayers from './CaseLayers.js'
@@ -13,6 +16,7 @@ import { StepError } from './StepError.schema.js'
 export type ScenarioOptions<RScenario = never, RExtra = never> = {
   readonly scenarioLayer?: Layer.Layer<RScenario>
   readonly layer?: Layer.Layer<RExtra>
+  readonly live?: string
 }
 
 type Top<T = unknown> = T
@@ -20,11 +24,16 @@ type Top<T = unknown> = T
 export type ScenarioBody<R = never> = Effect.Effect<Top, StepError, R>
 
 export type RegisterMode = Suite.RegisterMode
-
 const caseLayersFrom = (opts: ScenarioOptions<never, never> | null): CaseLayers.Layers => {
   if (opts === null) return CaseLayers.empty
   return { scenarioLayer: opts.scenarioLayer, extra: opts.layer }
 }
+
+const liveOf = (opts: ScenarioOptions<never, never> | null): Suite.LiveCase | undefined =>
+  Option.fromNullishOr(opts?.live).pipe(
+    Option.map((reason) => ({ reason })),
+    Option.getOrUndefined,
+  )
 
 export const checkSoftFailures = <R>(
   effect: Effect.Effect<void, StepError, R>,
@@ -45,7 +54,7 @@ export const checkSoftFailures = <R>(
 
 const normalizePipeline = <R>(
   pipeline: Effect.Effect<Top, StepError, R>,
-): Effect.Effect<void, StepError, R> => checkSoftFailures(pipeline.pipe(Effect.asVoid))
+): Effect.Effect<void, StepError, R> => checkSoftFailures(pipeline.pipe(Effect.asVoid, owned))
 
 const composeWithBackground = <R>(
   pipeline: Effect.Effect<Top, StepError, R>,
@@ -126,21 +135,23 @@ type OutlineRowRef<Row> = {
 }
 
 const registerOutlineRows = <R, Row>(
-  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+  register: Register4<Effect.Effect<void, StepError, R>>,
+  live: Suite.LiveCase | undefined,
   rows: readonly OutlineRowRef<Row>[],
   mode: RegisterMode,
   build: (row: Row) => Effect.Effect<void, StepError, R>,
 ): void => {
   for (const { title, row } of rows) {
-    register(title, build(row), mode)
+    register(title, build(row), mode, live)
   }
 }
 
 const registerOutlineResult = <R, Row extends Record<string, Top>>(
-  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+  register: Register4<Effect.Effect<void, StepError, R>>,
   name: string,
   expanded: Result.Result<readonly OutlineRowRef<Row>[], string>,
   mode: RegisterMode,
+  opts: ScenarioOptions<never, never> | null,
   build: (row: Row) => Effect.Effect<void, StepError, R>,
 ): void => {
   if (Result.isFailure(expanded)) {
@@ -151,11 +162,11 @@ const registerOutlineResult = <R, Row extends Record<string, Top>>(
     )
     return
   }
-  registerOutlineRows(register, expanded.success, mode, build)
+  registerOutlineRows(register, liveOf(opts), expanded.success, mode, build)
 }
 
 const makeOutlineCallableNoFresh = <R = never>(
-  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+  register: Register4<Effect.Effect<void, StepError, R>>,
   getBackground: () => Effect.Effect<Top, StepError, R> | null,
   mode: RegisterMode,
 ): OutlineCallable<R, never, never> => {
@@ -185,14 +196,15 @@ const makeOutlineCallableNoFresh = <R = never>(
       name,
       expandOutline(name, examples),
       mode,
+      optsOrNull(opts),
       (row) => buildScenario<R>(stepFactory(row), optsOrNull(opts), getBackground()),
     )
   }
   return outlineFn
 }
 
-export const createOutlineFnNoFresh = <R = never>(
-  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+const createOutlineFnNoFreshImpl = <R = never>(
+  register: Register4<Effect.Effect<void, StepError, R>>,
   getBackground: () => Effect.Effect<Top, StepError, R> | null,
 ): OutlineFn<R, never> => {
   const base = makeOutlineCallableNoFresh<R>(register, getBackground, 'run')
@@ -201,12 +213,20 @@ export const createOutlineFnNoFresh = <R = never>(
   return Object.assign(base, { skip, only })
 }
 
+export const createOutlineFnNoFresh: {
+  <R = never>(
+    getBackground: () => Effect.Effect<Top, StepError, R> | null,
+  ): (
+    register: Register4<Effect.Effect<void, StepError, R>>,
+  ) => OutlineFn<R, never>
+  <R = never>(
+    register: Register4<Effect.Effect<void, StepError, R>>,
+    getBackground: () => Effect.Effect<Top, StepError, R> | null,
+  ): OutlineFn<R, never>
+} = dual(2, createOutlineFnNoFreshImpl)
+
 const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
-  register: (
-    name: string,
-    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
-    mode: RegisterMode,
-  ) => void,
+  register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
   mode: RegisterMode,
 ): OutlineCallable<RShared, RFresh, RFreshReq> => {
@@ -239,17 +259,14 @@ const makeOutlineCallableWithFresh = <RShared, RFresh, RFreshReq>(
       name,
       expandOutline(name, examples),
       mode,
+      optsOrNull(opts),
       (row) => buildScenario<RShared | RFresh | RFreshReq>(stepFactory(row), optsOrNull(opts), getBackground()),
     )
   }
   return outlineFn
 }
-export const createOutlineFnWithFresh = <RShared, RFresh, RFreshReq>(
-  register: (
-    name: string,
-    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
-    mode: RegisterMode,
-  ) => void,
+const createOutlineFnWithFreshImpl = <RShared, RFresh, RFreshReq>(
+  register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
 ): OutlineFn<RShared, RFresh, RFreshReq> => {
   const base = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'run')
@@ -257,6 +274,17 @@ export const createOutlineFnWithFresh = <RShared, RFresh, RFreshReq>(
   const only = makeOutlineCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'only')
   return Object.assign(base, { skip, only })
 }
+export const createOutlineFnWithFresh: {
+  <RShared, RFresh, RFreshReq>(
+    getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
+  ): (
+    register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
+  ) => OutlineFn<RShared, RFresh, RFreshReq>
+  <RShared, RFresh, RFreshReq>(
+    register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
+    getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
+  ): OutlineFn<RShared, RFresh, RFreshReq>
+} = dual(2, createOutlineFnWithFreshImpl)
 
 export type HeadlessPipelineRejected =
   'Scenario pipeline must conclude with at least one Then step, not end on Given or When'
@@ -313,10 +341,9 @@ const isObjectValue = (v: unknown): v is object => {
   return v !== null
 }
 
-const hasScenarioOptKey = (v: object): boolean => {
-  if ('scenarioLayer' in v) return true
-  return 'layer' in v
-}
+const SCENARIO_OPT_KEYS: ReadonlyArray<string> = ['scenarioLayer', 'layer', 'live']
+
+const hasScenarioOptKey = (v: object): boolean => SCENARIO_OPT_KEYS.some((key) => key in v)
 
 const isScenarioOpts = (v: unknown): v is ScenarioOptions => {
   if (!isObjectValue(v)) return false
@@ -359,7 +386,7 @@ const resolvePresentSecond = <R>(
   return resolveOptsAndPipeline(second, third)
 }
 
-export const resolveScenarioArgs = <R>(
+const resolveScenarioArgsImpl = <R>(
   second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined,
   third: Effect.Effect<Top, StepError, R> | undefined,
 ): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null } => {
@@ -367,8 +394,31 @@ export const resolveScenarioArgs = <R>(
   return resolvePresentSecond(second, third)
 }
 
+export const resolveScenarioArgs: {
+  <R = never>(
+    third: Effect.Effect<Top, StepError, R> | undefined,
+  ): (
+    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined,
+  ) => { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null }
+  <R = never>(
+    second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never> | undefined,
+    third: Effect.Effect<Top, StepError, R> | undefined,
+  ): { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null }
+} = dual(2, resolveScenarioArgsImpl)
+
+type Register4<Body> = (name: string, effect: Body, mode: RegisterMode, live?: Suite.LiveCase) => void
+const registerResolved = <R>(
+  register: Register4<Effect.Effect<void, StepError, R>>,
+  name: string,
+  mode: RegisterMode,
+  background: Effect.Effect<Top, StepError, R> | null,
+  resolved: { pipeline: Effect.Effect<Top, StepError, R>; opts: ScenarioOptions<never, never> | null },
+): void => {
+  register(name, buildScenario<R>(resolved.pipeline, resolved.opts, background), mode, liveOf(resolved.opts))
+}
+
 const makeScenarioCallableNoFresh = <R>(
-  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+  register: Register4<Effect.Effect<void, StepError, R>>,
   getBackground: () => Effect.Effect<Top, StepError, R> | null,
   mode: RegisterMode,
 ): ScenarioCallable<R, never, never> => {
@@ -386,19 +436,13 @@ const makeScenarioCallableNoFresh = <R>(
     second: Effect.Effect<Top, StepError, R> | ScenarioOptions<never, never>,
     third?: Effect.Effect<Top, StepError, R>,
   ): void {
-    const { pipeline, opts } = resolveScenarioArgs(second, third)
-    const background = getBackground()
-    register(name, buildScenario<R>(pipeline, opts, background), mode)
+    return registerResolved(register, name, mode, getBackground(), resolveScenarioArgs(second, third))
   }
   return scenarioFn
 }
 
 const makeScenarioCallableWithFresh = <RShared, RFresh, RFreshReq>(
-  register: (
-    name: string,
-    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
-    mode: RegisterMode,
-  ) => void,
+  register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
   mode: RegisterMode,
 ): ScenarioCallable<RShared, RFresh, RFreshReq> => {
@@ -418,15 +462,13 @@ const makeScenarioCallableWithFresh = <RShared, RFresh, RFreshReq>(
       | ScenarioOptions<never, never>,
     third?: Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq>,
   ): void {
-    const { pipeline, opts } = resolveScenarioArgs(second, third)
-    const background = getBackground()
-    register(name, buildScenario<RShared | RFresh | RFreshReq>(pipeline, opts, background), mode)
+    return registerResolved(register, name, mode, getBackground(), resolveScenarioArgs(second, third))
   }
   return scenarioFn
 }
 
-export const createScenarioNoFresh = <R = never>(
-  register: (name: string, effect: Effect.Effect<void, StepError, R>, mode: RegisterMode) => void,
+const createScenarioNoFreshImpl = <R = never>(
+  register: Register4<Effect.Effect<void, StepError, R>>,
   getBackground: () => Effect.Effect<Top, StepError, R> | null,
 ): ScenarioFn<R, never> => {
   const base = makeScenarioCallableNoFresh<R>(register, getBackground, 'run')
@@ -435,12 +477,20 @@ export const createScenarioNoFresh = <R = never>(
   return Object.assign(base, { skip, only })
 }
 
-export const createScenarioWithFresh = <RShared = never, RFresh = never, RFreshReq = never>(
-  register: (
-    name: string,
-    effect: Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>,
-    mode: RegisterMode,
-  ) => void,
+export const createScenarioNoFresh: {
+  <R = never>(
+    getBackground: () => Effect.Effect<Top, StepError, R> | null,
+  ): (
+    register: Register4<Effect.Effect<void, StepError, R>>,
+  ) => ScenarioFn<R, never>
+  <R = never>(
+    register: Register4<Effect.Effect<void, StepError, R>>,
+    getBackground: () => Effect.Effect<Top, StepError, R> | null,
+  ): ScenarioFn<R, never>
+} = dual(2, createScenarioNoFreshImpl)
+
+const createScenarioWithFreshImpl = <RShared = never, RFresh = never, RFreshReq = never>(
+  register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
   getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
 ): ScenarioFn<RShared, RFresh, RFreshReq> => {
   const base = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'run')
@@ -448,3 +498,15 @@ export const createScenarioWithFresh = <RShared = never, RFresh = never, RFreshR
   const only = makeScenarioCallableWithFresh<RShared, RFresh, RFreshReq>(register, getBackground, 'only')
   return Object.assign(base, { skip, only })
 }
+
+export const createScenarioWithFresh: {
+  <RShared = never, RFresh = never, RFreshReq = never>(
+    getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
+  ): (
+    register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
+  ) => ScenarioFn<RShared, RFresh, RFreshReq>
+  <RShared = never, RFresh = never, RFreshReq = never>(
+    register: Register4<Effect.Effect<void, StepError, RShared | RFresh | RFreshReq>>,
+    getBackground: () => Effect.Effect<Top, StepError, RShared | RFresh | RFreshReq> | null,
+  ): ScenarioFn<RShared, RFresh, RFreshReq>
+} = dual(2, createScenarioWithFreshImpl)

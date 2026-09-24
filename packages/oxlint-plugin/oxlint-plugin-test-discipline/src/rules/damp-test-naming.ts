@@ -23,6 +23,8 @@ import {
   TEST_PREFIX_FORBIDDEN_FIX,
   WHEN_SEPARATOR_LENGTH,
 } from './damp-test-naming.config.js'
+import { TYPE_TEST_BASENAME } from './path.config.js'
+import { basenameOf } from './path.js'
 
 export type Options = []
 export type MessageIds =
@@ -174,6 +176,7 @@ const isTestFunctionCall = (node: ESTree.CallExpression): boolean => {
 export const dampTestNaming = defineRule({
   meta,
   create(context: Context) {
+    if (TYPE_TEST_BASENAME.test(basenameOf(context.filename))) return {}
     return {
       CallExpression(node: ESTree.CallExpression) {
         if (!isTestFunctionCall(node)) {

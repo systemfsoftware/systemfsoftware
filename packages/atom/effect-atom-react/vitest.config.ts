@@ -1,8 +1,10 @@
+import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 import { playwright } from '@vitest/browser-playwright'
 
 export default defineConfig({
   ...sharedConfig,
+  plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
     projects: [
@@ -10,8 +12,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'browser',
-          include: ['./tests/**/*.integration.test.ts', '!./tests/ssr.integration.test.ts'],
-          setupFiles: ['./vitest-setup.ts'],
+          include: [
+            './tests/**/*.integration.test.ts',
+            './tests/**/*.contract.test.ts',
+            '!./tests/ssr.integration.test.ts',
+          ],
           browser: {
             enabled: true,
             provider: playwright(),
@@ -24,7 +29,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'node',
-          include: ['./tests/ssr.integration.test.ts'],
+          include: ['./tests/ssr.integration.test.ts', './src/**/*.test.ts'],
           environment: 'node',
         },
       },

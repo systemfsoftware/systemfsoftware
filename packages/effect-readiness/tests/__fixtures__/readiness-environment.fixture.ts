@@ -41,13 +41,21 @@ type ScenarioEnvironment = Layer.Layer<
 
 const environmentOf = (
   logLayer: Layer.Layer<Readiness.LogSource | DynamicLogStream>,
-): ScenarioEnvironment => Layer.mergeAll(Readiness.NodeHostProber, logLayer, guestService())
+): ScenarioEnvironment => Layer.mergeAll(Readiness.NodeHostProber.layer, logLayer, guestService())
+
+const logEnvironmentOf = (
+  logLayer: Layer.Layer<Readiness.LogSource | DynamicLogStream>,
+): Layer.Layer<Readiness.HostProber | Readiness.LogSource | DynamicLogStream> =>
+  Layer.mergeAll(Readiness.NodeHostProber.layer, logLayer)
 
 export const dynamicScenarioEnvironment = (
   initialLines: ReadonlyArray<string> = [],
-): ScenarioEnvironment => environmentOf(dynamicLogStream(initialLines))
+): Layer.Layer<Readiness.HostProber | Readiness.LogSource | DynamicLogStream> =>
+  logEnvironmentOf(dynamicLogStream(initialLines))
 
-export const scenarioEnvironment: ScenarioEnvironment = dynamicScenarioEnvironment(BASELINE_LOG_LINES)
+export const scenarioEnvironment: ScenarioEnvironment = environmentOf(dynamicLogStream(BASELINE_LOG_LINES))
 
-export const unreadableLogEnvironment = (error: Readiness.LogSourceError): ScenarioEnvironment =>
-  environmentOf(unreadableLogSource(error))
+export const unreadableLogEnvironment = (
+  error: Readiness.LogSourceError,
+): Layer.Layer<Readiness.HostProber | Readiness.LogSource | DynamicLogStream> =>
+  error.pipe(unreadableLogSource, logEnvironmentOf)

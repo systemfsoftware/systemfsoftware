@@ -23,37 +23,42 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
   valid: [
     {
       name: 'Should_Pass_When_ItProp_InPropertyFile',
-      code: `it.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      code: `it.prop('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)`,
       filename: PROPERTY_FILE,
     },
     {
       name: 'Should_Pass_When_ItEffectProp_InPropertyFile',
-      code: `it.effect.prop('∀x_X_=x', [arb], ([x]) => Effect.gen(function*() { return x === x }))`,
+      code:
+        `it.effect.prop('∀x_X_=x', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => Effect.gen(function*() { return v === v }))`,
       filename: PROPERTY_FILE,
     },
     {
       name: 'Should_Pass_When_ItPropOnly_InPropertyFile',
-      code: `it.prop.only('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      code: `it.prop.only('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)`,
       filename: PROPERTY_FILE,
     },
     {
       name: 'Should_Pass_When_Describe_InPropertyFile',
-      code: `describe('sort', () => { it.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n) })`,
+      code:
+        `describe('sort', () => { it.prop('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v) })`,
       filename: PROPERTY_FILE,
     },
     {
       name: 'Should_Pass_When_FcArbitraryBuilders_InPropertyFile',
-      code: `it.prop('∀h_X_=x', [fc.stringMatching(/^0x/)], ([h]) => { fc.pre(h.length > 2); return check(h) })`,
+      code:
+        `it.prop('∀h_X_=x', { of: [fc.stringMatching(/^0x/)], subject: (h) => h, runs: 100 }, (s, [v]) => { fc.pre(v.length > 2); return check(v) })`,
       filename: PROPERTY_FILE,
     },
     {
       name: 'Should_Pass_When_CheckMethodOnNonFcObject_InPropertyFile',
-      code: `it.prop('∀x_X_=x', [a], ([x]) => { xs.check(x); return x === x })`,
+      code:
+        `it.prop('∀x_X_=x', { of: [a], subject: (x) => x, runs: 100 }, (s, [v]) => { xs.check(v); return v === v })`,
       filename: PROPERTY_FILE,
     },
     {
       name: 'Should_Pass_When_SchemaArbitrary_InPropertyFile',
-      code: `import { Schema } from 'effect'\nit.prop('∀s_X_=x', [Schema.String], ([s]) => s === s)`,
+      code:
+        `import { Schema } from 'effect'\nit.prop('∀s_X_=x', { of: [Schema.String], subject: (s) => s, runs: 100 }, (s, [v]) => v === v)`,
       filename: PROPERTY_FILE,
     },
     {
@@ -74,7 +79,8 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     },
     {
       name: 'Should_Pass_When_ItProp_InNonTestFile',
-      code: `export const laws = (schema) => it.prop('∀x_X_=x', [schema], ([x]) => x === x)`,
+      code:
+        `export const laws = (schema) => it.prop('∀x_X_=x', { of: [schema], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)`,
       filename: 'src/schema-laws.ts',
     },
     {
@@ -191,7 +197,7 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
             expected: 'it.prop(...) or it.effect.prop(...) from @effect/vitest',
             actual: 'fc.check(...) bypasses the vitest/Effect integration',
             fix:
-              'rewrite as it.prop(name, [arbitraries], predicate) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',
+              'rewrite as it.prop(name, { of, subject, runs }, holds) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',
           },
         },
       ],
@@ -226,7 +232,7 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     },
     {
       name: 'Should_Report_When_ItProp_InScenarioFile',
-      code: `it.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      code: `it.prop('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)`,
       filename: SCENARIO_FILE,
       errors: [
         {
@@ -242,13 +248,14 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     },
     {
       name: 'Should_Report_When_ItEffectProp_InScenarioFile',
-      code: `it.effect.prop('∀x_X_=x', [arb], ([x]) => Effect.gen(function*() { return x === x }))`,
+      code:
+        `it.effect.prop('∀x_X_=x', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => Effect.gen(function*() { return v === v }))`,
       filename: SCENARIO_FILE,
       errors: [{ messageId: 'propCall' }],
     },
     {
       name: 'Should_Report_When_ItPropOnly_InSpecFile',
-      code: `it.prop.only('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      code: `it.prop.only('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)`,
       filename: 'src/sort.spec.ts',
       errors: [{ messageId: 'propCall' }],
     },
@@ -281,7 +288,7 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     },
     {
       name: 'Should_Report_When_ItProp_InSnapshotFile',
-      code: `it.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      code: `it.prop('∀n_X_=x', { of: [fc.integer()], subject: (n) => n, runs: 100 }, (s, [v]) => v === v)`,
       filename: SNAPSHOT_FILE,
       errors: [
         {
@@ -297,7 +304,8 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
     },
     {
       name: 'Should_Report_When_ItEffectProp_InSnapshotFile',
-      code: `it.effect.prop('∀x_X_=x', [arb], ([x]) => Effect.gen(function*() { return x === x }))`,
+      code:
+        `it.effect.prop('∀x_X_=x', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => Effect.gen(function*() { return v === v }))`,
       filename: SNAPSHOT_FILE,
       errors: [{ messageId: 'propCall' }],
     },

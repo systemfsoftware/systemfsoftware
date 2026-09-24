@@ -1,4 +1,5 @@
 import { Cause, Context, Deferred, Effect, Exit, Fiber } from 'effect'
+import { dual } from 'effect/Function'
 import { screen } from 'storybook/test'
 
 import {
@@ -155,6 +156,7 @@ const runStep = <TArgs>(
             Effect.ensuring(Fiber.interrupt(fiber).pipe(Effect.asVoid)),
           )
         ),
+        Effect.ensuring(Deferred.interrupt(done).pipe(Effect.asVoid)),
       )
     }),
   )
@@ -571,14 +573,18 @@ const contextOf = (options: FeatureOptions): Context.Context<never> => {
   return options.context
 }
 
+const featureImpl = <M>(meta: M, options: FeatureOptions): Feature<M> => makeFeature<M>(meta, contextOf(options))
+
 /**
  * Declare a feature: a story set whose scenarios execute as CSF `play`
  * functions. `options.context` (default `Context.empty()`) is the Effect
  * context interpreting each scenario's composed step program exactly once,
  * at the play edge.
  */
-export const feature = <M>(meta: M, options: FeatureOptions = {}): Feature<M> =>
-  makeFeature<M>(meta, contextOf(options))
+export const feature: {
+  <M>(options: FeatureOptions): (meta: M) => Feature<M>
+  <M>(meta: M, options: FeatureOptions): Feature<M>
+} = dual(2, featureImpl)
 
 export const Steps = <TArgs>(...steps: readonly Step<TArgs>[]): Step<TArgs>[] => [...steps]
 

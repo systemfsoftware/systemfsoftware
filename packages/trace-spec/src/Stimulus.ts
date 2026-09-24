@@ -1,10 +1,14 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
-import { Effect } from 'effect'
+import { Effect, Random } from 'effect'
+
+const BYTE_COUNT = 256
 
 const byteHex = (byte: number): string => byte.toString(16).padStart(2, '0')
 
-const randomHex = (byteLength: number): string =>
-  Array.from(crypto.getRandomValues(new Uint8Array(byteLength)), byteHex).join('')
+const randomByte: Effect.Effect<number> = Random.nextIntBetween(0, BYTE_COUNT - 1)
+
+const randomHex = (byteLength: number): Effect.Effect<string> =>
+  Effect.map(Effect.all(Array.from({ length: byteLength }, () => randomByte)), (bytes) => bytes.map(byteHex).join(''))
 
 export interface TraceContext {
   readonly traceId: string
@@ -12,9 +16,9 @@ export interface TraceContext {
   readonly traceparent: string
 }
 
-export const traceContext: Effect.Effect<TraceContext> = Effect.sync(() => {
-  const traceId = randomHex(16)
-  const spanId = randomHex(8)
+export const traceContext: Effect.Effect<TraceContext> = Effect.gen(function*() {
+  const traceId = yield* randomHex(16)
+  const spanId = yield* randomHex(8)
   return { traceId, spanId, traceparent: `00-${traceId}-${spanId}-01` }
 })
 

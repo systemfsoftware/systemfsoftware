@@ -1,10 +1,10 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
-import { it, layer } from '@effect/vitest'
+import { it } from '@effect/vitest'
 import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, FileSystem, Layer, Ref, Schema } from 'effect'
 
-const TraceSuite = Suite.make({ it, layer })
+const TraceSuite = Suite.make({ it })
 
 const discardingFileSystem = Layer.succeed(
   FileSystem.FileSystem,
@@ -75,8 +75,8 @@ TraceSuite('suite layers')
   .withLayer(Layer.merge(sharedLayer, harness))
   .withScenarioLayer(Layer.merge(scenarioLayer, harness))
   .body(({ Case }) => {
-    Case('the first case sees the first scenario build', lensContract(1), undefined)
-    Case('the second case sees the second scenario build on the same shared lifecycle', lensContract(2), undefined)
+    Case('each case rebuilds the scenario layer over a fresh shared lifecycle', lensContract(1), undefined)
+    Case('the next case rebuilds both layers again, so it still sees the first build', lensContract(1), undefined)
   })
 
 TraceSuite('suite shared layer alone')

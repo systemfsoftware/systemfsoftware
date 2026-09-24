@@ -3,6 +3,7 @@ import { Option, Predicate } from 'effect'
 import * as Arr from 'effect/Array'
 import * as ByteSize from 'effect/ByteSize'
 import type * as FileSystem from 'effect/FileSystem'
+import { dual } from 'effect/Function'
 import * as Error from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 import { ShapeRefusal } from './MemoryFileSystemError.schema.js'
@@ -35,13 +36,18 @@ const directoryOf = (cwd: string): string => cwd.endsWith('/') ? cwd : `${cwd}/`
 
 const absoluteOf = (cwd: string, path: string): string => path.startsWith('/') ? path : directoryOf(cwd) + path
 
-export const byteBodiesOf = (
-  cwd: string,
-  contents: Contents,
-): ReadonlyArray<readonly [path: string, bytes: Uint8Array]> =>
-  Object.entries(contents).flatMap(([path, body]) =>
-    body instanceof Uint8Array ? [[absoluteOf(cwd, path), body] as const] : []
-  )
+type ByteBodies = ReadonlyArray<readonly [path: string, bytes: Uint8Array]>
+
+export const byteBodiesOf: {
+  (contents: Contents): (cwd: string) => ByteBodies
+  (cwd: string, contents: Contents): ByteBodies
+} = dual(
+  2,
+  (cwd: string, contents: Contents): ByteBodies =>
+    Object.entries(contents).flatMap(([path, body]) =>
+      body instanceof Uint8Array ? [[absoluteOf(cwd, path), body] as const] : []
+    ),
+)
 
 const stringFieldOf = <E = unknown>(error: E, property: string): string => {
   if (!Predicate.hasProperty(error, property)) {
@@ -231,12 +237,27 @@ if (import.meta.vitest !== void 0) {
     number: (key: string, text: string) => ({ record: { [key]: text.length }, read: '' }),
   }
 
+  const statSubject = (drawn: ReadonlyArray<string>, lacking: boolean) =>
+    statOf(recordAnswering(withheld(drawn, 'isFile', ['isFile', 'isDirectory'])(lacking)))
+
+  const driverSubject = (drawn: ReadonlyArray<string>, lacking: boolean) =>
+    driverOf(recordAnswering(withheld(drawn, 'close', ['close', 'read', 'write'])(lacking)))
+
+  const kindSubject = (drawn: ReadonlyArray<string>, silent: boolean) => kindOf(statAnswering(quieted(drawn, silent)))
+
+  const entryPathSubject = (text: string, shape: keyof typeof entryShaped) => entryPathOf(entryShaped[shape](text))
+
+  const bytesSubject = (text: string, shape: keyof typeof contentsShaped) => bytesOf(contentsShaped[shape](text))
+
+  const stringFieldSubject = (key: string, text: string, field: keyof typeof fieldShaped) =>
+    stringFieldOf(fieldShaped[field](key, text).record, key)
+
   it.prop(
     '∀a_StatAdmitted_≡AnswersFileAndDirectory',
-    [Schema.Array(StatQuestion), Schema.Boolean],
-    ([drawn, lacking]) => {
+    { of: [Schema.Array(StatQuestion), Schema.Boolean], subject: statSubject },
+    (subject, [drawn, lacking]) => {
       const answers = withheld(drawn, 'isFile', ['isFile', 'isDirectory'])(lacking)
-      return Result.match(statOf(recordAnswering(answers)), {
+      return Result.match(subject(drawn, lacking), {
         onFailure: (refusal) => !answersStat(answers) && refusalNames('stat')(refusal),
         onSuccess: () => answersStat(answers),
       })
@@ -245,33 +266,46 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀a_DriverAdmitted_≡AnswersCloseReadWrite',
-    [Schema.Array(DriverQuestion), Schema.Boolean],
-    ([drawn, lacking]) => {
+    { of: [Schema.Array(DriverQuestion), Schema.Boolean], subject: driverSubject },
+    (subject, [drawn, lacking]) => {
       const answers = withheld(drawn, 'close', ['close', 'read', 'write'])(lacking)
-      return Result.match(driverOf(recordAnswering(answers)), {
+      return Result.match(subject(drawn, lacking), {
         onFailure: (refusal) => !answersDriver(answers) && refusalNames('open')(refusal),
         onSuccess: () => answersDriver(answers),
       })
     },
   )
 
-  it.prop('∀a_KindUnknown_≡NoKindAnswered', [Schema.Array(KindQuestion), Schema.Boolean], ([drawn, silent]) => {
-    const answers = quieted(drawn, silent)
-    return (kindOf(statAnswering(answers)) === 'Unknown') === (answers.length === 0)
-  })
+  it.prop(
+    '∀a_KindUnknown_≡NoKindAnswered',
+    { of: [Schema.Array(KindQuestion), Schema.Boolean], subject: kindSubject },
+    (subject, [drawn, silent]) => {
+      const answers = quieted(drawn, silent)
+      return (subject(drawn, silent) === 'Unknown') === (answers.length === 0)
+    },
+  )
 
-  it.prop('∀t_EntryPath_≡ShapeIndependent', [Schema.String, EntryShape], ([drawn, shape]) => {
-    const text = drawn.toWellFormed()
-    return entryPathOf(entryShaped[shape](text)) === text
-  })
+  it.prop(
+    '∀t_EntryPath_≡ShapeIndependent',
+    { of: [Schema.String, EntryShape], subject: entryPathSubject },
+    (subject, [drawn, shape]) => {
+      const text = drawn.toWellFormed()
+      return subject(text, shape) === text
+    },
+  )
 
-  it.prop('∀t_Contents_≡ShapeIndependent', [Schema.String, ContentsShape], ([drawn, shape]) => {
-    const text = drawn.toWellFormed()
-    return new TextDecoder().decode(bytesOf(contentsShaped[shape](text))) === text
-  })
+  it.prop(
+    '∀t_Contents_≡ShapeIndependent',
+    { of: [Schema.String, ContentsShape], subject: bytesSubject },
+    (subject, [drawn, shape]) => {
+      const text = drawn.toWellFormed()
+      return new TextDecoder().decode(subject(text, shape)) === text
+    },
+  )
 
-  it.prop('∀k_ErrorField_≡StringOrEmpty', [Schema.String, Schema.String, ErrorField], ([key, text, field]) => {
-    const { record, read } = fieldShaped[field](key, text)
-    return stringFieldOf(record, key) === read
-  })
+  it.prop(
+    '∀k_ErrorField_≡StringOrEmpty',
+    { of: [Schema.String, Schema.String, ErrorField], subject: stringFieldSubject },
+    (subject, [key, text, field]) => subject(key, text, field) === fieldShaped[field](key, text).read,
+  )
 }

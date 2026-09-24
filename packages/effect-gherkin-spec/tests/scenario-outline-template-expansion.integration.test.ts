@@ -7,7 +7,8 @@
  * `renderTitle`, `stringifyForTitle`) are reached through the package barrel,
  * exactly as a downstream consumer would import them.
  */
-import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   expandOutline,
   Gherkin,
@@ -18,9 +19,8 @@ import {
   tokenizeTemplate,
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result } from 'effect'
-import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Scenario outline — template expansion')
   .withLayer(Layer.empty)

@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -5,16 +6,15 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
-import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
+import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Duration, Effect, Layer, Option, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 Feature('Per-supervisor reporter hooks')
   .withScenarioLayer(NoopLayer)
   .body(({ scenario }) => {
@@ -81,7 +81,7 @@ Feature('Per-supervisor reporter hooks')
             const gOpt = Option.fromNullishOr(
               s.result.globalRestarts.find((r) => r.name === 'hook-restart-sup'),
             )
-            expect(Option.isSome(gOpt)).toBe(true)
+            expect(gOpt).toSatisfy(Option.isSome)
             expect(s.result.local).toHaveLength(1)
             if (Option.isNone(gOpt)) {
               throw new Error('expected global restart entry for hook-restart-sup')
@@ -148,7 +148,7 @@ Feature('Per-supervisor reporter hooks')
             const gOpt = Option.fromNullishOr(
               s.result.globalExhaustions.find((e) => e.name === 'hook-exhaust-sup'),
             )
-            expect(Option.isSome(gOpt)).toBe(true)
+            expect(gOpt).toSatisfy(Option.isSome)
             expect(s.result.local).toHaveLength(1)
             if (Option.isNone(gOpt)) {
               throw new Error('expected global exhaustion entry for hook-exhaust-sup')

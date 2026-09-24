@@ -1,13 +1,33 @@
 import { NodeRuntime } from '@effect/platform-node'
 import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
-import { Deferred, Effect, Fiber, Match, Ref } from 'effect'
+import { Readiness } from '@systemfsoftware/effect-readiness'
+import { Config, Crypto, Deferred, Effect, Fiber, Layer, Match, Random, Schema } from 'effect'
+import type * as FileSystem from 'effect/FileSystem'
 import type * as Scope from 'effect/Scope'
 import { Sandbox } from 'microsandbox'
 import assert from 'node:assert'
 import { Buffer } from 'node:buffer'
-import { randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+
+export class HostListenerError extends Schema.TaggedError<HostListenerError>()(
+  'HostListenerError',
+  {
+    cause: Schema.Unknown,
+  },
+) {}
+
+export class SandboxListingError extends Schema.TaggedError<SandboxListingError>()(
+  'SandboxListingError',
+  {
+    cause: Schema.Unknown,
+  },
+) {}
+
+export class EscapeHatchDefect extends Schema.TaggedError<EscapeHatchDefect>()(
+  'EscapeHatchDefect',
+  {},
+) {}
 
 const sandboxPrefix = 'effect-microsandbox-'
 
@@ -20,7 +40,10 @@ const recordGone = (name: string): Effect.Effect<boolean> =>
 const alpine = MicroVM.spec('alpine:3.20').withExposedPorts([8080])
 const portless = MicroVM.spec('alpine:3.20')
 
-const randomToken = (): string => randomBytes(16).toString('hex')
+const randomToken: Effect.Effect<string, never, Crypto.Crypto> = Effect.map(
+  Effect.flatMap(Crypto.Crypto, (crypto) => Effect.orDie(crypto.randomBytes(16))),
+  (bytes) => Buffer.from(bytes).toString('hex'),
+)
 
 /**
  * Byte-exact expectation for `yes "$SEED" | head -c <size>`: busybox `yes` writes
@@ -44,7 +67,7 @@ const portOf = (server: Server): number => {
 }
 
 interface HostListener {
-  readonly requests: Ref.Ref<number>
+  readonly requestCount: () => number
   readonly url: string
 }
 
@@ -52,22 +75,18 @@ type HostReply = (request: IncomingMessage, response: ServerResponse, server: Se
 
 const openListener = (reply: HostReply): Effect.Effect<HostListener, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const requests = yield* Ref.make(0)
+    let requests = 0
     const server = yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () =>
-          new Promise<Server>((resolve, reject) => {
-            const server = createServer((request, response) => {
-              Effect.runSync(Ref.update(requests, (count) => count + 1))
-              reply(request, response, server)
-            })
-            server.once('error', reject)
-            server.listen(0, '127.0.0.1', () => {
-              server.unref()
-              resolve(server)
-            })
-          }),
-        catch: (cause) => new Error('host listener failed to bind', { cause }),
+      Effect.callback<Server, HostListenerError>((resume) => {
+        const server = createServer((request, response) => {
+          requests = requests + 1
+          reply(request, response, server)
+        })
+        server.once('error', (cause) => resume(Effect.fail(new HostListenerError({ cause }))))
+        server.listen(0, '127.0.0.1', () => {
+          server.unref()
+          resume(Effect.succeed(server))
+        })
       }).pipe(Effect.orDie),
       (server) =>
         Effect.sync(() => {
@@ -75,7 +94,7 @@ const openListener = (reply: HostReply): Effect.Effect<HostListener, never, Scop
           server.close()
         }),
     )
-    return { requests, url: `http://host.microsandbox.internal:${portOf(server)}/` }
+    return { requestCount: () => requests, url: `http://host.microsandbox.internal:${portOf(server)}/` }
   })
 
 const exitCodeOf = (completion: MicroVM.JobCompletion): number =>
@@ -101,7 +120,7 @@ const assertSignaled = (label: string, completion: MicroVM.JobCompletion): void 
 const listSandboxPage = (cursor: string | undefined) =>
   Effect.tryPromise({
     try: () => (cursor === undefined ? Sandbox.list() : Sandbox.listWith((list) => list.cursor(cursor))),
-    catch: (cause) => new Error('sandbox listing failed', { cause }),
+    catch: (cause) => new SandboxListingError({ cause }),
   }).pipe(Effect.orDie)
 
 const sandboxNamesFrom = (cursor: string | undefined): Effect.Effect<ReadonlyArray<string>> =>
@@ -121,6 +140,35 @@ const assertNoLeftovers = (label: string): Effect.Effect<void> =>
     const names = yield* sandboxNamesFrom(undefined)
     const leftovers = names.filter((name) => name.startsWith(sandboxPrefix))
     assert.deepStrictEqual(leftovers, [], `${label}: no ${sandboxPrefix}* sandbox may remain`)
+  })
+
+/**
+ * Interruption points for the VM-release journey (R26): delays, in
+ * milliseconds, measured from the moment a boot starts. The delays span the
+ * whole boot so a run probes starting before, during, and after the sandbox
+ * exists on the host.
+ */
+const INTERRUPTION_CANDIDATES = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512] as const
+const INTERRUPTIONS_PER_RUN = 5
+
+const interruptionPointsFor = (seed: number): Effect.Effect<ReadonlyArray<number>> =>
+  Effect.replicateEffect(Random.choice(INTERRUPTION_CANDIDATES), INTERRUPTIONS_PER_RUN).pipe(Random.withSeed(seed))
+
+const interruptBootAt = (
+  point: number,
+): Effect.Effect<
+  void,
+  never,
+  Crypto.Crypto | FileSystem.FileSystem | Readiness.HostProber
+> =>
+  Effect.gen(function*() {
+    yield* Effect.logInfo(`[smoke] J14: boot starting, interruption scheduled at ${point}ms`)
+    const boot = yield* Effect.forkChild(
+      Effect.scoped(alpine.withEnv({ SMOKE_JOURNEY: 'j14' }).scoped.pipe(Effect.andThen(Effect.never))),
+    )
+    yield* Effect.sleep(point)
+    yield* Fiber.interrupt(boot)
+    yield* assertNoLeftovers(`J14@${point}ms`)
   })
 
 const j1 = Effect.scoped(
@@ -189,9 +237,9 @@ const j4 = Effect.scoped(
     )
     assert.equal(refusedGuest, 9999)
     assert.ok(!('sandbox' in vm), 'native driver must not be reachable from the handle surface')
-    const echoed = yield* MicroVM.use(vm, async (sandbox) => sandbox.name)
+    const echoed = yield* MicroVM.use(vm, (sandbox) => Promise.resolve(sandbox.name))
     assert.equal(echoed, vm.name)
-    const defect = new Error('smoke escape-hatch defect')
+    const defect = new EscapeHatchDefect()
     const useRefusal = yield* Effect.flip(MicroVM.use(vm, () => Promise.reject(defect)))
     const preserved = Match.value(useRefusal).pipe(
       Match.tag('SandboxBootError', (error) => error.cause),
@@ -206,7 +254,7 @@ const payloadSize = 2 * 1024 * 1024
 const j5 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J5: job stdout payload, host-random seed, byte-exact')
-    const seed = randomToken()
+    const seed = yield* randomToken
     const completion = yield* MicroVM.job('alpine:3.20', ['sh', '-c', `yes "$SEED" | head -c ${payloadSize}`])
       .withEnv({ SEED: seed })
       .run
@@ -219,7 +267,7 @@ const j5 = Effect.scoped(
 const j6 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J6: job stderr payload with exit 42')
-    const seed = randomToken()
+    const seed = yield* randomToken
     const completion = yield* MicroVM.job('alpine:3.20', [
       'sh',
       '-c',
@@ -236,7 +284,8 @@ const j6 = Effect.scoped(
 const j7 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J7: one-shot host resource, replay cannot reproduce the token')
-    const body = `${randomToken()}\n`
+    const token = yield* randomToken
+    const body = `${token}\n`
     const listener = yield* openListener((_request, response, server) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body, () => {
@@ -259,7 +308,8 @@ const j7 = Effect.scoped(
 const j8 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J8: host-opted fetch equals stdout with exit 0')
-    const body = `${randomToken()}\n`
+    const token = yield* randomToken
+    const body = `${token}\n`
     const listener = yield* openListener((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body)
@@ -269,14 +319,15 @@ const j8 = Effect.scoped(
       .run
     assert.equal(exitCodeOf(completion), 0, 'host-opted fetch must exit 0')
     assertBytes('J8 host body', completion.stdout, Buffer.from(body))
-    assert.ok((yield* Ref.get(listener.requests)) >= 1, 'guest must reach the host listener')
+    assert.ok(listener.requestCount() >= 1, 'guest must reach the host listener')
   }),
 )
 
 const j9 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J9: identical argv without opt-in stays off the host')
-    const body = `${randomToken()}\n`
+    const token = yield* randomToken
+    const body = `${token}\n`
     const listener = yield* openListener((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' })
       response.end(body)
@@ -284,7 +335,7 @@ const j9 = Effect.scoped(
     const completion = yield* MicroVM.job('alpine:3.20', ['wget', '-T', '5', '-qO-', listener.url]).run
     assertFetchFailed('J9 denied', completion)
     assert.equal(Buffer.from(completion.stdout).includes(body), false, 'denied guest must not receive the body')
-    assert.equal(yield* Ref.get(listener.requests), 0, 'denied guest must not reach the host listener')
+    assert.equal(listener.requestCount(), 0, 'denied guest must not reach the host listener')
   }),
 )
 
@@ -310,12 +361,15 @@ const j11 = Effect.scoped(
 const j12 = Effect.scoped(
   Effect.gen(function*() {
     yield* Effect.logInfo('[smoke] J12: interrupt a host-opted job after its first request')
-    const reached = yield* Deferred.make<void>()
+    let signalFirstRequest: (() => void) | undefined
     const listener = yield* openListener((_request, response) => {
-      response.end('reached\n', () => {
-        Effect.runSync(Deferred.succeed(reached, undefined))
-      })
+      response.end('reached\n')
+      signalFirstRequest?.()
     })
+    const awaitFirstRequest = Effect.callback<void>((resume) => {
+      signalFirstRequest = () => resume(Effect.void)
+    })
+    const waiter = yield* Effect.forkChild(awaitFirstRequest.pipe(Effect.timeout('30 seconds')))
     const fiber = yield* Effect.forkChild(
       Effect.scoped(
         MicroVM.job('alpine:3.20', ['sh', '-c', `wget -T 5 -qO- ${listener.url}; sleep 300`])
@@ -323,7 +377,7 @@ const j12 = Effect.scoped(
           .run,
       ),
     )
-    yield* Deferred.await(reached)
+    yield* Fiber.join(waiter)
     yield* Fiber.interrupt(fiber)
     yield* assertNoLeftovers('J12')
   }),
@@ -333,6 +387,32 @@ const j13 = Effect.gen(function*() {
   yield* Effect.logInfo('[smoke] J13: end of journeys, no sandbox left behind')
   yield* assertNoLeftovers('J13')
 })
+
+const REFUSED_IMAGE = 'effect-microsandbox-refusal-does-not-exist:0.0.0'
+
+const j14 = Effect.gen(function*() {
+  const seed = yield* Config.Number('SANDBOX_SMOKE_SEED').pipe(Config.withDefault(0))
+  const points = yield* interruptionPointsFor(seed)
+  yield* Effect.logInfo(
+    `[smoke] J14: VM release at seeded interruption points (seed=${seed}, points=${points.join(',')})`,
+  )
+  yield* Effect.forEach(points, interruptBootAt)
+  yield* assertNoLeftovers('J14')
+})
+
+const j15 = Effect.scoped(
+  Effect.gen(function*() {
+    yield* Effect.logInfo('[smoke] J15: a refused start is reported as a failure, never passed')
+    const refusal = yield* Effect.flip(MicroVM.spec(REFUSED_IMAGE).scoped).pipe(Effect.orDie)
+    const reported = Match.value(refusal).pipe(
+      Match.tag('VirtualizationUnsupportedError', () => 'virtualization refused'),
+      Match.tag('SandboxBootError', () => 'boot refused'),
+      Match.tag('LoopbackViolationError', () => 'plan refused'),
+      Match.orElse(() => assert.fail('expected the start to be refused, not to succeed')),
+    )
+    yield* Effect.logInfo(`[smoke] J15: start refused — ${reported}`)
+  }),
+)
 
 const main = Effect.gen(
   function*() {
@@ -350,9 +430,11 @@ const main = Effect.gen(
     yield* j10
     yield* j11
     yield* j12
+    yield* j14
+    yield* j15
     yield* j13
     yield* Effect.logInfo('[smoke] all journeys green')
   },
 )
 
-NodeRuntime.runMain(Effect.provide(main, nodeServicesLayer))
+NodeRuntime.runMain(Effect.provide(main, Layer.merge(nodeServicesLayer, Readiness.NodeHostProber.layer)))

@@ -4,6 +4,7 @@
 
 ```ts
 
+import { DummyRuleMap } from 'oxlint';
 import { OxlintOverride } from 'oxlint';
 import { Rule } from '@oxlint/plugins';
 
@@ -22,12 +23,11 @@ const _default: {
         'no-native-map-in-effect': Rule;
         'no-native-set-in-effect': Rule;
         'no-new-worker-with-wasm-import': Rule;
+        'no-unported-time-source': Rule;
     };
     configs: {
         recommended: {
-            rules: {
-                readonly [x: string]: "error";
-            };
+            rules: DummyRuleMap;
             overrides: OxlintOverride[];
         };
     };

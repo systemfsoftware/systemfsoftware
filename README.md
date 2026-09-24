@@ -1,187 +1,96 @@
 # systemfsoftware
 
-> TypeScript architecture, type-level contracts, and verification gates for production Effect-TS systems.
->
-> Rules in this repository are enforced by the TypeScript compiler, custom Oxlint rules, and mutation testing. If a behavior can regress without a test or a check failing, it does not ship.
+> Pure-core / imperative-shell architecture, type-level contracts, and deterministic verification gates for production Effect-TS systems.
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square)](LICENSE)
 [![CI Status](https://img.shields.io/github/actions/workflow/status/systemfsoftware/systemfsoftware/release.yml?branch=main&style=flat-square&label=CI)](https://github.com/systemfsoftware/systemfsoftware/actions)
 
-LLMs generate code with subtle failure modes: stubs on internal glue that pass without testing real behavior, branching that hides untested paths, and circular reviews where models approve their own patterns.
+Large language models generate code with subtle integration traps: mocks on internal glue that pass without testing real drivers, procedural branching that conceals untested code paths, and prose rules that are ignored when context windows compact.
 
-**systemfsoftware** provides an architecture and verification toolchain that prevents these defects at compile time and in CI:
+**systemfsoftware** provides an architecture and verification toolchain designed to make illegal programs unrepresentable and prevent regressions at compile time and in CI:
 
-1. **Cell architecture**: Every outside interaction follows a typed five-phase chain (`read -> decode -> decide -> encode -> write`).
-2. **Pure workflows**: Business logic runs in pure functions with cyclomatic complexity 1. Branching uses exhaustive pattern matching over closed variant types.
-3. **Boundary testing**: Boundary code is tested against real local OS resources (loopback sockets, temporary directories, child processes), not mock objects.
-4. **Automated gates**: Architectural rules are enforced by compiler types, Oxlint AST plugins, property-test generators, and Stryker mutation testing.
+1. **Cell architecture**: Outside interactions follow a typed, five-phase sandwich chain (`read -> decode -> decide -> encode -> write`).
+2. **Pure decision workflows**: Business logic executes in pure functions with cyclomatic complexity 1. Branching uses exhaustive pattern matching over closed variant types.
+3. **Boundary testing**: Adapters are verified against real local system oracles (loopback sockets, temporary directories, child processes), not driver mocks.
+4. **Automated gates**: Architectural contracts are enforced by the TypeScript compiler, Oxlint AST rules, property-test generators, and Stryker mutation testing.
 
 ```text
-                  Outside World (HTTP / RPC / Message / DB)
-                                     │
-                                     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│  Cell Sandwich: Cell<in I, out A, out E, out R>                        │
-│                                                                        │
-│   1. Read       (Impure I/O: acquire state, snapshots, clocks via R)   │
-│         │                                                              │
-│         ▼                                                              │
-│   2. Decode     (Pure: Schema.decodeUnknown into validated Command)    │
-│         │                                                              │
-│         ▼                                                              │
-│   3. Decide     (Pure Core: Workflow.make, CC = 1, Match.exhaustive)   │
-│         │                                                              │
-│         ▼                                                              │
-│   4. Encode     (Pure: Decision outcome mapped to wire payload)        │
-│         │                                                              │
-│         ▼                                                              │
-│   5. Write      (Impure I/O: commit events, CAS transaction via R)     │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-                   Domain Outcome (A) or Failure (E)
+                                  Input `I`
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Cell<in I, out A, out E, out R>                                            │
+│                                                                             │
+│   1. Read       (Impure: (input: I) => Effect<Encoded<Cmd>, RE, RR>)        │
+│         │                                                                   │
+│         ▼                                                                   │
+│   2. Decode     (Pure: Schema.decodeUnknown(CommandSchema))                 │
+│         │                                    │                              │
+│      [valid]                             [invalid]                          │
+│         │                                    │                              │
+│         ▼                                    ▼                              │
+│   3. Decide     (Pure: Workflow.make)    5b. Write: CommandRejected handler │
+│         │                                            │                      │
+│      [Result]                                        │                      │
+│         │                                            │                      │
+│         ▼                                            │                      │
+│   4. Encode     (Pure: variant schemas)              │                      │
+│         │                                            │                      │
+│         ▼                                            │                      │
+│   5a. Write     (Impure: Tag-keyed handlers)         │                      │
+│         │                                            │                      │
+└─────────┼────────────────────────────────────────────┼──────────────────────┘
+          ▼                                            ▼
+   Handler Response (`A`)              Infrastructure Error (`RE | WE` in `E`)
 ```
 
----
+## Quick Start
 
-## Contents
+Install the cell runtime and peer dependencies:
 
-- [Core Principles](#core-principles)
-- [Cell Architecture](#cell-architecture)
-  - [The Five-Phase Sandwich Chain](#the-five-phase-sandwich-chain)
-  - [Pure Decision Workflows (CC = 1)](#pure-decision-workflows-cc--1)
-  - [The Four-Channel Contract](#the-four-channel-contract)
-  - [Separating Ports from Layers](#separating-ports-from-layers)
-  - [Resource & Lifecycle Algebra](#resource--lifecycle-algebra)
-- [Boundary Testing & Local Oracles](#boundary-testing--local-oracles)
-  - [No Mocks on Internal Glue](#no-mocks-on-internal-glue)
-  - [Local System Oracles](#local-system-oracles)
-- [Monorepo Package Map](#monorepo-package-map)
-  - [Cell & Workflow Core](#cell--workflow-core)
-  - [Schema & Property Law](#schema--property-law)
-  - [Specification & BDD Verification](#specification--bdd-verification)
-  - [Oxlint Static Rules](#oxlint-static-rules)
-  - [Infrastructure & Tooling](#infrastructure--tooling)
-- [Architectural Compound Packs](#architectural-compound-packs)
-- [Roadmap: Non-Autoregressive Decisions (Jev)](#roadmap-non-autoregressive-decisions-jev)
-- [Example Application: Inventory Fulfillment](#example-application-inventory-fulfillment)
-- [Examples](#examples)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Core Principles
-
-When AI agents author code, three patterns cause silent regressions:
-
-1. **Mocks hide driver bugs**: Stubs for network sockets, database queries, and filesystem operations pass without verifying real wire protocols or OS permissions.
-2. **Procedural branching hides untested paths**: Nested `if`, `switch`, and loops create combinatorial execution branches that test suites fail to cover.
-3. **Prose rules are forgotten**: Instructions in markdown documents are lost when context windows compact.
-
-**The systemfsoftware rule**: Any code change that regresses without the TypeScript compiler, an Oxlint rule, or a mutation test failing is rejected. Rules must be executable checks.
-
----
-
-## Cell Architecture
-
-The Cell Architecture (`compound-packs/cell-architecture/`) separates business decisions from external I/O.
-
-### The Five-Phase Sandwich Chain
-
-Every interaction with the outside world is structured as a five-phase sequence:
-
-$$\text{read} \longrightarrow \text{decode} \longrightarrow \text{decide} \longrightarrow \text{encode} \longrightarrow \text{write}$$
-
-The phases are enforced at compile time by `@systemfsoftware/effect-cell-types`:
-
-```ts
-import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Effect, Result, Schema as S } from 'effect'
-import { decideOrderFulfillment } from './fulfillment.workflow.js'
-import { SubmitOrderError, SubmitOrderRequest, SubmitOrderResponse } from './order.schema.js'
-import { InventoryStore } from './ports/InventoryStore.js'
-import { PaymentLedger } from './ports/PaymentLedger.js'
-
-export const submitOrderCell = Sandwich.named('order.submit')(
-  // Phase 1: READ (Impure) — Fetch database records, cache entries, and current time via R
-  (req: SubmitOrderRequest) =>
-    Effect.gen(function*() {
-      const inventory = yield* InventoryStore
-      const ledger = yield* PaymentLedger
-      const stock = yield* inventory.getAvailableStock(req.sku)
-      const credit = yield* ledger.getCustomerCredit(req.customerId)
-      return { req, stock, credit }
-    }),
-)
-  // Phase 2: DECODE (Pure) — Parse unknown inputs into validated Command schemas
-  .decode(
-    Sandwich.pure(({ credit, req, stock }) =>
-      S.decodeUnknown(SubmitOrderCommand)({
-        orderId: req.orderId,
-        sku: req.sku,
-        quantity: req.quantity,
-        availableStock: stock.quantity,
-        creditBalance: credit.balance,
-      })
-    ),
-  )
-  // Phase 3: DECIDE (Pure Core) — Execute a pure decision function (CC = 1)
-  .decide(decideOrderFulfillment)
-  // Phase 4: ENCODE (Pure) — Convert domain decision outcomes into persistence records
-  .encode(
-    Sandwich.pure((outcome) =>
-      Result.match(outcome, {
-        onSuccess: (accepted) => new OrderCommittedPayload({ id: accepted.orderId }),
-        onFailure: (refusal) => new OrderRefusalLoggedPayload({ reason: refusal._tag }),
-      })
-    ),
-  )
-  // Phase 5: WRITE (Impure) — Persist records, update tables, and emit events via R
-  .write((payload, { req }) =>
-    Effect.gen(function*() {
-      const ledger = yield* PaymentLedger
-      yield* ledger.commitTransaction(payload)
-      return new SubmitOrderResponse({ orderId: req.orderId, status: payload._tag })
-    })
-  )
+```bash
+pnpm add @systemfsoftware/effect-cell-types effect@4.0.0-rc.116
 ```
 
-Calling I/O inside `decide`, skipping a phase, or asserting types without validation (`as`) fails the TypeScript typecheck.
+### 1. Declare the Pure Decision Workflow
 
-### Pure Decision Workflows (CC = 1)
-
-Decision logic in `Sandwich.decide` must be a `Workflow` created with `Workflow.make`:
-
-- **Cyclomatic complexity = 1**: The function has a single code path.
-- **Exhaustive pattern matching**: Branching uses `Match.value(cmd).pipe(..., Match.exhaustive)` over closed tagged unions.
-- **No imperative control flow**: `if`, `else`, `switch`, `for`, `while`, and `?:` are prohibited in `*.workflow.ts` by an Oxlint rule.
-- **No ambient I/O**: Workflows do not read clocks (`Date.now`), generate random values, or access Effect context services. Clocks and IDs are read during Phase 1 (`read`) and passed into the Command.
+Workflows have cyclomatic complexity 1 and declare schemas for commands, decisions, and domain errors. Decision variants share a family brand (`Symbol.for`), and command schemas declare their instrumentation mapping:
 
 ```ts
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Result, Schema as S } from 'effect'
 
+// Family brand distinguishing this decision's variants
+const AllocationTypeId: unique symbol = Symbol.for('inventory/Allocation')
+type AllocationTypeId = typeof AllocationTypeId
+
 export class AllocateStockCommand extends S.Class<AllocateStockCommand>('AllocateStockCommand')({
   orderId: S.String,
-  requestedQuantity: S.Int.pipe(S.positive()),
-  availableQuantity: S.Int.pipe(S.nonNegative()),
-}) {}
+  requestedQuantity: S.Int.pipe(S.check(S.isGreaterThan(0))),
+  availableQuantity: S.Int.pipe(S.check(S.isGreaterThanOrEqualTo(0))),
+}) {
+  static readonly [Workflow.InstrumentationBrand] = { orderId: 'app.order.id' } as const
+}
 
 export class StockAllocated extends S.TaggedClass<StockAllocated>()('StockAllocated', {
   orderId: S.String,
   quantity: S.Int,
-}) {}
+}) {
+  readonly [AllocationTypeId] = AllocationTypeId
+}
 
-export class InsufficientStockRefusal extends S.TaggedClass<InsufficientStockRefusal>()('InsufficientStockRefusal', {
+export class InsufficientStockRefusal extends S.TaggedError<InsufficientStockRefusal>()('InsufficientStockRefusal', {
   orderId: S.String,
   deficit: S.Int,
-}) {}
+}) {
+  readonly [AllocationTypeId] = AllocationTypeId
+}
 
-// Cyclomatic complexity = 1: Single total pipeline ending with Match.exhaustive
-export const allocateStockWorkflow = Workflow.make(
-  AllocateStockCommand,
-  (cmd): Result.Result<StockAllocated, InsufficientStockRefusal> =>
+export const allocateStockWorkflow = Workflow.make({
+  command: AllocateStockCommand,
+  decision: StockAllocated,
+  error: InsufficientStockRefusal,
+  decide: (cmd) =>
     Match.value(cmd.availableQuantity >= cmd.requestedQuantity).pipe(
       Match.when(true, () =>
         Result.succeed(
@@ -199,127 +108,155 @@ export const allocateStockWorkflow = Workflow.make(
         )),
       Match.exhaustive,
     ),
+})
+```
+
+### 2. Wrap in a Five-Phase Cell Sandwich
+
+The cell reads state, decodes the command via schema, executes the workflow, serializes the outcome, and calls the appropriate write handler:
+
+```ts
+import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
+import { Context, Effect } from 'effect'
+import { allocateStockWorkflow } from './allocate-stock.workflow.js'
+
+export class InventoryStore extends Context.Service<InventoryStore, {
+  readonly getAvailableStock: (sku: string) => Effect.Effect<{ readonly quantity: number }>
+  readonly commitAllocation: (orderId: string, quantity: number) => Effect.Effect<void>
+}>()('InventoryStore') {}
+
+export interface OrderRequest {
+  readonly orderId: string
+  readonly sku: string
+  readonly requestedQuantity: number
+}
+
+export const allocateStockCell = Sandwich.named('inventory.allocate')(
+  // Phase 1: Read (impure) -> returns Command's Encoded shape
+  (req: OrderRequest) =>
+    Effect.gen(function*() {
+      const inventory = yield* InventoryStore
+      const stock = yield* inventory.getAvailableStock(req.sku)
+      return {
+        orderId: req.orderId,
+        requestedQuantity: req.requestedQuantity,
+        availableQuantity: stock.quantity,
+      }
+    }),
 )
+  // Phase 2 (Decode) & Phase 4 (Encode) are derived automatically from schemas
+  // Phase 3: Decide (pure workflow)
+  .decide(allocateStockWorkflow)
+  // Phase 5: Write (impure) -> exhaustive handlers over outcomes plus CommandRejected
+  .write({
+    StockAllocated: ({ orderId, quantity }) =>
+      Effect.gen(function*() {
+        const inventory = yield* InventoryStore
+        yield* inventory.commitAllocation(orderId, quantity)
+        return { status: 'allocated' as const, orderId, quantity }
+      }),
+    InsufficientStockRefusal: ({ orderId, deficit }) =>
+      Effect.succeed({ status: 'refused' as const, orderId, deficit }),
+    CommandRejected: ({ issue }) => Effect.fail(new Error(`Validation failed: ${issue}`)),
+  })
 ```
 
-### The Four-Channel Contract
+### 3. Bind Services at the Composition Root
 
-Every Cell is typed as `Cell<in I, out A, out E, out R>`:
+Provide context once at the entrypoint before invoking `.run()`:
 
-| Channel           | Role                                    | Invariant                                                                                                                                                              |
-| :---------------- | :-------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`I` (Input)**   | Request or command parameters.          | Schema-validated and total.                                                                                                                                            |
-| **`A` (Outcome)** | Successful outcome or business refusal. | **Domain refusals live on channel A.** `InsufficientStock`, `CreditHold`, and `OrderRejected` are valid business decisions, encoded in Phase 4 and written in Phase 5. |
-| **`E` (Failure)** | Infrastructure errors.                  | Reserved for transport crashes (`DatabaseCrash`, `SocketTimeout`, `SchemaDecodeError`). Never used for business decisions.                                             |
-| **`R` (Context)** | Service requirements.                   | Services required by `read` and `write`. Must be satisfied ($R = \text{never}$) before `.run()`.                                                                       |
+```ts
+import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Effect, Layer } from 'effect'
+import { allocateStockCell, InventoryStore } from './allocate-stock.cell.js'
 
-### Service & Layer Boundaries
+const InventoryLive = Layer.succeed(InventoryStore, {
+  getAvailableStock: (_sku) => Effect.succeed({ quantity: 10 }),
+  commitAllocation: (_orderId, _qty) => Effect.void,
+})
 
-Following `compound-packs/cell-architecture/service-and-layer-boundaries.md`:
+const program = Effect.gen(function*() {
+  const context = yield* Layer.build(InventoryLive)
+  const cell = Cell.provideContext(allocateStockCell, context)
 
-- Capability contracts are declared as `Context.Service<Self, Shape>()(...)` in dedicated `*.service.ts` modules with zero driver imports (`.port.ts` and `.layer.ts` suffixes are prohibited).
-- Concrete implementations export parameterized `layer(options)` factories from dedicated driver/store modules (e.g. `src/drivers/*`, `src/store/*`). Static `*Live` singletons are reserved strictly for the application composition root (`main.ts`).
-- Dependencies bind **once** at the application entrypoint via `Cell.provide(AppStack)`; mid-pipeline binding (`Effect.provide` inside cells) is forbidden.
+  const result = yield* cell.run({
+    orderId: 'ord-123',
+    sku: 'widget-a',
+    requestedQuantity: 2,
+  })
 
-### Resource & Lifecycle Algebra
-
-Infrastructure and capability packages (container runners, sandbox drivers, process managers) manage resources directly without application port ceremony:
-
-- **Scoped lifecycles**: Resources acquire inside Effect `Scope` with escalating finalizers. Imperative `start()` and `stop()` methods are prohibited (`scoped-lifecycle-boundaries.md`).
-- **Resource and handle pairing**: Declarative specifications compile directly to scoped instances or parameterized layers (`resource-vs-handle-duality.md`).
-- **Dual syntax support**: Operations are callable both as object methods and as data-last `pipe()` combinators (`pipeable-dual-parity.md`).
-- **Cause preservation**: Errors preserve underlying failure details via `cause: Schema.optional(Schema.Unknown)` (`four-channel-contracts.md`).
+  return result
+})
+```
 
 ---
 
-## Boundary Testing & Local Oracles
+## Architectural Doctrine
 
-Mocking internal I/O glue hides integration bugs:
+The principles and design laws governing code in this repository live in standalone Compound Engineering packs:
 
-```text
-Without oracles (mocks):
-  Test ──► [ vi.fn() stub ] ──► Asserts mock was called
-  (No sockets opened, no filesystem accessed, false confidence)
+- [Cell Architecture](compound-packs/cell-architecture): Five-phase continuation chains, pure decision workflows, service and layer boundaries, four-channel separation, and scoped resource lifecycles.
+- [Boundary Testing](compound-packs/boundary-testing): Local system oracles, zero driver mocks on internal glue, and dual-condition acceptance/refusal tests.
 
-With system oracles:
-  Test ──► [ Boundary adapter ] ──► Local loopback socket (127.0.0.1:0)
-  (Real TCP connection, verified acceptance and refusal, zero handle leaks)
-```
-
-The Boundary Testing doctrine (`compound-packs/boundary-testing/`) requires:
-
-1. **No driver mocks**: Do not mock platform modules (`net`, `fs`, `child_process`, `sql`). Pure logic belongs in a `Workflow` covered by property tests. Boundary adapters must run against real local OS resources.
-2. **Local system oracles**: Ephemeral kernel ports (`127.0.0.1:0`), temporary file directories, and child processes serve as test fixtures.
-3. **Dual-condition checks**: Every boundary test verifies both acceptance (an active listener connects) and refusal (a closed port refuses immediately without timing out or leaking resources).
+Concepts, definitions, and verification gates are indexed in [CONCEPTS.md](CONCEPTS.md).
 
 ---
 
-## Monorepo Package Map
+## Monorepo Workspace Map
 
-Run `pnpm map` to inspect packages, versions, and build gates:
+Run `pnpm map` to inspect packages, directories, and verified build gates:
 
-### Cell & Workflow Core
+```bash
+pnpm map
+```
 
-| Package                                                                | Version | Description                                                                        | Gate                                                      |
-| :--------------------------------------------------------------------- | :------ | :--------------------------------------------------------------------------------- | :-------------------------------------------------------- |
-| [`@systemfsoftware/effect-cell-types`](packages/effect-cell-types)     | `1.2.0` | Type contracts for workflows, Arrow chains (`Sandwich`), and five-phase pipelines. | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-readiness`](packages/effect-readiness)       | `1.0.0` | Pure readiness verification workflows, polling policies, and socket/HTTP probes.   | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-microsandbox`](packages/effect-microsandbox) | `1.0.0` | Declarative container specifications and isolated microVM testcontainers.          | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-daemon-spec`](packages/effect-daemon-spec)   | `1.0.0` | Supervision tree daemon primitives, leader election, and health monitors.          | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+### Core Architecture & Execution
+
+| Package                                                                 | Purpose                                                                         | Verification Gates                                        |
+| :---------------------------------------------------------------------- | :------------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| [`@systemfsoftware/effect-cell-types`](packages/effect-cell-types)      | Type contracts for five-phase cells, stage builders (`Sandwich`), and workflows | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-readiness`](packages/effect-readiness)        | Pure readiness verification workflows and polling probe policies                | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-microsandbox`](packages/effect-microsandbox)  | Declarative container specifications and isolated microVM testcontainers        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-daemon-spec`](packages/effect-daemon-spec)    | Supervision tree daemon primitives and health monitors                          | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-memfs`](packages/effect-memfs)                | In-memory Effect Platform `FileSystem` implementation                           | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-atom`](packages/atom/effect-atom)             | Reactive atomic state management with Effect streams                            | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-atom-react`](packages/atom/effect-atom-react) | React bindings and hooks for Effect Atom                                        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ### Schema & Property Law
 
-| Package                                                                                      | Version | Description                                                                               | Gate                                                      |
-| :------------------------------------------------------------------------------------------- | :------ | :---------------------------------------------------------------------------------------- | :-------------------------------------------------------- |
-| [`@systemfsoftware/effect-schema-law`](packages/effect-schema-law)                           | `1.0.0` | Property-test generators verifying schema encode/decode roundtrips and canonical subsets. | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-schema-vite`](packages/effect-schema-vite)                         | `1.0.0` | Vite plugin that finds exported schemas and generates inline property test suites.        | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-schema-discovery`](packages/effect-schema-discovery)               | `1.0.0` | AST scanner that finds exported Schema declarations across packages.                      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-schema-recursion-budget`](packages/effect-schema-recursion-budget) | `1.0.0` | Cycle detection and recursion depth guards for recursive schemas.                         | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/hex-schema`](packages/hex-schema)                                         | `1.0.0` | Schema transformations for validated hex-encoded strings and buffers.                     | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| Package                                                                                      | Purpose                                                                      | Verification Gates                                        |
+| :------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------- | :-------------------------------------------------------- |
+| [`@systemfsoftware/effect-schema-law`](packages/effect-schema-law)                           | Property-test generators for schema roundtrip laws and canonical subsets     | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-schema-vite`](packages/effect-schema-vite)                         | Vite plugin discovering schemas and synthesizing inline property test suites | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-schema-discovery`](packages/effect-schema-discovery)               | AST scanner finding exported schema declarations across workspace packages   | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-schema-extensions`](packages/effect-schema-extensions)             | Common schema combinators, branded types, and transformations                | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/effect-schema-recursion-budget`](packages/effect-schema-recursion-budget) | Recursion depth ceilings and decay guards for recursive schemas              | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/hex-schema`](packages/hex-schema)                                         | Validated hex-encoded string and buffer codecs                               | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
 
 ### Specification & BDD Verification
 
-| Package                                                                | Version | Description                                                                                     | Gate                                              |
-| :--------------------------------------------------------------------- | :------ | :---------------------------------------------------------------------------------------------- | :------------------------------------------------ |
-| [`@systemfsoftware/effect-gherkin-spec`](packages/effect-gherkin-spec) | `1.0.0` | Gherkin BDD syntax executing Given/When/Then steps as typed Effect workflows.                   | `build`, `lint`, `typecheck`, `test`, `attw`      |
-| [`@systemfsoftware/storybook-gherkin`](packages/storybook-gherkin)     | `1.0.0` | Gherkin scenarios executed as play functions in Storybook browser tests.                        | `build`, `lint`, `typecheck`, `test`, `api:check` |
-| [`@systemfsoftware/differential-spec`](packages/differential-spec)     | `1.0.0` | Differential testing engine comparing candidate code outputs against reference implementations. | `build`, `lint`, `typecheck`, `test`              |
+| Package                                                                | Purpose                                                                         | Verification Gates                                        |
+| :--------------------------------------------------------------------- | :------------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| [`@systemfsoftware/effect-gherkin-spec`](packages/effect-gherkin-spec) | Gherkin BDD syntax executing Given/When/Then steps as typed Effect workflows    | `build`, `lint`, `typecheck`, `test`, `attw`              |
+| [`@systemfsoftware/storybook-gherkin`](packages/storybook-gherkin)     | Gherkin scenarios executed as play functions in Storybook browser tests         | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/differential-spec`](packages/differential-spec)     | Differential testing comparing candidate code against reference implementations | `build`, `lint`, `typecheck`, `test`                      |
+| [`@systemfsoftware/effect-spec-runtime`](packages/effect-spec-runtime) | Test execution runtime and fixture isolation harness                            | `build`, `lint`, `typecheck`, `test`, `attw`              |
+| [`@systemfsoftware/trace-spec`](packages/trace-spec)                   | OpenTelemetry trace assertion and contract specification harness                | `build`, `lint`, `typecheck`, `test`, `attw`              |
+| [`@systemfsoftware/trace-taxonomy`](packages/trace-taxonomy)           | Semantic convention taxonomy and span attribute typings                         | `build`, `lint`, `typecheck`, `test`, `attw`              |
 
-### Oxlint Static Rules
+### Oxlint Static Plugins & Presets
 
-| Package                                                                                                      | Version | Description                                                                         | Gate                                                      |
-| :----------------------------------------------------------------------------------------------------------- | :------ | :---------------------------------------------------------------------------------- | :-------------------------------------------------------- |
-| [`@systemfsoftware/oxlint-plugin-cell-architecture`](packages/oxlint-plugin/oxlint-plugin-cell-architecture) | `1.2.0` | Enforces sandwich phase ordering, workflow purity, and inward dependency direction. | `build`, `lint`, `typecheck`, `test`, `api:check`         |
-| [`@systemfsoftware/oxlint-plugin-effect-platform`](packages/oxlint-plugin/oxlint-plugin-effect-platform)     | `1.0.0` | Validates Effect Platform service usage, layer creation, and resource scopes.       | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/oxlint-plugin-effect-schema`](packages/oxlint-plugin/oxlint-plugin-effect-schema)         | `1.0.0` | Flags schema decoding anti-patterns, manual type casts, and unvalidated models.     | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/oxlint-plugin-test-discipline`](packages/oxlint-plugin/oxlint-plugin-test-discipline)     | `1.0.0` | Prohibits mocking drivers on internal glue code and enforces oracle assertions.     | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-
-### Infrastructure & Tooling
-
-| Package                                                  | Version | Description                                                                    | Gate                                                      |
-| :------------------------------------------------------- | :------ | :----------------------------------------------------------------------------- | :-------------------------------------------------------- |
-| [`@systemfsoftware/rx-effect`](packages/rx-effect)       | `1.0.0` | Bridge connecting RxJS Observables to backpressured Effect Streams.            | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/effect-memfs`](packages/effect-memfs) | `1.0.0` | In-memory implementation of Effect Platform `FileSystem` for isolated testing. | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-| [`@systemfsoftware/npm-package`](packages/npm-package)   | `1.0.0` | Schema models and codecs for validating npm `package.json` manifests.          | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
-
----
-
-## Architectural Compound Packs
-
-Architectural rules are published as [Compound Engineering Packs](https://every.to/compound-engineering/guides/packs):
-
-- [`compound-packs/cell-architecture/`](compound-packs/cell-architecture): The five-phase sandwich chain, single-path workflows, four-channel separation, inward dependencies, scoped resource lifecycles, and parameterized layer constructors.
-- [`compound-packs/boundary-testing/`](compound-packs/boundary-testing): Zero driver mocks, local loopback oracles, and staged protocol evidence.
-
-### Using Packs in Downstream Projects
-
-To vendor and enforce these packs in downstream repositories using the Compound Engineering CLI, add them to `.compound-engineering/config.yaml`:
-
-```yaml
-packs:
-  - source: https://github.com/systemfsoftware/systemfsoftware/tree/main/compound-packs/cell-architecture
-  - source: https://github.com/systemfsoftware/systemfsoftware/tree/main/compound-packs/boundary-testing
-```
+| Package                                                                                                       | Purpose                                                                   | Verification Gates                                        |
+| :------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| [`@systemfsoftware/oxlint-plugin-cell-architecture`](packages/oxlint-plugin/oxlint-plugin-cell-architecture)  | Enforces sandwich phase sequencing and inward dependency direction        | `build`, `lint`, `typecheck`, `test`, `api:check`         |
+| [`@systemfsoftware/oxlint-plugin-dmmf-workflow`](packages/oxlint-plugin/oxlint-plugin-dmmf-workflow)          | Enforces workflow purity, CC = 1, and Match.exhaustive in `*.workflow.ts` | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-effect-platform`](packages/oxlint-plugin/oxlint-plugin-effect-platform)      | Validates Effect Platform service usage and resource scopes               | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-effect-schema`](packages/oxlint-plugin/oxlint-plugin-effect-schema)          | Flags schema decoding anti-patterns and unvalidated type assertions       | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-plugin-test-discipline`](packages/oxlint-plugin/oxlint-plugin-test-discipline)      | Bans driver mocks on internal glue and enforces local system oracles      | `build`, `lint`, `typecheck`, `test`, `attw`, `api:check` |
+| [`@systemfsoftware/oxlint-config-recommended`](packages/oxlint-presets/oxlint-config-recommended)             | Monorepo recommended linter configuration preset                          | `build`, `lint`, `typecheck`, `attw`                      |
+| [`@systemfsoftware/oxlint-config-cell-architecture`](packages/oxlint-presets/oxlint-config-cell-architecture) | Linter preset enforcing pure-core/imperative-shell boundaries             | `build`, `lint`, `typecheck`, `attw`                      |
+| [`@systemfsoftware/oxlint-config-dmmf`](packages/oxlint-presets/oxlint-config-dmmf)                           | Linter preset enforcing workflow purity and schema boundaries             | `build`, `lint`, `typecheck`, `attw`                      |
+| [`@systemfsoftware/oxlint-config-rule-authoring`](packages/oxlint-presets/oxlint-config-rule-authoring)       | Linter preset for AST plugin authoring                                    | `build`, `lint`, `typecheck`, `attw`                      |
 
 ---
 
@@ -355,17 +292,17 @@ System One Decision Gate:
 
 ---
 
-## Example Application: Inventory Fulfillment
+## Reference Implementation
 
-The repository includes a complete example application in [`examples/inventory-fulfillment/`](examples/inventory-fulfillment):
+A full-stack reference application demonstrating the cell architecture lives in [`examples/inventory-fulfillment/`](examples/inventory-fulfillment):
 
-- **Transport**: `effect/unstable/rpc` over `@effect/platform-node`.
-- **Persistence**: `drizzle-orm` over `@effect/sql-pg` (production) and `@effect/sql-pglite` (tests).
-- **Business rules**: Multi-warehouse stock allocation, lot expiry filtering, VIP credit limits, and bundle expansion.
-- **Concurrency**: Compare-and-swap (CAS) optimistic concurrency with exponential backoff, isolated to Phase 5 (`write`).
-- **Integration tests**: Sociable scenarios run against embedded PostgreSQL with no mock objects.
+- **Transport**: Effect RPC over HTTP router (`effect/unstable/rpc`).
+- **Persistence**: Drizzle ORM over embedded PGlite in tests and PostgreSQL in production.
+- **Authentication**: Better-Auth session validation middleware.
+- **Concurrency**: CAS optimistic concurrency retry loops isolated to Phase 5 (`write`).
+- **Integration testing**: Sociable scenarios run against embedded PostgreSQL with zero mocks.
 
-Run the test suite:
+Run the example test suite:
 
 ```bash
 pnpm --filter @systemfsoftware/example-inventory-fulfillment test
@@ -373,17 +310,9 @@ pnpm --filter @systemfsoftware/example-inventory-fulfillment test
 
 ---
 
-## Examples
-
-Runnable full-stack reference applications and integration suites live in [`examples/`](examples):
-
-- [`examples/inventory-fulfillment/`](examples/inventory-fulfillment): End-to-end e-commerce fulfillment engine exercising Effect RPC, Drizzle ORM over PGlite/Postgres, Better-Auth session validation, and CAS optimistic concurrency retry loops.
-
-More end-to-end examples demonstrating complex domain models and capability drivers will be added under [`examples/`](examples).
-
 ## Contributing
 
-Review [CONTRIBUTING.md](CONTRIBUTING.md) for local environment setup (Node 24, pnpm 11, Nix flakes) and commit conventions.
+Review [CONTRIBUTING.md](CONTRIBUTING.md) for local environment setup, Nix flakes, and commit conventions.
 
 Pre-delivery check command:
 

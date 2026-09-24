@@ -1,5 +1,7 @@
 export const TEST_BASENAME = /\.(?:test|spec)\.[cm]?tsx?$/
 
+export const TYPE_TEST_BASENAME = /\.tst\.[cm]?tsx?$/
+
 export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
 
 /**
@@ -13,6 +15,10 @@ export const TEST_TREE_DIRS: ReadonlySet<string> = new Set([...SANCTIONED_TEST_D
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
 export const DIFFERENTIAL_SUFFIX = '.differential.test.ts' as const
+
+export const CONFORMANCE_SUFFIX = '.conformance.test.ts' as const
+
+export const MODEL_SUFFIX = '.model.ts' as const
 
 export const TRACE_SUFFIX = '.trace.test.ts' as const
 
@@ -44,9 +50,17 @@ export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const
 
 export const DIFFERENTIAL_PACKAGE = '@systemfsoftware/differential-spec' as const
 
+export const CONFORMANCE_PACKAGE = '@systemfsoftware/conformance-spec' as const
+
 export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 
 export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
+
+export const RAW_VITEST_PACKAGES: Record<string, true> = {
+  'effect-spec-runtime': true,
+  'vitest': true,
+  'vitest-conformance': true,
+}
 
 export const RUNNER_NAMES: ReadonlySet<string> = new Set(['it', 'test', 'describe'])
 

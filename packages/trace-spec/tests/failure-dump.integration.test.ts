@@ -1,18 +1,13 @@
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
+import { expect } from '@effect/vitest'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
-import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
-type CheckFailure =
-  | Contract.ContractDecodeError
-  | Observation.EmptyObservationError
-  | Contract.TraceDisparityError
-
-const disparityOf = (failure: CheckFailure): Contract.TraceDisparityError => {
+const disparityOf = (failure: Contract.CheckFailure<never>): Contract.TraceDisparityError => {
   if (!Schema.is(Contract.TraceDisparityError)(failure)) {
     throw new Error('expected the contract to refuse with a trace disparity')
   }

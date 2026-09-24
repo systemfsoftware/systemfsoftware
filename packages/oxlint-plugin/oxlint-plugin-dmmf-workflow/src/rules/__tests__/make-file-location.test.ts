@@ -18,16 +18,13 @@ const ruleTester = new RuleTester({
 const IMPORT = `import { Workflow } from '@systemfsoftware/effect-cell-types'`
 
 const OUTSIDE_EXPECTED =
-  'a workflow constructed with Workflow.make, Workflow.total, or Workflow.andThen only in a <stem>.workflow.ts file whose stem is one segment with no periods'
-const OUTSIDE_ACTUAL =
-  'a workflow construction (Workflow.make, Workflow.total, or Workflow.andThen) in a file that is not a single-segment <stem>.workflow.ts'
+  'a workflow constructed with Workflow.make only in a <stem>.workflow.ts file whose stem is one segment with no periods'
+const OUTSIDE_ACTUAL = 'a Workflow.make construction in a file that is not a single-segment <stem>.workflow.ts'
 const OUTSIDE_FIX =
   'move this construction into a <stem>.workflow.ts module and import the workflow from here; a workflow only a test uses belongs in tests/__fixtures__/<stem>.workflow.ts'
 
-const SECOND_EXPECTED =
-  'at most one workflow construction (Workflow.make, Workflow.total, or Workflow.andThen) per file'
-const SECOND_ACTUAL =
-  'a second workflow construction (Workflow.make, Workflow.total, or Workflow.andThen) in the same file'
+const SECOND_EXPECTED = 'at most one Workflow.make construction per file'
+const SECOND_ACTUAL = 'a second Workflow.make construction in the same file'
 const SECOND_FIX =
   'give each decision its own <stem>.workflow.ts with its __tests__/<stem>.workflow.property.test.ts beside it'
 
@@ -41,11 +38,17 @@ const secondError = (name: string) => ({
   data: { name, expected: SECOND_EXPECTED, actual: SECOND_ACTUAL, fix: SECOND_FIX },
 })
 
+const makeOnce = (decide = '(input: number) => input', binding = 'decide'): string =>
+  `${IMPORT}\nexport const ${binding} = Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide: ${decide} })`
+
+const makeViaAliases = (first: string, second: string): string =>
+  `${IMPORT}\nconst W = Workflow\nexport const ${first} = W.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })\nexport const ${second} = Workflow['make']({ decide: (input: number) => input, command: Cmd, decision: Decision, error: NoError })`
+
 ruleTester.run('make-file-location', makeFileLocation, {
   valid: [
     {
       name: 'Should_Pass_When_WorkflowFileConstructsOnce',
-      code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
+      code: makeOnce(),
       filename: '/repo/pkg/src/decide.workflow.ts',
     },
     {
@@ -55,81 +58,79 @@ ruleTester.run('make-file-location', makeFileLocation, {
     },
     {
       name: 'Should_Ignore_When_TheBoundaryIsShadowedByALocalBinding',
-      code: `${IMPORT}\nconst Workflow = { make: (f: unknown) => f }\nWorkflow.make((x: number) => x)`,
+      code:
+        `${IMPORT}\nconst Workflow = { make: (options: unknown) => options }\nWorkflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (x: number) => x })`,
       filename: '/repo/pkg/src/executor.ts',
     },
     {
-      name: 'Should_Pass_When_MakeArgumentIsAModuleScopeFunctionReference',
-      code: `${IMPORT}\nconst decide = (input: number) => input\nexport const workflow = Workflow.make(decide)`,
+      name: 'Should_Pass_When_TheDecidePropertyReferencesAModuleScopeFunction',
+      code:
+        `${IMPORT}\nconst decide = (input: number) => input\nexport const workflow = Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide })`,
       filename: '/repo/pkg/src/decide.workflow.ts',
     },
     {
       name: 'Should_Pass_When_WorkflowFileLivesOutsideSrc',
-      code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
+      code: makeOnce(),
       filename: '/repo/pkg/tests/__fixtures__/f.workflow.ts',
     },
     {
       name: 'Should_Pass_When_AnAliasedMakeConstructsOnceInAWorkflowFile',
-      code: `${IMPORT}\nconst W = Workflow\nexport const decide = W.make((input: number) => input)`,
+      code:
+        `${IMPORT}\nconst W = Workflow\nexport const decide = W.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/decide.workflow.ts',
     },
     {
-      name: 'Should_Pass_When_AWorkflowFileConstructsOnceWithTotal',
-      code: `${IMPORT}\nexport const decide = Workflow.total(Cmd, (input: number) => input)`,
+      name: 'Should_Pass_When_AComputedMakeConstructsOnceInAWorkflowFile',
+      code:
+        `${IMPORT}\nexport const decide = Workflow['make']({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/decide.workflow.ts',
-    },
-    {
-      name: 'Should_Pass_When_AWorkflowFileConstructsOnceWithAndThen',
-      code: `${IMPORT}\nexport const decide = Workflow.andThen(Cmd, upstream, NextCmd, session, downstream)`,
-      filename: '/repo/pkg/src/admit-order.workflow.ts',
     },
     {
       name: 'Should_Ignore_When_AnUnrecognizedWorkflowMemberIsCalled',
-      code: `${IMPORT}\nexport const adapter = Workflow.compose((input: number) => input)`,
+      code: `${IMPORT}\nexport const adapter = Workflow.compose({ command: Cmd, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/executor.ts',
     },
     {
       name: 'Should_Pass_When_AConstructionSitsInATypePosition',
-      code: `${IMPORT}\ntype Key = { [Workflow.total(Cmd, decide)]: string }`,
+      code:
+        `${IMPORT}\ntype Key = { [Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide })]: string }`,
       filename: '/repo/pkg/src/run.executor.ts',
     },
     {
       name: 'Should_Pass_When_AConstructionIsAProbeInATypeTestFile',
       code:
-        `${IMPORT}\nconst probe = Workflow.andThen(Cmd, decideUpstream, NextCmd, session, decideDownstream)\nexpect(Workflow.total(Cmd, decide)).type.toBe<unknown>()\nexpect(probe).type.toBe<unknown>()`,
+        `${IMPORT}\nexpect(Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide })).type.toBe<unknown>()`,
       filename: '/repo/pkg/test-types/Workflow.tst.ts',
     },
   ],
   invalid: [
     {
       name: 'Should_Report_When_MakeIsConstructedInAnExecutor',
-      code: `${IMPORT}\nexport const adapter = Workflow.make((input: number) => input)`,
+      code: makeOnce(),
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts')],
     },
     {
       name: 'Should_Report_When_WorkflowStemCarriesAnExtraPeriod',
-      code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
+      code: makeOnce(),
       filename: '/repo/pkg/src/foo.bar.workflow.ts',
       errors: [outsideError('foo.bar.workflow.ts')],
     },
     {
       name: 'Should_Report_When_MakeIsConstructedInATestFile',
-      code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
+      code: makeOnce(),
       filename: '/repo/pkg/src/__tests__/foo.workflow.test.ts',
       errors: [outsideError('foo.workflow.test.ts')],
     },
     {
       name: 'Should_Report_When_WorkflowFileConstructsTwice',
-      code:
-        `${IMPORT}\nexport const a = Workflow.make((input: number) => input)\nexport const b = Workflow.make((input: number) => input)`,
+      code: makeViaAliases('a', 'b'),
       filename: '/repo/pkg/src/decide.workflow.ts',
       errors: [secondError('decide.workflow.ts')],
     },
     {
       name: 'Should_ReportLocationOnly_When_NonConformingFileConstructsTwice',
-      code:
-        `${IMPORT}\nexport const a = Workflow.make((input: number) => input)\nexport const b = Workflow.make((input: number) => input)`,
+      code: makeViaAliases('a', 'b'),
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts'), outsideError('run.executor.ts')],
     },
@@ -137,7 +138,8 @@ ruleTester.run('make-file-location', makeFileLocation, {
       // The defining package imports `Workflow` relatively, so a resolver keyed only on the
       // package specifier reported nothing in the one package that authors the primitive.
       name: 'Should_Report_When_TheDefiningPackageImportsWorkflowRelatively',
-      code: `import * as Workflow from './Workflow.js'\nexport const decide = Workflow.make((input: number) => input)`,
+      code:
+        `import * as Workflow from './Workflow.js'\nexport const decide = Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/packages/effect-cell-types/src/Cell.ts',
       errors: [outsideError('Cell.ts')],
     },
@@ -146,57 +148,43 @@ ruleTester.run('make-file-location', makeFileLocation, {
       // previously pattern-matched the callee object to the import binding itself,
       // so `const W = Workflow; W.make(...)` walked past in any filename.
       name: 'Should_Report_When_AnAliasedConstructionLivesInAnExecutor',
-      code: `${IMPORT}\nconst W = Workflow\nexport const adapter = W.make((input: number) => input)`,
+      code:
+        `${IMPORT}\nconst W = Workflow\nexport const adapter = W.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts')],
     },
     {
       name: 'Should_Report_When_AComputedConstructionLivesInAnExecutor',
-      code: `${IMPORT}\nexport const adapter = Workflow['make']((input: number) => input)`,
+      code:
+        `${IMPORT}\nexport const adapter = Workflow['make']({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts')],
     },
     {
       name: 'Should_Report_When_ADestructuredConstructionLivesInAnExecutor',
-      code: `${IMPORT}\nconst { make } = Workflow\nexport const adapter = make((input: number) => input)`,
+      code:
+        `${IMPORT}\nconst { make } = Workflow\nexport const adapter = make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts')],
     },
     {
       name: 'Should_Report_When_AWorkflowFileConstructsTwiceThroughAliases',
       code:
-        `${IMPORT}\nconst W = Workflow\nexport const a = W.make((input: number) => input)\nexport const b = Workflow['make']((input: number) => input)`,
-      filename: '/repo/pkg/src/decide.workflow.ts',
-      errors: [secondError('decide.workflow.ts')],
-    },
-    {
-      name: 'Should_Report_When_TotalIsConstructedInAnExecutor',
-      code: `${IMPORT}\nexport const adapter = Workflow.total(Cmd, (input: number) => input)`,
-      filename: '/repo/pkg/src/run.executor.ts',
-      errors: [outsideError('run.executor.ts')],
-    },
-    {
-      name: 'Should_Report_When_TotalIsConstructedInATestFile',
-      code: `${IMPORT}\nexport const decide = Workflow.total(Cmd, (input: number) => input)`,
-      filename: '/repo/pkg/src/__tests__/foo.workflow.test.ts',
-      errors: [outsideError('foo.workflow.test.ts')],
-    },
-    {
-      name: 'Should_Report_When_AWorkflowFileConstructsWithMakeAndAndThen',
-      code:
-        `${IMPORT}\nexport const a = Workflow.make((input: number) => input)\nexport const b = Workflow.andThen(Cmd, a, NextCmd, session, decideNext)`,
+        `${IMPORT}\nconst W = Workflow\nexport const a = W.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })\nexport const b = Workflow['make']({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })`,
       filename: '/repo/pkg/src/decide.workflow.ts',
       errors: [secondError('decide.workflow.ts')],
     },
     {
       name: 'Should_Report_When_AConstructionSitsInAnObjectLiteralKey',
-      code: `${IMPORT}\nexport const w = { [Workflow.total(Cmd, decide)]: 1 }`,
+      code:
+        `${IMPORT}\nexport const w = { [Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide })]: 1 }`,
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts')],
     },
     {
       name: 'Should_Report_When_AProbeShapedConstructionLivesInAnExecutor',
-      code: `${IMPORT}\nexpect(Workflow.total(Cmd, (input: number) => input)).type.toBe<unknown>()`,
+      code:
+        `${IMPORT}\nexpect(Workflow.make({ command: Cmd, decision: Decision, error: NoError, decide: (input: number) => input })).type.toBe<unknown>()`,
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts')],
     },

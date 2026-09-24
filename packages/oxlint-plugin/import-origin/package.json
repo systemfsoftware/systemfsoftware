@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsdown -l warn",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {

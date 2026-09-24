@@ -29,7 +29,7 @@ shipped the identifier-keyed rule, killed it, and shipped its replacement inside
    is the library itself - `Cell.andThen` calls the inner cell's `run`, so the identifier-keyed rule
    flags the library that defines the combinators.
 3. The operations people actually mean by "run placement" are two others: wiring closure
-   (`ManagedRuntime.make`, `Layer.provide`/`merge`, `Cell.provide`) and interpretation
+   (`ManagedRuntime.make`, `Layer.provide`/`merge`, `Cell.provideContext`) and interpretation
    (`runtime.runPromise`/`runFork`, `Layer.launch`). Those have cardinality (once per process;
    once per outside interaction) and placement (root module; SF2 edge) semantics.
 4. Of those properties, only the shapes are statically decidable: a tracked wiring call inside a

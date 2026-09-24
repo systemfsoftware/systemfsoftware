@@ -35,9 +35,13 @@ export class InfraCrashError extends S.TaggedError<InfraCrashError>()('InfraCras
   message: S.String,
 }) {}
 
-export const admitDecodedCommand = Workflow.make(
-  Decoded,
-  (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>
+export const AdmissionDecision = S.Union([Admitted, Rejected])
+
+export const admitDecodedCommand = Workflow.make({
+  command: Decoded,
+  decision: AdmissionDecision,
+  error: Malformed,
+  decide: (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>
     Match.value(decoded.length < 0).pipe(
       Match.when(true, () => Result.fail(new Malformed({ length: decoded.length }))),
       Match.when(false, () =>
@@ -48,4 +52,4 @@ export const admitDecodedCommand = Workflow.make(
         )),
       Match.exhaustive,
     ),
-)
+})

@@ -16,6 +16,13 @@
   "files": [
     "src"
   ],
+  "scripts": {
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",

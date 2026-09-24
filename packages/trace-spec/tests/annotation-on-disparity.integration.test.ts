@@ -1,20 +1,26 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { And, Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FileSystem, Layer } from 'effect'
-import { expect } from 'vitest'
 import { startVitest } from 'vitest/node'
 import type { Reporter, RunnerTestFile } from 'vitest/node'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const DUMP_DIRECTORY = 'artifacts/traces'
+
+interface ErrorView {
+  readonly name?: string
+  readonly message?: string
+  readonly source?: string
+}
 
 interface TaskView {
   readonly tasks?: ReadonlyArray<TaskView>
   readonly type?: string
   readonly result?: {
     readonly state?: string
-    readonly errors?: ReadonlyArray<{ readonly name?: string; readonly message?: string }>
+    readonly errors?: ReadonlyArray<ErrorView>
   }
 }
 
@@ -22,34 +28,30 @@ interface Observed {
   readonly annotations: ReadonlyArray<string>
   readonly errorNames: ReadonlyArray<string>
   readonly errorMessages: ReadonlyArray<string>
+  readonly errorSources: ReadonlyArray<string>
   readonly failedTests: number
   readonly dumps: number
 }
 
-const failureList = (task: TaskView): ReadonlyArray<string> =>
-  (task.result?.errors ?? []).map((error) => error.name ?? '')
-
-const failureMessages = (task: TaskView): ReadonlyArray<string> =>
-  (task.result?.errors ?? []).map((error) => error.message ?? '')
-
-const failuresOf = (
-  task: TaskView,
-): ReadonlyArray<string> => [...failureList(task), ...(task.tasks ?? []).flatMap(failuresOf)]
-
-const messagesOf = (
-  task: TaskView,
-): ReadonlyArray<string> => [...failureMessages(task), ...(task.tasks ?? []).flatMap(messagesOf)]
+const errorsOf = (task: TaskView): ReadonlyArray<ErrorView> => [
+  ...(task.result?.errors ?? []),
+  ...(task.tasks ?? []).flatMap(errorsOf),
+]
 
 const isFailedTest = (task: TaskView): boolean => task.type === 'test' && task.result?.state === 'fail'
 
 const failedCount = (task: TaskView): number =>
   (isFailedTest(task) ? 1 : 0) + (task.tasks ?? []).reduce((sum, child) => sum + failedCount(child), 0)
 
-const observed = (files: ReadonlyArray<RunnerTestFile>): Omit<Observed, 'annotations' | 'dumps'> => ({
-  errorNames: files.flatMap(failuresOf),
-  errorMessages: files.flatMap(messagesOf),
-  failedTests: files.reduce((sum, file) => sum + failedCount(file), 0),
-})
+const observed = (files: ReadonlyArray<RunnerTestFile>): Omit<Observed, 'annotations' | 'dumps'> => {
+  const errors = files.flatMap(errorsOf)
+  return {
+    errorNames: errors.map((error) => error.name ?? ''),
+    errorMessages: errors.map((error) => error.message ?? ''),
+    errorSources: errors.map((error) => error.source ?? ''),
+    failedTests: files.reduce((sum, file) => sum + failedCount(file), 0),
+  }
+}
 
 const annotationCollector = (): { readonly reporter: Reporter; readonly messages: ReadonlyArray<string> } => {
   const messages: Array<string> = []
@@ -62,6 +64,8 @@ const annotationCollector = (): { readonly reporter: Reporter; readonly messages
   return { reporter, messages }
 }
 
+const fixtureRuns = 100
+
 const runVitestOn = (fixture: string): Effect.Effect<Omit<Observed, 'dumps'>> =>
   Effect.gen(function*() {
     const collector = annotationCollector()
@@ -69,7 +73,9 @@ const runVitestOn = (fixture: string): Effect.Effect<Omit<Observed, 'dumps'>> =>
       startVitest('test', [], {
         include: [`tests/__fixtures__/${fixture}`],
         watch: false,
+        bail: 0,
         coverage: { enabled: false },
+        provide: { '@systemfsoftware/vitest:property-check': { runs: fixtureRuns } },
         reporters: [collector.reporter],
       })
     )
@@ -99,6 +105,7 @@ const runFixtureCountingDumps = (fixture: string): Effect.Effect<Observed> =>
   }).pipe(Effect.provide(NodeFileSystem.layer))
 
 Feature('Reporting where a broken trace spec leaves its evidence')
+  .live('the scenarios drive the real vitest runner, which completes outside the kernel')
   .withScenarioLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
@@ -109,7 +116,10 @@ Feature('Reporting where a broken trace spec leaves its evidence')
           () => runVitestOn('annotation-failure.fixture.ts'),
         ),
         Then('the failing case carries an annotation naming the written trace')((s) => {
-          expect(s.outcome.annotations.some((message) => message.includes('artifacts/traces/'))).toBe(true)
+          expect(s.outcome.annotations).toSatisfy(
+            (annotations: ReadonlyArray<string>) =>
+              annotations.some((message) => message.includes('artifacts/traces/')),
+          )
         }),
         And('the failing case failed on the disparity itself')((s) => {
           expect(s.outcome.failedTests).toBe(1)
@@ -136,6 +146,29 @@ Feature('Reporting where a broken trace spec leaves its evidence')
         }),
         And('the failing case failed on the falsified draw itself')((s) => {
           expect(s.outcome.failedTests).toBe(1)
+        }),
+      ),
+    )
+
+    scenario(
+      'A case whose trace store is unreachable or still receiving blames the store, not the behaviour',
+      Gherkin.Do.pipe(
+        Given('a spec whose trace store refuses every read, and one whose trace never finishes, was run')(
+          'outcome',
+          () => runVitestOn('observation-failure.fixture.ts'),
+        ),
+        Then('both cases fail')((s) => {
+          expect(s.outcome.failedTests).toBe(2)
+        }),
+        And('the unreachable store is reported as unreachable, naming the store it tried')((s) => {
+          expect(s.outcome.errorNames.filter((name) => name.includes('TransportObservationError'))).toHaveLength(1)
+          expect(s.outcome.errorSources).toContain('http://tempo.invalid/api/v2/traces')
+        }),
+        And('the unfinished trace is reported as unfinished, and neither is blamed on the behaviour')((s) => {
+          expect(s.outcome.errorNames.filter((name) => name.includes('IncompleteObservationError'))).toHaveLength(1)
+          expect(s.outcome.errorNames).not.toSatisfy(
+            (names: ReadonlyArray<string>) => names.some((name) => name.includes('StimulusFailure')),
+          )
         }),
       ),
     )

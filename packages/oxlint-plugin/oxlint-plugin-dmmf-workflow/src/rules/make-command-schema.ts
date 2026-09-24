@@ -21,8 +21,8 @@ export type MessageIds = 'assertedCommand' | 'launderedCommand' | 'declaredComma
 /**
  * The assertion forms that genuinely defeat the bound. Each produces a value whose
  * static type says "schema class" while the value itself was never checked against
- * one - measured, not assumed: `make(maybe, …)` on a `Class | undefined` is refused
- * (TS2345) and `make(maybe!, …)` is accepted in silence.
+ * one - measured, not assumed: `make({ command: maybe, … })` on a `Class | undefined`
+ * is refused (TS2345) and `make({ command: maybe!, … })` is accepted in silence.
  *
  * `TSSatisfiesExpression` was here and is deliberately absent. `x satisfies T` has the
  * type of `x`, so it cannot relabel anything: `make({} as NotAClass satisfies unknown, …)`
@@ -72,9 +72,9 @@ const launderingConstructor = (callee: ESTree.Node): string | null => {
 }
 
 /**
- * The command position with one property read peeled off, when the property is read
+ * The command property with one property read peeled off, when the property is read
  * from a laundering call's result. `Proxy.revocable(Cmd, {}).proxy` is a Proxy reached
- * by a member access rather than a constructor, so the bare command position is a
+ * by a member access rather than a constructor, so the bare command property is a
  * MemberExpression that no branch classifies - and a MemberExpression cannot be
  * refused wholesale, because a class imported through a namespace is one too. Peeling
  * only when the object is an enumerated laundering call keeps the namespace case silent.
@@ -116,9 +116,9 @@ const localVariable = (
 /**
  * The assertion a local binding was initialised with, or `null`. An assertion one
  * statement away launders exactly as well as one written at the call: `const Forged =
- * Hand as unknown as S.Class<…>` then `make(Forged, …)` compiles, and the command
- * position is a bare Identifier that no other branch classifies. Resolution is local
- * and one hop deep - the rule reports what this file did, never what an import did.
+ * Hand as unknown as S.Class<…>` then `make({ command: Forged, … })` compiles, and the
+ * command property is a bare Identifier that no other branch classifies. Resolution is
+ * local and one hop deep - the rule reports what this file did, never what an import did.
  */
 const initializingAssertion = (variable: VariableLike): string | null => {
   for (const def of variable.defs) {
@@ -131,7 +131,7 @@ const initializingAssertion = (variable: VariableLike): string | null => {
 
 /**
  * True when a local binding was introduced by a `declare`. A declared binding is
- * erased, so the command position holds nothing at runtime — the one absence the type
+ * erased, so the command property holds nothing at runtime — the one absence the type
  * layer is structurally unable to notice, because a declaration is exactly what it
  * trusts.
  */
@@ -161,7 +161,7 @@ export const makeCommandSchema = defineRule({
     return {
       Program() {
         for (const boundary of collectMakeBoundaries(context)) {
-          const command = boundary.commandArgument === null ? null : peelLaunderedProperty(boundary.commandArgument)
+          const command = boundary.commandProperty === null ? null : peelLaunderedProperty(boundary.commandProperty)
           if (command === null) continue
 
           if (ASSERTION_TYPES.includes(command.type)) {

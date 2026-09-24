@@ -1,7 +1,7 @@
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
-import type { Layer } from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type { Pipeable } from 'effect/Pipeable'
 import { Prototype } from 'effect/Pipeable'
@@ -113,6 +113,9 @@ export const andThen: {
     self: Cell<I, A, E, R>,
     that: Cell<A, B, E2, R2>,
   ): Cell<I, B, E | E2, R | R2>
+  <A, B, E2, R2>(
+    that: Cell<A, B, E2, R2>,
+  ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
   <A, B, E2, R2>(
     f: (response: A) => Cell<A, B, E2, R2>,
   ): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
@@ -238,24 +241,25 @@ export const collectAll: {
 )
 
 /**
- * Provides a Layer to the Cell, eliminating the services the layer builds from `R`. This is
- * the one composition-root elimination; the resulting Cell still demands the layer's input
- * services. A missing provide is a compile error at the run site.
+ * Provides a Context to the Cell, eliminating the services the context carries from `R`. The
+ * composition root builds the context once — `Layer.build` under the root scope, or a
+ * `ManagedRuntime` — so nothing is rebuilt per run. A missing provideContext is a compile
+ * error at the run site.
  */
-export const provide: {
-  <RIn, LE, ROut>(
-    layer: Layer<ROut, LE, RIn>,
-  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
-  <I, A, E, R, RIn, LE, ROut>(
+export const provideContext: {
+  <Services>(
+    context: Context.Context<Services>,
+  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E, Exclude<R, Services>>
+  <I, A, E, R, Services>(
     self: Cell<I, A, E, R>,
-    layer: Layer<ROut, LE, RIn>,
-  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
+    context: Context.Context<Services>,
+  ): Cell<I, A, E, Exclude<R, Services>>
 } = dual(
   2,
-  <I, A, E, R, RIn, LE, ROut>(
+  <I, A, E, R, Services>(
     self: Cell<I, A, E, R>,
-    layer: Layer<ROut, LE, RIn>,
-  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
+    context: Context.Context<Services>,
+  ): Cell<I, A, E, Exclude<R, Services>> => make((input) => Effect.provideContext(self.run(input), context)),
 )
 
 /**

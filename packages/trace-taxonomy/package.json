@@ -1,13 +1,13 @@
 {
   "name": "@systemfsoftware/trace-taxonomy",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
     "directory": "packages/trace-taxonomy"
   },
-  "description": "Declared spans for trace contracts \u2014 a contracted span is declared once with its typed required attributes and started only through that declaration.",
+  "description": "Declared spans for trace contracts — a contracted span is declared once with its typed required attributes and started only through that declaration.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -32,7 +32,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown -l warn",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",

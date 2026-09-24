@@ -1,6 +1,6 @@
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
-import { expect } from 'vitest'
 
 interface SessionStoreService {
   readonly accessCount: Effect.Effect<number>
@@ -27,7 +27,7 @@ const sessionStoreLayer = Layer.effect(
   }),
 )
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Background precondition lifecycle and scenario isolation')
   .withScenarioLayer(sessionStoreLayer)
