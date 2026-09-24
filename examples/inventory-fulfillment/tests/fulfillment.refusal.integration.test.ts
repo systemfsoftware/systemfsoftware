@@ -1,4 +1,4 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment } from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract } from '@systemfsoftware/trace-spec'
 import { Effect } from 'effect'
@@ -10,7 +10,7 @@ import {
   settlementRequest,
 } from './__fixtures__/fulfillment-trace.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const world = settlementLayers({
   creditLimits: { 'customer-in-good-standing': 1000, 'customer-without-credit': 0 },
@@ -19,7 +19,6 @@ const world = settlementLayers({
 
 Feature('Refusing a settlement whose trace breaks the written contract')
   .withScenarioLayer(world)
-  .liveClock()
   .body(({ scenario }) => {
     scenario(
       'A settlement whose reservation was already taken names the charge that never arrived',

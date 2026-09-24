@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', 'tests/**/*.integration.test.ts', 'tests/**/*.trace.test.ts'],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     server: {
       deps: {
         inline: [/better-auth/, /@better-auth\//, /better-call/, /@better-fetch\//, /@opentelemetry\//],

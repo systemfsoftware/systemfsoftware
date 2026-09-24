@@ -1,4 +1,4 @@
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { DateTime, Effect, Result, Schema as S } from 'effect'
 import { expect } from 'vitest'
 import {
@@ -26,7 +26,7 @@ import type {
   StockView,
 } from './__fixtures__/server.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface LineInput {
   readonly sku: string
@@ -118,7 +118,7 @@ const listStockPage = (session: Session, request: StockPageRequest) =>
 
 Feature('Inventory fulfillment across the warehouse network')
   .withScenarioLayer(TestServerLayer)
-  .liveClock()
+  .live('customers drive the store through a real HTTP socket held together with an in-process PGlite ledger')
   .body(({ scenario }) => {
     scenario(
       'An order larger than one warehouse is split across two warehouses',

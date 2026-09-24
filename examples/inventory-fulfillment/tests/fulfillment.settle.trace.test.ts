@@ -1,4 +1,4 @@
-import { it, layer } from '@effect/vitest'
+import { it } from '@effect/vitest'
 import { Suite } from '@systemfsoftware/trace-spec'
 import {
   allocateContract,
@@ -7,7 +7,7 @@ import {
   settlementRequest,
 } from './__fixtures__/fulfillment-trace.fixture.js'
 
-const Trace = Suite.make({ it, layer })
+const Trace = Suite.make({ it })
 
 const world = settlementLayers({
   creditLimits: { 'customer-in-good-standing': 1000, 'customer-without-credit': 0 },
