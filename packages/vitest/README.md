@@ -67,7 +67,7 @@ it('ships a pending order', function*({ expect }) {
 
 ### The guard
 
-A check is the only way to assert, and the guard is what makes that true rather than advisory. `@effect/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers; the shared Vitest config lists it in `setupFiles` for every package that depends on the fork, so no import is needed. Under it:
+A check is the only way to assert, and the guard is what makes that true rather than advisory. `@effect/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers. The shared Vitest config loads it into every test project, inline projects included, so no import is needed. A project stays out only when vitest-config's exemption table names it together with the foreign runner that registers its tests (oxlint's `RuleTester`, Storybook's plugin). A package outside that table that cannot resolve `@effect/vitest/guard` fails at config load rather than running unguarded. Under it:
 
 - **a raw `vitest` `expect` (or `assert`) is refused**, even beside a real check: "✗ an expect imported from vitest ran; take it from the test callback: it(name, function\* ({ expect }) { ... })";
 - **a test registered with `vitest`'s own `it`/`test` is refused**: "✗ this test was registered with vitest's it; import it from @effect/vitest".

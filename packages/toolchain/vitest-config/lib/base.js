@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defineConfig as defineVitestConfig } from 'vitest/config'
@@ -10,36 +11,157 @@ import { CONFORMANCE_SETUP, conformanceCoverage } from './conformance-coverage.j
 /** @typedef {NonNullable<TestConfig['projects']>} Projects */
 
 /**
- * @param {TestConfig | undefined} test
- * @returns {TestConfig}
+ * @param {string} path
+ * @returns {unknown}
  */
-const withConformanceSetup = (test) => {
-  const setupFiles = test?.setupFiles === undefined ? [] : [test.setupFiles].flat()
-  return { ...test, setupFiles: [...setupFiles, CONFORMANCE_SETUP] }
+const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
+
+/**
+ * @param {unknown} value
+ * @param {string} key
+ * @returns {string}
+ */
+const stringField = (value, key) => {
+  const field = typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined
+  return typeof field === 'string' ? field : ''
+}
+
+// The fork is declared under this name: `pnpm-workspace.yaml`'s catalog aliases it to this repo's
+// `@systemfsoftware/vitest` package. A package that cannot resolve it must not run unguarded.
+const forkDependency = '@effect/vitest'
+
+// The setup file that installs the fork's guard (KTD8), published by the fork under this subpath.
+const forkGuardSpecifier = `${forkDependency}/guard`
+
+// The fork's own package. It holds no dependency on itself, so it loads its guard from source instead.
+const forkPackage = '@systemfsoftware/vitest'
+
+/**
+ * The one table that takes a package's tests out from under the guard. A package is exempt only by being
+ * listed here, together with the runner that registers its tests: vitest's own `it` is what the guard
+ * refuses, so every test another runner registers must not load it. `projects` is `'*'` when the whole
+ * package is exempt, otherwise the names of the exempt inline test projects.
+ *
+ * @type {Readonly<Record<string, { readonly projects: readonly string[] | '*', readonly registrar: string }>>}
+ */
+const guardExemptions = {
+  '@systemfsoftware/oxlint-plugin-cell-architecture': {
+    projects: '*',
+    registrar: "oxlint's RuleTester registers every case with vitest's it",
+  },
+  '@systemfsoftware/oxlint-plugin-dmmf-workflow': {
+    projects: '*',
+    registrar: "oxlint's RuleTester registers every case with vitest's it",
+  },
+  '@systemfsoftware/oxlint-plugin-effect-platform': {
+    projects: '*',
+    registrar: "oxlint's RuleTester registers every case with vitest's it",
+  },
+  '@systemfsoftware/oxlint-plugin-effect-schema': {
+    projects: '*',
+    registrar: "oxlint's RuleTester registers every case with vitest's it",
+  },
+  '@systemfsoftware/oxlint-plugin-test-discipline': {
+    projects: '*',
+    registrar: "oxlint's RuleTester registers every case with vitest's it",
+  },
+  '@systemfsoftware/storybook-gherkin': {
+    projects: ['storybook'],
+    registrar: "Storybook's vitest plugin registers every story",
+  },
 }
 
 /**
- * An inline project gets the setup file itself: vitest does not carry the
- * root's setup files into `test.projects`, and a project without it records
- * sites but never hands them to the reporter.
+ * The setup file that installs the guard, resolved from the package's own directory so a package that
+ * cannot resolve the fork fails config load instead of running unguarded. The fork resolves its own
+ * source, since it holds no dependency on itself.
+ *
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string}
+ */
+const guardSetupFile = (cwd, name) => {
+  if (name === forkPackage) return join(cwd, 'src', 'guard.ts')
+  try {
+    return createRequire(join(cwd, 'package.json')).resolve(forkGuardSpecifier)
+  } catch (cause) {
+    throw new Error(
+      `[@systemfsoftware/vitest-config] ${name} cannot resolve "${forkGuardSpecifier}", so its tests would run without the KTD8 guard. ` +
+        `Declare "@effect/vitest": "catalog:" in devDependencies of ${join(cwd, 'package.json')}, ` +
+        `or name the exempt test project in vitest-config's guard exemption table.`,
+      { cause },
+    )
+  }
+}
+
+// A package config is evaluated with the package directory as the working directory (`pnpm --filter <pkg>
+// test`, and turbo's per-package task), so `<cwd>/package.json` is the package this config belongs to.
+const packageName = stringField(readJson(join(process.cwd(), 'package.json')), 'name')
+const packageExemption = guardExemptions[packageName]
+
+/**
+ * The setup files that install the fork's guard (KTD8). Empty only for a package the exemption table
+ * names in full; a package config that reaches the fork without a guard in this list throws while it
+ * loads, naming the package and the dependency that fixes it.
+ *
+ * @type {ReadonlyArray<string>}
+ */
+export const guardSetupFiles = packageExemption?.projects === '*' ? [] : [guardSetupFile(process.cwd(), packageName)]
+
+/**
+ * A test block with `guardSetupFiles` and the conformance handoff added on top of its own setup files,
+ * each at most once. `guard` is false for an exempt project, which still takes the handoff.
+ *
+ * @param {TestConfig | undefined} test
+ * @param {boolean} guard
+ * @returns {TestConfig}
+ */
+const withSetupFiles = (test, guard) => {
+  const own = test?.setupFiles === undefined ? [] : [test.setupFiles].flat()
+  return {
+    ...test,
+    setupFiles: [...new Set([...own, ...(guard ? guardSetupFiles : []), CONFORMANCE_SETUP])],
+  }
+}
+
+/**
+ * Whether a project's tests are registered by a runner the guard does not apply to.
+ *
+ * @param {TestConfig | undefined} test
+ * @returns {boolean}
+ */
+const isExemptProject = (test) => {
+  const names = packageExemption?.projects
+  if (names === undefined || names === '*') return false
+  const name = test?.name
+  return typeof name === 'string' && names.includes(name)
+}
+
+/**
+ * An inline project gets the setup files itself: vitest does not carry the root's setup files into
+ * `test.projects`, and a project without them records sites but never hands them to the reporter. A
+ * project the exemption table names is the one exception: the runner that registers its tests is not
+ * vitest's, so it takes the handoff without the guard.
+ *
  * @param {unknown} project
  * @returns {unknown}
  */
 const projectWithSetup = (project) => {
   if (typeof project !== 'object' || project === null || !('test' in project)) return project
-  return { ...project, test: withConformanceSetup(/** @type {TestConfig | undefined} */ (project.test)) }
+  const test = /** @type {TestConfig | undefined} */ (project.test)
+  return { ...project, test: withSetupFiles(test, !isExemptProject(test)) }
 }
 
 /**
  * Vitest's `defineConfig` with the conformance coverage gate added to the
- * config's own plugins and its per-test handoff added to the root and every
- * inline project, so no package config can leave it out by setting `plugins`
+ * config's own plugins and its per-test handoff and the guard added to the root and every
+ * inline project, so no package config can leave either out by setting `plugins`
  * or `setupFiles` after spreading `sharedConfig`.
  * @param {ViteUserConfig} config
  * @returns {ViteUserConfig}
  */
 export const defineConfig = (config) => {
-  const test = withConformanceSetup(config.test)
+  const test = withSetupFiles(config.test, true)
   const projects = config.test?.projects
   return defineVitestConfig({
     ...config,
@@ -75,36 +197,6 @@ const propertyRuns = process.env['STRYKER_MUTATOR_WORKER'] !== undefined ? 30 : 
 
 // The fork reads these under `inject`; the key is its published `ProvidedContext` key.
 const propertyCheckDefaults = { runs: propertyRuns }
-
-// The fork is declared under this name: `pnpm-workspace.yaml`'s catalog aliases it to this repo's
-// `@systemfsoftware/vitest` package. A package that cannot resolve the fork must not list its setup file.
-const forkDependency = '@effect/vitest'
-
-// A package config is evaluated with the package directory as the working directory (`pnpm --filter <pkg>
-// test`, and turbo's per-package task), so `<cwd>/package.json` is the package this config belongs to.
-/**
- * @param {string} root
- */
-const dependenciesOf = (root) => {
-  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-  return {
-    ...manifest.dependencies,
-    ...manifest.devDependencies,
-    ...manifest.peerDependencies,
-    ...manifest.optionalDependencies,
-  }
-}
-
-/**
- * The setup file that installs the fork's guard (KTD8), or nothing for a package that cannot resolve the fork:
- * `oxlint-plugin/*`, `oxlint-presets/*`, `toolchain/*` and the fork itself register through Vitest's own `it`,
- * which the guard refuses. A config that replaces `test.setupFiles` spreads this in.
- *
- * @type {ReadonlyArray<string>}
- */
-export const guardSetupFiles = Object.hasOwn(dependenciesOf(process.cwd()), forkDependency)
-  ? ['@effect/vitest/guard']
-  : []
 
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
