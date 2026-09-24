@@ -47,15 +47,18 @@ export const fulfillmentCell = explodeBundleCell.pipe(
   Cell.andThen(settleFulfillmentCell),
 )
 
-// RIGHT: one sandwich over one composed workflow, run inside the store's unit of work.
-export const placeOrderCell = Sandwich.named('inventory.fulfillment.place')(load)
-  .decide(placeOrder)
-  .write({ OrderAllocated: commit, OrderHeld: commit, InsufficientStock: refuse /* ... */ })
+// RIGHT: one sandwich over one composed workflow, built over the unit the store hands out.
+export const placeOrderCell = (unit: SettlementUnit) => {
+  const read = loadIn(unit)
+  return Sandwich.named('inventory.fulfillment.place')(read)
+    .decide(placeOrder)
+    .write({ OrderAllocated: commitIn(unit), OrderHeld: commitIn(unit), InsufficientStock: refuse /* ... */ })
+}
 
 const submitOrder = (request: FulfillmentRequest) =>
   Effect.gen(function*() {
     const store = yield* SettlementStore
-    return yield* store.unitOfWork(placeOrderCell.run(request))
+    return yield* store.unitOfWork((unit) => placeOrderCell(unit).run(request))
   })
 ```
 

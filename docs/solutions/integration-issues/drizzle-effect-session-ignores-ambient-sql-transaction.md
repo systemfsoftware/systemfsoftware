@@ -48,13 +48,13 @@ The obvious way to make a read-decide-write atomic in Effect is to wrap it at th
 The store port owns the unit of work, and its drizzle adapter opens the transaction itself with the isolation level stated on every call. `examples/inventory-fulfillment/src/store/SettlementStoreDrizzle.ts`:
 
 ```ts
-unitOfWork: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+unitOfWork: <A, E, R>(use: (unit: SettlementUnit.SettlementUnit) => Effect.Effect<A, E, R>) =>
   db.transaction(
     (tx) =>
-      effect.pipe(
-        Effect.provideService(UnitOfWork, { open: true }),
-        Effect.provideService(OpenTransaction, tx),
-      ),
+      Effect.scoped(Effect.flatMap(
+        SettlementUnit.open({ load: (key) => load(tx, key), settle: (plan) => settle(tx, plan) }),
+        use,
+      )),
     { isolationLevel: 'serializable' },
   ).pipe(
     Effect.retry({ while: (error) => retryable(error), times: Math.max(0, budget.attempts - 1), schedule: backoff }),
@@ -62,11 +62,11 @@ unitOfWork: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   ),
 ```
 
-`load` and `settle` query through the private `OpenTransaction` handle, so they can only run on the transaction `unitOfWork` opened. `sqlStatesOf` in the same file collects SQLSTATEs through `.cause` fields and through Effect `Cause` fail and die reasons, and `retryable` matches only `40001` and `40P01`.
+The unit handle's slot holds `load` and `settle` bound to drizzle's `tx`, so they can only run on the transaction `unitOfWork` opened, and the unit closes when that transaction's scope ends. `sqlStatesOf` in the same file collects SQLSTATEs through `.cause` fields and through Effect `Cause` fail and die reasons, and `retryable` matches only `40001` and `40P01`.
 
 ## Why This Works
 
-Drizzle's Effect session opens its own connection-level transaction and knows nothing about `SqlClient`'s transaction service. The only transaction a drizzle query joins is the `tx` handle drizzle itself passes in. Putting the unit of work on the store port makes that handle the only path to the tables. The `UnitOfWork` requirement on `load` and `settle` then makes a read or save outside it a type error. Passing `isolationLevel` on the same call is what makes Postgres check the unit against every other serializable writer.
+Drizzle's Effect session opens its own connection-level transaction and knows nothing about `SqlClient`'s transaction service. The only transaction a drizzle query joins is the `tx` handle drizzle itself passes in. Putting the unit of work on the store port makes that handle the only path to the tables, and binding `load` and `settle` to it inside a unit handle makes a read or save with no unit a type error. Passing `isolationLevel` on the same call is what makes Postgres check the unit against every other serializable writer.
 
 ## Prevention
 
@@ -77,5 +77,4 @@ Drizzle's Effect session opens its own connection-level transaction and knows no
 ## Related Issues
 
 - PR #495: the store rebuild on a serializable unit of work.
-- `compound-packs/cell-architecture/store-serializable-unit-of-work.md` and `store-unit-of-work-in-requirements.md`: the doctrine this adapter implements.
-- Issue #507: a hand-provided `UnitOfWork` compiles and dies only at run time.
+- `compound-packs/cell-architecture/store-serializable-unit-of-work.md` and `store-unit-of-work-handle.md`: the doctrine this adapter implements.

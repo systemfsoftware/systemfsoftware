@@ -21,7 +21,8 @@ A test double that behaves differently from the real adapter makes every test bu
 3. **Unit-of-work laws, for a store with a unit of work:**
    - a unit of work that fails writes nothing, on both adapters;
    - on the fake, concurrent units of work for one key leave the state some serial order would leave;
-   - on the real adapter, a serialization failure raised by the engine (SQLSTATE `40001`) re-runs the whole unit, and the unit commits once.
+   - on the real adapter, a serialization failure raised by the engine (SQLSTATE `40001`) re-runs the whole unit, and the unit commits once;
+   - a unit kept after its unit of work ended dies on every read and save before touching the store, on both adapters.
 
    Never fake the engine's error in an adapter or fixture. Raise it from the engine, for example with a test-only trigger that raises `40001` while an arming row says so.
 4. **PGlite cannot race.** `@effect/sql-pglite` has one connection and holds a single-permit semaphore from `BEGIN` to commit (`repos/effect/packages/sql/pglite/src/PgliteClient.ts`, lines 212–224), so units on PGlite run one at a time. The suite proves atomicity and the retry path, never isolation. Real concurrency is proven by a race against a Postgres server, run by hand or by a dedicated job.
@@ -30,17 +31,17 @@ A test double that behaves differently from the real adapter makes every test bu
 // WRONG: a fake whose unitOfWork does not serialize. Two concurrent orders for one
 // customer with room for one are both granted, and every test above it passes a race
 // the real store refuses.
-const leakyUnitOfWork = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.provideService(effect, UnitOfWork, { open: true })
+const leakyUnitOfWork = <A, E, R>(use: (unit: SettlementUnit) => Effect.Effect<A, E, R>) =>
+  Effect.scoped(Effect.flatMap(SettlementUnit.open(driverOver(state)), use))
 
 // RIGHT: one history, run against both adapters. The fake runs units one at a time
 // on a staged copy of its state, so a failed unit writes nothing.
 const twoOrdersWithRoomForOne = Effect.gen(function*() {
   const store = yield* SettlementStore
   yield* Effect.all([placeOrder(store, 'order-1'), placeOrder(store, 'order-2')], { concurrency: 2 })
-  return yield* store.unitOfWork(store.load(customerKey))
+  return yield* store.unitOfWork(SettlementUnit.load(customerKey))
 })
 // expected: exactly one charge, for Settlement.Memory.layer(seed) and Settlement.Drizzle.layer(spec) over PGlite
 ```
 
-Gate: `review` — verify that every store ships one `*.integration.test.ts` law suite that its fake and its real adapter both pass, covering the base laws and, for a store with a unit of work, the three unit-of-work laws, with serialization failures raised by the engine and real concurrency left to a race against a Postgres server.
+Gate: `review` — verify that every store ships one `*.integration.test.ts` law suite that its fake and its real adapter both pass, covering the base laws and, for a store with a unit of work, the four unit-of-work laws, with serialization failures raised by the engine and real concurrency left to a race against a Postgres server.

@@ -1,62 +1,71 @@
 ---
-title: Resource builders and combinators must implement full Pipeable and dual parity
+title: Blueprints and handles carry the kind's Pipeable prototype and full dual parity
 applies_when:
-  - authoring combinators and methods on resource builders
+  - authoring combinators and operations on blueprints and handles
   - implementing fluent APIs in capability packages
-  - integrating builders with Effect pipe workflows
+  - integrating blueprints and handles with Effect pipe workflows
 tags: [cell, pipeable, dual, combinators]
 ---
 
-In accordance with `skill://gcanti-tim-smart-style` (Rule `R6`), every fluent builder and combinator must provide full parity between direct method chaining and data-last functional composition using Effect's `pipe(...)`.
+Every blueprint and handle is `Pipeable`, and every operation is reachable both as a method (`self.op(...)`) and as a data-last function in `pipe(...)`. Both halves are supplied by the kind; the module never builds either by hand.
 
-### 1. Prototype-Backed Pipeable
+### 1. Prototype-backed Pipeable, attached by the kind
 
-Resource builders must extend `Pipeable.Pipeable` and spread `...Pipeable.Prototype` into their prototype or factory object:
+`Blueprint.make` and `Handle.make` attach the `Pipeable` prototype and the nominal `[TypeId]` brand when they mint the record. A blueprint carries its steps as methods and a handle carries its data; the kind attaches the prototype for both. A module must not spread `Prototype` from `effect/Pipeable` or write a computed `[TypeId]` key:
 
 ```ts
-import { type Pipeable, Prototype } from 'effect/Pipeable'
+// WRONG: hand-built prototype and brand — a forge of the kind-minted record
+const RunningVM = { ...Prototype, [TypeId]: TypeId, name }
 
-export interface ResourceBuilder<Spec> extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly spec: Spec
-  withPort(port: number): ResourceBuilder<Spec>
-}
+// RIGHT: the kind mints and brands; do not re-implement it
+const RunningVM = Handle.make<{ readonly name: string }, RawDriver>()(TypeId)
+
+export type RunningVM = Handle.Of<typeof RunningVM>
 ```
 
-### 2. Dual Combinator Parity (Rule R6)
+### 2. Dual parity, derived from one declaration (Rule R6)
 
-Every standalone combinator function must be wrapped in `dual(2, ...)` (from `effect/Function`), supporting both data-first method calls and data-last pipe arguments:
+In accordance with `skill://gcanti-tim-smart-style` (Rule `R6`), every fluent builder and combinator must provide full parity between direct method chaining and data-last functional composition using Effect's `pipe(...)`. Each operation is declared once and the kind derives the forms:
 
-```ts
-export const withPort: {
-  (port: number): <Spec extends BaseSpec>(spec: Spec) => Spec
-  <Spec extends BaseSpec>(spec: Spec, port: number): Spec
-} = dual(2, <Spec extends BaseSpec>(spec: Spec, port: number): Spec => ({
-  ...spec,
-  port,
-}))
-```
+- `Blueprint.make<Spec>()(TypeId).steps({ steps, targets })` installs each step as a method and exposes the data-first/data-last dual as `definition.operations.<name>`; the module re-exports that dual.
+- `Blueprint.make<Spec, X>()(TypeId).operations<Ops>()({ operations, targets })` declares one indexed transition per operation, from which the method, the data-first dual, and the data-last dual are all derived.
+
+A handle's own operations are not on the kind, so each is authored as a standalone `dual(...)` over the record and the data-last form composes like any Effect function.
 
 ```ts
-// WRONG: Method-only builder that breaks pipe composition
-const resource = Container.make('postgres:16')
-pipe(
-  resource,
-  Container.withPort(5432), // TypeError: withPort is not a dual!
-)
+import { dual } from 'effect/Function'
 
-// RIGHT: Full parity between method chaining and pipe composition
-// Style A: Fluent method chaining
-const instanceA = Container.make('postgres:16')
-  .withPort(5432)
-  .withMemoryLimit(512)
+// Blueprint step: one declaration, three forms — method, data-first, data-last.
+export const withPort = Containers.operations.withPort
 
-// Style B: Functional pipe composition
-const instanceB = pipe(
-  Container.make('postgres:16'),
-  Container.withPort(5432),
-  Container.withMemoryLimit(512),
+// Handle operation: authored once with dual, both forms.
+export const exec: {
+  (cmd: string): (self: RunningVM) => Effect.Effect<ExecResult, ExecError>
+  (self: RunningVM, cmd: string): Effect.Effect<ExecResult, ExecError>
+} = dual(
+  2,
+  (self: RunningVM, cmd: string): Effect.Effect<ExecResult, ExecError> =>
+    Effect.tryPromise({
+      try: () => RunningVM.slot(self).execute(cmd),
+      catch: (cause) => new ExecError({ cmd, cause }),
+    }),
 )
 ```
 
-Gate: `review` — verify the builder implements `Pipeable.Pipeable` and every combinator export is authored with `dual(2, ...)`.
+```ts
+// WRONG: a bare two-argument function has a data-first shape but no data-last twin
+const withEnv = (spec: ContainerSpec, env: Record<string, string>): ContainerSpec =>
+  /* ... */
+  pipe(make('postgres:16'), withEnv({ POSTGRES_DB: 'app' })) // TypeError: not a dual
+
+// RIGHT: full parity — chain or pipe the same operation
+const a = make('postgres:16').pipe(withPort(5432), withEnv({ POSTGRES_DB: 'app' }))
+
+const b = pipe(
+  make('postgres:16'),
+  withPort(5432),
+  withEnv({ POSTGRES_DB: 'app' }),
+)
+```
+
+Gate: `kind-record-minted-by-kind`, `type-checker`, `review` — verify every blueprint/handle record is minted through the kind (no hand-spread `Prototype`, no computed `[TypeId]`), each operation has one declaration whose method, data-first, and data-last forms agree, and that where the derived dual trips the linter an annotated `dual(...)` overload set is exported over the same implementation (`docs/solutions/architecture-patterns/blueprint-type-index-reads.md`).
