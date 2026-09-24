@@ -9,7 +9,7 @@
  */
 'use client'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import type { Registry } from '@systemfsoftware/effect-atom/Registry'
+import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as React from 'react'
 import { RegistryContext } from './RegistryContext.js'
 
@@ -58,7 +58,7 @@ function partitionDehydratedAtoms(
 }
 
 function hydrateNewAtoms(
-  registry: Registry,
+  registry: Registry.Registry,
   newAtoms: Array<Hydration.DehydratedAtomValue>,
 ): void {
   if (newAtoms.length === 0) {
@@ -77,16 +77,16 @@ function existingAtomsOrUndefined(
 }
 
 function queueHydrationFromState(
-  registry: Registry,
+  registry: Registry.Registry,
   state: Iterable<Hydration.DehydratedAtomValue>,
 ): Array<Hydration.DehydratedAtomValue> | undefined {
-  const partitioned = partitionDehydratedAtoms(registry.getNodes(), Array.from(state))
+  const partitioned = partitionDehydratedAtoms(Registry.getNodes(registry), Array.from(state))
   hydrateNewAtoms(registry, partitioned.newAtoms)
   return existingAtomsOrUndefined(partitioned.existingAtoms)
 }
 
 function queueHydration(
-  registry: Registry,
+  registry: Registry.Registry,
   state: Iterable<Hydration.DehydratedAtomValue> | undefined,
 ): Array<Hydration.DehydratedAtomValue> | undefined {
   if (state === undefined) {

@@ -20,7 +20,7 @@ Feature('Deriving values from other values on a page')
             const page = Registry.make()
             return { page, value }
           })),
-        When('the value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.value))),
+        When('the value is read')('reading', (s) => Effect.sync(() => Registry.get(s.ctx.page, s.ctx.value))),
         Then('it matches what was set')((s) => {
           expect(s.reading).toBe(42)
         }),
@@ -37,9 +37,9 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read, replaced, and read again')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.value)
-            s.ctx.page.set(s.ctx.value, { filled: true })
-            return { before, after: s.ctx.page.get(s.ctx.value) }
+            const before = Registry.get(s.ctx.page, s.ctx.value)
+            Registry.set(s.ctx.page, s.ctx.value, { filled: true })
+            return { before, after: Registry.get(s.ctx.page, s.ctx.value) }
           })),
         Then('the page first held the empty object and then the replacement')((s) => {
           expect(s.readings.before).toEqual({})
@@ -57,7 +57,7 @@ Feature('Deriving values from other values on a page')
             const page = Registry.make()
             return { page, doubled }
           })),
-        When('the doubled value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.doubled))),
+        When('the doubled value is read')('reading', (s) => Effect.sync(() => Registry.get(s.ctx.page, s.ctx.doubled))),
         Then('it reflects the source value doubled')((s) => {
           expect(s.reading).toBe(20)
         }),
@@ -74,8 +74,8 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read for two different items')('readings', (s) =>
           Effect.sync(() => ({
-            first: s.ctx.page.get(s.ctx.lengthOfName('foo')),
-            second: s.ctx.page.get(s.ctx.lengthOfName('bar')),
+            first: Registry.get(s.ctx.page, s.ctx.lengthOfName('foo')),
+            second: Registry.get(s.ctx.page, s.ctx.lengthOfName('bar')),
           }))),
         Then('each item keeps its own value')((s) => {
           expect(s.readings.first).toBe(3)
@@ -96,9 +96,9 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              const firstReading = s.ctx.page.get(s.ctx.value)
-              s.ctx.page.refresh(s.ctx.value)
-              const secondReading = s.ctx.page.get(s.ctx.value)
+              const firstReading = Registry.get(s.ctx.page, s.ctx.value)
+              Registry.refresh(s.ctx.page, s.ctx.value)
+              const secondReading = Registry.get(s.ctx.page, s.ctx.value)
               return { firstReading, secondReading }
             }),
         ),
@@ -120,7 +120,7 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read before the source finishes')(
           'reading',
-          (s) => Effect.sync(() => s.ctx.page.get(s.ctx.withStandIn)),
+          (s) => Effect.sync(() => Registry.get(s.ctx.page, s.ctx.withStandIn)),
         ),
         Then('the stand-in is shown, marked as still loading')((s) => {
           expect(Result.isSuccess(s.reading) && s.reading.value === 'cached' && s.reading.waiting).toBe(true)
@@ -139,9 +139,9 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read after the source has settled')('reading', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.withStandIn)
-            s.ctx.page.refresh(s.ctx.withStandIn)
-            return s.ctx.page.get(s.ctx.withStandIn)
+            Registry.get(s.ctx.page, s.ctx.withStandIn)
+            Registry.refresh(s.ctx.page, s.ctx.withStandIn)
+            return Registry.get(s.ctx.page, s.ctx.withStandIn)
           })),
         Then('the real failure is shown, not the stand-in')((s) => {
           expect(Result.isFailure(s.reading)).toBe(true)
@@ -183,13 +183,13 @@ Feature('Deriving values from other values on a page')
         ),
         When('the change is made and the rejection arrives')('readings', (s) =>
           Effect.gen(function*() {
-            const before = s.ctx.page.get(s.ctx.optimisticValue)
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
+            const before = Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             s.ctx.latch.openUnsafe()
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const afterRejection = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterRejection = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { before, whilePending, afterRejection }
           })),
         Then('the change showed immediately, then rolled back to the stored value')((s) => {
@@ -233,13 +233,13 @@ Feature('Deriving values from other values on a page')
         ),
         When('the change is made and the store accepts it')('readings', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
+            Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterConfirmation = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
         Then('the confirmed value stays on screen')((s) => {
@@ -257,17 +257,17 @@ Feature('Deriving values from other values on a page')
             const base = Atom.make(0)
             const quieted = base.pipe(Atom.debounce(100))
             const page = Registry.make()
-            page.mount(quieted)
+            Registry.subscribe(page, quieted, () => {}, { immediate: true })
             return { page, base, quieted }
           })),
         When('several edits happen in quick succession, then things go quiet')('readings', (s) =>
           Effect.sync(() => {
-            s.ctx.page.set(s.ctx.base, 1)
-            s.ctx.page.set(s.ctx.base, 2)
-            s.ctx.page.set(s.ctx.base, 3)
-            const duringBurst = s.ctx.page.get(s.ctx.quieted)
+            Registry.set(s.ctx.page, s.ctx.base, 1)
+            Registry.set(s.ctx.page, s.ctx.base, 2)
+            Registry.set(s.ctx.page, s.ctx.base, 3)
+            const duringBurst = Registry.get(s.ctx.page, s.ctx.quieted)
             vi.advanceTimersByTime(150)
-            const afterQuiet = s.ctx.page.get(s.ctx.quieted)
+            const afterQuiet = Registry.get(s.ctx.page, s.ctx.quieted)
             vi.useRealTimers()
             return { duringBurst, afterQuiet }
           })),
@@ -293,9 +293,9 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read, its short timer runs out, and it is read again')('readings', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.value)
+            Registry.get(s.ctx.page, s.ctx.value)
             vi.advanceTimersByTime(100)
-            s.ctx.page.get(s.ctx.value)
+            Registry.get(s.ctx.page, s.ctx.value)
             const starts = s.ctx.starts()
             vi.useRealTimers()
             return { starts }
@@ -323,9 +323,9 @@ Feature('Deriving values from other values on a page')
           })),
         When('one member is read, the timer runs out, and it is read again')('readings', (s) =>
           Effect.sync(() => {
-            const first = s.ctx.page.get(s.ctx.family(7))
+            const first = Registry.get(s.ctx.page, s.ctx.family(7))
             vi.advanceTimersByTime(100)
-            const second = s.ctx.page.get(s.ctx.family(7))
+            const second = Registry.get(s.ctx.page, s.ctx.family(7))
             const starts = s.ctx.starts()
             vi.useRealTimers()
             return { first, second, starts }
@@ -342,20 +342,20 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const feed = Atom.pull(Stream.make(1, 2, 3))
             const page = Registry.make()
-            page.mount(feed)
+            Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
         When('the reader pulls until the feed finishes')('final', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.feed, void 0)
+            Registry.set(s.ctx.page, s.ctx.feed, void 0)
             yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
+            Registry.set(s.ctx.page, s.ctx.feed, void 0)
             yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
+            Registry.set(s.ctx.page, s.ctx.feed, void 0)
             yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
+            Registry.set(s.ctx.page, s.ctx.feed, void 0)
             yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+            return Registry.get(s.ctx.page, s.ctx.feed)
           })),
         Then('every update arrived in order and the feed is marked finished')((s) => {
           expect(Result.isSuccess(s.final)).toBe(true)
@@ -374,15 +374,15 @@ Feature('Deriving values from other values on a page')
             const ref = yield* SubscriptionRef.make(0)
             const view = Atom.subscriptionRef(ref)
             const page = Registry.make()
-            page.mount(view)
+            Registry.subscribe(page, view, () => {}, { immediate: true })
             return { ref, view, page }
           })),
         When('the reference changes twice')('readings', (s) =>
           Effect.gen(function*() {
             yield* SubscriptionRef.set(s.ctx.ref, 5)
-            const first = s.ctx.page.get(s.ctx.view)
+            const first = Registry.get(s.ctx.page, s.ctx.view)
             yield* SubscriptionRef.set(s.ctx.ref, 9)
-            const second = s.ctx.page.get(s.ctx.view)
+            const second = Registry.get(s.ctx.page, s.ctx.view)
             return { first, second }
           })),
         Then('the view tracked both changes')((s) => {
@@ -409,20 +409,20 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is changed and a fresh page reads it')('readings', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.mount(s.ctx.remembered)
+            Registry.subscribe(s.ctx.page, s.ctx.remembered, () => {}, { immediate: true })
             yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.remembered, 42)
+            Registry.set(s.ctx.page, s.ctx.remembered, 42)
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             const freshPage = Registry.make()
-            freshPage.mount(s.ctx.remembered)
+            Registry.subscribe(freshPage, s.ctx.remembered, () => {}, { immediate: true })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return { onFreshPage: freshPage.get(s.ctx.remembered) }
+            return { onFreshPage: Registry.get(freshPage, s.ctx.remembered) }
           })),
         Then('the fresh page sees the remembered value')((s) => {
           expect(s.readings.onFreshPage).toBe(42)
@@ -441,10 +441,10 @@ Feature('Deriving values from other values on a page')
           })),
         When('the values are read and written with no address bar available')('readings', (s) =>
           Effect.sync(() => {
-            const plainBefore = s.ctx.page.get(s.ctx.plain)
-            const decodedBefore = s.ctx.page.get(s.ctx.decoded)
-            s.ctx.page.set(s.ctx.plain, 'hello')
-            const plainAfter = s.ctx.page.get(s.ctx.plain)
+            const plainBefore = Registry.get(s.ctx.page, s.ctx.plain)
+            const decodedBefore = Registry.get(s.ctx.page, s.ctx.decoded)
+            Registry.set(s.ctx.page, s.ctx.plain, 'hello')
+            const plainAfter = Registry.get(s.ctx.page, s.ctx.plain)
             return { plainBefore, decodedBefore, plainAfter }
           })),
         Then('both read as empty, and a write keeps the value locally')((s) => {
@@ -476,13 +476,13 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.get(s.ctx.staleAware)
-              s.ctx.page.refresh(s.ctx.staleAware)
-              const fresh = s.ctx.page.get(s.ctx.staleAware)
+              Registry.get(s.ctx.page, s.ctx.staleAware)
+              Registry.refresh(s.ctx.page, s.ctx.staleAware)
+              const fresh = Registry.get(s.ctx.page, s.ctx.staleAware)
               s.ctx.setStored(2)
               vi.advanceTimersByTime(200)
-              s.ctx.page.get(s.ctx.staleAware)
-              const revalidated = s.ctx.page.get(s.ctx.staleAware)
+              Registry.get(s.ctx.page, s.ctx.staleAware)
+              const revalidated = Registry.get(s.ctx.page, s.ctx.staleAware)
               vi.useRealTimers()
               return { fresh, revalidated }
             }),
@@ -541,13 +541,13 @@ Feature('Deriving values from other values on a page')
           })),
         When('the change is made and the store accepts it')('readings', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
+            Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterConfirmation = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { whilePending, afterConfirmation }
           })),
         Then('the change reported itself in flight, then settled on the stored value')((s) => {
@@ -577,12 +577,12 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              const beforeDouble = s.ctx.page.get(s.ctx.doubled)
-              const beforeQuad = s.ctx.page.get(s.ctx.quadrupled)
-              s.ctx.page.set(s.ctx.doubled, 100)
-              const baseAfter = s.ctx.page.get(s.ctx.base)
-              const afterDouble = s.ctx.page.get(s.ctx.doubled)
-              const afterQuad = s.ctx.page.get(s.ctx.quadrupled)
+              const beforeDouble = Registry.get(s.ctx.page, s.ctx.doubled)
+              const beforeQuad = Registry.get(s.ctx.page, s.ctx.quadrupled)
+              Registry.set(s.ctx.page, s.ctx.doubled, 100)
+              const baseAfter = Registry.get(s.ctx.page, s.ctx.base)
+              const afterDouble = Registry.get(s.ctx.page, s.ctx.doubled)
+              const afterQuad = Registry.get(s.ctx.page, s.ctx.quadrupled)
               return { beforeDouble, beforeQuad, baseAfter, afterDouble, afterQuad }
             }),
         ),
@@ -610,10 +610,10 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              const before = s.ctx.page.get(s.ctx.mapped)
-              s.ctx.page.set(s.ctx.count, 1)
-              const after = s.ctx.page.get(s.ctx.mapped)
-              const afterAgain = s.ctx.page.get(s.ctx.mappedAgain)
+              const before = Registry.get(s.ctx.page, s.ctx.mapped)
+              Registry.set(s.ctx.page, s.ctx.count, 1)
+              const after = Registry.get(s.ctx.page, s.ctx.mapped)
+              const afterAgain = Registry.get(s.ctx.page, s.ctx.mappedAgain)
               return { before, after, afterAgain }
             }),
         ),
@@ -638,18 +638,18 @@ Feature('Deriving values from other values on a page')
           })),
         When('each value is read before and after being asked to run')('readings', (s) =>
           Effect.sync(() => {
-            const plainBefore = s.ctx.page.get(s.ctx.plain)
-            const withInitialBefore = s.ctx.page.get(s.ctx.withInitial)
-            const plainFnBefore = s.ctx.page.get(s.ctx.plainFn)
-            const withInitialFnBefore = s.ctx.page.get(s.ctx.withInitialFn)
-            s.ctx.page.set(s.ctx.plain, 3)
-            s.ctx.page.set(s.ctx.withInitial, 4)
-            s.ctx.page.set(s.ctx.plainFn, 2)
-            s.ctx.page.set(s.ctx.withInitialFn, 5)
-            const plainAfter = s.ctx.page.get(s.ctx.plain)
-            const withInitialAfter = s.ctx.page.get(s.ctx.withInitial)
-            const plainFnAfter = s.ctx.page.get(s.ctx.plainFn)
-            const withInitialFnAfter = s.ctx.page.get(s.ctx.withInitialFn)
+            const plainBefore = Registry.get(s.ctx.page, s.ctx.plain)
+            const withInitialBefore = Registry.get(s.ctx.page, s.ctx.withInitial)
+            const plainFnBefore = Registry.get(s.ctx.page, s.ctx.plainFn)
+            const withInitialFnBefore = Registry.get(s.ctx.page, s.ctx.withInitialFn)
+            Registry.set(s.ctx.page, s.ctx.plain, 3)
+            Registry.set(s.ctx.page, s.ctx.withInitial, 4)
+            Registry.set(s.ctx.page, s.ctx.plainFn, 2)
+            Registry.set(s.ctx.page, s.ctx.withInitialFn, 5)
+            const plainAfter = Registry.get(s.ctx.page, s.ctx.plain)
+            const withInitialAfter = Registry.get(s.ctx.page, s.ctx.withInitial)
+            const plainFnAfter = Registry.get(s.ctx.page, s.ctx.plainFn)
+            const withInitialFnAfter = Registry.get(s.ctx.page, s.ctx.withInitialFn)
             return {
               plainBefore,
               withInitialBefore,
@@ -685,26 +685,26 @@ Feature('Deriving values from other values on a page')
             const latch = Latch.makeUnsafe()
             const task = Atom.fn(() => latch.await)
             const page = Registry.make()
-            page.mount(task)
+            Registry.subscribe(page, task, () => {}, { immediate: true })
             return { page, task, latch }
           })),
         When('the computation is started, interrupted, reset, and started again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, void 0)
-              const running = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, Atom.Interrupt)
-              const interrupted = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, Atom.Reset)
-              const reset = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, void 0)
-              const restarted = s.ctx.page.get(s.ctx.task)
+              const before = Registry.get(s.ctx.page, s.ctx.task)
+              Registry.set(s.ctx.page, s.ctx.task, void 0)
+              const running = Registry.get(s.ctx.page, s.ctx.task)
+              Registry.set(s.ctx.page, s.ctx.task, Atom.Interrupt)
+              const interrupted = Registry.get(s.ctx.page, s.ctx.task)
+              Registry.set(s.ctx.page, s.ctx.task, Atom.Reset)
+              const reset = Registry.get(s.ctx.page, s.ctx.task)
+              Registry.set(s.ctx.page, s.ctx.task, void 0)
+              const restarted = Registry.get(s.ctx.page, s.ctx.task)
               s.ctx.latch.openUnsafe()
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const finished = s.ctx.page.get(s.ctx.task)
+              const finished = Registry.get(s.ctx.page, s.ctx.task)
               return { before, running, interrupted, reset, restarted, finished }
             }),
         ),
@@ -731,18 +731,18 @@ Feature('Deriving values from other values on a page')
               return latch.await.pipe(Effect.tap(() => Effect.sync(() => done++)))
             }, { concurrent: true })
             const page = Registry.make()
-            page.mount(task)
+            Registry.subscribe(page, task, () => {}, { immediate: true })
             return { page, task, latches: () => latches, done: () => done }
           })),
         When('the computation is asked to run three times before any of them finish')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.task)
-              s.ctx.page.set(s.ctx.task, 1)
-              s.ctx.page.set(s.ctx.task, 2)
-              s.ctx.page.set(s.ctx.task, 3)
-              const during = s.ctx.page.get(s.ctx.task)
+              const before = Registry.get(s.ctx.page, s.ctx.task)
+              Registry.set(s.ctx.page, s.ctx.task, 1)
+              Registry.set(s.ctx.page, s.ctx.task, 2)
+              Registry.set(s.ctx.page, s.ctx.task, 3)
+              const during = Registry.get(s.ctx.page, s.ctx.task)
               const started = s.ctx.latches().length
               const finishedBefore = s.ctx.done()
               s.ctx.latches().forEach((latch) => latch.openUnsafe())
@@ -750,7 +750,7 @@ Feature('Deriving values from other values on a page')
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               const finishedAfter = s.ctx.done()
-              const after = s.ctx.page.get(s.ctx.task)
+              const after = Registry.get(s.ctx.page, s.ctx.task)
               return { before, during, started, finishedBefore, finishedAfter, after }
             }),
         ),
@@ -772,18 +772,18 @@ Feature('Deriving values from other values on a page')
             const gate = Deferred.makeUnsafe<number>()
             const value = Atom.makeWith(Deferred.await(gate), { initialValue: 0 })
             const page = Registry.make()
-            page.mount(value)
+            Registry.subscribe(page, value, () => {}, { immediate: true })
             return { gate, page, value }
           })),
         When('the value is read, the fetch answers, and the value is read again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.value)
+              const before = Registry.get(s.ctx.page, s.ctx.value)
               yield* Deferred.succeed(s.ctx.gate, 1)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const after = s.ctx.page.get(s.ctx.value)
+              const after = Registry.get(s.ctx.page, s.ctx.value)
               return { before, after }
             }),
         ),
@@ -803,21 +803,21 @@ Feature('Deriving values from other values on a page')
             const gate = Deferred.makeUnsafe<number>()
             const count = Atom.fn((start: number) => Stream.fromEffect(Deferred.await(gate).pipe(Effect.as(start + 1))))
             const page = Registry.make()
-            page.mount(count)
+            Registry.subscribe(page, count, () => {}, { immediate: true })
             return { gate, page, count }
           })),
         When('the value is read, the computation is asked to run, and the signal arrives before it is read again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.count)
-              s.ctx.page.set(s.ctx.count, 1)
-              const during = s.ctx.page.get(s.ctx.count)
+              const before = Registry.get(s.ctx.page, s.ctx.count)
+              Registry.set(s.ctx.page, s.ctx.count, 1)
+              const during = Registry.get(s.ctx.page, s.ctx.count)
               yield* Deferred.succeed(s.ctx.gate, 1)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const after = s.ctx.page.get(s.ctx.count)
+              const after = Registry.get(s.ctx.page, s.ctx.count)
               return { before, during, after }
             }),
         ),
@@ -837,25 +837,25 @@ Feature('Deriving values from other values on a page')
             const gate = Deferred.makeUnsafe<number>()
             const value = Atom.makeWith(Stream.fromEffect(Deferred.await(gate)), { initialValue: 0 })
             const page = Registry.make()
-            page.mount(value)
+            Registry.subscribe(page, value, () => {}, { immediate: true })
             return { gate, page, value }
           })),
         When('the value is read, the signal arrives, and the value is read again before and after a refresh')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const before = s.ctx.page.get(s.ctx.value)
+              const before = Registry.get(s.ctx.page, s.ctx.value)
               yield* Deferred.succeed(s.ctx.gate, 5)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.value)
-              s.ctx.page.refresh(s.ctx.value)
-              const afterRefresh = s.ctx.page.get(s.ctx.value)
+              const loaded = Registry.get(s.ctx.page, s.ctx.value)
+              Registry.refresh(s.ctx.page, s.ctx.value)
+              const afterRefresh = Registry.get(s.ctx.page, s.ctx.value)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const settled = s.ctx.page.get(s.ctx.value)
+              const settled = Registry.get(s.ctx.page, s.ctx.value)
               return { before, loaded, afterRefresh, settled }
             }),
         ),
@@ -880,9 +880,9 @@ Feature('Deriving values from other values on a page')
               const failing = Atom.make(Stream.fail('boom' as const))
               const streamed = Atom.make(() => Stream.succeed(7))
               const page = Registry.make()
-              page.mount(empty)
-              page.mount(failing)
-              page.mount(streamed)
+              Registry.subscribe(page, empty, () => {}, { immediate: true })
+              Registry.subscribe(page, failing, () => {}, { immediate: true })
+              Registry.subscribe(page, streamed, () => {}, { immediate: true })
               return { page, empty, failing, streamed }
             }),
         ),
@@ -894,9 +894,9 @@ Feature('Deriving values from other values on a page')
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const emptyResult = s.ctx.page.get(s.ctx.empty)
-              const failingResult = s.ctx.page.get(s.ctx.failing)
-              const streamedResult = s.ctx.page.get(s.ctx.streamed)
+              const emptyResult = Registry.get(s.ctx.page, s.ctx.empty)
+              const failingResult = Registry.get(s.ctx.page, s.ctx.failing)
+              const streamedResult = Registry.get(s.ctx.page, s.ctx.streamed)
               return { emptyResult, failingResult, streamedResult }
             }),
         ),
@@ -922,7 +922,7 @@ Feature('Deriving values from other values on a page')
                 disableAccumulation: true,
               })
               const page = Registry.make()
-              page.mount(feed)
+              Registry.subscribe(page, feed, () => {}, { immediate: true })
               return { page, feed }
             }),
         ),
@@ -931,11 +931,11 @@ Feature('Deriving values from other values on a page')
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
+            Registry.set(s.ctx.page, s.ctx.feed, void 0)
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+            return Registry.get(s.ctx.page, s.ctx.feed)
           })),
         Then('the second batch replaced the first instead of joining it')((s) => {
           expect(Result.isSuccess(s.result)).toBe(true)
@@ -953,7 +953,7 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const feed = Atom.pull(Stream.empty)
             const page = Registry.make()
-            page.mount(feed)
+            Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
         When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
@@ -961,7 +961,7 @@ Feature('Deriving values from other values on a page')
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+            return Registry.get(s.ctx.page, s.ctx.feed)
           })),
         Then('the feed reports that there was nothing to show')((s) => {
           expect(Result.isFailure(s.result)).toBe(true)
@@ -975,7 +975,7 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const feed = Atom.pull(Stream.fail('boom' as const))
             const page = Registry.make()
-            page.mount(feed)
+            Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
         When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
@@ -983,7 +983,7 @@ Feature('Deriving values from other values on a page')
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.feed)
+            return Registry.get(s.ctx.page, s.ctx.feed)
           })),
         Then('the feed reports the failure')((s) => {
           expect(Result.isFailure(s.result)).toBe(true)
@@ -998,22 +998,22 @@ Feature('Deriving values from other values on a page')
             const gate = Deferred.makeUnsafe<number>()
             const feed = Atom.pull(() => Stream.fromEffectRepeat(Deferred.await(gate).pipe(Effect.as(7))))
             const page = Registry.make()
-            page.mount(feed)
+            Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { gate, page, feed }
           })),
         When('the feed is asked for two batches at once, then the signal arrives')(
           'result',
           (s) =>
             Effect.gen(function*() {
-              s.ctx.page.set(s.ctx.feed, void 0)
-              s.ctx.page.set(s.ctx.feed, void 0)
+              Registry.set(s.ctx.page, s.ctx.feed, void 0)
+              Registry.set(s.ctx.page, s.ctx.feed, void 0)
               yield* Deferred.succeed(s.ctx.gate, 7)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              return s.ctx.page.get(s.ctx.feed)
+              return Registry.get(s.ctx.page, s.ctx.feed)
             }),
         ),
         Then('every batch that was asked for arrived once the signal came')((s) => {
@@ -1036,10 +1036,10 @@ Feature('Deriving values from other values on a page')
             const functionView = Atom.subscriptionRef((_get) => SubscriptionRef.make(0))
             const brokenView = Atom.subscriptionRef(Effect.fail('nope' as const))
             const page = Registry.make()
-            page.mount(view)
-            page.mount(effectView)
-            page.mount(functionView)
-            page.mount(brokenView)
+            Registry.subscribe(page, view, () => {}, { immediate: true })
+            Registry.subscribe(page, effectView, () => {}, { immediate: true })
+            Registry.subscribe(page, functionView, () => {}, { immediate: true })
+            Registry.subscribe(page, brokenView, () => {}, { immediate: true })
             return { ref, page, view, effectView, functionView, brokenView }
           })),
         When('the views are read, written through, and the underlying reference changes')(
@@ -1049,24 +1049,24 @@ Feature('Deriving values from other values on a page')
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const viewBefore = s.ctx.page.get(s.ctx.view)
-              const effectBefore = s.ctx.page.get(s.ctx.effectView)
-              const functionBefore = s.ctx.page.get(s.ctx.functionView)
-              const brokenBefore = s.ctx.page.get(s.ctx.brokenView)
-              s.ctx.page.set(s.ctx.view, 5)
+              const viewBefore = Registry.get(s.ctx.page, s.ctx.view)
+              const effectBefore = Registry.get(s.ctx.page, s.ctx.effectView)
+              const functionBefore = Registry.get(s.ctx.page, s.ctx.functionView)
+              const brokenBefore = Registry.get(s.ctx.page, s.ctx.brokenView)
+              Registry.set(s.ctx.page, s.ctx.view, 5)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const viewWritten = s.ctx.page.get(s.ctx.view)
-              s.ctx.page.set(s.ctx.effectView, 3)
+              const viewWritten = Registry.get(s.ctx.page, s.ctx.view)
+              Registry.set(s.ctx.page, s.ctx.effectView, 3)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const effectWritten = s.ctx.page.get(s.ctx.effectView)
+              const effectWritten = Registry.get(s.ctx.page, s.ctx.effectView)
               yield* SubscriptionRef.set(s.ctx.ref, 9)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const viewChanged = s.ctx.page.get(s.ctx.view)
+              const viewChanged = Registry.get(s.ctx.page, s.ctx.view)
               return { viewBefore, effectBefore, functionBefore, brokenBefore, viewWritten, effectWritten, viewChanged }
             }),
         ),
@@ -1126,37 +1126,37 @@ Feature('Deriving values from other values on a page')
           })),
         When('the values are read and the tasks are asked to run')('readings', (s) =>
           Effect.gen(function*() {
-            const countResult = s.ctx.page.get(s.ctx.count)
-            const doubledResult = s.ctx.page.get(s.ctx.doubled)
-            s.ctx.page.set(s.ctx.add, 4)
-            const addResult = s.ctx.page.get(s.ctx.add)
-            s.ctx.page.set(s.ctx.curried, 2)
-            const curriedResult = s.ctx.page.get(s.ctx.curried)
-            s.ctx.page.set(s.ctx.reactive, 4)
-            const reactiveResult = s.ctx.page.get(s.ctx.reactive)
-            s.ctx.page.set(s.ctx.reactiveStream, 3)
-            const reactiveStreamResult = s.ctx.page.get(s.ctx.reactiveStream)
-            s.ctx.page.mount(s.ctx.feed)
+            const countResult = Registry.get(s.ctx.page, s.ctx.count)
+            const doubledResult = Registry.get(s.ctx.page, s.ctx.doubled)
+            Registry.set(s.ctx.page, s.ctx.add, 4)
+            const addResult = Registry.get(s.ctx.page, s.ctx.add)
+            Registry.set(s.ctx.page, s.ctx.curried, 2)
+            const curriedResult = Registry.get(s.ctx.page, s.ctx.curried)
+            Registry.set(s.ctx.page, s.ctx.reactive, 4)
+            const reactiveResult = Registry.get(s.ctx.page, s.ctx.reactive)
+            Registry.set(s.ctx.page, s.ctx.reactiveStream, 3)
+            const reactiveStreamResult = Registry.get(s.ctx.page, s.ctx.reactiveStream)
+            Registry.subscribe(s.ctx.page, s.ctx.feed, () => {}, { immediate: true })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            s.ctx.page.set(s.ctx.feed, void 0)
+            Registry.set(s.ctx.page, s.ctx.feed, void 0)
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const feedResult = s.ctx.page.get(s.ctx.feed)
-            s.ctx.page.mount(s.ctx.streamed)
+            const feedResult = Registry.get(s.ctx.page, s.ctx.feed)
+            Registry.subscribe(s.ctx.page, s.ctx.streamed, () => {}, { immediate: true })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const streamedResult = s.ctx.page.get(s.ctx.streamed)
-            s.ctx.page.mount(s.ctx.refView)
-            s.ctx.page.mount(s.ctx.refFromFunction)
+            const streamedResult = Registry.get(s.ctx.page, s.ctx.streamed)
+            Registry.subscribe(s.ctx.page, s.ctx.refView, () => {}, { immediate: true })
+            Registry.subscribe(s.ctx.page, s.ctx.refFromFunction, () => {}, { immediate: true })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const refResult = s.ctx.page.get(s.ctx.refView)
-            const refFunctionResult = s.ctx.page.get(s.ctx.refFromFunction)
+            const refResult = Registry.get(s.ctx.page, s.ctx.refView)
+            const refFunctionResult = Registry.get(s.ctx.page, s.ctx.refFromFunction)
             return {
               countResult,
               doubledResult,
@@ -1202,7 +1202,7 @@ Feature('Deriving values from other values on a page')
               return { page, count }
             }),
         ),
-        When('the value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.count))),
+        When('the value is read')('reading', (s) => Effect.sync(() => Registry.get(s.ctx.page, s.ctx.count))),
         Then('it reflects the number the recipe provided')((s) => {
           expect(Result.isSuccess(s.reading) && s.reading.value === 7).toBe(true)
         }),
@@ -1223,10 +1223,10 @@ Feature('Deriving values from other values on a page')
           })),
         When('every value is read')('readings', (s) =>
           Effect.sync(() => ({
-            count: s.ctx.page.get(s.ctx.count),
-            add: s.ctx.page.get(s.ctx.add),
-            feed: s.ctx.page.get(s.ctx.feed),
-            refView: s.ctx.page.get(s.ctx.refView),
+            count: Registry.get(s.ctx.page, s.ctx.count),
+            add: Registry.get(s.ctx.page, s.ctx.add),
+            feed: Registry.get(s.ctx.page, s.ctx.feed),
+            refView: Registry.get(s.ctx.page, s.ctx.refView),
           }))),
         Then('every value reports the failure')((s) => {
           expect(Result.isFailure(s.readings.count)).toBe(true)
@@ -1247,9 +1247,9 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read and changed')('readings', (s) =>
           Effect.sync(() => {
-            const seeded = s.ctx.page.get(s.ctx.count)
-            s.ctx.page.set(s.ctx.count, 5)
-            const afterChange = s.ctx.page.get(s.ctx.count)
+            const seeded = Registry.get(s.ctx.page, s.ctx.count)
+            Registry.set(s.ctx.page, s.ctx.count, 5)
+            const afterChange = Registry.get(s.ctx.page, s.ctx.count)
             return { seeded, afterChange }
           })),
         Then('the page started with the saved value and kept the change')((s) => {
@@ -1269,9 +1269,9 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is shown, then the saved copy arrives')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.count)
-            s.ctx.page.setSerializable('count', 42)
-            const after = s.ctx.page.get(s.ctx.count)
+            const before = Registry.get(s.ctx.page, s.ctx.count)
+            Registry.setSerializable(s.ctx.page, 'count', 42)
+            const after = Registry.get(s.ctx.page, s.ctx.count)
             return { before, after }
           })),
         Then('the value on the page was replaced by the saved copy')((s) => {
@@ -1287,10 +1287,10 @@ Feature('Deriving values from other values on a page')
           Effect.sync(() => {
             const count = Atom.make(0).pipe(Atom.serializable({ key: 'count', schema: Schema.Finite }))
             const page = Registry.make()
-            page.setSerializable('count', 42)
+            Registry.setSerializable(page, 'count', 42)
             return { page, count }
           })),
-        When('the value is read')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.count))),
+        When('the value is read')('reading', (s) => Effect.sync(() => Registry.get(s.ctx.page, s.ctx.count))),
         Then('it shows the saved value')((s) => {
           expect(s.reading).toBe(42)
         }),
@@ -1308,7 +1308,7 @@ Feature('Deriving values from other values on a page')
               const derived = base.pipe(Atom.withRefresh(1000))
               const saved = derived.pipe(Atom.serializable({ key: 'derived', schema: Schema.Finite }))
               const page = Registry.make()
-              const unmount = page.mount(saved)
+              const unmount = Registry.subscribe(page, saved, () => {}, { immediate: true })
               return { page, saved, unmount }
             }),
         ),
@@ -1316,10 +1316,10 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.setSerializable('derived', 99)
-              const restored = s.ctx.page.get(s.ctx.saved)
+              Registry.setSerializable(s.ctx.page, 'derived', 99)
+              const restored = Registry.get(s.ctx.page, s.ctx.saved)
               vi.advanceTimersByTime(2000)
-              const afterRefresh = s.ctx.page.get(s.ctx.saved)
+              const afterRefresh = Registry.get(s.ctx.page, s.ctx.saved)
               s.ctx.unmount()
               vi.useRealTimers()
               return { restored, afterRefresh }
@@ -1341,12 +1341,12 @@ Feature('Deriving values from other values on a page')
               Atom.serializable({ key: 'named', schema: Schema.Finite }),
             )
             const page = Registry.make()
-            page.mount(named)
+            Registry.subscribe(page, named, () => {}, { immediate: true })
             return { page, named }
           })),
         When('the value is read and its name is asked for')('readings', (s) =>
           Effect.sync(() => ({
-            value: s.ctx.page.get(s.ctx.named),
+            value: Registry.get(s.ctx.page, s.ctx.named),
             name: s.ctx.named.label?.[0],
           }))),
         Then('the value works normally and keeps the name it was given')((s) => {
@@ -1369,7 +1369,7 @@ Feature('Deriving values from other values on a page')
           })),
         When('the local value is changed and every value is read for the server')('readings', (s) =>
           Effect.sync(() => {
-            s.ctx.page.set(s.ctx.local, 5)
+            Registry.set(s.ctx.page, s.ctx.local, 5)
             const plain = Atom.getServerValue(s.ctx.local, s.ctx.page)
             const overriddenValue = Atom.getServerValue(s.ctx.overridden, s.ctx.page)
             const nestedValue = Atom.getServerValue(s.ctx.nested, s.ctx.page)
@@ -1399,12 +1399,12 @@ Feature('Deriving values from other values on a page')
           })),
         When('the values are read, written through, and read again')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.withStandIn)
-            const mappedBefore = s.ctx.page.get(s.ctx.mappedWithStandIn)
-            s.ctx.page.set(s.ctx.withStandIn, 1)
-            const after = s.ctx.page.get(s.ctx.withStandIn)
-            s.ctx.page.set(s.ctx.mappedWithStandIn, 2)
-            const mappedAfter = s.ctx.page.get(s.ctx.mappedWithStandIn)
+            const before = Registry.get(s.ctx.page, s.ctx.withStandIn)
+            const mappedBefore = Registry.get(s.ctx.page, s.ctx.mappedWithStandIn)
+            Registry.set(s.ctx.page, s.ctx.withStandIn, 1)
+            const after = Registry.get(s.ctx.page, s.ctx.withStandIn)
+            Registry.set(s.ctx.page, s.ctx.mappedWithStandIn, 2)
+            const mappedAfter = Registry.get(s.ctx.page, s.ctx.mappedWithStandIn)
             return { before, after, mappedBefore, mappedAfter }
           })),
         Then('the stored copy showed until the value ran, then the real outcome replaced it')((s) => {
@@ -1453,13 +1453,13 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              const first = s.ctx.page.get(s.ctx.onFocus)
-              const firstAlways = s.ctx.page.get(s.ctx.alwaysOnFocus)
+              const first = Registry.get(s.ctx.page, s.ctx.onFocus)
+              const firstAlways = Registry.get(s.ctx.page, s.ctx.alwaysOnFocus)
               s.ctx.setStored(2)
               vi.advanceTimersByTime(200)
-              s.ctx.page.set(s.ctx.focus, 1)
-              const revalidated = s.ctx.page.get(s.ctx.onFocus)
-              const revalidatedAlways = s.ctx.page.get(s.ctx.alwaysOnFocus)
+              Registry.set(s.ctx.page, s.ctx.focus, 1)
+              const revalidated = Registry.get(s.ctx.page, s.ctx.onFocus)
+              const revalidatedAlways = Registry.get(s.ctx.page, s.ctx.alwaysOnFocus)
               vi.useRealTimers()
               return { first, firstAlways, revalidated, revalidatedAlways }
             }),
@@ -1488,10 +1488,10 @@ Feature('Deriving values from other values on a page')
           })),
         When('the value is read, then asked to refresh, and read again')('readings', (s) =>
           Effect.sync(() => {
-            const first = s.ctx.page.get(s.ctx.quiet)
+            const first = Registry.get(s.ctx.page, s.ctx.quiet)
             const readsAfterFirst = s.ctx.reads()
-            s.ctx.page.refresh(s.ctx.quiet)
-            const second = s.ctx.page.get(s.ctx.quiet)
+            Registry.refresh(s.ctx.page, s.ctx.quiet)
+            const second = Registry.get(s.ctx.page, s.ctx.quiet)
             const readsAfterSecond = s.ctx.reads()
             return { first, readsAfterFirst, second, readsAfterSecond }
           })),
@@ -1515,8 +1515,8 @@ Feature('Deriving values from other values on a page')
           })),
         When('both values are read')('readings', (s) =>
           Effect.sync(() => ({
-            failing: s.ctx.page.get(s.ctx.failing),
-            waiting: s.ctx.page.get(s.ctx.waiting),
+            failing: Registry.get(s.ctx.page, s.ctx.failing),
+            waiting: Registry.get(s.ctx.page, s.ctx.waiting),
           }))),
         Then('the failed value reports its failure and the waiting value stays waiting')((s) => {
           expect(Result.isFailure(s.readings.failing)).toBe(true)
@@ -1581,23 +1581,23 @@ Feature('Deriving values from other values on a page')
           })),
         When('both changes are made, confirmed, and read throughout')('readings', (s) =>
           Effect.gen(function*() {
-            const before = s.ctx.page.get(s.ctx.optimisticValue)
-            s.ctx.page.set(s.ctx.save, 99)
-            const whilePending = s.ctx.page.get(s.ctx.optimisticValue)
-            s.ctx.page.set(s.ctx.save, 99)
+            const before = Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            Registry.set(s.ctx.page, s.ctx.save, 99)
+            const whilePending = Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            Registry.set(s.ctx.page, s.ctx.save, 99)
             s.ctx.setStored(99)
             s.ctx.latch.openUnsafe()
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
-            const before2 = s.ctx.page.get(s.ctx.optimistic2)
-            s.ctx.page.set(s.ctx.save2, 99)
-            const whilePending2 = s.ctx.page.get(s.ctx.optimistic2)
+            const afterConfirmation = Registry.get(s.ctx.page, s.ctx.optimisticValue)
+            const before2 = Registry.get(s.ctx.page, s.ctx.optimistic2)
+            Registry.set(s.ctx.page, s.ctx.save2, 99)
+            const whilePending2 = Registry.get(s.ctx.page, s.ctx.optimistic2)
             s.ctx.setStored2(99)
             s.ctx.latch2.openUnsafe()
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const afterConfirmation2 = s.ctx.page.get(s.ctx.optimistic2)
+            const afterConfirmation2 = Registry.get(s.ctx.page, s.ctx.optimistic2)
             return { before, whilePending, afterConfirmation, before2, whilePending2, afterConfirmation2 }
           })),
         Then('each change showed its progress, then settled on the confirmed value')((s) => {
@@ -1643,11 +1643,11 @@ Feature('Deriving values from other values on a page')
           })),
         When('the change is made and the store accepts it right away')('readings', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.save, 99)
+            Registry.set(s.ctx.page, s.ctx.save, 99)
             s.ctx.setStored(99)
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const afterConfirmation = s.ctx.page.get(s.ctx.optimisticValue)
+            const afterConfirmation = Registry.get(s.ctx.page, s.ctx.optimisticValue)
             return { afterConfirmation }
           })),
         Then('the confirmed value settled on screen right away')((s) => {
@@ -1687,20 +1687,20 @@ Feature('Deriving values from other values on a page')
               defaultValue: () => 0,
             })
             const page = Registry.make()
-            page.mount(remembered)
+            Registry.subscribe(page, remembered, () => {}, { immediate: true })
             return { gate, page, remembered, storage }
           })),
         When('the value is read, the store answers, and the value is read again')(
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const whileLoading = s.ctx.page.get(s.ctx.remembered)
+              const whileLoading = Registry.get(s.ctx.page, s.ctx.remembered)
               yield* Deferred.succeed(s.ctx.gate, void 0)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.remembered)
+              const loaded = Registry.get(s.ctx.page, s.ctx.remembered)
               const stored = s.ctx.storage.get('known-key')
               return { whileLoading, loaded, stored }
             }),
@@ -1747,18 +1747,18 @@ Feature('Deriving values from other values on a page')
               defaultValue: () => 0,
             })
             const page = Registry.make()
-            page.mount(remembered)
+            Registry.subscribe(page, remembered, () => {}, { immediate: true })
             return { gate, page, remembered }
           })),
         When('a write is made, then the store answers')('value', (s) =>
           Effect.gen(function*() {
-            s.ctx.page.set(s.ctx.remembered, 99)
+            Registry.set(s.ctx.page, s.ctx.remembered, 99)
             yield* Deferred.succeed(s.ctx.gate, void 0)
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.page.get(s.ctx.remembered)
+            return Registry.get(s.ctx.page, s.ctx.remembered)
           })),
         Then('the written value wins over the slower store read')((s) => {
           expect(s.value).toBe(99)
@@ -1799,7 +1799,7 @@ Feature('Deriving values from other values on a page')
                 defaultValue: () => 0,
               })
               const page = Registry.make()
-              page.mount(remembered)
+              Registry.subscribe(page, remembered, () => {}, { immediate: true })
               return { gate, page, remembered, storage }
             }),
         ),
@@ -1807,15 +1807,15 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.gen(function*() {
-              const whileLoading = s.ctx.page.get(s.ctx.remembered)
+              const whileLoading = Registry.get(s.ctx.page, s.ctx.remembered)
               yield* Deferred.succeed(s.ctx.gate, void 0)
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
-              const loaded = s.ctx.page.get(s.ctx.remembered)
-              s.ctx.page.set(s.ctx.remembered, 99)
-              const afterWrite = s.ctx.page.get(s.ctx.remembered)
+              const loaded = Registry.get(s.ctx.page, s.ctx.remembered)
+              Registry.set(s.ctx.page, s.ctx.remembered, 99)
+              const afterWrite = Registry.get(s.ctx.page, s.ctx.remembered)
               const stored = s.ctx.storage.get('fresh-key')
               return { whileLoading, loaded, afterWrite, stored }
             }),
@@ -1836,18 +1836,18 @@ Feature('Deriving values from other values on a page')
             const running = Atom.makeWith(Effect.never, { initialValue: 1 })
             const guarded = Atom.makeWith(Effect.never, { initialValue: 1, uninterruptible: true })
             const page = Registry.make()
-            const stopRunning = page.mount(running)
-            const stopGuarded = page.mount(guarded)
+            const stopRunning = Registry.subscribe(page, running, () => {}, { immediate: true })
+            const stopGuarded = Registry.subscribe(page, guarded, () => {}, { immediate: true })
             return { page, running, guarded, stopRunning, stopGuarded }
           })),
         When('both values are read, then both are released')('readings', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.running)
-            const guardedBefore = s.ctx.page.get(s.ctx.guarded)
+            const before = Registry.get(s.ctx.page, s.ctx.running)
+            const guardedBefore = Registry.get(s.ctx.page, s.ctx.guarded)
             s.ctx.stopRunning()
             s.ctx.stopGuarded()
-            const restarted = s.ctx.page.get(s.ctx.running)
-            const restartedGuarded = s.ctx.page.get(s.ctx.guarded)
+            const restarted = Registry.get(s.ctx.page, s.ctx.running)
+            const restartedGuarded = Registry.get(s.ctx.page, s.ctx.guarded)
             return { before, guardedBefore, restarted, restartedGuarded }
           })),
         Then('both values showed their stand-in while running, and started over once read again')((s) => {
@@ -1879,7 +1879,7 @@ Feature('Deriving values from other values on a page')
         When('the value is worked on through the page service')('readings', (s) =>
           Effect.gen(function*() {
             const withPage = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-              Effect.provideService(Registry.AtomRegistry, s.ctx.page)(effect)
+              Effect.provideService(Registry.Current, s.ctx.page)(effect)
             yield* withPage(s.ctx.value.pipe(Atom.mount))
             const initial = yield* withPage(s.ctx.value.pipe(Atom.get))
             yield* withPage(Atom.set(s.ctx.value, 5))
@@ -1917,7 +1917,7 @@ Feature('Deriving values from other values on a page')
               const objectValue = Atom.make(() => ({ n: 1 }))
               const effectValue = Atom.make(() => Effect.succeed(5))
               const page = Registry.make()
-              page.mount(tracked)
+              Registry.subscribe(page, tracked, () => {}, { immediate: true })
               return { page, source, tracked, nothing, objectValue, effectValue }
             }),
         ),
@@ -1925,12 +1925,12 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              const before = s.ctx.page.get(s.ctx.tracked)
-              s.ctx.page.set(s.ctx.source, 3)
-              const after = s.ctx.page.get(s.ctx.tracked)
-              const nullRead = s.ctx.page.get(s.ctx.nothing)
-              const objectRead = s.ctx.page.get(s.ctx.objectValue)
-              const effectRead = s.ctx.page.get(s.ctx.effectValue)
+              const before = Registry.get(s.ctx.page, s.ctx.tracked)
+              Registry.set(s.ctx.page, s.ctx.source, 3)
+              const after = Registry.get(s.ctx.page, s.ctx.tracked)
+              const nullRead = Registry.get(s.ctx.page, s.ctx.nothing)
+              const objectRead = Registry.get(s.ctx.page, s.ctx.objectValue)
+              const effectRead = Registry.get(s.ctx.page, s.ctx.effectValue)
               return { before, after, nullRead, objectRead, effectRead }
             }),
         ),
@@ -1955,8 +1955,8 @@ Feature('Deriving values from other values on a page')
               const withPending = base.pipe(Atom.debounce(100))
               const quiet = base.pipe(Atom.debounce(100))
               const page = Registry.make()
-              const stopPending = page.mount(withPending)
-              const stopQuiet = page.mount(quiet)
+              const stopPending = Registry.subscribe(page, withPending, () => {}, { immediate: true })
+              const stopQuiet = Registry.subscribe(page, quiet, () => {}, { immediate: true })
               return { page, base, withPending, stopPending, stopQuiet }
             }),
         ),
@@ -1964,11 +1964,11 @@ Feature('Deriving values from other values on a page')
           'readings',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.set(s.ctx.base, 1)
+              Registry.set(s.ctx.page, s.ctx.base, 1)
               s.ctx.stopPending()
               s.ctx.stopQuiet()
               vi.advanceTimersByTime(200)
-              const after = s.ctx.page.get(s.ctx.withPending)
+              const after = Registry.get(s.ctx.page, s.ctx.withPending)
               vi.useRealTimers()
               return { after }
             }),

@@ -10,20 +10,24 @@
 
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import type * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
-import { dual } from 'effect/Function'
+import { constVoid, dual } from 'effect/Function'
 import * as React from 'react'
 import { RegistryContext } from './RegistryContext.js'
 
-function useStore<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): A {
+function useStore<A>(registry: Registry.Registry, atom: Atom.Atom<A>): A {
   const subscribe = React.useMemo(
-    () => (onStoreChange: () => void) => registry.subscribe(atom, () => onStoreChange()),
+    () => (onStoreChange: () => void) => Registry.subscribe(registry, atom, () => onStoreChange()),
     [registry, atom],
   )
-  return React.useSyncExternalStore(subscribe, () => registry.get(atom), () => Atom.getServerValue(atom, registry))
+  return React.useSyncExternalStore(
+    subscribe,
+    () => Registry.get(registry, atom),
+    () => Atom.getServerValue(atom, registry),
+  )
 }
 
 type AnyAtom<Val = unknown> = Atom.Atom<Val>
@@ -31,10 +35,10 @@ type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
 type AnyPromiseMap<Val = unknown> = WeakMap<AnyAtom<Val>, Promise<void>>
 type AnyValue<Val = unknown> = Val
 
-const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<AnyAtom>>()
+const initialValuesSet = new WeakMap<Registry.Registry, WeakSet<AnyAtom>>()
 
 function initialValuesSetFor(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
 ): WeakSet<AnyAtom> {
   const existing = initialValuesSet.get(registry)
   if (existing !== undefined) {
@@ -44,7 +48,7 @@ function initialValuesSetFor(
 }
 
 function createInitialValuesSet(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
 ): WeakSet<AnyAtom> {
   const set = new WeakSet<AnyAtom>()
   initialValuesSet.set(registry, set)
@@ -53,7 +57,7 @@ function createInitialValuesSet(
 
 function seedInitialValueIfNew(
   set: WeakSet<AnyAtom>,
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: AnyAtom,
   value: AnyValue,
 ): void {
@@ -61,11 +65,11 @@ function seedInitialValueIfNew(
     return
   }
   set.add(atom)
-  registry.setInitialValue(atom, value)
+  Registry.setInitialValue(registry, atom, value)
 }
 
 function seedInitialValues(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   initialValues: Iterable<AnyInitialValue>,
 ): void {
   const set = initialValuesSetFor(registry)
@@ -128,8 +132,8 @@ export const useAtomValue: {
   },
 )
 
-function mountAtom<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): void {
-  React.useEffect(() => registry.mount(atom), [atom, registry])
+function mountAtom<A>(registry: Registry.Registry, atom: Atom.Atom<A>): void {
+  React.useEffect(() => Registry.subscribe(registry, atom, constVoid, { immediate: true }), [atom, registry])
 }
 
 /**
@@ -178,7 +182,7 @@ export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void 
   const registry = React.useContext(RegistryContext)
   mountAtom(registry, atom)
   return React.useCallback((value: W) => {
-    registry.set(atom, value)
+    Registry.set(registry, atom, value)
   }, [registry, atom])
 }
 
@@ -206,8 +210,8 @@ export const useAtomSetResult = <A, E, W>(
   const registry = React.useContext(RegistryContext)
   mountAtom(registry, atom)
   return React.useCallback((value: W) => {
-    registry.set(atom, value)
-    return AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true })
+    Registry.set(registry, atom, value)
+    return Registry.getResult(registry, atom, { suspendOnWaiting: true })
   }, [registry, atom])
 }
 
@@ -228,7 +232,7 @@ export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R
   const registry = React.useContext(RegistryContext)
   mountAtom(registry, atom)
   return React.useCallback((f: (previous: R) => W) => {
-    registry.update(atom, f)
+    Registry.update(registry, atom, f)
   }, [registry, atom])
 }
 
@@ -254,7 +258,7 @@ export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
   const registry = React.useContext(RegistryContext)
   mountAtom(registry, atom)
   return React.useCallback(() => {
-    registry.refresh(atom)
+    Registry.refresh(registry, atom)
   }, [registry, atom])
 }
 
@@ -278,17 +282,17 @@ export const useAtom = <R, W>(
   const registry = React.useContext(RegistryContext)
   return [
     useStore(registry, atom),
-    React.useCallback((value: W) => registry.set(atom, value), [registry, atom]),
+    React.useCallback((value: W) => Registry.set(registry, atom, value), [registry, atom]),
   ]
 }
 
 const atomPromiseMap = {
   suspendOnWaiting: new WeakMap<
-    AtomRegistry.Registry,
+    Registry.Registry,
     AnyPromiseMap
   >(),
   default: new WeakMap<
-    AtomRegistry.Registry,
+    Registry.Registry,
     AnyPromiseMap
   >(),
 }
@@ -320,7 +324,7 @@ function includeFailureFrom(options?: {
 
 function promiseRegistries(
   suspendOnWaiting: boolean,
-): WeakMap<AtomRegistry.Registry, AnyPromiseMap> {
+): WeakMap<Registry.Registry, AnyPromiseMap> {
   if (suspendOnWaiting) {
     return atomPromiseMap.suspendOnWaiting
   }
@@ -328,8 +332,8 @@ function promiseRegistries(
 }
 
 function createAtomPromiseMap(
-  registries: WeakMap<AtomRegistry.Registry, AnyPromiseMap>,
-  registry: AtomRegistry.Registry,
+  registries: WeakMap<Registry.Registry, AnyPromiseMap>,
+  registry: Registry.Registry,
 ): AnyPromiseMap {
   const map = new WeakMap<AnyAtom, Promise<void>>()
   registries.set(registry, map)
@@ -337,7 +341,7 @@ function createAtomPromiseMap(
 }
 
 function promiseMapFor(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   suspendOnWaiting: boolean,
 ): AnyPromiseMap {
   const registries = promiseRegistries(suspendOnWaiting)
@@ -408,14 +412,14 @@ function onAtomPromiseResult<A, E>(
 }
 
 function createAtomPromise<A, E>(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
   map: AnyPromiseMap,
 ): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
   const state = { settled: false }
-  const dispose = registry.subscribe(atom, (result) => {
+  const dispose = Registry.subscribe(registry, atom, (result) => {
     onAtomPromiseResult(state, result, suspendOnWaiting, dispose, resolve, map, atom)
   })
   map.set(atom, promise)
@@ -423,7 +427,7 @@ function createAtomPromise<A, E>(
 }
 
 function atomToPromise<A, E>(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
 ): Promise<void> {
@@ -450,7 +454,7 @@ function throwForSuspense(error: Error): never {
 }
 
 function atomResultOrSuspend<A, E>(
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
 ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
@@ -580,7 +584,7 @@ export const useAtomSubscribe: {
     const fRef = React.useRef(f)
     fRef.current = f
     React.useEffect(
-      () => registry.subscribe(atom, (value) => fRef.current(value), options),
+      () => Registry.subscribe(registry, atom, (value) => fRef.current(value), options),
       [registry, atom, options?.immediate],
     )
   },

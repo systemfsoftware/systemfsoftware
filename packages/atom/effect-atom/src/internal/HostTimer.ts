@@ -4,7 +4,7 @@
  * This module is the named host boundary for wall-clock reads and delayed
  * scheduling. The registry itself is a fiber-free store, and consumers who
  * need deterministic idle eviction pass their own `now` / `scheduleTimer` to
- * `Registry.make` / `Registry.layerOptions`. The defaults here route through
+ * `Registry.make` / `Registry.layer`. The defaults here route through
  * the Effect-native primitives — the default `Clock` reference's wall clock,
  * resolved once per registry, and `Effect.sleep` forked on the default
  * runtime — so a caller who does not configure scheduling still lands on the

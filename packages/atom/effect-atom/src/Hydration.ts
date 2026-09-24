@@ -1,8 +1,8 @@
 /**
  * Saves and restores serializable atom state.
  *
- * `dehydrate` reads atoms marked with `Atom.serializable` from an
- * `AtomRegistry` and returns encoded entries keyed by their serialization keys.
+ * `dehydrate` reads atoms marked with `Atom.serializable` from a
+ * registry and returns encoded entries keyed by their serialization keys.
  * `hydrate` preloads those entries into another registry before the atoms are
  * read. Initial `AsyncResult` values can be ignored, encoded as values, or
  * carried as a pending update that settles the target registry once the source
@@ -16,7 +16,7 @@ import * as Effect from 'effect/Effect'
 import type * as Fiber from 'effect/Fiber'
 import { dual } from 'effect/Function'
 import * as Atom from './Atom.js'
-import * as AtomRegistry from './Registry.js'
+import * as Registry from './Registry.js'
 import * as AsyncResult from './Result.js'
 
 type AnyAtom<A = unknown> = Atom.Atom<A>
@@ -75,9 +75,9 @@ export const dehydrate: {
      * How to encode `AsyncResult.Initial` values. Default is "ignore".
      */
     readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
-  }): (registry: AtomRegistry.Registry) => DehydratedAtomValue[]
+  }): (registry: Registry.Registry) => DehydratedAtomValue[]
   (
-    registry: AtomRegistry.Registry,
+    registry: Registry.Registry,
     options?: {
       /**
        * How to encode `AsyncResult.Initial` values. Default is "ignore".
@@ -86,9 +86,9 @@ export const dehydrate: {
     },
   ): DehydratedAtomValue[]
 } = dual(
-  (args) => AtomRegistry.isAtomRegistry(args[0]),
+  (args) => Registry.isRegistry(args[0]),
   (
-    registry: AtomRegistry.Registry,
+    registry: Registry.Registry,
     options?: {
       readonly encodeInitialAs?: 'ignore' | 'deferred' | 'value-only' | undefined
     },
@@ -96,7 +96,7 @@ export const dehydrate: {
     const encodeInitialResultMode = encodeInitialMode(options)
     const arr: DehydratedAtomValue[] = []
     const now = Effect.runSync(Clock.currentTimeMillis)
-    registry.getNodes().forEach((node, key) => {
+    Registry.getNodes(registry).forEach((node, key) => {
       dehydrateNode(registry, node, key, encodeInitialResultMode, now, arr)
     })
     return arr
@@ -131,7 +131,7 @@ const isInitialResult = <V = unknown>(value: V): boolean => {
 }
 
 const dehydrateNode = (
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   node: { readonly atom: AnyAtom; readonly value: () => AnyValue },
   key: AnyValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
@@ -164,7 +164,7 @@ const shouldSkipInitial = (
 }
 
 const dehydrateSerializable = (
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: AnyAtom,
   serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
   value: AnyValue,
@@ -181,7 +181,7 @@ const dehydrateSerializable = (
 }
 
 const dehydrateKeyed = (
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: AnyAtom,
   serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
   value: AnyValue,
@@ -222,7 +222,7 @@ const isSettledResult = <V = unknown>(newValue: V): boolean => {
 }
 
 const attachDeferred = (
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   atom: AnyAtom,
   serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
   entry: DehydratedAtomValue,
@@ -233,7 +233,7 @@ const attachDeferred = (
     return
   }
   const deferred = Deferred.makeUnsafe<AnyValue>()
-  const unsubscribe = registry.subscribe(atom, (newValue) => {
+  const unsubscribe = Registry.subscribe(registry, atom, (newValue) => {
     completeDeferred(deferred, unsubscribe, serializer, newValue)
   })
   pendingResults.set(entry, deferred)
@@ -276,15 +276,15 @@ const completeDeferred = (
 export const hydrate: {
   (
     dehydratedState: Iterable<DehydratedAtomValue>,
-  ): (registry: AtomRegistry.Registry) => Fiber.Fiber<void, never>
+  ): (registry: Registry.Registry) => Fiber.Fiber<void, never>
   (
-    registry: AtomRegistry.Registry,
+    registry: Registry.Registry,
     dehydratedState: Iterable<DehydratedAtomValue>,
   ): Fiber.Fiber<void, never>
 } = dual(
   2,
   (
-    registry: AtomRegistry.Registry,
+    registry: Registry.Registry,
     dehydratedState: Iterable<DehydratedAtomValue>,
   ): Fiber.Fiber<void, never> => {
     const pending: Effect.Effect<void>[] = []
@@ -296,11 +296,11 @@ export const hydrate: {
 )
 
 const hydrateOne = (
-  registry: AtomRegistry.Registry,
+  registry: Registry.Registry,
   pending: Effect.Effect<void>[],
   datom: DehydratedAtomValue,
 ): void => {
-  registry.setSerializable(datom.key, datom.value)
+  Registry.setSerializable(registry, datom.key, datom.value)
   const result = pendingResults.get(datom)
   if (result === undefined) {
     return
@@ -308,7 +308,7 @@ const hydrateOne = (
   pending.push(
     Effect.flatMap(Deferred.await(result), (resolvedValue) =>
       Effect.sync(() => {
-        registry.setSerializable(datom.key, resolvedValue)
+        Registry.setSerializable(registry, datom.key, resolvedValue)
       })),
   )
 }

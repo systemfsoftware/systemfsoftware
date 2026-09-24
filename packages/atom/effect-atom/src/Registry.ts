@@ -1,7 +1,7 @@
 /**
  * Stores and runs atoms for one reactive runtime.
  *
- * An `AtomRegistry` evaluates atoms, caches their current values, tracks
+ * A registry evaluates atoms, caches their current values, tracks
  * dependencies, applies writes and refreshes, manages subscriptions, and
  * disposes unused nodes. Each registry is independent, so the same atom can hold
  * different values in different registries. Serializable atom values can also be
@@ -31,70 +31,46 @@ import type { Failure, Success } from './Result.js'
 type AnyValue<A = unknown> = A
 
 /**
- * The literal type used to identify `AtomRegistry` services and values.
+ * The literal type used to identify registry values.
  *
  * @since 4.0.0
  */
 export type TypeId = '~effect-atom/atom/Registry'
 
 /**
- * The runtime type id used to identify `AtomRegistry` services and values.
+ * The runtime type id used to identify registry values.
  *
  * @since 4.0.0
  */
 export const TypeId: TypeId = '~effect-atom/atom/Registry'
 
 /**
- * Returns `true` when the value has the `AtomRegistry` type id.
+ * Module-private slot holding the engine behind a registry handle.
+ */
+const engine: unique symbol = Symbol('~effect-atom/atom/Registry/engine')
+
+/**
+ * Returns `true` when the value has the registry type id.
  *
  * @since 4.0.0
  */
-export const isAtomRegistry = (u: unknown): u is Registry => hasProperty(u, TypeId)
+export const isRegistry = (u: unknown): u is Registry => hasProperty(u, TypeId)
 
 /**
- * The runtime registry that stores atom nodes and coordinates reads, writes,
- * refreshes, subscriptions, and disposal.
+ * A handle to a running registry.
  *
  * **Details**
  *
- * It also manages scheduler configuration, serializable preloaded values, and node
- * addition/removal callbacks.
+ * The handle is a pipeable record carrying only the registry type id; every
+ * operation is a `dual` function in this module that forwards to the engine
+ * behind the handle. One engine stores atom nodes, coordinates reads, writes,
+ * refreshes, subscriptions, and disposal.
  *
  * @since 4.0.0
  */
-export interface Registry {
+export interface Registry extends Pipeable.Pipeable {
   readonly [TypeId]: TypeId
-  readonly scheduler: Scheduler
-  readonly schedulerAsync: Scheduler
-  /**
-   * The clock and delayed-callback scheduler every time-dependent atom on this
-   * registry reads. Supplied to `make`, so one substitution drives idle-TTL
-   * eviction, `Atom.debounce` and `Atom.swr` staleness together.
-   */
-  readonly now: () => number
-  readonly scheduleTimer: (f: () => void, delayMillis: number) => () => void
-  readonly getNodes: () => ReadonlyMap<Atom.Atom | string, Node>
-  readonly get: <A>(atom: Atom.Atom<A>) => A
-  /**
-   * Returns the current value of an atom when its node has been initialized, without rebuilding a stale or uninitialized node.
-   *
-   * @since 4.0.0
-   */
-  readonly getRaw: <A>(atom: Atom.Atom<A>) => Option.Option<A>
-  readonly mount: <A>(atom: Atom.Atom<A>) => () => void
-  readonly refresh: <A>(atom: Atom.Atom<A>) => void
-  readonly set: <R, W>(atom: Atom.Writable<R, W>, value: W) => void
-  readonly setSerializable: <T = unknown>(key: string, encoded: T) => void
-  readonly setInitialValue: <A>(atom: Atom.Atom<A>, value: A) => void
-  readonly modify: <R, W, A>(atom: Atom.Writable<R, W>, f: (_: R) => [returnValue: A, nextValue: W]) => A
-  readonly update: <R, W>(atom: Atom.Writable<R, W>, f: (_: R) => W) => void
-  readonly subscribe: <A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: {
-    readonly immediate?: boolean
-  }) => () => void
-  readonly reset: () => void
-  readonly dispose: () => void
-  onNodeAdded?: ((node: Node) => void) | undefined
-  onNodeRemoved?: ((node: Node) => void) | undefined
+  readonly [engine]: RegistryImpl
 }
 
 /**
@@ -131,7 +107,7 @@ type RegistryMakeOptions = {
 }
 
 /**
- * Creates an `AtomRegistry`.
+ * Creates a registry handle backed by a fresh engine.
  *
  * **Details**
  *
@@ -145,7 +121,7 @@ export const make = (
   options?: RegistryMakeOptions,
 ): Registry => {
   if (options === undefined) {
-    return new RegistryImpl()
+    return new RegistryImpl().handle
   }
   return new RegistryImpl(
     options.initialValues,
@@ -154,11 +130,11 @@ export const make = (
     options.defaultIdleTTL,
     options.now,
     options.scheduleTimer,
-  )
+  ).handle
 }
 
 /**
- * Service tag for the active atom runtime cache.
+ * Service tag for the registry evaluating an effect.
  *
  * **When to use**
  *
@@ -167,35 +143,208 @@ export const make = (
  *
  * @since 4.0.0
  */
-export class AtomRegistry extends Context.Service<AtomRegistry, Registry>()(TypeId) {}
+export class Current extends Context.Service<Current, Registry>()('@systemfsoftware/effect-atom/Registry/Current') {}
 
 /**
- * Creates a layer that provides an `AtomRegistry` configured with the supplied
- * options.
+ * Creates a layer that provides a registry for the given service tag,
+ * configured with the supplied options.
  *
  * **Details**
  *
- * The registry is disposed when the layer scope is finalized.
+ * The registry is disposed when the layer scope is finalized. Distinct tags
+ * hold distinct registries at once; passing `Current` provides the registry
+ * atom evaluations read.
  *
  * @since 4.0.0
  */
-export const layerOptions = (options?: RegistryMakeOptions): Layer.Layer<AtomRegistry> =>
-  Layer.effect(
-    AtomRegistry,
-    Effect.gen(function*() {
-      const scope = yield* Effect.scope
-      const registry = make(options)
-      yield* Scope.addFinalizer(scope, Effect.sync(() => registry.dispose()))
-      return registry
-    }),
-  )
+export const layer: {
+  (options?: RegistryMakeOptions): <I>(tag: Context.Key<I, Registry>) => Layer.Layer<I>
+  <I>(tag: Context.Key<I, Registry>, options?: RegistryMakeOptions): Layer.Layer<I>
+} = dual(
+  (args) => hasProperty(args[0], Context.ServiceTypeId),
+  <I>(tag: Context.Key<I, Registry>, options?: RegistryMakeOptions): Layer.Layer<I> =>
+    Layer.effect(
+      tag,
+      Effect.gen(function*() {
+        const registry = make(options)
+        const scope = yield* Effect.scope
+        yield* Scope.addFinalizer(scope, Effect.sync(() => dispose(registry)))
+        return registry
+      }),
+    ),
+)
+
+// -----------------------------------------------------------------------------
+// operations
+// -----------------------------------------------------------------------------
 
 /**
- * The default layer that provides a fresh `AtomRegistry`.
+ * The nodes currently held by a registry.
  *
  * @since 4.0.0
  */
-export const layer: Layer.Layer<AtomRegistry> = layerOptions()
+export const getNodes = (self: Registry): ReadonlyMap<Atom.Atom | string, Node> => self[engine].getNodes()
+
+/**
+ * Reads the current value of an atom.
+ *
+ * @since 4.0.0
+ */
+export const get: {
+  <A>(atom: Atom.Atom<A>): (self: Registry) => A
+  <A>(self: Registry, atom: Atom.Atom<A>): A
+} = dual(
+  (args) => isRegistry(args[0]),
+  <A>(self: Registry, atom: Atom.Atom<A>): A => self[engine].get(atom),
+)
+
+/**
+ * Returns the current value of an atom when its node has been initialized, without rebuilding a stale or uninitialized node.
+ *
+ * @since 4.0.0
+ */
+export const getRaw: {
+  <A>(atom: Atom.Atom<A>): (self: Registry) => Option.Option<A>
+  <A>(self: Registry, atom: Atom.Atom<A>): Option.Option<A>
+} = dual(
+  (args) => isRegistry(args[0]),
+  <A>(self: Registry, atom: Atom.Atom<A>): Option.Option<A> => self[engine].getRaw(atom),
+)
+
+/**
+ * Writes a value to a writable atom.
+ *
+ * @since 4.0.0
+ */
+export const set: {
+  <R, W>(atom: Atom.Writable<R, W>, value: W): (self: Registry) => void
+  <R, W>(self: Registry, atom: Atom.Writable<R, W>, value: W): void
+} = dual(
+  (args) => isRegistry(args[0]),
+  <R, W>(self: Registry, atom: Atom.Writable<R, W>, value: W): void => self[engine].set(atom, value),
+)
+
+/**
+ * Stores an encoded serializable value, applying it to the matching atom now
+ * or when the atom is first read.
+ *
+ * @since 4.0.0
+ */
+export const setSerializable: {
+  <T = unknown>(key: string, encoded: T): (self: Registry) => void
+  <T = unknown>(self: Registry, key: string, encoded: T): void
+} = dual(
+  (args) => isRegistry(args[0]),
+  <T = unknown>(self: Registry, key: string, encoded: T): void => self[engine].setSerializable(key, encoded),
+)
+
+/**
+ * Preloads an atom's value before the atom is first read.
+ *
+ * @since 4.0.0
+ */
+export const setInitialValue: {
+  <A>(atom: Atom.Atom<A>, value: A): (self: Registry) => void
+  <A>(self: Registry, atom: Atom.Atom<A>, value: A): void
+} = dual(
+  (args) => isRegistry(args[0]),
+  <A>(self: Registry, atom: Atom.Atom<A>, value: A): void => self[engine].setInitialValue(atom, value),
+)
+
+/**
+ * Reads a writable atom, computes a return value and next write value, and writes the next value.
+ *
+ * @since 4.0.0
+ */
+type ModifyFunction<R, W, A> = (_: R) => [returnValue: A, nextValue: W]
+
+export const modify: {
+  <R, W, A>(atom: Atom.Writable<R, W>, f: ModifyFunction<R, W, A>): (self: Registry) => A
+  <R, W, A>(self: Registry, atom: Atom.Writable<R, W>, f: ModifyFunction<R, W, A>): A
+} = dual(
+  (args) => isRegistry(args[0]),
+  <R, W, A>(
+    self: Registry,
+    atom: Atom.Writable<R, W>,
+    f: (_: R) => [returnValue: A, nextValue: W],
+  ): A => self[engine].modify(atom, f),
+)
+
+/**
+ * Reads a writable atom and writes the next value computed from the current one.
+ *
+ * @since 4.0.0
+ */
+export const update: {
+  <R, W>(atom: Atom.Writable<R, W>, f: (_: R) => W): (self: Registry) => void
+  <R, W>(self: Registry, atom: Atom.Writable<R, W>, f: (_: R) => W): void
+} = dual(
+  (args) => isRegistry(args[0]),
+  <R, W>(self: Registry, atom: Atom.Writable<R, W>, f: (_: R) => W): void => self[engine].update(atom, f),
+)
+
+/**
+ * Requests a refresh of an atom.
+ *
+ * @since 4.0.0
+ */
+export const refresh: {
+  <A>(atom: Atom.Atom<A>): (self: Registry) => void
+  <A>(self: Registry, atom: Atom.Atom<A>): void
+} = dual(
+  (args) => isRegistry(args[0]),
+  <A>(self: Registry, atom: Atom.Atom<A>): void => self[engine].refresh(atom),
+)
+
+/**
+ * Subscribes to an atom's changes and returns a function that removes the
+ * subscription.
+ *
+ * @since 4.0.0
+ */
+export const subscribe: {
+  <A>(
+    atom: Atom.Atom<A>,
+    f: (_: A) => void,
+    options?: { readonly immediate?: boolean },
+  ): (self: Registry) => () => void
+  <A>(self: Registry, atom: Atom.Atom<A>, f: (_: A) => void, options?: {
+    readonly immediate?: boolean
+  }): () => void
+} = dual(
+  (args) => isRegistry(args[0]),
+  <A>(self: Registry, atom: Atom.Atom<A>, f: (_: A) => void, options?: {
+    readonly immediate?: boolean
+  }): () => void => self[engine].subscribe(atom, f, options),
+)
+
+/**
+ * Schedules a delayed callback through the registry's configured timer
+ * scheduler and returns a function that cancels it.
+ *
+ * @since 4.0.0
+ */
+export const scheduleTimer: {
+  (f: () => void, delayMillis: number): (self: Registry) => () => void
+  (self: Registry, f: () => void, delayMillis: number): () => void
+} = dual(
+  (args) => isRegistry(args[0]),
+  (self: Registry, f: () => void, delayMillis: number): () => void => self[engine].scheduleTimer(f, delayMillis),
+)
+
+/**
+ * Removes every node from the registry and cancels its pending timers.
+ *
+ * @since 4.0.0
+ */
+export const reset = (self: Registry): void => self[engine].reset()
+
+/**
+ * Disposes the registry: pending work stops and further reads fail.
+ *
+ * @since 4.0.0
+ */
+export const dispose = (self: Registry): void => self[engine].dispose()
 
 // -----------------------------------------------------------------------------
 // conversions
@@ -224,7 +373,7 @@ export const toStream: {
           return Effect.die(new Error('Expected a current fiber when converting an atom to a stream'))
         }
         const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-        const cancel = self.subscribe(atom, (value) => Queue.offerUnsafe(queue, value), {
+        const cancel = self[engine].subscribe(atom, (value) => Queue.offerUnsafe(queue, value), {
           immediate: true,
         })
         return Scope.addFinalizer(scope, Effect.sync(cancel))
@@ -320,7 +469,7 @@ function subscribeUntilSettled<A, E>(
   suspendOnWaiting: boolean,
   resume: (effect: Effect.Effect<A, E>) => void,
 ): Effect.Effect<void> {
-  const cancel = self.subscribe(atom, (value) => {
+  const cancel = self[engine].subscribe(atom, (value) => {
     onSubscribedResult(value, suspendOnWaiting, resume, cancel)
   })
   return Effect.sync(cancel)
@@ -345,7 +494,7 @@ function getResultCallback<A, E>(
   suspendOnWaiting: boolean,
   resume: (effect: Effect.Effect<A, E>) => void,
 ): void | Effect.Effect<void> {
-  const result = self.get(atom)
+  const result = self[engine].get(atom)
   if (Result.isInitial(result)) {
     return subscribeUntilSettled(self, atom, suspendOnWaiting, resume)
   }
@@ -370,7 +519,7 @@ export const getResult: {
     readonly suspendOnWaiting?: boolean | undefined
   }): Effect.Effect<A, E>
 } = dual(
-  (args) => isAtomRegistry(args[0]),
+  (args) => isRegistry(args[0]),
   <A, E>(self: Registry, atom: Atom.Atom<Result.Result<A, E>>, options?: {
     readonly suspendOnWaiting?: boolean | undefined
   }): Effect.Effect<A, E> => {
@@ -396,7 +545,7 @@ export const mount: {
   2,
   <A>(self: Registry, atom: Atom.Atom<A>) =>
     Effect.acquireRelease(
-      Effect.sync(() => self.mount(atom)),
+      Effect.sync(() => self[engine].mount(atom)),
       (release) => Effect.sync(release),
     ),
 )
@@ -801,11 +950,7 @@ function removeNodeFromBucketEntry(
   }
 }
 
-/**
- * Concrete registry used by the package implementation.
- */
-export class RegistryImpl extends Pipeable.Class implements Registry {
-  readonly [TypeId]: TypeId
+export class RegistryImpl extends Pipeable.Class {
   readonly timeoutResolution: number
   readonly defaultIdleTTL: number | undefined
   readonly scheduler: Scheduler
@@ -813,6 +958,7 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
   readonly dispatcher: SchedulerDispatcher
   readonly now: () => number
   readonly scheduleTimer: (f: () => void, delayMillis: number) => () => void
+  readonly handle: Registry
   onNodeAdded?: ((node: Node) => void) | undefined
   onNodeRemoved?: ((node: Node) => void) | undefined
 
@@ -825,7 +971,7 @@ export class RegistryImpl extends Pipeable.Class implements Registry {
     scheduleTimer?: (f: () => void, delayMillis: number) => () => void,
   ) {
     super()
-    this[TypeId] = TypeId
+    this.handle = { [TypeId]: TypeId, [engine]: this, ...Pipeable.Prototype }
     this.scheduler = new MixedScheduler('sync', scheduleTask)
     this.schedulerAsync = new MixedScheduler('async', scheduleTask)
     this.dispatcher = this.schedulerAsync.makeDispatcher()

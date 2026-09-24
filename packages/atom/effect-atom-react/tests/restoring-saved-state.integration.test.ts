@@ -25,7 +25,7 @@ Feature('Restoring saved page state')
               Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
             )
             const savedPage = AtomRegistry.make()
-            savedPage.set(temperature, 23)
+            AtomRegistry.set(savedPage, temperature, 23)
             const saved = Hydration.dehydrate(savedPage)
             function Page() {
               const value = useAtomValue(temperature)
@@ -58,7 +58,7 @@ Feature('Restoring saved page state')
             Effect.sync(() => {
               const room = Atom.make(4)
               const registry = AtomRegistry.make()
-              registry.set(room, 4)
+              AtomRegistry.set(registry, room, 4)
               function Page() {
                 const value = useAtomValue(room)
                 return React.createElement('div', { 'data-testid': 'plain-room' }, value)

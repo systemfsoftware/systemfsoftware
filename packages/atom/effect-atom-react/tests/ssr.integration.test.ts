@@ -93,7 +93,7 @@ Feature('Server-side rendering of React atom hooks')
           })),
         When('the server markup is observed and the client reads the atom')('result', (s) =>
           Effect.sync(() => {
-            const clientValue = s.ctx.registry.get(s.ctx.userDataAtom)
+            const clientValue = AtomRegistry.get(s.ctx.registry, s.ctx.userDataAtom)
             return { clientValue }
           })),
         Then('the client read ran the effect and settled the atom')((s) => {
@@ -132,10 +132,10 @@ Feature('Server-side rendering of React atom hooks')
               const atomResult3 = makeAtomResult('pending', Effect.never)
 
               const serverRegistry = AtomRegistry.make()
-              serverRegistry.set(atomBasic, 1)
-              serverRegistry.mount(atomResult1)
-              serverRegistry.mount(atomResult2)
-              serverRegistry.mount(atomResult3)
+              AtomRegistry.set(serverRegistry, atomBasic, 1)
+              AtomRegistry.subscribe(serverRegistry, atomResult1, () => {}, { immediate: true })
+              AtomRegistry.subscribe(serverRegistry, atomResult2, () => {}, { immediate: true })
+              AtomRegistry.subscribe(serverRegistry, atomResult3, () => {}, { immediate: true })
               const dehydratedState = Hydration.dehydrate(serverRegistry, { encodeInitialAs: 'value-only' })
 
               function Basic() {
@@ -222,7 +222,7 @@ Feature('Server-side rendering of React atom hooks')
             )
 
             const serverRegistry = AtomRegistry.make()
-            serverRegistry.mount(atom)
+            AtomRegistry.subscribe(serverRegistry, atom, () => {}, { immediate: true })
 
             const before = { start, stop }
 
@@ -265,11 +265,11 @@ Feature('Server-side rendering of React atom hooks')
               return Effect.runPromise(s.ctx.latch.await)
                 .then(() =>
                   vi.waitFor(() => {
-                    const snapshot = s.ctx.hydrationRegistry.get(s.ctx.atom)
+                    const snapshot = AtomRegistry.get(s.ctx.hydrationRegistry, s.ctx.atom)
                     expect(AsyncResult.isSuccess(snapshot)).toBe(true)
                   })
                 )
-                .then(() => AsyncResult.getOrThrow(s.ctx.hydrationRegistry.get(s.ctx.atom)))
+                .then(() => AsyncResult.getOrThrow(AtomRegistry.get(s.ctx.hydrationRegistry, s.ctx.atom)))
             }),
         ),
         Then('the deferred value is applied to the hydration registry once')((s) => {

@@ -1,6 +1,6 @@
 import { Atom, Registry, Result } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Stream } from 'effect'
+import { Cause, Context, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Scope, Stream } from 'effect'
 import { expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -30,10 +30,10 @@ Feature('Keeping a value that is still loading available to every reader')
           'result',
           (s) =>
             Effect.sync(() => {
-              const firstReading = s.setup.registry.get(s.setup.atom)
-              const secondReading = s.setup.registry.get(s.setup.atom)
+              const firstReading = Registry.get(s.setup.registry, s.setup.atom)
+              const secondReading = Registry.get(s.setup.registry, s.setup.atom)
               vi.advanceTimersByTime(100)
-              const readingAfterCleanup = s.setup.registry.get(s.setup.atom)
+              const readingAfterCleanup = Registry.get(s.setup.registry, s.setup.atom)
               const started = s.setup.timesStarted()
               vi.useRealTimers()
               return { firstReading, secondReading, readingAfterCleanup, started }
@@ -71,9 +71,9 @@ Feature('Keeping a value that is still loading available to every reader')
           'res',
           (s) =>
             Effect.sync(() => {
-              const firstReading = s.ctx.registry.get(s.ctx.atom)
+              const firstReading = Registry.get(s.ctx.registry, s.ctx.atom)
               vi.advanceTimersByTime(100)
-              const secondReading = s.ctx.registry.get(s.ctx.atom)
+              const secondReading = Registry.get(s.ctx.registry, s.ctx.atom)
               const started = s.ctx.timesStarted()
               vi.useRealTimers()
               return { firstReading, secondReading, started }
@@ -115,12 +115,12 @@ Feature('Keeping a value that is still loading available to every reader')
         ),
         When('the derived value switches sources and the cleanup timer runs')('nodes', (s) =>
           Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.switching)
+            const before = Registry.get(s.ctx.page, s.ctx.switching)
             s.ctx.flip()
-            s.ctx.page.refresh(s.ctx.switching)
-            const after = s.ctx.page.get(s.ctx.switching)
+            Registry.refresh(s.ctx.page, s.ctx.switching)
+            const after = Registry.get(s.ctx.page, s.ctx.switching)
             vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             vi.useRealTimers()
             return {
               before,
@@ -165,10 +165,10 @@ Feature('Keeping a value that is still loading available to every reader')
             Effect.gen(function*() {
               s.ctx.latch.openUnsafe()
               yield* Effect.yieldNow
-              const first = s.ctx.page.get(s.ctx.source)
+              const first = Registry.get(s.ctx.page, s.ctx.source)
               s.ctx.setStored(2)
               s.ctx.latch.closeUnsafe()
-              s.ctx.page.refresh(s.ctx.source)
+              Registry.refresh(s.ctx.page, s.ctx.source)
               const pending = yield* Effect.forkChild(
                 Registry.getResult(s.ctx.page, s.ctx.source, { suspendOnWaiting: true }),
               )
@@ -190,13 +190,13 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             const value = Atom.make(5)
             const page = Registry.make()
-            page.get(value)
+            Registry.get(page, value)
             return { page, value }
           })),
         When('a listener attaches asking for the current value immediately')('heard', (s) =>
           Effect.sync(() => {
             const heard: number[] = []
-            s.ctx.page.subscribe(s.ctx.value, (v) => heard.push(v), { immediate: true })
+            Registry.subscribe(s.ctx.page, s.ctx.value, (v) => heard.push(v), { immediate: true })
             return heard
           })),
         Then('the listener heard the current value without waiting for a change')((s) => {
@@ -217,10 +217,10 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('both are read and the cleanup timer runs')('nodes', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.first)
-            s.ctx.page.get(s.ctx.second)
+            Registry.get(s.ctx.page, s.ctx.first)
+            Registry.get(s.ctx.page, s.ctx.second)
             vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             vi.useRealTimers()
             return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
@@ -248,13 +248,13 @@ Feature('Keeping a value that is still loading available to every reader')
           'readings',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.get(s.ctx.value)
+              Registry.get(s.ctx.page, s.ctx.value)
               vi.advanceTimersByTime(50)
-              s.ctx.page.get(s.ctx.value)
+              Registry.get(s.ctx.page, s.ctx.value)
               vi.advanceTimersByTime(60)
               const afterFirstWindow = s.ctx.starts()
               vi.advanceTimersByTime(100)
-              s.ctx.page.get(s.ctx.value)
+              Registry.get(s.ctx.page, s.ctx.value)
               const afterSecondWindow = s.ctx.starts()
               vi.useRealTimers()
               return { afterFirstWindow, afterSecondWindow }
@@ -279,7 +279,7 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.gen(function*() {
             yield* Effect.scoped(Registry.mount(s.ctx.page, s.ctx.value))
             yield* Effect.yieldNow
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             return { hasValue: HashSet.has(keys, s.ctx.value) }
           })),
         Then('the value is gone')((s) => {
@@ -314,7 +314,7 @@ Feature('Keeping a value that is still loading available to every reader')
                 ),
               )
               yield* first.await
-              s.ctx.page.set(s.ctx.value, 2)
+              Registry.set(s.ctx.page, s.ctx.value, 2)
               yield* second.await
               yield* Fiber.interrupt(fiber)
               return { heard }
@@ -352,14 +352,14 @@ Feature('Keeping a value that is still loading available to every reader')
                 ),
               )
               yield* Effect.yieldNow
-              s.ctx.page.set(s.ctx.value, Result.success(1))
+              Registry.set(s.ctx.page, s.ctx.value, Result.success(1))
               yield* first.await
-              s.ctx.page.set(s.ctx.value, Result.success(2))
+              Registry.set(s.ctx.page, s.ctx.value, Result.success(2))
               yield* second.await
-              s.ctx.page.set(s.ctx.value, Result.success(2))
+              Registry.set(s.ctx.page, s.ctx.value, Result.success(2))
               yield* Effect.yieldNow
               const afterDuplicate = heard.length
-              s.ctx.page.set(s.ctx.value, Result.failure<number, string>(Cause.fail('boom')))
+              Registry.set(s.ctx.page, s.ctx.value, Result.failure<number, string>(Cause.fail('boom')))
               const exit = yield* Effect.exit(Fiber.join(fiber))
               return { heard, afterDuplicate, exit }
             }),
@@ -415,7 +415,7 @@ Feature('Keeping a value that is still loading available to every reader')
             const got = Latch.makeUnsafe()
             const successFiber = yield* Effect.forkChild(
               Effect.scoped(
-                Stream.runForEach(s.ctx.page.get(s.ctx.successStream), (n) =>
+                Stream.runForEach(Registry.get(s.ctx.page, s.ctx.successStream), (n) =>
                   Effect.sync(() => {
                     heard.push(n)
                     got.openUnsafe()
@@ -425,7 +425,7 @@ Feature('Keeping a value that is still loading available to every reader')
             yield* got.await
             yield* Fiber.interrupt(successFiber)
             const failureFiber = yield* Effect.forkChild(
-              Effect.scoped(Stream.runCollect(s.ctx.page.get(s.ctx.failureStream))),
+              Effect.scoped(Stream.runCollect(Registry.get(s.ctx.page, s.ctx.failureStream))),
             )
             const exit = yield* Effect.exit(Fiber.join(failureFiber))
             return { chunk: heard, exit }
@@ -472,19 +472,19 @@ Feature('Keeping a value that is still loading available to every reader')
             Effect.gen(function*() {
               const fromLoading = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.loading))
               yield* Effect.yieldNow
-              s.ctx.page.set(s.ctx.loading, Result.success(20))
+              Registry.set(s.ctx.page, s.ctx.loading, Result.success(20))
               const waited = yield* Fiber.join(fromLoading)
               const fromWaiting = yield* Effect.forkChild(
                 Registry.getResult(s.ctx.page, s.ctx.waiting, { suspendOnWaiting: true }),
               )
               yield* Effect.yieldNow
-              s.ctx.page.set(s.ctx.waiting, Result.successWith(1, { waiting: true }))
-              s.ctx.page.set(s.ctx.waiting, Result.success(2))
+              Registry.set(s.ctx.page, s.ctx.waiting, Result.successWith(1, { waiting: true }))
+              Registry.set(s.ctx.page, s.ctx.waiting, Result.success(2))
               const waitedThrough = yield* Fiber.join(fromWaiting)
               const fromFlicker = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.flickering))
               yield* Effect.yieldNow
-              s.ctx.page.set(s.ctx.flickering, Result.initial(true))
-              s.ctx.page.set(s.ctx.flickering, Result.success(30))
+              Registry.set(s.ctx.page, s.ctx.flickering, Result.initial(true))
+              Registry.set(s.ctx.page, s.ctx.flickering, Result.success(30))
               const waitedPastFlicker = yield* Fiber.join(fromFlicker)
               return { waited, waitedThrough, waitedPastFlicker }
             }),
@@ -508,11 +508,11 @@ Feature('Keeping a value that is still loading available to every reader')
         When('several writes happen inside one batch')('heard', (s) =>
           Effect.sync(() => {
             const heard: number[] = []
-            s.ctx.page.subscribe(s.ctx.value, (v) => heard.push(v))
+            Registry.subscribe(s.ctx.page, s.ctx.value, (v) => heard.push(v))
             Registry.batch(() => {
-              s.ctx.page.set(s.ctx.value, 2)
-              s.ctx.page.set(s.ctx.value, 3)
-              s.ctx.page.set(s.ctx.value, 4)
+              Registry.set(s.ctx.page, s.ctx.value, 2)
+              Registry.set(s.ctx.page, s.ctx.value, 3)
+              Registry.set(s.ctx.page, s.ctx.value, 4)
             })
             return { heard }
           })),
@@ -542,9 +542,9 @@ Feature('Keeping a value that is still loading available to every reader')
         When('the value is built inside a batch')('result', (s) =>
           Effect.sync(() => {
             Registry.batch(() => {
-              s.ctx.page.get(s.ctx.selfInvalidating)
+              Registry.get(s.ctx.page, s.ctx.selfInvalidating)
             })
-            return { value: s.ctx.page.get(s.ctx.selfInvalidating) }
+            return { value: Registry.get(s.ctx.page, s.ctx.selfInvalidating) }
           })),
         Then('the value was rebuilt once and settled on the newer source value')((s) => {
           expect(s.result.value).toBe(1)
@@ -563,15 +563,15 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('both are refreshed inside one batch')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.source)
-            s.ctx.page.get(s.ctx.derived)
+            Registry.get(s.ctx.page, s.ctx.source)
+            Registry.get(s.ctx.page, s.ctx.derived)
             Registry.batch(() => {
-              s.ctx.page.refresh(s.ctx.derived)
-              s.ctx.page.refresh(s.ctx.source)
+              Registry.refresh(s.ctx.page, s.ctx.derived)
+              Registry.refresh(s.ctx.page, s.ctx.source)
             })
             return {
-              source: s.ctx.page.get(s.ctx.source),
-              derived: s.ctx.page.get(s.ctx.derived),
+              source: Registry.get(s.ctx.page, s.ctx.source),
+              derived: Registry.get(s.ctx.page, s.ctx.derived),
             }
           })),
         Then('both were rebuilt in dependency order and kept their values')((s) => {
@@ -601,9 +601,9 @@ Feature('Keeping a value that is still loading available to every reader')
         When('the value is built inside a batch')('result', (s) =>
           Effect.sync(() => {
             Registry.batch(() => {
-              s.ctx.page.get(s.ctx.selfRefreshing)
+              Registry.get(s.ctx.page, s.ctx.selfRefreshing)
             })
-            return { value: s.ctx.page.get(s.ctx.selfRefreshing) }
+            return { value: Registry.get(s.ctx.page, s.ctx.selfRefreshing) }
           })),
         Then('the refresh happened without leaving the value behind')((s) => {
           expect(s.result.value).toBe(0)
@@ -622,9 +622,9 @@ Feature('Keeping a value that is still loading available to every reader')
         When('an initial value is set before the value is ever read')('result', (s) =>
           Effect.sync(() => {
             const heard: number[] = []
-            s.ctx.page.subscribe(s.ctx.value, (v) => heard.push(v))
-            s.ctx.page.setInitialValue(s.ctx.value, 10)
-            return { heard, read: s.ctx.page.get(s.ctx.value) }
+            Registry.subscribe(s.ctx.page, s.ctx.value, (v) => heard.push(v))
+            Registry.setInitialValue(s.ctx.page, s.ctx.value, 10)
+            return { heard, read: Registry.get(s.ctx.page, s.ctx.value) }
           })),
         Then('the listener heard the preloaded value and the first read returned it')((s) => {
           expect(s.result.heard).toEqual([10])
@@ -643,9 +643,9 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('a new initial value is set on the built value')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.value)
-            s.ctx.page.setInitialValue(s.ctx.value, 7)
-            return { read: s.ctx.page.get(s.ctx.value) }
+            Registry.get(s.ctx.page, s.ctx.value)
+            Registry.setInitialValue(s.ctx.page, s.ctx.value, 7)
+            return { read: Registry.get(s.ctx.page, s.ctx.value) }
           })),
         Then('the built value now holds the new initial value')((s) => {
           expect(s.result.read).toBe(7)
@@ -664,9 +664,9 @@ Feature('Keeping a value that is still loading available to every reader')
         When('an initial value is set for it inside a batch')('result', (s) =>
           Effect.sync(() => {
             Registry.batch(() => {
-              s.ctx.page.setInitialValue(s.ctx.fresh, 5)
+              Registry.setInitialValue(s.ctx.page, s.ctx.fresh, 5)
             })
-            return { read: s.ctx.page.get(s.ctx.fresh) }
+            return { read: Registry.get(s.ctx.page, s.ctx.fresh) }
           })),
         Then('the value kept the initial value set inside the batch')((s) => {
           expect(s.result.read).toBe(5)
@@ -685,10 +685,10 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('an initial value is set on the derived value')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.setInitialValue(s.ctx.derived, 7)
+            Registry.setInitialValue(s.ctx.page, s.ctx.derived, 7)
             return {
-              derived: s.ctx.page.get(s.ctx.derived),
-              source: s.ctx.page.get(s.ctx.source),
+              derived: Registry.get(s.ctx.page, s.ctx.derived),
+              source: Registry.get(s.ctx.page, s.ctx.source),
             }
           })),
         Then('the initial value was routed through to the source and flowed back')((s) => {
@@ -708,9 +708,9 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('a stored value arrives for it')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.direct)
-            s.ctx.page.setSerializable('direct-key', 9)
-            return { read: s.ctx.page.get(s.ctx.direct) }
+            Registry.get(s.ctx.page, s.ctx.direct)
+            Registry.setSerializable(s.ctx.page, 'direct-key', 9)
+            return { read: Registry.get(s.ctx.page, s.ctx.direct) }
           })),
         Then('the existing value was replaced by the stored one')((s) => {
           expect(s.result.read).toBe(9)
@@ -731,10 +731,10 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('a stored value arrives before the derived value is ever read')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.setSerializable('derived-key', 7)
+            Registry.setSerializable(s.ctx.page, 'derived-key', 7)
             return {
-              derived: s.ctx.page.get(s.ctx.derived),
-              source: s.ctx.page.get(s.ctx.source),
+              derived: Registry.get(s.ctx.page, s.ctx.derived),
+              source: Registry.get(s.ctx.page, s.ctx.source),
             }
           })),
         Then('the stored value became the source initial value and flowed through')((s) => {
@@ -754,11 +754,11 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('a stored value arrives and the value is then refreshed')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.subscribe(s.ctx.direct, () => {})
-            s.ctx.page.setSerializable('unread-key', 9)
-            const stored = s.ctx.page.get(s.ctx.direct)
-            s.ctx.page.refresh(s.ctx.direct)
-            const rebuilt = s.ctx.page.get(s.ctx.direct)
+            Registry.subscribe(s.ctx.page, s.ctx.direct, () => {})
+            Registry.setSerializable(s.ctx.page, 'unread-key', 9)
+            const stored = Registry.get(s.ctx.page, s.ctx.direct)
+            Registry.refresh(s.ctx.page, s.ctx.direct)
+            const rebuilt = Registry.get(s.ctx.page, s.ctx.direct)
             return { stored, rebuilt }
           })),
         Then('the stored value was applied to the never-read value and then rebuilt from its definition')((s) => {
@@ -768,7 +768,7 @@ Feature('Keeping a value that is still loading available to every reader')
       ),
     )
     scenario(
-      'A registry provided by the default layer serves values and honors preloaded options',
+      'A registry provided for the shared name serves values and honors preloaded options',
       Gherkin.Do.pipe(
         Given('two values')('ctx', () =>
           Effect.sync(() => {
@@ -776,20 +776,22 @@ Feature('Keeping a value that is still loading available to every reader')
             const other = Atom.make(2)
             return { value, other }
           })),
-        When('the service layer provides a registry, one with a preloaded value')(
+        When('one registry is provided under the shared name, another with a preloaded value')(
           'reads',
           (s) =>
             Effect.gen(function*() {
-              const defaultRead = yield* Effect.provide(Registry.layer)(
+              const defaultRead = yield* Effect.provide(Registry.layer(Registry.Current))(
                 Effect.gen(function*() {
-                  const registry = yield* Registry.AtomRegistry
-                  return registry.get(s.ctx.value)
+                  const registry = yield* Registry.Current
+                  return Registry.get(registry, s.ctx.value)
                 }),
               )
-              const preloadedRead = yield* Effect.provide(Registry.layerOptions({ initialValues: [[s.ctx.other, 9]] }))(
+              const preloadedRead = yield* Effect.provide(
+                Registry.layer(Registry.Current, { initialValues: [[s.ctx.other, 9]] }),
+              )(
                 Effect.gen(function*() {
-                  const registry = yield* Registry.AtomRegistry
-                  return registry.get(s.ctx.other)
+                  const registry = yield* Registry.Current
+                  return Registry.get(registry, s.ctx.other)
                 }),
               )
               return { defaultRead, preloadedRead }
@@ -808,16 +810,16 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             const page = Registry.make()
             const value = Atom.make(1)
-            page.get(value)
+            Registry.get(page, value)
             return { page }
           })),
         When('the registry is disposed and a new value is read through it')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.dispose()
-            const remaining = s.ctx.page.getNodes().size
+            Registry.dispose(s.ctx.page)
+            const remaining = Registry.getNodes(s.ctx.page).size
             let message: string | undefined
             try {
-              s.ctx.page.get(Atom.make(2))
+              Registry.get(s.ctx.page, Atom.make(2))
             } catch (error) {
               if (error instanceof Error) {
                 message = error.message
@@ -844,15 +846,15 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('both fall idle and the shared cleanup timer runs')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.derived)
-            const maybeNode = s.ctx.page.getNodes().get(s.ctx.derived)
+            Registry.get(s.ctx.page, s.ctx.derived)
+            const maybeNode = Registry.getNodes(s.ctx.page).get(s.ctx.derived)
             if (maybeNode === undefined) {
               throw new Error('expected a node after reading the value')
             }
             const node = maybeNode
             const before = node.currentState()
             vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             const after = node.currentState()
             vi.useRealTimers()
             return {
@@ -885,10 +887,10 @@ Feature('Keeping a value that is still loading available to every reader')
           'result',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.get(s.ctx.derived)
-              s.ctx.page.subscribe(s.ctx.source, () => {})
+              Registry.get(s.ctx.page, s.ctx.derived)
+              Registry.subscribe(s.ctx.page, s.ctx.source, () => {})
               vi.advanceTimersByTime(100)
-              const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
               vi.useRealTimers()
               return {
                 hasDerived: HashSet.has(keys, s.ctx.derived),
@@ -915,11 +917,11 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('both fall idle and the cleanup timers run past both windows')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.derived)
+            Registry.get(s.ctx.page, s.ctx.derived)
             vi.advanceTimersByTime(15)
-            const afterFirstWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const afterFirstWindow = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             vi.advanceTimersByTime(100)
-            const afterSecondWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const afterSecondWindow = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             vi.useRealTimers()
             return {
               hasDerivedAfterFirst: HashSet.has(afterFirstWindow, s.ctx.derived),
@@ -948,13 +950,13 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('both fall idle and are read again before their window')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.first)
-            s.ctx.page.get(s.ctx.second)
+            Registry.get(s.ctx.page, s.ctx.first)
+            Registry.get(s.ctx.page, s.ctx.second)
             vi.advanceTimersByTime(1)
-            s.ctx.page.get(s.ctx.first)
-            s.ctx.page.get(s.ctx.second)
+            Registry.get(s.ctx.page, s.ctx.first)
+            Registry.get(s.ctx.page, s.ctx.second)
             vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             vi.useRealTimers()
             return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
@@ -975,15 +977,15 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('a listener attaches without reading, then releases')('result', (s) =>
           Effect.gen(function*() {
-            const cancel = s.ctx.page.subscribe(s.ctx.value, () => {})
-            const maybeNode = s.ctx.page.getNodes().get(s.ctx.value)
+            const cancel = Registry.subscribe(s.ctx.page, s.ctx.value, () => {})
+            const maybeNode = Registry.getNodes(s.ctx.page).get(s.ctx.value)
             if (maybeNode === undefined) {
               throw new Error('expected a node after the value was touched')
             }
             const before = maybeNode.currentState()
             cancel()
             yield* Effect.yieldNow
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             return { before, hasValue: HashSet.has(keys, s.ctx.value) }
           })),
         Then('the never-built value was removed once the listener left')((s) => {
@@ -1005,15 +1007,15 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('the lazy value is refreshed while its child is active')('result', (s) =>
           Effect.sync(() => {
-            s.ctx.page.get(s.ctx.root)
-            s.ctx.page.get(s.ctx.activeChild)
-            const maybeNode = s.ctx.page.getNodes().get(s.ctx.root)
+            Registry.get(s.ctx.page, s.ctx.root)
+            Registry.get(s.ctx.page, s.ctx.activeChild)
+            const maybeNode = Registry.getNodes(s.ctx.page).get(s.ctx.root)
             if (maybeNode === undefined) {
               throw new Error('expected a node after reading the value')
             }
             const node = maybeNode
-            s.ctx.page.refresh(s.ctx.root)
-            return { state: node.currentState(), value: s.ctx.page.get(s.ctx.root) }
+            Registry.refresh(s.ctx.page, s.ctx.root)
+            return { state: node.currentState(), value: Registry.get(s.ctx.page, s.ctx.root) }
           })),
         Then('the lazy value rebuilt immediately')((s) => {
           expect(s.result.state).toBe('valid')
@@ -1039,24 +1041,24 @@ Feature('Keeping a value that is still loading available to every reader')
           'result',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.get(s.ctx.root)
-              s.ctx.page.get(s.ctx.left)
-              s.ctx.page.get(s.ctx.right)
-              s.ctx.page.get(s.ctx.leftChild)
-              s.ctx.page.get(s.ctx.rightChild)
-              const maybeNode = s.ctx.page.getNodes().get(s.ctx.root)
+              Registry.get(s.ctx.page, s.ctx.root)
+              Registry.get(s.ctx.page, s.ctx.left)
+              Registry.get(s.ctx.page, s.ctx.right)
+              Registry.get(s.ctx.page, s.ctx.leftChild)
+              Registry.get(s.ctx.page, s.ctx.rightChild)
+              const maybeNode = Registry.getNodes(s.ctx.page).get(s.ctx.root)
               if (maybeNode === undefined) {
                 throw new Error('expected a node after reading the value')
               }
               const node = maybeNode
-              s.ctx.page.refresh(s.ctx.root)
+              Registry.refresh(s.ctx.page, s.ctx.root)
               const afterRefresh = node.currentState()
               const newcomer = Atom.readable((get) => get(s.ctx.root))
-              s.ctx.page.get(newcomer)
+              Registry.get(s.ctx.page, newcomer)
               return {
                 afterRefresh,
                 finalState: node.currentState(),
-                value: s.ctx.page.get(s.ctx.root),
+                value: Registry.get(s.ctx.page, s.ctx.root),
               }
             }),
         ),
@@ -1099,12 +1101,12 @@ Feature('Keeping a value that is still loading available to every reader')
         ),
         When('the derived value switches sources')('nodes', (s) =>
           Effect.sync(() => {
-            s.ctx.page.subscribe(s.ctx.first, () => {})
-            s.ctx.page.get(s.ctx.switching)
+            Registry.subscribe(s.ctx.page, s.ctx.first, () => {})
+            Registry.get(s.ctx.page, s.ctx.switching)
             s.ctx.flip()
-            s.ctx.page.refresh(s.ctx.switching)
-            const value = s.ctx.page.get(s.ctx.switching)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+            Registry.refresh(s.ctx.page, s.ctx.switching)
+            const value = Registry.get(s.ctx.page, s.ctx.switching)
+            const keys = HashSet.fromIterable(Registry.getNodes(s.ctx.page).keys())
             return {
               value,
               hasFirst: HashSet.has(keys, s.ctx.first),
@@ -1197,13 +1199,13 @@ Feature('Keeping a value that is still loading available to every reader')
           'result',
           (s) =>
             Effect.gen(function*() {
-              s.ctx.registry.get(s.ctx.value)
+              Registry.get(s.ctx.registry, s.ctx.value)
               yield* Effect.yieldNow
-              s.ctx.registry.set(s.ctx.loading, Result.initial(false))
-              s.ctx.registry.set(s.ctx.loading, Result.success(7))
-              s.ctx.registry.set(s.ctx.waiting, Result.successWith(2, { waiting: true }))
-              s.ctx.registry.set(s.ctx.waiting, Result.success(3))
-              s.ctx.registry.set(s.ctx.noOption, Option.some(5))
+              Registry.set(s.ctx.registry, s.ctx.loading, Result.initial(false))
+              Registry.set(s.ctx.registry, s.ctx.loading, Result.success(7))
+              Registry.set(s.ctx.registry, s.ctx.waiting, Result.successWith(2, { waiting: true }))
+              Registry.set(s.ctx.registry, s.ctx.waiting, Result.success(3))
+              Registry.set(s.ctx.registry, s.ctx.noOption, Option.some(5))
               const [settledFiber, loadingFiber, optionFiber, waitingFiber, noneFiber] = s.ctx.fibers
               if (
                 settledFiber === undefined || loadingFiber === undefined || optionFiber === undefined ||
@@ -1216,8 +1218,8 @@ Feature('Keeping a value that is still loading available to every reader')
               const optionValue = yield* Fiber.join(optionFiber)
               const throughWaiting = yield* Fiber.join(waitingFiber)
               const throughNone = yield* Fiber.join(noneFiber)
-              s.ctx.registry.refresh(s.ctx.value)
-              const maybeNode = s.ctx.registry.getNodes().get(s.ctx.value)
+              Registry.refresh(s.ctx.registry, s.ctx.value)
+              const maybeNode = Registry.getNodes(s.ctx.registry).get(s.ctx.value)
               if (maybeNode === undefined) {
                 throw new Error('expected a node after reading the value')
               }
@@ -1254,8 +1256,8 @@ Feature('Keeping a value that is still loading available to every reader')
               const late = manualClock()
               const first = Registry.make({ defaultIdleTTL: 100, timeoutResolution: 10, ...early })
               const second = Registry.make({ defaultIdleTTL: 100, timeoutResolution: 10, ...late })
-              first.get(value)
-              second.get(value)
+              Registry.get(first, value)
+              Registry.get(second, value)
               return { value, early, late, first, second }
             }),
         ),
@@ -1264,8 +1266,8 @@ Feature('Keeping a value that is still loading available to every reader')
             s.ctx.early.advance(200)
             s.ctx.late.advance(50)
             return {
-              first: s.ctx.first.getNodes().has(s.ctx.value),
-              second: s.ctx.second.getNodes().has(s.ctx.value),
+              first: Registry.getNodes(s.ctx.first).has(s.ctx.value),
+              second: Registry.getNodes(s.ctx.second).has(s.ctx.value),
             }
           })),
         Then('the first page has let the value go while the second still holds it')((s) => {
@@ -1273,6 +1275,171 @@ Feature('Keeping a value that is still loading available to every reader')
           expect(s.held.second).toBe(true)
         }),
       ),
+    )
+  })
+
+class FirstRegistry extends Context.Service<FirstRegistry, Registry.Registry>()(
+  '@systemfsoftware/effect-atom/tests/Registry.integration.test/FirstRegistry',
+) {}
+class SecondRegistry extends Context.Service<SecondRegistry, Registry.Registry>()(
+  '@systemfsoftware/effect-atom/tests/Registry.integration.test/SecondRegistry',
+) {}
+
+Feature('Providing registries by name')
+  .withLayer(Layer.empty)
+  .body(({ scenario, scenarioOutline }) => {
+    scenario(
+      'Two registries provided side by side keep their values separate',
+      Gherkin.Do.pipe(
+        Given('a value that either registry could hold')('ctx', () => Effect.sync(() => ({ value: Atom.make(0) }))),
+        When('both registries are provided together, each under its own name, and one records a new value')(
+          'seen',
+          (s) =>
+            Effect.provide(Layer.merge(Registry.layer(FirstRegistry), Registry.layer(SecondRegistry)))(
+              Effect.gen(function*() {
+                const first = yield* FirstRegistry
+                const second = yield* SecondRegistry
+                Registry.set(first, s.ctx.value, 11)
+                return {
+                  sameRegistry: first === second,
+                  onFirst: Registry.get(first, s.ctx.value),
+                  onSecond: Registry.get(second, s.ctx.value),
+                }
+              }),
+            ),
+        ),
+        Then('the registries are different, and only the first one shows the new value')((s) => {
+          expect(s.seen.sameRegistry).toBe(false)
+          expect(s.seen.onFirst).toBe(11)
+          expect(s.seen.onSecond).toBe(0)
+        }),
+      ),
+    )
+    scenario(
+      'A registry whose providing scope closes refuses further reads',
+      Gherkin.Do.pipe(
+        Given('a registry living for a bounded scope, already holding a value')('ctx', () =>
+          Effect.gen(function*() {
+            const scope = yield* Scope.make()
+            const context = yield* Layer.buildWithScope(Registry.layer(Registry.Current), scope)
+            const registry = Context.get(context, Registry.Current)
+            const value = Atom.make(5)
+            Registry.get(registry, value)
+            return { registry, scope, value }
+          })),
+        When('the scope closes and the value is read again')('afterwards', (s) =>
+          Effect.andThen(
+            Scope.close(s.ctx.scope, Exit.void),
+            Effect.sync(() => {
+              let message: string | undefined
+              try {
+                Registry.get(s.ctx.registry, s.ctx.value)
+              } catch (error) {
+                if (error instanceof Error) {
+                  message = error.message
+                }
+              }
+              return { message }
+            }),
+          )),
+        Then('the read failed, and the failure said the registry is gone')((s) => {
+          expect(s.afterwards.message).toContain('disposed')
+        }),
+      ),
+    )
+    scenarioOutline(
+      'Asking a registry for <question> gives the same answer however it is asked',
+      [
+        {
+          question: 'the value it holds',
+          expected: 5,
+          direct: (registry: Registry.Registry, value: Atom.Writable<number, number>) => Registry.get(registry, value),
+          curried: (registry: Registry.Registry, value: Atom.Writable<number, number>) =>
+            registry.pipe(Registry.get(value)),
+        },
+        {
+          question: 'a replacement for the value it holds',
+          expected: 8,
+          direct: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            Registry.set(registry, value, 8)
+            return Registry.get(registry, value)
+          },
+          curried: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            registry.pipe(Registry.set(value, 8))
+            return Registry.get(registry, value)
+          },
+        },
+        {
+          question: 'an adjustment to the value it holds',
+          expected: 7,
+          direct: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            Registry.update(registry, value, (n) => n + 2)
+            return Registry.get(registry, value)
+          },
+          curried: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            registry.pipe(Registry.update(value, (n) => n + 2))
+            return Registry.get(registry, value)
+          },
+        },
+        {
+          question: 'a swap that hands back the old value',
+          expected: 5,
+          direct: (registry: Registry.Registry, value: Atom.Writable<number, number>) =>
+            Registry.modify(registry, value, (n) => [n, 9]),
+          curried: (registry: Registry.Registry, value: Atom.Writable<number, number>) =>
+            registry.pipe(Registry.modify(value, (n) => [n, 9])),
+        },
+        {
+          question: 'a seed placed before the value is read',
+          expected: 3,
+          direct: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            Registry.setInitialValue(registry, value, 3)
+            return Registry.get(registry, value)
+          },
+          curried: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            registry.pipe(Registry.setInitialValue(value, 3))
+            return Registry.get(registry, value)
+          },
+        },
+        {
+          question: 'a change while it listens',
+          expected: 6,
+          direct: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            const heard: number[] = []
+            const stop = Registry.subscribe(registry, value, (n) => heard.push(n))
+            Registry.set(registry, value, 6)
+            stop()
+            return heard[0]
+          },
+          curried: (registry: Registry.Registry, value: Atom.Writable<number, number>) => {
+            const heard: number[] = []
+            const stop = registry.pipe(Registry.subscribe(value, (n) => heard.push(n)))
+            Registry.set(registry, value, 6)
+            stop()
+            return heard[0]
+          },
+        },
+      ] as const,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('two pages, each holding a value of five')('ctx', () =>
+            Effect.sync(() => ({
+              first: { registry: Registry.make(), value: Atom.make(5) },
+              second: { registry: Registry.make(), value: Atom.make(5) },
+            }))),
+          When('the question is asked directly of the first page, and through the pipe of the second')(
+            'answers',
+            (s) =>
+              Effect.sync(() => ({
+                direct: row.direct(s.ctx.first.registry, s.ctx.first.value),
+                curried: row.curried(s.ctx.second.registry, s.ctx.second.value),
+              })),
+          ),
+          Then('both answers match, and they are the expected one')((s) => {
+            expect(s.answers.direct).toBe(row.expected)
+            expect(s.answers.curried).toBe(row.expected)
+          }),
+        ),
     )
   })
 

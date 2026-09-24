@@ -164,9 +164,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
           'reading',
           (s) =>
             Effect.sync(() => {
-              s.ctx.page.get(s.ctx.atom)
-              s.ctx.page.refresh(s.ctx.atom)
-              return s.ctx.page.get(s.ctx.atom)
+              Registry.get(s.ctx.page, s.ctx.atom)
+              Registry.refresh(s.ctx.page, s.ctx.atom)
+              return Registry.get(s.ctx.page, s.ctx.atom)
             }),
         ),
         Then('the refresh reports a failure, but the previous answer is still remembered')((s) => {
@@ -185,7 +185,10 @@ Feature('Keeping the last good answer on screen when a retry fails')
             const page = Registry.make()
             return { page, atom }
           })),
-        When('the value is read for the first time')('reading', (s) => Effect.sync(() => s.ctx.page.get(s.ctx.atom))),
+        When('the value is read for the first time')(
+          'reading',
+          (s) => Effect.sync(() => Registry.get(s.ctx.page, s.ctx.atom)),
+        ),
         Then('the failure carries no previous answer')((s) => {
           expect(Result.isFailure(s.reading) && Option.isNone(s.reading.previousSuccess)).toBe(true)
         }),

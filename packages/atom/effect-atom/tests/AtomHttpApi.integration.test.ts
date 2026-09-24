@@ -88,7 +88,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'result',
           (s) =>
             Effect.gen(function*() {
-              const unmount = s.ctx.registry.mount(s.ctx.profile)
+              const unmount = Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
@@ -96,7 +96,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               unmount()
               const freshPage = Registry.make()
               Hydration.hydrate(freshPage, savedPage)
-              const secondReading = freshPage.get(s.ctx.profile)
+              const secondReading = Registry.get(freshPage, s.ctx.profile)
               return { secondReading, calls: s.ctx.callsMade() }
             }),
         ),
@@ -123,8 +123,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'result',
           (s) =>
             Effect.sync(() => ({
-              firstReading: s.ctx.registry.get(s.ctx.profile),
-              secondReading: s.ctx.registry.get(s.ctx.profile),
+              firstReading: Registry.get(s.ctx.registry, s.ctx.profile),
+              secondReading: Registry.get(s.ctx.registry, s.ctx.profile),
             })),
         ),
         Then('both parts agree the profile is still loading, not a stale or broken value')((s) => {
@@ -159,12 +159,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
+            Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
           expect(Result.isSuccess(s.outcome)).toBe(true)
@@ -200,12 +200,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
+            Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as failed')((s) => {
           expect(Result.isFailure(s.outcome)).toBe(true)
@@ -232,11 +232,11 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           })),
         When('the profile is read')('outcome', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.profile)
+            const unmount = Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const outcome = s.ctx.registry.get(s.ctx.profile)
+            const outcome = Registry.get(s.ctx.registry, s.ctx.profile)
             unmount()
             return outcome
           })),
@@ -283,11 +283,11 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'the profile is read, a record is submitted while invalidating the profiles key, and the profile is read again',
         )('readings', (s) =>
           Effect.gen(function*() {
-            const unmount = s.ctx.registry.mount(s.ctx.profile)
+            const unmount = Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const first = s.ctx.registry.get(s.ctx.profile)
-            s.ctx.registry.set(s.ctx.create, {
+            const first = Registry.get(s.ctx.registry, s.ctx.profile)
+            Registry.set(s.ctx.registry, s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['profiles'],
             })
@@ -296,7 +296,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            const second = s.ctx.registry.get(s.ctx.profile)
+            const second = Registry.get(s.ctx.registry, s.ctx.profile)
             const calls = s.ctx.callsMade()
             unmount()
             return { first, second, calls }
@@ -334,12 +334,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           })),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
+            Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the raw response is reported')((s) => {
           expect(Result.isSuccess(s.outcome)).toBe(true)
@@ -387,7 +387,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           'result',
           (s) =>
             Effect.gen(function*() {
-              const unmount = s.ctx.registry.mount(s.ctx.profile)
+              const unmount = Registry.subscribe(s.ctx.registry, s.ctx.profile, () => {}, { immediate: true })
               yield* Effect.yieldNow
               yield* Effect.yieldNow
               yield* Effect.yieldNow
@@ -395,7 +395,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
               unmount()
               const freshPage = Registry.make()
               Hydration.hydrate(freshPage, savedPage)
-              const secondReading = freshPage.get(s.ctx.profile)
+              const secondReading = Registry.get(freshPage, s.ctx.profile)
               return { secondReading }
             }),
         ),
@@ -437,12 +437,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         ),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
+            Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a defect rather than a normal failure')((s) => {
           expect(Result.isFailure(s.outcome)).toBe(true)
@@ -479,12 +479,12 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         ),
         When('a new record is submitted')('outcome', (s) =>
           Effect.gen(function*() {
-            s.ctx.registry.mount(s.ctx.create)
-            s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
+            Registry.subscribe(s.ctx.registry, s.ctx.create, () => {}, { immediate: true })
+            Registry.set(s.ctx.registry, s.ctx.create, { payload: { name: 'grace' } })
             yield* Effect.yieldNow
             yield* Effect.yieldNow
             yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a normal failure with the described error')((s) => {
           expect(Result.isFailure(s.outcome)).toBe(true)

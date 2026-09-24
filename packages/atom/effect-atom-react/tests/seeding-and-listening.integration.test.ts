@@ -69,7 +69,7 @@ Feature('Seeding and listening to shared values')
         When('the value changes once')('heard', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 5)
+              AtomRegistry.set(s.ctx.registry, s.ctx.volume, 5)
             })
             return s.ctx.heard
           })),

@@ -24,7 +24,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const page = Registry.make({ defaultIdleTTL: 5 })
-              page.get(savedValue)
+              Registry.get(page, savedValue)
               const saved = Hydration.dehydrate(page)
               const reloadedPage = Registry.make({ defaultIdleTTL: 5 })
               Hydration.hydrate(reloadedPage, saved)
@@ -35,9 +35,9 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           'result',
           (s) =>
             Effect.sync(() => {
-              const firstReading = s.ctx.reloadedPage.get(s.ctx.savedValue)
+              const firstReading = Registry.get(s.ctx.reloadedPage, s.ctx.savedValue)
               vi.advanceTimersByTime(100)
-              const secondReading = s.ctx.reloadedPage.get(s.ctx.savedValue)
+              const secondReading = Registry.get(s.ctx.reloadedPage, s.ctx.savedValue)
               vi.useRealTimers()
               return { firstReading, secondReading }
             }),
@@ -64,7 +64,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const page = Registry.make({ defaultIdleTTL: 5 })
-              page.get(savedValue)
+              Registry.get(page, savedValue)
               const saved = Hydration.dehydrate(page)
               const reloadedPage = Registry.make({ defaultIdleTTL: 5 })
               Hydration.hydrate(reloadedPage, saved)
@@ -76,7 +76,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           (s) =>
             Effect.sync(() => {
               vi.advanceTimersByTime(100)
-              const reading = s.ctx.reloadedPage.get(s.ctx.savedValue)
+              const reading = Registry.get(s.ctx.reloadedPage, s.ctx.savedValue)
               vi.useRealTimers()
               return reading
             }),
@@ -101,7 +101,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const savedPage = Registry.make()
-              savedPage.get(stillLoading)
+              Registry.get(savedPage, stillLoading)
               const saved = Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
               const reloadedPage = Registry.make()
               const applied = Hydration.hydrate(reloadedPage, saved)
@@ -112,10 +112,10 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           'reading',
           (s) =>
             Effect.gen(function*() {
-              const beforeItFinishes = s.ctx.reloadedPage.get(s.ctx.stillLoading)
+              const beforeItFinishes = Registry.get(s.ctx.reloadedPage, s.ctx.stillLoading)
               yield* Deferred.succeed(s.ctx.source, 42)
               yield* Fiber.join(s.ctx.applied)
-              const afterItFinishes = s.ctx.reloadedPage.get(s.ctx.stillLoading)
+              const afterItFinishes = Registry.get(s.ctx.reloadedPage, s.ctx.stillLoading)
               return { beforeItFinishes, afterItFinishes }
             }),
         ),
@@ -138,7 +138,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               }),
             )
             const page = Registry.make()
-            page.get(stillLoading)
+            Registry.get(page, stillLoading)
             return { page, stillLoading }
           })),
         When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
@@ -167,7 +167,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
                 }),
               )
               const savedPage = Registry.make()
-              savedPage.get(stillLoading)
+              Registry.get(savedPage, stillLoading)
               const saved = Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
               const reloadedPage = Registry.make()
               const applied = Hydration.hydrate(reloadedPage, saved)
@@ -180,11 +180,11 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
           'reading',
           (s) =>
             Effect.gen(function*() {
-              const beforeItFinishes = s.ctx.reloadedPage.get(s.ctx.stillLoading)
-              s.ctx.savedPage.refresh(s.ctx.stillLoading)
-              s.ctx.savedPage.set(s.ctx.gate, 'ready')
+              const beforeItFinishes = Registry.get(s.ctx.reloadedPage, s.ctx.stillLoading)
+              Registry.refresh(s.ctx.savedPage, s.ctx.stillLoading)
+              Registry.set(s.ctx.savedPage, s.ctx.gate, 'ready')
               yield* Fiber.join(s.ctx.applied)
-              const afterItFinishes = s.ctx.reloadedPage.get(s.ctx.stillLoading)
+              const afterItFinishes = Registry.get(s.ctx.reloadedPage, s.ctx.stillLoading)
               return { beforeItFinishes, afterItFinishes }
             }),
         ),
@@ -207,8 +207,8 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             )
             const plainValue = Atom.make('not saved')
             const page = Registry.make()
-            page.get(savedValue)
-            page.get(plainValue)
+            Registry.get(page, savedValue)
+            Registry.get(page, plainValue)
             return { page }
           })),
         When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),

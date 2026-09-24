@@ -10,7 +10,7 @@
  */
 import { constant, dual } from 'effect/Function'
 import type { Atom, Type } from './Atom.js'
-import type { Registry } from './Registry.js'
+import * as Registry from './Registry.js'
 import * as AsyncResult from './Result.js'
 
 type AnyAtom<A = unknown> = Atom<A>
@@ -74,14 +74,14 @@ export const withServerValueInitial = <A extends AnyAsyncResultAtom>(self: A): A
  * @since 4.0.0
  */
 export const getServerValue: {
-  (registry: Registry): <A>(self: Atom<A>) => A
-  <A>(self: Atom<A>, registry: Registry): A
+  (registry: Registry.Registry): <A>(self: Atom<A>) => A
+  <A>(self: Atom<A>, registry: Registry.Registry): A
 } = dual(
   2,
-  <A>(self: Atom<A>, registry: Registry): A => {
+  <A>(self: Atom<A>, registry: Registry.Registry): A => {
     if (isServerValue(self)) {
-      return self[ServerValueTypeId]((atom) => registry.get(atom))
+      return self[ServerValueTypeId]((atom) => Registry.get(registry, atom))
     }
-    return registry.get(self)
+    return Registry.get(registry, self)
   },
 )

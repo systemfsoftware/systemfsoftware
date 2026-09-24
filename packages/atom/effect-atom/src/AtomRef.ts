@@ -2,7 +2,7 @@
  * Mutable reactive references for local, in-memory state.
  *
  * `AtomRef` provides small observable state cells that can be read, updated,
- * mapped, and subscribed to without going through an `AtomRegistry`. Mutable
+ * mapped, and subscribed to without going through a registry. Mutable
  * refs can also create refs for nested properties. The module also provides a
  * collection helper that stores item refs and notifies subscribers when items are
  * inserted, removed, or changed.

@@ -158,10 +158,10 @@ Feature('Reading and changing shared values from on-screen widgets')
         When('the value changes twice')('heard', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 5)
+              AtomRegistry.set(s.ctx.registry, s.ctx.volume, 5)
             })
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 8)
+              AtomRegistry.set(s.ctx.registry, s.ctx.volume, 8)
             })
             return s.ctx.heard
           })),
@@ -326,9 +326,9 @@ Feature('Reading and changing shared values from on-screen widgets')
                 Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
               )
               const registry = AtomRegistry.make()
-              registry.set(temperature, 18)
+              AtomRegistry.set(registry, temperature, 18)
               const savedPage = AtomRegistry.make()
-              savedPage.set(temperature, 23)
+              AtomRegistry.set(savedPage, temperature, 23)
               const saved = Hydration.dehydrate(savedPage)
               function Page() {
                 const value = useAtomValue(temperature)
@@ -383,7 +383,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             vi.useRealTimers()
           })),
         Then('the data source no longer answers')((s) => {
-          expect(() => s.ctx.registry().get(Atom.make(1))).toThrow('registry is disposed')
+          expect(() => AtomRegistry.get(s.ctx.registry(), Atom.make(1))).toThrow('registry is disposed')
         }),
       ),
     )
@@ -413,8 +413,8 @@ Feature('Reading and changing shared values from on-screen widgets')
                   ),
                 ),
               )
-              registry.set(savedValue, 41)
-              return { readSavedValue: () => registry.get(savedValue) }
+              AtomRegistry.set(registry, savedValue, 41)
+              return { readSavedValue: () => AtomRegistry.get(registry, savedValue) }
             }),
         ),
         When('plenty of time passes with the page still up')('done', () =>
