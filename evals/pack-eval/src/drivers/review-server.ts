@@ -6,20 +6,28 @@ import * as HttpServer from 'effect/unstable/http/HttpServer'
 import type * as HttpServerError from 'effect/unstable/http/HttpServerError'
 import * as HttpServerRequest from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import { assignPairSplits, AssignPairSplitsCommand, PairSplitInput } from '../assign-pair-splits.workflow.js'
 import { assignTaskSplit, AssignTaskSplitCommand } from '../assign-task-split.workflow.js'
 import { DatasetFileRefusal } from '../dataset-file.schema.js'
-import { RoutingLabelEntry, RoutingLabels } from '../labels.schema.js'
-import type { Pack, PackRule, RuleFileRefusal } from '../pack-rule.schema.js'
+import { JudgePrompt } from '../judge-prompt.schema.js'
+import { PairLabel, PairLabels, RoutingLabelEntry, RoutingLabels } from '../labels.schema.js'
+import { Pack, type PackRule, type RuleFileRefusal } from '../pack-rule.schema.js'
 import {
+  PairNotGoverning,
+  PlantedPairNeedsBody,
   ReviewAccepted,
   ReviewCandidateList,
   ReviewError,
   ReviewLabelsSaved,
   ReviewNotFound,
+  ReviewPairList,
+  ReviewPairSaved,
   ReviewRejected,
   ReviewSaveLabelsBody,
+  ReviewSavePairBody,
   ReviewTaskList,
   ReviewTaskView,
+  ReviewWitnessedPair,
   RouteIdParams,
   RoutePackQuery,
   UnknownLabelStem,
@@ -28,7 +36,7 @@ import { SelectionTrace } from '../selection-trace.schema.js'
 import { CandidateTask, CandidateTasks } from '../task-discovery.schema.js'
 import type { TaskSplit } from '../task-set.schema.js'
 import { Task, TaskSet } from '../task-set.schema.js'
-import { readJson, readPack, writeJson } from './dataset-files.js'
+import { readJson, readPack, traceRelativePathOf, writeJson } from './dataset-files.js'
 
 export interface ReviewServerOptions {
   readonly datasetDir: string
@@ -40,6 +48,8 @@ type ReviewRefusal =
   | RuleFileRefusal
   | UnknownLabelStem
   | ReviewNotFound
+  | PairNotGoverning
+  | PlantedPairNeedsBody
   | Schema.SchemaError
   | HttpServerError.HttpServerError
 
@@ -59,7 +69,7 @@ const tasksPathOf = (store: ReviewStore): string => store.paths.join(store.optio
 const labelsPathOf = (store: ReviewStore): string => store.paths.join(store.options.datasetDir, 'routing-labels.json')
 
 const tracePathOf = (store: ReviewStore, packId: string, taskId: string): string =>
-  store.paths.join(store.options.workDir, 'traces', packId, `${taskId}.json`)
+  store.paths.join(store.options.workDir, traceRelativePathOf(packId, taskId))
 
 const absentTokens = ['ENOENT', 'NotFound']
 
@@ -260,6 +270,342 @@ const saveLabels = (
     return new ReviewLabelsSaved({ taskId, packId })
   })
 
+const pairLabelsPathOf = (store: ReviewStore): string => store.paths.join(store.options.datasetDir, 'pair-labels.json')
+
+const judgePromptPathOf = (store: ReviewStore): string =>
+  store.paths.join(store.options.datasetDir, 'judge-prompt.json')
+
+const emptyPairLabels = new PairLabels({ version: 1, entries: [] })
+
+const readPairLabels = (store: ReviewStore): Effect.Effect<PairLabels, DatasetFileRefusal, FileSystem.FileSystem> =>
+  readDefaulting({ path: pairLabelsPathOf(store), schema: PairLabels, empty: emptyPairLabels })
+
+const readJudgePrompt = (
+  store: ReviewStore,
+): Effect.Effect<Option.Option<JudgePrompt>, never, FileSystem.FileSystem> =>
+  Effect.asSome(readJson(judgePromptPathOf(store), JudgePrompt)).pipe(
+    Effect.orElseSucceed((): Option.Option<JudgePrompt> => Option.none()),
+  )
+
+const pairIdOf = (packId: string, ruleA: string, ruleB: string): string =>
+  [packId, ...[ruleA, ruleB].toSorted()].join(':')
+
+const unorderedStemPairs = (stems: ReadonlyArray<string>): ReadonlyArray<readonly [string, string]> =>
+  stems.flatMap((stem, index) => stems.slice(index + 1).map((later): readonly [string, string] => [stem, later]))
+
+const governs = (governing: ReadonlyArray<string>, stem: string): boolean => governing.includes(stem)
+
+const ruleByStem = (pack: Pack, stem: string): PackRule | undefined => pack.rules.find((rule) => rule.stem === stem)
+
+interface WitnessedPairRules {
+  readonly first: PackRule
+  readonly second: PackRule
+}
+
+interface WitnessedPairDetails {
+  readonly taskId: string
+  readonly taskText: string
+  readonly pack: Pack
+  readonly pairLabels: PairLabels
+  readonly stems: readonly [string, string]
+}
+
+const rulesOfPair = (details: WitnessedPairDetails): Option.Option<WitnessedPairRules> =>
+  Option.all({
+    first: Option.fromUndefinedOr(ruleByStem(details.pack, details.stems[0])),
+    second: Option.fromUndefinedOr(ruleByStem(details.pack, details.stems[1])),
+  })
+
+const labelOfPair = (details: WitnessedPairDetails): PairLabel | undefined =>
+  details.pairLabels.entries.find((entry) => entry.id === pairIdOf(details.pack.id, details.stems[0], details.stems[1]))
+
+interface ShownPairBodies {
+  readonly ruleA: { readonly stem: string; readonly title: string; readonly body: string }
+  readonly ruleB: { readonly stem: string; readonly title: string; readonly body: string }
+}
+
+interface ShownPairState {
+  readonly origin: 'observed' | 'planted' | undefined
+  readonly split: 'train' | 'dev' | 'test' | undefined
+  readonly verdict: 'Pass' | 'Fail' | undefined
+  readonly notes: string | undefined
+  readonly plantedBody: string | undefined
+}
+
+const shownRuleBBody = (label: PairLabel | undefined, realBody: string): string =>
+  Option.fromUndefinedOr(label?.plantedBody).pipe(
+    Option.filter(() => label?.origin === 'planted'),
+    Option.getOrElse(() => realBody),
+  )
+
+const bodiesOf = (rules: WitnessedPairRules, label: PairLabel | undefined): ShownPairBodies => ({
+  ruleA: { stem: rules.first.stem, title: rules.first.title, body: rules.first.body },
+  ruleB: { stem: rules.second.stem, title: rules.second.title, body: shownRuleBBody(label, rules.second.body) },
+})
+
+const labelledStateOf = (label: PairLabel): ShownPairState => ({
+  origin: label.origin,
+  split: label.split,
+  verdict: label.verdict,
+  notes: label.notes,
+  plantedBody: label.plantedBody,
+})
+
+const unlabelledState: ShownPairState = {
+  origin: undefined,
+  split: undefined,
+  verdict: undefined,
+  notes: undefined,
+  plantedBody: undefined,
+}
+
+const stateOf = (label: PairLabel | undefined): ShownPairState =>
+  Option.fromUndefinedOr(label).pipe(Option.map(labelledStateOf), Option.getOrElse(() => unlabelledState))
+
+const witnessedPairViewOf = (
+  details: WitnessedPairDetails,
+  rules: WitnessedPairRules,
+  label: PairLabel | undefined,
+): ReviewWitnessedPair => {
+  const bodies = bodiesOf(rules, label)
+  const state = stateOf(label)
+  return new ReviewWitnessedPair({
+    pairId: pairIdOf(details.pack.id, details.stems[0], details.stems[1]),
+    taskId: details.taskId,
+    taskText: details.taskText,
+    packId: details.pack.id,
+    ruleA: { ...bodies.ruleA },
+    ruleB: { ...bodies.ruleB },
+    origin: state.origin,
+    split: state.split,
+    verdict: state.verdict,
+    notes: state.notes,
+    plantedBody: state.plantedBody,
+  })
+}
+const witnessedPairOf = (details: WitnessedPairDetails): Option.Option<ReviewWitnessedPair> =>
+  Option.map(
+    rulesOfPair(details),
+    (rules) => witnessedPairViewOf(details, rules, labelOfPair(details)),
+  )
+
+const pairsForPack = (
+  details: {
+    readonly taskId: string
+    readonly taskText: string
+    readonly pack: Pack
+    readonly labels: RoutingLabels
+    readonly pairLabels: PairLabels
+  },
+): ReadonlyArray<ReviewWitnessedPair> =>
+  Arr.findFirst(details.labels.entries, (entry) => entry.taskId === details.taskId && entry.packId === details.pack.id)
+    .pipe(
+      Option.map((entry) =>
+        unorderedStemPairs(entry.governing.filter((stem) => ruleByStem(details.pack, stem) !== undefined))
+          .map((stems) =>
+            witnessedPairOf({
+              taskId: details.taskId,
+              taskText: details.taskText,
+              pack: details.pack,
+              pairLabels: details.pairLabels,
+              stems,
+            })
+          )
+          .flatMap((pair) => Option.toArray(pair))
+      ),
+      Option.getOrElse((): ReadonlyArray<ReviewWitnessedPair> => []),
+    )
+
+const listPairs = (
+  store: ReviewStore,
+  taskId: string,
+): Effect.Effect<ReviewPairList, ReviewRefusal, ReviewRead> =>
+  Effect.gen(function*() {
+    const tasks = yield* readTaskSet(store)
+    const task = yield* requiredTask(tasks, taskId)
+    const packs = yield* readPacks(store)
+    const labels = yield* readLabels(store)
+    const pairLabels = yield* readPairLabels(store)
+    return new ReviewPairList({
+      pairs: packs.flatMap((pack) => pairsForPack({ taskId, taskText: task.text, pack, labels, pairLabels })),
+    })
+  })
+
+const governsBoth = (
+  labels: RoutingLabels,
+  taskId: string,
+  packId: string,
+  body: ReviewSavePairBody,
+): boolean =>
+  Arr.findFirst(labels.entries, (entry) => entry.taskId === taskId && entry.packId === packId).pipe(
+    Option.exists((entry) => governs(entry.governing, body.ruleA) && governs(entry.governing, body.ruleB)),
+  )
+
+const refuseNotGoverning = (
+  details: {
+    readonly labels: RoutingLabels
+    readonly taskId: string
+    readonly packId: string
+    readonly body: ReviewSavePairBody
+  },
+): Effect.Effect<void, PairNotGoverning> =>
+  governsBoth(details.labels, details.taskId, details.packId, details.body)
+    ? Effect.void
+    : Effect.fail(
+      new PairNotGoverning({
+        taskId: details.taskId,
+        packId: details.packId,
+        ruleA: details.body.ruleA,
+        ruleB: details.body.ruleB,
+      }),
+    )
+
+const needsPlantedBody = (body: ReviewSavePairBody): boolean =>
+  body.origin === 'planted' && body.plantedBody === undefined
+
+const refusePlantedWithoutBody = (
+  pairId: string,
+  body: ReviewSavePairBody,
+): Effect.Effect<void, PlantedPairNeedsBody> =>
+  needsPlantedBody(body) ? Effect.fail(new PlantedPairNeedsBody({ pairId })) : Effect.void
+
+const knownSplitOf = (
+  assigned: ReadonlyArray<{ readonly pairId: string; readonly split: 'train' | 'dev' | 'test' }>,
+  pairId: string,
+): 'train' | 'dev' | 'test' | undefined => assigned.find((entry) => entry.pairId === pairId)?.split
+
+const splitFor = (
+  assigned: ReadonlyArray<{ readonly pairId: string; readonly split: 'train' | 'dev' | 'test' }>,
+  pairId: string,
+): 'train' | 'dev' | 'test' =>
+  Option.fromUndefinedOr(knownSplitOf(assigned, pairId)).pipe(Option.getOrElse((): 'train' | 'dev' | 'test' => 'dev'))
+
+const storedExceptPair = (stored: PairLabels, pairId: string): ReadonlyArray<PairLabel> =>
+  stored.entries.filter((existing) => existing.id !== pairId)
+
+const splitKeptOf = (entry: PairLabel, split: 'train' | 'dev' | 'test'): PairLabel =>
+  new PairLabel({
+    id: entry.id,
+    taskId: entry.taskId,
+    packId: entry.packId,
+    ruleA: entry.ruleA,
+    ruleB: entry.ruleB,
+    split,
+    verdict: entry.verdict,
+    origin: entry.origin,
+    notes: entry.notes,
+    plantedBody: entry.plantedBody,
+  })
+
+const relabelledPairs = (
+  stored: PairLabels,
+  split: (pairId: string) => 'train' | 'dev' | 'test',
+): PairLabels =>
+  new PairLabels({ version: 1, entries: stored.entries.map((entry) => splitKeptOf(entry, split(entry.id))) })
+
+const pairEntryOf = (
+  taskId: string,
+  packId: string,
+  pairId: string,
+  body: ReviewSavePairBody,
+): PairLabel =>
+  new PairLabel({
+    id: pairId,
+    taskId,
+    packId,
+    ruleA: body.ruleA,
+    ruleB: body.ruleB,
+    split: 'dev',
+    verdict: body.verdict,
+    origin: body.origin,
+    notes: body.notes,
+    plantedBody: body.plantedBody,
+  })
+
+const fewShotIdsOf = (prompt: Option.Option<JudgePrompt>): ReadonlyArray<string> =>
+  Option.match(prompt, { onNone: () => [], onSome: (found) => [...found.fewShotPairIds] })
+
+const reassignedSplits = (
+  upserted: PairLabels,
+  prompt: Option.Option<JudgePrompt>,
+): ReadonlyArray<{ readonly pairId: string; readonly split: 'train' | 'dev' | 'test' }> =>
+  Result.getOrThrow(
+    assignPairSplits(
+      new AssignPairSplitsCommand({
+        pairs: upserted.entries.map((saved) => new PairSplitInput({ pairId: saved.id, verdict: saved.verdict })),
+        fewShotPairIds: [...fewShotIdsOf(prompt)],
+      }),
+    ),
+  ).assignments
+
+const savedSplitOf = (rewritten: PairLabels, pairId: string): 'train' | 'dev' | 'test' =>
+  Option.fromUndefinedOr(rewritten.entries.find((savedEntry) => savedEntry.id === pairId)?.split).pipe(
+    Option.getOrElse((): 'train' | 'dev' | 'test' => 'dev'),
+  )
+
+const checkedPairOf = (
+  details: {
+    readonly store: ReviewStore
+    readonly taskId: string
+    readonly packId: string
+    readonly body: ReviewSavePairBody
+  },
+): Effect.Effect<
+  { readonly pairId: string; readonly upserted: PairLabels; readonly prompt: Option.Option<JudgePrompt> },
+  ReviewRefusal,
+  ReviewRead
+> =>
+  Effect.gen(function*() {
+    const tasks = yield* readTaskSet(details.store)
+    yield* requiredTask(tasks, details.taskId)
+    const packs = yield* readPacks(details.store)
+    const pack = yield* requiredPack(packs, details.packId)
+    yield* requiredStems(pack, details.taskId, details.packId, [details.body.ruleA, details.body.ruleB])
+    const labels = yield* readLabels(details.store)
+    yield* refuseNotGoverning({ labels, taskId: details.taskId, packId: details.packId, body: details.body })
+    const pairId = pairIdOf(details.packId, details.body.ruleA, details.body.ruleB)
+    yield* refusePlantedWithoutBody(pairId, details.body)
+    const stored = yield* readPairLabels(details.store)
+    const prompt = yield* readJudgePrompt(details.store)
+    const upserted = new PairLabels({
+      version: 1,
+      entries: [...storedExceptPair(stored, pairId), pairEntryOf(details.taskId, details.packId, pairId, details.body)],
+    })
+    return { pairId, upserted, prompt }
+  })
+
+const storedPairOf = (
+  store: ReviewStore,
+  taskId: string,
+  packId: string,
+  body: ReviewSavePairBody,
+  checked: { readonly pairId: string; readonly upserted: PairLabels; readonly prompt: Option.Option<JudgePrompt> },
+): Effect.Effect<ReviewPairSaved, ReviewRefusal, ReviewRead> =>
+  Effect.gen(function*() {
+    const rewritten = relabelledPairs(checked.upserted, (savedId) =>
+      splitFor(reassignedSplits(checked.upserted, checked.prompt), savedId))
+    yield* writeJson(pairLabelsPathOf(store), PairLabels, rewritten)
+    return new ReviewPairSaved({
+      pairId: checked.pairId,
+      taskId,
+      packId,
+      split: savedSplitOf(rewritten, checked.pairId),
+      verdict: body.verdict,
+      origin: body.origin,
+    })
+  })
+
+const savePair = (
+  store: ReviewStore,
+  taskId: string,
+  packId: string,
+  body: ReviewSavePairBody,
+): Effect.Effect<ReviewPairSaved, ReviewRefusal, ReviewRead> =>
+  Effect.flatMap(
+    checkedPairOf({ store, taskId, packId, body }),
+    (checked) => storedPairOf(store, taskId, packId, body, checked),
+  )
+
 const ruleDetailsOf = (
   rule: PackRule,
 ): {
@@ -335,6 +681,14 @@ const unknownStemResponse = (refusal: UnknownLabelStem): HttpServerResponse.Http
 const notFoundResponse = (refusal: ReviewNotFound): HttpServerResponse.HttpServerResponse =>
   errorResponse(404)(`unknown ${refusal.what} ${refusal.id}`)
 
+const notGoverningResponse = (refusal: PairNotGoverning): HttpServerResponse.HttpServerResponse =>
+  errorResponse(422)(
+    `the task ${refusal.taskId} does not label both rules as governing: ${refusal.ruleA}, ${refusal.ruleB}`,
+  )
+
+const plantedBodyResponse = (refusal: PlantedPairNeedsBody): HttpServerResponse.HttpServerResponse =>
+  errorResponse(422)(`a planted pair needs a body: ${refusal.pairId}`)
+
 const fileRefusalResponse = (
   refusal: DatasetFileRefusal | RuleFileRefusal,
 ): HttpServerResponse.HttpServerResponse => errorResponse(500)(refusal.reason)
@@ -355,6 +709,8 @@ const settled = <A, R extends RouteRead>(
     Effect.catchTags({
       UnknownLabelStem: (refusal: UnknownLabelStem) => Effect.succeed(unknownStemResponse(refusal)),
       ReviewNotFound: (refusal: ReviewNotFound) => Effect.succeed(notFoundResponse(refusal)),
+      PairNotGoverning: (refusal: PairNotGoverning) => Effect.succeed(notGoverningResponse(refusal)),
+      PlantedPairNeedsBody: (refusal: PlantedPairNeedsBody) => Effect.succeed(plantedBodyResponse(refusal)),
       DatasetFileRefusal: (refusal: DatasetFileRefusal) => Effect.succeed(fileRefusalResponse(refusal)),
       RuleFileRefusal: (refusal: RuleFileRefusal) => Effect.succeed(fileRefusalResponse(refusal)),
       SchemaError: () => Effect.succeed(unreadableResponse()),
@@ -382,13 +738,6 @@ const idOf: Effect.Effect<string, Schema.SchemaError, HttpRouter.RouteContext> =
   HttpRouter.schemaPathParams(RouteIdParams),
   (params) => params.id,
 )
-
-const packOf: Effect.Effect<
-  string,
-  Schema.SchemaError,
-  HttpServerRequest.ParsedSearchParams | HttpRouter.RouteContext
-> = Effect.map(HttpRouter.schemaParams(RoutePackQuery), (params) => params.pack)
-
 const savedLabelsOf = (
   store: ReviewStore,
   taskId: string,
@@ -397,6 +746,22 @@ const savedLabelsOf = (
   Effect.flatMap(
     HttpServerRequest.schemaBodyJson(ReviewSaveLabelsBody),
     (body) => saveLabels(store, taskId, packId, body),
+  )
+
+const packOf: Effect.Effect<
+  string,
+  Schema.SchemaError,
+  HttpServerRequest.ParsedSearchParams | HttpRouter.RouteContext
+> = Effect.map(HttpRouter.schemaParams(RoutePackQuery), (params) => params.pack)
+
+const savedPairOf = (
+  store: ReviewStore,
+  taskId: string,
+  packId: string,
+): Effect.Effect<ReviewPairSaved, ReviewRefusal, ReviewRead | HttpServerRequest.HttpServerRequest> =>
+  Effect.flatMap(
+    HttpServerRequest.schemaBodyJson(ReviewSavePairBody),
+    (body) => savePair(store, taskId, packId, body),
   )
 
 const routesOf = (store: ReviewStore) =>
@@ -425,6 +790,18 @@ const routesOf = (store: ReviewStore) =>
         '/api/tasks/:id/labels',
         settled(
           Effect.flatMap(idOf, (id) => Effect.flatMap(packOf, (packId) => savedLabelsOf(store, id, packId))),
+        ),
+      ),
+      HttpRouter.route(
+        'GET',
+        '/api/tasks/:id/pairs',
+        settled(Effect.flatMap(idOf, (id) => listPairs(store, id))),
+      ),
+      HttpRouter.route(
+        'PUT',
+        '/api/tasks/:id/pairs',
+        settled(
+          Effect.flatMap(idOf, (id) => Effect.flatMap(packOf, (packId) => savedPairOf(store, id, packId))),
         ),
       ),
     ])

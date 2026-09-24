@@ -1,6 +1,7 @@
 export * from '../admit-dataset.workflow.js'
 export * from '../admit-task-candidates.workflow.js'
 export * from '../answer-cache.service.js'
+export * from '../assign-pair-splits.workflow.js'
 export * from '../assign-task-split.workflow.js'
 export * from '../bootstrap-rate-interval.workflow.js'
 export * as ComputeFingerprint from '../compute-fingerprint.cell.js'

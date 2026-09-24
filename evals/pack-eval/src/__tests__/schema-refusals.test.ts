@@ -79,3 +79,37 @@ describe('split refusals', () => {
     expect(Option.isNone(decoded)).toBe(true)
   })
 })
+
+describe('planted pair refusals', () => {
+  it('decodes a planted pair carrying its rewritten body', () => {
+    const decoded = Schema.decodeOption(PairLabel)({
+      id: 'pair-1',
+      taskId: 'task-1',
+      packId: 'bakery',
+      ruleA: 'crust',
+      ruleB: 'crumb',
+      split: 'train',
+      verdict: 'Fail',
+      origin: 'planted',
+      notes: 'a rewritten crumb rule',
+      plantedBody: 'Never rest the dough, bake it at once.',
+    })
+    expect(Option.isSome(decoded)).toBe(true)
+  })
+
+  it('refuses a planted pair with an empty rewritten body', () => {
+    const decoded = Schema.decodeOption(PairLabel)({
+      id: 'pair-1',
+      taskId: 'task-1',
+      packId: 'bakery',
+      ruleA: 'crust',
+      ruleB: 'crumb',
+      split: 'train',
+      verdict: 'Fail',
+      origin: 'planted',
+      notes: '',
+      plantedBody: '',
+    })
+    expect(Option.isNone(decoded)).toBe(true)
+  })
+})

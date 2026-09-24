@@ -82,3 +82,55 @@ export type RouteIdParams = typeof RouteIdParams.Type
 
 export const RoutePackQuery = Schema.Struct({ pack: Schema.NonEmptyString })
 export type RoutePackQuery = typeof RoutePackQuery.Type
+export class ReviewPairRule extends Schema.Class<ReviewPairRule>('ReviewPairRule')({
+  stem: Schema.NonEmptyString,
+  title: Schema.NonEmptyString,
+  body: Schema.String,
+}) {}
+
+export class ReviewWitnessedPair extends Schema.Class<ReviewWitnessedPair>('ReviewWitnessedPair')({
+  pairId: Schema.NonEmptyString,
+  taskId: Schema.NonEmptyString,
+  taskText: Schema.String,
+  packId: Schema.NonEmptyString,
+  ruleA: ReviewPairRule,
+  ruleB: ReviewPairRule,
+  origin: Schema.optional(Schema.Literals(['observed', 'planted'])),
+  split: Schema.optional(Schema.Literals(['train', 'dev', 'test'])),
+  verdict: Schema.optional(Schema.Literals(['Pass', 'Fail'])),
+  notes: Schema.optional(Schema.String),
+  plantedBody: Schema.optional(Schema.NonEmptyString),
+}) {}
+
+export class ReviewPairList extends Schema.Class<ReviewPairList>('ReviewPairList')({
+  pairs: Schema.Array(ReviewWitnessedPair),
+}) {}
+
+export class ReviewSavePairBody extends Schema.Class<ReviewSavePairBody>('ReviewSavePairBody')({
+  ruleA: Schema.NonEmptyString,
+  ruleB: Schema.NonEmptyString,
+  verdict: Schema.Literals(['Pass', 'Fail']),
+  origin: Schema.Literals(['observed', 'planted']),
+  notes: Schema.String,
+  plantedBody: Schema.optional(Schema.NonEmptyString),
+}) {}
+
+export class ReviewPairSaved extends Schema.Class<ReviewPairSaved>('ReviewPairSaved')({
+  pairId: Schema.NonEmptyString,
+  taskId: Schema.NonEmptyString,
+  packId: Schema.NonEmptyString,
+  split: Schema.Literals(['train', 'dev', 'test']),
+  verdict: Schema.Literals(['Pass', 'Fail']),
+  origin: Schema.Literals(['observed', 'planted']),
+}) {}
+
+export class PairNotGoverning extends Schema.TaggedError<PairNotGoverning>()('PairNotGoverning', {
+  taskId: Schema.NonEmptyString,
+  packId: Schema.NonEmptyString,
+  ruleA: Schema.NonEmptyString,
+  ruleB: Schema.NonEmptyString,
+}) {}
+
+export class PlantedPairNeedsBody extends Schema.TaggedError<PlantedPairNeedsBody>()('PlantedPairNeedsBody', {
+  pairId: Schema.NonEmptyString,
+}) {}

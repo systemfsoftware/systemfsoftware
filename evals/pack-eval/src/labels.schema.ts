@@ -22,6 +22,7 @@ export class PairLabel extends Schema.Class<PairLabel>('PairLabel')({
   verdict: Schema.Literals(['Pass', 'Fail']),
   origin: Schema.Literals(['observed', 'planted']),
   notes: Schema.String,
+  plantedBody: Schema.optional(Schema.NonEmptyString),
 }) {}
 
 export class PairLabels extends Schema.Class<PairLabels>('PairLabels')({

@@ -39,6 +39,22 @@ export const ventingRule: ReviewRuleSource = {
   body: 'Leave one vent open a hand width after the last walk-through.',
 }
 
+export const compostingRule: ReviewRuleSource = {
+  stem: 'compost-turning',
+  title: 'Turn the heap weekly',
+  appliesWhen: ['tending the compost heap'],
+  tags: ['soil'],
+  body: 'Turn the heap every seventh morning and note the smell.',
+}
+
+export const mulchingRule: ReviewRuleSource = {
+  stem: 'bed-mulching',
+  title: 'Mulch the bare beds',
+  appliesWhen: ['covering bare soil'],
+  tags: ['soil'],
+  body: 'Spread straw two knuckles deep on every bare bed.',
+}
+
 export interface ReviewWorld {
   readonly datasetDir: string
   readonly workDir: string
@@ -148,10 +164,74 @@ export const writeTrace = (options: {
       rawResponse: '{"loaded":[]}',
     })
     yield* PackEval.DatasetFiles.writeJson(
-      paths.join(options.world.workDir, 'traces', options.world.packId, `${options.taskId}.json`),
+      paths.join(
+        options.world.workDir,
+        PackEval.DatasetFiles.traceRelativePathOf(options.world.packId, options.taskId),
+      ),
       PackEval.SelectionTrace,
       trace,
     )
+  })
+
+export const writePairLabels = (options: {
+  readonly world: ReviewWorld
+  readonly labels: PackEval.PairLabels
+}) =>
+  Effect.gen(function*() {
+    const paths = yield* Path.Path
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(options.world.datasetDir, 'pair-labels.json'),
+      PackEval.PairLabels,
+      options.labels,
+    )
+  })
+
+export const writeJudgePrompt = (options: {
+  readonly world: ReviewWorld
+  readonly prompt: PackEval.JudgePrompt
+}) =>
+  Effect.gen(function*() {
+    const paths = yield* Path.Path
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(options.world.datasetDir, 'judge-prompt.json'),
+      PackEval.JudgePrompt,
+      options.prompt,
+    )
+  })
+
+export const readPairLabels = (world: ReviewWorld) =>
+  Effect.gen(function*() {
+    const paths = yield* Path.Path
+    return yield* PackEval.DatasetFiles.readJson(paths.join(world.datasetDir, 'pair-labels.json'), PackEval.PairLabels)
+  })
+
+export const pairLabelsFileText = (world: ReviewWorld) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.readFileString(paths.join(world.datasetDir, 'pair-labels.json'))
+  })
+
+export const pairLabelsFileExists = (world: ReviewWorld) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.exists(paths.join(world.datasetDir, 'pair-labels.json'))
+  })
+
+export const placeOutsideProbe = (options: { readonly base: string; readonly relative: string }) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    yield* fileSystem.makeDirectory(paths.dirname(paths.join(options.base, options.relative)), { recursive: true })
+    yield* fileSystem.writeFileString(paths.join(options.base, options.relative), '{"loaded":[]}')
+  })
+
+export const outsideProbeExists = (options: { readonly base: string; readonly relative: string }) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.exists(paths.join(options.base, options.relative))
   })
 
 export const readCandidates = (world: ReviewWorld) =>
