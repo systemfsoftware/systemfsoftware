@@ -1,7 +1,6 @@
-import { Clock, Context, Deferred, Effect, HashMap, Match, Option, Predicate, PubSub, Queue, Ref, Scope } from 'effect'
+import { Handle } from '@systemfsoftware/effect-cell-types'
+import { Clock, Context, Deferred, Effect, HashMap, Match, Option, PubSub, Queue, Ref, Scope } from 'effect'
 import { dual } from 'effect/Function'
-import type { Pipeable } from 'effect/Pipeable'
-import { Prototype } from 'effect/Pipeable'
 import * as Stream from 'effect/Stream'
 import type { SupervisionDecision, SupervisorState } from '../kernel/interpret-supervision-event.workflow.js'
 import type { SupervisionEvent } from '../kernel/SupervisionEvent.schema.js'
@@ -14,19 +13,6 @@ import type { Medium, Started } from './Medium.js'
 export const TypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor')
 /** The running supervisor brand. */
 export type TypeId = typeof TypeId
-
-const StateId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/state')
-const MailboxId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/mailbox')
-const TraceId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/trace')
-const EvidenceId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/evidence')
-const RepliesId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/replies')
-const BoundChildrenId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/boundChildren')
-const PendingId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/pending')
-const RequestsId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/requests')
-const TerminatedId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/terminated')
-const ScopeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/scope')
-const ContextId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/context')
-const FiberId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor/fiber')
 
 /** One kernel step as observed: the decoded event and the decision it produced. */
 export interface TraceEntry {
@@ -65,31 +51,33 @@ export type DynamicStopOutcome = DynamicStopDone | DynamicStopMissed
 /** Any dynamic answer, as the reply table stores it. */
 export type DynamicOutcome = DynamicStartOutcome | DynamicStopOutcome
 
-/**
- * A running supervisor. Its state lives in the handle's slots, never in a module
- * registry; the only public operations are the functions exported beside it.
- */
-export interface RunningSupervisor extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [StateId]: Ref.Ref<SupervisorState>
-  readonly [MailboxId]: Queue.Queue<SupervisionEvent>
-  readonly [TraceId]: PubSub.PubSub<TraceEntry>
-  readonly [EvidenceId]: Ref.Ref<HashMap.HashMap<string, Started>>
-  readonly [RepliesId]: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>>
-  readonly [BoundChildrenId]: Ref.Ref<HashMap.HashMap<ChildId, BoundChild>>
-  readonly [PendingId]: Ref.Ref<HashMap.HashMap<string, BoundChild>>
-  readonly [RequestsId]: Ref.Ref<number>
-  readonly [TerminatedId]: Deferred.Deferred<void>
-  readonly [ScopeId]: Scope.Scope
-  readonly [ContextId]: Context.Context<Scope.Scope>
-  readonly [FiberId]: Medium<FiberProgram, never, Scope.Scope>
-  readonly name: string
+interface SupervisorSlot {
+  readonly state: Ref.Ref<SupervisorState>
+  readonly mailbox: Queue.Queue<SupervisionEvent>
+  readonly trace: PubSub.PubSub<TraceEntry>
+  readonly evidence: Ref.Ref<HashMap.HashMap<string, Started>>
+  readonly replies: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>>
+  readonly boundChildren: Ref.Ref<HashMap.HashMap<ChildId, BoundChild>>
+  readonly pending: Ref.Ref<HashMap.HashMap<string, BoundChild>>
+  readonly requests: Ref.Ref<number>
+  readonly terminated: Deferred.Deferred<void>
+  readonly scope: Scope.Scope
+  readonly context: Context.Context<Scope.Scope>
+  readonly fiber: Medium<FiberProgram, never, Scope.Scope>
 }
 
-/** Whether a value is a running supervisor handle. */
-export const isRunningSupervisor = (value: unknown): value is RunningSupervisor => Predicate.hasProperty(value, TypeId)
+const RunningSupervisorDef = Handle.make<{ readonly name: string }, SupervisorSlot>()(TypeId)
 
-export const Handle = {
+/**
+ * A running supervisor. Its state lives in the handle's slot, never in a module
+ * registry; the only public operations are the functions exported beside it.
+ */
+export type RunningSupervisor = Handle.Of<typeof RunningSupervisorDef>
+
+/** Whether a value is a running supervisor handle. */
+export const isRunningSupervisor = RunningSupervisorDef.is
+
+export const RunningSupervisorHandle = {
   make: (
     name: string,
     initial: SupervisorState,
@@ -99,65 +87,71 @@ export const Handle = {
   ): Effect.Effect<RunningSupervisor, never, Scope.Scope> =>
     Effect.gen(function*() {
       const scope = yield* Effect.scope
-      return {
-        [TypeId]: TypeId,
-        [StateId]: yield* Ref.make(initial),
-        [MailboxId]: yield* Queue.unbounded<SupervisionEvent>(),
-        [TraceId]: yield* PubSub.unbounded<TraceEntry>(),
-        [EvidenceId]: yield* Ref.make(HashMap.empty<string, Started>()),
-        [RepliesId]: yield* Ref.make(HashMap.empty<string, Deferred.Deferred<DynamicOutcome>>()),
-        [BoundChildrenId]: yield* Ref.make(children),
-        [PendingId]: yield* Ref.make(HashMap.empty<string, BoundChild>()),
-        [RequestsId]: yield* Ref.make(0),
-        [TerminatedId]: yield* Deferred.make<void>(),
-        [ScopeId]: scope,
-        [ContextId]: context,
-        [FiberId]: fiber,
-        name,
-        ...Prototype,
+      const slot: SupervisorSlot = {
+        state: yield* Ref.make(initial),
+        mailbox: yield* Queue.unbounded<SupervisionEvent>(),
+        trace: yield* PubSub.unbounded<TraceEntry>(),
+        evidence: yield* Ref.make(HashMap.empty<string, Started>()),
+        replies: yield* Ref.make(HashMap.empty<string, Deferred.Deferred<DynamicOutcome>>()),
+        boundChildren: yield* Ref.make(children),
+        pending: yield* Ref.make(HashMap.empty<string, BoundChild>()),
+        requests: yield* Ref.make(0),
+        terminated: yield* Deferred.make<void>(),
+        scope,
+        context,
+        fiber,
       }
+      return RunningSupervisorDef.make({ name }, slot)
     }),
 } as const
 
-export const stateOf = (self: RunningSupervisor): Ref.Ref<SupervisorState> => self[StateId]
+export const stateOf = (self: RunningSupervisor): Ref.Ref<SupervisorState> => RunningSupervisorDef.slot(self).state
 
-export const mailboxOf = (self: RunningSupervisor): Queue.Queue<SupervisionEvent> => self[MailboxId]
+export const mailboxOf = (self: RunningSupervisor): Queue.Queue<SupervisionEvent> =>
+  RunningSupervisorDef.slot(self).mailbox
 
-export const tracePubSubOf = (self: RunningSupervisor): PubSub.PubSub<TraceEntry> => self[TraceId]
+export const tracePubSubOf = (self: RunningSupervisor): PubSub.PubSub<TraceEntry> =>
+  RunningSupervisorDef.slot(self).trace
 
-export const evidenceOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, Started>> => self[EvidenceId]
+export const evidenceOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, Started>> =>
+  RunningSupervisorDef.slot(self).evidence
 
 export const repliesOf = (
   self: RunningSupervisor,
-): Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>> => self[RepliesId]
+): Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>> => RunningSupervisorDef.slot(self).replies
 
 export const boundChildrenOf = (
   self: RunningSupervisor,
-): Ref.Ref<HashMap.HashMap<ChildId, BoundChild>> => self[BoundChildrenId]
+): Ref.Ref<HashMap.HashMap<ChildId, BoundChild>> => RunningSupervisorDef.slot(self).boundChildren
 
 export const pendingChildrenOf = (self: RunningSupervisor): Ref.Ref<HashMap.HashMap<string, BoundChild>> =>
-  self[PendingId]
+  RunningSupervisorDef.slot(self).pending
 
-export const fiberContextOf = (self: RunningSupervisor): Context.Context<Scope.Scope> => self[ContextId]
+export const fiberContextOf = (self: RunningSupervisor): Context.Context<Scope.Scope> =>
+  RunningSupervisorDef.slot(self).context
 
-export const fiberMediumOf = (self: RunningSupervisor): Medium<FiberProgram, never, Scope.Scope> => self[FiberId]
+export const fiberMediumOf = (self: RunningSupervisor): Medium<FiberProgram, never, Scope.Scope> =>
+  RunningSupervisorDef.slot(self).fiber
 
 /** The fiber medium bound to `program`, ready to be stored as a dynamic child. */
 const boundFiberProgramOf = (self: RunningSupervisor, program: FiberProgram): BoundChild =>
   Binder.bind(program, fiberMediumOf(self), fiberContextOf(self))
 
-export const terminatedLatchOf = (self: RunningSupervisor): Deferred.Deferred<void> => self[TerminatedId]
+export const terminatedLatchOf = (self: RunningSupervisor): Deferred.Deferred<void> =>
+  RunningSupervisorDef.slot(self).terminated
 
-export const ownerScopeOf = (self: RunningSupervisor): Scope.Scope => self[ScopeId]
+export const ownerScopeOf = (self: RunningSupervisor): Scope.Scope => RunningSupervisorDef.slot(self).scope
 
 /**
  * The kernel trace: every step's decoded event and decision, in mailbox order,
  * from the moment the stream is subscribed.
  */
-export const traceOf = (self: RunningSupervisor): Stream.Stream<TraceEntry> => Stream.fromPubSub(self[TraceId])
+export const traceOf = (self: RunningSupervisor): Stream.Stream<TraceEntry> =>
+  Stream.fromPubSub(RunningSupervisorDef.slot(self).trace)
 
 /** The supervisor's current phase and children, as the kernel last folded them. */
-export const statusOf = (self: RunningSupervisor): Effect.Effect<SupervisorState> => Ref.get(self[StateId])
+export const statusOf = (self: RunningSupervisor): Effect.Effect<SupervisorState> =>
+  Ref.get(RunningSupervisorDef.slot(self).state)
 
 export const offerEvent: {
   (event: SupervisionEvent): (self: RunningSupervisor) => Effect.Effect<void>
@@ -165,7 +159,7 @@ export const offerEvent: {
 } = dual(
   2,
   (self: RunningSupervisor, event: SupervisionEvent): Effect.Effect<void> =>
-    Effect.asVoid(Queue.offer(self[MailboxId], event)),
+    Effect.asVoid(Queue.offer(RunningSupervisorDef.slot(self).mailbox, event)),
 )
 
 const shutdownEventOf = (now: number): SupervisionEvent => ({
@@ -175,7 +169,8 @@ const shutdownEventOf = (now: number): SupervisionEvent => ({
 })
 
 /** Completes once the supervisor has terminated. */
-export const awaitTerminated = (self: RunningSupervisor): Effect.Effect<void> => Deferred.await(self[TerminatedId])
+export const awaitTerminated = (self: RunningSupervisor): Effect.Effect<void> =>
+  Deferred.await(RunningSupervisorDef.slot(self).terminated)
 
 /**
  * Asks the supervisor to shut down and waits until it has terminated: children stop
@@ -185,13 +180,16 @@ export const shutdown = (self: RunningSupervisor): Effect.Effect<void> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.flatMap(Clock.currentTimeMillis, (now) =>
       Effect.andThen(
-        Queue.offer(self[MailboxId], shutdownEventOf(now)),
-        restore(Deferred.await(self[TerminatedId])),
+        Queue.offer(RunningSupervisorDef.slot(self).mailbox, shutdownEventOf(now)),
+        restore(Deferred.await(RunningSupervisorDef.slot(self).terminated)),
       ))
   )
 
 const nextRequestId = (self: RunningSupervisor, kind: string): Effect.Effect<string> =>
-  Effect.map(Ref.getAndUpdate(self[RequestsId], (count) => count + 1), (count) => `${kind}-${count}`)
+  Effect.map(
+    Ref.getAndUpdate(RunningSupervisorDef.slot(self).requests, (count) => count + 1),
+    (count) => `${kind}-${count}`,
+  )
 
 const awaitReply = (
   self: RunningSupervisor,
@@ -200,14 +198,17 @@ const awaitReply = (
 ): Effect.Effect<DynamicOutcome> =>
   Effect.flatMap(Deferred.make<DynamicOutcome>(), (waiter) =>
     Effect.andThen(
-      Ref.update(self[RepliesId], (known) => HashMap.set(known, requestId, waiter)),
+      Ref.update(RunningSupervisorDef.slot(self).replies, (known) => HashMap.set(known, requestId, waiter)),
       Effect.flatMap(Clock.currentTimeMillis, (now) => {
         const event = eventOf(now)
         return Effect.andThen(
-          Queue.offer(self[MailboxId], event),
+          Queue.offer(RunningSupervisorDef.slot(self).mailbox, event),
           Effect.raceFirst(
             Deferred.await(waiter),
-            Effect.andThen(awaitTerminated(self), resolveWaiting(self[RepliesId], requestId, staleOf(event))).pipe(
+            Effect.andThen(
+              awaitTerminated(self),
+              resolveWaiting(RunningSupervisorDef.slot(self).replies, requestId, staleOf(event)),
+            ).pipe(
               Effect.andThen(Deferred.await(waiter)),
             ),
           ),
@@ -227,7 +228,10 @@ export const startChild: {
   (self: RunningSupervisor, program: FiberProgram): Effect.Effect<DynamicOutcome> =>
     Effect.flatMap(nextRequestId(self, 'start'), (requestId) =>
       Effect.andThen(
-        Ref.update(self[PendingId], (pending) => HashMap.set(pending, requestId, boundFiberProgramOf(self, program))),
+        Ref.update(
+          RunningSupervisorDef.slot(self).pending,
+          (pending) => HashMap.set(pending, requestId, boundFiberProgramOf(self, program)),
+        ),
         awaitReply(self, requestId, (now) => ({ _tag: 'DynamicStartRequested', at: now, requestId })),
       )),
 )
