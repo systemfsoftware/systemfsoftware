@@ -90,9 +90,10 @@ const program: SocketMedium.SocketProgram = {
 ## Proving the medium
 
 ```ts
-const report = yield * Conformance.prove(SocketMedium.conformanceDriver)
-
-Conformance.isConforming(report) // every scripted lifecycle matched the fibre reference
+const proof = Effect.gen(function*() {
+  const report = yield* Conformance.prove(SocketMedium.conformanceDriver)
+  return Conformance.isConforming(report) // every scripted lifecycle matched the fibre reference
+})
 ```
 
 `SocketMedium.makeLoopbackServer` is the loopback listener the driver dials; its `advance` enacts a

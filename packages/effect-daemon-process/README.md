@@ -85,15 +85,18 @@ returns only once the platform's `kill` has awaited the process group's exit, wh
 ## Proving the medium
 
 ```ts
-const report = yield * Conformance.prove(ProcessMedium.conformanceDriver({ fixturePath: './child-script.mjs' }))
-
-Conformance.isConforming(report) // every scripted lifecycle matched the fibre reference
+const proof = Effect.gen(function*() {
+  const report = yield* Conformance.prove(ProcessMedium.conformanceDriver({ fixturePath: './child-script.mjs' }))
+  return Conformance.isConforming(report) // every scripted lifecycle matched the fibre reference
+})
 ```
 
-The driver launches `node <fixturePath>` with the script's steps wired to the child's stdin, so
-`control.advance(step)` writes one step tag to the incarnation that is running at that moment.
-`ProcessMedium.fixtureReadyLine` (`READY`) is the line the fixture writes when a `BecomeReady` step
-reaches it, which is what a medium under proof reads as readiness.
+The driver launches `node <fixturePath>` once per incarnation, each with its own stdin channel.
+`control.advance(step, generation)` writes the step to exactly that generation's child. A step
+for an incarnation that has not started yet is held until it starts, so a child that is still
+stopping can never take a step meant for its successor. `ProcessMedium.fixtureReadyLine`
+(`READY`) is the line the fixture writes when a `BecomeReady` step reaches it, which is what a
+medium under proof reads as readiness.
 
 ## Verification
 

@@ -74,8 +74,10 @@ declared shutdown mode decides how long a graceful stop is given.
 ## Conformance
 
 ```ts
-const report = yield * Conformance.prove(MicroVMMedium.conformanceDriver(workload))
-Conformance.isConforming(report)
+const proof = Effect.gen(function*() {
+  const report = yield* Conformance.prove(MicroVMMedium.conformanceDriver(workload))
+  return Conformance.isConforming(report)
+})
 ```
 
 `conformanceDriver(workload)` returns a driver whose control channel is the workload's stdin:
