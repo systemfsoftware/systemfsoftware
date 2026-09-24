@@ -5,7 +5,7 @@ import type { TraceComparison } from './compare-traces.workflow.js'
 import { compare } from './compare.js'
 import { ScenarioCompared, ScenarioStalled } from './ConformanceReport.schema.js'
 import type { ConformanceReport, ScenarioResult } from './ConformanceReport.schema.js'
-import type { ChildControl, ConformanceDriver, LaunchedChild } from './driver.js'
+import type { ChildControl, ConformanceDriver, LaunchedChild, ScenarioBudget } from './driver.js'
 import { FiberReference } from './FiberReference.js'
 import { observedStepsOf } from './observed-trace.js'
 import type { ChildRole, Scenario } from './Scenario.schema.js'
@@ -236,6 +236,29 @@ const runReferenceOf = (scenario: Scenario): Effect.Effect<ConformanceTrace, nev
 
 const SCENARIO_MILLIS = Duration.seconds(5)
 
+const raisedFloorOf = (scenario: Scenario, budget: ScenarioBudget): Scenario => ({
+  ...scenario,
+  children: Arr.map(scenario.children, (role) => ({
+    ...role,
+    startTimeoutMillis: Math.max(role.startTimeoutMillis, budget.startTimeoutMillis),
+  })),
+})
+
+const adoptedScenarioOf = (
+  scenario: Scenario,
+  budget: Option.Option<ScenarioBudget>,
+): Scenario =>
+  Option.match(budget, {
+    onNone: () => scenario,
+    onSome: (declared) => raisedFloorOf(scenario, declared),
+  })
+
+const boundOf = (budget: Option.Option<ScenarioBudget>): Duration.Duration =>
+  Option.match(budget, {
+    onNone: () => SCENARIO_MILLIS,
+    onSome: (declared) => Duration.millis(declared.millis),
+  })
+
 const outcomeOf = (
   scenario: Scenario,
   medium: string,
@@ -263,14 +286,18 @@ const proveScenarioOf = <Program, StartError, R>(
   ScenarioResult,
   never,
   FiberShape | PortShape<Program, StartError, Scope.Scope | R> | R
-> =>
-  Effect.map(
+> => {
+  const budget = Option.fromNullishOr(driver.scenario)
+  const adopted = adoptedScenarioOf(scenario, budget)
+  const bound = boundOf(budget)
+  return Effect.map(
     Effect.zip(
-      Effect.timeoutOption(runReferenceOf(scenario), SCENARIO_MILLIS),
-      Effect.timeoutOption(runScenarioOf(driver, scenario), SCENARIO_MILLIS),
+      Effect.timeoutOption(runReferenceOf(adopted), bound),
+      Effect.timeoutOption(runScenarioOf(driver, adopted), bound),
     ),
-    ([reference, candidate]) => outcomeOf(scenario, driver.name, reference, candidate, driver.declaration),
+    ([reference, candidate]) => outcomeOf(adopted, driver.name, reference, candidate, driver.declaration),
   )
+}
 
 const comparisonConforms = (comparison: TraceComparison): boolean =>
   Match.value(comparison).pipe(

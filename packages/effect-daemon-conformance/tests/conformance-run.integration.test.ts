@@ -1,5 +1,6 @@
 import { it } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
+import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
 import { Duration, Effect, Layer, Match } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
@@ -32,10 +33,31 @@ const labelOf = (result: Conformance.ScenarioResult): string =>
     Match.exhaustive,
   )
 
+const EXPECTED_CATALOGUE_COMPARISONS: ReadonlyArray<string> = [
+  'ready-then-exit-normal:conform',
+  'ready-then-exit-abnormal:conform',
+  'never-become-ready:conform',
+  'ignores-graceful-stop:conform',
+  'one-for-all-group-stop:conform',
+]
+
 const advancing = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.provide(
     Effect.raceFirst(effect, Effect.forever(TestClock.adjust(Duration.millis(20)))),
     TestClock.layer(),
+  )
+
+const budgetedReference = (
+  scenario: Conformance.ScenarioBudget,
+): Conformance.ConformanceDriver<Supervisor.FiberProgram, never, never> => ({
+  ...Conformance.FiberReference,
+  scenario,
+})
+
+const budgetedProve = (scenario: Conformance.ScenarioBudget) =>
+  Conformance.prove(budgetedReference(scenario)).pipe(
+    Effect.provide(Conformance.FiberReferenceLayer),
+    advancing,
   )
 
 const reference = Conformance.prove(Conformance.FiberReference).pipe(
@@ -54,13 +76,7 @@ it.effect(
     Effect.map(reference, (report) => {
       expect(Conformance.isConforming(report)).toBe(true)
       expect(report.results.length).toBe(Conformance.Scenarios.length)
-      expect(report.results.map(labelOf)).toEqual([
-        'ready-then-exit-normal:conform',
-        'ready-then-exit-abnormal:conform',
-        'never-become-ready:conform',
-        'ignores-graceful-stop:conform',
-        'one-for-all-group-stop:conform',
-      ])
+      expect(report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
     }),
   60_000,
 )
@@ -71,6 +87,30 @@ it.effect(
     Effect.map(planted, (report) => {
       expect(Conformance.isConforming(report)).toBe(false)
       expect(namedMediums(report)).toContain('planted')
+    }),
+  60_000,
+)
+
+it.effect(
+  'A declared scenario floor below the catalogue leaves every comparison as the catalogue left it',
+  () =>
+    Effect.map(budgetedProve({ millis: 20_000, startTimeoutMillis: 1 }), (report) => {
+      expect(report.results.map(labelOf)).toEqual(EXPECTED_CATALOGUE_COMPARISONS)
+    }),
+  60_000,
+)
+
+it.effect(
+  'A declared scenario bound shorter than its declared floor stalls and names the scenario',
+  () =>
+    Effect.map(budgetedProve({ millis: 500, startTimeoutMillis: 10_000 }), (report) => {
+      expect(report.results.map(labelOf)).toEqual([
+        'ready-then-exit-normal:conform',
+        'ready-then-exit-abnormal:conform',
+        'never-become-ready:stalled',
+        'ignores-graceful-stop:conform',
+        'one-for-all-group-stop:conform',
+      ])
     }),
   60_000,
 )

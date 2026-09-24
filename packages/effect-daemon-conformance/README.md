@@ -23,6 +23,10 @@ pnpm add @systemfsoftware/effect-daemon-conformance
 - **Typed mismatches**: `Conformance.compare(reference, candidate, declaration)` returns
   `TracesConform` or `TracesDiverge`, and a divergence names the scenario, the medium and the first
   diverging index.
+- **A medium declares its own margins**: a driver whose start costs real time — a VM boot, a process
+  spawn — declares `scenario: { millis, startTimeoutMillis }`. Both sides of every comparison then
+  run with each child role's start timeout raised to at least `startTimeoutMillis`, and each side is
+  bounded by `millis` instead of the catalogue's five seconds.
 
 ## Usage
 

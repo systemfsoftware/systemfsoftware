@@ -20,6 +20,11 @@ export type MediumPortOf<Program, StartError, R> = Context.Service<
   Supervisor.Medium.MediumPortShape<Program, StartError, R>
 >
 
+export interface ScenarioBudget {
+  readonly millis: number
+  readonly startTimeoutMillis: number
+}
+
 /**
  * What a medium author supplies to `Conformance.prove`: the medium port, the
  * declaration it claims, and how a `ChildScript` becomes one of its programs
@@ -28,6 +33,7 @@ export type MediumPortOf<Program, StartError, R> = Context.Service<
 export interface ConformanceDriver<Program, StartError = never, R = never> {
   readonly name: string
   readonly declaration: Supervisor.Medium.MediumDeclaration
+  readonly scenario?: ScenarioBudget
   readonly port: MediumPortOf<Program, StartError, Scope.Scope | R>
   readonly launch: (
     childId: ChildId,

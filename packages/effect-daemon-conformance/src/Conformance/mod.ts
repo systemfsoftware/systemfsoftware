@@ -17,7 +17,7 @@ export {
 export { compare } from '../compare.js'
 export { FiberReferenceLayer, isConforming, prove } from '../conformance.resource.js'
 export { ConformanceReport, ScenarioCompared, ScenarioResult, ScenarioStalled } from '../ConformanceReport.schema.js'
-export type { ChildControl, ConformanceDriver, LaunchedChild, MediumPortOf } from '../driver.js'
+export type { ChildControl, ConformanceDriver, LaunchedChild, MediumPortOf, ScenarioBudget } from '../driver.js'
 export { FiberReference } from '../FiberReference.js'
 export { ProjectTrace, projectTrace, TracePreserved, TraceProjection, TraceReduced } from '../project-trace.workflow.js'
 export {
