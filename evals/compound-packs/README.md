@@ -40,3 +40,13 @@ node evals/pack-eval/dist/main.mjs evaluate \
 ```
 
 `OPENROUTER_API_KEY` must be set. There is no default model.
+
+Once `pair-labels.json` holds entries, `evaluate` and `fingerprint` also need `--judge-model <openrouter model id>`. `--judge-minimum` sets the TPR and TNR the judge must reach on `test` pairs before its verdicts count; the default is 0.8. Tune the judge prompt against `dev` pairs only:
+
+```sh
+node evals/pack-eval/dist/main.mjs tune-judge \
+  --pack compound-packs/cell-architecture --pack compound-packs/boundary-testing \
+  --dataset evals/compound-packs --judge-model <openrouter model id>
+```
+
+Exit codes: 0 clean, 1 a validated judge found a contradiction on a witnessed pair, 2 refused input, a rejected command line, or a provider failure.
