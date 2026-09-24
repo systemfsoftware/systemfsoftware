@@ -4,6 +4,7 @@ import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { expect } from 'vitest'
 
@@ -11,6 +12,7 @@ const Feature = makeFeature({ it })
 
 Feature('Keeping a shared page data source alive across page updates')
   .live('renders a real page in Chromium and waits on browser timers')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A page update keeps serving the same page data source',

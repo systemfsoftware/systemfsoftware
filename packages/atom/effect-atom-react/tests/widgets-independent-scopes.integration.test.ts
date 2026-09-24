@@ -5,6 +5,7 @@ import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { expect, vi } from 'vitest'
@@ -13,6 +14,7 @@ const Feature = makeFeature({ it })
 
 Feature('Keeping two widgets on separate data sources independent of each other')
   .live('renders real components in Chromium and advances the browser timer queue')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A widget still loading keeps waiting while the other widget is put away',

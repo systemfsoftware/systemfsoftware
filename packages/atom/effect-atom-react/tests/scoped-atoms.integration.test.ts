@@ -5,6 +5,7 @@ import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { make, RegistryContext, useAtomSet, useAtomUpdate, useAtomValue } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { expect } from 'vitest'
@@ -13,6 +14,7 @@ const Feature = makeFeature({ it })
 
 Feature('Scoped counters that belong to one part of the page')
   .live('renders real components in Chromium and waits on browser timers')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A scoped counter updates through its own setter for its part of the page',

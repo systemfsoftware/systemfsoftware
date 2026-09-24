@@ -21,6 +21,7 @@ import {
 } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
@@ -30,6 +31,7 @@ const Feature = makeFeature({ it })
 
 Feature('Reading and changing shared values from on-screen widgets')
   .live('renders real components in Chromium and advances the browser timer queue')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A writer who saves a new draft learns what was stored',

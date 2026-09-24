@@ -19,6 +19,7 @@ import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Latch from 'effect/Latch'
+import * as Layer from 'effect/Layer'
 import * as Scheduler from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
@@ -94,6 +95,7 @@ const settledOn = (
 const Feature = makeFeature({ it })
 
 Feature('Serving shared-value pages from the server')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A counter served without a preloaded value runs its read on the server',

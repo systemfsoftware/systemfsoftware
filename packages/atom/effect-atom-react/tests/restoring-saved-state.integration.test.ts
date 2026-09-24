@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { expect } from 'vitest'
@@ -14,6 +15,7 @@ const Feature = makeFeature({ it })
 
 Feature('Restoring saved page state')
   .live('renders real components in Chromium and waits on browser timers')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'A page that receives a saved value for a fresh value shows it immediately',
