@@ -1035,6 +1035,10 @@
     - mighty-beds-yell
     - quiet-melons-roll
     - witty-lions-queue
+"@systemfsoftware/effect-sim-kernel@0.1.1":
+  dir: packages/effect-sim-kernel
+  intents:
+    - gentle-horses-hope
 "@systemfsoftware/effect-spec-runtime@0.0.0":
   dir: packages/effect-spec-runtime
   intents:
