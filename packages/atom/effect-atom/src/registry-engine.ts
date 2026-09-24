@@ -211,6 +211,14 @@ function notifyIfImmediateFlag<A>(current: A, f: (_: A) => void, immediate: bool
   }
 }
 
+function hearIfChanged<A>(node: NodeImpl<A>, lastSeen: { value: A }, f: (_: A) => void): void {
+  if (node.atom.equals(lastSeen.value, node._value)) {
+    return
+  }
+  lastSeen.value = node._value
+  f(node._value)
+}
+
 function atomIdleTtlIsActive(registry: RegistryImpl, atom: Atom.Atom): boolean {
   if (atom.idleTTL === 0) {
     return false
@@ -579,9 +587,10 @@ export class RegistryImpl extends Pipeable.Class {
 
   subscribe<A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: { readonly immediate?: boolean }): () => void {
     const node = this.ensureNode(atom)
-    notifyIfImmediate(node.value(), f, options)
+    const lastSeen = { value: node.value() }
+    notifyIfImmediate(lastSeen.value, f, options)
     const remove = node.subscribe(function() {
-      f(node._value)
+      hearIfChanged(node, lastSeen, f)
     })
     return () => {
       remove()

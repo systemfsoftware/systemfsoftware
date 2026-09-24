@@ -14,7 +14,6 @@ import type { Registry } from './registry.handle.js'
 
 type AnyNode<A = unknown> = NodeImpl<A>
 type AnyLifetime<A = unknown> = Lifetime<A>
-type AnyValue<A = unknown> = A
 
 const notifyListener = (listener: () => void): void => {
   listener()
@@ -285,37 +284,28 @@ function assignInitialUninitialized<A>(node: NodeImpl<A>, value: A): void {
   node.preserveInitialValueOnBuild = true
   node.state = NodeState.stale
   node._value = value
-  notifyNodeOrBatch(node)
+  notifyListenersIfPresent(node)
 }
 
 function assignFirstValue<A>(node: NodeImpl<A>, value: A): void {
   node.state = NodeState.valid
   node._value = value
-  notifyNodeOrBatch(node)
+  notifyListenersIfPresent(node)
 }
-function notifyNodeOrBatch<A>(node: NodeImpl<A>): void {
+
+function notifyListenersIfPresent<A>(node: NodeImpl<A>): void {
+  if (node.listeners.size > 0) {
+    notifyNowOrAtBatchEnd(node)
+  }
+}
+
+function notifyNowOrAtBatchEnd<A>(node: NodeImpl<A>): void {
   const batch = node.registry.batch
   if (batch.phase === BatchPhase.collect) {
     batch.notify.add(node)
     return
   }
   node.notify()
-}
-
-function notifyChangeOrBatch<A>(node: NodeImpl<A>, previous: A): void {
-  const batch = node.registry.batch
-  if (batch.phase === BatchPhase.collect) {
-    rememberValueBeforeBatch(batch, node, previous)
-    batch.notify.add(node)
-    return
-  }
-  node.notify()
-}
-
-function rememberValueBeforeBatch<A>(batch: BatchState, node: NodeImpl<A>, previous: A): void {
-  if (batch.notify.has(node) === false) {
-    batch.valueBeforeBatch.set(node, previous)
-  }
 }
 
 function replaceInitializedValue<A>(node: NodeImpl<A>, value: A): void {
@@ -331,10 +321,9 @@ function replaceIfChanged<A>(node: NodeImpl<A>, value: A): void {
 }
 
 function commitChangedValue<A>(node: NodeImpl<A>, value: A): void {
-  const previous = node._value
   node._value = value
   invalidateAfterValueChange(node)
-  notifyListenersIfPresent(node, previous)
+  notifyListenersIfPresent(node)
 }
 
 function invalidateAfterValueChange<A>(node: NodeImpl<A>): void {
@@ -343,12 +332,6 @@ function invalidateAfterValueChange<A>(node: NodeImpl<A>): void {
     return
   }
   node.invalidateChildren()
-}
-
-function notifyListenersIfPresent<A>(node: NodeImpl<A>, previous: A): void {
-  if (node.listeners.size > 0) {
-    notifyChangeOrBatch(node, previous)
-  }
 }
 
 function forgetPreviousParent<A>(node: NodeImpl<A>, parent: AnyNode): void {
@@ -1068,7 +1051,6 @@ export interface BatchState {
   depth: number
   readonly stale: Set<AnyNode>
   readonly notify: Set<AnyNode>
-  readonly valueBeforeBatch: Map<AnyNode, AnyValue>
 }
 
 /** */
@@ -1077,7 +1059,6 @@ export const makeBatchState = (): BatchState => ({
   depth: 0,
   stale: new Set(),
   notify: new Set(),
-  valueBeforeBatch: new Map(),
 })
 
 /**
@@ -1128,22 +1109,11 @@ function rebuildStaleNodes(batch: BatchState): void {
 function notifyBatchedNodes(batch: BatchState): void {
   batch.phase = BatchPhase.commit
   for (const node of batch.notify) {
-    notifyIfChangedByBatch(batch, node)
+    node.notify()
   }
   batch.notify.clear()
-  batch.valueBeforeBatch.clear()
 }
 
-function notifyIfChangedByBatch(batch: BatchState, node: AnyNode): void {
-  if (endsWhereItStarted(batch, node)) {
-    return
-  }
-  node.notify()
-}
-
-function endsWhereItStarted(batch: BatchState, node: AnyNode): boolean {
-  return batch.valueBeforeBatch.has(node) && node.atom.equals(batch.valueBeforeBatch.get(node), node._value)
-}
 function batchRebuildNode(node: AnyNode) {
   restaleIfInvalidatedDuringBuild(node)
   rebuildParents(node)

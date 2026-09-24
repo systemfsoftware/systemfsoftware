@@ -1357,6 +1357,36 @@ Feature('Keeping computed values current while unused values are forgotten')
       ),
     )
     scenario(
+      'Listening from inside a group of changes hears only what changes after it started listening',
+      Gherkin.Do.pipe(
+        Given('a doubled counter nobody has read yet')('ctx', () =>
+          Effect.sync(() => {
+            const counter = Atom.make(0)
+            const doubled = Atom.make((get) => get(counter) * 2)
+            return { page: Atom.Registry.make(), counter, doubled }
+          })),
+        When('one group starts a listener and an immediate listener, and a second group moves the counter to 1')(
+          'heard',
+          (s) =>
+            Effect.sync(() => {
+              const heard: Array<string> = []
+              Atom.Registry.batch(s.ctx.page, () => {
+                Atom.Registry.subscribe(s.ctx.page, s.ctx.doubled, (value) => heard.push(`listener ${value}`))
+                Atom.Registry.subscribe(s.ctx.page, s.ctx.doubled, (value) => heard.push(`immediate ${value}`), {
+                  immediate: true,
+                })
+              })
+              heard.push('group ended')
+              Atom.Registry.batch(s.ctx.page, () => Atom.Registry.set(s.ctx.page, s.ctx.counter, 1))
+              return heard
+            }),
+        ),
+        Then('the immediate listener hears the start value once, and both hear the change once')((s) => {
+          expect(s.heard).toEqual(['immediate 0', 'group ended', 'listener 2', 'immediate 2'])
+        }),
+      ),
+    )
+    scenario(
       'A value kept alive holds on to the counter it is computed from',
       Gherkin.Do.pipe(
         Given('a page that keeps a running total of a counter alive, and has shown it once')(
