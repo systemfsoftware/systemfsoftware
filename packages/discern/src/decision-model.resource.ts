@@ -1,3 +1,4 @@
+import { Resource } from '@systemfsoftware/effect-cell-types'
 import { Match, Schema } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -419,6 +420,38 @@ const decoratedModel = (
     decide: decorate(interceptors, asProvider(Context.get(context, DecisionModel.DecisionModel))).decide,
   })
 
+export interface ModelSpec {
+  readonly provider: Provider
+  readonly interceptors: ReadonlyArray<Interceptor>
+}
+
+export const TypeId = Symbol.for('@systemfsoftware/discern/Model')
+export type TypeId = typeof TypeId
+
+const appendOf = (spec: ModelSpec, interceptor: Interceptor): ModelSpec => ({
+  provider: spec.provider,
+  interceptors: [...spec.interceptors, interceptor],
+})
+
+const layerOf = (spec: ModelSpec): Layer.Layer<DecisionModel.DecisionModel> =>
+  fromProvider(decorate(spec.interceptors, spec.provider))
+
+export const Model = Resource.make<ModelSpec>()({
+  typeId: TypeId,
+  combinators: {
+    recording: (spec, into: ObservationStore): ModelSpec => appendOf(spec, recording(into)),
+    caching: (spec, into: ObservationStore): ModelSpec => appendOf(spec, caching(into)),
+    replaying: (spec, source: Observations | ObservationStore, options?: ReplayOptions): ModelSpec =>
+      appendOf(spec, replaying(source, options)),
+    budgeted: (spec, limit: Budget): ModelSpec => appendOf(spec, budgeted(limit)),
+  },
+  projections: { layer: layerOf },
+})
+
+export type Model = Resource.Of<typeof Model>
+
+export const model = (source: Provider): Model => Model.of({ provider: source, interceptors: [] })
+
 /**
  * Decorate an existing `DecisionModel` layer — including one from a provider
  * package you do not own.
@@ -440,7 +473,7 @@ export const layer: {
 } = dual(
   (args: IArguments) => !Array.isArray(args[0]),
   (source: Provider, interceptors?: ReadonlyArray<Interceptor>): Layer.Layer<DecisionModel.DecisionModel> =>
-    fromProvider(decorate(interceptors ?? [], source)),
+    Model.of({ provider: source, interceptors: interceptors ?? [] }).layer,
 )
 
 /** A layer that answers only from recorded observations and never reaches a model. */

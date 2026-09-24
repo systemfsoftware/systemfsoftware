@@ -1,6 +1,7 @@
 import { Discern } from '@systemfsoftware/discern'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
+import type * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -345,5 +346,40 @@ describe('the budget the model hands out', () => {
       spent: () => ({ decisions: 0, calls: 0 }),
       reset: () => {},
     }).type.not.toBeAssignableTo<Discern.Model.Budget>()
+  })
+})
+
+const nakedModel = Discern.Model.model(Discern.Model.unavailable)
+const figuredModel = Discern.Model.model(Discern.Model.unavailable).pipe(
+  Discern.Model.Model.combinators.recording(observations),
+  Discern.Model.Model.combinators.caching(observations),
+  Discern.Model.Model.combinators.replaying(observations),
+  Discern.Model.Model.combinators.budgeted(spend),
+)
+
+describe('the model builder', () => {
+  it('Should_KeepTheModelResource_When_CombinatorsAreApplied', () => {
+    expect(figuredModel).type.toBe<Discern.Model.Model>()
+    expect(
+      Discern.Model.model(Discern.Model.unavailable).recording(observations).caching(observations),
+    ).type.toBe<Discern.Model.Model>()
+  })
+
+  it('Should_CombineTheInterceptorStacks_When_MethodsAndDualsAreMixed', () => {
+    expect(nakedModel.pipe(Discern.Model.Model.combinators.recording(observations))).type.toBe<
+      Discern.Model.Model
+    >()
+    expect(Discern.Model.Model.combinators.recording(nakedModel, observations)).type.toBe<Discern.Model.Model>()
+    expect(Discern.Model.Model.combinators.budgeted).type.toBeCallableWith(spend)
+    expect(Discern.Model.Model.combinators.budgeted).type.not.toBeCallableWith(observations)
+  })
+
+  it('Should_CompileTheBuilderAgainstTheDual_When_TheLayerProjectionIsRead', () => {
+    expect(
+      Discern.Model.model(Discern.Model.unavailable).recording(observations).budgeted(spend).layer,
+    ).type.toBe<Layer.Layer<DecisionModel.DecisionModel, never, never>>()
+    expect(
+      Discern.Model.layer(Discern.Model.unavailable, [Discern.Model.recording(observations)]),
+    ).type.toBe<Layer.Layer<DecisionModel.DecisionModel, never, never>>()
   })
 })
