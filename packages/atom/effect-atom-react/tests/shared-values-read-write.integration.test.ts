@@ -3,7 +3,7 @@ import * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import {
@@ -21,21 +21,20 @@ import {
 } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { expect, vi } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Reading and changing shared values from on-screen widgets')
-  .withLayer(Layer.empty)
+  .live('renders real components in Chromium and advances the browser timer queue')
   .body(({ scenario }) => {
     scenario(
-      'A writer who saves through the confirming setter knows when the save has finished',
+      'A writer who saves a new draft learns what was stored',
       Gherkin.Do.pipe(
-        Given('a form whose save button waits for the save to finish')('ctx', () =>
+        Given('Ada opens a form whose save button waits for the save to finish')('ctx', () =>
           Effect.sync(() => {
             const draft = Atom.fn((n: number) => Effect.succeed(n))
             let save: (n: number) => Effect.Effect<number, never> = () =>
@@ -53,21 +52,21 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return { save: () => save }
           })),
-        When('the writer saves a new draft')('saved', (s) =>
+        When('Ada saves a new draft of 42')('saved', (s) =>
           Effect.gen(function*() {
             const confirmed = yield* s.ctx.save()(42)
             return confirmed
           })),
-        Then('the save is confirmed with the stored draft')((s) => {
+        Then('Ada learns the stored draft is 42')((s) => {
           expect(s.saved).toBe(42)
         }),
       ),
     )
 
     scenario(
-      'A page that starts with seeded values shows them right away',
+      'A page that starts with a seeded balance shows it right away',
       Gherkin.Do.pipe(
-        Given('a page whose starting values are seeded before it renders')('ctx', () =>
+        Given('Ada opens a page whose starting balance is seeded before it renders')('ctx', () =>
           Effect.sync(() => {
             const startingBalance = Atom.make(0)
             function Page() {
@@ -84,22 +83,29 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the seeded value is already on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
-          })
-        ),
+        When('Ada looks at her starting balance')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
+            }),
+            true,
+          )),
+        Then('Ada sees her seeded balance on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
 
     scenario(
       'A reader who asks for fresh data sees the value recomputed',
       Gherkin.Do.pipe(
-        Given('a widget showing a reading that can be refreshed on demand')('ctx', () =>
+        Given('Ada opens a widget showing a reading she can refresh on demand')('ctx', () =>
           Effect.sync(() => {
             let readings = 0
-            const reading = Atom.make(Effect.sync(() => ++readings))
+            const reading = Atom.make(Effect.sync(() => {
+              readings = readings + 1
+              return readings
+            }))
             let refresh: () => void = () => {
               throw new Error('refresh called before the widget rendered')
             }
@@ -117,31 +123,33 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return { refresh: () => refresh }
           })),
-        When('the reader asks for fresh data twice')('done', (s) =>
-          Effect.sync(() => {
-            act(() => {
-              s.ctx.refresh()()
-            })
-            act(() => {
-              s.ctx.refresh()()
-            })
-          })),
-        Then('the widget shows the recomputed reading')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
-          })
-        ),
+        When('Ada asks for fresh data twice and looks at the reading')('shown', (s) =>
+          Effect.as(
+            Effect.promise(() => {
+              act(() => {
+                s.ctx.refresh()()
+              })
+              act(() => {
+                s.ctx.refresh()()
+              })
+              return expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
+            }),
+            true,
+          )),
+        Then('Ada sees the twice-recomputed reading on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
 
     scenario(
-      'A listener attached to a value hears every change without showing it',
+      'A listener who wants the starting value hears it and every change',
       Gherkin.Do.pipe(
-        Given('a listener watching a shared value')('ctx', () =>
+        Given('Bo listens to a shared volume and asks for its starting value')('ctx', () =>
           Effect.sync(() => {
             const volume = Atom.make(3)
             const heard: number[] = []
-            const registry = AtomRegistry.make()
+            const page = AtomRegistry.make()
             function Listener() {
               useAtomSubscribe(volume, (v) => heard.push(v), { immediate: true })
               return null
@@ -149,23 +157,23 @@ Feature('Reading and changing shared values from on-screen widgets')
             render(
               React.createElement(
                 RegistryContext.Provider,
-                { value: registry },
+                { value: page },
                 React.createElement(Listener),
               ),
             )
-            return { volume, heard, registry }
+            return { volume, heard, page }
           })),
-        When('the value changes twice')('heard', (s) =>
+        When('Ada turns the volume to 5 and then to 8')('heard', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 5)
+              s.ctx.page.set(s.ctx.volume, 5)
             })
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 8)
+              s.ctx.page.set(s.ctx.volume, 8)
             })
             return s.ctx.heard
           })),
-        Then('the listener heard the starting value and both changes')((s) => {
+        Then('Bo heard the starting volume and both changes')((s) => {
           expect(s.heard).toEqual([3, 5, 8])
         }),
       ),
@@ -174,7 +182,7 @@ Feature('Reading and changing shared values from on-screen widgets')
     scenario(
       'A view of one field of a shared record stays in sync with that field',
       Gherkin.Do.pipe(
-        Given('a shared record with a view onto one of its fields')('ctx', () =>
+        Given('Ada opens a view onto the name field of a shared record')('ctx', () =>
           Effect.sync(() => {
             const record = AtomRef.make({ name: 'ada', age: 36 })
             let nameRef: AtomRef.AtomRef<string> = AtomRef.make('')
@@ -192,26 +200,31 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return { record, nameRef: () => nameRef }
           })),
-        When('the field is edited through the view')('done', (s) =>
-          Effect.sync(() => {
-            act(() => {
-              s.ctx.nameRef().set('grace')
-            })
-          })),
-        Then('the view shows the new value and the rest of the record is untouched')((s) =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('name')).toHaveTextContent('grace').then(() => {
-              expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
-            })
-          })
+        When('Ada edits the name through the view to grace and reads the record')(
+          'state',
+          (s) =>
+            Effect.gen(function*() {
+              yield* Effect.sync(() => {
+                act(() => {
+                  s.ctx.nameRef().set('grace')
+                })
+              })
+              yield* Effect.promise(function() {
+                return expect.element(screen.getByTestId('name')).toHaveTextContent('grace')
+              })
+              return s.ctx.record.value
+            }),
         ),
+        Then('Ada sees the new name on screen and the rest of the record is untouched')((s) => {
+          expect(s.state).toEqual({ name: 'grace', age: 36 })
+        }),
       ),
     )
 
     scenario(
-      'A writer who saves through the exit-reporting setter learns whether the save worked or failed',
+      'A writer who saves an acceptable draft and an unacceptable draft learns which worked',
       Gherkin.Do.pipe(
-        Given('a form whose save button reports success or failure')('ctx', () =>
+        Given('Ada opens a form whose save button reports success or failure')('ctx', () =>
           Effect.sync(() => {
             const saveDraft = (n: number): Effect.Effect<number, 'rejected'> => {
               if (n > 0) {
@@ -235,7 +248,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return { save: () => save }
           })),
-        When('the writer saves one acceptable draft and one unacceptable draft')(
+        When('Ada saves 5 and then saves -1')(
           'outcomes',
           (s) =>
             Effect.gen(function*() {
@@ -244,7 +257,7 @@ Feature('Reading and changing shared values from on-screen widgets')
               return { accepted, rejected }
             }),
         ),
-        Then('the first save is reported as accepted and the second as rejected')((s) => {
+        Then('Ada learns the first save was accepted with 5 and the second was rejected')((s) => {
           let acceptedValue: number | null = null
           if (Exit.isSuccess(s.outcomes.accepted)) {
             acceptedValue = s.outcomes.accepted.value
@@ -256,9 +269,9 @@ Feature('Reading and changing shared values from on-screen widgets')
     )
 
     scenario(
-      'A reader who transforms what they read sees the transformed value',
+      'A reader who triples what they read sees the tripled value',
       Gherkin.Do.pipe(
-        Given('a widget showing a transformed reading')('ctx', () =>
+        Given('Ada opens a widget showing triple her base number')('ctx', () =>
           Effect.sync(() => {
             const base = Atom.make(7)
             function Widget() {
@@ -274,19 +287,23 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the transformed value is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
-          })
-        ),
+        When('Ada looks at her tripled number')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
+            }),
+            true,
+          )),
+        Then('Ada sees 21 on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
 
     scenario(
-      'A reader who accepts failures sees the failure instead of the widget crashing',
+      'A reader whose data source fails sees the failure instead of a crash',
       Gherkin.Do.pipe(
-        Given('a widget that shows failures instead of crashing')('ctx', () =>
+        Given('Ada opens a widget whose data source is unavailable')('ctx', () =>
           Effect.sync(() => {
             const failing = Atom.make(Effect.fail<'unavailable'>('unavailable'))
             function Widget() {
@@ -306,27 +323,31 @@ Feature('Reading and changing shared values from on-screen widgets')
             )
             return {}
           })),
-        When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the failure is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
-          })
-        ),
+        When('Ada looks at the page where her data should be')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
+            }),
+            true,
+          )),
+        Then('Ada sees the failure on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
 
     scenario(
-      'A reloaded page keeps showing its current value until the saved one is safely committed',
+      'A reloaded page commits the saved value once it is safe',
       Gherkin.Do.pipe(
-        Given('a page already showing a value, receiving a saved page with a newer value for it')(
+        Given('Ada reopens a page showing 18 with a saved page holding 23 for the same value')(
           'ctx',
           () =>
             Effect.sync(() => {
               const temperature = Atom.make(18).pipe(
                 Atom.serializable({ key: 'temperature', schema: Schema.Finite }),
               )
-              const registry = AtomRegistry.make()
-              registry.set(temperature, 18)
+              const page = AtomRegistry.make()
+              page.set(temperature, 18)
               const savedPage = AtomRegistry.make()
               savedPage.set(temperature, 23)
               const saved = Hydration.dehydrate(savedPage)
@@ -337,7 +358,7 @@ Feature('Reading and changing shared values from on-screen widgets')
               render(
                 React.createElement(
                   RegistryContext.Provider,
-                  { value: registry },
+                  { value: page },
                   React.createElement(
                     HydrationBoundary,
                     { state: saved },
@@ -348,23 +369,28 @@ Feature('Reading and changing shared values from on-screen widgets')
               return {}
             }),
         ),
-        When('the page settles after the saved data is committed')('settled', () =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
-          })),
-        Then('the newer saved value is what ends up on screen')(() => Effect.succeed(true)),
+        When('Ada looks at the reloaded temperature')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
+            }),
+            true,
+          )),
+        Then('Ada sees the saved 23 on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
 
     scenario(
-      'A data source nobody is using anymore is put away',
+      'A page data source nobody is using anymore is put away',
       Gherkin.Do.pipe(
-        Given('a page whose data source is shared only while shown')('ctx', () =>
+        Given('Ada opens a page whose data source is shared only while she watches')('ctx', () =>
           Effect.sync(() => {
             vi.useFakeTimers()
-            let registry: AtomRegistry.Registry = AtomRegistry.make()
+            let page: AtomRegistry.Registry = AtomRegistry.make()
             function Probe() {
-              registry = React.useContext(RegistryContext)
+              page = React.useContext(RegistryContext)
               return null
             }
             const { unmount } = render(
@@ -374,32 +400,32 @@ Feature('Reading and changing shared values from on-screen widgets')
                 React.createElement(Probe),
               ),
             )
-            return { unmount, registry: () => registry }
+            return { unmount, page: () => page }
           })),
-        When('the page disappears and enough time passes')('done', (s) =>
+        When('Ada leaves the page and enough time passes')('left', (s) =>
           Effect.sync(() => {
             s.ctx.unmount()
             vi.advanceTimersByTime(1000)
             vi.useRealTimers()
           })),
         Then('the data source no longer answers')((s) => {
-          expect(() => s.ctx.registry().get(Atom.make(1))).toThrow('registry is disposed')
+          expect(() => s.ctx.page().get(Atom.make(1))).toThrow('registry is disposed')
         }),
       ),
     )
 
     scenario(
-      'A screen put right back after a blink keeps the value it showed',
+      'A page whose data source never went away keeps showing its value',
       Gherkin.Do.pipe(
-        Given('a page showing a value was taken down and put right back inside the blink of an eye')(
+        Given('Ada opens a page showing her saved number')(
           'ctx',
           () =>
             Effect.sync(() => {
               vi.useFakeTimers()
-              const savedValue = Atom.make(41)
-              let registry: AtomRegistry.Registry = AtomRegistry.make()
+              const savedNumber = Atom.make(41)
+              let page: AtomRegistry.Registry = AtomRegistry.make()
               function Probe() {
-                registry = React.useContext(RegistryContext)
+                page = React.useContext(RegistryContext)
                 return null
               }
               render(
@@ -413,17 +439,17 @@ Feature('Reading and changing shared values from on-screen widgets')
                   ),
                 ),
               )
-              registry.set(savedValue, 41)
-              return { readSavedValue: () => registry.get(savedValue) }
+              page.set(savedNumber, 41)
+              return { readSavedNumber: () => page.get(savedNumber) }
             }),
         ),
-        When('plenty of time passes with the page still up')('done', () =>
+        When('Ada keeps the page up while plenty of time passes')('kept', () =>
           Effect.sync(() => {
             vi.advanceTimersByTime(1000)
             vi.useRealTimers()
           })),
-        Then('the page still shows the same value, from a data source that never went away')((s) => {
-          expect(s.ctx.readSavedValue()).toBe(41)
+        Then('Ada still reads her saved 41 from a data source that never went away')((s) => {
+          expect(s.ctx.readSavedNumber()).toBe(41)
         }),
       ),
     )

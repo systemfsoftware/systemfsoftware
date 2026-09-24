@@ -2,24 +2,23 @@ import { RegistryContext, useAtomSuspense } from '@systemfsoftware/effect-atom-r
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { expect, vi } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
-Feature('Keeping two on-screen widgets showing values from separate data sources independent of each other')
-  .withLayer(Layer.empty)
+Feature('Keeping two widgets on separate data sources independent of each other')
+  .live('renders real components in Chromium and advances the browser timer queue')
   .body(({ scenario }) => {
     scenario(
-      "A widget still loading is not affected when a different widget's cleanup timer runs",
+      'A widget still loading keeps waiting while the other widget is put away',
       Gherkin.Do.pipe(
         Given(
-          'two independent widgets, each backed by a value that never finishes loading, with a short cleanup timer',
+          'Ada opens two widgets on their own data sources, each showing a value that never finishes loading',
         )(
           'ctx',
           () =>
@@ -31,8 +30,8 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
               return { atom, first, second }
             }),
         ),
-        When('both widgets are shown, and time passes long enough for cleanup to run')(
-          'state',
+        When('Ada shows both widgets and lets enough time pass for cleanup to run')(
+          'shown',
           (s) =>
             Effect.sync(() => {
               function Comp({ id }: { readonly id: string }) {
@@ -76,8 +75,8 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
               return { firstLoading, secondLoading }
             }),
         ),
-        Then('the widgets do not both flip to the same state together')((s) => {
-          expect(s.state.firstLoading || s.state.secondLoading).toBe(true)
+        Then('Ada still sees at least one widget waiting, never both flipped to the same state')((s) => {
+          expect(s.shown.firstLoading || s.shown.secondLoading).toBe(true)
         }),
       ),
     )

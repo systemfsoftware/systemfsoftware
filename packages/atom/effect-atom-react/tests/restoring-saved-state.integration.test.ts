@@ -1,25 +1,24 @@
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Restoring saved page state')
-  .withLayer(Layer.empty)
+  .live('renders real components in Chromium and waits on browser timers')
   .body(({ scenario }) => {
     scenario(
-      'A page that receives a saved value for a fresh atom shows it immediately',
+      'A page that receives a saved value for a fresh value shows it immediately',
       Gherkin.Do.pipe(
-        Given('a page that will receive saved state for an atom it has not loaded yet')('ctx', () =>
+        Given('Ada reopens a page saved earlier with her preferred temperature')('ctx', () =>
           Effect.sync(() => {
             const temperature = Atom.make(18).pipe(
               Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
@@ -40,25 +39,29 @@ Feature('Restoring saved page state')
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the saved value is already on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
-          })
-        ),
+        When('Ada looks at the restored temperature')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
+            }),
+            true,
+          )),
+        Then('Ada sees her saved temperature on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
 
     scenario(
-      'A hydration boundary without saved state leaves the page values alone',
+      'A page without saved state keeps showing what it already had',
       Gherkin.Do.pipe(
-        Given('a page whose value is set before it renders, wrapped in a boundary without saved state')(
+        Given('Ada adjusts her room temperature before the page renders')(
           'ctx',
           () =>
             Effect.sync(() => {
               const room = Atom.make(4)
-              const registry = AtomRegistry.make()
-              registry.set(room, 4)
+              const page = AtomRegistry.make()
+              page.set(room, 4)
               function Page() {
                 const value = useAtomValue(room)
                 return React.createElement('div', { 'data-testid': 'plain-room' }, value)
@@ -66,19 +69,23 @@ Feature('Restoring saved page state')
               render(
                 React.createElement(
                   RegistryContext.Provider,
-                  { value: registry },
+                  { value: page },
                   React.createElement(HydrationBoundary, null, React.createElement(Page)),
                 ),
               )
               return {}
             }),
         ),
-        When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the value that was set is still on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
-          })
-        ),
+        When('Ada looks at the room temperature')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
+            }),
+            true,
+          )),
+        Then('Ada still sees the temperature she set')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
   })

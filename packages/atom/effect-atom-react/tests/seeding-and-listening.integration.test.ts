@@ -1,6 +1,6 @@
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import {
@@ -10,19 +10,18 @@ import {
   useAtomValue,
 } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Seeding and listening to shared values')
-  .withLayer(Layer.empty)
+  .live('renders real components in Chromium and waits on browser timers')
   .body(({ scenario }) => {
     scenario(
       'A page that seeds the same value twice keeps only the first seed',
       Gherkin.Do.pipe(
-        Given('a page that seeds a value twice before reading it')('ctx', () =>
+        Given('Mara opens a page that seeds her balance twice before it renders')('ctx', () =>
           Effect.sync(() => {
             const balance = Atom.make(0)
             function Page() {
@@ -40,40 +39,43 @@ Feature('Seeding and listening to shared values')
             )
             return {}
           })),
-        When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('only the first seed is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
-          })
-        ),
+        When('Mara looks at the seeded balance')('shown', () =>
+          Effect.as(
+            Effect.promise(function() {
+              return expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
+            }),
+            true,
+          )),
+        Then('Mara sees the first seed on screen')((s) => {
+          expect(s.shown).toBe(true)
+        }),
       ),
     )
-
     scenario(
-      'A listener attached without the immediate flag hears only later changes',
+      'A listener who skips the starting value hears only what changes',
       Gherkin.Do.pipe(
-        Given('a listener watching a value without asking for the current value')('ctx', () =>
+        Given('Bo listens to a shared volume without asking for its starting value')('ctx', () =>
           Effect.sync(() => {
             const volume = Atom.make(3)
             const heard: number[] = []
-            const registry = AtomRegistry.make()
+            const page = AtomRegistry.make()
             function Listener() {
               useAtomSubscribe(volume, (v) => heard.push(v))
               return null
             }
             render(
-              React.createElement(RegistryContext.Provider, { value: registry }, React.createElement(Listener)),
+              React.createElement(RegistryContext.Provider, { value: page }, React.createElement(Listener)),
             )
-            return { volume, heard, registry }
+            return { volume, heard, page }
           })),
-        When('the value changes once')('heard', (s) =>
+        When('Ada turns the volume up to 5')('heard', (s) =>
           Effect.sync(() => {
             act(() => {
-              s.ctx.registry.set(s.ctx.volume, 5)
+              s.ctx.page.set(s.ctx.volume, 5)
             })
             return s.ctx.heard
           })),
-        Then('the listener heard only the change, not the starting value')((s) => {
+        Then('Bo heard only the new volume, not the starting one')((s) => {
           expect(s.heard).toEqual([5])
         }),
       ),

@@ -1,28 +1,27 @@
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { RegistryContext, useAtomRefresh, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { expect } from 'vitest'
 import { Unavailable } from './__fixtures__/Unavailable.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Waiting for asynchronous values')
-  .withLayer(Layer.empty)
+  .live('renders real components in Chromium and waits on React commits in the browser')
   .body(({ scenario }) => {
     scenario(
       'A reader who waits through loading sees the value once it arrives',
       Gherkin.Do.pipe(
-        Given('a value that arrives once it is delivered and a widget that waits through loading')(
+        Given('Ada opens a widget that waits for a delivery before showing its number')(
           'ctx',
           () =>
             Effect.sync(() => {
@@ -46,30 +45,26 @@ Feature('Waiting for asynchronous values')
               return { source }
             }),
         ),
-        When('the value is delivered to the widget')(
-          'settled',
+        When('the delivery with 5 reaches the widget and Ada looks at it')(
+          'shown',
           (s) =>
             Effect.promise(() => {
               const next = act(() => Effect.runPromise(Deferred.succeed(s.ctx.source, 5)))
-              return Promise.resolve(next)
+              return Promise.resolve(next).then(function readLoaded() {
+                return screen.findByTestId('loaded-value')
+              })
             }),
         ),
-        Then('the loaded value is on screen')(() =>
-          Effect.promise(() => screen.findByTestId('loaded-value')).pipe(
-            Effect.tap((el) =>
-              Effect.sync(() => {
-                expect(el).toHaveTextContent('5')
-              })
-            ),
-          )
-        ),
+        Then('Ada sees the delivered 5 on screen')((s) => {
+          expect(s.shown).toHaveTextContent('5')
+        }),
       ),
     )
 
     scenario(
       'A reader who waits through a refresh sees the refreshed value',
       Gherkin.Do.pipe(
-        Given('a value that reloads on demand and a widget that waits through loading')('ctx', () =>
+        Given('Ada opens a widget that reloads its number on demand')('ctx', () =>
           Effect.sync(() => {
             const pending: Deferred.Deferred<number>[] = []
             const loaded = Atom.make(
@@ -100,8 +95,8 @@ Feature('Waiting for asynchronous values')
             )
             return { pending, refresh: () => refresh }
           })),
-        When('the first value arrives, the reader asks for a refresh, and the newer value arrives')(
-          'settled',
+        When('the first number arrives, Ada asks for a refresh, and the newer number arrives')(
+          'shown',
           (s) =>
             Effect.promise(() => {
               const [firstPending] = s.ctx.pending
@@ -127,53 +122,56 @@ Feature('Waiting for asynchronous values')
                   }
                   return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(secondPending, 2))))
                 })
+                .then(function readShown() {
+                  return screen.getByTestId('refreshed-value').textContent
+                })
             }),
         ),
-        Then('the widget shows the refreshed value')(() =>
-          Effect.promise(function showRefreshed() {
-            return expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('2')
-          })
-        ),
+        Then('Ada sees the refreshed 2 on screen')((s) => {
+          expect(s.shown).toBe('2')
+        }),
       ),
     )
 
     scenario(
-      'A reader who does not accept failures sees the error message instead of the widget',
+      'A reader whose data source is unavailable sees the error message instead of the widget',
       Gherkin.Do.pipe(
-        Given('a widget backed by a value that fails, wrapped in an error boundary')('ctx', () =>
-          Effect.sync(() => {
-            const failing = Atom.make(Unavailable.make({}).pipe(Effect.fail))
-            function Widget() {
-              useAtomSuspense(failing)
-              return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
-            }
-            render(
-              React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+        Given('Ada opens a widget whose delivery failed, wrapped to show errors kindly')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const failing = Atom.make(Unavailable.make({}).pipe(Effect.fail))
+              function Widget() {
+                useAtomSuspense(failing)
+                return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
+              }
+              render(
                 React.createElement(
-                  ErrorBoundary,
-                  { fallback: React.createElement('div', { 'data-testid': 'failure-message' }, 'failed to load') },
+                  RegistryContext.Provider,
+                  { value: AtomRegistry.make() },
                   React.createElement(
-                    Suspense,
-                    { fallback: React.createElement('div', { 'data-testid': 'waiting' }, 'loading') },
-                    React.createElement(Widget),
+                    ErrorBoundary,
+                    { fallback: React.createElement('div', { 'data-testid': 'failure-message' }, 'failed to load') },
+                    React.createElement(
+                      Suspense,
+                      { fallback: React.createElement('div', { 'data-testid': 'waiting' }, 'loading') },
+                      React.createElement(Widget),
+                    ),
                   ),
                 ),
-              ),
-            )
-            return {}
-          })),
-        When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the error boundary shows the failure message and the widget is not rendered')(() =>
+              )
+              return {}
+            }),
+        ),
+        When('Ada looks at the page and checks for the missing widget')('seen', () =>
           Effect.promise(function() {
             return expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load').then(
-              () => {
-                expect(screen.queryByTestId('unexpected-widget')).toBeNull()
-              },
+              () => screen.queryByTestId('unexpected-widget'),
             )
-          })
-        ),
+          })),
+        Then('Ada sees the failure message and not the widget')((s) => {
+          expect(s.seen).toBeNull()
+        }),
       ),
     )
   })
