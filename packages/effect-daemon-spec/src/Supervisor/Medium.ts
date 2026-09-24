@@ -1,6 +1,18 @@
 import { Context, Effect } from 'effect'
 import type { ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+export { BrutalShutdown, GracefulShutdown, InfinityShutdown, ShutdownMode } from '../kernel/SupervisorPolicy.schema.js'
+export {
+  AbnormalTermination,
+  CauseReport,
+  DeadlineMissedReport,
+  ExitReport,
+  FailureReport,
+  InferredReport,
+  NormalTermination,
+  ShutdownTermination,
+  TerminationReason,
+} from '../kernel/TerminationReport.schema.js'
 export { GroupStopGuarantee, MediumDeclaration, MediumReporting } from './MediumDeclaration.schema.js'
 import type { MediumDeclaration } from './MediumDeclaration.schema.js'
 
