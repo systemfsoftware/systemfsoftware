@@ -18,8 +18,8 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 const PLATFORM_PORTS = [
   'packages/atom/effect-atom/src/internal/HostTimer.ts',
   'packages/effect-schema-law/src/recursion-laws.ts',
-  // W3C trace/span IDs must stay globally unique across processes — trace-spec reads traces back from a shared remote store, so they cannot come from a seeded kernel Random.
-  'packages/trace-spec/src/Stimulus.ts',
+  // Per-case salt for globally unique W3C trace IDs (traces are read back from a shared remote store); drawn outside the kernel run.
+  'packages/trace-spec/src/Suite.ts',
 ]
 
 const recommendedRules: NonNullable<OxlintConfig['rules']> = {
