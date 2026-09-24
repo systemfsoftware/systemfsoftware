@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
@@ -5,7 +6,6 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Metric from 'effect/Metric'
-import { expect } from 'vitest'
 
 import { admitDecodedCommand, Admitted, Malformed, Rejected } from './__fixtures__/admit-decoded-command.workflow.js'
 
@@ -30,6 +30,8 @@ const LedgerRecording = Layer.sync(Ledger, () => {
       }),
   }
 })
+
+const FreshMetricRegistry = Layer.sync(Metric.MetricRegistry, () => new Map())
 
 type AdmittedEncoded = (typeof Admitted)['Encoded']
 type RejectedEncoded = (typeof Rejected)['Encoded']
@@ -82,7 +84,7 @@ const refusalSnapshotsOf = (door: string) =>
   )
 
 Feature('Admitting submissions at the door')
-  .withScenarioLayer(LedgerRecording)
+  .withScenarioLayer(Layer.merge(LedgerRecording, FreshMetricRegistry))
   .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A well-formed submission of good length is admitted and recorded',
@@ -132,14 +134,16 @@ Feature('Admitting submissions at the door')
           () => Effect.exit(damagedMeasurementCell.run({ id: 'abcd' })),
         ),
         Then('the door turns the submission away and records why')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
           expect(s.outcome).toStrictEqual(Exit.succeed('turned away'))
         }),
         And('the turned-away submission is on record')(() =>
           Effect.flatMap(Ledger, (ledger) =>
             Effect.map(ledger.lines, (lines) => {
               expect(lines.length).toBe(1)
-              expect(lines[0]?.startsWith('turned away:')).toBe(true)
+              expect(lines[0]).toSatisfy((line: string | undefined) =>
+                line !== undefined && line.startsWith('turned away:')
+              )
             }))
         ),
         And('the run itself is recorded as a refusal, not as a broken run')(() =>

@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 import { answering, CountingModel, withProvider } from './__fixtures__/counting-model.fixture.js'
 import { Request } from './__fixtures__/request.schema.js'
 import { matchedRouteOf, routingTo, uncertainRouteOf } from './__fixtures__/routing-model.fixture.js'

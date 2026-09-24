@@ -1,3 +1,4 @@
+import { recordAssertion } from '@effect/vitest'
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { dual } from 'effect/Function'
@@ -221,7 +222,10 @@ const tapThen =
       (scope): Effect.Effect<GherkinScope<Omit<A, typeof StageTypeId> & ThenStage>, StepError, R2> => {
         const resolvedText = resolveText(text, scope)
         const nextScope = { ...scope, ...stageThen }
-        return runTapBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
+        return runTapBody(f, scope, keyword, resolvedText).pipe(
+          Effect.tap(() => Effect.sync(recordAssertion)),
+          Effect.as(nextScope),
+        )
       },
     )
 const handleRawTap = <E2, R2, Out = unknown>(
@@ -264,7 +268,10 @@ const tapSoft =
       (scope): Effect.Effect<GherkinScope<Omit<A, typeof StageTypeId> & ThenStage>, StepError, R2> => {
         const resolvedText = resolveText(text, scope)
         const nextScope = { ...scope, ...stageThen }
-        return runSoftBody(f, scope, keyword, resolvedText).pipe(Effect.as(nextScope))
+        return runSoftBody(f, scope, keyword, resolvedText).pipe(
+          Effect.tap(() => Effect.sync(recordAssertion)),
+          Effect.as(nextScope),
+        )
       },
     )
 const evaluatePollRaw = <E2, R2, Out = unknown>(

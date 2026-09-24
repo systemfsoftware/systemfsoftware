@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import {
   And,
   checkSoftFailures,
@@ -14,7 +15,6 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer, Ref, Result } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 

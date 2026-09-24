@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Error from 'effect/PlatformError'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -114,8 +114,8 @@ Feature('Handing back scratch space when the work using it is over')
             )),
           Then('the scratch space is of the kind asked for, in the place asked for')((s) => {
             expect(s.borrowed.info.type).toBe(row.found)
-            expect(s.borrowed.path.startsWith(row.startsWith)).toBe(true)
-            expect(s.borrowed.path.endsWith(row.endsWith)).toBe(true)
+            expect(s.borrowed.path).toSatisfy((path: string) => path.startsWith(row.startsWith))
+            expect(s.borrowed.path).toSatisfy((path: string) => path.endsWith(row.endsWith))
           }),
         ),
     )

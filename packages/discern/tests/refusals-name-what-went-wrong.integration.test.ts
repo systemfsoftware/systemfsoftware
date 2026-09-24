@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result, Schema } from 'effect'
 import { Layer } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
@@ -21,7 +21,7 @@ Feature('Recognizing a well-formed refusal')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.UncertainMatchError)(s.payload)),
         ),
         Then('the unnamed case is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -38,7 +38,7 @@ Feature('Recognizing a well-formed refusal')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionIdCollisionError)(s.payload)),
         ),
         Then('the unnamed id is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -58,7 +58,7 @@ Feature('Recognizing a well-formed refusal')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.InvalidThresholdError)(s.payload)),
         ),
         Then('the unnamed limit is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -79,7 +79,7 @@ Feature('Recognizing a well-formed refusal')
           (s) => Effect.succeed(Schema.decodeResult(Discern.InvalidThresholdError)(s.payload)),
         ),
         Then('the non-finite value is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )

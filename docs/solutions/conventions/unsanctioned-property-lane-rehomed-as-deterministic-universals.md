@@ -65,10 +65,14 @@ Place Cell arrow-law coverage in `tests/*.integration.test.ts` as deterministic-
 // src/__tests__/cell-arrows.property.test.ts — never sanctioned
 import { it } from '@effect/vitest'
 
-it.prop('id is both-sided identity', [commandArbitrary], ([cmd]) =>
-  // Effect.runSync(Cell.id().run(cmd)) deep-equals cmd; andThen(id, cell)
-  // and andThen(cell, id) agree with cell
-  true)
+it.prop(
+  'id is both-sided identity',
+  { of: [commandArbitrary], subject: Cell.id<Command>().run, runs: 100 },
+  (subject, [cmd]) =>
+    // Effect.runSync(subject(cmd)) deep-equals cmd; andThen(id, cell)
+    // and andThen(cell, id) agree with cell
+    true,
+)
 ```
 
 **After (shipped)** — the deterministic-universal scenario, titled "Generated commands keep the identity as both-sided identity":

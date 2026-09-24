@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { dynamic } from '@systemfsoftware/effect-daemon-spec'
 import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
@@ -5,7 +6,6 @@ import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Option, Ref, Result, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { BufferedRef } from './__fixtures__/TestUtils.js'
 
@@ -93,7 +93,7 @@ Feature('Stream Worker Lifecycle')
           )),
         Then('the child ref.removed latch opens after the tick timeout')((s) =>
           Effect.sync(() => {
-            expect(s.result.removed).toBe(true)
+            expect(s.result.removed).toEqual(true)
           })
         ),
       ),
@@ -130,7 +130,7 @@ Feature('Stream Worker Lifecycle')
           )),
         Then('worker is still running after timeout')((s) =>
           Effect.sync(() => {
-            expect(s.result.stillRunning).toBe(true)
+            expect(s.result.stillRunning).toEqual(true)
           })
         ),
       ),
@@ -165,7 +165,7 @@ Feature('Stream Worker Lifecycle')
             Effect.flatMap((rooted) =>
               Effect.sync(() => {
                 expect(rooted.length).toBeGreaterThan(0)
-                expect(rooted.every((value) => value === true)).toBe(true)
+                expect(rooted).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === true))
               })
             ),
           )

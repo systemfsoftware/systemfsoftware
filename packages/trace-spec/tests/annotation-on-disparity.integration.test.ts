@@ -1,7 +1,7 @@
 import { NodeFileSystem } from '@effect/platform-node'
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FileSystem, Layer } from 'effect'
-import { expect } from 'vitest'
 import { startVitest } from 'vitest/node'
 import type { Reporter, RunnerTestFile } from 'vitest/node'
 
@@ -112,7 +112,10 @@ Feature('Reporting where a broken trace spec leaves its evidence')
           () => runVitestOn('annotation-failure.fixture.ts'),
         ),
         Then('the failing case carries an annotation naming the written trace')((s) => {
-          expect(s.outcome.annotations.some((message) => message.includes('artifacts/traces/'))).toBe(true)
+          expect(s.outcome.annotations).toSatisfy(
+            (annotations: ReadonlyArray<string>) =>
+              annotations.some((message) => message.includes('artifacts/traces/')),
+          )
         }),
         And('the failing case failed on the disparity itself')((s) => {
           expect(s.outcome.failedTests).toBe(1)
@@ -159,7 +162,9 @@ Feature('Reporting where a broken trace spec leaves its evidence')
         }),
         And('the unfinished trace is reported as unfinished, and neither is blamed on the behaviour')((s) => {
           expect(s.outcome.errorNames.filter((name) => name.includes('IncompleteObservationError'))).toHaveLength(1)
-          expect(s.outcome.errorNames.some((name) => name.includes('StimulusFailure'))).toBe(false)
+          expect(s.outcome.errorNames).not.toSatisfy(
+            (names: ReadonlyArray<string>) => names.some((name) => name.includes('StimulusFailure')),
+          )
         }),
       ),
     )

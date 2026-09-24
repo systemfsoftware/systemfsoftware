@@ -1,22 +1,18 @@
 import { it } from '@effect/vitest'
-import { Match, Option } from 'effect'
+import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { Condition } from '../Condition.schema.js'
+import type { Condition } from '../Condition.schema.js'
+import { PortNumber } from '../Port.schema.js'
 import { ProbeTarget } from '../ProbeTarget.schema.js'
 import { type ProbePlan, ResolveProbe, resolveProbe } from '../resolve-probe.workflow.js'
 
-const planOf = (target: ProbeTarget, condition: Condition): ProbePlan =>
-  Result.getOrThrow(resolveProbe(new ResolveProbe({ target, condition })))
+const planOf = (resolve: typeof resolveProbe, target: ProbeTarget, condition: Condition): ProbePlan =>
+  Result.getOrThrow(resolve(new ResolveProbe({ target, condition })))
 
-const guestPortOf = (condition: Condition): Option.Option<number> =>
-  Match.value(condition).pipe(
-    Match.tag('Tcp', (tcp) => Option.some(tcp.guestPort)),
-    Match.tag('Http', (http) => Option.some(http.guestPort)),
-    Match.tag('Log', () => Option.none<number>()),
-    Match.exhaustive,
-  )
+const isBound = (target: ProbeTarget, guestPort: number): boolean =>
+  target.bindings.some((binding) => binding.guest === guestPort)
 
-const boundPlanLaw = (plan: ProbePlan, guestPort: number, bound: boolean): boolean =>
+const portPlanLaw = (plan: ProbePlan, guestPort: number, bound: boolean): boolean =>
   Match.value(plan).pipe(
     Match.tag('ProbeAbsent', (absent) => !bound && absent.guestPort === guestPort),
     Match.tag('ProbeTcp', (tcp) => bound && tcp.binding.guest === guestPort),
@@ -25,36 +21,32 @@ const boundPlanLaw = (plan: ProbePlan, guestPort: number, bound: boolean): boole
   )
 
 it.prop(
-  '∀t_ConditionLookup_≡Binding',
-  [ProbeTarget, Condition],
-  ([target, condition]) =>
-    Option.match(guestPortOf(condition), {
-      onNone: () => true,
-      onSome: (guestPort) =>
-        boundPlanLaw(
-          planOf(target, condition),
-          guestPort,
-          target.bindings.some((binding) => binding.guest === guestPort),
-        ),
-    }),
+  '∀t_TcpCondition_≡Binding',
+  { of: [ProbeTarget, PortNumber], subject: resolveProbe, runs: 100 },
+  (resolve, [target, guestPort]) =>
+    portPlanLaw(planOf(resolve, target, { _tag: 'Tcp', guestPort }), guestPort, isBound(target, guestPort)),
 )
 
-it.prop('∀t_LogCondition_=ProbeLog', [ProbeTarget, Condition], ([target, condition]) =>
-  Match.value(condition).pipe(
-    Match.tag('Log', (log) =>
-      Match.value(planOf(target, log)).pipe(
-        Match.tag('ProbeLog', (plan) => plan.pattern === log.pattern),
-        Match.orElse(() => false),
-      )),
-    Match.orElse(() => true),
-  ))
+it.prop(
+  '∀t_HttpCondition_≡Path',
+  { of: [ProbeTarget, PortNumber, Schema.String], subject: resolveProbe, runs: 100 },
+  (resolve, [target, guestPort, path]) =>
+    Match.value(planOf(resolve, target, { _tag: 'Http', guestPort, path })).pipe(
+      Match.tag('ProbeAbsent', (absent) => !isBound(target, guestPort) && absent.guestPort === guestPort),
+      Match.tag(
+        'ProbeHttp',
+        (plan) => isBound(target, guestPort) && plan.binding.guest === guestPort && plan.path === path,
+      ),
+      Match.orElse(() => false),
+    ),
+)
 
-it.prop('∀t_HttpCondition_≡Path', [ProbeTarget, Condition], ([target, condition]) =>
-  Match.value(condition).pipe(
-    Match.tag('Http', (http) =>
-      Match.value(planOf(target, http)).pipe(
-        Match.tag('ProbeHttp', (plan) => plan.path === http.path),
-        Match.orElse(() => true),
-      )),
-    Match.orElse(() => true),
-  ))
+it.prop(
+  '∀t_LogCondition_=ProbeLog',
+  { of: [ProbeTarget, Schema.String], subject: resolveProbe, runs: 100 },
+  (resolve, [target, pattern]) =>
+    Match.value(planOf(resolve, target, { _tag: 'Log', pattern })).pipe(
+      Match.tag('ProbeLog', (plan) => plan.pattern === pattern),
+      Match.orElse(() => false),
+    ),
+)

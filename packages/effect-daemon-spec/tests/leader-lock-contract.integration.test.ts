@@ -1,10 +1,10 @@
+import { expect } from '@effect/vitest'
 import { LeaderLockFromPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Fiber, Layer, Option, Result } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { mkStatefulLockPrimitive } from './__fixtures__/LockPrimitiveFakes.js'
 
 const Feature = makeFeature({ it, layer })

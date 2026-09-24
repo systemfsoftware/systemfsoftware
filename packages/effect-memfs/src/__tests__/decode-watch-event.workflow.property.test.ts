@@ -1,77 +1,66 @@
 import { it } from '@effect/vitest'
-import { Schema } from 'effect'
+import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import {
   decodeWatchEvent,
   DriverWatchEvent,
   DriverWatchEventType,
   WatchCreate,
+  type WatchEventDecision,
   WatchRemove,
   WatchUpdate,
 } from '../decode-watch-event.workflow.js'
 
-const decodedTagOf = (
-  eventType: 'rename' | 'change',
-  filename: string,
-  exists: boolean,
-): string => {
-  const decision = Result.getOrThrow(
-    decodeWatchEvent(new DriverWatchEvent({ eventType, filename, exists })),
-  )
-  return decision._tag
-}
+const decide = (eventType: 'rename' | 'change', filename: string, exists: boolean) =>
+  decodeWatchEvent(new DriverWatchEvent({ eventType, filename, exists }))
 
-const decodedPathOf = (
-  eventType: 'rename' | 'change',
-  filename: string,
-  exists: boolean,
-): string => {
-  const decision = Result.getOrThrow(
-    decodeWatchEvent(new DriverWatchEvent({ eventType, filename, exists })),
+const tagOf = (decision: WatchEventDecision): string =>
+  Match.value(decision).pipe(
+    Match.tag('WatchCreate', () => 'WatchCreate'),
+    Match.tag('WatchUpdate', () => 'WatchUpdate'),
+    Match.tag('WatchRemove', () => 'WatchRemove'),
+    Match.exhaustive,
   )
-  return decision.path
-}
 
 const expectedTagOf = (eventType: 'rename' | 'change', exists: boolean): string =>
   eventType === 'change' ? 'WatchUpdate' : exists ? 'WatchCreate' : 'WatchRemove'
 
 it.prop(
   '∀e_WatchEvent_≡TableDispatch',
-  [DriverWatchEventType, Schema.String, Schema.Boolean],
-  ([eventType, filename, exists]) =>
-    decodedTagOf(eventType, filename, exists) === expectedTagOf(eventType, exists) &&
-    decodedPathOf(eventType, filename, exists) === filename,
+  { of: [DriverWatchEventType, Schema.String, Schema.Boolean], subject: decide, runs: 100 },
+  (subject, [eventType, filename, exists]) => {
+    const decision = subject(eventType, filename, exists).pipe(Result.getOrThrow)
+    return tagOf(decision) === expectedTagOf(eventType, exists) && decision.path === filename
+  },
 )
 
 it.prop(
   '∀e_WatchCreate_≡RenameExisting',
-  [Schema.String],
-  ([filename]) => {
-    const decision = Result.getOrThrow(
-      decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename, exists: true })),
-    )
+  { of: [Schema.String], subject: (filename: string) => decide('rename', filename, true), runs: 100 },
+  (subject, [filename]) => {
+    const decision = subject(filename).pipe(Result.getOrThrow)
     return Schema.is(WatchCreate)(decision) && decision.path === filename
   },
 )
 
 it.prop(
   '∀e_WatchRemove_≡RenameNonExisting',
-  [Schema.String],
-  ([filename]) => {
-    const decision = Result.getOrThrow(
-      decodeWatchEvent(new DriverWatchEvent({ eventType: 'rename', filename, exists: false })),
-    )
+  { of: [Schema.String], subject: (filename: string) => decide('rename', filename, false), runs: 100 },
+  (subject, [filename]) => {
+    const decision = subject(filename).pipe(Result.getOrThrow)
     return Schema.is(WatchRemove)(decision) && decision.path === filename
   },
 )
 
 it.prop(
   '∀e_WatchUpdate_≡ChangeAnyState',
-  [Schema.String, Schema.Boolean],
-  ([filename, exists]) => {
-    const decision = Result.getOrThrow(
-      decodeWatchEvent(new DriverWatchEvent({ eventType: 'change', filename, exists })),
-    )
+  {
+    of: [Schema.String, Schema.Boolean],
+    subject: (filename: string, exists: boolean) => decide('change', filename, exists),
+    runs: 100,
+  },
+  (subject, [filename, exists]) => {
+    const decision = subject(filename, exists).pipe(Result.getOrThrow)
     return Schema.is(WatchUpdate)(decision) && decision.path === filename
   },
 )

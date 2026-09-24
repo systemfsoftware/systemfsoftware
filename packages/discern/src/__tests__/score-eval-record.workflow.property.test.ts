@@ -4,8 +4,10 @@ import * as Result from 'effect/Result'
 import { type EvalScore, ScoreEvalRecord, scoreEvalRecord } from '../score-eval-record.workflow.js'
 import { PatternStatus } from '../Verdict.schema.js'
 
-const cellOf = (expected: boolean, status: PatternStatus): EvalScore =>
-  Result.match(scoreEvalRecord(new ScoreEvalRecord({ expected, status })), {
+type Score = typeof scoreEvalRecord
+
+const cellOf = (score: Score, expected: boolean, status: PatternStatus): EvalScore =>
+  Result.match(score(new ScoreEvalRecord({ expected, status })), {
     onFailure: (missing: never) => missing,
     onSuccess: (cell) => cell,
   })
@@ -23,27 +25,27 @@ const cellNameOf = (decision: EvalScore): string =>
 // Kills a scorer that rewards a miss or punishes a correct positive prediction.
 it.prop(
   '∀e_Match_=TpOrFp',
-  [Schema.Boolean],
-  ([expected]) => cellNameOf(cellOf(expected, 'Match')) === (expected ? 'tp' : 'fp'),
+  { of: [Schema.Boolean], subject: scoreEvalRecord, runs: 100 },
+  (subject, [expected]) => cellNameOf(cellOf(subject, expected, 'Match')) === (expected ? 'tp' : 'fp'),
 )
 
 // Kills a scorer that counts a deserved miss as a true negative.
 it.prop(
   '∀e_Miss_=FnOrTn',
-  [Schema.Boolean],
-  ([expected]) => cellNameOf(cellOf(expected, 'Miss')) === (expected ? 'fn' : 'tn'),
+  { of: [Schema.Boolean], subject: scoreEvalRecord, runs: 100 },
+  (subject, [expected]) => cellNameOf(cellOf(subject, expected, 'Miss')) === (expected ? 'fn' : 'tn'),
 )
 
 // Kills a scorer that scores abstentions into a confusion cell.
 it.prop(
   '∀e_Uncertain_=Abstained',
-  [Schema.Boolean],
-  ([expected]) => cellNameOf(cellOf(expected, 'Uncertain')) === 'abstained',
+  { of: [Schema.Boolean], subject: scoreEvalRecord, runs: 100 },
+  (subject, [expected]) => cellNameOf(cellOf(subject, expected, 'Uncertain')) === 'abstained',
 )
 
 // Kills a scorer that can fail: scoring is total over every expected-status pair.
 it.prop(
   '∀e_Score_=Total',
-  [Schema.Boolean, PatternStatus],
-  ([expected, status]) => Result.isSuccess(scoreEvalRecord(new ScoreEvalRecord({ expected, status }))),
+  { of: [Schema.Boolean, PatternStatus], subject: scoreEvalRecord, runs: 100 },
+  (subject, [expected, status]) => Result.isSuccess(subject(new ScoreEvalRecord({ expected, status }))),
 )

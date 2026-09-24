@@ -552,16 +552,16 @@ if (import.meta.vitest !== void 0) {
   const reportsSoft = (verdict: Verdict, expected: ReadonlyArray<string>): boolean =>
     expected.length === 0 ? isHold(verdict) : namesBreak(verdict, expected)
 
-  const allBehaves = (spec: Spec): Effect.Effect<boolean> =>
-    Effect.map(verdictLike(allFixture(spec), spec), (verdict) => {
+  const allBehaves = (fixtureOf: (spec: Spec) => Relation, spec: Spec): Effect.Effect<boolean> =>
+    Effect.map(verdictLike(fixtureOf(spec), spec), (verdict) => {
       const hard = expectedHardBreaks(spec)
       return hard.length > 0 ? verdict.conjunct === hard[0] : reportsSoft(verdict, expectedSoftBreaks(spec))
     })
 
-  const softeningPreserves = (spec: Spec): Effect.Effect<boolean> =>
+  const softeningPreserves = (soften: (relation: Relation) => Relation, spec: Spec): Effect.Effect<boolean> =>
     Effect.map(
-      Effect.all([verdictLike(soft(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
-      ([softened, plain]) => isHold(softened) === isHold(plain) && soft(exists(Settle)).soft === false,
+      Effect.all([verdictLike(soften(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
+      ([softened, plain]) => isHold(softened) === isHold(plain) && soften(exists(Settle)).soft === false,
     )
 
   const placedShipIds = (spec: Spec): ReadonlySet<string> => {
@@ -588,68 +588,78 @@ if (import.meta.vitest !== void 0) {
     Taxonomy.forbid(Charge, { unless: 'allocate' }),
   )
 
-  const forbidHonoursPath = (spec: Spec): Effect.Effect<boolean> =>
+  const forbidHonoursPath = (offPath: Relation, spec: Spec): Effect.Effect<boolean> =>
     Effect.map(
       Effect.all([
-        holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'hold' }), spec, spec.charges.length === 0),
+        holdsLike(offPath, spec, spec.charges.length === 0),
         holdsLike(fromTaxonomy(ForbidTaxonomy, { path: 'allocate' }), spec, true),
       ]),
-      ([offPath, onPath]) => offPath && onPath,
+      ([absentOffPath, permittedOnPath]) => absentOffPath && permittedOnPath,
     )
 
   it.effect.prop(
     '∀g_Exists_=Nonempty',
-    [GraphSpec],
-    ([spec]) =>
+    { of: [GraphSpec], subject: exists(Settle), runs: 100 },
+    (relation, [spec]) =>
       Effect.map(
-        Effect.all([graphOf(spec), holdsLike(exists(Settle), spec, spec.settles.length > 0)]),
+        Effect.all([graphOf(spec), holdsLike(relation, spec, spec.settles.length > 0)]),
         ([graph, holds]) => byId(graph, Settle).length === spec.settles.length && holds,
       ),
   )
 
   it.effect.prop(
     '∀g_Absent_=¬Nonempty',
-    [GraphSpec],
-    ([spec]) => holdsLike(absent(Settle), spec, spec.settles.length === 0),
+    { of: [GraphSpec], subject: absent(Settle), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, spec.settles.length === 0),
   )
 
   it.effect.prop(
     '∀g_Unique_=Singleton',
-    [GraphSpec],
-    ([spec]) => holdsLike(unique(Settle), spec, spec.settles.length === 1),
+    { of: [GraphSpec], subject: unique(Settle), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, spec.settles.length === 1),
   )
 
   it.effect.prop(
     '∀g_Child_=ParentEdge',
-    [GraphSpec],
-    ([spec]) => holdsLike(child(Settle, Charge), spec, expectedChild(spec)),
+    { of: [GraphSpec], subject: child(Settle, Charge), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, expectedChild(spec)),
   )
 
   it.effect.prop(
     '∀g_Descendant_=AncestorWalk',
-    [GraphSpec],
-    ([spec]) => holdsLike(descendant(Settle, Ship), spec, expectedDescendant(spec)),
+    { of: [GraphSpec], subject: descendant(Settle, Ship), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, expectedDescendant(spec)),
   )
 
-  it.effect.prop('∀g_All_→FirstHardBreak', [GraphSpec], ([spec]) => allBehaves(spec))
+  it.effect.prop(
+    '∀g_All_→FirstHardBreak',
+    { of: [GraphSpec], subject: allFixture, runs: 100 },
+    (fixtureOf, [spec]) => allBehaves(fixtureOf, spec),
+  )
 
-  it.effect.prop('∀g_Soft_=HoldsAlike', [GraphSpec], ([spec]) => softeningPreserves(spec))
+  it.effect.prop(
+    '∀g_Soft_=HoldsAlike',
+    { of: [GraphSpec], subject: soft, runs: 100 },
+    (soften, [spec]) => softeningPreserves(soften, spec),
+  )
 
   it.effect.prop(
     '∀g_Placement_=EveryChildPlaced',
-    [GraphSpec],
-    ([spec]) =>
-      holdsLike(placementOf({ relation: 'child', parent: Settle, child: Charge }), spec, everyChargePlaced(spec)),
+    { of: [GraphSpec], subject: placementOf({ relation: 'child', parent: Settle, child: Charge }), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, everyChargePlaced(spec)),
   )
 
   it.effect.prop(
     '∀g_Placement_=EveryDescendantPlaced',
-    [GraphSpec],
-    ([spec]) =>
-      holdsLike(placementOf({ relation: 'descendant', parent: Settle, child: Ship }), spec, everyShipPlaced(spec)),
+    { of: [GraphSpec], subject: placementOf({ relation: 'descendant', parent: Settle, child: Ship }), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, everyShipPlaced(spec)),
   )
 
-  it.effect.prop('∀g_Forbid_=AbsentOffPath', [GraphSpec], ([spec]) => forbidHonoursPath(spec))
+  it.effect.prop(
+    '∀g_Forbid_=AbsentOffPath',
+    { of: [GraphSpec], subject: fromTaxonomy(ForbidTaxonomy, { path: 'hold' }), runs: 100 },
+    (offPath, [spec]) => forbidHonoursPath(offPath, spec),
+  )
 
   const alwaysHolds = (): boolean => true
 
@@ -663,93 +673,95 @@ if (import.meta.vitest !== void 0) {
     spec.charges.length > 0 &&
     spec.charges.every((charge) => spec.settles.some((settle) => charge.startMillis >= settle.startMillis))
 
+  const boundedCharges = (spec: Spec): Relation =>
+    forall(Charge, (node) => node.durationMillis < spec.bound, 'a charge span exceeded the bound')
+
+  const chargesCarrying = (spec: Spec): Relation => event(Charge, spec.event)
+
   it.effect.prop(
     '∀g_Forall_=EveryNodePredicate',
-    [GraphSpec],
-    ([spec]) =>
-      holdsLike(
-        forall(Charge, (node) => node.durationMillis < spec.bound, 'a charge span exceeded the bound'),
-        spec,
-        expectedForall(spec),
-      ),
+    { of: [GraphSpec], subject: boundedCharges, runs: 100 },
+    (bounded, [spec]) => holdsLike(bounded(spec), spec, expectedForall(spec)),
   )
 
   it.effect.prop(
     '∀g_Forall_→NonVacuous',
-    [GraphSpec],
-    ([spec]) =>
-      Effect.map(
-        graphOf({ ...spec, charges: [] }),
-        (graph) => isBreak(forall(Charge, alwaysHolds, 'unused detail')(graph)),
-      ),
+    { of: [GraphSpec], subject: forall(Charge, alwaysHolds, 'unused detail'), runs: 100 },
+    (relation, [spec]) =>
+      Effect.map(graphOf(spec), (graph) => isBreak(relation(graph)) === (spec.charges.length === 0)),
   )
 
   it.effect.prop(
     '∀g_Event_=EveryNodeCarries',
-    [GraphSpec],
-    ([spec]) => holdsLike(event(Charge, spec.event), spec, expectedEvent(spec)),
+    { of: [GraphSpec], subject: chargesCarrying, runs: 100 },
+    (carries, [spec]) => holdsLike(carries(spec), spec, expectedEvent(spec)),
   )
 
   it.effect.prop(
     '∀g_Order_=AfterSomeBefore',
-    [GraphSpec],
-    ([spec]) => holdsLike(order(Settle, Charge), spec, expectedOrder(spec)),
+    { of: [GraphSpec], subject: order(Settle, Charge), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, expectedOrder(spec)),
   )
 
   it.effect.prop(
     '∀g_Any_=AtLeastOneHolds',
-    [GraphSpec],
-    ([spec]) =>
-      holdsLike(any(exists(Settle), exists(Charge)), spec, spec.settles.length > 0 || spec.charges.length > 0),
+    { of: [GraphSpec], subject: any(exists(Settle), exists(Charge)), runs: 100 },
+    (relation, [spec]) => holdsLike(relation, spec, spec.settles.length > 0 || spec.charges.length > 0),
   )
 
   const anyFixture = (): Relation => any(exists(Settle), unique(Charge))
 
   const anyExpected = (spec: Spec): boolean => spec.settles.length > 0 || spec.charges.length === 1
 
-  const anyBehaves = (spec: Spec): Effect.Effect<boolean> =>
+  const anyBehaves = (fixture: Relation, spec: Spec): Effect.Effect<boolean> =>
     Effect.map(
-      verdictLike(anyFixture(), spec),
+      verdictLike(fixture, spec),
       (verdict) => anyExpected(spec) ? isHold(verdict) : namesBreak(verdict, [exists(Settle).id, unique(Charge).id]),
     )
 
-  it.effect.prop('∀g_Any_→NamesEveryConjunct', [GraphSpec], ([spec]) => anyBehaves(spec))
+  it.effect.prop(
+    '∀g_Any_→NamesEveryConjunct',
+    { of: [GraphSpec], subject: anyFixture(), runs: 100 },
+    (fixture, [spec]) => anyBehaves(fixture, spec),
+  )
 
   it.effect.prop(
     '∀g_Any_=ConjunctAgreement',
-    [GraphSpec],
-    ([spec]) =>
+    { of: [GraphSpec], subject: any(unique(Charge)), runs: 100 },
+    (conjunct, [spec]) =>
       Effect.map(
-        Effect.all([verdictLike(any(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
+        Effect.all([verdictLike(conjunct, spec), verdictLike(unique(Charge), spec)]),
         ([disjunct, plain]) => isHold(disjunct) === isHold(plain),
       ),
   )
 
   it.effect.prop(
     '∀g_Not_=Negation',
-    [GraphSpec],
-    ([spec]) =>
+    { of: [GraphSpec], subject: not(unique(Charge)), runs: 100 },
+    (negated, [spec]) =>
       Effect.map(
-        Effect.all([verdictLike(not(unique(Charge)), spec), verdictLike(unique(Charge), spec)]),
-        ([negated, plain]) => isHold(negated) === !isHold(plain),
+        Effect.all([verdictLike(negated, spec), verdictLike(unique(Charge), spec)]),
+        ([broke, plain]) => isHold(broke) === !isHold(plain),
       ),
   )
 
-  it.effect.prop('∀g_Not_→NamesInnerOnHold', [GraphSpec], ([spec]) => {
-    const inner = unique(Charge)
-    return Effect.map(
-      Effect.all([verdictLike(not(inner), spec), verdictLike(inner, spec)]),
-      ([verdict, innerVerdict]) => isHold(innerVerdict) ? namesBreak(verdict, [inner.id]) : isHold(verdict),
-    )
-  })
+  it.effect.prop(
+    '∀g_Not_→NamesInnerOnHold',
+    { of: [GraphSpec], subject: not(unique(Charge)), runs: 100 },
+    (negated, [spec]) =>
+      Effect.map(
+        Effect.all([verdictLike(negated, spec), verdictLike(unique(Charge), spec)]),
+        ([verdict, innerVerdict]) => isHold(innerVerdict) ? namesBreak(verdict, [unique(Charge).id]) : isHold(verdict),
+      ),
+  )
 
   it.effect.prop(
     '∀g_NotNot_=Relation',
-    [GraphSpec],
-    ([spec]) =>
+    { of: [GraphSpec], subject: not(not(unique(Charge))), runs: 100 },
+    (doublyNegated, [spec]) =>
       Effect.map(
-        Effect.all([verdictLike(not(not(unique(Charge))), spec), verdictLike(unique(Charge), spec)]),
-        ([doublyNegated, plain]) => isHold(doublyNegated) === isHold(plain),
+        Effect.all([verdictLike(doublyNegated, spec), verdictLike(unique(Charge), spec)]),
+        ([doubled, plain]) => isHold(doubled) === isHold(plain),
       ),
   )
 }

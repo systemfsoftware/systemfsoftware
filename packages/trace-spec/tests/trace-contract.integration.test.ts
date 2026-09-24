@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
-import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
 const Feature = makeFeature({ it, layer })
@@ -63,7 +63,7 @@ Feature('Settling an order under a contract that names the charge')
         ),
         Then('the settlement is accepted and its charge is on the same trace')((s) => {
           expect(s.checked.run.output).toBe('settled:order-11')
-          expect(Schema.is(Rel.Hold)(s.checked.verdict)).toBe(true)
+          expect(s.checked.verdict).toSatisfy(Schema.is(Rel.Hold))
         }),
       ),
     )

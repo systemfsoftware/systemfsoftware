@@ -1,7 +1,8 @@
+import { expect } from '@effect/vitest'
 import { runDifferentialWithShrink, runDual } from '@systemfsoftware/differential-spec'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer } from 'effect'
-import { assert, expect } from 'vitest'
+import { assert } from 'vitest'
 import { integers } from './__fixtures__/arbitraries.js'
 import { CandidateDefect } from './__fixtures__/CandidateDefect.schema.js'
 import { disparityReportOf } from './__fixtures__/disparityReport.js'
@@ -100,7 +101,7 @@ Feature('Proving two implementations agree without a hardcoded expected value')
             runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
           )),
         Then('the run completes without complaint')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )
@@ -150,7 +151,7 @@ Feature('Proving two implementations agree without a hardcoded expected value')
             runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
           )),
         Then('the asynchronous run completes without complaint')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )
@@ -204,7 +205,7 @@ Feature('Proving two implementations agree without a hardcoded expected value')
             runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
           )),
         Then('the deferred run completes without complaint')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )

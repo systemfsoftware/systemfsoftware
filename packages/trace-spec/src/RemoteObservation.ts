@@ -291,8 +291,18 @@ if (import.meta.vitest !== void 0) {
   const Reads = Schema.Array(SpanRecord)
   const SomeReads = Schema.NonEmptyArray(SpanRecord)
 
-  const quietAfter = (advance: Advance, elapsedMillis: number, windows: Windows): Advance =>
-    settleStep(advance.settlement, NO_SPANS, elapsedMillis, windows)
+  type SettleStep = (
+    settlement: Settlement,
+    read: ReadonlyArray<SpanRecord>,
+    elapsedMillis: number,
+    windows: Windows,
+  ) => Advance
+
+  const seenAfter = (step: SettleStep, read: ReadonlyArray<SpanRecord>, windows: Windows): Advance =>
+    step(NEVER_READ, read, 0, windows)
+
+  const quietAfter = (step: SettleStep, advance: Advance, elapsedMillis: number, windows: Windows): Advance =>
+    step(advance.settlement, NO_SPANS, elapsedMillis, windows)
 
   const pollingOf = (verdict: Option.Option<Verdict>): boolean => Option.isNone(verdict)
 
@@ -328,55 +338,80 @@ if (import.meta.vitest !== void 0) {
     span: SpanRecord,
   ): boolean => firstWithId(spans, span.spanId) === firstWithId(read, span.spanId)
 
-  const seenAfter = (read: ReadonlyArray<SpanRecord>): Advance => settleStep(NEVER_READ, read, 0, WINDOWS)
+  const unionIsTheDistinctRead = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
+    sameIds(seenAfter(step, read, WINDOWS).settlement.spans, read)
 
-  const unionIsTheDistinctRead = (read: ReadonlyArray<SpanRecord>): boolean =>
-    sameIds(seenAfter(read).settlement.spans, read)
-
-  const replayAddsNothing = (read: ReadonlyArray<SpanRecord>): boolean => {
-    const seen = seenAfter(read)
-    return sameIds(quietAfter(seen, WINDOWS.settleMillis, WINDOWS).settlement.spans, seen.settlement.spans)
+  const replayAddsNothing = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean => {
+    const seen = seenAfter(step, read, WINDOWS)
+    return sameIds(quietAfter(step, seen, WINDOWS.settleMillis, WINDOWS).settlement.spans, seen.settlement.spans)
   }
 
   const laterReadKeepsEveryEarlierId = (
+    step: SettleStep,
     earlier: ReadonlyArray<SpanRecord>,
     later: ReadonlyArray<SpanRecord>,
   ): boolean => {
-    const union = settleStep(seenAfter(earlier).settlement, later, WINDOWS.settleMillis, WINDOWS).settlement.spans
+    const union = step(seenAfter(step, earlier, WINDOWS).settlement, later, WINDOWS.settleMillis, WINDOWS)
+      .settlement.spans
     return holdsEveryId(union, earlier) && holdsEveryId(union, later)
   }
 
-  const firstRecordOfEachIdSurvives = (read: ReadonlyArray<SpanRecord>): boolean =>
-    read.every((span) => keptFirstRecord(seenAfter(read).settlement.spans, read, span))
+  const firstRecordOfEachIdSurvives = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
+    read.every((span) => keptFirstRecord(seenAfter(step, read, WINDOWS).settlement.spans, read, span))
 
-  const settlesExactlyAtTheWindow = (read: ReadonlyArray<SpanRecord>): boolean => {
-    const grown = seenAfter(read)
-    return pollingOf(quietAfter(grown, WINDOWS.settleMillis - 1, WINDOWS).verdict) &&
-      settledOf(quietAfter(grown, WINDOWS.settleMillis, WINDOWS).verdict)
+  const settlesExactlyAtTheWindow = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean => {
+    const grown = seenAfter(step, read, WINDOWS)
+    return pollingOf(quietAfter(step, grown, WINDOWS.settleMillis - 1, WINDOWS).verdict) &&
+      settledOf(quietAfter(step, grown, WINDOWS.settleMillis, WINDOWS).verdict)
   }
 
-  const absenceMeansNothingWasSeen = (read: ReadonlyArray<SpanRecord>): boolean =>
-    absentOf(quietAfter(seenAfter(read), WINDOWS.timeoutMillis, WINDOWS).verdict) === (read.length === 0)
+  const absenceMeansNothingWasSeen = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
+    absentOf(quietAfter(step, seenAfter(step, read, WINDOWS), WINDOWS.timeoutMillis, WINDOWS).verdict) ===
+      (read.length === 0)
 
-  const unfinishedMeansSomethingWasSeen = (read: ReadonlyArray<SpanRecord>): boolean =>
-    unfinishedOf(quietAfter(settleStep(NEVER_READ, read, 0, SLOW), SLOW.timeoutMillis, SLOW).verdict) ===
+  const unfinishedMeansSomethingWasSeen = (step: SettleStep, read: ReadonlyArray<SpanRecord>): boolean =>
+    unfinishedOf(quietAfter(step, seenAfter(step, read, SLOW), SLOW.timeoutMillis, SLOW).verdict) ===
       (read.length > 0)
 
-  it.prop('∀r_SettleUnion_=DistinctRead', [Reads], ([read]) => unionIsTheDistinctRead(read))
+  it.prop(
+    '∀r_SettleUnion_=DistinctRead',
+    { of: [Reads], subject: settleStep, runs: 100 },
+    (step, [read]) => unionIsTheDistinctRead(step, read),
+  )
 
-  it.prop('∀r_SettleReplay_≡FirstUnion', [Reads], ([read]) => replayAddsNothing(read))
+  it.prop(
+    '∀r_SettleReplay_≡FirstUnion',
+    { of: [Reads], subject: settleStep, runs: 100 },
+    (step, [read]) => replayAddsNothing(step, read),
+  )
 
   it.prop(
     '∀r_SettleShrink_⊇EveryRead',
-    [Reads, Reads],
-    ([earlier, later]) => laterReadKeepsEveryEarlierId(earlier, later),
+    { of: [Reads, Reads], subject: settleStep, runs: 100 },
+    (step, [earlier, later]) => laterReadKeepsEveryEarlierId(step, earlier, later),
   )
 
-  it.prop('∀r_SettleFirstRecord_=FirstSeen', [Reads], ([read]) => firstRecordOfEachIdSurvives(read))
+  it.prop(
+    '∀r_SettleFirstRecord_=FirstSeen',
+    { of: [Reads], subject: settleStep, runs: 100 },
+    (step, [read]) => firstRecordOfEachIdSurvives(step, read),
+  )
 
-  it.prop('∀r_SettleWindow_=QuietForSettle', [SomeReads], ([read]) => settlesExactlyAtTheWindow(read))
+  it.prop(
+    '∀r_SettleWindow_=QuietForSettle',
+    { of: [SomeReads], subject: settleStep, runs: 100 },
+    (step, [read]) => settlesExactlyAtTheWindow(step, read),
+  )
 
-  it.prop('∀r_SettleVacant_=AbsentAtDeadline', [Reads], ([read]) => absenceMeansNothingWasSeen(read))
+  it.prop(
+    '∀r_SettleVacant_=AbsentAtDeadline',
+    { of: [Reads], subject: settleStep, runs: 100 },
+    (step, [read]) => absenceMeansNothingWasSeen(step, read),
+  )
 
-  it.prop('∀r_SettleGrowing_=UnfinishedAtDeadline', [Reads], ([read]) => unfinishedMeansSomethingWasSeen(read))
+  it.prop(
+    '∀r_SettleGrowing_=UnfinishedAtDeadline',
+    { of: [Reads], subject: settleStep, runs: 100 },
+    (step, [read]) => unfinishedMeansSomethingWasSeen(step, read),
+  )
 }

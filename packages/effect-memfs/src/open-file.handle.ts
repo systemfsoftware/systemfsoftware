@@ -313,11 +313,14 @@ if (import.meta.vitest !== void 0) {
 
   const magnitudeOf = (value: bigint): bigint => value < 0n ? -value : value
 
-  const seekOutcomeOf = (position: bigint, offset: bigint, from: FileSystem.SeekMode): bigint | string =>
-    Result.match(planSeekPosition(position, offset, from), {
+  const outcomeOf = (outcome: Result.Result<bigint, CursorRefusal>): bigint | string =>
+    Result.match(outcome, {
       onFailure: (refusal) => refusal._tag,
       onSuccess: (planned) => planned,
     })
+
+  const seekFromStart = (position: bigint, offset: bigint) => planSeekPosition(position, offset, 'start')
+  const seekFromCurrent = (position: bigint, offset: bigint) => planSeekPosition(position, offset, 'current')
 
   const stalled = (): Promise<{ bytesRead: number; bytesWritten: number; buffer: Uint8Array }> =>
     Promise.resolve({ bytesRead: 0, bytesWritten: 0, buffer: new Uint8Array(0) })
@@ -332,40 +335,51 @@ if (import.meta.vitest !== void 0) {
     close: Promise.resolve.bind(Promise),
   }
 
+  const basePositionOf = (from: 'start' | 'current', position: bigint): bigint => from === 'start' ? 0n : position
+
   it.prop(
     '∀s_SeekRefusal_≡NegativePosition',
-    [Schema.BigInt, Schema.BigInt],
-    ([pos, delta]) => {
+    {
+      of: [Schema.BigInt, Schema.BigInt, Schema.Literals(['start', 'current'])],
+      subject: planSeekPosition,
+      runs: 100,
+    },
+    (subject, [pos, off, from]) => {
       const position = magnitudeOf(pos)
-      const span = magnitudeOf(delta)
-      return seekOutcomeOf(position, -(position + span + 1n), 'current') === 'CursorRefusal' &&
-        seekOutcomeOf(position, -1n - span, 'start') === 'CursorRefusal'
+      const target = basePositionOf(from, position) + off
+      return outcomeOf(subject(position, off, from)) === (target < 0n ? 'CursorRefusal' : target)
     },
   )
 
   it.prop(
     '∀s_SeekPlanned_≡ExactBigIntStart',
-    [Schema.BigInt, Schema.BigInt],
-    ([pos, off]) => seekOutcomeOf(magnitudeOf(pos), magnitudeOf(off), 'start') === magnitudeOf(off),
+    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromStart, runs: 100 },
+    (subject, [pos, off]) => outcomeOf(subject(magnitudeOf(pos), magnitudeOf(off))) === magnitudeOf(off),
   )
 
   it.prop(
     '∀s_SeekPlanned_≡ExactBigIntCurrent',
-    [Schema.BigInt, Schema.BigInt],
-    ([pos, off]) =>
-      seekOutcomeOf(magnitudeOf(pos), magnitudeOf(off), 'current') === magnitudeOf(pos) + magnitudeOf(off),
+    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromCurrent, runs: 100 },
+    (subject, [pos, off]) =>
+      outcomeOf(subject(magnitudeOf(pos), magnitudeOf(off))) === magnitudeOf(pos) + magnitudeOf(off),
   )
 
   it.effect.prop(
     '∀n_StalledDriver_≡RefusedNotLooped',
-    [Size],
-    ([size]) =>
-      Effect.flatMap(make(stalledDriver), (file) =>
+    { of: [Size], subject: make, runs: 100 },
+    (subject, [size]) =>
+      Effect.flatMap(subject(stalledDriver), (file) =>
         Effect.map(
           Effect.all([Effect.flip(writeAll(file, new Uint8Array(size))), Effect.flip(stat(file))]),
           ([written, described]) =>
             Predicate.isTagged(written.reason, 'WriteZero') && described.reason.method === 'stat',
         )),
+  )
+
+  it.effect.prop(
+    '∀d_Make_≡ItsDriverFd',
+    { of: [Schema.Int], subject: make, runs: 100 },
+    (subject, [fd]) => Effect.map(subject({ ...stalledDriver, fd }), (file) => file.fd === fd),
   )
 
   const sliceFor = (requested: number, bytesRead: number): Option.Option<Uint8Array> =>
@@ -374,18 +388,29 @@ if (import.meta.vitest !== void 0) {
       sliceOf(new Uint8Array(requested)),
     )
 
+  const pendingOf = (written: number, remaining: number) =>
+    planWriteContinuation(new WriteAllChunk({ fd: 3, written, remaining }))
+
   it.prop(
     '∀nr_Slice_≡MinReadRequested',
-    [Size, Size],
-    ([requested, bytesRead]) =>
-      Option.exists(sliceFor(requested, bytesRead), (bytes) => bytes.length === Math.min(bytesRead, requested)),
+    { of: [Size, Size], subject: sliceFor, runs: 100 },
+    (subject, [requested, bytesRead]) =>
+      Option.exists(subject(requested, bytesRead), (bytes) => bytes.length === Math.min(bytesRead, requested)),
   )
 
-  it.prop('∀nr_Slice_≡NothingWhenNothingRead', [Size], ([requested]) => Option.isNone(sliceFor(requested, 0)))
+  it.prop(
+    '∀nr_Slice_≡NothingWhenNothingRead',
+    { of: [Size], subject: sliceFor, runs: 100 },
+    (subject, [requested]) => Option.isNone(subject(requested, 0)),
+  )
 
-  it.prop('∀nw_Pending_≡Remainder', [Size, Size], ([remaining, written]) =>
-    Option.exists(
-      Result.getSuccess(planWriteContinuation(new WriteAllChunk({ fd: 3, written, remaining }))),
-      (decision) => pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
-    ))
+  it.prop(
+    '∀nw_Pending_≡Remainder',
+    { of: [Size, Size], subject: pendingOf, runs: 100 },
+    (subject, [remaining, written]) =>
+      Option.exists(
+        Result.getSuccess(subject(written, remaining)),
+        (decision) => pendingAfter(decision, new Uint8Array(remaining)).length === Math.max(remaining - written, 0),
+      ),
+  )
 }

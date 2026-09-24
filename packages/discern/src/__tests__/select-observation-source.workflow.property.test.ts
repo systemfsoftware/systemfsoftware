@@ -12,12 +12,14 @@ import {
 type Selection = AllRecorded | AskForMissing
 type Verdict = Result.Result<Selection, RecordingMissing>
 
+type SelectSource = typeof selectObservationSource
+
 const verdictOf = (
+  select: SelectSource,
   hitIds: ReadonlyArray<string>,
   missing: ReadonlyArray<string>,
   onMissing: 'fail' | 'ask',
-): Verdict =>
-  selectObservationSource(new SelectObservationSource({ hitIds: [...hitIds], missing: [...missing], onMissing }))
+): Verdict => select(new SelectObservationSource({ hitIds: [...hitIds], missing: [...missing], onMissing }))
 
 const tagOf = (verdict: Verdict): string =>
   Result.match(verdict, {
@@ -44,22 +46,22 @@ const refusedIdsOf = (verdict: Verdict): ReadonlyArray<string> =>
 
 it.prop(
   '∀c_SelectSource_=AllRecorded',
-  [Schema.Array(Schema.String), Schema.Literals(['fail', 'ask'])],
-  ([hitIds, onMissing]) => tagOf(verdictOf(hitIds, [], onMissing)) === 'AllRecorded',
+  { of: [Schema.Array(Schema.String), Schema.Literals(['fail', 'ask'])], subject: selectObservationSource, runs: 100 },
+  (subject, [hitIds, onMissing]) => tagOf(verdictOf(subject, hitIds, [], onMissing)) === 'AllRecorded',
 )
 
 it.prop(
   '∀c_SelectSource_=AskForMissing',
-  [Schema.NonEmptyArray(Schema.String)],
-  ([missing]) =>
-    tagOf(verdictOf([], missing, 'ask')) === 'AskForMissing' &&
-    askedIdsOf(verdictOf([], missing, 'ask')).join('|') === missing.join('|'),
+  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource, runs: 100 },
+  (subject, [missing]) =>
+    tagOf(verdictOf(subject, [], missing, 'ask')) === 'AskForMissing' &&
+    askedIdsOf(verdictOf(subject, [], missing, 'ask')).join('|') === missing.join('|'),
 )
 
 it.prop(
   '∀c_SelectSource_=RecordingMissing',
-  [Schema.NonEmptyArray(Schema.String)],
-  ([missing]) =>
-    tagOf(verdictOf([], missing, 'fail')) === 'RecordingMissing' &&
-    refusedIdsOf(verdictOf([], missing, 'fail')).join('|') === missing.join('|'),
+  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource, runs: 100 },
+  (subject, [missing]) =>
+    tagOf(verdictOf(subject, [], missing, 'fail')) === 'RecordingMissing' &&
+    refusedIdsOf(verdictOf(subject, [], missing, 'fail')).join('|') === missing.join('|'),
 )

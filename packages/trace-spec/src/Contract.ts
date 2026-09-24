@@ -1,3 +1,4 @@
+import { recordAssertion } from '@effect/vitest'
 import type { Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Match, Option, Predicate } from 'effect'
 import { dual } from 'effect/Function'
@@ -186,7 +187,10 @@ const checkDual = <Input, Output, E, R>(
   input: Input,
   options?: CheckOptions,
 ): Effect.Effect<Judgment<Input, Output>, CheckFailure<E>, Services<R>> =>
-  Effect.flatMap(judgeDual(self, input, options), (judgment) => refuseBreak(self.relation.id, judgment))
+  Effect.flatMap(
+    judgeDual(self, input, options),
+    (judgment) => Effect.andThen(Effect.sync(recordAssertion), refuseBreak(self.relation.id, judgment)),
+  )
 
 export const check: {
   <Input>(

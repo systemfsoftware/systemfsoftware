@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Option } from 'effect'
-import { expect } from 'vitest'
 import { GuestService } from './__fixtures__/guest-service.fixture.js'
 import { scenarioEnvironment } from './__fixtures__/readiness-environment.fixture.js'
 
@@ -48,7 +48,7 @@ Feature('Preventing socket descriptor leaks across repeated checks')
         ),
         Then('host listener shutdown succeeds immediately without waiting on lingering connections')(
           ({ completionStatus }) => {
-            expect(Option.isSome(completionStatus)).toBe(true)
+            expect(completionStatus).toSatisfy(Option.isSome)
           },
         ),
       ),

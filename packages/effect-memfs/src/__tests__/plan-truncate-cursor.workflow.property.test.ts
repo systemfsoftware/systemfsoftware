@@ -3,29 +3,54 @@ import { Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { PlanTruncateCursor, planTruncateCursor } from '../plan-truncate-cursor.workflow.js'
 
-const settled = (position: bigint, length: number): bigint =>
-  Result.getOrThrow(planTruncateCursor(new PlanTruncateCursor({ position, length }))).position
+const decide = (position: bigint, length: number) => planTruncateCursor(new PlanTruncateCursor({ position, length }))
 
 it.prop(
   '∀pl_Cursor_≤Length',
-  [Schema.BigInt, Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 })))],
-  ([position, length]) => settled(position, length) <= BigInt(length),
+  {
+    of: [
+      Schema.BigInt,
+      Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
+    ],
+    subject: decide,
+    runs: 100,
+  },
+  (subject, [position, length]) => {
+    const decision = subject(position, length).pipe(Result.getOrThrow)
+    return decision.position <= BigInt(length)
+  },
 )
 
 it.prop(
   '∀pl_CursorWithinEnd_≡Unmoved',
-  [
-    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
-    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
-  ],
-  ([drawn, length]) => {
+  {
+    of: [
+      Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
+      Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
+    ],
+    subject: decide,
+    runs: 100,
+  },
+  (subject, [drawn, length]) => {
     const within = BigInt(Math.min(drawn, length))
-    return settled(within, length) === within
+    const decision = subject(within, length).pipe(Result.getOrThrow)
+    return decision.position === within
   },
 )
 
 it.prop(
   '∀pl_Truncate_∘Idempotent',
-  [Schema.BigInt, Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 })))],
-  ([position, length]) => settled(settled(position, length), length) === settled(position, length),
+  {
+    of: [
+      Schema.BigInt,
+      Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
+    ],
+    subject: decide,
+    runs: 100,
+  },
+  (subject, [position, length]) => {
+    const once = subject(position, length).pipe(Result.getOrThrow).position
+    const twice = subject(once, length).pipe(Result.getOrThrow).position
+    return twice === once
+  },
 )

@@ -9,7 +9,7 @@ describe('isMetaVitest', () => {
       object: buildNode('MetaProperty'),
       property: buildNode('Identifier', { name: 'vitest' }),
     })
-    expect(isMetaVitest(node as never)).toBe(true)
+    expect(node).toSatisfy(isMetaVitest)
   })
 
   it('Should_ReturnFalse_When_ObjectNotMetaProperty', () => {
@@ -17,7 +17,7 @@ describe('isMetaVitest', () => {
       object: buildNode('Identifier', { name: 'import' }),
       property: buildNode('Identifier', { name: 'vitest' }),
     })
-    expect(isMetaVitest(node as never)).toBe(false)
+    expect(node).not.toSatisfy(isMetaVitest)
   })
 
   it('Should_ReturnFalse_When_PropertyNotIdentifier', () => {
@@ -25,7 +25,7 @@ describe('isMetaVitest', () => {
       object: buildNode('MetaProperty'),
       property: buildNode('Literal', { value: 'vitest' }),
     })
-    expect(isMetaVitest(node as never)).toBe(false)
+    expect(node).not.toSatisfy(isMetaVitest)
   })
 
   it('Should_ReturnFalse_When_PropertyNameIsUrl', () => {
@@ -33,11 +33,11 @@ describe('isMetaVitest', () => {
       object: buildNode('MetaProperty'),
       property: buildNode('Identifier', { name: 'url' }),
     })
-    expect(isMetaVitest(node as never)).toBe(false)
+    expect(node).not.toSatisfy(isMetaVitest)
   })
 
   it('Should_ReturnFalse_When_NodeIsNotMemberExpression', () => {
-    expect(isMetaVitest(buildNode('Identifier', { name: 'vitest' }) as never)).toBe(false)
+    expect(buildNode('Identifier', { name: 'vitest' })).not.toSatisfy(isMetaVitest)
   })
 })
 
@@ -47,7 +47,7 @@ describe('isVitestGuard', () => {
       object: buildNode('MetaProperty'),
       property: buildNode('Identifier', { name: 'vitest' }),
     })
-    expect(isVitestGuard(node as never)).toBe(true)
+    expect(node).toSatisfy(isVitestGuard)
   })
 
   it('Should_ReturnTrue_When_BinaryLeftIsMetaVitest', () => {
@@ -58,7 +58,7 @@ describe('isVitestGuard', () => {
       }),
       right: buildNode('Identifier', { name: 'undefined' }),
     })
-    expect(isVitestGuard(node as never)).toBe(true)
+    expect(node).toSatisfy(isVitestGuard)
   })
 
   it('Should_ReturnTrue_When_BinaryRightIsMetaVitest', () => {
@@ -69,7 +69,7 @@ describe('isVitestGuard', () => {
         property: buildNode('Identifier', { name: 'vitest' }),
       }),
     })
-    expect(isVitestGuard(node as never)).toBe(true)
+    expect(node).toSatisfy(isVitestGuard)
   })
 
   it('Should_ReturnFalse_When_BinaryWithNoVitestSide', () => {
@@ -77,11 +77,11 @@ describe('isVitestGuard', () => {
       left: buildNode('Identifier', { name: 'a' }),
       right: buildNode('Identifier', { name: 'b' }),
     })
-    expect(isVitestGuard(node as never)).toBe(false)
+    expect(node).not.toSatisfy(isVitestGuard)
   })
 
   it('Should_ReturnFalse_When_NotBinaryNorMetaVitest', () => {
     const node = buildNode('Identifier', { name: 'foo' })
-    expect(isVitestGuard(node as never)).toBe(false)
+    expect(node).not.toSatisfy(isVitestGuard)
   })
 })

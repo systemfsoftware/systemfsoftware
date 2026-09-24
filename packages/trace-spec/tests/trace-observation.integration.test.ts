@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Result, Schema } from 'effect'
-import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
 const Feature = makeFeature({ it, layer })
@@ -40,7 +40,7 @@ Feature('Holding a settlement to the trace it produced')
         When('the finished trace is read back')('graph', (s) => observedGraph(s.run.traceId)),
         Then('the trace shows the charge beneath the settlement')((s) => {
           const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))(s.graph)
-          expect(Schema.is(Rel.Hold)(verdict)).toBe(true)
+          expect(verdict).toSatisfy(Schema.is(Rel.Hold))
           expect(s.run.output).toBe('settled:order-7')
         }),
       ),
@@ -117,7 +117,7 @@ Feature('Holding a settlement to the trace it produced')
         }),
         And('the window that served the settlement still answers with its graph')((s) => {
           const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))(s.window.graph)
-          expect(Schema.is(Rel.Hold)(verdict)).toBe(true)
+          expect(verdict).toSatisfy(Schema.is(Rel.Hold))
         }),
       ),
     )

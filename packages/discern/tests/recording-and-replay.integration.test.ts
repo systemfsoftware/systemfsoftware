@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Match, Result, Schema } from 'effect'
-import { expect } from 'vitest'
 import {
   type AnswerFor,
   answering,
@@ -154,7 +154,7 @@ Feature('Recording what the model said and replaying it later')
             const reworded = yield* Effect.flip(
               Effect.provide(policyOn(afterRewording)('x'), Discern.Model.replayLayer(taken)),
             )
-            expect(Discern.Model.isReplayMiss(reworded)).toBe(true)
+            expect(reworded).toSatisfy(Discern.Model.isReplayMiss)
           })
         ),
       ),
@@ -212,7 +212,7 @@ Feature('Recording what the model said and replaying it later')
             const missing = yield* Effect.flip(
               Effect.provide(s.policies.both('x'), Discern.Model.replayLayer(taken)),
             )
-            expect(Discern.Model.isReplayMiss(missing)).toBe(true)
+            expect(missing).toSatisfy(Discern.Model.isReplayMiss)
           })
         ),
       ),
@@ -286,7 +286,7 @@ Feature('Recording what the model said and replaying it later')
             const absent = yield* Effect.flip(
               Effect.provide(s.policies.first('x'), Discern.Model.replayLayer(taken)),
             )
-            expect(Discern.Model.isReplayMiss(absent)).toBe(true)
+            expect(absent).toSatisfy(Discern.Model.isReplayMiss)
             expect(yield* Effect.provide(s.policies.second('x'), Discern.Model.replayLayer(taken))).toBe('hit')
           })
         ),
@@ -326,8 +326,8 @@ Feature('Recording what the model said and replaying it later')
             newer: Schema.decodeUnknownResult(Discern.Model.Observations)(s.payloads.newer),
           })),
         Then('both are refused')(({ outcomes }) => {
-          expect(Result.isFailure(outcomes.older)).toBe(true)
-          expect(Result.isFailure(outcomes.newer)).toBe(true)
+          expect(outcomes.older).toSatisfy(Result.isFailure)
+          expect(outcomes.newer).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -361,8 +361,8 @@ Feature('Recording what the model said and replaying it later')
             unreadableAnswer: Schema.decodeUnknownResult(Discern.Model.Observation)(s.payloads.unreadableAnswer),
           })),
         Then('both entries are refused')(({ outcomes }) => {
-          expect(Result.isFailure(outcomes.unknownKind)).toBe(true)
-          expect(Result.isFailure(outcomes.unreadableAnswer)).toBe(true)
+          expect(outcomes.unknownKind).toSatisfy(Result.isFailure)
+          expect(outcomes.unreadableAnswer).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -376,12 +376,12 @@ Feature('Recording what the model said and replaying it later')
           (s) => Effect.flip(Discern.Model.load(s.store, { version: 2, entries: { oops: { broken: true } } })),
         ),
         Then('the store blames the entries, not the format version')(({ refused }) => {
-          expect(
-            Match.value(refused).pipe(
+          expect(refused).toSatisfy((error) =>
+            Match.value(error).pipe(
               Match.tag('MalformedObservationSnapshotError', () => true),
               Match.orElse(() => false),
-            ),
-          ).toBe(true)
+            )
+          )
         }),
       ),
     )

@@ -40,8 +40,9 @@ export interface RegisterFn<B, E, R> {
 const layerSetupOptions = (
   excludeTestServices: boolean,
   useLiveClock: boolean,
-): { readonly excludeTestServices: boolean } => ({
+): { readonly excludeTestServices: boolean; readonly shared: true } => ({
   excludeTestServices: excludeTestServices || useLiveClock,
+  shared: true,
 })
 
 const unlayeredRegister = <B, E, RFresh, RFreshReq extends Scope.Scope>(
@@ -177,9 +178,9 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀x_LayerSetupOptions_=OrWithLive',
-    [Schema.Boolean],
-    ([exclude]) =>
-      layerSetupOptions(exclude, true).excludeTestServices === true &&
-      layerSetupOptions(exclude, false).excludeTestServices === exclude,
+    { of: [Schema.Boolean], subject: layerSetupOptions, runs: 100 },
+    (setupOptions, [exclude]) =>
+      setupOptions(exclude, true).excludeTestServices === true &&
+      setupOptions(exclude, false).excludeTestServices === exclude,
   )
 }

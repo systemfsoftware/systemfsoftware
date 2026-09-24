@@ -9,10 +9,13 @@ import {
   type UncertainUnhandled,
 } from '../select-case.workflow.js'
 
+type Select = typeof selectCase
+
 const decisionOf = (
+  select: Select,
   cases: ReadonlyArray<CaseVerdict>,
   hasUncertainHandler: boolean,
-): Result.Result<SelectCaseDecision, UncertainUnhandled> => selectCase(new SelectCase({ cases, hasUncertainHandler }))
+): Result.Result<SelectCaseDecision, UncertainUnhandled> => select(new SelectCase({ cases, hasUncertainHandler }))
 
 const projectionOf = (outcome: Result.Result<SelectCaseDecision, UncertainUnhandled>): string =>
   Result.match(outcome, {
@@ -63,10 +66,10 @@ const isRefusedAs = (caseId: string, reason: string | undefined) => (refused: Un
 // Kills a decider that skips past matches, names the wrong case, or demands an uncertain handler.
 it.prop(
   '∀c_FirstMatch_=Selected',
-  [Schema.Array(Schema.String), Schema.String, Schema.Boolean],
-  ([missIds, headId, withHandler]) => {
+  { of: [Schema.Array(Schema.String), Schema.String, Schema.Boolean], subject: selectCase, runs: 100 },
+  (subject, [missIds, headId, withHandler]) => {
     const cases = [...missIds.map(missedCase), matchedCase(headId)]
-    return Result.match(decisionOf(cases, withHandler), {
+    return Result.match(decisionOf(subject, cases, withHandler), {
       onFailure: () => false,
       onSuccess: isCaseNamed(headId),
     })
@@ -76,9 +79,9 @@ it.prop(
 // Kills a decider that never falls back, including on the empty case list.
 it.prop(
   '∀c_AllMiss_=Fallback',
-  [Schema.Array(Schema.String), Schema.Boolean],
-  ([ids, withHandler]) =>
-    Result.match(decisionOf(ids.map(missedCase), withHandler), {
+  { of: [Schema.Array(Schema.String), Schema.Boolean], subject: selectCase, runs: 100 },
+  (subject, [ids, withHandler]) =>
+    Result.match(decisionOf(subject, ids.map(missedCase), withHandler), {
       onFailure: () => false,
       onSuccess: isFallback,
     }),
@@ -87,11 +90,11 @@ it.prop(
 // Kills a decider that handles uncertainty without naming the case or keeps a foreign reason.
 it.prop(
   '∀u_WithHandler_=Handled',
-  [Schema.String, Schema.Boolean, Schema.String],
-  ([caseId, withReason, reason]) => {
+  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase, runs: 100 },
+  (subject, [caseId, withReason, reason]) => {
     const wanted = expectedReason(withReason, reason)
     const cases = [uncertainCase(caseId, wanted)]
-    return Result.match(decisionOf(cases, true), {
+    return Result.match(decisionOf(subject, cases, true), {
       onFailure: () => false,
       onSuccess: isHandledAs(caseId, wanted),
     })
@@ -101,11 +104,11 @@ it.prop(
 // Kills a decider that answers when no uncertain handler exists.
 it.prop(
   '∀u_WithoutHandler_=Refused',
-  [Schema.String, Schema.Boolean, Schema.String],
-  ([caseId, withReason, reason]) => {
+  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase, runs: 100 },
+  (subject, [caseId, withReason, reason]) => {
     const wanted = expectedReason(withReason, reason)
     const cases = [uncertainCase(caseId, wanted)]
-    return Result.match(decisionOf(cases, false), {
+    return Result.match(decisionOf(subject, cases, false), {
       onFailure: isRefusedAs(caseId, wanted),
       onSuccess: () => false,
     })
@@ -123,8 +126,12 @@ const truncateAtFirstDecisive = (cases: ReadonlyArray<CaseVerdict>): ReadonlyArr
 }
 
 // Kills a decider that scans past the first decisive case.
-it.prop('∀c_Decision_=PrefixStable', [Schema.Array(CaseVerdict), Schema.Boolean], ([cases, withHandler]) => {
-  const full = projectionOf(decisionOf(cases, withHandler))
-  const truncated = projectionOf(decisionOf(truncateAtFirstDecisive(cases), withHandler))
-  return full === truncated
-})
+it.prop(
+  '∀c_Decision_=PrefixStable',
+  { of: [Schema.Array(CaseVerdict), Schema.Boolean], subject: selectCase, runs: 100 },
+  (subject, [cases, withHandler]) => {
+    const full = projectionOf(decisionOf(subject, cases, withHandler))
+    const truncated = projectionOf(decisionOf(subject, truncateAtFirstDecisive(cases), withHandler))
+    return full === truncated
+  },
+)
