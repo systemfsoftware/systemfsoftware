@@ -1,4 +1,5 @@
 ---
+"@systemfsoftware/conformance-spec": none
 "@systemfsoftware/differential-spec": none
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
