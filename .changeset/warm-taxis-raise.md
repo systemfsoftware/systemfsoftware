@@ -8,6 +8,7 @@
 "@systemfsoftware/effect-memfs": none
 "@systemfsoftware/effect-microsandbox": none
 "@systemfsoftware/effect-readiness": none
+"@systemfsoftware/effect-schema-discovery": none
 "@systemfsoftware/effect-schema-extensions": none
 "@systemfsoftware/effect-schema-law": none
 "@systemfsoftware/effect-schema-recursion-budget": none
