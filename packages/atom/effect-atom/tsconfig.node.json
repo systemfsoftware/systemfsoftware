@@ -7,6 +7,7 @@
   },
   "include": [
     "oxlint.config.ts",
+    "stryker.config.ts",
     "tsdown.config.ts",
     "vitest.config.ts",
     "vitest.node.config.ts"

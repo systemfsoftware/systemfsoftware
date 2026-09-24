@@ -503,6 +503,27 @@ importers:
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/stryker-config':
+        specifier: workspace:^
+        version: link:../../toolchain/stryker-config
+      '@systemfsoftware/stryker-ignorer-effect-schema-declarations':
+        specifier: catalog:stryker
+        version: 0.1.1(rolldown@1.2.9)
+      '@systemfsoftware/stryker-ignorer-in-source-vitest-block':
+        specifier: catalog:stryker
+        version: 0.1.1(rolldown@1.2.9)
+      '@systemfsoftware/stryker-js':
+        specifier: catalog:stryker
+        version: 10.1.1(@opentelemetry/api-logs@0.222.0)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.0-rc.117)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 7.0.5(@opentelemetry/api-logs@0.222.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.11.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(redis@6.2.1(@opentelemetry/api@1.9.1))(rolldown@1.2.9)(supports-color@10.2.2)(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 7.1.1(@opentelemetry/api@1.9.1)(effect@4.0.0-rc.117)(supports-color@10.2.2)(vitest@5.0.1)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 3.0.3(effect@4.0.0-rc.117)(rolldown@1.2.9)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
