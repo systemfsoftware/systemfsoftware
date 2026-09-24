@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Duration, Effect, Fiber, Match } from 'effect'
+import { Duration, Effect, Fiber, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { type DialMode, ProbeHarness, probeHarness } from './__fixtures__/probe-harness.fixture.js'
 
@@ -13,13 +12,6 @@ const TIGHT_WAIT = { timeoutMs: 300, pollMs: 25 } as const
 const target = Readiness.target([{ guest: GUEST_PORT, host: '127.0.0.1', hostPort: 1 }], TIGHT_WAIT)
 
 const awaitOver = target.awaitCondition(Readiness.Wait.forTcp(GUEST_PORT))
-
-const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boolean =>
-  Match.value(verdict).pipe(
-    Match.tag('Satisfied', () => true),
-    Match.tag('TimedOut', () => false),
-    Match.exhaustive,
-  )
 
 const dialCount = Effect.flatMap(ProbeHarness, (harness) => harness.dials)
 
@@ -36,12 +28,13 @@ Feature('Waiting for a guest service to answer before the check gives up')
           'outcome',
           () => Effect.zipWith(awaitOver, dialCount, (verdict, attempts) => ({ verdict, attempts })),
         ),
-        Then('the check reports the service is ready')(({ outcome }) => {
-          expect(outcome.verdict).toSatisfy(reportedReady)
-        }),
-        And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
-          expect(outcome.attempts).toBe(1)
-        }),
+        Then('the check reports the service ready after the mapped port saw exactly one connection attempt')(
+          (state, expect) =>
+            expect({ verdict: state.outcome.verdict, attempts: state.outcome.attempts }).toMatchObject({
+              verdict: { _tag: 'Satisfied' },
+              attempts: 1,
+            }),
+        ),
       ),
     )
 
@@ -57,12 +50,13 @@ Feature('Waiting for a guest service to answer before the check gives up')
             const verdict = yield* Fiber.join(checking)
             return { verdict, attempts: yield* dialCount }
           })),
-        Then('the check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(outcome.verdict).not.toSatisfy(reportedReady)
-        }),
-        And('the mapped port saw more than one connection attempt')(({ outcome }) => {
-          expect(outcome.attempts).toBeGreaterThan(1)
-        }),
+        Then('the check gives up as TimedOut after the mapped port saw more than one connection attempt')(
+          (state, expect) =>
+            expect({ verdict: state.outcome.verdict, attempts: state.outcome.attempts }).toMatchObject({
+              verdict: { _tag: 'TimedOut' },
+              attempts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(1)))),
+            }),
+        ),
       ),
     )
 
@@ -78,12 +72,13 @@ Feature('Waiting for a guest service to answer before the check gives up')
             const verdict = yield* Fiber.join(checking)
             return { verdict, attempts: yield* dialCount }
           })),
-        Then('the check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(outcome.verdict).not.toSatisfy(reportedReady)
-        }),
-        And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
-          expect(outcome.attempts).toBe(1)
-        }),
+        Then('the check gives up as TimedOut after the mapped port saw exactly one connection attempt')(
+          (state, expect) =>
+            expect({ verdict: state.outcome.verdict, attempts: state.outcome.attempts }).toMatchObject({
+              verdict: { _tag: 'TimedOut' },
+              attempts: 1,
+            }),
+        ),
       ),
     )
 
@@ -103,12 +98,13 @@ Feature('Waiting for a guest service to answer before the check gives up')
               return { verdict, attempts: yield* dialCount }
             }),
         ),
-        Then('the shortened check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(outcome.verdict).not.toSatisfy(reportedReady)
-        }),
-        And('the shortened check retried the connection before giving up')(({ outcome }) => {
-          expect(outcome.attempts).toBeGreaterThan(1)
-        }),
+        Then('the shortened check retried the connection before giving up as TimedOut')(
+          (state, expect) =>
+            expect({ verdict: state.outcome.verdict, attempts: state.outcome.attempts }).toMatchObject({
+              verdict: { _tag: 'TimedOut' },
+              attempts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(1)))),
+            }),
+        ),
       ),
     )
   })

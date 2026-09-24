@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Option } from 'effect'
+import { Effect } from 'effect'
 import { GuestService } from './__fixtures__/guest-service.fixture.js'
 import { scenarioEnvironment } from './__fixtures__/readiness-environment.fixture.js'
 
@@ -47,9 +46,7 @@ Feature('Releasing every probe connection after repeated readiness checks')
             }),
         ),
         Then('the service shuts down at once with no connection still held')(
-          ({ completionStatus }) => {
-            expect(completionStatus).toSatisfy(Option.isSome)
-          },
+          (state, expect) => expect(state.completionStatus).toMatchObject({ _tag: 'Some', value: undefined }),
         ),
       ),
     )
