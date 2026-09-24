@@ -193,19 +193,19 @@ const overdraftWithinPrivilege = (subject: PlaceOrder, command: PlaceOrderComman
 describe('placeOrder — composed pipeline', () => {
   it.prop(
     '∀c_CreditOutcome_=Tier',
-    { of: [PlaceOrderCommand], subject: placeOrder, runs: 100 },
+    { of: [PlaceOrderCommand], subject: placeOrder },
     (subject, [command]) => agreesWithTierContract(command, subject(command)),
   )
 
   it.prop(
     '∀c_Overdraft_≤Privilege',
-    { of: [PlaceOrderCommand], subject: placeOrder, runs: 100 },
+    { of: [PlaceOrderCommand], subject: placeOrder },
     (subject, [command]) => overdraftWithinPrivilege(subject, command),
   )
 
   it.prop(
     '∀c_AllocateStock_≤Stock',
-    { of: [PlaceOrderCommand], subject: placeOrder, runs: 100 },
+    { of: [PlaceOrderCommand], subject: placeOrder },
     (subject, [command]) =>
       Result.match(subject(command), {
         onFailure: (error) => refusalExplained(command, error),
@@ -231,7 +231,7 @@ describe('placeOrder — composed pipeline', () => {
 
   it.prop(
     '∀c_AllocatedBackordered_=Requested',
-    { of: [PlaceOrderCommand], subject: placeOrder, runs: 100 },
+    { of: [PlaceOrderCommand], subject: placeOrder },
     (subject, [command]) =>
       Result.match(subject(command), {
         onFailure: (error) => refusalExplained(command, error),
@@ -254,7 +254,7 @@ describe('placeOrder — composed pipeline', () => {
 
   it.prop(
     '∀c_Allocation_⊆Live',
-    { of: [PlaceOrderCommand], subject: placeOrder, runs: 100 },
+    { of: [PlaceOrderCommand], subject: placeOrder },
     (subject, [command]) =>
       Result.match(subject(command), {
         onFailure: (error) => refusalExplained(command, error),

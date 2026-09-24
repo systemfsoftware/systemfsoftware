@@ -141,7 +141,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀bg_PortLookup_≡Declared',
-    { of: [bindings, GuestPort], subject: hostPortOf, runs: 100 },
+    { of: [bindings, GuestPort], subject: hostPortOf },
     (subject, [drawn, guest]) =>
       holdsAll([
         drawn.every((binding) => Option.contains(subject(drawn, binding.guest), binding.hostPort)),
@@ -154,19 +154,19 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀p_PrefixSlash_≡Slashed',
-    { of: [Schema.String], subject: prefixSlash, runs: 100 },
+    { of: [Schema.String], subject: prefixSlash },
     (subject, [path]) => subject(path) === (path.startsWith('/') ? path : `/${path}`),
   )
 
   it.prop(
     '∀p_PrefixSlash_=Idempotent',
-    { of: [Schema.String], subject: prefixSlash, runs: 100 },
+    { of: [Schema.String], subject: prefixSlash },
     (subject, [path]) => subject(subject(path)) === subject(path),
   )
 
   it.prop(
     '∀p_Normalize_≡Prefix',
-    { of: [Schema.String], subject: normalizePath, runs: 100 },
+    { of: [Schema.String], subject: normalizePath },
     (subject, [path]) => subject(path) === prefixSlash(path) && subject(undefined) === '',
   )
 }

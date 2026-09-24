@@ -22,14 +22,14 @@ const portPlanLaw = (plan: ProbePlan, guestPort: number, bound: boolean): boolea
 
 it.prop(
   '∀t_TcpCondition_≡Binding',
-  { of: [ProbeTarget, PortNumber], subject: resolveProbe, runs: 100 },
+  { of: [ProbeTarget, PortNumber], subject: resolveProbe },
   (resolve, [target, guestPort]) =>
     portPlanLaw(planOf(resolve, target, { _tag: 'Tcp', guestPort }), guestPort, isBound(target, guestPort)),
 )
 
 it.prop(
   '∀t_HttpCondition_≡Path',
-  { of: [ProbeTarget, PortNumber, Schema.String], subject: resolveProbe, runs: 100 },
+  { of: [ProbeTarget, PortNumber, Schema.String], subject: resolveProbe },
   (resolve, [target, guestPort, path]) =>
     Match.value(planOf(resolve, target, { _tag: 'Http', guestPort, path })).pipe(
       Match.tag('ProbeAbsent', (absent) => !isBound(target, guestPort) && absent.guestPort === guestPort),
@@ -43,7 +43,7 @@ it.prop(
 
 it.prop(
   '∀t_LogCondition_=ProbeLog',
-  { of: [ProbeTarget, Schema.String], subject: resolveProbe, runs: 100 },
+  { of: [ProbeTarget, Schema.String], subject: resolveProbe },
   (resolve, [target, pattern]) =>
     Match.value(planOf(resolve, target, { _tag: 'Log', pattern })).pipe(
       Match.tag('ProbeLog', (plan) => plan.pattern === pattern),

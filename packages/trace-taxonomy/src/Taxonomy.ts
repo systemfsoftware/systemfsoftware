@@ -98,7 +98,7 @@ if (import.meta.vitest !== void 0) {
   const DeclaredSpan = Schema.Struct({ id: Schema.String, name: Schema.String })
   const LAW_ATTRS = Schema.Struct({})
 
-  it.prop('∀s_Add_=Idempotent', { of: [DeclaredSpan], subject: declared, runs: 100 }, (add, [spec]) => {
+  it.prop('∀s_Add_=Idempotent', { of: [DeclaredSpan], subject: declared }, (add, [spec]) => {
     const span = Span.declare({ id: spec.id, name: spec.name, attrs: LAW_ATTRS })
     const once = add(make('law'), span)
     const twice = add(once, span)

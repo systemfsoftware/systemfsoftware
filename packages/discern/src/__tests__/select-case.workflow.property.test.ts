@@ -66,7 +66,7 @@ const isRefusedAs = (caseId: string, reason: string | undefined) => (refused: Un
 // Kills a decider that skips past matches, names the wrong case, or demands an uncertain handler.
 it.prop(
   '∀c_FirstMatch_=Selected',
-  { of: [Schema.Array(Schema.String), Schema.String, Schema.Boolean], subject: selectCase, runs: 100 },
+  { of: [Schema.Array(Schema.String), Schema.String, Schema.Boolean], subject: selectCase },
   (subject, [missIds, headId, withHandler]) => {
     const cases = [...missIds.map(missedCase), matchedCase(headId)]
     return Result.match(decisionOf(subject, cases, withHandler), {
@@ -79,7 +79,7 @@ it.prop(
 // Kills a decider that never falls back, including on the empty case list.
 it.prop(
   '∀c_AllMiss_=Fallback',
-  { of: [Schema.Array(Schema.String), Schema.Boolean], subject: selectCase, runs: 100 },
+  { of: [Schema.Array(Schema.String), Schema.Boolean], subject: selectCase },
   (subject, [ids, withHandler]) =>
     Result.match(decisionOf(subject, ids.map(missedCase), withHandler), {
       onFailure: () => false,
@@ -90,7 +90,7 @@ it.prop(
 // Kills a decider that handles uncertainty without naming the case or keeps a foreign reason.
 it.prop(
   '∀u_WithHandler_=Handled',
-  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase, runs: 100 },
+  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase },
   (subject, [caseId, withReason, reason]) => {
     const wanted = expectedReason(withReason, reason)
     const cases = [uncertainCase(caseId, wanted)]
@@ -104,7 +104,7 @@ it.prop(
 // Kills a decider that answers when no uncertain handler exists.
 it.prop(
   '∀u_WithoutHandler_=Refused',
-  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase, runs: 100 },
+  { of: [Schema.String, Schema.Boolean, Schema.String], subject: selectCase },
   (subject, [caseId, withReason, reason]) => {
     const wanted = expectedReason(withReason, reason)
     const cases = [uncertainCase(caseId, wanted)]
@@ -128,7 +128,7 @@ const truncateAtFirstDecisive = (cases: ReadonlyArray<CaseVerdict>): ReadonlyArr
 // Kills a decider that scans past the first decisive case.
 it.prop(
   '∀c_Decision_=PrefixStable',
-  { of: [Schema.Array(CaseVerdict), Schema.Boolean], subject: selectCase, runs: 100 },
+  { of: [Schema.Array(CaseVerdict), Schema.Boolean], subject: selectCase },
   (subject, [cases, withHandler]) => {
     const full = projectionOf(decisionOf(subject, cases, withHandler))
     const truncated = projectionOf(decisionOf(subject, truncateAtFirstDecisive(cases), withHandler))

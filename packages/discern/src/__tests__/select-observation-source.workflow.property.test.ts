@@ -46,13 +46,13 @@ const refusedIdsOf = (verdict: Verdict): ReadonlyArray<string> =>
 
 it.prop(
   '∀c_SelectSource_=AllRecorded',
-  { of: [Schema.Array(Schema.String), Schema.Literals(['fail', 'ask'])], subject: selectObservationSource, runs: 100 },
+  { of: [Schema.Array(Schema.String), Schema.Literals(['fail', 'ask'])], subject: selectObservationSource },
   (subject, [hitIds, onMissing]) => tagOf(verdictOf(subject, hitIds, [], onMissing)) === 'AllRecorded',
 )
 
 it.prop(
   '∀c_SelectSource_=AskForMissing',
-  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource, runs: 100 },
+  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource },
   (subject, [missing]) =>
     tagOf(verdictOf(subject, [], missing, 'ask')) === 'AskForMissing' &&
     askedIdsOf(verdictOf(subject, [], missing, 'ask')).join('|') === missing.join('|'),
@@ -60,7 +60,7 @@ it.prop(
 
 it.prop(
   '∀c_SelectSource_=RecordingMissing',
-  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource, runs: 100 },
+  { of: [Schema.NonEmptyArray(Schema.String)], subject: selectObservationSource },
   (subject, [missing]) =>
     tagOf(verdictOf(subject, [], missing, 'fail')) === 'RecordingMissing' &&
     refusedIdsOf(verdictOf(subject, [], missing, 'fail')).join('|') === missing.join('|'),

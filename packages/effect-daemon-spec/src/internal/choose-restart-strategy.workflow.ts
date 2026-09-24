@@ -160,7 +160,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀t_RestartSet_⊆Children',
-    { of: [DecideInput], subject: restartIndicesFor, runs: 100 },
+    { of: [DecideInput], subject: restartIndicesFor },
     (subject, [input]) =>
       RESTART_STRATEGIES.every((strategy) =>
         restartSetIsValid(subject(strategy, input.failedIndex, input.totalChildren), input.totalChildren)
@@ -181,7 +181,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀t_BlastRadius_⊆Widening',
-    { of: [DecideInput], subject: restartIndicesFor, runs: 100 },
+    { of: [DecideInput], subject: restartIndicesFor },
     (subject, [input]) =>
       blastRadiusWidens(
         subject('one_for_one', input.failedIndex, input.totalChildren),
@@ -210,7 +210,7 @@ if (import.meta.vitest !== void 0) {
   /** one_for_all covers the whole tree, and rest_for_one exactly the failed child's suffix. */
   it.prop(
     '∀t_Cardinality_=Strategy',
-    { of: [DecideInput], subject: restartIndicesFor, runs: 100 },
+    { of: [DecideInput], subject: restartIndicesFor },
     (subject, [input]) =>
       cardinalityMatchesStrategy(
         subject('one_for_all', input.failedIndex, input.totalChildren),

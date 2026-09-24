@@ -94,7 +94,6 @@ it.prop(
       Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.05, maximum: 0.4 }))),
     ],
     subject: selectRoute,
-    runs: 100,
   },
   (subject, [leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
     const leader = { id: leaderId, probability: leaderProbability }
@@ -119,7 +118,6 @@ it.prop(
       Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.2, maximum: 0.4 }))),
     ],
     subject: selectRoute,
-    runs: 100,
   },
   (subject, [leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
     const leader = { id: leaderId, probability: leaderProbability }
@@ -143,7 +141,6 @@ it.prop(
       Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.5 }))),
     ],
     subject: selectRoute,
-    runs: 100,
   },
   (subject, [leaderId, runnerUpId, leaderProbability, minProbability, runnerUpProbability]) => {
     const leader = { id: leaderId, probability: leaderProbability }
@@ -158,7 +155,7 @@ it.prop(
 
 it.prop(
   '∀c_SingleEligible_=MatchedByElimination',
-  { of: [RouteCandidate], subject: selectRoute, runs: 100 },
+  { of: [RouteCandidate], subject: selectRoute },
   (subject, [candidate]) => {
     const route = verdictOf(subject, commandOf(new OneEligible({ candidate }), 0.7, 0.15))
     return isEliminationMatchOf(route, candidate.id)
@@ -167,7 +164,7 @@ it.prop(
 
 it.prop(
   '∀c_NoEligible_=None',
-  { of: [Schema.Array(Schema.String)], subject: selectRoute, runs: 100 },
+  { of: [Schema.Array(Schema.String)], subject: selectRoute },
   (subject, [membership]) => {
     const route = verdictOf(subject, commandOf(new NoEligible({ membership }), 0.7, 0.15))
     return isNoneOf(route, membership)

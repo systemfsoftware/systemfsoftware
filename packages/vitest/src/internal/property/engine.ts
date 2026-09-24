@@ -1,7 +1,8 @@
 /**
- * @internal The lawful property engine (R11-R15): a property names the function under test, requires a
- * budget, accepts only a literal boolean verdict (or an `Effect` of one), judges coverage classes with
- * QuickCheck's sequential test, and defers the constant-impostor verdict to the end of the file.
+ * @internal The lawful property engine (R11-R15): a property names the function under test, takes a budget
+ * that merges its own fields over the configured default over `runs: 100`, accepts only a literal boolean
+ * verdict (or an `Effect` of one), judges coverage classes with QuickCheck's sequential test, and defers the
+ * constant-impostor verdict to the end of the file.
  *
  * `of` accepts what upstream accepts — a tuple or record of Schemas or Arbitraries (KTD10) — and `holds`
  * receives the generated values exactly as drawn, typed by the gens that produced them.
@@ -11,8 +12,9 @@ import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as V from 'vitest'
-import { MissingBudget, NonBooleanVerdict } from '../errors.schema.js'
+import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'
 import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
+import { checkDefaultsKey, type ProvidedCheckDefaults, providedCheckDefaults } from './defaults.js'
 import { VacuousProperty } from './error.schema.js'
 import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
@@ -57,10 +59,14 @@ type PropertyRuns<N extends number> = number extends N ? number
 export interface PropertySpec<G extends Gens, S extends PropertySubject, N extends number> {
   readonly of: G
   readonly subject: S
-  readonly runs: N & PropertyRuns<N>
+  /**
+   * The property's own run count. Omitted, the configured default applies; when the run provides none,
+   * the built-in default of 100 does.
+   */
+  readonly runs?: N & PropertyRuns<N>
   /** Labelled input predicates, each with the minimum share of runs it must see (R14). */
   readonly cover?: Readonly<Record<string, readonly [CoveragePredicate<G>, number]>>
-  /** Passed through to Effect's Arbitrary checker beside the required `runs` (size, seed, shrink budget). */
+  /** The property's own check options, merged field by field over the provided and built-in defaults. */
   readonly arbitrary?: Arbitrary.CheckOptions
 }
 
@@ -135,25 +141,50 @@ interface CoverageRecorder<G extends Gens> {
   readonly judge: () => string | undefined
 }
 
+const DEFAULT_RUNS = 100
+
 const isPositiveInteger = (runs: number): boolean => Number.isInteger(runs) && runs > 0
 
-const describeRuns = (runs: number): string => Number.isInteger(runs) ? `${String(runs)}` : 'a non-integer or absent'
+const describeRuns = (runs: number): string => Number.isInteger(runs) ? `${String(runs)}` : 'a non-integer'
 
-const missingBudget = (name: string, runs: number): string =>
+const invalidPropertyBudget = (name: string, runs: number): string =>
   `${name}: pass a positive integer \`runs\`; received ${describeRuns(runs)}. Write ${REWRITE}.`
 
-const requireBudget = (
-  name: string,
-  spec: { readonly runs: number; readonly arbitrary?: Arbitrary.CheckOptions },
-): Budget => {
-  if (isPositiveInteger(spec.runs) === false) throw new MissingBudget({ detail: missingBudget(name, spec.runs) })
-  return withBudget(spec)
+const invalidProvidedBudget = (runs: number): string =>
+  `the configured property budget (${checkDefaultsKey}) supplies \`runs\`: ${describeRuns(runs)}; ` +
+  'it must be a positive integer.'
+
+const requirePositiveRuns = (message: (runs: number) => string, runs: number | undefined): void => {
+  if (isInvalidRuns(runs)) throw new InvalidBudget({ detail: message(runs) })
 }
 
-const withBudget = (spec: { readonly runs: number; readonly arbitrary?: Arbitrary.CheckOptions }): Budget => ({
-  runs: spec.runs,
-  options: { ...spec.arbitrary, runs: spec.runs },
-})
+const isInvalidRuns = (runs: number | undefined): runs is number =>
+  runs !== undefined && isPositiveInteger(runs) === false
+
+type BudgetInput = { readonly runs?: number | undefined; readonly arbitrary?: Arbitrary.CheckOptions | undefined }
+
+/** The property's own explicit fields, a property-level `runs` outranking the same field in `arbitrary`. */
+const explicitOptions = (spec: BudgetInput): Arbitrary.CheckOptions =>
+  spec.runs === undefined ? { ...spec.arbitrary } : { ...spec.arbitrary, runs: spec.runs }
+
+const mergedOptions = (
+  provided: ProvidedCheckDefaults | undefined,
+  explicit: Arbitrary.CheckOptions,
+): Arbitrary.CheckOptions => ({ runs: DEFAULT_RUNS, ...provided, ...explicit })
+
+const resolvedRuns = (options: Arbitrary.CheckOptions): number => options.runs ?? DEFAULT_RUNS
+
+/**
+ * The effective check options: the property's own fields over the configured default over `runs: 100`,
+ * merged field by field so a property that sets only `runs` still inherits the configured size and caps.
+ */
+const resolveBudget = (name: string, spec: BudgetInput, provided: ProvidedCheckDefaults | undefined): Budget => {
+  const explicit = explicitOptions(spec)
+  requirePositiveRuns((runs) => invalidPropertyBudget(name, runs), explicit.runs)
+  requirePositiveRuns(invalidProvidedBudget, provided?.runs)
+  const options = mergedOptions(provided, explicit)
+  return { runs: resolvedRuns(options), options }
+}
 
 const toArbitrary = (input: ArbitraryInput): Arbitrary.Arbitrary<Opaque> =>
   Schema.isSchema(input) ? Arbitrary.schema(input) : input
@@ -405,7 +436,7 @@ const program = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
   Effect.gen(function*() {
-    const budget = requireBudget(registration.name, registration.spec)
+    const budget = resolveBudget(registration.name, registration.spec, providedCheckDefaults())
     const arbitrary = arbitraryOf(registration.spec.of)
     const coverage = makeCoverage(registration.spec.cover, arbitrary)
     const run = checkOf(registration, arbitrary, budget, coverage.observe)

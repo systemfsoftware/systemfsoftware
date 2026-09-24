@@ -89,7 +89,7 @@ Measured in the prototypes, cheap models write `expect(Equal.equals(a, b)).toBe(
 
 **Properties**
 
-- R11. `it.prop(name, { of, subject, runs }, holds)` and `it.effect.prop(...)` name the function under test and require a positive integer `runs`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`. A missing budget fails as `MissingBudget`.
+- R11. `it.prop(name, { of, subject, runs? }, holds)` and `it.effect.prop(...)` name the function under test. `runs` is optional and must be a positive integer when given; the effective check options merge the property's own fields over the runner's configured default (`test.provide`) over the built-in `runs: 100`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`. A `runs` that is not a positive integer, from the property or from the configured default, fails as `InvalidBudget`, naming where the bad value came from.
 - R12. After a property holds, it runs again against a constant impostor of its subject, which returns the first output forever. Each subject is judged across all properties in its file. If no property in the file refutes the impostor, the file fails with `VacuousProperty` and the repair message.
 - R13. Law kinds `model`, `metamorphic`, `roundTrip` and `invariant` are sugar over R11/R12. `idempotent` and `deterministic` are declared exempt: they skip the impostor gate, are reported as exempt, and are the only exemptions.
 - R14. A property may declare coverage classes: labelled input predicates, each with a minimum share of runs. A class fails only when a sequential statistical test is confident its share is below the minimum, and passes once it is confident the share is at least 0.9 of the minimum (QuickCheck's `stdConfidence`: certainty 10^9, tolerance 0.9). The tolerance is what makes the test terminate: a class sitting exactly at its minimum would otherwise draw forever. `runs` is then the minimum run count, not the maximum. The failure names the label and the observed share.
@@ -283,7 +283,7 @@ flowchart TB
 The property surface, as directional grammar (not an exact signature):
 
 ```text
-it.prop(name, { of: Gens, subject: S, runs: PositiveInt, cover?: { [label]: [predicate(values), minShare] } }, holds(subject, values) => boolean)
+it.prop(name, { of: Gens, subject: S, runs?: PositiveInt, cover?: { [label]: [predicate(values), minShare] } }, holds(subject, values) => boolean)
 it.effect.prop(... holds(subject, values) => Effect<boolean>)
 it.law.model | metamorphic | roundTrip | invariant (name, spec, ...kind-specific functions)   -- gated
 it.law.idempotent | deterministic (name, spec, ...)                                       -- exempt, reported
@@ -471,7 +471,7 @@ flowchart TB
   - AE5: the sort-only property is vacuous alone; adding a `model` law makes it pass; `idempotent` alone passes and is reported exempt.
   - The Q1 corpus: 9/9 cheats refused, 2/2 controls pass.
   - A verdict of `undefined`, `1` or an `Effect<boolean>` returned from `it.prop` (not `it.effect.prop`) fails `NonBooleanVerdict`. This is the tempo-trace-store case.
-  - A missing `runs`, `runs: 0` or `runs: 1.5` fails `MissingBudget`, and the positional form is a type error.
+  - `runs: 0` or `runs: 1.5` fails `InvalidBudget`, an omitted `runs` inherits the configured default, and the positional form is a type error.
   - A `cover` class requiring 30% of runs but hit about 5% fails, naming the label and the observed share.
   - A class requiring 20% and hit about 19% does not fail on a single unlucky sample; the sequential test keeps drawing until it is confident either way.
   - Two concurrent files with same-named subjects are judged independently.

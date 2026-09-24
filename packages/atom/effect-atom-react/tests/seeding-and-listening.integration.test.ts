@@ -7,11 +7,13 @@ import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('Seeding and listening to shared values')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A page that seeds the same value twice keeps only the first seed',

@@ -70,7 +70,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀a_Start_=Declared',
-    { of: [CheckoutAttrs], subject: started, runs: 100 },
+    { of: [CheckoutAttrs], subject: started },
     (start, [attrs]) =>
       Effect.gen(function*() {
         const span = yield* start(Effect.currentSpan, Checkout, attrs)
@@ -81,7 +81,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀a_Start_=Identity',
-    { of: [CheckoutAttrs], subject: started, runs: 100 },
+    { of: [CheckoutAttrs], subject: started },
     (start, [attrs]) =>
       Effect.gen(function*() {
         const succeeded = yield* start(Effect.succeed(42), Checkout, attrs)

@@ -375,43 +375,43 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀r_SettleUnion_=DistinctRead',
-    { of: [Reads], subject: settleStep, runs: 100 },
+    { of: [Reads], subject: settleStep },
     (step, [read]) => unionIsTheDistinctRead(step, read),
   )
 
   it.prop(
     '∀r_SettleReplay_≡FirstUnion',
-    { of: [Reads], subject: settleStep, runs: 100 },
+    { of: [Reads], subject: settleStep },
     (step, [read]) => replayAddsNothing(step, read),
   )
 
   it.prop(
     '∀r_SettleShrink_⊇EveryRead',
-    { of: [Reads, Reads], subject: settleStep, runs: 100 },
+    { of: [Reads, Reads], subject: settleStep },
     (step, [earlier, later]) => laterReadKeepsEveryEarlierId(step, earlier, later),
   )
 
   it.prop(
     '∀r_SettleFirstRecord_=FirstSeen',
-    { of: [Reads], subject: settleStep, runs: 100 },
+    { of: [Reads], subject: settleStep },
     (step, [read]) => firstRecordOfEachIdSurvives(step, read),
   )
 
   it.prop(
     '∀r_SettleWindow_=QuietForSettle',
-    { of: [SomeReads], subject: settleStep, runs: 100 },
+    { of: [SomeReads], subject: settleStep },
     (step, [read]) => settlesExactlyAtTheWindow(step, read),
   )
 
   it.prop(
     '∀r_SettleVacant_=AbsentAtDeadline',
-    { of: [Reads], subject: settleStep, runs: 100 },
+    { of: [Reads], subject: settleStep },
     (step, [read]) => absenceMeansNothingWasSeen(step, read),
   )
 
   it.prop(
     '∀r_SettleGrowing_=UnfinishedAtDeadline',
-    { of: [Reads], subject: settleStep, runs: 100 },
+    { of: [Reads], subject: settleStep },
     (step, [read]) => unfinishedMeansSomethingWasSeen(step, read),
   )
 }

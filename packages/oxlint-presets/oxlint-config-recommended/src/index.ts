@@ -46,7 +46,7 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   ...testDiscipline.configs.recommended.rules,
 }
 
-const enforcedTestDisciplineRules = ['expect-boolean-predicate', 'expect-from-effect-vitest'] as const
+const enforcedTestDisciplineRules = ['expect-boolean-predicate', 'vitest-from-effect-vitest'] as const
 
 const enforcedRules: NonNullable<OxlintConfig['rules']> = Object.fromEntries(
   Object.entries(rules).filter(([key]) => enforcedTestDisciplineRules.some((name) => key.endsWith(`/${name}`))),

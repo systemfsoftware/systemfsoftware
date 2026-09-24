@@ -31,7 +31,6 @@ it.prop(
       Schema.Uint8Array,
     ],
     subject: classifyJobExit,
-    runs: 100,
   },
   (subject, [code, stdout, stderr]) =>
     Option.match(exitedOf(classifiedOf(subject, code, stdout, stderr)), {
@@ -45,13 +44,12 @@ it.prop(
   {
     of: [Schema.Int.pipe(Schema.check(Schema.isLessThan(0))), Schema.Uint8Array, Schema.Uint8Array],
     subject: classifyJobExit,
-    runs: 100,
   },
   (subject, [code, stdout, stderr]) => signaledOf(classifiedOf(subject, code, stdout, stderr)),
 )
 
 it.prop(
   '∀code_JobExited_≡Natural',
-  { of: [Schema.TaggedStruct('JobExited', { code: Schema.Int })], subject: Schema.decodeOption(JobExited), runs: 100 },
+  { of: [Schema.TaggedStruct('JobExited', { code: Schema.Int })], subject: Schema.decodeOption(JobExited) },
   (subject, [candidacy]) => Option.isSome(subject(candidacy)) === (candidacy.code >= 0),
 )

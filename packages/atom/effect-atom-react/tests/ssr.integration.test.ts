@@ -9,7 +9,7 @@
  *
  * @since 4.0.0
  */
-import { expect } from '@effect/vitest'
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -19,7 +19,6 @@ import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { renderToString } from 'react-dom/server'
-import { vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 

@@ -11,10 +11,17 @@ import type * as Scope from 'effect/Scope'
 import * as V from 'vitest'
 import * as expectInternal from './internal/expect.js'
 import * as ownedInternal from './internal/owned.js'
+import { checkDefaultsKey, type ProvidedCheckDefaults } from './internal/property/defaults.js'
 import type * as Engine from './internal/property/engine.js'
 import type * as Property from './internal/property/kinds.js'
 import * as internal from './internal/runner.js'
 import * as testContextInternal from './internal/test-context.js'
+
+declare module 'vitest' {
+  interface ProvidedContext {
+    [checkDefaultsKey]?: ProvidedCheckDefaults
+  }
+}
 
 /**
  * @since 4.0.0
@@ -137,8 +144,9 @@ export namespace Vitest {
   export type PropertySubject = Engine.PropertySubject
 
   /**
-   * A property's subject and its budget: `runs` must be a positive integer, and `cover` declares the
-   * coverage classes of R14.
+   * A property's subject, its optional budget and its coverage classes. `runs`, when given, must be a
+   * positive integer; omitted, the effective check options merge the property's fields over the configured
+   * default (`test.provide`) over the built-in `runs: 100`. `cover` declares the coverage classes of R14.
    *
    * @since 4.0.0
    */
@@ -207,7 +215,8 @@ export namespace Vitest {
      * `spec.subject` is handed to `holds` instead of being imported into the property. `holds` returns an
      * `Effect` of its verdict: `true` holds, `false` falsifies and triggers shrinking, and any typed failure
      * falsifies the property with its cause. A verdict that is not a literal boolean fails as
-     * `NonBooleanVerdict`, and a `runs` that is not a positive integer fails as `MissingBudget`. After the
+     * `NonBooleanVerdict`; a `runs` that is not a positive integer fails as `InvalidBudget`. `runs` is optional:
+     * the property's own fields win over the configured default (`test.provide`) over `runs: 100`. After the
      * property holds, it is run again against a constant impostor of its subject; the file fails as
      * `VacuousProperty` unless some property in it refutes that impostor.
      *
@@ -238,8 +247,9 @@ export namespace Vitest {
      * `spec.subject` is handed to `holds` instead of being imported into the property. `holds` returns a literal
      * `true`/`false` verdict: `false` falsifies and triggers shrinking. A verdict that is not a boolean — an
      * `Effect`, an `expect()`, an object — fails as `NonBooleanVerdict`, and a `runs` that is not a positive
-     * integer fails as `MissingBudget`. After the property holds, it is run again against a constant impostor of
-     * its subject; the file fails as `VacuousProperty` unless some property in it refutes that impostor.
+     * integer fails as `InvalidBudget`. `runs` is optional: the property's own fields win over the configured
+     * default (`test.provide`) over `runs: 100`. After the property holds, it is run again against a constant
+     * impostor of its subject; the file fails as `VacuousProperty` unless some property in it refutes that impostor.
      *
      * The old positional form `it.prop(name, [arbitraries], predicate)` is refused.
      *

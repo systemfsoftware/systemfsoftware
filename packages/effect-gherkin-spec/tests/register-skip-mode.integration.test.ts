@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
+import { afterAll, expect } from '@effect/vitest'
 import { Gherkin, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { afterAll } from 'vitest'
 
 const executions = { ran: 0 }
 

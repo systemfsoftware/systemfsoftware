@@ -10,6 +10,7 @@ import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 import { Unavailable } from './__fixtures__/Unavailable.schema.js'
 
@@ -17,6 +18,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Waiting for asynchronous values')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A reader who waits through loading sees the value once it arrives',

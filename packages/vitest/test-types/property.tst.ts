@@ -18,7 +18,7 @@ describe('lawful properties (R11-R15)', () => {
   it('accepts the lawful object form with schema arbitraries', () => {
     expect(prop).type.toBeCallableWith(
       'sorts',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (s: Sort, [xs]: SortValues) => isSorted(s(xs)),
     )
   })
@@ -26,7 +26,7 @@ describe('lawful properties (R11-R15)', () => {
   it('infers generated values inside holds', () => {
     expect(prop).type.toBeCallableWith(
       'sorts',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (s: Sort, values: SortValues) => {
         expect(values).type.toBe<readonly [ReadonlyArray<number>]>()
         return isSorted(s(values[0]))
@@ -37,7 +37,7 @@ describe('lawful properties (R11-R15)', () => {
   it('accepts a record of arbitraries', () => {
     expect(prop).type.toBeCallableWith(
       'sorts',
-      { of: { list: Schema.Array(Schema.Int) }, subject, runs: 50 },
+      { of: { list: Schema.Array(Schema.Int) }, subject },
       (s: Sort, values: { readonly list: ReadonlyArray<number> }) => {
         expect(values).type.toBe<{ readonly list: ReadonlyArray<number> }>()
         return isSorted(s(values.list))
@@ -51,7 +51,6 @@ describe('lawful properties (R11-R15)', () => {
       {
         of: [Schema.Array(Schema.Int)],
         subject,
-        runs: 400,
         cover: { singletons: [(xs: ReadonlyArray<number>) => xs.length === 1, 0.9] },
       },
       (s: Sort, [xs]: SortValues) => isSorted(s(xs)),
@@ -61,15 +60,20 @@ describe('lawful properties (R11-R15)', () => {
   it('accepts Effect<boolean> verdicts on it.effect.prop', () => {
     expect(effectProp).type.toBeCallableWith(
       'sorts',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (s: Sort, [xs]: SortValues) => Effect.succeed(isSorted(s(xs))),
     )
   })
 
-  it('requires runs in the spec', () => {
-    expect(prop).type.not.toBeCallableWith(
+  it('accepts an omitted runs and refuses one that is not a positive integer', () => {
+    expect(prop).type.toBeCallableWith(
       'sorts',
       { of: [Schema.Array(Schema.Int)], subject },
+      (s: Sort, [xs]: SortValues) => isSorted(s(xs)),
+    )
+    expect(prop).type.toBeCallableWith(
+      'sorts',
+      { of: [Schema.Array(Schema.Int)], subject, runs: 1 },
       (s: Sort, [xs]: SortValues) => isSorted(s(xs)),
     )
     expect(prop).type.not.toBeCallableWith(
@@ -85,11 +89,6 @@ describe('lawful properties (R11-R15)', () => {
     expect(prop).type.not.toBeCallableWith(
       'sorts',
       { of: [Schema.Array(Schema.Int)], subject, runs: 1.5 },
-      (s: Sort, [xs]: SortValues) => isSorted(s(xs)),
-    )
-    expect(prop).type.toBeCallableWith(
-      'sorts',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 1 },
       (s: Sort, [xs]: SortValues) => isSorted(s(xs)),
     )
   })
@@ -110,7 +109,7 @@ describe('lawful properties (R11-R15)', () => {
   it('refuses a non-boolean verdict on the sync lane', () => {
     expect(prop).type.not.toBeCallableWith(
       'sorts',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (s: Sort, [xs]: SortValues) => Effect.succeed(isSorted(s(xs))),
     )
   })
@@ -120,7 +119,7 @@ describe('law kinds (R13)', () => {
   it('accepts a model law against an independent oracle', () => {
     expect(law.model).type.toBeCallableWith(
       'agrees with insertion sort',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       oracle,
     )
   })
@@ -128,7 +127,7 @@ describe('law kinds (R13)', () => {
   it('refuses a model oracle whose output the subject does not produce', () => {
     expect(law.model).type.not.toBeCallableWith(
       'agrees with insertion sort',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (xs: ReadonlyArray<number>) => xs.join(','),
     )
   })
@@ -139,7 +138,6 @@ describe('law kinds (R13)', () => {
       {
         of: [Schema.Array(Schema.Int)],
         subject: (xs: ReadonlyArray<number>) => [...xs].sort((a, b) => a - b),
-        runs: 100,
       },
       oracle,
     )
@@ -149,19 +147,17 @@ describe('law kinds (R13)', () => {
     expect(law.idempotent).type.toBeCallableWith('sorting twice changes nothing', {
       of: [Schema.Array(Schema.Int)],
       subject,
-      runs: 50,
     })
     expect(law.deterministic).type.toBeCallableWith('one input, one output', {
       of: [Schema.Array(Schema.Int)],
       subject,
-      runs: 50,
     })
   })
 
   it('accepts a metamorphic law with an input transform', () => {
     expect(law.metamorphic).type.toBeCallableWith(
       'reversing twice is the identity',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       {
         transform: (xs: ReadonlyArray<number>): SortValues => [[...xs].reverse()] as const,
         relate: (original: ReadonlyArray<number>, transformed: ReadonlyArray<number>) =>
@@ -173,7 +169,7 @@ describe('law kinds (R13)', () => {
   it('accepts a roundTrip law whose decode returns the generated values', () => {
     expect(law.roundTrip).type.toBeCallableWith(
       'decode encodes',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (encoded: ReadonlyArray<number>): SortValues => [encoded],
     )
   })
@@ -181,7 +177,7 @@ describe('law kinds (R13)', () => {
   it('accepts an invariant law given the subject output and the values', () => {
     expect(law.invariant).type.toBeCallableWith(
       'sorted output',
-      { of: [Schema.Array(Schema.Int)], subject, runs: 100 },
+      { of: [Schema.Array(Schema.Int)], subject },
       (output: ReadonlyArray<number>) => isSorted(output),
     )
   })

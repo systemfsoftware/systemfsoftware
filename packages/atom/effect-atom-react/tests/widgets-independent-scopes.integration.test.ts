@@ -1,4 +1,4 @@
-import { expect } from '@effect/vitest'
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -7,12 +7,13 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
-import { vi } from 'vitest'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('Keeping two on-screen widgets showing values from separate data sources independent of each other')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       "A widget still loading is not affected when a different widget's cleanup timer runs",

@@ -7,7 +7,7 @@ const decide = (bytesRead: number, requested: number) => planReadSlice(new ReadS
 
 it.prop(
   '∀r_ReadExhausted_≡ZeroBytesRead',
-  { of: [Schema.Int], subject: decide, runs: 100 },
+  { of: [Schema.Int], subject: decide },
   (subject, [requested]) => {
     const decision = subject(0, Math.abs(requested) + 1).pipe(Result.getOrThrow)
     return Schema.is(ReadExhausted)(decision)
@@ -16,7 +16,7 @@ it.prop(
 
 it.prop(
   '∀r_ReadWhole_≡FullRequestSatisfied',
-  { of: [Schema.Int, Schema.Int], subject: decide, runs: 100 },
+  { of: [Schema.Int, Schema.Int], subject: decide },
   (subject, [req, extra]) => {
     const requested = Math.abs(req) + 1
     const bytesRead = requested + Math.abs(extra)
@@ -27,7 +27,7 @@ it.prop(
 
 it.prop(
   '∀r_ReadPartial_≡UnderflowCount',
-  { of: [Schema.Int, Schema.Int], subject: decide, runs: 100 },
+  { of: [Schema.Int, Schema.Int], subject: decide },
   (subject, [read, extra]) => {
     const bytesRead = Math.abs(read) + 1
     const requested = bytesRead + Math.abs(extra) + 1

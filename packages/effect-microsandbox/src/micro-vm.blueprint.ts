@@ -277,7 +277,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀spec_Combinators_=Pure',
-    { of: [MicroVMSpec], subject: applyAll, runs: 100 },
+    { of: [MicroVMSpec], subject: applyAll },
     (subject, [spec]) => {
       const next = subject(Services.of(spec)).spec
       return Exit.match(Schema.decodeExit(MicroVMSpec)(spec), {
@@ -290,7 +290,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀spec_Env_⊨Drawn',
-    { of: [MicroVMSpec, envRecord], subject: withEnv, runs: 100 },
+    { of: [MicroVMSpec, envRecord], subject: withEnv },
     (subject, [spec, env]) => {
       const next = subject(Services.of(spec), env).spec
       return Object.entries(env).every(([key, value]) => next.env[key] === value)
@@ -305,7 +305,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '≤kk_EnvMerge_≡Assoc',
-    { of: [MicroVMSpec, distinctKeyPair], subject: withEnv, runs: 100 },
+    { of: [MicroVMSpec, distinctKeyPair], subject: withEnv },
     (subject, [spec, [k1, k2]]) => {
       const sequential = subject(subject(Services.of(spec), { [k2]: 'v2' }), { [k1]: 'v1' }).spec
       const merged = subject(Services.of(spec), { [k1]: 'v1', [k2]: 'v2' }).spec
@@ -315,20 +315,20 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀spec_MemoryLimit_≡DrawnMb',
-    { of: [MicroVMSpec, positiveMb], subject: withMemoryLimit, runs: 100 },
+    { of: [MicroVMSpec, positiveMb], subject: withMemoryLimit },
     (subject, [spec, mb]) => subject(Services.of(spec), mb).spec.memoryMb === mb,
   )
 
   it.prop(
     '∀spec_MemoryLimit_=Idempotent',
-    { of: [MicroVMSpec, positiveMb], subject: withMemoryLimit, runs: 100 },
+    { of: [MicroVMSpec, positiveMb], subject: withMemoryLimit },
     (subject, [spec, mb]) =>
       specEq(subject(subject(Services.of(spec), mb), mb).spec, subject(Services.of(spec), mb).spec),
   )
 
   it.prop(
     '∀spec_Ports_⊨Drawn',
-    { of: [MicroVMSpec, guestPorts], subject: withExposedPorts, runs: 100 },
+    { of: [MicroVMSpec, guestPorts], subject: withExposedPorts },
     (subject, [spec, ports]) => {
       const next = subject(Services.of(spec), ports).spec
       return Match.value(next).pipe(
@@ -341,14 +341,14 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀spec_Ports_=Idempotent',
-    { of: [MicroVMSpec, guestPorts], subject: withExposedPorts, runs: 100 },
+    { of: [MicroVMSpec, guestPorts], subject: withExposedPorts },
     (subject, [spec, ports]) =>
       specEq(subject(subject(Services.of(spec), ports), ports).spec, subject(Services.of(spec), ports).spec),
   )
 
   it.prop(
     '∀job_Combinators_⊇HostAccessWorkdir',
-    { of: [JobSpec, Schema.Boolean, Schema.String], subject: withWorkdir, runs: 100 },
+    { of: [JobSpec, Schema.Boolean, Schema.String], subject: withWorkdir },
     (subject, [job, enabled, path]) => {
       const next = applyAll(subject(withHostAccess(Jobs.of(job), enabled), path)).spec
       return Match.value(next).pipe(

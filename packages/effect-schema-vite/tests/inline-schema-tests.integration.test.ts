@@ -5,7 +5,7 @@
  * generates that package's law suite and reads the emitted body: which
  * schemas earned a law pair and which module each law binds.
  */
-import { expect } from '@effect/vitest'
+import { afterAll, expect } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
@@ -15,7 +15,6 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 import { createServer } from 'vite'
-import { afterAll } from 'vitest'
 
 import { RECURSION_BUDGET_RUNTIME_SPECIFIER } from '@systemfsoftware/effect-schema-recursion-budget'
 import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'

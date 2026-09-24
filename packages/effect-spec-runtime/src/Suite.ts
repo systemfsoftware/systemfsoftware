@@ -1,4 +1,3 @@
-/// <reference types="vitest/globals" />
 /// <reference types="vitest/importMeta" />
 import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
@@ -178,7 +177,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀x_LayerSetupOptions_=OrWithLive',
-    { of: [Schema.Boolean], subject: layerSetupOptions, runs: 100 },
+    { of: [Schema.Boolean], subject: layerSetupOptions },
     (setupOptions, [exclude]) =>
       setupOptions(exclude, true).excludeTestServices === true &&
       setupOptions(exclude, false).excludeTestServices === exclude,

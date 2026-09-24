@@ -8,11 +8,13 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary, getErrorMessage } from 'react-error-boundary'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('Keeping a shared registry alive')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A widget under a provider reads the value that provider holds',

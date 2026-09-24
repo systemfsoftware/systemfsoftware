@@ -5,7 +5,7 @@ import { AssessVirtualization, assessVirtualization } from '../assess-virtualiza
 
 it.prop(
   '∀cmd_Verdict_=Sound',
-  { of: [AssessVirtualization], subject: assessVirtualization, runs: 100 },
+  { of: [AssessVirtualization], subject: assessVirtualization },
   (subject, [command]) => {
     const verdict = Result.getOrThrow(subject(command))
     return Match.value(command.observation).pipe(

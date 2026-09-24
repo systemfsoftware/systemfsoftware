@@ -92,19 +92,19 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀e_BreakWithDump_∈Messages',
-    { of: [Break, Schema.String], subject: dumpMessageOf, runs: 100 },
+    { of: [Break, Schema.String], subject: dumpMessageOf },
     (messageOf, [verdict, path]) => Option.exists(messageOf(verdict, path), (message) => message.includes(path)),
   )
 
   it.prop(
     '∀h_Hold_⊥Messages',
-    { of: [Hold, Schema.String], subject: dumpMessageOf, runs: 100 },
+    { of: [Hold, Schema.String], subject: dumpMessageOf },
     (messageOf, [verdict, path]) => Option.isNone(messageOf(verdict, path)),
   )
 
   it.prop(
     '∀b_BreakWithoutDump_⊥Messages',
-    { of: [Break], subject: dumpMessageOf, runs: 100 },
+    { of: [Break], subject: dumpMessageOf },
     (messageOf, [verdict]) => Option.isNone(messageOf(verdict, null)),
   )
 }

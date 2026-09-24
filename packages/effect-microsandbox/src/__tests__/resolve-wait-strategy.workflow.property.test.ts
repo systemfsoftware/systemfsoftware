@@ -61,7 +61,7 @@ const portOf = (required: WaitRequired): Option.Option<number> =>
 
 it.prop(
   '∀spec_Explicit_=Echo',
-  { of: [MicroVMSpec, WaitStrategy], subject: resolveWaitStrategy, runs: 100 },
+  { of: [MicroVMSpec, WaitStrategy], subject: resolveWaitStrategy },
   (subject, [spec, strategy]) =>
     Option.match(requiredOf(subject, specWithStrategy(spec, strategy)), {
       onNone: () => false,
@@ -71,13 +71,13 @@ it.prop(
 
 it.prop(
   '∀spec_NoPorts_=Skipped',
-  { of: [MicroVMSpec], subject: resolveWaitStrategy, runs: 100 },
+  { of: [MicroVMSpec], subject: resolveWaitStrategy },
   (subject, [spec]) => skippedOf(subject, specWithoutStrategy(spec, [])),
 )
 
 it.prop(
   '∀spec_FirstPort_=Probed',
-  { of: [MicroVMSpec, GuestPort], subject: resolveWaitStrategy, runs: 100 },
+  { of: [MicroVMSpec, GuestPort], subject: resolveWaitStrategy },
   (subject, [spec, port]) =>
     Option.match(requiredOf(subject, specWithoutStrategy(spec, [port])), {
       onNone: () => false,
@@ -87,6 +87,6 @@ it.prop(
 
 it.prop(
   '∀job_Strategy_=Skipped',
-  { of: [JobSpec], subject: resolveWaitStrategy, runs: 100 },
+  { of: [JobSpec], subject: resolveWaitStrategy },
   (subject, [job]) => skippedOf(subject, job),
 )

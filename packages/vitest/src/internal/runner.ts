@@ -460,7 +460,7 @@ const isSlop = (error: Error): error is Refusals.Slop => Schema.is(Refusals.Slop
 const refusalChecks: ReadonlyArray<(error: Error) => boolean> = [
   isSlop,
   Schema.is(Refusals.AfterFailedExpect),
-  Schema.is(Refusals.MissingBudget),
+  Schema.is(Refusals.InvalidBudget),
   Schema.is(Refusals.NonBooleanVerdict),
   Schema.is(Refusals.LeakedState),
 ]

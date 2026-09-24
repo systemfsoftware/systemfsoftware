@@ -29,14 +29,14 @@ const withinLimits = (command: AdmitBudgetCharge): boolean =>
 
 it.prop(
   '∀c_AdmitCharge_=ChargeAdmitted',
-  { of: [Schema.Int, Schema.Int], subject: admitBudgetCharge, runs: 100 },
+  { of: [Schema.Int, Schema.Int], subject: admitBudgetCharge },
   (subject, [spentDecisions, requestedDecisions]) =>
     tagOf(subject(new AdmitBudgetCharge({ spentDecisions, spentCalls: 0, requestedDecisions }))) === 'ChargeAdmitted',
 )
 
 it.prop(
   '∀c_AdmitCharge_=BudgetExhausted',
-  { of: [Schema.Int, Schema.Int], subject: admitBudgetCharge, runs: 100 },
+  { of: [Schema.Int, Schema.Int], subject: admitBudgetCharge },
   (subject, [spentDecisions, requestedDecisions]) =>
     tagOf(
       subject(
@@ -52,6 +52,6 @@ it.prop(
 
 it.prop(
   '∀c_ChargeAdmitted_⊆Limits',
-  { of: [AdmitBudgetCharge], subject: admitBudgetCharge, runs: 100 },
+  { of: [AdmitBudgetCharge], subject: admitBudgetCharge },
   (subject, [command]) => Result.isFailure(subject(command)) || withinLimits(command),
 )

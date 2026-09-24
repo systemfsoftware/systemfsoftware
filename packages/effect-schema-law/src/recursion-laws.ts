@@ -4,7 +4,7 @@ import { Effect, Function, Schema as S, SchemaAST } from 'effect'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 
 const SAMPLE_DRAWS = 2000
-const SAMPLE_SEEDS = 3
+const TREE_SAMPLE_SEEDS = 3
 
 const STOCK_MAX_DEPTH = 2
 
@@ -16,9 +16,8 @@ const SAFETY = 256
 const BUDGET_LOWER_FACTOR = 64
 const BUDGET_UPPER_FACTOR = 1024
 const CALIBRATION_SEED = 0xC0FFEE
-const PROBE_RUNS = 2
+const WALL_CLOCK_PROBE_RUNS = 2
 const PROBE_DRAWS = 200
-const DEFAULT_RUNS = 100
 
 const medianMs = (timings: ReadonlyArray<number>): number => {
   const ordered = [...timings].sort((left, right) => left - right)
@@ -340,7 +339,7 @@ const registerDeepShareLaw = (
   if (maxDepth <= STOCK_MAX_DEPTH) return
   it.effect.prop(
     `∀s_${label}DeepShare_≠Zero`,
-    { of: [S.Int], subject: recursionSubject, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => subject.sample(seed).pipe(Effect.map((sample) => subject.deepShare(sample) > 0)),
   )
 }
@@ -363,7 +362,7 @@ export const recursionLaws: {
 
     it.prop(
       `∀x_${label}Nesting_≤MaxDepth1`,
-      { of: [arbitrary], subject: recursionSubject, runs: SAMPLE_SEEDS },
+      { of: [arbitrary], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
       (subject, [value]) => subject.depth(value) <= maxDepth + 1,
     )
 
@@ -371,13 +370,13 @@ export const recursionLaws: {
 
     it.effect.prop(
       `∀s_${label}Variants_⊇Declared`,
-      { of: [S.Int], subject: recursionSubject, runs: SAMPLE_SEEDS },
+      { of: [S.Int], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
       (subject, [seed]) => subject.sample(seed).pipe(Effect.map((sample) => subject.covers(sample))),
     )
 
     it.prop(
       `∀v_${label}_DepthPlusOne`,
-      { of: [arbitrary], subject: recursionSubject, runs: SAMPLE_SEEDS },
+      { of: [arbitrary], subject: recursionSubject, runs: TREE_SAMPLE_SEEDS },
       (subject, [value]) => subject.depth({ v: value }) === subject.depth(value) + 1,
     )
   },
@@ -498,13 +497,13 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀v_Measure_DepthPlusOne',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: DEFAULT_RUNS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT },
     (subject, [value]) => subject.maxNestingDepthOf({ v: value }) === subject.maxNestingDepthOf(value) + 1,
   )
 
   it.prop(
     '∀s_NonRecursiveSchemas_⊥Cycle',
-    { of: [NonRecursiveIndex], subject: IN_SOURCE_SUBJECT, runs: DEFAULT_RUNS },
+    { of: [NonRecursiveIndex], subject: IN_SOURCE_SUBJECT },
     (subject, [index]) => {
       const schema = NON_RECURSIVE_SCHEMAS[index]
       if (schema === undefined) return false
@@ -514,19 +513,19 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀d_ChainPastCap_=Depth',
-    { of: [DeepChain], subject: IN_SOURCE_SUBJECT, runs: DEFAULT_RUNS },
+    { of: [DeepChain], subject: IN_SOURCE_SUBJECT },
     (subject, [depth]) => subject.decodedDepthOf(depth) === depth,
   )
 
   it.effect.prop(
     '∀s_StockExprDeepShare_=Zero',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => sampleOf(STOCK_EXPR, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) === 0)),
   )
 
   it.effect.prop(
     '∀s_StockExprNesting_≤StockCap',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(STOCK_EXPR, seed).pipe(
         Effect.map((sample) => sample.every((value) => subject.maxNestingDepthOf(value) <= declaredCapOf(STOCK_EXPR))),
@@ -535,7 +534,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀s_DeclaredDeepShare_≠Zero',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => sampleOf(ANNOTATED_EXPR, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) > 0)),
   )
 
@@ -554,20 +553,20 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀s_BaseHeavyDeepShare_≠Zero',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) => sampleOf(BASE_HEAVY_EXPR, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) > 0)),
   )
 
   it.effect.prop(
     '∀s_CollapsedSubsetDeepShare_=Zero',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(COLLAPSED_GENERATION, seed).pipe(Effect.map((sample) => subject.deepShareOf(sample) === 0)),
   )
 
   it.effect.prop(
     '∀s_AnnotatedExprNesting_≤DeclaredCap',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(ANNOTATED_EXPR, seed).pipe(
         Effect.map((sample) =>
@@ -578,7 +577,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀s_AnnotatedExprVariants_⊇Declared',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(ANNOTATED_EXPR, seed).pipe(
         Effect.map((sample) => subject.coversEveryVariant(sample, declaredMembersOf(ANNOTATED_EXPR))),
@@ -587,7 +586,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀s_CollapsedSubset_⊥FullUnionCoverage',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: SAMPLE_SEEDS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: TREE_SAMPLE_SEEDS },
     (subject, [seed]) =>
       sampleOf(COLLAPSED_GENERATION, seed).pipe(
         Effect.map((sample) => !subject.coversEveryVariant(sample, declaredMembersOf(DROPPED_MEMBER_EXPR))),
@@ -596,7 +595,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀c_Budget_∈MeasuredBand',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: PROBE_RUNS },
+    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: WALL_CLOCK_PROBE_RUNS },
     (subject, [seed]) =>
       Effect.gen(function*() {
         const arbitrary = arbitraryOf(ANNOTATED_EXPR)

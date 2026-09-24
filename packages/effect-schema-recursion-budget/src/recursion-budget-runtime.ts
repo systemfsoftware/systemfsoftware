@@ -168,13 +168,13 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀x_ChainNesting_≤Ceiling',
-    { of: [Chain], subject: maxNestingDepthOf, runs: 100 },
+    { of: [Chain], subject: maxNestingDepthOf },
     (depth, [value]) => depth(value) <= NESTING_CEILING,
   )
 
   it.prop(
     '∀x_ChainDeepest_=DeclaredTerminal',
-    { of: [Chain], subject: deepestKindOf, runs: 100 },
+    { of: [Chain], subject: deepestKindOf },
     (deepest, [value]) => {
       if (deepest({ kind: 'Lit', value: 42 }) !== 'Lit') return false
       if (deepest({ kind: 'Wrap', inner: 5 }) !== 'Wrap') return false
@@ -184,7 +184,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀x_NestingDepth_=ShiftedByWrap',
-    { of: [Chain], subject: maxNestingDepthOf, runs: 100 },
+    { of: [Chain], subject: maxNestingDepthOf },
     (depth, [value]) => depth({ kind: 'Wrap', inner: value }) === depth(value) + 1,
   )
 
@@ -194,7 +194,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀i_RefusedDerivations_⊥Generation',
-    { of: [RefusedIndex], subject: planOf, runs: 100 },
+    { of: [RefusedIndex], subject: planOf },
     (plan, [index]) => {
       if (typeof plan(Chain.ast) === 'string') return false
       const schema = REFUSED[index]

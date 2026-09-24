@@ -60,26 +60,26 @@ const RESTARTING = { exitSuccess: false, intensityExceeded: false } as const
 describe('chooseRestartStrategy — invariants', () => {
   it.prop(
     '→Succeeded_Exit_=Continue',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => tagOf(subject(commandWith(input, { exitSuccess: true }))) === 'Continue',
   )
 
   it.prop(
     '→Failed∧Exceeded_Decide_=Exhausted',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) =>
       tagOf(subject(commandWith(input, { exitSuccess: false, intensityExceeded: true }))) === 'Exhausted',
   )
 
   it.prop(
     '→Failed∧¬Exceeded_Decide_=Restart',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => tagOf(subject(commandWith(input, RESTARTING))) === 'Restart',
   )
 
   it.prop(
     '→Restart_Indices_≠∅',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => {
       const indices = indicesOf(subject(commandWith(input, RESTARTING)))
       return indices !== null && indices.length > 0
@@ -90,7 +90,7 @@ describe('chooseRestartStrategy — invariants', () => {
 describe('chooseRestartStrategy — restart index invariants', () => {
   it.prop(
     '→OneForOne_Indices_={Failed}',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => {
       const indices = indicesOf(subject(commandWith(input, { ...RESTARTING, strategy: 'one_for_one' })))
       return indices !== null && indices.length === 1 && indices[0] === input.failedIndex
@@ -99,7 +99,7 @@ describe('chooseRestartStrategy — restart index invariants', () => {
 
   it.prop(
     '→OneForAll_Indices_=All',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => {
       const indices = indicesOf(subject(commandWith(input, { ...RESTARTING, strategy: 'one_for_all' })))
       return indices !== null &&
@@ -111,7 +111,7 @@ describe('chooseRestartStrategy — restart index invariants', () => {
 
   it.prop(
     '→RestForOne_Indices_=Failed..End',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => {
       const indices = indicesOf(subject(commandWith(input, { ...RESTARTING, strategy: 'rest_for_one' })))
       return indices !== null &&
@@ -123,7 +123,7 @@ describe('chooseRestartStrategy — restart index invariants', () => {
 
   it.prop(
     '∀s_Indices_⊇Ascending',
-    { of: [DecideInput], subject: chooseRestartStrategy, runs: 100 },
+    { of: [DecideInput], subject: chooseRestartStrategy },
     (subject, [input]) => {
       const indices = indicesOf(subject(commandWith(input, RESTARTING)))
       if (indices === null) return false

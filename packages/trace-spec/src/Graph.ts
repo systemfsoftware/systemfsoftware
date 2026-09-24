@@ -269,7 +269,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀r_DecodeAttrs_=DeclaredOnly',
-    { of: [Extras, Schema.String], subject: decode, runs: 100 },
+    { of: [Extras, Schema.String], subject: decode },
     (decoder, [extras, orderId]) =>
       decodedSoleAttribute(
         decoder(TRACE_ID, [declaredRecord(extras, orderId)], DeclaredOnlyTaxonomy),
@@ -281,7 +281,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀r_MissingAttrs_→ContractDecodeError',
-    { of: [Extras], subject: decode, runs: 100 },
+    { of: [Extras], subject: decode },
     (decoder, [extras]) =>
       Result.match(decoder(TRACE_ID, [missingRecord(extras)], DeclaredOnlyTaxonomy), {
         onFailure: (error) => namesRefusal(error, ORDER_ATTR),
@@ -291,7 +291,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀r_UndeclaredSpan_∈Nodes',
-    { of: [Extras], subject: decode, runs: 100 },
+    { of: [Extras], subject: decode },
     (decoder, [extras]) => {
       const node = findsSpan(decoder(TRACE_ID, [noiseRecord(extras)], BothTaxonomy), NOISE_SPAN_ID)
       return node !== undefined && recordedAsObserved(node, distinctKeyCount(extras))
@@ -300,7 +300,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀r_Children_⊆Descendants',
-    { of: [Extras], subject: decode, runs: 100 },
+    { of: [Extras], subject: decode },
     (decoder, [extras]) =>
       decoder(TRACE_ID, placedTraceOf(extras), BothTaxonomy).pipe(placedNodesOf, childrenAreDescendants),
   )

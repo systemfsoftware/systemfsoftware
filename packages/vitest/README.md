@@ -115,7 +115,7 @@ A presence refusal reads exactly like this:
 
 ## Properties
 
-A property names the function under test and passes a budget:
+A property names the function under test. It runs `runs` times; omit `runs` and the run's configured default applies:
 
 ```ts
 import { expect, it } from '@effect/vitest'
@@ -126,12 +126,12 @@ const isOrdered = (xs: ReadonlyArray<number>): boolean => xs.every((x, i) => i =
 
 it.prop(
   'sorting is ordered',
-  { of: [S.Array(S.Int)], subject: sort, runs: 100 },
+  { of: [S.Array(S.Int)], subject: sort },
   (sort, [xs]) => isOrdered(sort(xs)),
 )
 ```
 
-`of` takes a tuple or a record of `Schema` arbitraries (`{ of: { list: S.Array(S.Int) } }`), and `holds` receives the subject first and the generated values second. `runs` is required and must be a positive integer. `it.effect.prop` is the same shape with `holds` returning `Effect<boolean>`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`; a missing, zero or fractional `runs` fails as `MissingBudget`; the positional form fails as a type error and a refusal.
+`of` takes a tuple or a record of `Schema` arbitraries (`{ of: { list: S.Array(S.Int) } }`), and `holds` receives the subject first and the generated values second. `runs` is optional and must be a positive integer when given. The effective check options merge field by field: the property's own fields win over the configured default (`test.provide`, set by `@systemfsoftware/vitest-config`: 30 in a Stryker worker, 1000 in CI, 100 otherwise) over the built-in `runs: 100`, so `{ runs: 3 }` still inherits the configured `size` and caps. `it.effect.prop` is the same shape with `holds` returning `Effect<boolean>`. A verdict that is not a literal boolean, or an `Effect` of one, fails as `NonBooleanVerdict`; a `runs` that is not a positive integer — from the property or from the configured default — fails as `InvalidBudget`, naming where the bad value came from; the positional form fails as a type error and a refusal.
 
 ### The constant-impostor gate
 
@@ -142,7 +142,7 @@ After a property holds, it runs again against a constant impostor of its subject
 `sorting is ordered` alone is vacuous, because a constant empty array is also ordered. A law that pins the output to an input refutes the impostor for that subject:
 
 ```ts
-it.law.model('agree with insertion sort', { of: [S.Array(S.Int)], subject: sort, runs: 100 }, insertionSort)
+it.law.model('agree with insertion sort', { of: [S.Array(S.Int)], subject: sort }, insertionSort)
 ```
 
 ### Law kinds

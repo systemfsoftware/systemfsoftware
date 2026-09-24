@@ -63,19 +63,19 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀n_MoneyRefusal_≡NonNegative',
-    { of: [S.Finite], subject: moneyDecodes, runs: 100 },
+    { of: [S.Finite], subject: moneyDecodes },
     (subject, [value]) => verdictsAgainst(subject, nonNegativeFinite, Arr.append(amountSeeds, value)),
   )
 
   it.prop(
     '∀n_AmountRefusal_≡NonNegative',
-    { of: [S.Finite], subject: amountDecodes, runs: 100 },
+    { of: [S.Finite], subject: amountDecodes },
     (subject, [value]) => verdictsAgainst(subject, nonNegativeFinite, Arr.append(amountSeeds, value)),
   )
 
   it.prop(
     '∀n_FraudRiskScoreRefusal_∈Bounds',
-    { of: [S.Finite], subject: fraudRiskScoreDecodes, runs: 100 },
+    { of: [S.Finite], subject: fraudRiskScoreDecodes },
     (subject, [value]) => verdictsAgainst(subject, boundedInteger, Arr.append(fraudRiskScoreSeeds, value)),
   )
 }

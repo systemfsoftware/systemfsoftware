@@ -95,7 +95,7 @@ const cmdEchoes = (plan: SandboxPlan, cmd: ReadonlyArray<string> | undefined): b
 
 it.prop(
   '∀outside_Render_=Refused',
-  { of: [refusalCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [refusalCase], subject: renderSandboxPlan },
   (subject, [{ command, offender }]) =>
     refusalLaw(subject, command, (refused) =>
       holds([
@@ -107,7 +107,7 @@ it.prop(
 
 it.prop(
   '∀loopback_Render_=Approved',
-  { of: [successCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [successCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     planLaw(subject, command, (plan) => {
       const allLoopback = plan.portBindings.every((b) => isLoopbackHost(b.host))
@@ -132,7 +132,7 @@ it.prop(
 
 it.prop(
   '∀plan_Configuration_=Conserved',
-  { of: [successCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [successCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     planLaw(subject, command, (plan) => {
       const envKeys = Object.keys(command.spec.env)
@@ -216,14 +216,14 @@ const preChangeServiceArm = (
 
 it.prop(
   '∀noOptIn_Render_=NoProfiles',
-  { of: [noOptInCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [noOptInCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     planLaw(subject, command, (plan) => holds([plan.networkProfiles === undefined, plan.workdir === undefined])),
 )
 
 it.prop(
   '∀hostAccessTrue_Render_=HostAndPublicProfiles',
-  { of: [hostAccessTrueCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [hostAccessTrueCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     planLaw(subject, command, (plan) =>
       Option.match(Option.fromNullishOr(plan.networkProfiles), {
@@ -234,13 +234,13 @@ it.prop(
 
 it.prop(
   '∀hostAccessFalse_Render_=NoProfiles',
-  { of: [hostAccessFalseCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [hostAccessFalseCase], subject: renderSandboxPlan },
   (subject, [command]) => planLaw(subject, command, (plan) => plan.networkProfiles === undefined),
 )
 
 it.prop(
   '∀workdir_Render_=Workdir',
-  { of: [workdirCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [workdirCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     planLaw(subject, command, (plan) =>
       Match.value(command.spec).pipe(
@@ -252,7 +252,7 @@ it.prop(
 
 it.prop(
   '∀serviceSpec_Render_=PreChangeServiceArm',
-  { of: [serviceCase], subject: renderSandboxPlan, runs: 100 },
+  { of: [serviceCase], subject: renderSandboxPlan },
   (subject, [command]) =>
     planLaw(subject, command, (plan) =>
       Match.value(command.spec).pipe(

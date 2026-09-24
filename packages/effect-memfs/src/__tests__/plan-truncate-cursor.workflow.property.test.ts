@@ -13,7 +13,6 @@ it.prop(
       Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
     ],
     subject: decide,
-    runs: 100,
   },
   (subject, [position, length]) => {
     const decision = subject(position, length).pipe(Result.getOrThrow)
@@ -29,7 +28,6 @@ it.prop(
       Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
     ],
     subject: decide,
-    runs: 100,
   },
   (subject, [drawn, length]) => {
     const within = BigInt(Math.min(drawn, length))
@@ -46,7 +44,6 @@ it.prop(
       Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4096 }))),
     ],
     subject: decide,
-    runs: 100,
   },
   (subject, [position, length]) => {
     const once = subject(position, length).pipe(Result.getOrThrow).position

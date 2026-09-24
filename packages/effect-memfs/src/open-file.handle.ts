@@ -342,7 +342,6 @@ if (import.meta.vitest !== void 0) {
     {
       of: [Schema.BigInt, Schema.BigInt, Schema.Literals(['start', 'current'])],
       subject: planSeekPosition,
-      runs: 100,
     },
     (subject, [pos, off, from]) => {
       const position = magnitudeOf(pos)
@@ -353,20 +352,20 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀s_SeekPlanned_≡ExactBigIntStart',
-    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromStart, runs: 100 },
+    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromStart },
     (subject, [pos, off]) => outcomeOf(subject(magnitudeOf(pos), magnitudeOf(off))) === magnitudeOf(off),
   )
 
   it.prop(
     '∀s_SeekPlanned_≡ExactBigIntCurrent',
-    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromCurrent, runs: 100 },
+    { of: [Schema.BigInt, Schema.BigInt], subject: seekFromCurrent },
     (subject, [pos, off]) =>
       outcomeOf(subject(magnitudeOf(pos), magnitudeOf(off))) === magnitudeOf(pos) + magnitudeOf(off),
   )
 
   it.effect.prop(
     '∀n_StalledDriver_≡RefusedNotLooped',
-    { of: [Size], subject: make, runs: 100 },
+    { of: [Size], subject: make },
     (subject, [size]) =>
       Effect.flatMap(subject(stalledDriver), (file) =>
         Effect.map(
@@ -378,7 +377,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀d_Make_≡ItsDriverFd',
-    { of: [Schema.Int], subject: make, runs: 100 },
+    { of: [Schema.Int], subject: make },
     (subject, [fd]) => Effect.map(subject({ ...stalledDriver, fd }), (file) => file.fd === fd),
   )
 
@@ -393,20 +392,20 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀nr_Slice_≡MinReadRequested',
-    { of: [Size, Size], subject: sliceFor, runs: 100 },
+    { of: [Size, Size], subject: sliceFor },
     (subject, [requested, bytesRead]) =>
       Option.exists(subject(requested, bytesRead), (bytes) => bytes.length === Math.min(bytesRead, requested)),
   )
 
   it.prop(
     '∀nr_Slice_≡NothingWhenNothingRead',
-    { of: [Size], subject: sliceFor, runs: 100 },
+    { of: [Size], subject: sliceFor },
     (subject, [requested]) => Option.isNone(subject(requested, 0)),
   )
 
   it.prop(
     '∀nw_Pending_≡Remainder',
-    { of: [Size, Size], subject: pendingOf, runs: 100 },
+    { of: [Size, Size], subject: pendingOf },
     (subject, [remaining, written]) =>
       Option.exists(
         Result.getSuccess(subject(written, remaining)),

@@ -1,9 +1,8 @@
-import { expect } from '@effect/vitest'
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, SubscriptionRef } from 'effect'
 import { KeyValueStore } from 'effect/unstable/persistence'
-import { vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 

@@ -8,11 +8,13 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('Scoped atoms that belong to one part of the page')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A scoped counter is created for its subtree and updates through its setter',

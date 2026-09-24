@@ -102,7 +102,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀id_HexId_∘Base64RoundTrip',
-    { of: [Schema.BigInt, Schema.BigInt], subject: HexIdCodec, runs: 100 },
+    { of: [Schema.BigInt, Schema.BigInt], subject: HexIdCodec },
     (codec, [spanIdValue, traceIdValue]) =>
       Effect.gen(function*() {
         const spanId = hexOf(spanIdValue, 16)

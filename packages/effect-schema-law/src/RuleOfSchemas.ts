@@ -137,8 +137,6 @@ const singleDeclaration = (ast: SchemaAST.Declaration, path: Set<SchemaAST.AST>)
 
 const isSingleInhabitant = (ast: SchemaAST.AST): boolean => singleValueWithin(ast, new Set<SchemaAST.AST>())
 
-const RUNS = 100
-
 const SINGLE_INHABITANT_REASON = 'single-inhabitant schema: a constant codec is correct'
 
 export const ruleOfSchemas: {
@@ -160,20 +158,20 @@ export const ruleOfSchemas: {
     if (isSingleInhabitant(schema.ast)) {
       it.law.deterministic(
         `∀x_${name}_=x (${SINGLE_INHABITANT_REASON})`,
-        { of: [schema], subject: roundTripOf(subject), runs: RUNS },
+        { of: [schema], subject: roundTripOf(subject) },
       )
       return
     }
 
     it.prop(
       `∀x_${name}Enc_=x`,
-      { of: [schema], subject, runs: RUNS },
+      { of: [schema], subject },
       (codec, [value]) => encodeStableOf(codec, encodedEq)(value),
     )
 
     it.prop(
       `∀x_${name}_=x`,
-      { of: [schema, schema], subject, runs: RUNS },
+      { of: [schema, schema], subject },
       (codec, [value, twin]) => roundTripsOf(codec, typeEq)(value, twin),
     )
   },
@@ -201,7 +199,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀s_DeclarationInhabitance_=Declared',
-    { of: [DeclarationIndex], subject: { isSingleInhabitant }, runs: RUNS },
+    { of: [DeclarationIndex], subject: { isSingleInhabitant } },
     (subject, [index]) => {
       const declared = DECLARED_INHABITANCE[index]
       if (declared === undefined) return false

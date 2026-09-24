@@ -14,8 +14,7 @@
       "@systemfsoftware/source"
     ],
     "types": [
-      "node",
-      "vitest/globals"
+      "node"
     ]
   },
   "include": [

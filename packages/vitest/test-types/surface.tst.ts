@@ -118,8 +118,8 @@ describe('every added data-last form type-checks (pipeable surface)', () => {
   })
 
   it('routes the sync property lane data-last', () => {
-    expect(Fork.it.prop({ of: [Schema.Int], subject, runs: 100 }, holdsSync)).type.toBe<(name: string) => void>()
-    expect(Fork.prop({ of: [Schema.Int], subject, runs: 100 }, holdsSync)).type.toBe<(name: string) => void>()
+    expect(Fork.it.prop({ of: [Schema.Int], subject }, holdsSync)).type.toBe<(name: string) => void>()
+    expect(Fork.prop({ of: [Schema.Int], subject }, holdsSync)).type.toBe<(name: string) => void>()
   })
 
   it('routes layer and flakyTest data-last', () => {

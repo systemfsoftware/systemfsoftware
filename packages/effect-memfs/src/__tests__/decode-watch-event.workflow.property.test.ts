@@ -27,7 +27,7 @@ const expectedTagOf = (eventType: 'rename' | 'change', exists: boolean): string 
 
 it.prop(
   '∀e_WatchEvent_≡TableDispatch',
-  { of: [DriverWatchEventType, Schema.String, Schema.Boolean], subject: decide, runs: 100 },
+  { of: [DriverWatchEventType, Schema.String, Schema.Boolean], subject: decide },
   (subject, [eventType, filename, exists]) => {
     const decision = subject(eventType, filename, exists).pipe(Result.getOrThrow)
     return tagOf(decision) === expectedTagOf(eventType, exists) && decision.path === filename
@@ -36,7 +36,7 @@ it.prop(
 
 it.prop(
   '∀e_WatchCreate_≡RenameExisting',
-  { of: [Schema.String], subject: (filename: string) => decide('rename', filename, true), runs: 100 },
+  { of: [Schema.String], subject: (filename: string) => decide('rename', filename, true) },
   (subject, [filename]) => {
     const decision = subject(filename).pipe(Result.getOrThrow)
     return Schema.is(WatchCreate)(decision) && decision.path === filename
@@ -45,7 +45,7 @@ it.prop(
 
 it.prop(
   '∀e_WatchRemove_≡RenameNonExisting',
-  { of: [Schema.String], subject: (filename: string) => decide('rename', filename, false), runs: 100 },
+  { of: [Schema.String], subject: (filename: string) => decide('rename', filename, false) },
   (subject, [filename]) => {
     const decision = subject(filename).pipe(Result.getOrThrow)
     return Schema.is(WatchRemove)(decision) && decision.path === filename
@@ -57,7 +57,6 @@ it.prop(
   {
     of: [Schema.String, Schema.Boolean],
     subject: (filename: string, exists: boolean) => decide('change', filename, exists),
-    runs: 100,
   },
   (subject, [filename, exists]) => {
     const decision = subject(filename, exists).pipe(Result.getOrThrow)

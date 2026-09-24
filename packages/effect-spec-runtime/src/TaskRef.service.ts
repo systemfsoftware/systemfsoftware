@@ -57,13 +57,13 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀o_ReadTaskContext_=Identity',
-    { of: [Labelled], subject: readTaskContext, runs: 100 },
+    { of: [Labelled], subject: readTaskContext },
     (read, [record]) => read(record) === record,
   )
 
   it.prop(
     '∀p_ReadTaskContext_=Null',
-    { of: [Schema.String], subject: readTaskContext, runs: 100 },
+    { of: [Schema.String], subject: readTaskContext },
     (read, [primitive]) => read(primitive) === null,
   )
 }

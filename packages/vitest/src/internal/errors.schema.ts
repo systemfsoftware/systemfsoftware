@@ -37,7 +37,7 @@ export class Slop extends S.TaggedError<Slop>()('Slop', {
 }
 
 /** @internal */
-export class MissingBudget extends S.TaggedError<MissingBudget>()('MissingBudget', {
+export class InvalidBudget extends S.TaggedError<InvalidBudget>()('InvalidBudget', {
   detail: S.String,
 }) {
   override get message(): string {

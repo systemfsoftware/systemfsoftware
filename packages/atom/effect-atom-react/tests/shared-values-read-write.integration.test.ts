@@ -1,4 +1,4 @@
-import { expect } from '@effect/vitest'
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
@@ -10,12 +10,13 @@ import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
-import { vi } from 'vitest'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it, layer })
 
 Feature('Reading and changing shared values from on-screen widgets')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A writer who saves through the confirming setter knows when the save has finished',

@@ -25,27 +25,27 @@ const cellNameOf = (decision: EvalScore): string =>
 // Kills a scorer that rewards a miss or punishes a correct positive prediction.
 it.prop(
   '∀e_Match_=TpOrFp',
-  { of: [Schema.Boolean], subject: scoreEvalRecord, runs: 100 },
+  { of: [Schema.Boolean], subject: scoreEvalRecord },
   (subject, [expected]) => cellNameOf(cellOf(subject, expected, 'Match')) === (expected ? 'tp' : 'fp'),
 )
 
 // Kills a scorer that counts a deserved miss as a true negative.
 it.prop(
   '∀e_Miss_=FnOrTn',
-  { of: [Schema.Boolean], subject: scoreEvalRecord, runs: 100 },
+  { of: [Schema.Boolean], subject: scoreEvalRecord },
   (subject, [expected]) => cellNameOf(cellOf(subject, expected, 'Miss')) === (expected ? 'fn' : 'tn'),
 )
 
 // Kills a scorer that scores abstentions into a confusion cell.
 it.prop(
   '∀e_Uncertain_=Abstained',
-  { of: [Schema.Boolean], subject: scoreEvalRecord, runs: 100 },
+  { of: [Schema.Boolean], subject: scoreEvalRecord },
   (subject, [expected]) => cellNameOf(cellOf(subject, expected, 'Uncertain')) === 'abstained',
 )
 
 // Kills a scorer that can fail: scoring is total over every expected-status pair.
 it.prop(
   '∀e_Score_=Total',
-  { of: [Schema.Boolean, PatternStatus], subject: scoreEvalRecord, runs: 100 },
+  { of: [Schema.Boolean, PatternStatus], subject: scoreEvalRecord },
   (subject, [expected, status]) => Result.isSuccess(subject(new ScoreEvalRecord({ expected, status }))),
 )

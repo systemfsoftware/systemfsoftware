@@ -138,49 +138,49 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀s_SkuIdRefusal_≡NonEmpty',
-    { of: [S.String], subject: skuIdDecodes, runs: 100 },
+    { of: [S.String], subject: skuIdDecodes },
     (subject, [value]) => verdictsAgainst(subject, nonEmpty, Arr.append(identifierSeeds, value)),
   )
 
   it.prop(
     '∀s_WarehouseIdRefusal_≡NonEmpty',
-    { of: [S.String], subject: warehouseIdDecodes, runs: 100 },
+    { of: [S.String], subject: warehouseIdDecodes },
     (subject, [value]) => verdictsAgainst(subject, nonEmpty, Arr.append(identifierSeeds, value)),
   )
 
   it.prop(
     '∀s_LotIdRefusal_≡NonEmpty',
-    { of: [S.String], subject: lotIdDecodes, runs: 100 },
+    { of: [S.String], subject: lotIdDecodes },
     (subject, [value]) => verdictsAgainst(subject, nonEmpty, Arr.append(identifierSeeds, value)),
   )
 
   it.prop(
     '∀n_VersionRefusal_≡Positive',
-    { of: [S.Finite], subject: versionDecodes, runs: 100 },
+    { of: [S.Finite], subject: versionDecodes },
     (subject, [value]) => verdictsAgainst(subject, positiveInteger, Arr.append(positiveIntegerSeeds, value)),
   )
 
   it.prop(
     '∀n_QuantityRefusal_≡Positive',
-    { of: [S.Finite], subject: quantityDecodes, runs: 100 },
+    { of: [S.Finite], subject: quantityDecodes },
     (subject, [value]) => verdictsAgainst(subject, positiveInteger, Arr.append(positiveIntegerSeeds, value)),
   )
 
   it.prop(
     '∀n_QuantityOnHandRefusal_≡NonNegative',
-    { of: [S.Finite], subject: quantityOnHandDecodes, runs: 100 },
+    { of: [S.Finite], subject: quantityOnHandDecodes },
     (subject, [value]) => verdictsAgainst(subject, nonNegativeInteger, Arr.append(nonNegativeIntegerSeeds, value)),
   )
 
   it.prop(
     '∀s_StockCursorRefusal_≡Base64JsonPosition',
-    { of: [S.String], subject: stockCursorDecodes, runs: 100 },
+    { of: [S.String], subject: stockCursorDecodes },
     (subject, [value]) => verdictsAgainst(subject, stockCursorShape, Arr.append(cursorSeeds, value)),
   )
 
   it.prop(
     '∀n_StockPageSizeRefusal_≡BoundedPositive',
-    { of: [S.Finite], subject: stockPageSizeDecodes, runs: 100 },
+    { of: [S.Finite], subject: stockPageSizeDecodes },
     (subject, [value]) => verdictsAgainst(subject, pageSizeShape, Arr.append(pageSizeSeeds, value)),
   )
 }

@@ -254,7 +254,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀a_StatAdmitted_≡AnswersFileAndDirectory',
-    { of: [Schema.Array(StatQuestion), Schema.Boolean], subject: statSubject, runs: 100 },
+    { of: [Schema.Array(StatQuestion), Schema.Boolean], subject: statSubject },
     (subject, [drawn, lacking]) => {
       const answers = withheld(drawn, 'isFile', ['isFile', 'isDirectory'])(lacking)
       return Result.match(subject(drawn, lacking), {
@@ -266,7 +266,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀a_DriverAdmitted_≡AnswersCloseReadWrite',
-    { of: [Schema.Array(DriverQuestion), Schema.Boolean], subject: driverSubject, runs: 100 },
+    { of: [Schema.Array(DriverQuestion), Schema.Boolean], subject: driverSubject },
     (subject, [drawn, lacking]) => {
       const answers = withheld(drawn, 'close', ['close', 'read', 'write'])(lacking)
       return Result.match(subject(drawn, lacking), {
@@ -278,7 +278,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀a_KindUnknown_≡NoKindAnswered',
-    { of: [Schema.Array(KindQuestion), Schema.Boolean], subject: kindSubject, runs: 100 },
+    { of: [Schema.Array(KindQuestion), Schema.Boolean], subject: kindSubject },
     (subject, [drawn, silent]) => {
       const answers = quieted(drawn, silent)
       return (subject(drawn, silent) === 'Unknown') === (answers.length === 0)
@@ -287,7 +287,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀t_EntryPath_≡ShapeIndependent',
-    { of: [Schema.String, EntryShape], subject: entryPathSubject, runs: 100 },
+    { of: [Schema.String, EntryShape], subject: entryPathSubject },
     (subject, [drawn, shape]) => {
       const text = drawn.toWellFormed()
       return subject(text, shape) === text
@@ -296,7 +296,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀t_Contents_≡ShapeIndependent',
-    { of: [Schema.String, ContentsShape], subject: bytesSubject, runs: 100 },
+    { of: [Schema.String, ContentsShape], subject: bytesSubject },
     (subject, [drawn, shape]) => {
       const text = drawn.toWellFormed()
       return new TextDecoder().decode(subject(text, shape)) === text
@@ -305,7 +305,7 @@ if (import.meta.vitest !== void 0) {
 
   it.prop(
     '∀k_ErrorField_≡StringOrEmpty',
-    { of: [Schema.String, Schema.String, ErrorField], subject: stringFieldSubject, runs: 100 },
+    { of: [Schema.String, Schema.String, ErrorField], subject: stringFieldSubject },
     (subject, [key, text, field]) => subject(key, text, field) === fieldShaped[field](key, text).read,
   )
 }

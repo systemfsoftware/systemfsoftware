@@ -21,13 +21,13 @@ const tagOf = (outcome: Result.Result<WriteAllChunkDecision, WriteZero>): string
 
 it.prop(
   '∀w_WriteZero_≡ZeroWritten',
-  { of: [Schema.Int, Schema.Int], subject: decide, runs: 100 },
+  { of: [Schema.Int, Schema.Int], subject: decide },
   (subject, [fd, remaining]) => tagOf(subject(fd, 0, remaining)) === 'WriteZero',
 )
 
 it.prop(
   '∀w_WriteContinued_≡PositiveSkip',
-  { of: [Schema.Int, Schema.Int, Schema.Int], subject: decide, runs: 100 },
+  { of: [Schema.Int, Schema.Int, Schema.Int], subject: decide },
   (subject, [fd, chunk, extra]) => {
     const written = Math.abs(chunk) + 1
     const remaining = written + Math.abs(extra) + 1
@@ -38,7 +38,7 @@ it.prop(
 
 it.prop(
   '∀w_WriteDrained_≡ExhaustedBuffer',
-  { of: [Schema.Int, Schema.Int, Schema.Int], subject: decide, runs: 100 },
+  { of: [Schema.Int, Schema.Int, Schema.Int], subject: decide },
   (subject, [fd, baseRemaining, extra]) => {
     const remaining = Math.abs(baseRemaining)
     const written = remaining + Math.abs(extra)

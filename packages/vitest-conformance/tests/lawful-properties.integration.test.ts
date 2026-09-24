@@ -55,9 +55,9 @@ describe('lawful properties (R11-R15)', () => {
     return runCheats()
   })
 
-  it('fails a property with a missing runs budget (MissingBudget)', () => {
+  it('fails a property whose runs is not a positive integer (InvalidBudget)', () => {
     expect(CHEATS[0]).toContain('property-shape')
-    return shouldContain('missing budget', 'positive integer `runs`')
+    return shouldContain('invalid budget', 'positive integer `runs`')
   })
 
   it('fails a property whose verdict is an Effect on the sync lane (NonBooleanVerdict)', () => {

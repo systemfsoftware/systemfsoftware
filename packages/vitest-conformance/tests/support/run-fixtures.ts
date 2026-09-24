@@ -20,6 +20,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ProvidedContext } from 'vitest'
 import { startVitest } from 'vitest/node'
 
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -74,6 +75,8 @@ export interface ProbeRunOptions {
   /** Shuffles within suites; the fork's `describe` defaults this on, so tests opt out explicitly. */
   readonly shuffle?: boolean | undefined
   readonly env?: Readonly<Record<string, string>> | undefined
+  /** The values the nested run publishes under `inject`; omit to leave every provided context unset. */
+  readonly provide?: Partial<ProvidedContext> | undefined
 }
 
 /** Every nested-run failure carries this: what failed, and why. */
@@ -174,6 +177,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                   ...(options.seed === undefined ? {} : { seed: options.seed }),
                 },
                 ...(options.env === undefined ? {} : { env: options.env }),
+                ...(options.provide === undefined ? {} : { provide: options.provide }),
               },
               {
                 resolve: {

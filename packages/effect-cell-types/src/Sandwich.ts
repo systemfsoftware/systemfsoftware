@@ -558,7 +558,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀c_Span_=Named',
-    { of: [AdmittedLength], subject: cell.run, runs: 100 },
+    { of: [AdmittedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
         const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
@@ -568,7 +568,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀c_Span_=Mapped',
-    { of: [Schema.Int], subject: cell.run, runs: 100 },
+    { of: [Schema.Int], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
         const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
@@ -582,7 +582,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀c_Span_=Decided',
-    { of: [AdmittedLength], subject: cell.run, runs: 100 },
+    { of: [AdmittedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
         const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
@@ -597,7 +597,7 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀c_Span_=Refused',
-    { of: [RefusedLength], subject: cell.run, runs: 100 },
+    { of: [RefusedLength], subject: cell.run },
     (run, [length]) =>
       Effect.gen(function*() {
         const observed = Option.getOrThrow(yield* run(new LawCommand({ length })))
