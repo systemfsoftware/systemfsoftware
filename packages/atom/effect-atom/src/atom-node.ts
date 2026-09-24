@@ -376,12 +376,6 @@ function clearPreviousParentsIfEmpty<A>(
 }
 
 function linkChild<A>(node: NodeImpl<A>, parent: AnyNode): void {
-  if (parent.children.has(node) === false) {
-    adoptChild(node, parent)
-  }
-}
-
-function adoptChild<A>(node: NodeImpl<A>, parent: AnyNode): void {
   parent.children.add(node)
   clearSkipInvalidation(parent)
 }
@@ -471,6 +465,13 @@ function invalidateChildSet<A>(node: NodeImpl<A>): void {
   node.children = new Set()
   children.forEach(markStale)
   children.forEach(continueInvalidateIfWaiting)
+  children.forEach((child) => relinkIfLeftStale(node, child))
+}
+
+function relinkIfLeftStale<A>(node: NodeImpl<A>, child: AnyNode): void {
+  if (child.state === NodeState.stale) {
+    node.children.add(child)
+  }
 }
 
 function continueInvalidateIfWaiting(node: AnyNode): void {
@@ -494,13 +495,6 @@ function stashParents<A>(node: NodeImpl<A>): void {
 }
 
 function removeLifetimeAndParents<A>(node: NodeImpl<A>): void {
-  if (node.lifetime === undefined) {
-    return
-  }
-  disposeThenDetach(node)
-}
-
-function disposeThenDetach<A>(node: NodeImpl<A>): void {
   node.disposeLifetime()
   detachRemovedParents(node)
 }

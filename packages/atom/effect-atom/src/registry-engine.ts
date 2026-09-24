@@ -296,6 +296,14 @@ function applyPreloadedIfStringKey<A>(
   applyPreloadedSerializable(registry, node, key)
 }
 
+function holdsStateFor(registry: RegistryImpl, key: Atom.Atom | string): boolean {
+  return registry.nodes.has(key) || hasPendingPreload(registry, key)
+}
+
+function hasPendingPreload(registry: RegistryImpl, key: Atom.Atom | string): boolean {
+  return typeof key === 'string' && registry.preloadedSerializable.has(key)
+}
+
 function applyPreloadedSerializable(
   registry: RegistryImpl,
   node: NodeImpl,
@@ -608,7 +616,10 @@ export class RegistryImpl extends Pipeable.Class {
   }
 
   invalidateAtom = <A>(atom: Atom.Atom<A>): void => {
-    this.ensureNode(atom).invalidate()
+    throwIfDisposed(this, atom)
+    if (holdsStateFor(this, atomKey(atom))) {
+      this.ensureNode(atom).invalidate()
+    }
   }
 
   scheduleAtomRemoval(atom: Atom.Atom): void {

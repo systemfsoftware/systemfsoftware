@@ -1320,6 +1320,167 @@ Feature('Keeping a value that is still loading available to every reader')
     )
   })
 
+Feature('Keeping computed values current while unused values are forgotten')
+  .withLayer(Layer.empty)
+  .body(({ scenario }) => {
+    scenario(
+      'A group of changes that ends where it started tells no listener anything',
+      Gherkin.Do.pipe(
+        Given('a listener watching a counter and a doubled counter')('ctx', () =>
+          Effect.sync(() => {
+            const counter = Atom.make(0)
+            const doubled = Atom.make((get) => get(counter) * 2)
+            const page = Atom.Registry.make()
+            const heard: Array<string> = []
+            Atom.Registry.subscribe(page, counter, (value) => heard.push(`counter ${value}`))
+            Atom.Registry.subscribe(page, doubled, (value) => heard.push(`doubled ${value}`))
+            return { page, counter, heard }
+          })),
+        When('one group moves the counter to 5 and back to 0, and a second group moves it to 3')(
+          'heard',
+          (s) =>
+            Effect.sync(() => {
+              Atom.Registry.batch(s.ctx.page, () => {
+                Atom.Registry.set(s.ctx.page, s.ctx.counter, 5)
+                Atom.Registry.set(s.ctx.page, s.ctx.counter, 0)
+              })
+              Atom.Registry.batch(s.ctx.page, () => {
+                Atom.Registry.set(s.ctx.page, s.ctx.counter, 1)
+                Atom.Registry.set(s.ctx.page, s.ctx.counter, 3)
+              })
+              return s.ctx.heard
+            }),
+        ),
+        Then('the listeners hear only the second group, once each')((s) => {
+          expect(s.heard).toEqual(['counter 3', 'doubled 6'])
+        }),
+      ),
+    )
+    scenario(
+      'A value kept alive holds on to the counter it is computed from',
+      Gherkin.Do.pipe(
+        Given('a page that keeps a running total of a counter alive, and has shown it once')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              vi.useFakeTimers()
+              const counter = Atom.make(0)
+              const total = Atom.make((get) => get(counter)).pipe(Atom.keepAlive)
+              const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
+              Atom.Registry.get(page, total)
+              return { page, counter, total }
+            }),
+        ),
+        When('the counter is set to 1 and the page sits idle well past its cleanup time')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              Atom.Registry.set(s.ctx.page, s.ctx.counter, 1)
+              vi.advanceTimersByTime(100)
+              const result = {
+                counter: Atom.Registry.get(s.ctx.page, s.ctx.counter),
+                total: Atom.Registry.get(s.ctx.page, s.ctx.total),
+              }
+              vi.useRealTimers()
+              return result
+            }),
+        ),
+        Then('the counter still reads 1 and the total shows 1')((s) => {
+          expect(s.result).toEqual({ counter: 1, total: 1 })
+        }),
+      ),
+    )
+    scenario(
+      'A value watched again after going stale hears every later change',
+      Gherkin.Do.pipe(
+        Given('a doubled counter that was watched once and released, and whose counter was then refreshed')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const counter = Atom.make(0)
+              const doubled = Atom.make((get) => get(counter) * 2)
+              const page = Atom.Registry.make()
+              Atom.Registry.subscribe(page, doubled, () => {}, { immediate: true })()
+              Atom.Registry.refresh(page, counter)
+              return { page, counter, doubled }
+            }),
+        ),
+        When('a new listener watches the doubled counter and the counter goes up by one')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              const heard: Array<number> = []
+              Atom.Registry.subscribe(s.ctx.page, s.ctx.doubled, (value) => heard.push(value))
+              Atom.Registry.update(s.ctx.page, s.ctx.counter, (n) => n + 1)
+              return { heard, doubled: Atom.Registry.get(s.ctx.page, s.ctx.doubled) }
+            }),
+        ),
+        Then('the listener hears 2 and the doubled counter reads 2')((s) => {
+          expect(s.result).toEqual({ heard: [2], doubled: 2 })
+        }),
+      ),
+    )
+    scenario(
+      'Refreshing a value nobody has read computes nothing, alone or among other changes',
+      Gherkin.Do.pipe(
+        Given('a value that counts how often it is computed and has never been read')('ctx', () =>
+          Effect.sync(() => {
+            const computed = { times: 0 }
+            const counter = Atom.make(0)
+            const counted = Atom.make((get) => {
+              computed.times++
+              return get(counter)
+            })
+            const page = Atom.Registry.make()
+            return { page, counter, counted, computed }
+          })),
+        When('it is refreshed on its own, and again inside a group of changes to the counter')(
+          'times',
+          (s) =>
+            Effect.sync(() => {
+              Atom.Registry.refresh(s.ctx.page, s.ctx.counted)
+              Atom.Registry.batch(s.ctx.page, () => {
+                Atom.Registry.set(s.ctx.page, s.ctx.counter, 1)
+                Atom.Registry.refresh(s.ctx.page, s.ctx.counted)
+              })
+              return s.ctx.computed.times
+            }),
+        ),
+        Then('it has never been computed')((s) => {
+          expect(s.times).toBe(0)
+        }),
+      ),
+    )
+    scenario(
+      'A counter is forgotten once the value read from it has gone idle',
+      Gherkin.Do.pipe(
+        Given('a doubled counter that was read once')('ctx', () =>
+          Effect.sync(() => {
+            vi.useFakeTimers()
+            const counter = Atom.make(0)
+            const doubled = Atom.make((get) => get(counter) * 2)
+            const page = Atom.Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
+            Atom.Registry.get(page, doubled)
+            return { page, counter }
+          })),
+        When('the counter is set to 1 and the page sits idle well past its cleanup time')(
+          'counter',
+          (s) =>
+            Effect.sync(() => {
+              Atom.Registry.set(s.ctx.page, s.ctx.counter, 1)
+              vi.advanceTimersByTime(100)
+              const counter = Atom.Registry.get(s.ctx.page, s.ctx.counter)
+              vi.useRealTimers()
+              return counter
+            }),
+        ),
+        Then('the counter reads its starting 0 again')((s) => {
+          expect(s.counter).toBe(0)
+        }),
+      ),
+    )
+  })
+
 class FirstRegistry extends Context.Service<FirstRegistry, Atom.Registry.Registry>()(
   '@systemfsoftware/effect-atom/tests/Registry.integration.test/FirstRegistry',
 ) {}
