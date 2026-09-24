@@ -34,7 +34,6 @@ export default defineConfig({
     customExports: injectApiExtractorTypes,
   },
   tsconfig: './tsconfig.build.json',
-  clean: false,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: { onlyBundle: false },
   define: { 'import.meta.vitest': 'undefined' },

@@ -1,4 +1,4 @@
-import { expect, it, owned } from '@effect/vitest'
+import { expect, it, owned } from '@systemfsoftware/vitest'
 import { Cause } from 'effect'
 import { Effect } from 'effect'
 import { Exit } from 'effect'

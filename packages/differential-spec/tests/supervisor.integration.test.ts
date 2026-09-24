@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { runDifferentialWithShrink } from '@systemfsoftware/differential-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Exit, Layer } from 'effect'
 import { integers } from './__fixtures__/arbitraries.js'
 import { CandidateDefect } from './__fixtures__/CandidateDefect.schema.js'

@@ -1,6 +1,6 @@
-import { it } from '@effect/vitest'
 import { Contract, Observation, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
+import { it } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Layer } from 'effect'
 import { FulfillmentTaxonomy, Settle } from './fulfillment-trace.schema.js'
 

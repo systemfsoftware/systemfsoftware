@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Exit, Fiber, Layer, Ref } from 'effect'
 import {
   alwaysLast,

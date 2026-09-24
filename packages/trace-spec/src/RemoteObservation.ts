@@ -282,7 +282,7 @@ export const layer: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic imports: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Schema } = await import('effect')
   const { SpanRecord } = await import('./TraceGraph.schema.js')
 

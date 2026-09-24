@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Equivalence, Function, Match, Option, Schema, Schema as S, SchemaAST } from 'effect'
 
 type CodecPair<A, I> = {

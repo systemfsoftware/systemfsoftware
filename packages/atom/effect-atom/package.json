@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom",
   "license": "Apache-2.0",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -53,7 +53,6 @@
     "effect": "catalog:peers"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/conformance-spec": "workspace:^",
@@ -71,6 +70,7 @@
     "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/browser": "catalog:",

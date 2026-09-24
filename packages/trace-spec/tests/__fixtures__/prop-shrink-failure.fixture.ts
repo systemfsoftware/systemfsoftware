@@ -1,7 +1,7 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { it } from '@effect/vitest'
 import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import { it } from '@systemfsoftware/vitest'
 import { Effect, Layer, Schema } from 'effect'
 import { probeInputs } from './probe-arbitrary.schema.js'
 

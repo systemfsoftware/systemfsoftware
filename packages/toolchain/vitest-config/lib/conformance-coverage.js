@@ -149,9 +149,9 @@ const aliasedTarget = (value) => {
 
 /**
  * name (and alias) → { name, dir, dependencies } for every workspace package.
- * Alias keys are added for the fork specifier (`@effect/vitest`) as well as the
- * package's own name, so a checker that depends on the fork only through the
- * alias still places the fork in its closure.
+ * Alias keys are added as well as the package's own name, so a checker that
+ * depends on the fork (`@systemfsoftware/vitest`) only through an `npm:` or
+ * `workspace:` alias still places the fork in its closure.
  * @param {string} workspaceRoot
  * @returns {Promise<Map<string, { name: string, dir: string, dependencies: ReadonlyArray<string> }>>}
  */

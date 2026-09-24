@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { planReadSlice, ReadExhausted, ReadPartial, ReadSlice, ReadWhole } from '../plan-read-slice.workflow.js'

@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { runMetamorphicWithShrink } from '@systemfsoftware/differential-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Exit, Layer } from 'effect'
 import { integers } from './__fixtures__/arbitraries.js'
 import { disparityReportOf } from './__fixtures__/disparityReport.js'

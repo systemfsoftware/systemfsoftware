@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
   createPackage,
@@ -8,6 +7,7 @@ import {
   packTree,
   toDirectoryJSON,
 } from '@systemfsoftware/npm-package'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })

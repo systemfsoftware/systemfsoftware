@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
-import { refuseAsync, refuseBareEffect, refuseNoAssertion } from '@effect/vitest/refusals'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
+import { refuseAsync, refuseBareEffect, refuseNoAssertion } from '@systemfsoftware/vitest/refusals'
 import { Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures, runProbes } from './__fixtures__/run-fixtures'

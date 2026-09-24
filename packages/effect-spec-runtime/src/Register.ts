@@ -1,5 +1,5 @@
-import { captureRunBinding } from '@effect/vitest'
-import type { Vitest } from '@effect/vitest'
+import { captureRunBinding } from '@systemfsoftware/vitest'
+import type { Vitest } from '@systemfsoftware/vitest'
 import { Effect, Option, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
@@ -82,7 +82,7 @@ export const selectCaseRunner: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const BodyOutcome = Schema.Literals(['success', 'failure', 'unscoped'])
 

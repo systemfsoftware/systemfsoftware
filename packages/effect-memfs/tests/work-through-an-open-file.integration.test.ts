@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Option, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Error from 'effect/PlatformError'

@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Result } from 'effect'
 import * as Match from 'effect/Match'
 import { AssessVirtualization, assessVirtualization } from '../assess-virtualization.workflow.js'

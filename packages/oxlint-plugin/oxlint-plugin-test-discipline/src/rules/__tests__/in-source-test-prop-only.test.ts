@@ -26,7 +26,7 @@ ruleTester.run('in-source-test-prop-only', inSourceTestPropOnly, {
       code: `
 const helper = (x: number): number => x + 1
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   it.prop('Holds_ForOne', { of: [helper(1)], subject: (v) => v, runs: 100 }, (s, [v]) => v === 1)
 }
 `,
@@ -37,7 +37,7 @@ if (import.meta.vitest !== void 0) {
       code: `
 const helper = (x: number): number => x + 1
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   it.effect.prop('Holds_ForOne', { of: [helper(1)], subject: (v) => v, runs: 100 }, (s, [v]) => v === 1)
 }
 `,
@@ -47,7 +47,7 @@ if (import.meta.vitest !== void 0) {
       name: 'Should_Allow_PropModifiers_When_SkipOnlyTodoOnPropChain',
       code: `
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   it.prop.skip('Skipped_Prop', { of: [], subject: () => true, runs: 100 }, () => true)
   it.prop.only('Only_Prop', { of: [], subject: () => true, runs: 100 }, () => true)
   it.effect.prop.todo('Todo_EffectProp', { of: [], subject: () => true, runs: 100 }, () => true)
@@ -59,7 +59,7 @@ if (import.meta.vitest !== void 0) {
       name: 'Should_Allow_SchemaAndFcCalls_When_InsidePropBlock',
       code: `
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
   const negative = fc.integer({ min: -100, max: -1 })
@@ -76,7 +76,7 @@ if (import.meta.vitest !== void 0) {
       name: 'Should_Allow_UnresolvableRoot_When_ThisCallInGuard',
       code: `
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   it.prop('Holds_AfterSetup', { of: [], subject: () => true, runs: 100 }, () => this.setup() === true)
 }
 `,
@@ -87,7 +87,7 @@ if (import.meta.vitest !== void 0) {
       code: `
 const helper = (x: number): number => x + 1
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   it.prop('Holds_ForOne', { of: [helper(1)], subject: (v) => v, runs: 100 }, (s, [v]) => v === 1)
 }
 if (helper(0) > 0) {
@@ -185,7 +185,7 @@ if (import.meta.vitest !== void 0) {
       name: 'Should_Report_NonPropCall_When_ItEffectWithoutProp',
       code: `
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   it.effect('Only_Effect_NoProp', () => {})
 }
 `,

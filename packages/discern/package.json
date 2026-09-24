@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/discern",
   "license": "Apache-2.0",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -49,7 +49,6 @@
     "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/differential-spec": "workspace:^",
@@ -59,6 +58,7 @@
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",

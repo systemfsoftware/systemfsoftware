@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it, recordAssertion } from '@effect/vitest'
+import { afterEach, beforeEach, describe, it, recordAssertion } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 describe('per-test hooks are refused', () => {

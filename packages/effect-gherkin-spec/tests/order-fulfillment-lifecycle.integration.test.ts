@@ -1,5 +1,5 @@
-import { expect } from '@effect/vitest'
 import { And, But, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Context, Effect, Exit, Layer, Ref } from 'effect'
 import { InsufficientFundsError, OutOfStockError } from './__fixtures__/OrderFulfillment.schema.js'
 

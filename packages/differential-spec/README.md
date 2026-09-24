@@ -60,5 +60,5 @@ A check has no wall-clock limit. Each generated input runs on the simulation ker
 
 - Every comparison runs both sides on the simulation kernel under explored schedules, and a failure report names the schedule that produced it. `name` becomes the test's name.
 - Targets are plain `Effect` values and may be asynchronous: `Effect.sleep` advances virtual time, and a promise that settles without host I/O resolves inside the run. A target that waits on a real timer, file, or socket fails the comparison with a report naming the wait.
-- Checks register through `@effect/vitest`, so run them under Vitest; each `.assert` / `.relation` call adds one test to the suite.
+- Checks register through `@systemfsoftware/vitest`, so run them under Vitest; each `.assert` / `.relation` call adds one test to the suite.
 - One side crashing is a discrepancy, not an abort: agreeing refusals (same failure fingerprint) still pass.

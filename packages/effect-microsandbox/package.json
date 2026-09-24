@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-microsandbox",
   "license": "Apache-2.0",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -55,7 +55,6 @@
     "microsandbox": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/conformance-spec": "workspace:^",
@@ -72,6 +71,7 @@
     "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",

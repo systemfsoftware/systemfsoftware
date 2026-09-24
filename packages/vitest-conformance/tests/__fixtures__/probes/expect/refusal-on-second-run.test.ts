@@ -1,4 +1,4 @@
-import { expect, it } from '@effect/vitest'
+import { expect, it } from '@systemfsoftware/vitest'
 import { Effect, Ref } from 'effect'
 
 const runs = Ref.makeUnsafe(0)

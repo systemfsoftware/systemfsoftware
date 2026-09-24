@@ -1,5 +1,5 @@
-import { recordAssertion } from '@effect/vitest'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
+import { recordAssertion } from '@systemfsoftware/vitest'
 import { Cause, Effect, Exit, Fiber, Function } from 'effect'
 import * as fc from 'fast-check'
 

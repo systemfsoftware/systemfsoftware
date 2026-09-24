@@ -7,8 +7,8 @@
  * the runner is built.
  *
  * The run is in-process through `vitest/node` on the worker-threads pool: no child process, no browser.
- * Fixtures resolve `@effect/vitest` to this worktree's fork source directly, so a report always describes
- * the code under conformance rather than an installed copy.
+ * Fixtures resolve `@systemfsoftware/vitest` to this worktree's fork source directly, so a report always
+ * describes the code under conformance rather than an installed copy.
  *
  * Fixtures live in `tests/__fixtures__/probes/**`. A glob handed to {@link runFixtures} is matched relative
  * to that directory; a glob that already starts with `tests/` or `/` is matched relative to the package root.
@@ -182,8 +182,8 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
               {
                 resolve: {
                   alias: {
-                    '@effect/vitest/refusals': forkRefusals,
-                    '@effect/vitest': forkEntry,
+                    '@systemfsoftware/vitest/refusals': forkRefusals,
+                    '@systemfsoftware/vitest': forkEntry,
                     'effect/TestClock': forkTestClock,
                   },
                 },

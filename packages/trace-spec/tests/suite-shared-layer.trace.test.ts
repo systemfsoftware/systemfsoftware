@@ -1,7 +1,7 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
-import { it } from '@effect/vitest'
 import { Contract, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import { it } from '@systemfsoftware/vitest'
 import { Context, Effect, FileSystem, Layer, Ref, Schema } from 'effect'
 
 const TraceSuite = Suite.make({ it })

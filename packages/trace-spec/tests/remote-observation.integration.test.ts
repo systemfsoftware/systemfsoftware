@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, RemoteObservation } from '@systemfsoftware/trace-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Array as Arr, Cause, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Result, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 

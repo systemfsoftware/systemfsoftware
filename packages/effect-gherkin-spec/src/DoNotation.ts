@@ -1,5 +1,5 @@
-import { recordAssertion } from '@effect/vitest'
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
+import { recordAssertion } from '@systemfsoftware/vitest'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { dual } from 'effect/Function'
 import { StepError } from './StepError.schema.js'

@@ -108,6 +108,45 @@ const unscopedImpact = Discern.classify({
   criteria: { none: 'none', some: 'some' },
 })
 
+declare const openCriteria: Record<string, string>
+declare const toneCriteria: Record<`tone-${string}`, string>
+declare const pixelCriteria: Record<'auto' | `${number}px`, string>
+declare const openLevels: Array<string>
+
+describe('the label sets a classification or rating is built from', () => {
+  it('Should_RejectTheClassification_When_TheLabelSetIsString', () => {
+    expect(Change.classify).type.toBeCallableWith({ instructions: 'Closed', criteria: { none: 'n', some: 's' } })
+    expect(Change.classify).type.not.toBeCallableWith({ instructions: 'Open', criteria: openCriteria })
+    expect(Discern.classify).type.toBeCallableWith({ instructions: 'Closed', criteria: { none: 'n', some: 's' } })
+    expect(Discern.classify).type.not.toBeCallableWith({ instructions: 'Open', criteria: openCriteria })
+  })
+
+  it('Should_RejectTheClassification_When_ALabelIsAnInfiniteTemplate', () => {
+    expect(Change.classify).type.toBeCallableWith({ instructions: 'Closed', criteria: { 'tone-calm': 'c' } })
+    expect(Change.classify).type.not.toBeCallableWith({ instructions: 'Pattern', criteria: toneCriteria })
+    expect(Change.classify).type.not.toBeCallableWith({ instructions: 'Mixed', criteria: pixelCriteria })
+    expect(Discern.classify).type.toBeCallableWith({ instructions: 'Closed', criteria: { 'tone-calm': 'c' } })
+    expect(Discern.classify).type.not.toBeCallableWith({ instructions: 'Pattern', criteria: toneCriteria })
+    expect(Discern.classify).type.not.toBeCallableWith({ instructions: 'Mixed', criteria: pixelCriteria })
+  })
+
+  it('Should_RejectTheClassification_When_TheLabelSetIsEmpty', () => {
+    expect(Change.classify).type.toBeCallableWith({ instructions: 'One', criteria: { none: 'n' } })
+    expect(Change.classify).type.not.toBeCallableWith({ instructions: 'Empty', criteria: {} })
+    expect(Discern.classify).type.toBeCallableWith({ instructions: 'One', criteria: { none: 'n' } })
+    expect(Discern.classify).type.not.toBeCallableWith({ instructions: 'Empty', criteria: {} })
+  })
+
+  it('Should_RejectTheRating_When_TheLevelsAreStringOrEmpty', () => {
+    expect(Change.rate).type.toBeCallableWith({ instructions: 'Closed', criteria: ['low', 'high'] })
+    expect(Change.rate).type.not.toBeCallableWith({ instructions: 'Open', criteria: openLevels })
+    expect(Change.rate).type.not.toBeCallableWith({ instructions: 'Empty', criteria: [] })
+    expect(Discern.rate).type.toBeCallableWith({ instructions: 'Closed', criteria: ['low', 'high'] })
+    expect(Discern.rate).type.not.toBeCallableWith({ instructions: 'Open', criteria: openLevels })
+    expect(Discern.rate).type.not.toBeCallableWith({ instructions: 'Empty', criteria: [] })
+  })
+})
+
 describe('the labels a classification accepts', () => {
   it('Should_AcceptAKnownLabel_When_NoThresholdsAreGiven', () => {
     expect(impact.is).type.toBeCallableWith('breaking')

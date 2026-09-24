@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { SavedText } from './__fixtures__/SavedText.schema.js'

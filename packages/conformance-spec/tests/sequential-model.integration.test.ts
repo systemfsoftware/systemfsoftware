@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 
 import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'

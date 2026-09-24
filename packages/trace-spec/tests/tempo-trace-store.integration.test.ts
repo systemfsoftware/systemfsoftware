@@ -1,7 +1,7 @@
-import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { Graph } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'

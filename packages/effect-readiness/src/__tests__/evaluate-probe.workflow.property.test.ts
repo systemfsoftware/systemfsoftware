@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Schema } from 'effect'
 import * as Result from 'effect/Result'
 import { StatusCode } from '../../tests/__fixtures__/status-code.schema.js'

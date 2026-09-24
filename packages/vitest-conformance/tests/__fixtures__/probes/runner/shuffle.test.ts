@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@effect/vitest'
+import { describe, expect, it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 const doubled = (n: number): number => n * 2

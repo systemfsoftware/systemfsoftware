@@ -9,9 +9,9 @@
  *
  * @since 4.0.0
  */
-import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect, vi } from '@systemfsoftware/vitest'
 import { Effect, Layer, Option, Schema } from 'effect'
 
 const Feature = makeFeature({ it })

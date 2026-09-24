@@ -54,8 +54,8 @@ const paymentUnderCheckout = Contract.of(checkout)
 
 ```ts
 import { NodeFileSystem } from '@effect/platform-node'
-import { it } from '@effect/vitest'
 import { Observation, ObservationWindow, Suite } from '@systemfsoftware/trace-spec'
+import { it } from '@systemfsoftware/vitest'
 import { Layer } from 'effect'
 
 const TraceSuite = Suite.make({ it })

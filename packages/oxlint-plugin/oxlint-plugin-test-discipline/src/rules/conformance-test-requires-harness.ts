@@ -34,7 +34,7 @@ const isRawRunnerCall = (callee: ESTree.CallExpression['callee']): boolean => {
 }
 
 const isForeignRunnerImport = (node: ESTree.ImportDeclaration): boolean =>
-  typeof node.source.value === 'string' && FOREIGN_RUNNERS.has(node.source.value)
+  typeof node.source.value === 'string' && FOREIGN_RUNNERS[node.source.value] === true
 
 const namesConformanceExport = (specifier: ESTree.ImportSpecifier): boolean =>
   specifier.imported.type === 'Identifier' && specifier.imported.name === HARNESS_BINDING
@@ -100,7 +100,8 @@ export const conformanceTestRequiresHarness = defineRule({
             data: {
               name: `runner import from ${String(node.source.value)} in a conformance test file`,
               expected: HARNESS_PRESCRIPTION,
-              actual: 'a direct vitest / @effect/vitest runner import bypasses the conformance check',
+              actual:
+                'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the conformance check',
               fix: `delete the runner import; ${HARNESS_PRESCRIPTION}`,
             },
           })

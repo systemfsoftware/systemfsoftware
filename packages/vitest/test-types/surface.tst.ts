@@ -9,9 +9,9 @@ import * as Fork from '../src/mod'
 import type { Vitest } from '../src/mod'
 
 /**
- * Upstream `@effect/vitest` rc.117's published surface (repos/effect/packages/vitest/src/index.ts), spelled
- * out because `@effect/vitest` resolves to this package. `prop` is deliberately missing from `Tester`: the
- * fork's lawful property API replaces the positional one (R11-R15), so the claim is about the rest.
+ * Upstream `@effect/vitest` rc.117's published surface (repos/effect/packages/vitest/src/index.ts),
+ * spelled out because `@systemfsoftware/vitest` resolves to this package. `prop` is deliberately missing from
+ * `Tester`: the fork's lawful property API replaces the positional one (R11-R15), so the claim is about the rest.
  */
 declare namespace Upstream {
   interface TestFunction<A, E, R> {

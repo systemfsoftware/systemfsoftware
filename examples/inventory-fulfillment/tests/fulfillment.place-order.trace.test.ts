@@ -1,5 +1,5 @@
-import { it } from '@effect/vitest'
 import { Suite } from '@systemfsoftware/trace-spec'
+import { it } from '@systemfsoftware/vitest'
 import {
   allocateContract,
   creditHoldContract,

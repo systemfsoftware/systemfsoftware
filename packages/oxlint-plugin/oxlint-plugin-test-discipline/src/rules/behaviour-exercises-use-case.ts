@@ -14,7 +14,11 @@ export type MessageIds = 'noSubjectImport'
 
 const EFFECT_PACKAGE = 'effect' as const
 
-const FOUNDATION_PACKAGES: ReadonlySet<string> = new Set([...FOREIGN_RUNNERS, GHERKIN_PACKAGE, EFFECT_PACKAGE])
+const FOUNDATION_PACKAGES: ReadonlySet<string> = new Set([
+  ...Object.keys(FOREIGN_RUNNERS),
+  GHERKIN_PACKAGE,
+  EFFECT_PACKAGE,
+])
 
 /**
  * The runner, the spec DSL and effect itself - the scaffolding every behaviour
@@ -102,13 +106,14 @@ const DIST_SEGMENT = /(?:^|\/)dist\//
  * name documents it for the reader without pretending to be evidence.
  *
  * What counts as reaching: a runtime import from anything that is not the
- * scaffolding - vitest, @effect/vitest, the gherkin spec package, effect or a
- * subpath of it, or a Node builtin - and not the test file itself, or a dynamic
- * `import(...)` of such a source. Type-only specifiers are erased and never
- * count; a side-effect import (`import "./x.js"`, `import {} from "./x.js"`)
- * executes its module and counts for whatever that module is. Whether a named
- * module actually exists is not observable from one file, so an import whose
- * path names nothing satisfies the rule the same way a real one does.
+ * scaffolding - vitest, @effect/vitest, @systemfsoftware/vitest, the gherkin
+ * spec package, effect or a subpath of it, or a Node builtin - and not the test
+ * file itself, or a dynamic `import(...)` of such a source. Type-only
+ * specifiers are erased and never count; a side-effect import (`import
+ * "./x.js"`, `import {} from "./x.js"`) executes its module and counts for
+ * whatever that module is. Whether a named module actually exists is not
+ * observable from one file, so an import whose path names nothing satisfies the
+ * rule the same way a real one does.
  */
 export const behaviourExercisesUseCase = defineRule({
   meta,

@@ -1,4 +1,4 @@
-import { expect, it } from '@effect/vitest'
+import { expect, it } from '@systemfsoftware/vitest'
 import * as Schema from 'effect/Schema'
 
 const below = (n: number): boolean => n < 100

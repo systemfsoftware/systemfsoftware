@@ -1,6 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { answering, CountingModel, withProvider } from './__fixtures__/counting-model.fixture.js'
 import { Request } from './__fixtures__/request.schema.js'

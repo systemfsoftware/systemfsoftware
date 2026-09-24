@@ -412,7 +412,7 @@ export const fromTaxonomy: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const TRACE_ID = 'trace-rel-1'
   const ORDER_ATTR = 'app.order.id'
