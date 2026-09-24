@@ -168,11 +168,19 @@
     - dry-apes-hammer
     - famous-moles-beg
     - weak-houses-pretend
+"@systemfsoftware/differential-spec@0.4.0":
+  dir: packages/differential-spec
+  intents:
+    - tame-jeans-tickle
 "@systemfsoftware/discern@0.0.0":
   dir: packages/discern
   intents:
     - discern-fork-debut
     - weak-houses-pretend
+"@systemfsoftware/discern@0.1.0":
+  dir: packages/discern
+  intents:
+    - discern-cell-kinds
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -237,6 +245,10 @@
   dir: packages/atom/effect-atom-react
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-atom-react@1.0.0":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - curvy-poets-hide
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -312,6 +324,10 @@
   dir: packages/atom/effect-atom
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-atom@5.0.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - curvy-poets-hide
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -330,6 +346,11 @@
   dir: packages/effect-cell-types
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-cell-types@10.2.0":
+  dir: packages/effect-cell-types
+  intents:
+    - cell-kinds
+    - wild-roses-fly
 "@systemfsoftware/effect-cell-types@2.0.0":
   dir: packages/effect-cell-types
   intents:
@@ -588,6 +609,10 @@
   dir: packages/effect-gherkin-spec
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-gherkin-spec@4.4.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - clever-carrots-run
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -655,6 +680,10 @@
   dir: packages/effect-memfs
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-memfs@4.0.0":
+  dir: packages/effect-memfs
+  intents:
+    - memfs-cell-kinds
 "@systemfsoftware/effect-microsandbox@0.1.0":
   dir: packages/effect-microsandbox
   intents:
@@ -678,6 +707,10 @@
   dir: packages/effect-microsandbox
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-microsandbox@3.0.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - microvm-cell-kinds
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:
@@ -695,6 +728,10 @@
   dir: packages/effect-readiness
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-readiness@0.3.0":
+  dir: packages/effect-readiness
+  intents:
+    - readiness-cell-kinds
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -860,6 +897,10 @@
   dir: packages/effect-schema-law
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-schema-law@2.4.0":
+  dir: packages/effect-schema-law
+  intents:
+    - young-moose-deny
 "@systemfsoftware/effect-schema-recursion-budget@0.0.0":
   dir: packages/effect-schema-recursion-budget
   intents:
@@ -956,6 +997,10 @@
   dir: packages/effect-spec-runtime
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-spec-runtime@0.2.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - tough-tigers-unite
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -1186,6 +1231,10 @@
   dir: packages/oxlint-presets/oxlint-config-cell-architecture
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-config-cell-architecture@2.0.0":
+  dir: packages/oxlint-presets/oxlint-config-cell-architecture
+  intents:
+    - blueprint-handle-rules
 "@systemfsoftware/oxlint-config-dmmf@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-dmmf
   intents:
@@ -1217,6 +1266,11 @@
   dir: packages/oxlint-presets/oxlint-config-recommended
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-config-recommended@3.0.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - blueprint-handle-rules
+    - strong-socks-punch
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -1247,6 +1301,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-cell-architecture@3.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-architecture
+  intents:
+    - blueprint-handle-rules
 "@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
   dir: packages/oxlint-plugins/cell-vocabulary
   intents:
@@ -1687,6 +1745,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-test-discipline@3.9.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - real-knives-shout
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
@@ -2807,6 +2869,11 @@
   dir: packages/trace-spec
   intents:
     - weak-houses-pretend
+"@systemfsoftware/trace-spec@0.3.0":
+  dir: packages/trace-spec
+  intents:
+    - angry-falcons-travel
+    - trace-spec-cell-kinds
 "@systemfsoftware/trace-taxonomy@0.0.0":
   dir: packages/trace-taxonomy
   intents:
@@ -2843,3 +2910,7 @@
   dir: packages/toolchain/tsconfig
   intents:
     - chilly-grapes-count
+"@systemfsoftware/vitest@0.0.0":
+  dir: packages/vitest
+  intents:
+    - thick-cooks-sell
