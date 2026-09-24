@@ -8,48 +8,13 @@ import {
   type ReadableSpan,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import type { Span } from '@systemfsoftware/trace-taxonomy'
-import { Context, Effect, Predicate } from 'effect'
-import { dual } from 'effect/Function'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
+import { Context, Effect, Layer } from 'effect'
 import { EmptyObservationError } from './EmptyObservationError.schema.js'
 import { Observation } from './Observation.service.js'
 import type { ObservationWindowSpec } from './ObservationWindowSpec.schema.js'
 import type { SpanEvent, SpanLink, SpanRecord, Status } from './TraceGraph.schema.js'
-
-export const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindow')
-export type TypeId = typeof TypeId
-
-const ExporterId: unique symbol = Symbol.for('~systemfsoftware/trace-spec/ObservationWindow/exporter')
-
-const ProviderId: unique symbol = Symbol.for('~systemfsoftware/trace-spec/ObservationWindow/provider')
-
-export interface ObservationWindow extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [ExporterId]: InMemorySpanExporter
-  readonly [ProviderId]: BasicTracerProvider
-  readonly serviceName: string
-}
-
-export const isObservationWindow = (u: unknown): u is ObservationWindow => Predicate.hasProperty(u, TypeId)
-
-export const make = (spec: ObservationWindowSpec): ObservationWindow => {
-  const exporter = new InMemorySpanExporter()
-  const provider = new BasicTracerProvider({
-    sampler: new AlwaysOnSampler(),
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
-  })
-  return {
-    [TypeId]: TypeId,
-    [ExporterId]: exporter,
-    [ProviderId]: provider,
-    serviceName: spec.serviceName,
-    ...Prototype,
-  }
-}
-
-export const shutdown = (self: ObservationWindow): Effect.Effect<void> =>
-  Effect.promise(() => self[ProviderId].shutdown())
 
 const SCALAR_TYPES: Record<string, true> = { string: true, number: true, boolean: true }
 
@@ -125,21 +90,39 @@ const emptyObservation = (traceId: string): EmptyObservationError =>
     detail: 'the observation window closed with no span carrying the stimulated trace id',
   })
 
-const recordsOf = (self: ObservationWindow, traceId: string): ReadonlyArray<SpanRecord> =>
-  self[ExporterId].getFinishedSpans()
-    .filter((span) => span.spanContext().traceId === traceId)
-    .map(spanRecordOf)
+/**
+ * The observation window handle: an in-memory span exporter behind a simple span processor and an
+ * always-on sampler. Its driver is the exporter and its provider together; the integration builds
+ * the tracer from that provider, so only the tracer service reaches the caller's context.
+ */
+export const ObservationWindow = Handle.make({
+  name: 'ObservationWindow',
+  create: (spec: ObservationWindowSpec) =>
+    Effect.sync(() => {
+      const exporter = new InMemorySpanExporter()
+      const provider = new BasicTracerProvider({
+        sampler: new AlwaysOnSampler(),
+        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      })
+      return { driver: { exporter, provider }, data: { serviceName: spec.serviceName } }
+    }),
+  release: [[(driver) => Effect.tryPromise(() => driver.provider.shutdown())]],
+  operations: {
+    collect: (driver, _window, traceId: string): Effect.Effect<ReadonlyArray<SpanRecord>, EmptyObservationError> =>
+      Effect.suspend(() => {
+        const records = driver.exporter
+          .getFinishedSpans()
+          .filter((span) => span.spanContext().traceId === traceId)
+          .map(spanRecordOf)
+        return records.length > 0 ? Effect.succeed(records) : Effect.fail(emptyObservation(traceId))
+      }),
+  },
+  services: (window, members) =>
+    Context.make(Observation, { collect: (traceId: string) => members.operations.collect(window, traceId) }),
+  integration: (driver, window) =>
+    OtelTracer.layerWithoutOtelTracer.pipe(
+      Layer.provideMerge(Layer.succeed(OtelTracer.OtelTracer, driver.provider.getTracer(window.serviceName))),
+    ),
+})
 
-export const collect: {
-  (traceId: string): (self: ObservationWindow) => Effect.Effect<ReadonlyArray<SpanRecord>, EmptyObservationError>
-  (self: ObservationWindow, traceId: string): Effect.Effect<ReadonlyArray<SpanRecord>, EmptyObservationError>
-} = dual(2, (self: ObservationWindow, traceId: string) =>
-  Effect.suspend(() => {
-    const records = recordsOf(self, traceId)
-    return records.length > 0 ? Effect.succeed(records) : Effect.fail(emptyObservation(traceId))
-  }))
-
-export const context = (self: ObservationWindow): Context.Context<Observation | OtelTracer.OtelTracerProvider> =>
-  Context.make(Observation, { collect: (traceId) => collect(self, traceId) }).pipe(
-    Context.add(OtelTracer.OtelTracerProvider, self[ProviderId]),
-  )
+export const collect = ObservationWindow.operations.collect
