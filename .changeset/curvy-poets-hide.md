@@ -3,10 +3,10 @@
 "@systemfsoftware/effect-atom-react": major
 ---
 
-Each package now has one entry point with one namespace: `import { Atom } from '@systemfsoftware/effect-atom'` and `import { AtomReact } from '@systemfsoftware/effect-atom-react'`. The `/Atom`, `/Registry`, `/Result`, `/Hydration`, `/AtomRef`, `/AtomHttpApi`, and `/AtomRpc` subpaths are gone; use `Atom.Registry`, `Atom.AsyncResult`, `Atom.Hydration`, `Atom.Ref`, `Atom.HttpApi`, and `Atom.Rpc`.
+Each package has one entry point: `import { Atom } from '@systemfsoftware/effect-atom'` and `import { AtomReact } from '@systemfsoftware/effect-atom-react'`. The subpaths are gone; use `Atom.Registry`, `Atom.AsyncResult`, `Atom.Hydration`, `Atom.Ref`, `Atom.HttpApi`, and `Atom.Rpc`.
 
-There is no global registry any more. `Atom.Registry.make` returns a handle whose operations are functions (`Atom.Registry.get(registry, atom)` or `registry.pipe(Atom.Registry.get(atom))`), `Atom.Registry.Current` is the service tag, and `Atom.Registry.layer(tag, options?)` provides a registry under any tag. Each registry keeps its own clock, timers, hook caches, and batch: `Atom.Registry.batch(registry, f)` defers notifications only for that registry. `Atom.Ref` values are handles with the same data-first and data-last operations.
+There is no global registry. `Atom.Registry.make` returns a handle used with functions such as `Atom.Registry.get(registry, atom)`, and `Atom.Registry.layer(tag)` provides one. Batches are per registry.
 
-`AtomReact` hooks throw when no `RegistryProvider` is above them, and Suspense uses `React.use`.
+Listeners hear each change once, after the write or the outermost batch, and a batch that ends where it started notifies nobody. Writes feeding an unwatched `keepAlive` value survive idle time, and refreshing an unread value no longer computes it.
 
-`Atom.Hydration.hydrate` decodes every entry through a Schema. A malformed entry (including a negative `dehydratedAt`), or a value that fails its atom's schema in either direction, is skipped and recorded; read the records with `Atom.Registry.refusals(registry)`. Hydration payload keys are unchanged.
+`AtomReact` hooks throw without a `RegistryProvider`. `Atom.Hydration.hydrate` skips malformed entries and lists them in `Atom.Registry.refusals(registry)`.
