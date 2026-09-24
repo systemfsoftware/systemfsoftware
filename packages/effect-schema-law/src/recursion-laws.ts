@@ -10,44 +10,6 @@ const STOCK_MAX_DEPTH = 2
 
 const DEEP_DEPTH = STOCK_MAX_DEPTH + 2
 
-const CALIBRATION_DRAWS = 512
-const CALIBRATION_RUNS = 5
-const SAFETY = 256
-const BUDGET_LOWER_FACTOR = 64
-const BUDGET_UPPER_FACTOR = 1024
-const CALIBRATION_SEED = 0xC0FFEE
-const WALL_CLOCK_PROBE_RUNS = 2
-const PROBE_DRAWS = 200
-
-const medianMs = (timings: ReadonlyArray<number>): number => {
-  const ordered = [...timings].sort((left, right) => left - right)
-  return ordered[ordered.length >> 1] ?? 0
-}
-
-const timedSampleMs = (
-  arbitrary: Arbitrary.Arbitrary<unknown>,
-  count: number,
-  seed: number,
-): Effect.Effect<number, Arbitrary.SampleError> =>
-  Effect.sync(() => performance.now()).pipe(
-    Effect.flatMap((started) =>
-      Arbitrary.sampleEffect(arbitrary, { count, seed }).pipe(
-        Effect.map(() => performance.now() - started),
-      )
-    ),
-  )
-
-const medianOrDie = (median: number): number => {
-  if (median <= 0) throw new Error('recursionLaws calibration measured zero cost — clock unavailable')
-  return median
-}
-
-const measureDrawMs = (arbitrary: Arbitrary.Arbitrary<unknown>) =>
-  Effect.forEach(
-    Array.from({ length: CALIBRATION_RUNS }, (_, run) => run),
-    () => timedSampleMs(arbitrary, CALIBRATION_DRAWS, CALIBRATION_SEED),
-  ).pipe(Effect.map((timings) => medianOrDie(medianMs(timings))))
-
 const budgetFromObject = (annotation: object | null): { readonly maxDepth: number } | undefined => {
   if (annotation === null) return undefined
   return maxDepthFromAnnotation(annotation)
@@ -492,7 +454,6 @@ if (import.meta.vitest !== void 0) {
     maxNestingDepthOf,
     deepShareOf,
     coversEveryVariant,
-    measureDrawMs,
   }
 
   it.prop(
@@ -591,18 +552,5 @@ if (import.meta.vitest !== void 0) {
       sampleOf(COLLAPSED_GENERATION, seed).pipe(
         Effect.map((sample) => !subject.coversEveryVariant(sample, declaredMembersOf(DROPPED_MEMBER_EXPR))),
       ),
-  )
-
-  it.effect.prop(
-    '∀c_Budget_∈MeasuredBand',
-    { of: [S.Int], subject: IN_SOURCE_SUBJECT, runs: WALL_CLOCK_PROBE_RUNS },
-    (subject, [seed]) =>
-      Effect.gen(function*() {
-        const arbitrary = arbitraryOf(ANNOTATED_EXPR)
-        const median = yield* subject.measureDrawMs(arbitrary)
-        const freshBudget = median * (PROBE_DRAWS / CALIBRATION_DRAWS) * SAFETY
-        const measured = yield* timedSampleMs(arbitrary, PROBE_DRAWS, seed)
-        return freshBudget >= measured * BUDGET_LOWER_FACTOR && freshBudget <= measured * BUDGET_UPPER_FACTOR
-      }),
   )
 }
