@@ -4,100 +4,127 @@ import {
   assignPairSplits,
   AssignPairSplitsCommand,
   type AssignPairSplitsDecision,
+  PairSplit,
   PairSplitInput,
 } from '../assign-pair-splits.workflow.js'
 
-const SPLITS = ['train', 'dev', 'test'] as const
+const trialsIn = (draw: number): number => 1 + draw
 
-type Pair = { readonly pairId: string; readonly verdict: 'Pass' | 'Fail' }
+const passPairAt = (index: number): PairSplitInput =>
+  new PairSplitInput({ pairId: `pass-pair-${index}`, verdict: 'Pass' })
 
-const VERDICTS: ReadonlyArray<Pair['verdict']> = ['Pass', 'Fail']
+const failPairAt = (index: number): PairSplitInput =>
+  new PairSplitInput({ pairId: `fail-pair-${index}`, verdict: 'Fail' })
 
-const passPairOf = (index: number): Pair => ({ pairId: `pass-${index}`, verdict: 'Pass' })
-
-const failPairOf = (index: number): Pair => ({ pairId: `fail-${index}`, verdict: 'Fail' })
-
-const pairsOf = (passCount: number, failCount: number): ReadonlyArray<Pair> => [
-  ...Array.from({ length: passCount }, (_, index) => passPairOf(index)),
-  ...Array.from({ length: failCount }, (_, index) => failPairOf(index)),
-]
+const pairsOf = (
+  passDraw: number,
+  failDraw: number,
+  fewShareDraw: number,
+): { readonly pairs: ReadonlyArray<PairSplitInput>; readonly fewShotPairIds: ReadonlyArray<string> } => {
+  const passPairs = Array.from({ length: trialsIn(passDraw) }, (_, index) => passPairAt(index))
+  const failPairs = Array.from({ length: trialsIn(failDraw) }, (_, index) => failPairAt(index))
+  const pairs = [...passPairs, ...failPairs]
+  const fewShotPairIds = pairs
+    .filter((_, index) => index <= fewShareDraw)
+    .map((pair) => pair.pairId)
+  return { pairs, fewShotPairIds }
+}
 
 const commandOf = (
-  pairs: ReadonlyArray<Pair>,
-  fewShotPairIds: ReadonlyArray<string> = [],
-): AssignPairSplitsCommand =>
-  new AssignPairSplitsCommand({
-    pairs: pairs.map((pair) => new PairSplitInput({ pairId: pair.pairId, verdict: pair.verdict })),
-    fewShotPairIds,
-  })
+  passDraw: number,
+  failDraw: number,
+  fewShareDraw: number,
+): AssignPairSplitsCommand => {
+  const { pairs, fewShotPairIds } = pairsOf(passDraw, failDraw, fewShareDraw)
+  return new AssignPairSplitsCommand({ pairs, fewShotPairIds })
+}
+
+const decisionsOf = (command: AssignPairSplitsCommand): AssignPairSplitsDecision =>
+  Result.getOrThrow(assignPairSplits(command))
 
 const assignmentsOf = (
   decision: AssignPairSplitsDecision,
-): ReadonlyArray<{ readonly pairId: string; readonly split: string }> =>
+): ReadonlyArray<{ readonly pairId: string; readonly split: PairSplit }> =>
   Match.value(decision).pipe(
     Match.tag('PairsApportioned', (apportioned) => [...apportioned.assignments]),
     Match.tag('PairsBelowThreshold', (below) => [...below.assignments]),
     Match.exhaustive,
   )
 
-const decisionOf = (command: AssignPairSplitsCommand): AssignPairSplitsDecision =>
-  Result.getOrThrow(assignPairSplits(command))
-
-const splitOf = (decision: AssignPairSplitsDecision, pairId: string): string | undefined =>
+const splitOf = (decision: AssignPairSplitsDecision, pairId: string): PairSplit | undefined =>
   assignmentsOf(decision).find((assignment) => assignment.pairId === pairId)?.split
 
-const splitsFor = (decision: AssignPairSplitsDecision, verdict: Pair['verdict'], pairs: ReadonlyArray<Pair>) =>
-  pairs
-    .filter((pair) => pair.verdict === verdict)
-    .map((pair) => splitOf(decision, pair.pairId))
-
-const countOf = (splits: ReadonlyArray<string | undefined>, wanted: string): number =>
-  splits.filter((split) => split === wanted).length
+const splitsFor = (
+  decision: AssignPairSplitsDecision,
+  verdict: 'Pass' | 'Fail',
+  pairs: ReadonlyArray<PairSplitInput>,
+): ReadonlyArray<PairSplit | undefined> =>
+  pairs.filter((pair) => pair.verdict === verdict).map((pair) => splitOf(decision, pair.pairId))
 
 it.prop(
   '∀s_pairSet_≡DeterministicAssignment',
-  [Schema.Int, Schema.Int, Schema.Int],
-  ([passDraw, failDraw, fewDraw]) => {
-    const pairs = pairsOf(1 + (Math.abs(passDraw) % 8), 1 + (Math.abs(failDraw) % 8))
-    const fewShot = pairs.slice(0, Math.abs(fewDraw) % pairs.length).map((pair) => pair.pairId)
-    const first = decisionOf(commandOf(pairs, fewShot))
-    const again = decisionOf(commandOf(pairs, fewShot))
+  [
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 7 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 7 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 7 }))),
+  ],
+  ([passDraw, failDraw, fewShareDraw]) => {
+    const command = commandOf(passDraw, failDraw, fewShareDraw)
+    const first = decisionsOf(command)
+    const again = decisionsOf(commandOf(passDraw, failDraw, fewShareDraw))
     return Equal.equals(first, again)
   },
 )
 
 it.prop(
-  '∀s_eachClassAboveThreshold_≡BothVerdictsInDevAndTest',
-  [Schema.Int, Schema.Int],
-  ([passDraw, failDraw]) => {
-    const pairs = pairsOf(3 + (Math.abs(passDraw) % 6), 3 + (Math.abs(failDraw) % 6))
-    const decision = decisionOf(commandOf(pairs))
-    return SPLITS.every((split) =>
-      VERDICTS.every((verdict) => countOf(splitsFor(decision, verdict, pairs), split) >= 1)
+  '∀s_thresholdBreachedOnBothClasses_≡PairsApportioned',
+  [
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 3, maximum: 8 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 3, maximum: 8 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: -3, maximum: -1 }))),
+  ],
+  ([passDraw, failDraw, fewShareDraw]) => {
+    const { pairs, fewShotPairIds } = pairsOf(passDraw, failDraw, fewShareDraw)
+    const decision = decisionsOf(new AssignPairSplitsCommand({ pairs, fewShotPairIds }))
+    const beyondTrain = (verdict: 'Pass' | 'Fail'): ReadonlyArray<PairSplit | undefined> =>
+      splitsFor(decision, verdict, pairs).filter((split) => split !== 'train')
+    const verdicts: ReadonlyArray<'Pass' | 'Fail'> = ['Pass', 'Fail']
+    const splits: ReadonlyArray<PairSplit> = ['dev', 'test']
+    return verdicts.every((verdict) =>
+      splits.every((split) => beyondTrain(verdict).filter((found) => found === split).length >= 1)
+    )
+  },
+)
+it.prop(
+  '∀s_fewShotPair_≡AlwaysTrain',
+  [
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 7 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 7 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 7 }))),
+  ],
+  ([passDraw, failDraw, fewShareDraw]) => {
+    const { pairs, fewShotPairIds } = pairsOf(passDraw, failDraw, fewShareDraw)
+    const decision = decisionsOf(new AssignPairSplitsCommand({ pairs, fewShotPairIds }))
+    return Match.value(decision).pipe(
+      Match.tag('PairsApportioned', () => fewShotPairIds.every((pairId) => splitOf(decision, pairId) === 'train')),
+      Match.tag('PairsBelowThreshold', () => fewShotPairIds.every((pairId) => splitOf(decision, pairId) === 'train')),
+      Match.exhaustive,
     )
   },
 )
 
 it.prop(
-  '∀s_fewShotPair_≡AlwaysTrain',
-  [Schema.Int, Schema.Int, Schema.Int],
-  ([passDraw, failDraw, fewDraw]) => {
-    const pairs = pairsOf(1 + (Math.abs(passDraw) % 8), 1 + (Math.abs(failDraw) % 8))
-    const fewShot = pairs.slice(0, Math.abs(fewDraw) % (pairs.length + 1)).map((pair) => pair.pairId)
-    const decision = decisionOf(commandOf(pairs, fewShot))
-    return fewShot.every((pairId) => splitOf(decision, pairId) === 'train')
-  },
-)
-
-it.prop(
   '∀s_classBelowThreshold_≡RemainderToDev',
-  [Schema.Int, Schema.Int, Schema.Int],
-  ([passDraw, failDraw, fewDraw]) => {
-    const pairs = pairsOf(Math.abs(passDraw) % 3, Math.abs(failDraw) % 3)
-    const fewShot = pairs.slice(0, Math.abs(fewDraw) % (pairs.length + 1)).map((pair) => pair.pairId)
-    const decision = decisionOf(commandOf(pairs, fewShot))
+  [
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 1 }))),
+    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: -3, maximum: -1 }))),
+  ],
+  ([passDraw, failDraw, fewShareDraw]) => {
+    const { pairs, fewShotPairIds } = pairsOf(passDraw, failDraw, fewShareDraw)
+    const decision = decisionsOf(new AssignPairSplitsCommand({ pairs, fewShotPairIds }))
     return pairs.every((pair) =>
-      fewShot.includes(pair.pairId)
+      fewShotPairIds.includes(pair.pairId)
         ? splitOf(decision, pair.pairId) === 'train'
         : splitOf(decision, pair.pairId) === 'dev'
     )
