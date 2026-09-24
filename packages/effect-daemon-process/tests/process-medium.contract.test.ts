@@ -1,5 +1,5 @@
 import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer, Scope } from 'effect'
 import { ChildProcess } from 'effect/unstable/process'
 import {
@@ -22,7 +22,7 @@ import {
   scriptedRun,
 } from './__fixtures__/process-runs.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const MISSING_EXECUTABLE = 'effect-daemon-process-no-such-executable'
 
@@ -32,7 +32,7 @@ const SCRIPT_TIMEOUT_MILLIS = 2_000
 
 Feature('Supervising an operating-system process', { timeout: 120_000 })
   .withLayer(Layer.merge(mediumLayer, spawnerLayer))
-  .liveClock()
+  .live('every scenario spawns, signals and reaps real operating-system child processes')
   .body(({ background, scenario }) => {
     background(
       Gherkin.Do.pipe(

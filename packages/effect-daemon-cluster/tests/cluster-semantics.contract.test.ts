@@ -1,14 +1,14 @@
 import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Exit, Layer, Ref, Scope } from 'effect'
 import { Sharding, Singleton } from 'effect/unstable/cluster'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Keeping one active owner per singleton name')
   .withScenarioLayer(ClusterOracle)
-  .liveClock()
+  .live('every singleton is registered with a real SingleRunner over PGlite and Crypto')
   .body(({ scenario }) => {
     scenario(
       'A singleton whose work fails keeps its name and is not restarted',

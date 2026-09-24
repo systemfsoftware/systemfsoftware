@@ -2,10 +2,10 @@ import { expect } from '@effect/vitest'
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import type { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Match } from 'effect'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const atomicDeclaration: Supervisor.Medium.MediumDeclaration = { reporting: 'inferred', groupStop: 'atomic' }
 

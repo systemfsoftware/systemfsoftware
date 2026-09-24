@@ -58,6 +58,9 @@ export interface ScriptedRequest {
   readonly options?: Supervisor.ChildOptions | undefined
 }
 
+const awaitSupervisionSettled = (handle: Supervisor.RunningSupervisor): Effect.Effect<void> =>
+  Effect.catchTag(Supervisor.awaitTerminated(handle), 'SupervisorTerminated', () => Effect.void)
+
 export const scriptedRun = (
   request: ScriptedRequest,
 ): Effect.Effect<ReadonlyArray<Supervisor.TraceEntry>, never, ProcessProject | Scope.Scope> =>
@@ -67,7 +70,7 @@ export const scriptedRun = (
       const handle = yield* declared({ ...request, program: launched.program }).scoped
       const trace = yield* collectTraceOf(handle)
       yield* Effect.forEach(request.steps, (step) => launched.control.advance(step, 0), { discard: true })
-      yield* Supervisor.awaitTerminated(handle)
+      yield* awaitSupervisionSettled(handle)
       return yield* Ref.get(trace)
     }),
   )
@@ -79,7 +82,7 @@ export const programRun = (
     Effect.gen(function*() {
       const handle = yield* declared(request).scoped
       const trace = yield* collectTraceOf(handle)
-      yield* Supervisor.awaitTerminated(handle)
+      yield* awaitSupervisionSettled(handle)
       return yield* Ref.get(trace)
     }),
   )

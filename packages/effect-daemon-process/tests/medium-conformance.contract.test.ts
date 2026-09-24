@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Match, Schema } from 'effect'
 import { plantedDriver, plantedLayer } from './__fixtures__/planted-process-medium.js'
 import { mediumLayer, processDriver, referenceLayer, spawnerLayer } from './__fixtures__/process-fixtures.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const bound = Layer.mergeAll(referenceLayer, mediumLayer, spawnerLayer, plantedLayer)
 
@@ -43,7 +43,7 @@ const labelOf = (result: Conformance.ScenarioResult): string =>
 
 Feature('Proving a medium against the reference', { timeout: 240_000 })
   .withLayer(bound)
-  .liveClock()
+  .live('every scenario drives the process medium against real operating-system child processes')
   .body(({ scenario }) => {
     scenario(
       'Every scripted child lifecycle matches the reference',

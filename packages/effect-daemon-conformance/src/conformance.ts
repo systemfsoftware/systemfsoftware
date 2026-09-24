@@ -1,5 +1,5 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Array as Arr, Duration, Effect, HashMap, Layer, Match, Option, Ref, Scope, Stream } from 'effect'
+import { Array as Arr, Deferred, Duration, Effect, HashMap, Layer, Match, Option, Ref, Scope, Stream } from 'effect'
 import type { ChildStep } from './ChildScript.schema.js'
 import type { TraceComparison } from './compare-traces.workflow.js'
 import { compare } from './compare.js'
@@ -116,19 +116,26 @@ const stepSettledIn = (childId: string, generation: number, step: ChildStep['_ta
     Match.orElse(() => true),
   )
 
-const awaitPredicate = (
-  seen: Ref.Ref<Trace>,
-  predicate: (trace: Trace) => boolean,
-): Effect.Effect<void> => Effect.flatMap(Ref.get(seen), (trace) => settleOf(seen, predicate, trace))
+interface TraceWaiter {
+  readonly predicate: (trace: Trace) => boolean
+  readonly done: Deferred.Deferred<void>
+}
 
-const settleOf = (
-  seen: Ref.Ref<Trace>,
-  predicate: (trace: Trace) => boolean,
-  trace: Trace,
-): Effect.Effect<void> =>
-  Option.match(Option.filter(Option.some(Effect.void), () => predicate(trace)), {
-    onSome: (done) => done,
-    onNone: () => Effect.suspend(() => Effect.andThen(Effect.yieldNow, awaitPredicate(seen, predicate))),
+interface SeenTrace {
+  readonly trace: Ref.Ref<Trace>
+  readonly waiters: Ref.Ref<ReadonlyArray<TraceWaiter>>
+}
+
+const awaitPredicate = (seen: SeenTrace, predicate: (trace: Trace) => boolean): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const done = yield* Deferred.make<void>()
+    yield* Ref.update(seen.waiters, (waiting) => Arr.append(waiting, { predicate, done }))
+    const settled = yield* Ref.get(seen.trace)
+    yield* Option.match(Option.filter(Option.some(done), () => predicate(settled)), {
+      onSome: (completion) => Deferred.succeed(completion, void 0),
+      onNone: () => Effect.void,
+    })
+    yield* Deferred.await(done)
   })
 
 const shutdownModeOf = (kind: ChildRole['shutdown']): NonNullable<Supervisor.ChildOptions['shutdown']> =>
@@ -182,11 +189,33 @@ const supervisorOf = <Program, StartError, R>(
     ),
   )
 
-const followedTraceOf = (handle: Supervisor.RunningSupervisor): Effect.Effect<Ref.Ref<Trace>, never, Scope.Scope> =>
+const followTraceOf = (
+  seen: SeenTrace,
+  entry: Supervisor.TraceEntry,
+): Effect.Effect<void> =>
   Effect.gen(function*() {
-    const seen = yield* Ref.make<Trace>([])
+    const grown = Arr.append(yield* Ref.get(seen.trace), entry)
+    yield* Ref.set(seen.trace, grown)
+    const waiting = yield* Ref.getAndSet(seen.waiters, [])
+    yield* Effect.forEach(
+      waiting,
+      (waiter) =>
+        Option.match(Option.filter(Option.some(waiter), () => waiter.predicate(grown)), {
+          onSome: (ready) => Deferred.succeed(ready.done, void 0),
+          onNone: () => Ref.update(seen.waiters, (known) => Arr.append(known, waiter)),
+        }),
+      { discard: true },
+    )
+  })
+
+const followedTraceOf = (handle: Supervisor.RunningSupervisor): Effect.Effect<SeenTrace, never, Scope.Scope> =>
+  Effect.gen(function*() {
+    const seen: SeenTrace = {
+      trace: yield* Ref.make<Trace>([]),
+      waiters: yield* Ref.make<ReadonlyArray<TraceWaiter>>([]),
+    }
     yield* Effect.forkScoped(
-      Stream.runForEach(Supervisor.traceOf(handle), (entry) => Ref.update(seen, (trace) => Arr.append(trace, entry))),
+      Stream.runForEach(Supervisor.traceOf(handle), (entry) => followTraceOf(seen, entry)),
       { startImmediately: true },
     )
     return seen
@@ -200,13 +229,13 @@ const currentCursorOf = (
 
 const advanceEffectOf = <Program>(
   cursors: Ref.Ref<HashMap.HashMap<string, number>>,
-  seen: Ref.Ref<Trace>,
+  seen: SeenTrace,
   scenario: Scenario,
   launched: HashMap.HashMap<string, LaunchedChild<Program>>,
   childId: string,
 ): Effect.Effect<void> =>
   Effect.gen(function*() {
-    const generation = yield* Effect.map(Ref.get(seen), latestOrderedGenerationIn(childId))
+    const generation = yield* Effect.map(Ref.get(seen.trace), latestOrderedGenerationIn(childId))
     const index = yield* currentCursorOf(cursors, childId)
     yield* Ref.update(cursors, (known) => HashMap.set(known, childId, index + 1))
     yield* Option.match(Arr.get(scriptOf(scenario, childId), index), {
@@ -221,7 +250,7 @@ const advanceEffectOf = <Program>(
 
 const controlStepEffectOf = <Program>(
   cursors: Ref.Ref<HashMap.HashMap<string, number>>,
-  seen: Ref.Ref<Trace>,
+  seen: SeenTrace,
   scenario: Scenario,
   launched: HashMap.HashMap<string, LaunchedChild<Program>>,
   handle: Supervisor.RunningSupervisor,
@@ -229,7 +258,8 @@ const controlStepEffectOf = <Program>(
 ): Effect.Effect<void> =>
   Match.value(step).pipe(
     Match.tag('AdvanceChild', (advance) => advanceEffectOf(cursors, seen, scenario, launched, advance.childId)),
-    Match.tag('ShutdownSupervisor', () => Supervisor.shutdown(handle)),
+    Match.tag('ShutdownSupervisor', () =>
+      Supervisor.shutdown(handle).pipe(Effect.catchTag('SupervisorTerminated', () => Effect.void))),
     Match.exhaustive,
   )
 
@@ -237,7 +267,7 @@ const driveControlOf = <Program>(
   scenario: Scenario,
   launched: HashMap.HashMap<string, LaunchedChild<Program>>,
   handle: Supervisor.RunningSupervisor,
-  seen: Ref.Ref<Trace>,
+  seen: SeenTrace,
 ): Effect.Effect<void> =>
   Effect.gen(function*() {
     const cursors = yield* Ref.make(HashMap.empty<string, number>())
@@ -258,7 +288,7 @@ const runScenarioOf = <Program, StartError, R>(
     const seen = yield* followedTraceOf(handle)
     yield* driveControlOf(scenario, launched, handle, seen)
     yield* awaitPredicate(seen, terminatedDecisionIn)
-    const entries = yield* Ref.get(seen)
+    const entries = yield* Ref.get(seen.trace)
     return { scenario: scenario.name, medium: driver.name, steps: observedStepsOf(entries) }
   }))
 

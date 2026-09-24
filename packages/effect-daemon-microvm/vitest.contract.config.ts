@@ -32,7 +32,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['tests/**/*.contract.test.ts'],
+    include: ['tests/**/*.contract.test.ts', 'tests/**/*.conformance.test.ts'],
     fileParallelism: false,
     testTimeout: 900_000,
     hookTimeout: 900_000,

@@ -1,11 +1,11 @@
 import { expect } from '@effect/vitest'
 import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Match } from 'effect'
 import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const describeResult = (result: Conformance.ScenarioResult): string =>
   Match.value(result).pipe(
@@ -20,7 +20,7 @@ const describeResult = (result: Conformance.ScenarioResult): string =>
 
 Feature('Supervising cluster children')
   .withScenarioLayer(ClusterOracle)
-  .liveClock()
+  .live('the report compares the medium against a real SingleRunner over PGlite and Crypto')
   .body(({ scenario }) => {
     scenario(
       'Every scripted child lifecycle matches the fiber reference',

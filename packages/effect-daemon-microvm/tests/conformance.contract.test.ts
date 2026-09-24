@@ -2,13 +2,13 @@ import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer, Match } from 'effect'
 import { childScriptWorkload } from './__fixtures__/child-script.js'
 import { featureNameOf, kvmGate } from './__fixtures__/kvm-gate.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const labelOf = (result: Conformance.ScenarioResult): string =>
   Match.value(result).pipe(
@@ -33,7 +33,9 @@ const ContractFeature = kvmGate.available ? Feature : Feature.skip
 ContractFeature(
   featureNameOf('Supervising a workload in a microVM matches supervising it in process'),
 )
-  .liveClock()
+  .live(
+    'each scenario boots and tears down real microsandbox virtual machines, which the simulation kernel cannot observe',
+  )
   .withLayer(MicroVMLayer)
   .body(({ scenario }) => {
     scenario(

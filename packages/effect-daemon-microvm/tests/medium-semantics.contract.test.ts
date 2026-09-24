@@ -2,14 +2,14 @@ import { layer as nodeServicesLayer } from '@effect/platform-node/NodeServices'
 import { expect } from '@effect/vitest'
 import type { Conformance } from '@systemfsoftware/effect-daemon-conformance'
 import { MicroVMMedium } from '@systemfsoftware/effect-daemon-microvm'
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Layer } from 'effect'
 import { Sandbox } from 'microsandbox'
 import { ABNORMAL_EXIT_CODE, childScriptWorkload } from './__fixtures__/child-script.js'
 import { featureNameOf, kvmGate } from './__fixtures__/kvm-gate.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const SANDBOX_NAME_PREFIX = 'effect-microsandbox-'
 
@@ -72,7 +72,7 @@ const ContractFeature = kvmGate.available ? Feature : Feature.skip
 ContractFeature(
   featureNameOf('A workload in a microVM tells its supervisor how it ended, and the machine it ran in goes away'),
 )
-  .liveClock()
+  .live('each scenario boots, reports and tears down a real microsandbox virtual machine on the host')
   .withLayer(MicroVMLayer)
   .body(({ scenario }) => {
     scenario(
