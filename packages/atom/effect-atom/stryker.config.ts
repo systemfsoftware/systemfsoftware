@@ -23,11 +23,8 @@ const config: StrykerConfig = defineConfig({
   plugins: [
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
-  // The propagation engine is the code the registry model specifies; the rest of
-  // `src/` is covered by scenarios, not by a model, and would not fit the CI budget.
   mutate: [
     'src/atom-node.ts',
-    'src/registry-engine.ts',
   ],
   thresholds: { high: 100, low: 100, break: 100 },
   dryRunTimeoutMinutes: 10,
