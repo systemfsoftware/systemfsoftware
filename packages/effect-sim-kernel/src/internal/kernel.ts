@@ -151,15 +151,37 @@ const captureDescriptors = (
     .map((field) => descriptorEntryOf(proto, field))
     .filter((entry): entry is readonly [string, PropertyDescriptor] => entry !== undefined)
 
-const restoreDescriptor = (proto: object, entry: readonly [string, PropertyDescriptor]): void => {
-  Reflect.defineProperty(proto, entry[0], entry[1])
+const slotOf = (field: string): symbol => Symbol.for(`~effect-sim-kernel/field/${field}`)
+
+const passThroughField = (proto: object, field: string): void => {
+  const slot = slotOf(field)
+  Reflect.defineProperty(proto, field, {
+    configurable: true,
+    get(this: Record<symbol, Field>): Field {
+      return this[slot]
+    },
+    set(this: Record<symbol, Field>, value: Field): void {
+      this[slot] = value
+    },
+  })
 }
 
-const restoreDescriptors = (
+const restoreField = (
   proto: object,
+  field: string,
   captured: ReadonlyArray<readonly [string, PropertyDescriptor]>,
 ): void => {
-  for (const entry of captured) restoreDescriptor(proto, entry)
+  const original = captured.find((entry) => entry[0] === field)
+  if (original === undefined) passThroughField(proto, field)
+  else Reflect.defineProperty(proto, original[0], original[1])
+}
+
+const restoreFields = (
+  proto: object,
+  fields: ReadonlyArray<string>,
+  captured: ReadonlyArray<readonly [string, PropertyDescriptor]>,
+): void => {
+  for (const field of fields) restoreField(proto, field, captured)
 }
 
 const patchMethod = (
@@ -213,7 +235,7 @@ const originalMethodsOf = (proto: object): ReadonlyArray<readonly [string, Metho
   FIBER_METHODS.map((name) => originalOf(proto, name))
 
 const interceptField = (proto: object, field: string, guard: (target: object) => void): void => {
-  const slot = Symbol(field)
+  const slot = slotOf(field)
   Reflect.defineProperty(proto, field, {
     configurable: true,
     get(this: Record<symbol, Field>): Field {
@@ -260,8 +282,8 @@ const acquireHooks = (kernel: Kernel): () => void => {
   return () => {
     releaseRun()
     restoreMethods(fiberProto, originals)
-    restoreDescriptors(refProto, capturedRef)
-    restoreDescriptors(deferredProto, capturedDeferred)
+    restoreFields(refProto, REF_FIELDS, capturedRef)
+    restoreFields(deferredProto, DEFERRED_FIELDS, capturedDeferred)
   }
 }
 
