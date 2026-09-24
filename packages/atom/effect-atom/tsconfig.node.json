@@ -8,6 +8,7 @@
   "include": [
     "oxlint.config.ts",
     "tsdown.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.node.config.ts"
   ]
 }
