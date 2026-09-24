@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Match, Result, Schema } from 'effect'
+import { Effect, Match, Schema } from 'effect'
 import {
   type AnswerFor,
   answering,
@@ -80,16 +79,25 @@ Feature('Recording what the model said and replaying it later')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('x'), model.model, [Discern.Model.recording(s.store)])
           })),
-        Then('the same change replays from the recording, handler work and all')((s) =>
+        Then('the same change replays from the recording, handler work and all')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
             const taken = yield* Discern.Model.snapshot(s.store)
             const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
-            expect(replayed).toBe('block:x')
-            expect(model.calls()).toBe(1)
-            expect(s.counter.count()).toBe(2)
-            expect(yield* Discern.Model.size(s.store)).toBe(1)
-          })
+            return {
+              replayed,
+              modelCalls: model.calls(),
+              handlerRuns: s.counter.count(),
+              storedObservations: yield* Discern.Model.size(s.store),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              replayed: 'block:x',
+              modelCalls: 1,
+              handlerRuns: 2,
+              storedObservations: 1,
+            })
+          ))
         ),
       ),
     )
@@ -121,14 +129,18 @@ Feature('Recording what the model said and replaying it later')
                   ),
               ),
           )),
-        Then('the fresh store replays the change without the model')((s) =>
+        Then('the fresh store replays the change without the model')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
             const taken = yield* Discern.Model.snapshot(s.fresh)
             const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
-            expect(replayed).toBe('block')
-            expect(model.calls()).toBe(1)
-          })
+            return { replayed, modelCalls: model.calls() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              replayed: 'block',
+              modelCalls: 1,
+            })
+          ))
         ),
       ),
     )
@@ -146,16 +158,20 @@ Feature('Recording what the model said and replaying it later')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('x'), model.model, [Discern.Model.recording(s.store)])
           })),
-        Then('the recorded run replays, and the reworded policy refuses to use it')((s) =>
+        Then('the recorded run replays, and the reworded policy refuses to use it')((s, expect) =>
           Effect.gen(function*() {
             const taken = yield* Discern.Model.snapshot(s.store)
             const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
-            expect(replayed).toBe('block')
             const reworded = yield* Effect.flip(
               Effect.provide(policyOn(afterRewording)('x'), Discern.Model.replayLayer(taken)),
             )
-            expect(reworded).toSatisfy(Discern.Model.isReplayMiss)
-          })
+            return { replayed, reworded }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              replayed: 'block',
+              reworded: { _tag: 'AiError', module: 'Discern', method: 'replaying' },
+            })
+          ))
         ),
       ),
     )
@@ -180,15 +196,28 @@ Feature('Recording what the model said and replaying it later')
               return { riskyFile, safeFile }
             }),
         ),
-        Then('each file replays its own answer')((s) =>
+        Then('each file replays its own answer')((s, expect) =>
           Effect.gen(function*() {
-            expect(s.verdicts.riskyFile).toBe('block')
-            expect(s.verdicts.safeFile).toBe('ship')
-            expect(yield* Discern.Model.size(s.store)).toBe(2)
+            const recorded = {
+              riskyFile: s.verdicts.riskyFile,
+              safeFile: s.verdicts.safeFile,
+              storedObservations: yield* Discern.Model.size(s.store),
+            }
             const taken = yield* Discern.Model.snapshot(s.store)
-            expect(yield* Effect.provide(s.policy('risky.ts'), Discern.Model.replayLayer(taken))).toBe('block')
-            expect(yield* Effect.provide(s.policy('safe.ts'), Discern.Model.replayLayer(taken))).toBe('ship')
-          })
+            return {
+              ...recorded,
+              replayedRisky: yield* Effect.provide(s.policy('risky.ts'), Discern.Model.replayLayer(taken)),
+              replayedSafe: yield* Effect.provide(s.policy('safe.ts'), Discern.Model.replayLayer(taken)),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              riskyFile: 'block',
+              safeFile: 'ship',
+              storedObservations: 2,
+              replayedRisky: 'block',
+              replayedSafe: 'ship',
+            })
+          ))
         ),
       ),
     )
@@ -206,14 +235,20 @@ Feature('Recording what the model said and replaying it later')
             const model = yield* CountingModel
             return yield* withProvider(s.policies.first('x'), model.model, [Discern.Model.recording(s.store)])
           })),
-        Then('a full replay of the two-question policy is refused')((s) =>
+        Then('a full replay of the two-question policy is refused')((s, expect) =>
           Effect.gen(function*() {
             const taken = yield* Discern.Model.snapshot(s.store)
             const missing = yield* Effect.flip(
               Effect.provide(s.policies.both('x'), Discern.Model.replayLayer(taken)),
             )
-            expect(missing).toSatisfy(Discern.Model.isReplayMiss)
-          })
+            return missing
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              _tag: 'AiError',
+              module: 'Discern',
+              method: 'replaying',
+            })
+          ))
         ),
       ),
     )
@@ -238,12 +273,16 @@ Feature('Recording what the model said and replaying it later')
               return replayed
             }),
         ),
-        Then('only the unrecorded question reached the model')((s) =>
+        Then('only the unrecorded question reached the model')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdict).toBe('both')
-            expect(model.asked()).toStrictEqual([['a'], ['b']])
-          })
+            return { verdict: s.verdict, asked: model.asked() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              verdict: 'both',
+              asked: [['a'], ['b']],
+            })
+          ))
         ),
       ),
     )
@@ -279,16 +318,22 @@ Feature('Recording what the model said and replaying it later')
               return { first, second }
             }),
         ),
-        Then('the store holds only what was loaded into it')((s) =>
+        Then('the store holds only what was loaded into it')((s, expect) =>
           Effect.gen(function*() {
-            expect(yield* Discern.Model.size(s.stores.first)).toBe(1)
+            const storedObservations = yield* Discern.Model.size(s.stores.first)
             const taken = yield* Discern.Model.snapshot(s.stores.first)
             const absent = yield* Effect.flip(
               Effect.provide(s.policies.first('x'), Discern.Model.replayLayer(taken)),
             )
-            expect(absent).toSatisfy(Discern.Model.isReplayMiss)
-            expect(yield* Effect.provide(s.policies.second('x'), Discern.Model.replayLayer(taken))).toBe('hit')
-          })
+            const second = yield* Effect.provide(s.policies.second('x'), Discern.Model.replayLayer(taken))
+            return { storedObservations, absent, second }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              storedObservations: 1,
+              absent: { _tag: 'AiError', module: 'Discern', method: 'replaying' },
+              second: 'hit',
+            })
+          ))
         ),
       ),
     )
@@ -301,14 +346,14 @@ Feature('Recording what the model said and replaying it later')
           'refused',
           (s) => Effect.flip(Discern.Model.load(s.store, { version: 99, entries: {} })),
         ),
-        Then('the store blames the foreign format version')(({ refused }) => {
+        Then('the store blames the foreign format version')(({ refused }, expect) =>
           expect(
             Match.value(refused).pipe(
               Match.tag('UnsupportedObservationFormatError', (unsupported) => unsupported.version),
               Match.orElse(() => -1),
             ),
           ).toBe(99)
-        }),
+        ),
       ),
     )
 
@@ -325,10 +370,18 @@ Feature('Recording what the model said and replaying it later')
             older: Schema.decodeUnknownResult(Discern.Model.Observations)(s.payloads.older),
             newer: Schema.decodeUnknownResult(Discern.Model.Observations)(s.payloads.newer),
           })),
-        Then('both are refused')(({ outcomes }) => {
-          expect(outcomes.older).toSatisfy(Result.isFailure)
-          expect(outcomes.newer).toSatisfy(Result.isFailure)
-        }),
+        Then('both are refused')(({ outcomes }, expect) =>
+          expect({ older: outcomes.older, newer: outcomes.newer }).toMatchObject({
+            older: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["version"\]/) },
+            },
+            newer: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["version"\]/) },
+            },
+          })
+        ),
       ),
     )
 
@@ -360,10 +413,18 @@ Feature('Recording what the model said and replaying it later')
             unknownKind: Schema.decodeUnknownResult(Discern.Model.Observation)(s.payloads.unknownKind),
             unreadableAnswer: Schema.decodeUnknownResult(Discern.Model.Observation)(s.payloads.unreadableAnswer),
           })),
-        Then('both entries are refused')(({ outcomes }) => {
-          expect(outcomes.unknownKind).toSatisfy(Result.isFailure)
-          expect(outcomes.unreadableAnswer).toSatisfy(Result.isFailure)
-        }),
+        Then('both entries are refused')(({ outcomes }, expect) =>
+          expect({ unknownKind: outcomes.unknownKind, unreadableAnswer: outcomes.unreadableAnswer }).toMatchObject({
+            unknownKind: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["kind"\]/) },
+            },
+            unreadableAnswer: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["answer"\]\["probability"\]/) },
+            },
+          })
+        ),
       ),
     )
 
@@ -375,14 +436,12 @@ Feature('Recording what the model said and replaying it later')
           'refused',
           (s) => Effect.flip(Discern.Model.load(s.store, { version: 2, entries: { oops: { broken: true } } })),
         ),
-        Then('the store blames the entries, not the format version')(({ refused }) => {
-          expect(refused).toSatisfy((error) =>
-            Match.value(error).pipe(
-              Match.tag('MalformedObservationSnapshotError', () => true),
-              Match.orElse(() => false),
-            )
-          )
-        }),
+        Then('the store blames the entries, not the format version')(({ refused }, expect) =>
+          expect(refused).toMatchObject({
+            _tag: 'MalformedObservationSnapshotError',
+            detail: expect.stringMatching(/at \["entries"\]\["oops"\]\["decisionId"\]/),
+          })
+        ),
       ),
     )
   })

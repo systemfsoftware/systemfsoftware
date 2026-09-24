@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, MutableRef, Schema } from 'effect'
@@ -65,17 +64,31 @@ Feature('Decorating a model you did not build')
               return { firstRun, secondRun }
             }),
         ),
-        Then('the third-party model was asked once, the cache paid no allowance, and the recording replays')((s) =>
+        Then('the third-party model was asked once, the cache paid no allowance, and the recording replays')((
+          s,
+          expect,
+        ) =>
           Effect.gen(function*() {
-            expect(s.verdicts.firstRun).toBe('block')
-            expect(s.verdicts.secondRun).toBe('block')
-            expect(s.thirdParty.calls()).toBe(1)
-            expect(yield* Discern.Model.size(s.mount.store)).toBe(1)
-            expect(yield* Discern.Model.spent(s.mount.spend)).toStrictEqual({ decisions: 1, calls: 1 })
+            const recorded = {
+              firstRun: s.verdicts.firstRun,
+              secondRun: s.verdicts.secondRun,
+              thirdPartyCalls: s.thirdParty.calls(),
+              storedObservations: yield* Discern.Model.size(s.mount.store),
+              spent: yield* Discern.Model.spent(s.mount.spend),
+            }
             const taken = yield* Discern.Model.snapshot(s.mount.store)
             const replayed = yield* Effect.provide(s.policy('x'), Discern.Model.replayLayer(taken))
-            expect(replayed).toBe('block')
-          })
+            return { ...recorded, replayed }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              firstRun: 'block',
+              secondRun: 'block',
+              thirdPartyCalls: 1,
+              storedObservations: 1,
+              spent: { decisions: 1, calls: 1 },
+              replayed: 'block',
+            })
+          ))
         ),
       ),
     )

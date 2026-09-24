@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Result, Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import { Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -21,9 +20,12 @@ Feature('Keeping routing evidence well formed')
             Effect.succeed({ id: 'find', probability: row.probability })),
           When('the candidate is read back')('outcome', (s) =>
             Effect.succeed(Schema.decodeResult(Discern.Procedure.RouteCandidate)(s.payload))),
-          Then('the impossible probability is refused')(({ outcome }) => {
-            expect(outcome).toSatisfy(Result.isFailure)
-          }),
+          Then('the impossible probability is refused')(({ outcome }, expect) =>
+            expect(outcome).toMatchObject({
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["probability"\]/) },
+            })
+          ),
         ),
     )
 
@@ -35,9 +37,12 @@ Feature('Keeping routing evidence well formed')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.RouteCandidate)(s.payload)),
         ),
-        Then('the probability-less candidate is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the probability-less candidate is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["probability"\]/) },
+          })
+        ),
       ),
     )
 
@@ -52,9 +57,12 @@ Feature('Keeping routing evidence well formed')
           'outcome',
           (s) => Effect.succeed(Schema.decodeResult(Discern.Procedure.RouteCandidate)(s.payload)),
         ),
-        Then('the endless probability is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the endless probability is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["probability"\]/) },
+          })
+        ),
       ),
     )
 
@@ -69,9 +77,12 @@ Feature('Keeping routing evidence well formed')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.RoutingUncertainError)(s.payload)),
         ),
-        Then('the ranking-less refusal is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the ranking-less refusal is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["ranked"\]/) },
+          })
+        ),
       ),
     )
 
@@ -86,9 +97,12 @@ Feature('Keeping routing evidence well formed')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.DepthExceededError)(s.payload)),
         ),
-        Then('the ceiling-less refusal is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the ceiling-less refusal is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["limit"\]/) },
+          })
+        ),
       ),
     )
   })

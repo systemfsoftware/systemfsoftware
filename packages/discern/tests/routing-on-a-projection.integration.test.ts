@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema } from 'effect'
@@ -73,13 +72,21 @@ Feature('Routing on a projection of the request instead of the whole of it')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.invoke(ticket({ ask: 'what is this about?' })), model.model)
           })),
-        Then('the router was shown only the question, and routing is typed by the projection')((s) =>
+        Then('the router was shown only the question, and routing is typed by the projection')((s, expect) =>
           Effect.gen(function*() {
             const sight = yield* RoutingSight
-            expect(s.answer).toBe('inspected:what is this about?')
-            expect(sight.states()).toStrictEqual(['what is this about?'])
-            expect(s.registry.routeInput).toBe(Schema.String)
-          })
+            return {
+              answer: s.answer,
+              seenStates: sight.states(),
+              routeInput: s.registry.routeInput,
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              answer: 'inspected:what is this about?',
+              seenStates: ['what is this about?'],
+              routeInput: Schema.String,
+            })
+          ))
         ),
       ),
     )
@@ -94,12 +101,16 @@ Feature('Routing on a projection of the request instead of the whole of it')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.invoke(ticket({ ask: 'what is this about?' })), model.model)
           })),
-        Then('the router saw the whole ticket, evidence included')((s) =>
+        Then('the router saw the whole ticket, evidence included')((s, expect) =>
           Effect.gen(function*() {
             const sight = yield* RoutingSight
-            expect(s.answer).toBe('inspected:what is this about?')
-            expect(sight.states()).toStrictEqual([ticket({ ask: 'what is this about?' })])
-          })
+            return { answer: s.answer, seenStates: sight.states() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              answer: 'inspected:what is this about?',
+              seenStates: [ticket({ ask: 'what is this about?' })],
+            })
+          ))
         ),
       ),
     )
@@ -128,16 +139,24 @@ Feature('Routing on a projection of the request instead of the whole of it')
               return { production, local }
             }),
         ),
-        Then('the local question was put to the router without the two procedures that decline it')((s) =>
+        Then('the local question was put to the router without the two procedures that decline it')((s, expect) =>
           Effect.gen(function*() {
             const sight = yield* RoutingSight
-            expect(s.answers.production).toBe('inspected:what is this?')
-            expect(s.answers.local).toBe('inspected:what is this?')
-            expect(sight.offered()).toStrictEqual([
-              ['inspect', 'deploy', 'rollback', 'escalate'],
-              ['inspect', 'escalate'],
-            ])
-          })
+            return {
+              production: s.answers.production,
+              local: s.answers.local,
+              offered: sight.offered(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              production: 'inspected:what is this?',
+              local: 'inspected:what is this?',
+              offered: [
+                ['inspect', 'deploy', 'rollback', 'escalate'],
+                ['inspect', 'escalate'],
+              ],
+            })
+          ))
         ),
       ),
     )
@@ -162,13 +181,21 @@ Feature('Routing on a projection of the request instead of the whole of it')
               withProvider(s.registry.invoke(ticket({ ask: 'ship it', environment: 'local' })), model.model),
             )
           })),
-        Then('the route names the situation and the invocation refuses, both without asking the model')((s) =>
+        Then('the route names the situation and the invocation refuses, both without asking the model')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(noneRouteOf(s.route).reason).toContain('no procedure is eligible')
-            expect(s.refused).toMatchObject({ _tag: 'NoEligibleProcedureError' })
-            expect(model.calls()).toBe(0)
-          })
+            return {
+              routeReason: noneRouteOf(s.route).reason,
+              refused: s.refused,
+              modelCalls: model.calls(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toMatchObject({
+              routeReason: expect.stringMatching(/no procedure is eligible/),
+              refused: { _tag: 'NoEligibleProcedureError' },
+              modelCalls: 0,
+            })
+          ))
         ),
       ),
     )
@@ -183,14 +210,18 @@ Feature('Routing on a projection of the request instead of the whole of it')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.route(ticket({ ask: 'ship it', environment: 'local' })), model.model)
           })),
-        Then('the last procedure standing wins by elimination, and the model was never asked')((s) =>
+        Then('the last procedure standing wins by elimination, and the model was never asked')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
             const matched = matchedRouteOf(s.route)
-            expect(matched.id).toBe('inspect')
-            expect(matched.by).toBe('elimination')
-            expect(model.calls()).toBe(0)
-          })
+            return { id: matched.id, wonBy: matched.by, modelCalls: model.calls() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              id: 'inspect',
+              wonBy: 'elimination',
+              modelCalls: 0,
+            })
+          ))
         ),
       ),
     )
@@ -205,13 +236,21 @@ Feature('Routing on a projection of the request instead of the whole of it')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.invokeWithRoute(ticket({ ask: 'please release this' })), model.model)
           })),
-        Then('the choice names the winner, how it won, and the full ranking')(({ routed }) => {
-          expect(routed.value).toBe('deployed:production')
+        Then('the choice names the winner, how it won, and the full ranking')(({ routed }, expect) => {
           const matched = matchedRouteOf(routed.route)
-          expect(matched.id).toBe('deploy')
-          expect(matched.by).toBe('model')
-          expect(matched.probability).toBe(0.9)
-          expect(matched.ranked.map((candidate) => candidate.id)).toStrictEqual(['deploy', 'inspect', 'rollback'])
+          return expect({
+            value: routed.value,
+            id: matched.id,
+            wonBy: matched.by,
+            probability: matched.probability,
+            ranked: matched.ranked.map((candidate) => candidate.id),
+          }).toEqual({
+            value: 'deployed:production',
+            id: 'deploy',
+            wonBy: 'model',
+            probability: 0.9,
+            ranked: ['deploy', 'inspect', 'rollback'],
+          })
         }),
       ),
     )
@@ -239,12 +278,16 @@ Feature('Routing on a projection of the request instead of the whole of it')
               s.cache,
             )
           })),
-        Then('the second invocation routed from the cache, so the model was asked once')((s) =>
+        Then('the second invocation routed from the cache, so the model was asked once')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.second).toBe('inspected:what is this?')
-            expect(model.calls()).toBe(1)
-          })
+            return { second: s.second, modelCalls: model.calls() }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              second: 'inspected:what is this?',
+              modelCalls: 1,
+            })
+          ))
         ),
       ),
     )

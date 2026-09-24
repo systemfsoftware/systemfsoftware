@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
@@ -41,10 +40,15 @@ Feature('Owning up when a request cannot be routed confidently')
             const model = yield* CountingModel
             return yield* withProvider(s.registry.route('do something'), model.model)
           })),
-        Then('the doubt is named and the whole distribution is reported in order')(({ route }) => {
+        Then('the doubt is named and the whole distribution is reported in order')(({ route }, expect) => {
           const uncertain = uncertainRouteOf(route)
-          expect(uncertain.reason).toMatch(/no procedure reached 0\.7/)
-          expect(uncertain.ranked.map((candidate) => candidate.id)).toStrictEqual(['test-gaps', 'review', 'find'])
+          return expect({
+            reason: uncertain.reason,
+            ranked: uncertain.ranked.map((candidate) => candidate.id),
+          }).toEqual({
+            reason: expect.stringMatching(/no procedure reached 0\.7/),
+            ranked: ['test-gaps', 'review', 'find'],
+          })
         }),
       ),
     )
@@ -62,9 +66,9 @@ Feature('Owning up when a request cannot be routed confidently')
               model.model,
             )
           })),
-        Then('the refusal names the leader, the runner-up, and how narrow the lead was')(({ route }) => {
+        Then('the refusal names the leader, the runner-up, and how narrow the lead was')(({ route }, expect) =>
           expect(uncertainRouteOf(route).reason).toMatch(/led find by only 0\.020/)
-        }),
+        ),
       ),
     )
 
@@ -96,14 +100,20 @@ Feature('Owning up when a request cannot be routed confidently')
               model.model,
             )
           })),
-        Then('the refusal reports the ranking, and both plans answer instead')((s) => {
-          expect(s.refused).toMatchObject({
-            _tag: 'RoutingUncertainError',
-            ranked: [{ id: 'review' }, { id: 'find' }, { id: 'test-gaps' }],
+        Then('the refusal reports the ranking, and both plans answer instead')((s, expect) =>
+          expect({
+            refused: s.refused,
+            handled: s.handled,
+            answered: s.answered,
+          }).toMatchObject({
+            refused: {
+              _tag: 'RoutingUncertainError',
+              ranked: [{ id: 'review' }, { id: 'find' }, { id: 'test-gaps' }],
+            },
+            handled: 'ask-a-human:review',
+            answered: 'ask-a-human:from-effect',
           })
-          expect(s.handled).toBe('ask-a-human:review')
-          expect(s.answered).toBe('ask-a-human:from-effect')
-        }),
+        ),
       ),
     )
 
@@ -125,10 +135,15 @@ Feature('Owning up when a request cannot be routed confidently')
               model.model,
             )
           })),
-        Then('a hesitant leader is doubted by default and accepted once the bar is lowered')((s) => {
-          expect(uncertainRouteOf(s.strict).reason).toMatch(/no procedure reached 0\.7/)
-          expect(matchedRouteOf(s.relaxed).id).toBe('find')
-        }),
+        Then('a hesitant leader is doubted by default and accepted once the bar is lowered')((s, expect) =>
+          expect({
+            strictReason: uncertainRouteOf(s.strict).reason,
+            relaxedWinner: matchedRouteOf(s.relaxed).id,
+          }).toEqual({
+            strictReason: expect.stringMatching(/no procedure reached 0\.7/),
+            relaxedWinner: 'find',
+          })
+        ),
       ),
     )
   })

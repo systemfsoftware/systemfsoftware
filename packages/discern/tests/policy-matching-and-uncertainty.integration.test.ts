@@ -1,8 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Match, Schema } from 'effect'
-import type * as AiError from 'effect/unstable/ai/AiError'
 import {
   type AnswerFor,
   answering,
@@ -108,16 +106,6 @@ const moderateSeverity: AnswerFor = (request) =>
 const collidingBefore = Change.probability({ id: 'risk', instructions: 'Risky' })
 const collidingAfter = Change.probability({ id: 'risk', instructions: 'Something else entirely' })
 
-const isUncertainRefusal = Schema.is(Discern.UncertainMatchError)
-
-const refusalOf = (
-  failure:
-    | AiError.AiError
-    | Discern.DecisionIdCollisionError
-    | Discern.InvalidThresholdError
-    | Discern.PolicyCommandRejected
-    | Discern.UncertainMatchError,
-): Discern.UncertainMatchError | undefined => (isUncertainRefusal(failure) ? failure : undefined)
 const crossedBounds = changeImpact.is('breaking', { match: 0.8, miss: 0.9 })
 const crossedPolicy = Discern.type(Schema.String).pipe(
   Discern.when(crossedBounds, () => 'block'),
@@ -140,17 +128,23 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('change-1'), model.model)
           })),
-        Then('the change is blocked before it lands')((s) =>
+        Then('the change is blocked before it lands')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdict).toBe('block:change-1')
-            expect(model.calls()).toBe(1)
-            expect(model.asked()).toStrictEqual([['api-impact', 'regression-risk']])
-            expect(Arr.map(s.policy.plan.decisions, (decision) => decision.id)).toStrictEqual([
-              'api-impact',
-              'regression-risk',
-            ])
-          })
+            return {
+              verdict: s.verdict,
+              modelCalls: model.calls(),
+              asked: model.asked(),
+              plannedDecisionIds: Arr.map(s.policy.plan.decisions, (decision) => decision.id),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              verdict: 'block:change-1',
+              modelCalls: 1,
+              asked: [['api-impact', 'regression-risk']],
+              plannedDecisionIds: ['api-impact', 'regression-risk'],
+            })
+          ))
         ),
       ),
     )
@@ -168,9 +162,9 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('x'), model.model)
           })),
-        Then('the change goes to review instead of the fallback')(({ verdict }) => {
+        Then('the change goes to review instead of the fallback')(({ verdict }, expect) =>
           expect(verdict).toBe('review:high-risk')
-        }),
+        ),
       ),
     )
 
@@ -184,10 +178,9 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* Effect.flip(withProvider(s.policy('x'), model.model))
           })),
-        Then('the run refuses to guess and names the undecided case')(({ outcome }) => {
-          expect(outcome).toBeInstanceOf(Discern.UncertainMatchError)
-          expect(refusalOf(outcome)?.caseId).toBe('high-risk')
-        }),
+        Then('the run refuses to guess and names the undecided case')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({ _tag: 'UncertainMatchError', caseId: 'high-risk' })
+        ),
       ),
     )
 
@@ -203,12 +196,11 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('README.md'), model.model)
           })),
-        Then('the file is skipped and the model was never asked')((s) =>
+        Then('the file is skipped and the model was never asked')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdict).toBe('skip')
-            expect(model.calls()).toBe(0)
-          })
+            return { verdict: s.verdict, modelCalls: model.calls() }
+          }).pipe(Effect.map((answer) => expect(answer).toEqual({ verdict: 'skip', modelCalls: 0 })))
         ),
       ),
     )
@@ -225,12 +217,11 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('index.ts'), model.model)
           })),
-        Then('the file is held for review after one model round trip')((s) =>
+        Then('the file is held for review after one model round trip')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.verdict).toBe('review')
-            expect(model.calls()).toBe(1)
-          })
+            return { verdict: s.verdict, modelCalls: model.calls() }
+          }).pipe(Effect.map((answer) => expect(answer).toEqual({ verdict: 'review', modelCalls: 1 })))
         ),
       ),
     )
@@ -255,9 +246,7 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('change'), model.model)
           })),
-        Then('the handler for the returned verdict runs')(({ verdict }) => {
-          expect(verdict).toBe('review')
-        }),
+        Then('the handler for the returned verdict runs')(({ verdict }, expect) => expect(verdict).toBe('review')),
       ),
     )
 
@@ -271,9 +260,9 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* withProvider(s.policy('x'), model.model)
           })),
-        Then('the change is escalated because its rating sits above the queue band')(({ verdict }) => {
+        Then('the change is escalated because its rating sits above the queue band')(({ verdict }, expect) =>
           expect(verdict).toBe('escalate')
-        }),
+        ),
       ),
     )
 
@@ -289,9 +278,9 @@ Feature('Reviewing changes with semantic policies')
             const model = yield* CountingModel
             return yield* Effect.flip(withProvider(s.policy('change'), model.model))
           })),
-        Then('the run is refused, naming the shared id')(({ outcome }) => {
+        Then('the run is refused, naming the shared id')(({ outcome }, expect) =>
           expect(outcome).toMatchObject({ _tag: 'DecisionIdCollisionError', decisionId: 'risk' })
-        }),
+        ),
       ),
     )
 
@@ -309,15 +298,12 @@ Feature('Reviewing changes with semantic policies')
             const asked = model.calls()
             return { outcome, asked }
           })),
-        Then('the run is refused, naming the crossed bounds, and the model is never asked')(({ outcome }) => {
-          expect(outcome.outcome).toMatchObject({
-            _tag: 'InvalidThresholdError',
-            threshold: 'miss',
-            value: 0.9,
-            limit: 0.8,
+        Then('the run is refused, naming the crossed bounds, and the model is never asked')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            outcome: { _tag: 'InvalidThresholdError', threshold: 'miss', value: 0.9, limit: 0.8 },
+            asked: 0,
           })
-          expect(outcome.asked).toBe(0)
-        }),
+        ),
       ),
     )
   })
