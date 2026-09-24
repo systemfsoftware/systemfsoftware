@@ -1,8 +1,7 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Layer } from 'effect'
-import { isOverBudget, outcomeBound, queueProgram } from './__fixtures__/searchFixtures.js'
+import { outcomeBound, queueProgram } from './__fixtures__/searchFixtures.js'
 import { latchProgram, pubSubProgram, semaphoreProgram } from './__fixtures__/unobservedInstallFixtures.js'
 
 const Feature = makeFeature({ it })
@@ -29,12 +28,13 @@ Feature('Watching the shared primitives a run touches')
           'outcome',
           (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
         ),
-        Then('the search finishes within its bound')((s) => {
-          expect(s.outcome).not.toSatisfy(isOverBudget)
-        }),
-        And('the bound names the queue among the primitives the kernel cannot watch')((s) => {
-          expect(outcomeBound(s.outcome).pruning.disabledBy).toContain('Queue')
-        }),
+        Then('the search finishes within its bound, naming the queue among the primitives the kernel cannot watch')(
+          (s, expect) =>
+            expect({ tag: s.outcome._tag, disabledBy: outcomeBound(s.outcome).pruning.disabledBy }).toMatchObject({
+              tag: 'Completed',
+              disabledBy: expect.arrayContaining(['Queue']),
+            }),
+        ),
       ),
     )
 
@@ -48,12 +48,14 @@ Feature('Watching the shared primitives a run touches')
             'outcome',
             (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
           ),
-          Then('the bound reports pruning is off')((s) => {
-            expect(s.outcome).not.toSatisfy(isOverBudget)
-            expect(outcomeBound(s.outcome).pruning.enabled).toBe(false)
-          }),
-          And('the bound names the primitive the kernel cannot watch')((s) => {
-            expect(outcomeBound(s.outcome).pruning.disabledBy).toContain(row.named)
+          Then('the bound reports pruning is off and names the primitive the kernel cannot watch')((s, expect) => {
+            const bound = outcomeBound(s.outcome)
+            return expect({ tag: s.outcome._tag, enabled: bound.pruning.enabled, disabledBy: bound.pruning.disabledBy })
+              .toMatchObject({
+                tag: 'Completed',
+                enabled: false,
+                disabledBy: expect.arrayContaining([row.named]),
+              })
           }),
         ),
     )

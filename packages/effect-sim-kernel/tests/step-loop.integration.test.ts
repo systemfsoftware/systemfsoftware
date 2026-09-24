@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Deferred, Effect, Exit, Fiber, Layer, Ref } from 'effect'
+import { Deferred, Effect, Fiber, Layer, Ref, Schema } from 'effect'
 import {
   alwaysLast,
   callHostTimeout,
@@ -107,12 +106,6 @@ const depthProgram = (
     return `finished at depth ${inside}`
   })
 
-const someStepOfferedAChoice = (steps: ReadonlyArray<Kernel.StepRecord>): boolean =>
-  steps.some((step) => step.options > 1)
-
-const everyWorkerHasFrames = (workers: ReadonlyArray<Kernel.SuspendedFiber>): boolean =>
-  workers.every((worker) => worker.frames.length > 0)
-
 const replayTwice = (
   program: typeof raceProgram,
   path: ReadonlyArray<Kernel.Decision>,
@@ -147,12 +140,15 @@ Feature('Running one program again under a chosen schedule')
               )
             ),
         ),
-        Then('on the default schedule the writing worker writes last')((s) => {
-          expect(completedValueOf(s.runs.defaultRun)).toEqual(['waiting worker', 'yielding worker'])
-        }),
-        And('with the waiting worker woken first the waiting worker writes last')((s) => {
-          expect(completedValueOf(s.runs.wokenFirst)).toEqual(['yielding worker', 'waiting worker'])
-        }),
+        Then('the default schedule writes waiting then yielding, and waking first reverses them')((s, expect) =>
+          expect({
+            defaultRun: completedValueOf(s.runs.defaultRun),
+            wokenFirst: completedValueOf(s.runs.wokenFirst),
+          }).toMatchObject({
+            defaultRun: ['waiting worker', 'yielding worker'],
+            wokenFirst: ['yielding worker', 'waiting worker'],
+          })
+        ),
       ),
     )
 
@@ -167,12 +163,12 @@ Feature('Running one program again under a chosen schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(s.contest)),
         ),
-        Then('the run fails naming the escaped timer')((s) => {
-          expect(escapeOf(s.run).timer).toBe('setTimeout')
-        }),
-        And('the failure names the call site outside the run')((s) => {
-          expect(escapeOf(s.run).site).toContain('step-loop.integration.test.ts')
-        }),
+        Then('the run fails naming the escaped timer and the call site outside the run')((s, expect) =>
+          expect({ timer: escapeOf(s.run).timer, site: escapeOf(s.run).site }).toMatchObject({
+            timer: 'setTimeout',
+            site: expect.stringContaining('step-loop.integration.test.ts'),
+          })
+        ),
       ),
     )
 
@@ -187,12 +183,18 @@ Feature('Running one program again under a chosen schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(s.contest)),
         ),
-        Then('the woken worker finishes once the schedule picks it')((s) => {
-          expect(completedValueOf(s.run)).toEqual(['woken by in-process work'])
-        }),
-        And('at least one step offered more than one choice')((s) => {
-          expect(completedRunOf(s.run).steps).toSatisfy(someStepOfferedAChoice)
-        }),
+        Then('the woken worker finishes once the schedule picks it, at a step that offered more than one choice')(
+          (s, expect) => {
+            const steps = completedRunOf(s.run).steps
+            return expect({
+              value: completedValueOf(s.run),
+              mostOptions: Math.max(...steps.map((step) => step.options)),
+            }).toMatchObject({
+              value: ['woken by in-process work'],
+              mostOptions: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(1)))),
+            })
+          },
+        ),
       ),
     )
 
@@ -207,14 +209,19 @@ Feature('Running one program again under a chosen schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(s.contest)),
         ),
-        Then('the run fails naming at least the two stuck handoffs')((s) => {
-          expect(deadlockOf(s.run).suspended.length).toBeGreaterThanOrEqual(2)
-        }),
-        And('every stuck worker is listed once with the frames it stopped in')((s) => {
-          const suspended = deadlockOf(s.run).suspended
-          expect(suspended).toSatisfy(everyWorkerHasFrames)
-          expect(new Set(suspended.map((worker) => worker.id)).size).toBe(suspended.length)
-        }),
+        Then('the run fails naming at least two stuck handoffs, each listed once with the frames it stopped in')(
+          (s, expect) => {
+            const suspended = deadlockOf(s.run).suspended
+            const ids = suspended.map((worker) => worker.id).sort((left, right) => left - right)
+            return expect({ workers: suspended, total: suspended.length, ids }).toMatchObject({
+              workers: expect.schemaMatching(
+                Schema.Array(Schema.Struct({ frames: Schema.NonEmptyArray(Schema.Unknown) })),
+              ),
+              total: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(2)))),
+              ids: [...new Set(ids)],
+            })
+          },
+        ),
       ),
     )
 
@@ -234,17 +241,30 @@ Feature('Running one program again under a chosen schedule')
               )
             ),
         ),
-        Then('both replays take the recorded schedule')((s) => {
-          const second = completedRunOf(s.runs.second)
-          expect(second.steps.map((step) => step.choice)).toEqual([...s.runs.firstRun.decisions])
-        }),
-        And('both replays agree on the outcome and the step history')((s) => {
+        Then('both replays take the recorded schedule and agree on the outcome and the step history')((s, expect) => {
           const second = completedRunOf(s.runs.second)
           const third = completedRunOf(s.runs.third)
-          expect(stepsWithoutFiberIds(third.steps)).toEqual(stepsWithoutFiberIds(second.steps))
-          expect(fiberPatternOf(third.steps)).toEqual(fiberPatternOf(second.steps))
-          expect(third.decisions).toEqual(second.decisions)
-          expect(completedValueOf(s.runs.third)).toEqual(completedValueOf(s.runs.second))
+          return expect({
+            replayChoices: second.steps.map((step) => step.choice),
+            secondSteps: stepsWithoutFiberIds(second.steps),
+            thirdSteps: stepsWithoutFiberIds(third.steps),
+            secondFibers: fiberPatternOf(second.steps),
+            thirdFibers: fiberPatternOf(third.steps),
+            secondDecisions: second.decisions,
+            thirdDecisions: third.decisions,
+            secondValue: completedValueOf(s.runs.second),
+            thirdValue: completedValueOf(s.runs.third),
+          }).toEqual({
+            replayChoices: [...s.runs.firstRun.decisions],
+            secondSteps: stepsWithoutFiberIds(second.steps),
+            thirdSteps: stepsWithoutFiberIds(second.steps),
+            secondFibers: fiberPatternOf(second.steps),
+            thirdFibers: fiberPatternOf(second.steps),
+            secondDecisions: second.decisions,
+            thirdDecisions: second.decisions,
+            secondValue: completedValueOf(s.runs.second),
+            thirdValue: completedValueOf(s.runs.second),
+          })
         }),
       ),
     )
@@ -260,12 +280,12 @@ Feature('Running one program again under a chosen schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(interruptedProgram(s.receipts), { interrupt: { atStep: 11 } })),
         ),
-        Then('the cleanup ran')((s) => {
-          expect(s.receipts).toEqual(['cleanup ran'])
-        }),
-        And('the run exits with the interruption')((s) => {
-          expect(completedRunOf(s.run).exit).toSatisfy(Exit.hasInterrupts)
-        }),
+        Then('the cleanup ran and the run exits with the interruption')((s, expect) =>
+          expect({ receipts: s.receipts, exit: completedRunOf(s.run).exit }).toMatchObject({
+            receipts: ['cleanup ran'],
+            exit: { _tag: 'Failure', cause: { reasons: [{ _tag: 'Interrupt' }] } },
+          })
+        ),
       ),
     )
 
@@ -280,9 +300,7 @@ Feature('Running one program again under a chosen schedule')
           'leftOpen',
           (s) => Effect.promise(s.check),
         ),
-        Then('no run leaves the source open')((s) => {
-          expect(s.leftOpen).toEqual([])
-        }),
+        Then('no run leaves the source open')((s, expect) => expect(s.leftOpen).toEqual([])),
       ),
     )
 
@@ -312,12 +330,16 @@ Feature('Running one program again under a chosen schedule')
               }
             }),
         ),
-        Then('the program that can never finish reports its own stall')((s) => {
-          expect(deadlockOf(s.runs.stalled).suspended.length).toBeGreaterThan(0)
-        }),
-        And('the run that waited completes with its own answer')((s) => {
-          expect(completedValueOf(s.runs.queued)).toBe('the waiting run finished')
-        }),
+        Then('the program that can never finish reports its own stall, and the run that waited completes')((
+          s,
+          expect,
+        ) =>
+          expect({ stalled: deadlockOf(s.runs.stalled).suspended, queued: completedValueOf(s.runs.queued) })
+            .toMatchObject({
+              stalled: expect.schemaMatching(Schema.NonEmptyArray(Schema.Unknown)),
+              queued: 'the waiting run finished',
+            })
+        ),
       ),
     )
 
@@ -338,16 +360,26 @@ Feature('Running one program again under a chosen schedule')
               return { alone, together, deepest: yield* Ref.get(s.counters.peak) }
             }),
         ),
-        Then('no two runs were ever inside the program at once')((s) => {
-          expect(s.runs.deepest).toBe(1)
-        }),
-        And('each run that started together returns what the run alone returned')((s) => {
-          const [first, second] = s.runs.together
-          expect(completedValueOf(first)).toBe(completedValueOf(s.runs.alone))
-          expect(completedValueOf(second)).toBe(completedValueOf(s.runs.alone))
-          expect(first.decisions).toEqual(s.runs.alone.decisions)
-          expect(second.decisions).toEqual(s.runs.alone.decisions)
-        }),
+        Then(
+          'no two runs were inside the program at once, and each run that started together returned what the run alone returned',
+        )(
+          (s, expect) => {
+            const [first, second] = s.runs.together
+            return expect({
+              deepest: s.runs.deepest,
+              first: completedValueOf(first),
+              second: completedValueOf(second),
+              firstDecisions: first.decisions,
+              secondDecisions: second.decisions,
+            }).toEqual({
+              deepest: 1,
+              first: completedValueOf(s.runs.alone),
+              second: completedValueOf(s.runs.alone),
+              firstDecisions: s.runs.alone.decisions,
+              secondDecisions: s.runs.alone.decisions,
+            })
+          },
+        ),
       ),
     )
 
@@ -369,13 +401,17 @@ Feature('Running one program again under a chosen schedule')
               return { pinned, explored }
             }),
         ),
-        Then('the setup steps keep the default choice')((s) => {
-          expect(s.runs.pinned.steps[0]?.deviation).toBe(false)
-        }),
-        And('the setup steps stay out of the recorded choices')((s) => {
-          expect(s.runs.pinned.decisions.length).toBeLessThan(s.runs.pinned.steps.length)
-          expect(s.runs.explored.decisions.length).toBe(s.runs.explored.steps.length)
-        }),
+        Then('the setup steps keep the default choice and stay out of the recorded choices')((s, expect) =>
+          expect({
+            firstDeviation: s.runs.pinned.steps[0]?.deviation,
+            pinnedGap: s.runs.pinned.steps.length - s.runs.pinned.decisions.length,
+            exploredGap: s.runs.explored.decisions.length - s.runs.explored.steps.length,
+          }).toMatchObject({
+            firstDeviation: false,
+            pinnedGap: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            exploredGap: 0,
+          })
+        ),
       ),
     )
   })

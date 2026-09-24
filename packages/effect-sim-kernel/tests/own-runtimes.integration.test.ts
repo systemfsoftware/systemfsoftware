@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Layer } from 'effect'
@@ -32,9 +31,9 @@ Feature('Keeping work a program hands to a runtime of its own inside the run')
             () => Effect.succeed(handedToOwnRuntime(row.program)),
           ),
           When('the program runs')('run', (s) => Effect.promise(() => Kernel.run(s.program))),
-          Then(`the run completes with the answer "${row.answer}"`)((s) => {
+          Then(`the run completes with the answer "${row.answer}"`)((s, expect) =>
             expect(completedValueOf(s.run)).toBe(row.answer)
-          }),
+          ),
         ),
     )
     scenario(
@@ -45,9 +44,7 @@ Feature('Keeping work a program hands to a runtime of its own inside the run')
           'answer',
           () => Effect.promise(() => Effect.runPromise(finishingAfterGivingWay)),
         ),
-        Then('the program finishes')((s) => {
-          expect(s.answer).toBe('finished')
-        }),
+        Then('the program finishes')((s, expect) => expect(s.answer).toBe('finished')),
       ),
     )
   })

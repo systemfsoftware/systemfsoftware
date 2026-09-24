@@ -1,5 +1,4 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { firstRaceFinding, guardedInOneStep, raceValueOf, wrapperVariants } from './__fixtures__/selfTestFixtures.js'
 import type { RaceFinding, WrapperVariant } from './__fixtures__/selfTestFixtures.js'
@@ -32,12 +31,12 @@ Feature('Two workers claiming one shared slot')
             'finding',
             (s) => Effect.promise(() => firstRaceFinding(1)(s.contestants)),
           ),
-          Then('both workers hold the slot')((s) => {
-            expect(raceValueOf(s.finding)).toEqual([true, true])
-          }),
-          And('the schedule spends exactly one pause')((s) => {
-            expect(s.finding?.preemptions).toBe(1)
-          }),
+          Then('both workers hold the slot, and the schedule spends exactly one pause')((s, expect) =>
+            expect({ value: raceValueOf(s.finding), pauses: s.finding?.preemptions }).toMatchObject({
+              value: [true, true],
+              pauses: 1,
+            })
+          ),
         ),
     )
 
@@ -52,9 +51,9 @@ Feature('Two workers claiming one shared slot')
           'findings',
           (s) => Effect.promise(() => searchWithoutPause(s.contestants)),
         ),
-        Then('no schedule leaves both workers holding the slot')((s) => {
+        Then('no schedule leaves both workers holding the slot')((s, expect) =>
           expect(s.findings.map(raceValueOf)).toEqual([undefined, undefined, undefined, undefined])
-        }),
+        ),
       ),
     )
 
@@ -69,9 +68,9 @@ Feature('Two workers claiming one shared slot')
           'finding',
           (s) => Effect.promise(() => firstRaceFinding(1)(s.contestants)),
         ),
-        Then('no schedule leaves both workers holding the slot')((s) => {
+        Then('no schedule leaves both workers holding the slot')((s, expect) =>
           expect(raceValueOf(s.finding)).toBeUndefined()
-        }),
+        ),
       ),
     )
   })

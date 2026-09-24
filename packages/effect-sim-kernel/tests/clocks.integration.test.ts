@@ -1,9 +1,8 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Clock, Duration, Effect, Exit, Fiber, Layer, Stream } from 'effect'
+import { Clock, Duration, Effect, Exit, Fiber, Layer, Schema, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
-import { alwaysLast, completedValueOf, deadlockOf, escapeOf } from './__fixtures__/kernelFixtures.js'
+import { alwaysLast, completedValueOf, failureOf } from './__fixtures__/kernelFixtures.js'
 
 const Feature = makeFeature({ it })
 
@@ -85,12 +84,13 @@ Feature('Waiting until nothing moves, then moving virtual time')
               )
             ),
         ),
-        Then('the timeout stops the worker before the move completes')((s) => {
-          expect(completedValueOf(s.run).removed).toBe(true)
-        }),
-        And('the move lands at 91 seconds')((s) => {
-          expect(completedValueOf(s.run).now).toBe(TEST_CLOCK)
-        }),
+        Then('the timeout stops the worker before the move completes, and the move lands at 91 seconds')(
+          (s, expect) =>
+            expect(completedValueOf(s.run)).toMatchObject({
+              removed: true,
+              now: TEST_CLOCK,
+            }),
+        ),
       ),
     )
 
@@ -105,13 +105,13 @@ Feature('Waiting until nothing moves, then moving virtual time')
           'run',
           (s) => Effect.promise(() => Kernel.run(Effect.provide(s.program, Kernel.TestClock.layer))),
         ),
-        Then('the woken work finishes before the ten-second wait fires')((s) => {
+        Then('the woken work finishes before the ten-second wait fires')((s, expect) =>
           expect(completedValueOf(s.run)).toEqual([
             'the five-second wait finished',
             'the five-second wait finished its follow-up work',
             'the ten-second wait finished',
           ])
-        }),
+        ),
       ),
     )
 
@@ -126,11 +126,13 @@ Feature('Waiting until nothing moves, then moving virtual time')
           'run',
           (s) => Effect.promise(() => Kernel.run(s.program)),
         ),
-        Then('the run reports the sleep as stuck')((s) => {
-          expect(deadlockOf(s.run).suspended.length).toBeGreaterThanOrEqual(1)
-        }),
-        And('no timer escape is reported')((s) => {
-          expect(() => escapeOf(s.run)).toThrow('expected a timer escape, got another failure')
+        Then('the run reports the sleep as stuck, and no timer escape is reported')((s, expect) => {
+          const failure = failureOf(s.run)
+          const suspended = 'suspended' in failure ? failure.suspended : []
+          return expect({ tag: failure._tag, suspended }).toMatchObject({
+            tag: 'Deadlock',
+            suspended: expect.schemaMatching(Schema.NonEmptyArray(Schema.Unknown)),
+          })
         }),
       ),
     )
@@ -146,12 +148,9 @@ Feature('Waiting until nothing moves, then moving virtual time')
           'run',
           (s) => Effect.promise(() => Kernel.run(Effect.provide(s.program, Kernel.TestClock.layer))),
         ),
-        Then('the move lands at one hour')((s) => {
-          expect(completedValueOf(s.run).now).toBe(ONE_HOUR)
-        }),
-        And('the late wait is still asleep')((s) => {
-          expect(completedValueOf(s.run).events).toEqual([])
-        }),
+        Then('the move lands at one hour and the late wait is still asleep')((s, expect) =>
+          expect(completedValueOf(s.run)).toEqual({ events: [], now: ONE_HOUR })
+        ),
       ),
     )
   })
