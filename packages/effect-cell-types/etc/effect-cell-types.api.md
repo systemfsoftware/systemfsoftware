@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Blueprint {
-    export { Applied, Blueprint, Carrying, Conditional, DataFirst, Definition$1 as Definition, Derived, Dual, DualOut, Either, Get, Implementation, Implementations, IndexId, IndexOf, LastFirstOf, LastRestOf, Of$1 as Of, Operation, OutOf, ParamsOf, RestOf, Step, Target, TargetOf, make$2 as make };
+    export { Applied, Blueprint, Carrying, Conditional, DataFirst, Definition$1 as Definition, Derived, Dual, DualOut, Either, Get, Implementation, Implementations, IndexId$1 as IndexId, IndexOf, LastFirstOf, LastRestOf, Of$1 as Of, Operation, OutOf, ParamsOf, RestOf, Step, Target, TargetOf, make$2 as make };
 }
 
 // @public (undocumented)
@@ -16,7 +16,7 @@ export namespace Cell {
 
 // @public (undocumented)
 export namespace Handle {
-    export { Definition, Handle, Of, make$1 as make };
+    export { Definition, Handle, Indexed, Of, make$1 as make };
 }
 
 // @public (undocumented)
