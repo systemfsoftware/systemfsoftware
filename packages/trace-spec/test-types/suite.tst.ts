@@ -151,4 +151,28 @@ describe('Suite.make', () => {
       expect(Case.prop).type.not.toBeCallableWith('counts', needsInventory, 'order-1')
     })
   })
+
+  it('a declared stage stays on the live clock only with a reason', () => {
+    const declared = Suite.make(bindings)('s')
+    expect(declared.live).type.toBeCallableWith('binds a real loopback socket')
+    expect(declared.live).type.not.toBeCallableWith()
+    expect(declared.live).type.not.toBeCallableWith(1)
+    expect(declared.pipe(Suite.live('binds a real loopback socket'))).type.toBe<Suite.Declared>()
+  })
+
+  it('a shared stage stays on the live clock only with a reason', () => {
+    const shared = Suite.make(bindings)('s').withLayer(harnessWithInventory)
+    expect(shared.live).type.toBeCallableWith('binds a real loopback socket')
+    expect(shared.live).type.not.toBeCallableWith()
+    expect(shared.pipe(Suite.live('binds a real loopback socket'))).type.toBe<Suite.Shared<Inventory>>()
+  })
+
+  it('an opened stage stays on the live clock only with a reason', () => {
+    const opened = Suite.make(bindings)('s').withScenarioLayer(harnessWithInventory)
+    expect(opened.live).type.toBeCallableWith('binds a real loopback socket')
+    expect(opened.live).type.not.toBeCallableWith()
+    expect(Suite.live(opened, 'binds a real loopback socket')).type.toBe<
+      Suite.Opened<Inventory | Observation.Observation | FileSystem.FileSystem>
+    >()
+  })
 })

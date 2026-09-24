@@ -1,11 +1,11 @@
 import { NodeFileSystem } from '@effect/platform-node'
-import { And, Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FileSystem, Layer } from 'effect'
 import { expect } from 'vitest'
 import { startVitest } from 'vitest/node'
 import type { Reporter, RunnerTestFile } from 'vitest/node'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const DUMP_DIRECTORY = 'artifacts/traces'
 
@@ -102,6 +102,7 @@ const runFixtureCountingDumps = (fixture: string): Effect.Effect<Observed> =>
   }).pipe(Effect.provide(NodeFileSystem.layer))
 
 Feature('Reporting where a broken trace spec leaves its evidence')
+  .live('the scenarios drive the real vitest runner, which completes outside the kernel')
   .withScenarioLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(

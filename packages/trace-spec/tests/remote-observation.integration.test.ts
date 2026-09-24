@@ -1,10 +1,10 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, RemoteObservation } from '@systemfsoftware/trace-spec'
 import { Array as Arr, Cause, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Result, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const TRACE_ID = '0af7651916cd43dd8448eb211c80319c'
 const CHECKOUT_SPAN_ID = '5b8efff798038c10355db7e76c83f5b1'

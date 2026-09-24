@@ -4,9 +4,8 @@ import { SpanStatusCode } from '@opentelemetry/api'
 import {
   AlwaysOnSampler,
   BasicTracerProvider,
-  InMemorySpanExporter,
   type ReadableSpan,
-  SimpleSpanProcessor,
+  type SpanProcessor,
 } from '@opentelemetry/sdk-trace-base'
 import type { Span } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, Predicate } from 'effect'
@@ -24,9 +23,42 @@ const ExporterId: unique symbol = Symbol.for('~systemfsoftware/trace-spec/Observ
 
 const ProviderId: unique symbol = Symbol.for('~systemfsoftware/trace-spec/ObservationWindow/provider')
 
+/**
+ * The finished-span storage a window reads back through.
+ */
+interface SpanRecordStore {
+  readonly getFinishedSpans: () => ReadonlyArray<ReadableSpan>
+}
+
+/**
+ * Records every finished span the moment it ends, and answers `shutdown`
+ * inline. The OpenTelemetry `InMemorySpanExporter` defers its result callback
+ * to a `setTimeout`, a real timer the kernel must fail as an escaped schedule;
+ * a window records nothing that waits, so it records synchronously.
+ */
+const spanRecorder = (): { readonly processor: SpanProcessor; readonly store: SpanRecordStore } => {
+  const finishedSpans: Array<ReadableSpan> = []
+  let stopped = false
+  return {
+    processor: {
+      onStart: () => undefined,
+      onEnd: (span) => {
+        if (!stopped) finishedSpans.push(span)
+      },
+      shutdown: () => {
+        stopped = true
+        finishedSpans.length = 0
+        return Promise.resolve()
+      },
+      forceFlush: () => Promise.resolve(),
+    },
+    store: { getFinishedSpans: () => finishedSpans },
+  }
+}
+
 export interface ObservationWindow extends Pipeable {
   readonly [TypeId]: typeof TypeId
-  readonly [ExporterId]: InMemorySpanExporter
+  readonly [ExporterId]: SpanRecordStore
   readonly [ProviderId]: BasicTracerProvider
   readonly serviceName: string
 }
@@ -34,14 +66,14 @@ export interface ObservationWindow extends Pipeable {
 export const isObservationWindow = (u: unknown): u is ObservationWindow => Predicate.hasProperty(u, TypeId)
 
 export const make = (spec: ObservationWindowSpec): ObservationWindow => {
-  const exporter = new InMemorySpanExporter()
+  const { processor, store } = spanRecorder()
   const provider = new BasicTracerProvider({
     sampler: new AlwaysOnSampler(),
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
+    spanProcessors: [processor],
   })
   return {
     [TypeId]: TypeId,
-    [ExporterId]: exporter,
+    [ExporterId]: store,
     [ProviderId]: provider,
     serviceName: spec.serviceName,
     ...Prototype,

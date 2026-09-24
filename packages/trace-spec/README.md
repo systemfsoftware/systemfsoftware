@@ -54,11 +54,11 @@ const paymentUnderCheckout = Contract.of(checkout)
 
 ```ts
 import { NodeFileSystem } from '@effect/platform-node'
-import { it, layer } from '@effect/vitest'
+import { it } from '@effect/vitest'
 import { Observation, ObservationWindow, Suite } from '@systemfsoftware/trace-spec'
 import { Layer } from 'effect'
 
-const TraceSuite = Suite.make({ it, layer })
+const TraceSuite = Suite.make({ it })
 const harness = Layer.mergeAll(ObservationWindow.make('checkout').layer, NodeFileSystem.layer, CheckoutDoubles)
 
 TraceSuite('checkout.place_order')
@@ -68,9 +68,9 @@ TraceSuite('checkout.place_order')
   })
 ```
 
-`Suite.make({ it, layer })(name)` stages a suite as a Pipeable builder, and `withLayer`/`withScenarioLayer` are `dual` combinators whose terminal `body` registers the cases. The scenario layer is built fresh per case and must provide `Observation.Observation` and a `FileSystem` for failure dumps, plus whatever the stimulated behaviour needs — the requirement is enforced at the type level. A failing case fails with the harness's own error channel — the outcomes above, or `Suite.StimulusFailure` when the behaviour itself failed before its trace could be judged. Cases run on the live clock.
+`Suite.make({ it })(name)` stages a suite as a Pipeable builder, and `withLayer`/`withScenarioLayer` are `dual` combinators whose terminal `body` registers the cases. The scenario layer is built fresh per case and must provide `Observation.Observation` and a `FileSystem` for failure dumps, plus whatever the stimulated behaviour needs — the requirement is enforced at the type level. A failing case fails with the harness's own error channel — the outcomes above, or `Suite.StimulusFailure` when the behaviour itself failed before its trace could be judged. Cases run on the kernel under the zero-preemption schedule plus the profile's seeded PCT schedules; every case gets its own crypto-random salt, so two cases never share a trace id. A case that must stay on the live clock declares why with `.live(reason)` at any stage before `body` (including the `Suite.live` dual), and the reason appears in the run report.
 
-`.withLayer(shared)` registers the suite over a layer built once for the whole suite; the shared layer then carries the observation harness, and `.withScenarioLayer(scenario)` can follow it for what each case needs fresh.
+`.withLayer(shared)` registers the suite over a layer rebuilt fresh for each case for replay; the shared layer then carries the observation harness, and `.withScenarioLayer(scenario)` can follow it for what each case needs fresh.
 
 `Case.prop(title, contract, schema)` runs the contract over inputs drawn from the Schema's derived arbitrary through `it.effect.prop` on the suite's runner, so shrinking is the runner's own: a failing draw fails the property and the runner reports the smallest failing input. The dump is named after the case title, so every failing draw overwrites one file and the surviving dump is the reported counterexample's evidence. When a case fails with a `Contract.TraceDisparityError`, the test carries a Vitest annotation naming that dump, so the decoded graph is found from the failing test.
 

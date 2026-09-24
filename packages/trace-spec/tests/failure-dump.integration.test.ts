@@ -1,11 +1,11 @@
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer, Schema } from 'effect'
 import { expect } from 'vitest'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const disparityOf = (failure: Contract.CheckFailure<never>): Contract.TraceDisparityError => {
   if (!Schema.is(Contract.TraceDisparityError)(failure)) {

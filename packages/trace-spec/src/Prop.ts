@@ -35,15 +35,17 @@ const predicateImpl = <Input, Output, E, Provided, Required>(
   title: string,
   contract: Contract.Contract<Input, Output, E, Provided>,
   scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+  shared: Layer.Layer<Required, never, never>,
 ): (
   input: Input,
   context: TestContext | undefined,
-) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required> => {
+) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope> => {
+  const provided = scenario.pipe(Layer.provideMerge(shared))
   const checked = (input: Input, context: TestContext | undefined) =>
     Contract.judge(contract, input, { dumpName: title }).pipe(
       Effect.tap((judgment) => announce(context, judgment.verdict, judgment.dumpPath)),
       Effect.map((judgment) => isHold(judgment.verdict)),
-      Effect.provide(Layer.fresh(scenario)),
+      Effect.provide(Layer.fresh(provided)),
     )
 
   return (input, context) => checked(input, context)
@@ -53,21 +55,23 @@ export const predicate: {
   <Input, Output, E, Provided, Required>(
     contract: Contract.Contract<Input, Output, E, Provided>,
     scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+    shared: Layer.Layer<Required, never, never>,
   ): (
     title: string,
   ) => (
     input: Input,
     context: TestContext | undefined,
-  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required>
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
   <Input, Output, E, Provided, Required>(
     title: string,
     contract: Contract.Contract<Input, Output, E, Provided>,
     scenario: Layer.Layer<Contract.Services<Provided>, never, Required>,
+    shared: Layer.Layer<Required, never, never>,
   ): (
     input: Input,
     context: TestContext | undefined,
-  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope | Required>
-} = dual(3, predicateImpl)
+  ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
+} = dual(4, predicateImpl)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
