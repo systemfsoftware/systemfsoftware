@@ -4,7 +4,6 @@ import { ConfigProvider, Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { fiberPatternOf } from './__fixtures__/kernelFixtures.js'
 import {
-  budgetLimitOf,
   checkThenSet,
   firstFailureValue,
   isOverBudget,
@@ -274,7 +273,7 @@ Feature('Searching schedules until a concurrency fault shows')
     )
 
     scenario(
-      'A search out of schedules fails over and names the schedule budget',
+      'A search out of schedules reports it ran out before covering its bound',
       Gherkin.Do.pipe(
         Given('a search allowed a single schedule before the race can appear')(
           'target',
@@ -287,47 +286,6 @@ Feature('Searching schedules until a concurrency fault shows')
         ),
         Then('the search reports it ran out before covering its bound')((s) => {
           expect(isOverBudget(s.outcome)).toBe(true)
-        }),
-        And('the named limit is the schedule budget')((s) => {
-          expect(budgetLimitOf(s.outcome)).toBe('schedule budget')
-        }),
-      ),
-    )
-
-    scenario(
-      'A search out of time fails over and names the wall-clock bound',
-      Gherkin.Do.pipe(
-        Given('a search whose clock already passed its time budget')(
-          'options',
-          () => {
-            let at = 0
-            return Effect.succeed({
-              preemptions: 2 as const,
-              timeoutMs: 1 as const,
-              now: () => {
-                at += 10
-                return at
-              },
-            })
-          },
-        ),
-        When('the search runs with the clock already past its budget')(
-          'outcome',
-          (s) =>
-            Effect.promise(() =>
-              Kernel.search(checkThenSet, {
-                preemptions: s.options.preemptions,
-                timeoutMs: s.options.timeoutMs,
-                now: s.options.now,
-                isFailure: raceDetected,
-              })
-            ),
-        ),
-        Then('the search reports it ran out before covering its bound')((s) => {
-          expect(isOverBudget(s.outcome)).toBe(true)
-        }),
-        And('the named limit is the wall-clock bound')((s) => {
-          expect(budgetLimitOf(s.outcome)).toBe('wall-clock bound')
         }),
       ),
     )

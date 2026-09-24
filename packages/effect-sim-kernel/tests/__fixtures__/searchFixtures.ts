@@ -1,5 +1,5 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Exit, Fiber, Queue, Ref } from 'effect'
+import { Effect, Exit, Fiber, Predicate, Queue, Ref } from 'effect'
 
 export const checkThenSet: Effect.Effect<ReadonlyArray<boolean>> = Effect.gen(function*() {
   const holder = yield* Ref.make<string | null>(null)
@@ -56,10 +56,8 @@ export const sharedScopeProgram: Effect.Effect<ReadonlyArray<string>> = Effect.g
   return events
 })
 
-export const isOverBudget = <A, E>(outcome: Kernel.SearchReport<A, E>): boolean => 'limit' in outcome
-
-export const budgetLimitOf = <A, E>(outcome: Kernel.SearchReport<A, E>): Kernel.BudgetLimit | undefined =>
-  'limit' in outcome ? outcome.limit : undefined
+export const isOverBudget = <A, E>(outcome: Kernel.SearchReport<A, E>): boolean =>
+  Predicate.isTagged(outcome, 'OverBudget')
 
 export const outcomeBound = <A, E>(outcome: Kernel.SearchReport<A, E>): Kernel.Bound => outcome.bound
 

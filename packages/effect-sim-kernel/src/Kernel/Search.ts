@@ -5,8 +5,9 @@
  * order, and preempts only before steps that touch state the kernel observes
  * (`StepRecord.visible`) while every shared primitive the target uses stays
  * observed. Every result carries its bound, and a search that exhausts its
- * schedule budget or wall-clock bound before covering it fails as over budget,
- * naming the limit.
+ * schedule budget before covering it fails as over budget. The budget is
+ * counted in schedules, never in wall-clock time, so the same search reaches
+ * the same verdict on a loaded machine as on an idle one.
  */
 import { Effect } from 'effect'
 import { dual } from 'effect/Function'
@@ -26,13 +27,9 @@ type OverBudgetTag = typeof OverBudgetTag
 
 export const searchTags = { completed: CompletedTag, overBudget: OverBudgetTag } as const
 
-export type BudgetLimit = 'schedule budget' | 'wall-clock bound'
-
 export interface SearchOptions<A, E> {
   readonly preemptions?: number
   readonly maxSchedules?: number
-  readonly timeoutMs?: number
-  readonly now?: () => number
   readonly isFailure?: (result: RunResult<A, E>) => boolean
   readonly maxSteps?: number
   readonly prune?: boolean
@@ -50,7 +47,6 @@ export interface SearchOutcome<A, E> extends CompletedTag {
 }
 
 export interface OverBudgetOutcome<A, E> extends OverBudgetTag {
-  readonly limit: BudgetLimit
   readonly failures: ReadonlyArray<SearchFailure<A, E>>
   readonly bound: Bound
 }
@@ -76,23 +72,6 @@ const DEFAULT_PREEMPTIONS = 2
 
 const DEFAULT_MAX_SCHEDULES = 100_000
 
-const DEFAULT_TIMEOUT_MS = 120_000
-
-const withTimeout = (options: SearchOptions<never, never>): (() => number) | undefined => {
-  if (options.timeoutMs === undefined) return undefined
-  return options.now
-}
-
-const clockOf = (options: SearchOptions<never, never>): (() => number) | undefined => {
-  if (options.now === undefined) return undefined
-  return withTimeout(options)
-}
-
-const startedAt = (options: SearchOptions<never, never>): number => {
-  const now = options.now
-  return now === undefined ? 0 : now()
-}
-
 interface Schedule {
   readonly path: ReadonlyArray<Decision>
   readonly used: number
@@ -117,9 +96,6 @@ interface SearchState<A, E> {
   readonly collected: Array<string>
   readonly preemptions: number
   readonly maxSchedules: number
-  readonly timeoutMs: number
-  readonly clock: (() => number) | undefined
-  readonly started: number
   readonly isFailure: (result: RunResult<A, E>) => boolean
   readonly maxSteps: number | undefined
   readonly prune: boolean
@@ -130,8 +106,6 @@ const distinctFibers = <A, E>(result: RunResult<A, E>): number => new Set(result
 const preemptionsOf = (options: SearchOptions<never, never>): number => options.preemptions ?? DEFAULT_PREEMPTIONS
 
 const maxSchedulesOf = (options: SearchOptions<never, never>): number => options.maxSchedules ?? DEFAULT_MAX_SCHEDULES
-
-const timeoutMsOf = (options: SearchOptions<never, never>): number => options.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
 const pruneOf = (options: SearchOptions<never, never>): boolean => options.prune ?? true
 
@@ -145,9 +119,6 @@ const searchState = <A, E>(program: Effect.Effect<A, E>, options: SearchOptions<
   collected: [],
   preemptions: preemptionsOf(options),
   maxSchedules: maxSchedulesOf(options),
-  timeoutMs: timeoutMsOf(options),
-  clock: clockOf(options),
-  started: startedAt(options),
   isFailure: options.isFailure ?? failKept,
   maxSteps: options.maxSteps,
   prune: pruneOf(options),
@@ -304,32 +275,15 @@ const completedOutcome = <A, E>(state: SearchState<A, E>): SearchOutcome<A, E> =
   bound: boundOf(state),
 })
 
-const overBudget = <A, E>(state: SearchState<A, E>, limit: BudgetLimit): OverBudgetOutcome<A, E> => ({
+const overBudget = <A, E>(state: SearchState<A, E>): OverBudgetOutcome<A, E> => ({
   ...searchTags.overBudget,
-  limit,
   failures: [],
   bound: boundOf(state),
 })
 
 const scheduleHalt = <A, E>(state: SearchState<A, E>): OverBudgetOutcome<A, E> | undefined => {
   if (state.schedules < state.maxSchedules) return undefined
-  return overBudget(state, 'schedule budget')
-}
-
-const isTimedOut = <A, E>(state: SearchState<A, E>): boolean => {
-  const clock = state.clock
-  if (clock === undefined) return false
-  return clock() - state.started > state.timeoutMs
-}
-
-const timeHalt = <A, E>(state: SearchState<A, E>): OverBudgetOutcome<A, E> | undefined => {
-  if (!isTimedOut(state)) return undefined
-  return overBudget(state, 'wall-clock bound')
-}
-
-const haltOf = <A, E>(state: SearchState<A, E>): OverBudgetOutcome<A, E> | undefined => {
-  const bySchedule = scheduleHalt(state)
-  return bySchedule ?? timeHalt(state)
+  return overBudget(state)
 }
 
 const pendingSchedule = <A, E>(state: SearchState<A, E>): Schedule | undefined => {
@@ -348,7 +302,7 @@ const exploreNext = <A, E>(state: SearchState<A, E>): Promise<SearchReport<A, E>
 }
 
 const driveSearch = <A, E>(state: SearchState<A, E>): Promise<SearchReport<A, E>> => {
-  const halted = haltOf(state)
+  const halted = scheduleHalt(state)
   if (halted !== undefined) return Promise.resolve(halted)
   return exploreNext(state)
 }
