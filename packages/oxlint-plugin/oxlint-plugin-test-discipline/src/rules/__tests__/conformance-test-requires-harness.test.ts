@@ -206,5 +206,24 @@ ruleTester.run('conformance-test-requires-harness', conformanceTestRequiresHarne
       filename: '/repo/pkg/tests/a.conformance.test.ts',
       errors: [missingImportError],
     },
+    {
+      name: 'Should_Report_RawRunner_When_VacuousAdopterImportsConformanceButOnlyPassesATest',
+      code: `
+        import { Conformance } from '@systemfsoftware/conformance-spec'
+        import { it } from 'vitest'
+        it('passes', () => {})
+      `,
+      filename: '/repo/pkg/tests/a.conformance.test.ts',
+      errors: [runnerImportError('vitest'), rawRunnerError('it')],
+    },
+    {
+      name: 'Should_Report_RawRunnerAndMissingImport_When_VacuousAdopterImportsNothing',
+      code: `
+        import { it } from 'vitest'
+        it('passes', () => {})
+      `,
+      filename: '/repo/pkg/tests/a.conformance.test.ts',
+      errors: [runnerImportError('vitest'), missingImportError, rawRunnerError('it')],
+    },
   ],
 })
