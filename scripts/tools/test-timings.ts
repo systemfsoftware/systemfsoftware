@@ -69,25 +69,22 @@ const predictedOf = (record: TimingRecord, options: PlanOptions) => (pkg: TestPa
 
 type Bin = { packages: TestPackage[]; seconds: number }
 
-/** First-fit decreasing: each whole package goes into the first bin with room. */
-const packBins = (items: readonly (readonly [TestPackage, number])[], capacity: number): Bin[] => {
-  const bins: Bin[] = []
+/** Longest package first, each into the least-loaded of `count` bins, so the loads come out even. */
+const balance = (items: readonly (readonly [TestPackage, number])[], count: number): Bin[] => {
+  const bins: Bin[] = Array.from({ length: count }, () => ({ packages: [], seconds: 0 }))
   for (const [pkg, seconds] of [...items].sort((a, b) => b[1] - a[1] || a[0].name.localeCompare(b[0].name))) {
-    const bin = bins.find((b) => b.seconds + seconds <= capacity)
-    if (bin === undefined) bins.push({ packages: [pkg], seconds })
-    else {
-      bin.packages.push(pkg)
-      bin.seconds += seconds
-    }
+    const bin = bins.reduce((least, candidate) => (candidate.seconds < least.seconds ? candidate : least))
+    bin.packages.push(pkg)
+    bin.seconds += seconds
   }
-  return bins
+  return bins.filter((bin) => bin.packages.length > 0)
 }
 
 /**
- * Packs whole packages into jobs of at most `target` predicted seconds and
- * splits a package predicted over `target` into shard jobs of its own. When the
- * whole-package jobs would exceed the job budget left after shards, the bin
- * capacity grows until they fit.
+ * Packs whole packages into the fewest jobs whose balanced loads fit `target`
+ * predicted seconds, and splits a package predicted over `target` into shard
+ * jobs of its own. When no job count within the budget left after shards fits,
+ * the budget's jobs share the work evenly and run past the target.
  */
 export const planJobs = (packages: readonly TestPackage[], record: TimingRecord, options: PlanOptions): Plan => {
   const predict = predictedOf(record, options)
@@ -115,12 +112,10 @@ export const planJobs = (packages: readonly TestPackage[], record: TimingRecord,
   }
 
   const budget = Math.max(1, options.maxJobs - shardJobs.length)
-  let capacity = options.target
-  let bins = packBins(whole, capacity)
-  while (bins.length > budget) {
-    capacity = Math.ceil(capacity * 1.25)
-    bins = packBins(whole, capacity)
-  }
+  const total = whole.reduce((sum, [, seconds]) => sum + seconds, 0)
+  let count = Math.min(budget, Math.max(1, Math.ceil(total / options.target)))
+  let bins = balance(whole, count)
+  while (count < budget && bins.some((bin) => bin.seconds > options.target)) bins = balance(whole, ++count)
 
   const wholeJobs = bins.map((bin, i): Job => {
     const names = bin.packages.map((pkg) => pkg.name).sort()

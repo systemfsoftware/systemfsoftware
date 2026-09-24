@@ -12,7 +12,7 @@ env:
 
 jobs:
   plan:
-    name: plan · test jobs from main's timings
+    name: plan · test jobs from recorded timings
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -21,13 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
-      - name: Main's latest timing record
+      - name: Latest timing record, main's first
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p .timings/previous
           id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=test-timings&per_page=100" \
-            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].id // empty') || id=
+            --jq '[.artifacts[] | select(.expired | not)] | (map(select(.workflow_run.head_branch == "main"))[0] // .[0]).id // empty') || id=
           if [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip; then
             unzip -o -q .timings/previous.zip -d .timings/previous || true
           fi
@@ -107,12 +107,11 @@ jobs:
       - name: Install Playwright chromium
         if: matrix.job.browser
         run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
+      - name: Build
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream ${{ matrix.job.filters }}
       - name: Test
         if: matrix.job.shard == null
-        run: corepack pnpm exec turbo run test --continue --summarize --output-logs=new-only --log-order=stream ${{ matrix.job.filters }}
-      - name: Build for shard
-        if: matrix.job.shard != null
-        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream ${{ matrix.job.filters }}
+        run: corepack pnpm exec turbo run test --only --concurrency=1 --continue --summarize --output-logs=new-only --log-order=stream ${{ matrix.job.filters }}
       - name: Test shard
         id: shard
         if: matrix.job.shard != null

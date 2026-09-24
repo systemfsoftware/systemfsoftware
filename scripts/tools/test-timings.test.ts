@@ -40,6 +40,24 @@ Deno.test('a package with no measurement is still planned, at the unknown defaul
   assertEquals(plan.jobs.map((job) => [job.packages, job.predicted]), [[['@s/new'], 60]])
 })
 
+Deno.test('equal packages spread evenly over the fewest jobs that fit the target', () => {
+  const packages = Array.from({ length: 12 }, (_unused, i) => pkg(`p${String(i).padStart(2, '0')}`))
+  const plan = planJobs(packages, emptyRecord, options)
+  assertEquals(plan.jobs.map((job) => job.predicted), [240, 240, 240])
+})
+
+Deno.test('a heavy package does not share its job with packages that fit elsewhere', () => {
+  const plan = planJobs(
+    ['heavy', 'b', 'c', 'd', 'e'].map((name) => pkg(name)),
+    recordOf({ heavy: 280, b: 100, c: 90, d: 60, e: 50 }),
+    options,
+  )
+  assertEquals(plan.jobs.map((job) => [job.packages, job.predicted]), [
+    [['@s/heavy'], 280],
+    [['@s/b', '@s/c', '@s/d', '@s/e'], 300],
+  ])
+})
+
 Deno.test('whole-package jobs grow past the target rather than exceed the job budget', () => {
   const packages = Array.from({ length: 6 }, (_unused, i) => pkg(`p${i}`))
   const plan = planJobs(packages, recordOf(Object.fromEntries(packages.map((_p, i) => [`p${i}`, 250]))), {
