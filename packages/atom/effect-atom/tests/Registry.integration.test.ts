@@ -512,7 +512,7 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             const heard: number[] = []
             Atom.Registry.subscribe(s.ctx.page, s.ctx.value, (v) => heard.push(v))
-            Atom.Registry.batch(() => {
+            Atom.Registry.batch(s.ctx.page, () => {
               Atom.Registry.set(s.ctx.page, s.ctx.value, 2)
               Atom.Registry.set(s.ctx.page, s.ctx.value, 3)
               Atom.Registry.set(s.ctx.page, s.ctx.value, 4)
@@ -522,6 +522,41 @@ Feature('Keeping a value that is still loading available to every reader')
         Then('the listener heard only the final value once')((s) => {
           expect(s.heard.heard).toEqual([4])
         }),
+      ),
+    )
+    scenario(
+      'A write in a second registry is announced immediately while the first registry is inside a batch',
+      Gherkin.Do.pipe(
+        Given('two separate registries holding the same value, with a listener on the second')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const batching = Atom.Registry.make()
+              const listening = Atom.Registry.make()
+              const value = Atom.make(1)
+              return { batching, listening, value }
+            }),
+        ),
+        When('the first registry runs a batch that writes to a value held by the second registry')(
+          'heard',
+          (s) =>
+            Effect.sync(() => {
+              const heard: number[] = []
+              const heardWhileBatching: number[][] = []
+              Atom.Registry.subscribe(s.ctx.listening, s.ctx.value, (v) => heard.push(v))
+              Atom.Registry.batch(s.ctx.batching, () => {
+                Atom.Registry.set(s.ctx.listening, s.ctx.value, 2)
+                heardWhileBatching.push([...heard])
+              })
+              return { heard, heardWhileBatching }
+            }),
+        ),
+        Then('the listener on the second registry heard the new value before that batch finished, and only once')(
+          (s) => {
+            expect(s.heard.heardWhileBatching).toEqual([[2]])
+            expect(s.heard.heard).toEqual([2])
+          },
+        ),
       ),
     )
     scenario(
@@ -544,7 +579,7 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('the value is built inside a batch')('result', (s) =>
           Effect.sync(() => {
-            Atom.Registry.batch(() => {
+            Atom.Registry.batch(s.ctx.page, () => {
               Atom.Registry.get(s.ctx.page, s.ctx.selfInvalidating)
             })
             return { value: Atom.Registry.get(s.ctx.page, s.ctx.selfInvalidating) }
@@ -568,7 +603,7 @@ Feature('Keeping a value that is still loading available to every reader')
           Effect.sync(() => {
             Atom.Registry.get(s.ctx.page, s.ctx.source)
             Atom.Registry.get(s.ctx.page, s.ctx.derived)
-            Atom.Registry.batch(() => {
+            Atom.Registry.batch(s.ctx.page, () => {
               Atom.Registry.refresh(s.ctx.page, s.ctx.derived)
               Atom.Registry.refresh(s.ctx.page, s.ctx.source)
             })
@@ -603,7 +638,7 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('the value is built inside a batch')('result', (s) =>
           Effect.sync(() => {
-            Atom.Registry.batch(() => {
+            Atom.Registry.batch(s.ctx.page, () => {
               Atom.Registry.get(s.ctx.page, s.ctx.selfRefreshing)
             })
             return { value: Atom.Registry.get(s.ctx.page, s.ctx.selfRefreshing) }
@@ -666,7 +701,7 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('an initial value is set for it inside a batch')('result', (s) =>
           Effect.sync(() => {
-            Atom.Registry.batch(() => {
+            Atom.Registry.batch(s.ctx.page, () => {
               Atom.Registry.setInitialValue(s.ctx.page, s.ctx.fresh, 5)
             })
             return { read: Atom.Registry.get(s.ctx.page, s.ctx.fresh) }

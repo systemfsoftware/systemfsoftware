@@ -23,7 +23,6 @@ import * as Stream from 'effect/Stream'
 import * as Result from './async-result.js'
 import type { Failure, Success } from './async-result.js'
 import type * as Atom from './atom-modules.js'
-import { runInternalBatch } from './atom-node.js'
 import { engine, refusalLog, RegistryImpl, TypeId } from './registry-engine.js'
 
 export { TypeId }
@@ -578,6 +577,22 @@ export const mount: {
     ),
 )
 
-export function batch(f: () => void): void {
-  runInternalBatch(f)
-}
+/**
+ * Runs synchronous atom updates as a batch on one registry.
+ *
+ * **Details**
+ *
+ * Stale nodes are rebuilt and listeners are notified after the callback completes,
+ * so dependent updates observe the final batched state.
+ *
+ * @since 4.0.0
+ */
+export const batch: {
+  (f: () => void): (self: Registry) => void
+  (self: Registry, f: () => void): void
+} = dual(
+  (args) => isRegistry(args[0]),
+  (self: Registry, f: () => void): void => {
+    self[engine].batchOn(f)
+  },
+)

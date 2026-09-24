@@ -10,6 +10,7 @@ import type * as Atom from './atom-modules.js'
 import { decideNodeFate, type NodeLifetimeInput } from './internal/node-lifetime.js'
 import type { NodeFate } from './internal/node-lifetime.schema.js'
 import type { RegistryImpl } from './registry-engine.js'
+import type { Registry } from './registry.handle.js'
 
 type AnyNode<A = unknown> = NodeImpl<A>
 type AnyLifetime<A = unknown> = Lifetime<A>
@@ -140,8 +141,9 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   notify(): void {
     this.listeners.forEach(notifyListener)
 
-    if (batchState.phase === BatchPhase.commit) {
-      batchState.notify.delete(this)
+    const batch = this.registry.batch
+    if (batch.phase === BatchPhase.commit) {
+      batch.notify.delete(this)
     }
   }
 
@@ -266,10 +268,10 @@ function assignFirstValue<A>(node: NodeImpl<A>, value: A): void {
   node._value = value
   notifyNodeOrBatch(node)
 }
-
 function notifyNodeOrBatch<A>(node: NodeImpl<A>): void {
-  if (batchState.phase === BatchPhase.collect) {
-    batchState.notify.add(node)
+  const batch = node.registry.batch
+  if (batch.phase === BatchPhase.collect) {
+    batch.notify.add(node)
     return
   }
   node.notify()
@@ -358,7 +360,7 @@ function isBuildingInCollect<A>(node: NodeImpl<A>): boolean {
   if (node.building === false) {
     return false
   }
-  return batchState.phase === BatchPhase.collect
+  return node.registry.batch.phase === BatchPhase.collect
 }
 
 function staleIfValid<A>(node: NodeImpl<A>): void {
@@ -367,10 +369,10 @@ function staleIfValid<A>(node: NodeImpl<A>): void {
     node.disposeLifetime()
   }
 }
-
 function continueInvalidate<A>(node: NodeImpl<A>): void {
-  if (batchState.phase === BatchPhase.collect) {
-    batchState.stale.push(node)
+  const batch = node.registry.batch
+  if (batch.phase === BatchPhase.collect) {
+    batch.stale.add(node)
     return
   }
   invalidateOutsideCollect(node)
@@ -950,23 +952,27 @@ function readAndLink<A, A2>(node: NodeImpl<A>, atom: Atom.Atom<A2>): A2 {
   node.addParent(parent)
   return value
 }
-
 class WriteContextImpl<A> extends Pipeable.Class implements Atom.WriteContext<A> {
   constructor(
     registry: RegistryImpl,
     node: NodeImpl<A>,
   ) {
     super()
-    this.registry = registry
+    this.writeRegistry = registry
+    this.registryHandle = registry.handle
     this.node = node
   }
-  readonly registry: RegistryImpl
+  get registry(): Registry {
+    return this.registryHandle
+  }
+  readonly writeRegistry: RegistryImpl
+  readonly registryHandle: Registry
   readonly node: NodeImpl<A>
   get<A>(atom: Atom.Atom<A>): A {
-    return this.registry.get(atom)
+    return this.writeRegistry.get(atom)
   }
   set<R, W>(atom: Atom.Writable<R, W>, value: W) {
-    return this.registry.set(atom, value)
+    return this.writeRegistry.set(atom, value)
   }
   setSelf(value: A) {
     return this.node.setValue(value)
@@ -990,72 +996,76 @@ export const BatchPhase: {
   collect: 1,
   commit: 2,
 }
-
 /** */
 export type BatchPhase = 0 | 1 | 2
 
-/** */
-export const batchState: {
+export interface BatchState {
   phase: BatchPhase
   depth: number
-  stale: Array<AnyNode>
-  notify: Set<AnyNode>
-} = {
-  phase: BatchPhase.disabled,
-  depth: 0,
-  stale: [],
-  notify: new Set(),
+  readonly stale: Set<AnyNode>
+  readonly notify: Set<AnyNode>
 }
 
 /** */
-export function runInternalBatch(f: () => void): void {
-  batchState.phase = BatchPhase.collect
-  batchState.depth++
-  try {
-    f()
-    commitInternalBatchIfOutermost()
-  } finally {
-    finishInternalBatch()
+export const makeBatchState = (): BatchState => ({
+  phase: BatchPhase.disabled,
+  depth: 0,
+  stale: new Set(),
+  notify: new Set(),
+})
+
+/**
+ * Batch state lifecycle for one registry, run by the engine's `batchOn`.
+ *
+ * **Details**
+ *
+ * Starting, committing, and finishing take the engine's own state record so
+ * concurrent registries never share collect, rebuild, or notification state.
+ */
+export interface BatchRunner {
+  readonly startBatch: (batch: BatchState) => void
+  readonly commitBatchIfOutermost: (batch: BatchState) => void
+  readonly finishBatch: (batch: BatchState) => void
+}
+export const batchRunner: BatchRunner = {
+  startBatch,
+  commitBatchIfOutermost,
+  finishBatch,
+}
+
+function startBatch(batch: BatchState): void {
+  batch.phase = BatchPhase.collect
+  batch.depth++
+}
+
+function commitBatchIfOutermost(batch: BatchState): void {
+  if (batch.depth === 1) {
+    rebuildStaleNodes(batch)
+    notifyBatchedNodes(batch)
   }
 }
 
-function commitInternalBatchIfOutermost(): void {
-  if (batchState.depth === 1) {
-    commitInternalBatch()
+function finishBatch(batch: BatchState): void {
+  batch.depth--
+  if (batch.depth === 0) {
+    batch.phase = BatchPhase.disabled
+    batch.stale.clear()
   }
 }
 
-function commitInternalBatch(): void {
-  rebuildStaleNodes()
-  notifyBatchedNodes()
-}
-
-function rebuildStaleNodes(): void {
-  for (const node of batchState.stale) {
+function rebuildStaleNodes(batch: BatchState): void {
+  for (const node of batch.stale) {
     batchRebuildNode(node)
   }
 }
 
-function notifyBatchedNodes(): void {
-  batchState.phase = BatchPhase.commit
-  for (const node of batchState.notify) {
+function notifyBatchedNodes(batch: BatchState): void {
+  batch.phase = BatchPhase.commit
+  for (const node of batch.notify) {
     node.notify()
   }
-  batchState.notify.clear()
+  batch.notify.clear()
 }
-
-function finishInternalBatch(): void {
-  batchState.depth--
-  resetBatchIfIdle()
-}
-
-function resetBatchIfIdle(): void {
-  if (batchState.depth === 0) {
-    batchState.phase = BatchPhase.disabled
-    batchState.stale = []
-  }
-}
-
 function batchRebuildNode(node: AnyNode) {
   restaleIfInvalidatedDuringBuild(node)
   rebuildParents(node)

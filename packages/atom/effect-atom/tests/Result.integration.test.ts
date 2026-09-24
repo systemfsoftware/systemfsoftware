@@ -624,11 +624,11 @@ Feature('Keeping the last good answer on screen when a retry fails')
               s.samples.every((result) =>
                 (() => {
                   if (!Atom.AsyncResult.isFailure(result)) return true
-                  const mappedd = Atom.AsyncResult.map(result, (n: number) => n + 1)
-                  return Atom.AsyncResult.isFailure(mappedd) && mappedd.waiting === result.waiting &&
-                    Equal.equals(mappedd.cause, result.cause) &&
+                  const mapped = Atom.AsyncResult.map(result, (n: number) => n + 1)
+                  return Atom.AsyncResult.isFailure(mapped) && mapped.waiting === result.waiting &&
+                    Equal.equals(mapped.cause, result.cause) &&
                     Equal.equals(
-                      mappedd.previousSuccess,
+                      mapped.previousSuccess,
                       Option.map(result.previousSuccess, (s) => Atom.AsyncResult.successWith(s.value + 1, s)),
                     )
                 })()
@@ -693,12 +693,12 @@ Feature('Keeping the last good answer on screen when a retry fails')
           (s) =>
             Effect.sync(() =>
               s.samples.every((result) => {
-                const routedd = Atom.AsyncResult.match(result, {
+                const routed = Atom.AsyncResult.match(result, {
                   onInitial: () => 'initial',
                   onFailure: () => 'failure',
                   onSuccess: () => 'success',
                 })
-                return matchRouteHolds(result, routedd)
+                return matchRouteHolds(result, routed)
               })
             ),
         ),
@@ -716,13 +716,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
           (s) =>
             Effect.sync(() =>
               s.samples.every((result) => {
-                const routedd = Atom.AsyncResult.matchWithError(result, {
+                const routed = Atom.AsyncResult.matchWithError(result, {
                   onInitial: () => 'initial',
                   onError: () => 'error',
                   onDefect: () => 'defect',
                   onSuccess: () => 'success',
                 })
-                return matchWithErrorHolds(result, routedd)
+                return matchWithErrorHolds(result, routed)
               })
             ),
         ),
@@ -740,13 +740,13 @@ Feature('Keeping the last good answer on screen when a retry fails')
           (s) =>
             Effect.sync(() =>
               s.samples.every((result) => {
-                const routedd = Atom.AsyncResult.matchWithWaiting(result, {
+                const routed = Atom.AsyncResult.matchWithWaiting(result, {
                   onWaiting: () => 'waiting',
                   onError: () => 'error',
                   onDefect: () => 'defect',
                   onSuccess: () => 'success',
                 })
-                return matchWithWaitingHolds(result, routedd)
+                return matchWithWaitingHolds(result, routed)
               })
             ),
         ),
@@ -779,9 +779,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
               s.samples.every((result) =>
                 (() => {
                   if (!Atom.AsyncResult.isFailure(result)) return true
-                  const mappedd = Atom.AsyncResult.flatMap(result, () => Atom.AsyncResult.failure(Cause.fail('nope')))
-                  return Atom.AsyncResult.isFailure(mappedd) && Option.isNone(mappedd.previousSuccess) &&
-                    mappedd.waiting === result.waiting && Equal.equals(mappedd.cause, result.cause)
+                  const mapped = Atom.AsyncResult.flatMap(result, () => Atom.AsyncResult.failure(Cause.fail('nope')))
+                  return Atom.AsyncResult.isFailure(mapped) && Option.isNone(mapped.previousSuccess) &&
+                    mapped.waiting === result.waiting && Equal.equals(mapped.cause, result.cause)
                 })()
               )
             ),
@@ -831,9 +831,9 @@ Feature('Keeping the last good answer on screen when a retry fails')
           (s) =>
             Effect.sync(() =>
               s.samples.every((result) => {
-                const routedd = Atom.AsyncResult.builder(result).onInitial(() => 'initial').onWaiting(() => 'waiting')
+                const routed = Atom.AsyncResult.builder(result).onInitial(() => 'initial').onWaiting(() => 'waiting')
                   .onSuccess(() => 'success').onFailure(() => 'failure').orElse(() => 'other')
-                return routedd === builderFirstHandler(result)
+                return routed === builderFirstHandler(result)
               })
             ),
         ),

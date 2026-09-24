@@ -7,7 +7,7 @@ import * as Pipeable from 'effect/Pipeable'
 import { MixedScheduler, type Scheduler, type SchedulerDispatcher } from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
 import type * as Atom from './atom-modules.js'
-import { NodeImpl } from './atom-node.js'
+import { batchRunner, type BatchState, makeBatchState, NodeImpl } from './atom-node.js'
 import { hostScheduleTimer, makeHostNow } from './internal/host-timer.js'
 import type { Node, PreloadRefused, Registry } from './registry.handle.js'
 
@@ -460,6 +460,7 @@ export class RegistryImpl extends Pipeable.Class {
   readonly now: () => number
   readonly scheduleTimer: (f: () => void, delayMillis: number) => () => void
   readonly handle: Registry
+  readonly batch: BatchState
   onNodeAdded?: ((node: Node) => void) | undefined
   onNodeRemoved?: ((node: Node) => void) | undefined
 
@@ -473,6 +474,7 @@ export class RegistryImpl extends Pipeable.Class {
   ) {
     super()
     this.handle = { [TypeId]: TypeId, [engine]: this, ...Pipeable.Prototype }
+    this.batch = makeBatchState()
     this.scheduler = new MixedScheduler('sync', scheduleTask)
     this.schedulerAsync = new MixedScheduler('async', scheduleTask)
     this.dispatcher = this.schedulerAsync.makeDispatcher()
@@ -523,7 +525,15 @@ export class RegistryImpl extends Pipeable.Class {
   set<R, W>(atom: Atom.Writable<R, W>, value: W): void {
     atom.write(this.ensureNode(atom).writeContext, value)
   }
-
+  batchOn(f: () => void): void {
+    batchRunner.startBatch(this.batch)
+    try {
+      f()
+      batchRunner.commitBatchIfOutermost(this.batch)
+    } finally {
+      batchRunner.finishBatch(this.batch)
+    }
+  }
   setSerializable<T = unknown>(key: string, encoded: T): void {
     const node = this.nodes.get(key)
     if (node === undefined) {

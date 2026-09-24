@@ -139,6 +139,7 @@ export interface AtomContext {
  * @since 4.0.0
  */
 export interface WriteContext<A> {
+  readonly registry: Registry.Registry
   get<T>(this: WriteContext<A>, atom: Atom<T>): T
   refreshSelf(this: WriteContext<A>): void
   setSelf(this: WriteContext<A>, a: A): void
@@ -2047,7 +2048,7 @@ const makeFnSync = <Arg, A>(f: (arg: Arg, get: FnContext) => A, options?: {
     get.isFn = true
     return readFnSync(get, argAtom, f, fnSyncOptionValue(options), hasInitialValue)
   }, function(ctx, arg: Arg) {
-    batch(() => {
+    batch(ctx.registry, () => {
       ctx.set(argAtom, [ctx.get(argAtom)[0] + 1, arg])
       ctx.refreshSelf()
     })
@@ -2279,7 +2280,7 @@ function makeResultFn<Arg, E, A, R0 = never>(
     ctx: WriteContext<AsyncResult.Result<A, E | Cause.NoSuchElementError>>,
     arg: Arg | Reset | Interrupt,
   ) {
-    batch(() => {
+    batch(ctx.registry, () => {
       writeResultFnArg(ctx, argAtom, arg)
       ctx.refreshSelf()
     })
@@ -2421,7 +2422,7 @@ export const keepAlive = <A extends Atom<Top>>(self: A): A =>
   })
 
 /**
- * Runs synchronous atom updates as a batch.
+ * Runs synchronous atom updates as a batch on one registry.
  *
  * **Details**
  *
@@ -2430,4 +2431,4 @@ export const keepAlive = <A extends Atom<Top>>(self: A): A =>
  *
  * @since 4.0.0
  */
-export const batch: (f: () => void) => void = Registry.batch
+export const batch: typeof Registry.batch = Registry.batch
