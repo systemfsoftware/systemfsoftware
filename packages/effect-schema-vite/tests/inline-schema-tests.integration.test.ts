@@ -5,10 +5,10 @@
  * generates that package's law suite and reads the emitted body: which
  * schemas earned a law pair and which module each law binds.
  */
-import { afterAll, expect } from '@effect/vitest'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { afterAll } from '@effect/vitest'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Effect, Equal } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -71,6 +71,14 @@ const lawsIn = (code: string): ReadonlyMap<string, string> => {
 
 const NESTED = makePackage('schema-laws-', { 'nested/schemas.ts': MIXED_DECLARATIONS })
 
+const NESTED_LAW_BINDINGS = {
+  StructConst: './nested/schemas',
+  PipedFromMember: './nested/schemas',
+  PipedFromCall: './nested/schemas',
+  DataClass: './nested/schemas',
+  TaggedData: './nested/schemas',
+}
+
 const recursionLawsIn = (code: string): ReadonlyMap<string, string> => {
   const moduleOfLocal = new Map(
     [...code.matchAll(/import \{ \w+ as (\w+) \} from '([^']+)'/g)].map(([, local, module]) => [
@@ -85,6 +93,22 @@ const recursionLawsIn = (code: string): ReadonlyMap<string, string> => {
     ]),
   )
 }
+
+/**
+ * The title literals the suite hands `ruleOfSchemas`, apostrophes and all: the plain capture stops at an
+ * escaped quote, so it drops the pair a folder named `pat's-money` earns. Sorted, because the walk order of
+ * the two schema files is not part of the contract.
+ */
+const titlesIn = (code: string): ReadonlyArray<string> =>
+  [...code.matchAll(/ruleOfSchemas\('((?:[^'\\]|\\.)*)', /g)].map(([, title]) => title ?? '').sort()
+
+/** The law calls the suite declares, in the order it declares them. */
+const callsIn = (code: string): ReadonlyArray<string> =>
+  [...code.matchAll(/\b(ruleOfSchemas|recursionLaws)\(/g)].map(([, called]) => called ?? '')
+
+/** The module specifiers the suite imports, in the order it imports them. */
+const importsIn = (code: string): ReadonlyArray<string> =>
+  [...code.matchAll(/from '([^']+)'/g)].map(([, specifier]) => specifier ?? '')
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -191,7 +215,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       ),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
       Then('the five data schemas each carry a law pair bound to a module that exists, and the error carries none')(
-        (s) => {
+        (s, expect) => {
           const lawFileDir = join(s.pkg, 'src')
           const resolved = Object.fromEntries(
             [...lawsIn(s.code)].map(([title, module]) => [
@@ -199,7 +223,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
               existsSync(`${resolve(lawFileDir, module)}.ts`) ? 'imports resolve' : 'imports broken',
             ]),
           )
-          expect(resolved).toEqual({
+          return expect(resolved).toEqual({
             StructConst: 'imports resolve',
             PipedFromMember: 'imports resolve',
             PipedFromCall: 'imports resolve',
@@ -216,9 +240,9 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
     Gherkin.Do.pipe(
       Given('a package whose schemas all live one folder below its source root')('pkg', () => Effect.succeed(NESTED)),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
-      Then('the law binds the nested module by the path leading down to it from the law file')((s) => {
+      Then('the law binds the nested module by the path leading down to it from the law file')((s, expect) =>
         expect(lawsIn(s.code).get('StructConst')).toBe('./nested/schemas')
-      }),
+      ),
     ),
   )
 
@@ -227,12 +251,12 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
     Gherkin.Do.pipe(
       Given('a package where two modules both export a schema named Money')('pkg', () => Effect.succeed(NAMESAKES)),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
-      Then('each namesake is titled by the module that declares it and bound to that module alone')((s) => {
+      Then('each namesake is titled by the module that declares it and bound to that module alone')((s, expect) =>
         expect(Object.fromEntries(lawsIn(s.code))).toEqual({
           'Money (./first/money.schema)': './first/money.schema',
           'Money (./second/money.schema)': './second/money.schema',
         })
-      }),
+      ),
     ),
   )
 
@@ -244,12 +268,12 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
         () => Effect.succeed(QUOTED),
       ),
       When('the plugin generates that package\u2019s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
-      Then('the generated suite is syntactically valid')((s) => {
-        expect(parseSync(LAW_FILE_BASENAME, s.code).errors).toEqual([])
-      }),
-      Then('the folder name survives in the title rather than being dropped')((s) => {
-        expect(s.code).toContain(String.raw`\'s-money`)
-      }),
+      Then('the generated suite parses and its title keeps the apostrophe in the folder name')((s, expect) =>
+        expect({ parseErrors: parseSync(LAW_FILE_BASENAME, s.code).errors, titles: titlesIn(s.code) }).toEqual({
+          parseErrors: [],
+          titles: [String.raw`Money (./pat\'s-money/money.schema)`, 'Money (./plain-money/money.schema)'],
+        })
+      ),
     ),
   )
 
@@ -258,9 +282,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
     Gherkin.Do.pipe(
       Given('a package whose source folder holds no schema at all')('pkg', () => Effect.succeed(BARE)),
       When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
-      Then('the law suite is an empty module')((s) => {
-        expect(s.code).toBe('// no schemas found\nexport {}\n')
-      }),
+      Then('the law suite is an empty module')((s, expect) => expect(s.code).toBe('// no schemas found\nexport {}\n')),
     ),
   )
 
@@ -269,18 +291,12 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
     Gherkin.Do.pipe(
       Given('a package with a single schema')('pkg', () => Effect.succeed(SINGLE)),
       When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
-      Then('the suite contains ruleOfSchemas calls')((s) => {
-        expect(s.code).toContain('ruleOfSchemas')
-      }),
-      Then('the suite contains recursionLaws calls')((s) => {
-        expect(s.code).toContain('recursionLaws')
-      }),
-      Then('both law kinds are imported from the law package')((s) => {
-        expect(s.code).toContain(`from '${LAW_PKG}'`)
-      }),
-      Then('the suite needs no vitest import')((s) => {
-        expect(s.code).not.toContain(`from 'vitest'`)
-      }),
+      Then('the suite calls both law kinds, importing them from the law package and nothing from vitest')((s, expect) =>
+        expect({ calls: callsIn(s.code), imports: importsIn(s.code) }).toEqual({
+          calls: ['ruleOfSchemas', 'recursionLaws'],
+          imports: [LAW_PKG, './money.schema'],
+        })
+      ),
     ),
   )
 
@@ -289,9 +305,12 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
     Gherkin.Do.pipe(
       Given('a package whose schemas all live one folder below its source root')('pkg', () => Effect.succeed(NESTED)),
       When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
-      Then('each schema is passed to both law calls under one title and one module binding')((s) => {
-        expect(Object.fromEntries(recursionLawsIn(s.code))).toEqual(Object.fromEntries(lawsIn(s.code)))
-      }),
+      Then('each schema is passed to both law calls under one title and one module binding')((s, expect) =>
+        expect({
+          roundTrips: Object.fromEntries(lawsIn(s.code)),
+          generation: Object.fromEntries(recursionLawsIn(s.code)),
+        }).toEqual({ roundTrips: NESTED_LAW_BINDINGS, generation: NESTED_LAW_BINDINGS })
+      ),
     ),
   )
 
@@ -307,19 +326,25 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
         'driven',
         (s) => Effect.promise(() => drivenByPlugin(s.pkg)),
       ),
-      Then('the transformed module carries the derivation hook that honors the budget')((s) => {
-        expect(s.driven.code).toContain('toCodecArbitrary')
-      }),
-      And('the hook imports the budget runtime, which resolves to a file on disk')((s) => {
-        expect(s.driven.code).toMatch(
-          /import \{ \w+ as \w+ \} from "[^"]*recursion-budget-runtime\.[a-z]+";/,
+      Then('the plugin honors the budget, resolving its hook on disk and exporting the schema')((s, expect) =>
+        expect({
+          code: s.driven.code,
+          runtime: s.driven.runtime,
+          exportedSchemas: s.driven.exportedSchemas,
+        }).toSatisfy(
+          ({ code, runtime, exportedSchemas }) =>
+            /toCodecArbitrary: __esRecursionBudget\(\(\) => RecursiveExpr, \{\s*maxDepth: 6,\s*depthSize: "medium"\s*\}\)/
+              .test(
+                code,
+              ) &&
+            /import \{ budgetToArbitrary as __esRecursionBudget \} from "[^"]*recursion-budget-runtime\.[a-z]+";/.test(
+              code,
+            ) &&
+            runtime !== null && /recursion-budget-runtime\.(ts|mjs)$/.test(runtime) && existsSync(runtime) &&
+            Equal.equals(exportedSchemas, ['RecursiveExpr']),
+          'the transformed module carries toCodecArbitrary for the declared budget, imports it from the budget-runtime module the plugin resolves on disk, and exports RecursiveExpr; the rest of the transformed source carries the checkout-specific module paths',
         )
-        expect(s.driven.runtime).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
-        expect(s.driven.runtime).toSatisfy((runtime: string | null) => runtime !== null && existsSync(runtime))
-      }),
-      And('the transformed module runs and exports its schema for the consumer')((s) => {
-        expect(s.driven.exportedSchemas).toContain('RecursiveExpr')
-      }),
+      ),
     ),
   )
 })

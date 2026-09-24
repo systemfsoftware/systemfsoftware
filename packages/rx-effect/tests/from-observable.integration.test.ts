@@ -14,10 +14,9 @@
  *     enough values, including the boundary where the consumer takes a single
  *     element out of a long stream.
  */
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer, Result, Stream } from 'effect'
+import { Effect, Layer, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 
 import { fromObservable } from '@systemfsoftware/rx-effect'
@@ -56,9 +55,9 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               collectValues,
             ),
         ),
-        Then('the stream yields exactly the emitted values in order')((s) => {
+        Then('the stream yields exactly the emitted values in order')((s, expect) =>
           expect(s.values).toEqual([10, 20, 30])
-        }),
+        ),
       ),
     )
 
@@ -81,9 +80,7 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               collectValues,
             ),
         ),
-        Then('the stream is empty')((s) => {
-          expect(s.values).toEqual([])
-        }),
+        Then('the stream is empty')((s, expect) => expect(s.values).toEqual([])),
       ),
     )
 
@@ -109,9 +106,9 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               collectValues,
             ),
         ),
-        Then('the stream yields exactly 0..99 in order')((s) => {
+        Then('the stream yields exactly 0..99 in order')((s, expect) =>
           expect(s.values).toEqual(Array.from({ length: 100 }, (_, i) => i))
-        }),
+        ),
       ),
     )
 
@@ -128,16 +125,14 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
             ),
         ),
         When('the stream is collected with a string mapper')(
-          'outcome',
+          'error',
           (s) =>
             fromObservable(errorMessage)(s.observable).pipe(
               collectValues,
-              Effect.result,
+              Effect.flip,
             ),
         ),
-        Then('the call fails with the mapped message')((s) => {
-          expect(s.outcome).toEqual(Result.fail('boom'))
-        }),
+        Then('the call fails with the mapped message')((s, expect) => expect(s.error).toBe('boom')),
       ),
     )
 
@@ -154,16 +149,16 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
             ),
         ),
         When('the stream is collected with a string mapper')(
-          'outcome',
+          'error',
           (s) =>
             fromObservable(errorMessage)(s.observable).pipe(
               collectValues,
-              Effect.result,
+              Effect.flip,
             ),
         ),
-        Then('the call fails with the full multi-line string')((s) => {
-          expect(s.outcome).toEqual(Result.fail('line one\nline two'))
-        }),
+        Then('the call fails with the full multi-line string')((s, expect) =>
+          expect(s.error).toBe('line one\nline two')
+        ),
       ),
     )
 
@@ -191,10 +186,10 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               Stream.take(1),
             ),
           )),
-        Then('the stream yields exactly one element and the underlying subscription is unsubscribed once')((s) => {
-          expect(s.values).toEqual([0])
-          expect(s.subject.calls).toEqual([undefined])
-        }),
+        Then('the stream yields exactly one element and the underlying subscription is unsubscribed once')((
+          s,
+          expect,
+        ) => expect({ values: s.values, calls: s.subject.calls }).toEqual({ values: [0], calls: [undefined] })),
       ),
     )
 
@@ -222,10 +217,9 @@ Feature('fromObservable — RxJS-to-Effect stream bridge')
               Stream.take(3),
             ),
           )),
-        Then('the stream yields the first three elements and unsubscribes once')((s) => {
-          expect(s.values).toEqual([0, 1, 2])
-          expect(s.subject.calls).toEqual([undefined])
-        }),
+        Then('the stream yields the first three elements and unsubscribes once')((s, expect) =>
+          expect({ values: s.values, calls: s.subject.calls }).toEqual({ values: [0, 1, 2], calls: [undefined] })
+        ),
       ),
     )
   })
