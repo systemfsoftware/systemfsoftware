@@ -81,7 +81,7 @@ jobs:
   nightly-gate:
     if: needs.plan.outputs.phase == 'publish'
     needs: [plan]
-    name: nightly gateway · fresh green nightly on main
+    name: nightly gate · fresh green nightly on main
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
