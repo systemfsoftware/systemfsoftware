@@ -1,18 +1,18 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { Effect } from 'effect'
-import * as Match from 'effect/Match'
+import { Effect, Option } from 'effect'
 import type { AcquiredVM } from './boot-sandbox.cell.js'
 import { ClassifyJobExit, classifyJobExit, JobExited, JobSignaled } from './classify-job-exit.workflow.js'
 import { JobCompletion } from './JobCompletion.schema.js'
 import { ExecError } from './MicroVMError.schema.js'
-import type { MicroVMSpec } from './MicroVMSpec.schema.js'
+import type { SandboxPlan } from './render-sandbox-plan.schema.js'
 
-const argvOf = (spec: MicroVMSpec): ReadonlyArray<string> =>
-  Match.value(spec).pipe(
-    Match.tag('Job', (job) => [...job.cmd]),
-    Match.tag('Service', () => []),
-    Match.exhaustive,
-  )
+/**
+ * The argv the read names a rejected command with. The decide workflow's plan
+ * already carries the job's command (`planOf` sets it for `Job` and leaves it
+ * absent for `Service`), so the read gathers that decided value instead of
+ * re-dispatching the spec: gathering an absent plan field runs one path.
+ */
+const argvOf = (plan: SandboxPlan): ReadonlyArray<string> => Option.getOrElse(Option.fromNullishOr(plan.cmd), () => [])
 
 /**
  * The read snapshot the write handlers receive: the encoded `ClassifyJobExit` command plus the
@@ -21,9 +21,8 @@ const argvOf = (spec: MicroVMSpec): ReadonlyArray<string> =>
 type JobExitSnapshot = (typeof ClassifyJobExit)['Encoded'] & {
   readonly argv: ReadonlyArray<string>
 }
-
 const readJobExit = (acquired: AcquiredVM): Effect.Effect<JobExitSnapshot, ExecError> => {
-  const argv = argvOf(acquired.spec)
+  const argv = argvOf(acquired.plan)
   return Effect.map(
     Effect.tryPromise({
       try: () => acquired.sandbox.execDefault(),
