@@ -93,7 +93,7 @@ const readinessVerdictOf = (verdict: Readiness.Satisfied | Readiness.TimedOut): 
     Match.exhaustive,
   )
 
-const targetOf = (address: SocketAddress, options: SocketMediumOptions): Readiness.ProbeTarget =>
+const targetOf = (address: SocketAddress, options: SocketMediumOptions): Readiness.ProbeTargetBlueprint =>
   ReadinessModule.target([{ guest: address.port, host: address.host, hostPort: address.port }], {
     timeoutMs: Option.getOrElse(
       Option.fromNullishOr(options.readyTimeoutMillis),
@@ -108,7 +108,7 @@ const readyOf = (parts: {
   readonly prober: Readiness.HostProber['Service']
   readonly log: Ref.Ref<ReadonlyArray<string>>
 }): Effect.Effect<void> =>
-  ReadinessModule.awaitCondition(targetOf(parts.program.address, parts.options), parts.program.ready).pipe(
+  targetOf(parts.program.address, parts.options).awaitCondition(parts.program.ready).pipe(
     Effect.provideService(ReadinessModule.HostProber, parts.prober),
     Effect.provideService(ReadinessModule.LogSource, { entries: Ref.get(parts.log) }),
     Effect.matchEffect({ onFailure: () => Effect.never, onSuccess: readinessVerdictOf }),

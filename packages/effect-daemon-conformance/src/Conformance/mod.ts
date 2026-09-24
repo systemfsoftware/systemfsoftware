@@ -15,7 +15,7 @@ export {
   TracesDiverge,
 } from '../compare-traces.workflow.js'
 export { compare } from '../compare.js'
-export { FiberReferenceLayer, isConforming, prove } from '../conformance.resource.js'
+export { FiberReferenceLayer, isConforming, prove } from '../conformance.js'
 export { ConformanceReport, ScenarioCompared, ScenarioResult, ScenarioStalled } from '../ConformanceReport.schema.js'
 export type { ChildControl, ConformanceDriver, LaunchedChild, MediumPortOf, ScenarioBudget } from '../driver.js'
 export { FiberReference } from '../FiberReference.js'

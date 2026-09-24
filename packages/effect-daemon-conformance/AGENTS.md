@@ -2,7 +2,7 @@
 
 The pairwise conformance kit for `effect-daemon-spec` media: a pure core (`ChildScript`, the
 scenario catalogue, `project-trace.workflow.ts`, `compare-traces.workflow.ts`) plus the run side
-(`conformance.resource.ts`) medium authors call. Root `AGENTS.md` governs.
+(`conformance.ts`) medium authors call. Root `AGENTS.md` governs.
 
 ## Rules
 

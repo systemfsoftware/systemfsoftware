@@ -20,10 +20,10 @@ import { type BareFiberProgram, fiberPort, type FiberProgram, mediumFor, readyOn
 import { type Medium, type MediumPortShape } from './Medium.js'
 import {
   awaitTerminated,
-  Handle,
   mailboxOf,
   offerEvent,
   type RunningSupervisor,
+  RunningSupervisorHandle,
   shutdown,
   stateOf,
 } from './running-supervisor.handle.js'
@@ -141,7 +141,7 @@ const scopedOf = <R>(parts: SpecParts<R>): Effect.Effect<RunningSupervisor, neve
     )
     const context = yield* Effect.context<Scope.Scope>()
     const fiber = yield* fiberMediumOf()
-    const handle = yield* Handle.make(parts.name, initial, HashMap.fromIterable(bound), context, fiber)
+    const handle = yield* RunningSupervisorHandle.make(parts.name, initial, HashMap.fromIterable(bound), context, fiber)
     const step = supervisorStepFor(Steps.runtimeOf({ handle }))
     yield* Effect.forkIn(drainOf(handle, step), supervisorScope)
     yield* offerEvent(handle, { _tag: 'SupervisorStarted', at: 0 })
