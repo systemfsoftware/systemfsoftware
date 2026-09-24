@@ -64,4 +64,5 @@ export class EvalReport extends Schema.Class<EvalReport>('EvalReport')({
   rules: Schema.Array(RuleRoute),
   contradiction: ContradictionReport,
   outcome: RunOutcome,
+  refusal: Schema.optional(Schema.NonEmptyString),
 }) {}
