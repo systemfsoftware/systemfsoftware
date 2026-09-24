@@ -10,7 +10,7 @@ import {
   NothingToTrace,
   TraceTargetsDerived,
 } from './derive-trace-targets.workflow.js'
-import { readJson, readPack, writeJson } from './drivers/dataset-files.js'
+import { readJson, readPack, traceRelativePathOf, writeJson } from './drivers/dataset-files.js'
 import type { Pack, RuleFileRefusal } from './pack-rule.schema.js'
 import { RuleSelector } from './rule-selector.service.js'
 import type { SelectionError, SelectionTrace } from './selection-trace.schema.js'
@@ -103,7 +103,7 @@ const writeTraces = (
       Effect.gen(function*() {
         const pack = yield* packById(read.packs, target.packId)
         const task = yield* taskById(read.tasks, target.taskId)
-        const tracePath = paths.join(read.workDir, 'traces', target.relativePath)
+        const tracePath = paths.join(read.workDir, traceRelativePathOf(target.packId, target.taskId))
         return yield* traceTarget(pack, task, read.instruction, tracePath)
       }))
     return { tracePaths } satisfies TracedSelection

@@ -45,7 +45,6 @@ it.prop('∀p_TaskPackPairs_≡OneTargetEach', [Schema.Int], ([draw]) => {
         _tag: 'TraceTarget',
         packId: pack.id,
         taskId: task.id,
-        relativePath: `${pack.id}/${task.id}.json`,
       }))
     ),
   })

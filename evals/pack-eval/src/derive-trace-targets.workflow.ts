@@ -9,7 +9,6 @@ type TraceTargetsTypeId = typeof TraceTargetsTypeId
 export class TraceTarget extends Schema.Class<TraceTarget>('TraceTarget')({
   packId: Schema.NonEmptyString,
   taskId: Schema.NonEmptyString,
-  relativePath: Schema.NonEmptyString,
 }) {}
 
 export class TraceTargetsDerived extends Schema.TaggedClass<TraceTargetsDerived>()('TraceTargetsDerived', {
@@ -40,8 +39,7 @@ export class DeriveTraceTargets extends Schema.TaggedClass<DeriveTraceTargets>()
   static readonly [Workflow.InstrumentationBrand] = {} as const
 }
 
-const targetOf = (packId: string, taskId: string): TraceTarget =>
-  new TraceTarget({ packId, taskId, relativePath: `${packId}/${taskId}.json` })
+const targetOf = (packId: string, taskId: string): TraceTarget => new TraceTarget({ packId, taskId })
 
 const targetsOf = (command: DeriveTraceTargets): ReadonlyArray<TraceTarget> =>
   command.packs.flatMap((pack) => command.tasks.tasks.map((task) => targetOf(pack.id, task.id)))

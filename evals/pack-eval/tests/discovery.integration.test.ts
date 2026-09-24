@@ -10,6 +10,7 @@ import {
   type DiscoveryWorld,
   discoveryWorld,
   generatorStack,
+  pathExists,
   type RuleSource,
   selectorStack,
   servedModel,
@@ -87,6 +88,15 @@ const taskVenting = new PackEval.Task({
 })
 
 const taskSet = new PackEval.TaskSet({ version: 1, tasks: [taskHoeing, taskVenting] })
+
+const escapingTaskId = '../../escaped/beds'
+
+const taskEscaping = new PackEval.Task({
+  id: escapingTaskId,
+  text: 'Hoe the beds by the far wall',
+  split: 'dev',
+  dimensions: { job: 'feeding', pace: 'rushed' },
+})
 
 const growCandidates = (world: DiscoveryWorld) =>
   PackEval.generateTasks.run({ datasetDir: world.datasetDir, workDir: world.workDir }).pipe(
@@ -223,6 +233,45 @@ Feature('Growing a task set from owner dimensions and tracing the selector over 
           expect(s.outcome.hoeing.instructionDigest).toBe(s.outcome.fingerprint.instructionDigest)
           expect(s.outcome.venting.instructionDigest).toBe(s.outcome.fingerprint.instructionDigest)
           expect(s.outcome.asked).toBe(2)
+        }),
+      ),
+    )
+
+    scenario(
+      'A task named with a slash and two dots still keeps its trace inside the work folder',
+      Gherkin.Do.pipe(
+        Given('an accepted task was named after a folder two levels above the work folder')(
+          'world',
+          () =>
+            discoveryWorld({
+              replies: [stemsReply(['watering-schedule'])],
+              dimensions: ownerDimensions,
+              tasks: new PackEval.TaskSet({ version: 1, tasks: [taskEscaping] }),
+              instruction,
+              rules: greenhouseRules,
+            }),
+        ),
+        When('the selector is traced over that task')(
+          'outcome',
+          (s) =>
+            Effect.gen(function*() {
+              const traced = yield* traceTasks(s.world)
+              const trace = yield* traceAt({
+                workDir: s.world.workDir,
+                packId: discoveryPackId,
+                taskId: escapingTaskId,
+              })
+              const escaped = yield* pathExists(s.world.workDir, '..', 'escaped')
+              return { traced, trace, escaped }
+            }),
+        ),
+        Then("the trace sits in the pack's trace folder and reads back under the task's own name")((s) => {
+          expect(s.outcome.traced.tracePaths).toHaveLength(1)
+          expect(s.outcome.traced.tracePaths[0]?.startsWith(`${s.world.workDir}/traces/${discoveryPackId}/`)).toBe(true)
+          expect(s.outcome.trace.taskId).toBe(escapingTaskId)
+        }),
+        Then('nothing was written beside the work folder')((s) => {
+          expect(s.outcome.escaped).toBe(false)
         }),
       ),
     )

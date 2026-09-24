@@ -6,6 +6,18 @@ import { DatasetFileRefusal } from '../dataset-file.schema.js'
 import { Pack, RuleFile } from '../pack-rule.schema.js'
 import type { RuleFileRefusal } from '../pack-rule.schema.js'
 
+const traceRelativePathAt = (packId: string, taskId: string): string =>
+  `traces/${encodeURIComponent(packId)}/${encodeURIComponent(taskId)}.json`
+
+/**
+ * Where the selection trace for a pack and task lives, relative to the work directory. Both ids are
+ * percent-encoded into single path segments, so an id holding `/` or `..` can never leave `traces/`.
+ */
+export const traceRelativePathOf: {
+  (taskId: string): (packId: string) => string
+  (packId: string, taskId: string): string
+} = dual(2, traceRelativePathAt)
+
 const refusalAt = (path: string) => (error: { readonly message: string }): DatasetFileRefusal =>
   new DatasetFileRefusal({ path, reason: error.message })
 

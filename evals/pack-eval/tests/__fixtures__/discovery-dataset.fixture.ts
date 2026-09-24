@@ -158,7 +158,7 @@ export const traceAt = (options: { readonly workDir: string; readonly packId: st
   Effect.gen(function*() {
     const paths = yield* Path.Path
     return yield* PackEval.DatasetFiles.readJson(
-      paths.join(options.workDir, 'traces', options.packId, `${options.taskId}.json`),
+      paths.join(options.workDir, PackEval.DatasetFiles.traceRelativePathOf(options.packId, options.taskId)),
       PackEval.SelectionTrace,
     )
   })
@@ -175,6 +175,13 @@ export const candidatesFileExists = (workDir: string) =>
     const fileSystem = yield* FileSystem.FileSystem
     const paths = yield* Path.Path
     return yield* fileSystem.exists(paths.join(workDir, 'candidates.json'))
+  })
+
+export const pathExists = (...segments: ReadonlyArray<string>) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.exists(paths.join(...segments))
   })
 
 export const taskSetExists = (datasetDir: string) =>
