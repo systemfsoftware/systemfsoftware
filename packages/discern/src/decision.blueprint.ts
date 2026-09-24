@@ -9,18 +9,18 @@
  * Judging an answer against a threshold, band, label, or range is pure
  * resource code (KD7) — never a workflow.
  */
-import { Array as Arr, Match, Schema } from 'effect'
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
+import { Array as Arr, Match, Predicate, Schema } from 'effect'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
-import { Prototype } from 'effect/Pipeable'
 import * as Result from 'effect/Result'
 import * as AiError from 'effect/unstable/ai/AiError'
 import * as Decision from 'effect/unstable/ai/Decision'
 import * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import { decisionFingerprint, hash } from './decision-model.blueprint.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
-import type { Answers, DecisionNode, LeafOptions, NodeCore, Pattern, PatternRefusal } from './pattern.blueprint.js'
+import type { Answers, LeafOptions, NodeCore, Pattern, PatternRefusal } from './pattern.blueprint.js'
 import { distinctFirstById, matched, missed, notPattern, semanticLeaf, uncertain } from './pattern.blueprint.js'
 import type { PatternResult } from './Verdict.schema.js'
 
@@ -34,6 +34,158 @@ export type Answer<D extends AnyDecision> = Decision.Answer<D>
 export type AnswerReader<D extends AnyDecision> = (answers: Answers) => Option.Option<Answer<D>>
 
 type AnswerGuard<D extends AnyDecision> = (input: Answer<AnyDecision>) => input is Answer<D>
+
+type Top<A = unknown> = A
+
+export const TypeId = Symbol.for('@systemfsoftware/discern/DecisionNode')
+export type TypeId = typeof TypeId
+
+/** The data a decision node is minted from: its identity, its decision, its schema, and its labels. */
+export interface DecisionSpec {
+  readonly id: string
+  readonly fingerprint: string
+  readonly decision: AnyDecision
+  readonly schema: Schema.Constraint | undefined
+  readonly labels: ReadonlyArray<string>
+}
+
+export interface DecisionIndex {
+  readonly Input: Top
+  readonly D: AnyDecision
+  readonly S: Schema.Constraint | undefined
+}
+
+type InputOf<X> = X extends { readonly Input: (input: infer I) => void } ? I : never
+type KindOf<X> = X extends { readonly D: infer D extends AnyDecision } ? D : never
+type SchemaOf<X> = X extends { readonly S: infer S extends Schema.Constraint | undefined } ? S : never
+type LabelOf<X> = KindOf<X> extends Decision.Classify<infer Label> ? Label
+  : KindOf<X> extends Decision.Rate<infer Level> ? Level
+  : never
+
+/** Interpret one node's validated answer as a binary pattern leaf. */
+export interface Where extends Blueprint.Operation {
+  readonly params: readonly [predicate: (answer: Answer<KindOf<this['Index']>>) => boolean, options?: LeafOptions]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** Interpret one node's validated answer as a tri-state pattern leaf. */
+export interface WhereResult extends Blueprint.Operation {
+  readonly params: readonly [
+    resolve: (answer: Answer<KindOf<this['Index']>>) => PatternResult,
+    options?: LeafOptions,
+  ]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A classification read as naming one label, optionally with confidence thresholds. */
+export interface ClassifyIs extends Blueprint.Operation {
+  readonly params: readonly [label: LabelOf<this['Index']>, thresholds?: ClassifyThresholds]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A rating read as naming one level, or bounded by a level. */
+export interface AtLevel extends Blueprint.Operation {
+  readonly params: readonly [level: LabelOf<this['Index']>]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A rating read as sitting between two levels. */
+export interface BetweenLevels extends Blueprint.Operation {
+  readonly params: readonly [low: LabelOf<this['Index']>, high: LabelOf<this['Index']>]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A classification read as naming any of several labels. */
+export interface OneOf extends Blueprint.Operation {
+  readonly params: ReadonlyArray<LabelOf<this['Index']>>
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A classification read as one label leading another by at least a margin. */
+export interface Margin extends Blueprint.Operation {
+  readonly params: readonly [label: LabelOf<this['Index']>, over: LabelOf<this['Index']>, by: number]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A probability read against a threshold. */
+export interface Threshold extends Blueprint.Operation {
+  readonly params: readonly [threshold: number, options?: BandOptions]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A probability read as sitting inside a span. */
+export interface BetweenProbabilities extends Blueprint.Operation {
+  readonly params: readonly [low: number, high: number]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+/** A probability read as sitting inside a named band. */
+export interface Band extends Blueprint.Operation {
+  readonly params: readonly [band: ProbabilityBand]
+  readonly out: Pattern<InputOf<this['Index']>>
+}
+
+export interface DecisionTarget extends Blueprint.Target {
+  readonly target: KindOf<this['Index']>
+}
+
+export interface SchemaTarget extends Blueprint.Target {
+  readonly target: SchemaOf<this['Index']>
+}
+
+export interface LevelsTarget extends Blueprint.Target {
+  readonly target: ReadonlyArray<LabelOf<this['Index']>>
+}
+
+/** What every decision node carries, whatever its kind. */
+export interface DecisionOps {
+  readonly where: Where
+  readonly whereResult: WhereResult
+  readonly id: Blueprint.Get<string>
+  readonly fingerprint: Blueprint.Get<string>
+  readonly decision: DecisionTarget
+  readonly schema: SchemaTarget
+}
+
+export interface ClassifyOps extends DecisionOps {
+  readonly is: ClassifyIs
+  readonly oneOf: OneOf
+  readonly not: AtLevel
+  readonly margin: Margin
+  readonly labels: Blueprint.Get<ReadonlyArray<string>>
+}
+
+export interface ProbabilityOps extends DecisionOps {
+  readonly above: Threshold
+  readonly below: Threshold
+  readonly atLeast: Threshold
+  readonly atMost: Threshold
+  readonly between: BetweenProbabilities
+  readonly band: Band
+}
+
+export interface RateOps extends DecisionOps {
+  readonly is: AtLevel
+  readonly atLeast: AtLevel
+  readonly atMost: AtLevel
+  readonly between: BetweenLevels
+  readonly levels: LevelsTarget
+}
+
+type IndexOf<Input, D extends AnyDecision, S extends Schema.Constraint | undefined> = {
+  readonly Input: (input: Input) => void
+  readonly D: D
+  readonly S: S
+}
+
+/** A named semantic question bound to the input it is asked about. */
+export type DecisionNode<
+  Input = unknown,
+  D extends AnyDecision = AnyDecision,
+  S extends Schema.Constraint | undefined = undefined,
+> = Blueprint.Blueprint<TypeId, DecisionSpec, DecisionOps, IndexOf<Input, D, S>>
+
+type AnyNode = DecisionNode<never, AnyDecision, Schema.Constraint | undefined>
 
 const asAnyDecision = <D extends AnyDecision>(decision: D): Decision.Any => decision
 
@@ -129,24 +281,14 @@ const judgeOfPredicate = <D extends AnyDecision>(
   return judge
 }
 
-const makeDecisionNode = <Input, D extends AnyDecision, S extends Schema.Constraint | undefined>(
-  value: D,
-  schema: S,
+const specOf = (
+  value: AnyDecision,
+  schema: Schema.Constraint | undefined,
   explicitId: string | undefined,
-): DecisionNode<Input, D, S> => {
+  labels: ReadonlyArray<string>,
+): DecisionSpec => {
   const fingerprint = decisionFingerprint(value)
-  const id = explicitId ?? `d_${fingerprint.slice(3)}`
-  const readAnswer = answerReaderOf(id, value)
-  const node: DecisionNode<Input, D, S> = {
-    id,
-    fingerprint,
-    decision: value,
-    schema,
-    ...Prototype,
-    where: (predicate, options) => whereLeaf<Input, D>(node, id, readAnswer, judgeOfPredicate(predicate), options),
-    whereResult: (resolve, options) => whereLeaf<Input, D>(node, id, readAnswer, resolve, options),
-  }
-  return node
+  return { id: explicitId ?? `d_${fingerprint.slice(3)}`, fingerprint, decision: value, schema, labels }
 }
 
 /** Wrap an Effect Decision. Supply a schema to make it executable on its own. */
@@ -157,7 +299,7 @@ export const decision: {
   (args: IArguments) => 'instructions' in args[0],
   <D extends AnyDecision, Input = unknown>(value: D, options?: DecisionOptions): DecisionNode<Input, D> => {
     const opts: DecisionOptions = options ?? {}
-    return makeDecisionNode<Input, D, undefined>(value, undefined, opts.id)
+    return Nodes.of<IndexOf<Input, D, undefined>>(specOf(value, undefined, opts.id, []))
   },
 )
 
@@ -176,17 +318,11 @@ export interface ClassifyThresholds {
 }
 
 /** A semantic classification decision. */
-export interface ClassifyDecision<
+export type ClassifyDecision<
   Input = unknown,
   Label extends string = string,
   S extends Schema.Constraint | undefined = undefined,
-> extends DecisionNode<Input, Decision.Classify<Label>, S> {
-  readonly labels: ReadonlyArray<string>
-  readonly is: (label: Label, thresholds?: ClassifyThresholds) => Pattern<Input>
-  readonly oneOf: (...labels: ReadonlyArray<Label>) => Pattern<Input>
-  readonly not: (label: Label) => Pattern<Input>
-  readonly margin: (label: Label, over: Label, by: number) => Pattern<Input>
-}
+> = Blueprint.Blueprint<TypeId, DecisionSpec, ClassifyOps, IndexOf<Input, Decision.Classify<Label>, S>>
 
 /** Options for building a classification decision. */
 export interface ClassifyOptions<Label extends string> {
@@ -312,18 +448,9 @@ const classifyFor = <Input, Label extends string, S extends Schema.Constraint | 
   schema: S,
 ): ClassifyDecision<Input, Label, S> => {
   const { id, ...definition } = options
-  const labels: ReadonlyArray<string> = Object.keys(options.criteria)
-  const self: ClassifyDecision<Input, Label, S> = Object.assign(
-    makeDecisionNode<Input, Decision.Classify<Label>, S>(Decision.classify(definition), schema, id),
-    {
-      labels,
-      is: (label: Label, thresholds?: ClassifyThresholds) => is(self, label, thresholds),
-      oneOf: (...wanted: ReadonlyArray<Label>) => oneOfLeaf(self, wanted),
-      not: (label: Label) => not(self, label),
-      margin: (label: Label, over: Label, by: number) => margin(self, label, over, by),
-    },
+  return Classifies.of<IndexOf<Input, Decision.Classify<Label>, S>>(
+    specOf(Decision.classify(definition), schema, id, Object.keys(options.criteria)),
   )
-  return self
 }
 
 /**
@@ -351,16 +478,8 @@ export interface BandOptions {
 }
 
 /** A semantic probability estimate. */
-export interface ProbabilityDecision<Input = unknown, S extends Schema.Constraint | undefined = undefined>
-  extends DecisionNode<Input, Decision.Probability, S>
-{
-  readonly above: (threshold: number, options?: BandOptions) => Pattern<Input>
-  readonly atLeast: (threshold: number, options?: BandOptions) => Pattern<Input>
-  readonly below: (threshold: number, options?: BandOptions) => Pattern<Input>
-  readonly atMost: (threshold: number, options?: BandOptions) => Pattern<Input>
-  readonly between: (low: number, high: number) => Pattern<Input>
-  readonly band: (band: ProbabilityBand) => Pattern<Input>
-}
+export type ProbabilityDecision<Input = unknown, S extends Schema.Constraint | undefined = undefined> =
+  Blueprint.Blueprint<TypeId, DecisionSpec, ProbabilityOps, IndexOf<Input, Decision.Probability, S>>
 
 /** Options for building a probability decision. */
 export interface ProbabilityOptions {
@@ -436,20 +555,9 @@ const probabilityFor = <Input, S extends Schema.Constraint | undefined>(
 ): ProbabilityDecision<Input, S> => {
   const { id, ...definition } = options
   const criteria = definition.criteria ?? defaultProbabilityCriteria
-  const node = makeDecisionNode<Input, Decision.Probability, S>(
-    Decision.probability({ instructions: definition.instructions, criteria }),
-    schema,
-    id,
+  return Probabilities.of<IndexOf<Input, Decision.Probability, S>>(
+    specOf(Decision.probability({ instructions: definition.instructions, criteria }), schema, id, []),
   )
-  const self: ProbabilityDecision<Input, S> = Object.assign(node, {
-    above: (threshold: number, options?: BandOptions) => above(self, threshold, options),
-    atLeast: (threshold: number, options?: BandOptions) => atLeast(self, threshold, options),
-    below: (threshold: number, options?: BandOptions) => below(self, threshold, options),
-    atMost: (threshold: number, options?: BandOptions) => atMost(self, threshold, options),
-    between: (low: number, high: number) => between(self, low, high),
-    band: (limits: ProbabilityBand) => band(self, limits),
-  })
-  return self
 }
 
 /** The bounds a caller crossed naming a probability band, carried to the run that refuses them. */
@@ -488,17 +596,11 @@ export const probability = <Input = unknown>(options: ProbabilityOptions): Proba
 // -------------------------------------------------------------------------------------------------
 
 /** A semantic ordered rating. */
-export interface RateDecision<
+export type RateDecision<
   Input = unknown,
   Level extends string = string,
   S extends Schema.Constraint | undefined = undefined,
-> extends DecisionNode<Input, Decision.Rate<Level>, S> {
-  readonly levels: ReadonlyArray<Level>
-  readonly is: (level: Level) => Pattern<Input>
-  readonly atLeast: (level: Level) => Pattern<Input>
-  readonly atMost: (level: Level) => Pattern<Input>
-  readonly between: (low: Level, high: Level) => Pattern<Input>
-}
+> = Blueprint.Blueprint<TypeId, DecisionSpec, RateOps, IndexOf<Input, Decision.Rate<Level>, S>>
 
 /** Options for building an ordered rating decision. */
 export interface RateOptions<Level extends string> {
@@ -512,17 +614,9 @@ const rateFor = <Input, const Level extends string, S extends Schema.Constraint 
   schema: S,
 ): RateDecision<Input, Level, S> => {
   const { id, ...definition } = options
-  const self: RateDecision<Input, Level, S> = Object.assign(
-    makeDecisionNode<Input, Decision.Rate<Level>, S>(Decision.rate(definition), schema, id),
-    {
-      levels: options.criteria,
-      is: (level: Level) => is(self, level),
-      atLeast: (level: Level) => atLeast(self, level),
-      atMost: (level: Level) => atMost(self, level),
-      between: (low: Level, high: Level) => between(self, low, high),
-    },
+  return Rates.of<IndexOf<Input, Decision.Rate<Level>, S>>(
+    specOf(Decision.rate(definition), schema, id, options.criteria),
   )
-  return self
 }
 
 /** Create an unscoped semantic ordered rating: the input stays open until the decision is bound through {@link on}. */
@@ -694,18 +788,75 @@ export const ask: {
 // methods above delegate here.
 // -------------------------------------------------------------------------------------------------
 
-const isObject = (u: unknown): u is object => typeof u === 'object' && u !== null
-
-const hasKeys = (u: object, keys: ReadonlyArray<string>): boolean => keys.every((key) => key in u)
-
-const isDecisionNode = (u: unknown): u is DecisionNode<never, AnyDecision, Schema.Constraint | undefined> =>
-  isObject(u) && hasKeys(u, ['decision', 'where'])
+const isDecisionNode = (u: unknown): u is AnyNode => Nodes.is(u)
 
 const isClassifyDecision = (u: unknown): u is ClassifyDecision<never, string, Schema.Constraint | undefined> =>
-  isObject(u) && hasKeys(u, ['labels', 'oneOf'])
+  Nodes.is(u) && Predicate.isTagged(u.decision, 'Classify')
 
 const isProbabilityDecision = (u: unknown): u is ProbabilityDecision<never, Schema.Constraint | undefined> =>
-  isObject(u) && hasKeys(u, ['above', 'band'])
+  Nodes.is(u) && Predicate.isTagged(u.decision, 'Probability')
+
+const whereOf = <D extends AnyDecision, Input, S extends Schema.Constraint | undefined>(
+  self: DecisionNode<Input, D, S>,
+  predicate: (answer: Answer<D>) => boolean,
+  options?: LeafOptions,
+): Pattern<Input> =>
+  whereLeaf(self, self.id, answerReaderOf(self.id, self.decision), judgeOfPredicate(predicate), options)
+
+const whereResultOf = <D extends AnyDecision, Input, S extends Schema.Constraint | undefined>(
+  self: DecisionNode<Input, D, S>,
+  resolve: (answer: Answer<D>) => PatternResult,
+  options?: LeafOptions,
+): Pattern<Input> => whereLeaf(self, self.id, answerReaderOf(self.id, self.decision), resolve, options)
+
+const isOf = (
+  self:
+    | ClassifyDecision<never, string, Schema.Constraint | undefined>
+    | RateDecision<never, string, Schema.Constraint | undefined>,
+  label: string,
+  thresholds?: ClassifyThresholds,
+): Pattern<never> =>
+  isClassifyDecision(self)
+    ? classifyIs(self, self.labels, label, thresholds)
+    : whereOf(self, (answer) => answer.label === label, { description: `${self.id} is ${label}` })
+
+const oneOfOf = <Input, Label extends string, S extends Schema.Constraint | undefined>(
+  self: ClassifyDecision<Input, Label, S>,
+  ...labels: ReadonlyArray<Label>
+): Pattern<Input> => oneOfLeaf(self, labels)
+
+const marginOf = <Input, Label extends string, S extends Schema.Constraint | undefined>(
+  self: ClassifyDecision<Input, Label, S>,
+  label: Label,
+  over: Label,
+  by: number,
+): Pattern<Input> =>
+  whereOf(
+    self,
+    (answer) => probabilityOf(answer, label) - probabilityOf(answer, over) >= by,
+    { description: `${self.id}: ${label} leads ${over} by ${by}` },
+  )
+
+const strictlyAboveOf = <Input, S extends Schema.Constraint | undefined>(
+  self: ProbabilityDecision<Input, S>,
+  threshold: number,
+  options?: BandOptions,
+): Pattern<Input> => aboveOf(self, threshold, false, options)
+
+const strictlyBelowOf = <Input, S extends Schema.Constraint | undefined>(
+  self: ProbabilityDecision<Input, S>,
+  threshold: number,
+  options?: BandOptions,
+): Pattern<Input> => belowOf(self, threshold, false, options)
+
+const betweenOf = (
+  self:
+    | ProbabilityDecision<never, Schema.Constraint | undefined>
+    | RateDecision<never, string, Schema.Constraint | undefined>,
+  low: number | string,
+  high: number | string,
+): Pattern<never> =>
+  isProbabilityDecision(self) ? betweenOfProbability(self, low, high) : betweenOfRate(self, low, high)
 
 /** Interpret one node's validated answer as a binary pattern leaf. */
 export const where: {
@@ -718,15 +869,7 @@ export const where: {
     predicate: (answer: Answer<D>) => boolean,
     options?: LeafOptions,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => isDecisionNode(args[0]),
-  <D extends AnyDecision, Input, S extends Schema.Constraint | undefined>(
-    self: DecisionNode<Input, D, S>,
-    predicate: (answer: Answer<D>) => boolean,
-    options?: LeafOptions,
-  ): Pattern<Input> =>
-    whereLeaf(self, self.id, answerReaderOf(self.id, self.decision), judgeOfPredicate(predicate), options),
-)
+} = dual((args: IArguments) => isDecisionNode(args[0]), whereOf)
 
 /** Interpret one node's validated answer as a tri-state pattern leaf. */
 export const whereResult: {
@@ -739,14 +882,7 @@ export const whereResult: {
     resolve: (answer: Answer<D>) => PatternResult,
     options?: LeafOptions,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => isDecisionNode(args[0]),
-  <D extends AnyDecision, Input, S extends Schema.Constraint | undefined>(
-    self: DecisionNode<Input, D, S>,
-    resolve: (answer: Answer<D>) => PatternResult,
-    options?: LeafOptions,
-  ): Pattern<Input> => whereLeaf(self, self.id, answerReaderOf(self.id, self.decision), resolve, options),
-)
+} = dual((args: IArguments) => isDecisionNode(args[0]), whereResultOf)
 
 /**
  * Read a classification or a rating as the answer naming one label: `is(node,
@@ -765,19 +901,7 @@ export const is: {
     label: Label,
     thresholds?: ClassifyThresholds,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  (
-    self:
-      | ClassifyDecision<never, string, Schema.Constraint | undefined>
-      | RateDecision<never, string, Schema.Constraint | undefined>,
-    label: string,
-    thresholds?: ClassifyThresholds,
-  ): Pattern<never> =>
-    isClassifyDecision(self)
-      ? classifyIs(self, self.labels, label, thresholds)
-      : where(self, (answer) => answer.label === label, { description: `${self.id} is ${label}` }),
-)
+} = dual((args: IArguments) => typeof args[0] === 'object', isOf)
 
 const oneOfLeaf = <Input, Label extends string, S extends Schema.Constraint | undefined>(
   self: ClassifyDecision<Input, Label, S>,
@@ -800,14 +924,7 @@ export const oneOf: {
     label: Label,
     ...labels: ReadonlyArray<Label>
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  <Input, Label extends string, S extends Schema.Constraint | undefined>(
-    self: ClassifyDecision<Input, Label, S>,
-    label: Label,
-    ...labels: ReadonlyArray<Label>
-  ): Pattern<Input> => oneOfLeaf(self, [label, ...labels]),
-)
+} = dual((args: IArguments) => typeof args[0] === 'object', oneOfOf)
 
 /** Read a classification as leading another label by at least a margin. */
 export const margin: {
@@ -824,20 +941,7 @@ export const margin: {
     over: Label,
     by: number,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  <Input, Label extends string, S extends Schema.Constraint | undefined>(
-    self: ClassifyDecision<Input, Label, S>,
-    label: Label,
-    over: Label,
-    by: number,
-  ): Pattern<Input> =>
-    where(
-      self,
-      (answer) => probabilityOf(answer, label) - probabilityOf(answer, over) >= by,
-      { description: `${self.id}: ${label} leads ${over} by ${by}` },
-    ),
-)
+} = dual((args: IArguments) => typeof args[0] === 'object', marginOf)
 
 const notLabelOf = (
   self: ClassifyDecision<never, string, Schema.Constraint | undefined>,
@@ -897,44 +1001,7 @@ export const above: {
     threshold: number,
     options?: BandOptions,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  <Input, S extends Schema.Constraint | undefined>(
-    self: ProbabilityDecision<Input, S>,
-    threshold: number,
-    options?: BandOptions,
-  ): Pattern<Input> => aboveOf(self, threshold, false, options),
-)
-
-/** Read a probability estimate as at least a threshold. */
-export const atLeast: {
-  (threshold: number, options?: BandOptions): <Input, S extends Schema.Constraint | undefined>(
-    self: ProbabilityDecision<Input, S>,
-  ) => Pattern<Input>
-  <Level extends string>(
-    level: Level,
-  ): <Input, All extends string, S extends Schema.Constraint | undefined>(
-    self: [Level] extends [All] ? RateDecision<Input, All, S> : never,
-  ) => Pattern<Input>
-  <Input, S extends Schema.Constraint | undefined>(
-    self: ProbabilityDecision<Input, S>,
-    threshold: number,
-    options?: BandOptions,
-  ): Pattern<Input>
-  <Level extends string, Input, All extends string, S extends Schema.Constraint | undefined>(
-    self: [Level] extends [All] ? RateDecision<Input, All, S> : never,
-    level: Level,
-  ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  (
-    self:
-      | ProbabilityDecision<never, Schema.Constraint | undefined>
-      | RateDecision<never, string, Schema.Constraint | undefined>,
-    thresholdOrLevel: number | string,
-    options?: BandOptions,
-  ): Pattern<never> => atLeastOf(self, thresholdOrLevel, options),
-)
+} = dual((args: IArguments) => typeof args[0] === 'object', strictlyAboveOf)
 
 const atLeastOfRate = (
   self: RateDecision<never, string, Schema.Constraint | undefined>,
@@ -964,27 +1031,8 @@ const atLeastOf = (
     ? atLeastOfProbability(self, thresholdOrLevel, options)
     : atLeastOfRate(self, thresholdOrLevel)
 
-/** Read a probability estimate as strictly below a threshold. */
-export const below: {
-  (threshold: number, options?: BandOptions): <Input, S extends Schema.Constraint | undefined>(
-    self: ProbabilityDecision<Input, S>,
-  ) => Pattern<Input>
-  <Input, S extends Schema.Constraint | undefined>(
-    self: ProbabilityDecision<Input, S>,
-    threshold: number,
-    options?: BandOptions,
-  ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  <Input, S extends Schema.Constraint | undefined>(
-    self: ProbabilityDecision<Input, S>,
-    threshold: number,
-    options?: BandOptions,
-  ): Pattern<Input> => belowOf(self, threshold, false, options),
-)
-
-/** Read a probability estimate or a rating as at most a threshold or level. */
-export const atMost: {
+/** Read a probability estimate as at least a threshold. */
+export const atLeast: {
   (threshold: number, options?: BandOptions): <Input, S extends Schema.Constraint | undefined>(
     self: ProbabilityDecision<Input, S>,
   ) => Pattern<Input>
@@ -1002,16 +1050,19 @@ export const atMost: {
     self: [Level] extends [All] ? RateDecision<Input, All, S> : never,
     level: Level,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  (
-    self:
-      | ProbabilityDecision<never, Schema.Constraint | undefined>
-      | RateDecision<never, string, Schema.Constraint | undefined>,
-    thresholdOrLevel: number | string,
+} = dual((args: IArguments) => typeof args[0] === 'object', atLeastOf)
+
+/** Read a probability estimate as strictly below a threshold. */
+export const below: {
+  (threshold: number, options?: BandOptions): <Input, S extends Schema.Constraint | undefined>(
+    self: ProbabilityDecision<Input, S>,
+  ) => Pattern<Input>
+  <Input, S extends Schema.Constraint | undefined>(
+    self: ProbabilityDecision<Input, S>,
+    threshold: number,
     options?: BandOptions,
-  ): Pattern<never> => atMostOf(self, thresholdOrLevel, options),
-)
+  ): Pattern<Input>
+} = dual((args: IArguments) => typeof args[0] === 'object', strictlyBelowOf)
 
 const atMostOfRate = (
   self: RateDecision<never, string, Schema.Constraint | undefined>,
@@ -1041,6 +1092,27 @@ const atMostOf = (
     ? atMostOfProbability(self, thresholdOrLevel, options)
     : atMostOfRate(self, thresholdOrLevel)
 
+/** Read a probability estimate or a rating as at most a threshold or level. */
+export const atMost: {
+  (threshold: number, options?: BandOptions): <Input, S extends Schema.Constraint | undefined>(
+    self: ProbabilityDecision<Input, S>,
+  ) => Pattern<Input>
+  <Level extends string>(
+    level: Level,
+  ): <Input, All extends string, S extends Schema.Constraint | undefined>(
+    self: [Level] extends [All] ? RateDecision<Input, All, S> : never,
+  ) => Pattern<Input>
+  <Input, S extends Schema.Constraint | undefined>(
+    self: ProbabilityDecision<Input, S>,
+    threshold: number,
+    options?: BandOptions,
+  ): Pattern<Input>
+  <Level extends string, Input, All extends string, S extends Schema.Constraint | undefined>(
+    self: [Level] extends [All] ? RateDecision<Input, All, S> : never,
+    level: Level,
+  ): Pattern<Input>
+} = dual((args: IArguments) => typeof args[0] === 'object', atMostOf)
+
 /** Read a probability estimate or a rating as sitting inside a span. */
 export const between: {
   (low: number, high: number): <Input, S extends Schema.Constraint | undefined>(
@@ -1062,17 +1134,7 @@ export const between: {
     low: Level,
     high: Level,
   ): Pattern<Input>
-} = dual(
-  (args: IArguments) => typeof args[0] === 'object',
-  (
-    self:
-      | ProbabilityDecision<never, Schema.Constraint | undefined>
-      | RateDecision<never, string, Schema.Constraint | undefined>,
-    low: number | string,
-    high: number | string,
-  ): Pattern<never> =>
-    isProbabilityDecision(self) ? betweenOfProbability(self, low, high) : betweenOfRate(self, low, high),
-)
+} = dual((args: IArguments) => typeof args[0] === 'object', betweenOf)
 
 const probabilityBoundOf = (bound: number | string): number => (typeof bound === 'number' ? bound : Number.NaN)
 
@@ -1133,3 +1195,43 @@ export const band: {
   (args: IArguments) => typeof args[0] === 'object',
   bandOf,
 )
+
+const whereOps = { where: whereOf, whereResult: whereResultOf }
+
+const nodeTargets = {
+  id: (self: AnyNode) => self.spec.id,
+  fingerprint: (self: AnyNode) => self.spec.fingerprint,
+  decision: (self: AnyNode) => self.spec.decision,
+  schema: (self: AnyNode) => self.spec.schema,
+}
+
+const Nodes = Blueprint.make<DecisionSpec, DecisionIndex>()(TypeId).operations<DecisionOps>()({
+  operations: whereOps,
+  targets: nodeTargets,
+})
+
+const Classifies = Blueprint.make<DecisionSpec, DecisionIndex>()(TypeId).operations<ClassifyOps>()({
+  operations: { ...whereOps, is: isOf, oneOf: oneOfOf, not: notLabelOf, margin: marginOf },
+  targets: { ...nodeTargets, labels: (self: AnyNode) => self.spec.labels },
+})
+
+const Probabilities = Blueprint.make<DecisionSpec, DecisionIndex>()(TypeId).operations<ProbabilityOps>()({
+  operations: {
+    ...whereOps,
+    above: strictlyAboveOf,
+    below: strictlyBelowOf,
+    atLeast: atLeastOf,
+    atMost: atMostOf,
+    between: betweenOf,
+    band: bandOf,
+  },
+  targets: nodeTargets,
+})
+
+const Rates = Blueprint.make<DecisionSpec, DecisionIndex>()(TypeId).operations<RateOps>()({
+  operations: { ...whereOps, is: isOf, atLeast: atLeastOf, atMost: atMostOf, between: betweenOf },
+  targets: { ...nodeTargets, levels: (self: AnyNode) => self.spec.labels },
+})
+
+/** Whether a value is a decision node of any kind. */
+export const isNode = Nodes.is

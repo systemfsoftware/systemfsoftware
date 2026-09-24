@@ -10,11 +10,20 @@
  * input type. Procedures with different inputs compose statically, through
  * ordinary Effect code. Members are held under their own id, as the record's
  * key, so two members cannot share an id and a lookup by id cannot miss.
+ *
+ * A registry is a cold blueprint over the routing machinery. Member reads
+ * (`get`), routing (`route`), and invocation (`invoke`, `invokeWithRoute`)
+ * are each one operation: the kind derives the method, the data-first dual,
+ * and the data-last dual from a single type-level transition. Everything else
+ * the rest of the package reads — `input`, `routeInput`, `members`, `ids`,
+ * `decision` — is a target over the registry's type index. `invoke`'s error
+ * channel is option-dependent: `RoutingUncertainError` is present without
+ * `onUncertain` and absent with it, so the transition reads the call's
+ * arguments, like a question whose `onUnsure` drops the `Unsure` channel.
  */
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Effect, Match, Option, Predicate } from 'effect'
 import { dual } from 'effect/Function'
-import type { Pipeable } from 'effect/Pipeable'
-import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -31,8 +40,6 @@ import {
   type AnyProcedure,
   type ErrorOf,
   examplesOrNone,
-  type FallbackInvokeOptions,
-  type HomogeneousProcedure,
   type InvokeOptions,
   make,
   type OutputOf,
@@ -47,9 +54,12 @@ import {
 } from './ProcedureError.schema.js'
 import { region } from './region.service.js'
 import type { RouteOptions } from './Route.schema.js'
-import type { Route } from './select-route.workflow.js'
+import type { Route, RouteUncertain } from './select-route.workflow.js'
 
-const RegistryTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Registry')
+type Top<A = unknown> = A
+
+export const TypeId = Symbol.for('@systemfsoftware/discern/Registry')
+export type TypeId = typeof TypeId
 
 /**
  * How the model sees a request when routing.
@@ -58,9 +68,9 @@ const RegistryTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Regis
  * choose. Projecting keeps large evidence — a diff, a document, a transcript —
  * out of the routing prompt, which cuts tokens and raises signal.
  */
-export interface RouteBy<S extends Schema.Constraint, R extends Schema.Constraint> {
-  readonly schema: R
-  readonly select: (input: S['Type']) => R['Type']
+export interface RouteBy<S extends Schema.Constraint, RouteInput extends Schema.Constraint> {
+  readonly schema: RouteInput
+  readonly select: (input: S['Type']) => RouteInput['Type']
 }
 
 export interface RegistryOptions<S extends Schema.Constraint, RouteInput extends Schema.Constraint> {
@@ -70,7 +80,212 @@ export interface RegistryOptions<S extends Schema.Constraint, RouteInput extends
   readonly routeBy?: RouteBy<S, RouteInput>
 }
 
+/**
+ * The data a registry is minted from: the schemas it accepts and routes on,
+ * its members, the routing decision over the full membership, and the
+ * per-invocation closures the operations forward to. The closures are the
+ * erased implementation boundary: each is written with the registry's precise
+ * types, recorded here as a plain function, and its public type comes back
+ * from the operation's transition over the index.
+ */
+export interface RegistrySpec {
+  readonly input: Schema.Constraint
+  readonly routeInput: Schema.Constraint
+  readonly members: Readonly<Record<string, AnyProcedure>>
+  readonly ids: ReadonlyArray<string>
+  readonly decision: Top
+  readonly memberAt: (id: string) => AnyProcedure
+  readonly routeOf: (input: never, options?: never) => Top
+  readonly invokeOf: (input: never, options?: never) => Top
+  readonly invokeWithRouteOf: (input: never, options?: never) => Top
+}
+
+/**
+ * The type index a registry carries: its membership, the schema it accepts
+ * and the schema it routes on, and the success, failure, and requirement
+ * channels the members' programs agree on.
+ */
+export interface RegistryIndex<
+  Members extends Readonly<Record<string, AnyProcedure>>,
+  S extends Schema.Constraint,
+  RouteInput extends Schema.Constraint,
+  Value,
+  Failure,
+  Requirements,
+> {
+  readonly Members: Members
+  readonly Input: S
+  readonly RouteInput: RouteInput
+  readonly Value: Value
+  readonly Failure: Failure
+  readonly Requirements: Requirements
+}
+
+/** The widest index a registry can be invoked through. */
+export type AnyRegistryIndex = RegistryIndex<
+  Readonly<Record<string, AnyProcedure>>,
+  Schema.Constraint,
+  Schema.Constraint,
+  Top,
+  Top,
+  Top
+>
+
+type MembersOf<X> = X extends { readonly Members: infer Members extends AnyProcedureRecord } ? Members : never
+type InputSchemaOf<X> = X extends { readonly Input: infer S extends Schema.Constraint } ? S : never
+type RouteInputOf<X> = X extends { readonly RouteInput: infer RouteInput extends Schema.Constraint } ? RouteInput
+  : never
+type ValueOf<X> = X extends { readonly Value: infer Value } ? Value : never
+type FailureOf<X> = X extends { readonly Failure: infer Failure } ? Failure : never
+type IndexRequirementsOf<X> = X extends { readonly Requirements: infer Requirements } ? Requirements : never
+type RequestOf<X> = InputSchemaOf<X>['Type']
+type ServicesOf<X> = RouteInputOf<X>['EncodingServices']
+type AnyProcedureRecord = Readonly<Record<string, AnyProcedure>>
+type ProjectedOf<X> = RouteInputOf<X>['Type']
 type IdsOf<Members> = Extract<keyof Members, string>
+type MemberAt<Members, Args> = Args extends readonly [infer Id, ...ReadonlyArray<Top>]
+  ? Id extends keyof Members ? Members[Id] : never
+  : never
+
+type HandlerValue<Returned> = [Returned] extends [Effect.Effect<infer Value, Top, Top>] ? Value : Returned
+type HandlerFailure<Returned> = [Returned] extends [Effect.Effect<Top, infer Failure, Top>] ? Failure : never
+type HandlerRequirements<Returned> = [Returned] extends [Effect.Effect<Top, Top, infer Requirements>] ? Requirements
+  : never
+
+/** The failures every invocation carries, whatever the caller does about doubt. */
+type SeenOf<X> = DecisionModel.DecisionModel | ServicesOf<X>
+
+type InvokeOptionsOf<X> = {
+  readonly routing?: RouteOptions | undefined
+  readonly onUncertain?: (input: RequestOf<X>, route: (typeof RouteUncertain)['Encoded']) => Top
+}
+
+type InvokeOut<X, Args> = Args extends readonly [Top, {
+  readonly onUncertain: (...args: never[]) => infer Returned
+}] ? Effect.Effect<
+    ValueOf<X> | HandlerValue<Returned>,
+    | FailureOf<X>
+    | HandlerFailure<Returned>
+    | AiError.AiError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
+    | NoEligibleProcedureError
+    | DepthExceededError,
+    IndexRequirementsOf<X> | HandlerRequirements<Returned> | SeenOf<X>
+  >
+  : Effect.Effect<
+    ValueOf<X>,
+    | FailureOf<X>
+    | AiError.AiError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
+    | NoEligibleProcedureError
+    | DepthExceededError
+    | RoutingUncertainError,
+    IndexRequirementsOf<X> | SeenOf<X>
+  >
+
+type InvokeWithRouteOut<X, Args> = Args extends readonly [Top, {
+  readonly onUncertain: (...args: never[]) => infer Returned
+}] ? Effect.Effect<
+    { readonly route: Route; readonly value: ValueOf<X> | HandlerValue<Returned> },
+    | FailureOf<X>
+    | HandlerFailure<Returned>
+    | AiError.AiError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
+    | NoEligibleProcedureError
+    | DepthExceededError,
+    IndexRequirementsOf<X> | HandlerRequirements<Returned> | SeenOf<X>
+  >
+  : Effect.Effect<
+    { readonly route: Route; readonly value: ValueOf<X> },
+    | FailureOf<X>
+    | AiError.AiError
+    | DecisionIdCollisionError
+    | ProcedureCommandRejectedError
+    | NoEligibleProcedureError
+    | DepthExceededError
+    | RoutingUncertainError,
+    IndexRequirementsOf<X> | SeenOf<X>
+  >
+/** The member held under one of the registry's own keys. The read is total by construction. */
+export interface RegistryGet extends Blueprint.Operation {
+  readonly params: readonly [id: IdsOf<MembersOf<this['Index']>>]
+  readonly out: MemberAt<MembersOf<this['Index']>, this['Args']>
+}
+
+/** Choose a procedure from the whole distribution, without running it. */
+export interface RegistryRoute extends Blueprint.Operation {
+  readonly params:
+    | readonly [input: RequestOf<this['Index']>]
+    | readonly [input: RequestOf<this['Index']>, options?: RouteOptions]
+  readonly lastRest: readonly [] | readonly [options?: RouteOptions]
+  readonly out: Effect.Effect<
+    Route,
+    AiError.AiError | DecisionIdCollisionError,
+    SeenOf<this['Index']>
+  >
+}
+
+/** Route, then run the chosen procedure. */
+export interface RegistryInvoke extends Blueprint.Operation {
+  readonly params:
+    | readonly [input: RequestOf<this['Index']>]
+    | readonly [input: RequestOf<this['Index']>, options: InvokeOptionsOf<this['Index']>]
+  readonly lastRest: readonly [] | readonly [options: InvokeOptionsOf<this['Index']>]
+  readonly out: InvokeOut<this['Index'], this['Args']>
+}
+
+/** As `invoke`, but also returns the routing decision itself. */
+export interface RegistryInvokeWithRoute extends Blueprint.Operation {
+  readonly params:
+    | readonly [input: RequestOf<this['Index']>]
+    | readonly [input: RequestOf<this['Index']>, options: InvokeOptionsOf<this['Index']>]
+  readonly lastRest: readonly [] | readonly [options: InvokeOptionsOf<this['Index']>]
+  readonly out: InvokeWithRouteOut<this['Index'], this['Args']>
+}
+
+/** The schema the registry accepts. */
+export interface RegistryInput extends Blueprint.Target {
+  readonly target: InputSchemaOf<this['Index']>
+}
+
+/** The schema the routing decision actually sees. Equal to `input` unless projected. */
+export interface RegistryRouteInput extends Blueprint.Target {
+  readonly target: RouteInputOf<this['Index']>
+}
+
+/** Every member, held under its own id. */
+export interface RegistryMembers extends Blueprint.Target {
+  readonly target: MembersOf<this['Index']>
+}
+
+/** Every member key, each one an id by construction. */
+export interface RegistryIds extends Blueprint.Target {
+  readonly target: ReadonlyArray<IdsOf<MembersOf<this['Index']>>>
+}
+
+/**
+ * The classification for the full membership, exposed for inspection and
+ * evaluation. Eligibility may narrow the set actually asked about at run time.
+ */
+export interface RegistryDecision extends Blueprint.Target {
+  readonly target: ClassifyDecision<ProjectedOf<this['Index']>, string, RouteInputOf<this['Index']>>
+}
+
+/** Four operations, five targets: one declaration per registry capability. */
+export interface RegistryOps {
+  readonly get: RegistryGet
+  readonly route: RegistryRoute
+  readonly invoke: RegistryInvoke
+  readonly invokeWithRoute: RegistryInvokeWithRoute
+  readonly input: RegistryInput
+  readonly routeInput: RegistryRouteInput
+  readonly members: RegistryMembers
+  readonly ids: RegistryIds
+  readonly decision: RegistryDecision
+}
 
 type AnyRegistry = Registry<Readonly<Record<string, AnyProcedure>>, Schema.Constraint>
 
@@ -80,102 +295,19 @@ type AnyRegistry = Registry<Readonly<Record<string, AnyProcedure>>, Schema.Const
  * The channel parameters default to the union of what the members' `run`
  * returns, so a plain `Registry<Members, S, RouteInput>` is exact.
  */
-export interface Registry<
+export type Registry<
   Members extends Readonly<Record<string, AnyProcedure>>,
   S extends Schema.Constraint,
   RouteInput extends Schema.Constraint = S,
   Value = OutputOf<Members[keyof Members]>,
   Failure = ErrorOf<Members[keyof Members]>,
   Requirements = RequirementsOf<Members[keyof Members]>,
-> extends Pipeable {
-  readonly [RegistryTypeId]: typeof RegistryTypeId
-  readonly input: S
-  /** The schema the routing decision actually sees. Equal to `input` unless projected. */
-  readonly routeInput: RouteInput
-  readonly members: Members
-  readonly ids: ReadonlyArray<IdsOf<Members>>
-  readonly get: <Id extends IdsOf<Members>>(id: Id) => Members[Id]
-  /**
-   * The classification for the full membership, exposed for inspection and
-   * evaluation. Eligibility may narrow the set actually asked about at run time.
-   */
-  readonly decision: ClassifyDecision<RouteInput['Type'], string, RouteInput>
-  /**
-   * Choose a procedure from the whole distribution, not just the provider's
-   * chosen label. Returns uncertainty rather than picking a near-tie, and
-   * `RouteNone` when eligibility ruled everything out.
-   */
-  readonly route: (
-    input: S['Type'],
-    options?: RouteOptions,
-  ) => Effect.Effect<
-    Route,
-    AiError.AiError | DecisionIdCollisionError,
-    DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  /** Route, then run the chosen procedure. */
-  readonly invoke: {
-    <FallbackValue, FallbackError = never, FallbackServices = never>(
-      input: S['Type'],
-      options: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-    ): Effect.Effect<
-      Value | FallbackValue,
-      | Failure
-      | FallbackError
-      | AiError.AiError
-      | DecisionIdCollisionError
-      | ProcedureCommandRejectedError
-      | NoEligibleProcedureError
-      | DepthExceededError,
-      Requirements | FallbackServices | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-    >
-    (
-      input: S['Type'],
-      options?: InvokeOptions<S['Type']>,
-    ): Effect.Effect<
-      Value,
-      | Failure
-      | AiError.AiError
-      | DecisionIdCollisionError
-      | ProcedureCommandRejectedError
-      | NoEligibleProcedureError
-      | DepthExceededError
-      | RoutingUncertainError,
-      Requirements | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-    >
-  }
-  /** As `invoke`, but also returns the routing decision itself. */
-  readonly invokeWithRoute: {
-    <FallbackValue, FallbackError = never, FallbackServices = never>(
-      input: S['Type'],
-      options: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-    ): Effect.Effect<
-      { readonly route: Route; readonly value: Value | FallbackValue },
-      | Failure
-      | FallbackError
-      | AiError.AiError
-      | DecisionIdCollisionError
-      | ProcedureCommandRejectedError
-      | NoEligibleProcedureError
-      | DepthExceededError,
-      Requirements | FallbackServices | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-    >
-    (
-      input: S['Type'],
-      options?: InvokeOptions<S['Type']>,
-    ): Effect.Effect<
-      { readonly route: Route; readonly value: Value },
-      | Failure
-      | AiError.AiError
-      | DecisionIdCollisionError
-      | ProcedureCommandRejectedError
-      | NoEligibleProcedureError
-      | DepthExceededError
-      | RoutingUncertainError,
-      Requirements | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-    >
-  }
-}
+> = Blueprint.Blueprint<
+  typeof TypeId,
+  RegistrySpec,
+  RegistryOps,
+  RegistryIndex<Members, S, RouteInput, Value, Failure, Requirements>
+>
 
 const DEFAULT_INSTRUCTIONS = 'Choose the procedure that best handles this request'
 
@@ -198,8 +330,6 @@ const idFieldOf = (id: string | undefined, whole: boolean): { readonly id: strin
 
 const identityOf = <V>(value: V): V => value
 
-const isRegistry = (u: unknown): u is AnyRegistry => Predicate.hasProperty(u, RegistryTypeId)
-
 /**
  * The member held under one of the registry's own keys. The key is a member
  * key by construction, so the read is total: it never misses and never yields
@@ -210,6 +340,12 @@ const memberOf = <Members extends Readonly<Record<string, AnyProcedure>>, K exte
   key: K,
 ): Members[K] => members[key]
 
+/** The same read through the erased shape the spec records. Reads forward through the held members. */
+const memberAtOf = (members: Readonly<Record<string, AnyProcedure>>, id: string): AnyProcedure =>
+  Arr.findFirst(Object.entries(members), ([key]) => key === id).pipe(
+    Option.map(([, member]) => member),
+    Option.getOrThrow,
+  )
 /**
  * The member keys, each one an id by construction: a record cannot hold two
  * entries under one key, so the ids a registry routes between are unique
@@ -229,6 +365,43 @@ const criteriaOf = <Members extends Readonly<Record<string, AnyProcedure>>>(
   candidates: ReadonlyArray<IdsOf<Members>>,
 ): Record<string, string> =>
   Object.fromEntries(Arr.map(candidates, (id) => [id, criterion(memberOf(members, id))] as const))
+
+const Registries = Blueprint.make<RegistrySpec, AnyRegistryIndex>()(TypeId).operations<RegistryOps>()({
+  operations: {
+    get: (self: AnyRegistry, id: string) => self.spec.memberAt(id),
+    route: {
+      run: (self: AnyRegistry, input: never, options?: never) => self.spec.routeOf(input, options),
+      isDataFirst: (args) => Registries.is(args[0]),
+    },
+    invoke: {
+      run: (self: AnyRegistry, input: never, options?: never) => self.spec.invokeOf(input, options),
+      isDataFirst: (args) => Registries.is(args[0]),
+    },
+    invokeWithRoute: {
+      run: (self: AnyRegistry, input: never, options?: never) => self.spec.invokeWithRouteOf(input, options),
+      isDataFirst: (args) => Registries.is(args[0]),
+    },
+  },
+  targets: {
+    input: (self: AnyRegistry) => self.spec.input,
+    routeInput: (self: AnyRegistry) => self.spec.routeInput,
+    members: (self: AnyRegistry) => self.spec.members,
+    ids: (self: AnyRegistry) => self.spec.ids,
+    decision: (self: AnyRegistry) => self.spec.decision,
+  },
+})
+
+/** Read one member of a registry by its id. Every id is held, so the read cannot miss. */
+export const get = Registries.operations.get
+
+/** Choose a procedure from the whole distribution, without running it. */
+export const route = Registries.operations.route
+
+/** Route, then run the chosen procedure. */
+export const invoke = Registries.operations.invoke
+
+/** As `invoke`, but also returns the routing decision itself. */
+export const invokeWithRoute = Registries.operations.invokeWithRoute
 
 /**
  * Build a registry. Adding or removing a member renormalizes every
@@ -258,7 +431,6 @@ const buildRegistry = <
 
   const eligibleIds = (value: S['Type']): ReadonlyArray<RouteIds> =>
     Arr.filter(ids, (id) => memberOf(members, id).eligible(value))
-
   const runMember = (id: RouteIds, value: S['Type']) => region(id)(memberOf(members, id).run(value))
 
   const decisions = new Map<string, ClassifyDecision<RouteInput['Type'], string, RouteInput>>()
@@ -290,38 +462,21 @@ const buildRegistry = <
 
   const views = { ...view, runMember }
 
-  function invokeWithRoute<FallbackValue, FallbackError = never, FallbackServices = never>(
+  const invokeWithRouteOf = <FallbackValue, FallbackError, FallbackServices>(
     request: S['Type'],
-    invokeOptions: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
+    invokeOptions?: InvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
   ): Effect.Effect<
     { readonly route: Route; readonly value: Value | FallbackValue },
     | Failure
     | FallbackError
     | AiError.AiError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError,
-    Requirements | FallbackServices | SeenR
-  >
-  function invokeWithRoute(
-    request: S['Type'],
-    invokeOptions?: InvokeOptions<S['Type']>,
-  ): Effect.Effect<
-    { readonly route: Route; readonly value: Value },
-    | Failure
-    | AiError.AiError
+    | DecisionIdCollisionError
     | ProcedureCommandRejectedError
     | NoEligibleProcedureError
     | DepthExceededError
     | RoutingUncertainError,
-    Requirements | SeenR
-  >
-  function invokeWithRoute<FallbackValue, FallbackError = never, FallbackServices = never>(
-    request: S['Type'],
-    invokeOptions?:
-      | InvokeOptions<S['Type']>
-      | FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ) {
+    Requirements | FallbackServices | SeenR
+  > => {
     const { routing, onUncertain } = invokeOptions ?? {}
     return Option.match(Option.fromUndefinedOr(onUncertain), {
       onNone: () => invokeProcedure(views, { input: request, options: { routing } }),
@@ -341,74 +496,22 @@ const buildRegistry = <
     })
   }
 
-  function invoke<FallbackValue, FallbackError = never, FallbackServices = never>(
+  const invokeOf = <FallbackValue, FallbackError, FallbackServices>(
     request: S['Type'],
-    invokeOptions: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ): Effect.Effect<
-    Value | FallbackValue,
-    | Failure
-    | FallbackError
-    | AiError.AiError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError,
-    Requirements | FallbackServices | SeenR
-  >
-  function invoke(
-    request: S['Type'],
-    invokeOptions?: InvokeOptions<S['Type']>,
-  ): Effect.Effect<
-    Value,
-    | Failure
-    | AiError.AiError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError
-    | RoutingUncertainError,
-    Requirements | SeenR
-  >
-  function invoke<FallbackValue, FallbackError = never, FallbackServices = never>(
-    request: S['Type'],
-    invokeOptions?:
-      | InvokeOptions<S['Type']>
-      | FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ) {
-    const { routing, onUncertain } = invokeOptions ?? {}
-    return Option.match(Option.fromUndefinedOr(onUncertain), {
-      onNone: () =>
-        Effect.map(invokeProcedure(views, { input: request, options: { routing } }), (routed) => routed.value),
-      onSome: (uncertain) =>
-        Effect.map(
-          invokeProcedureWithFallback<
-            S['Type'],
-            RouteInput['Type'],
-            Value,
-            Failure,
-            Requirements,
-            SeenR,
-            RouteIds,
-            FallbackValue,
-            FallbackError,
-            FallbackServices
-          >(views, { input: request, options: { routing, onUncertain: uncertain } }),
-          (routed) => routed.value,
-        ),
-    })
-  }
+    invokeOptions?: InvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
+  ) => Effect.map(invokeWithRouteOf(request, invokeOptions), (routed) => routed.value)
 
-  return {
-    [RegistryTypeId]: RegistryTypeId,
+  return Registries.of<RegistryIndex<Members, S, RouteInput, Value, Failure, Requirements>>({
     input,
     routeInput,
     members,
     ids,
-    get: <Id extends RouteIds>(id: Id): Members[Id] => members[id],
     decision: decisionFor(ids),
-    route: (request, routeOptions) => prepareRoute(view, request, routeOptions),
-    invoke,
-    invokeWithRoute,
-    ...Prototype,
-  }
+    memberAt: (id) => memberAtOf(members, id),
+    routeOf: (request: S['Type'], routeOptions?: RouteOptions) => prepareRoute(view, request, routeOptions),
+    invokeOf,
+    invokeWithRouteOf,
+  })
 }
 
 /**
@@ -485,320 +588,9 @@ export const registry: {
   },
 )
 
-/** Read one member of a registry by its id. Every id is held, so the read cannot miss. */
-export const get: {
-  <Members extends Readonly<Record<string, AnyProcedure>>, S extends Schema.Constraint, Id extends IdsOf<Members>>(
-    self: Registry<Members, S>,
-    id: Id,
-  ): Members[Id]
-  <Members extends Readonly<Record<string, AnyProcedure>>, S extends Schema.Constraint, Id extends IdsOf<Members>>(
-    id: Id,
-  ): (self: Registry<Members, S>) => Members[Id]
-} = dual(
-  2,
-  <Members extends Readonly<Record<string, AnyProcedure>>, S extends Schema.Constraint, Id extends IdsOf<Members>>(
-    self: Registry<Members, S>,
-    id: Id,
-  ): Members[Id] => self.get(id),
-)
-
-/** Choose a procedure from the whole distribution, without running it. */
-export const route: {
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-  >(
-    input: S['Type'],
-    options?: RouteOptions,
-  ): (
-    self: Registry<Members, S, RouteInput>,
-  ) => Effect.Effect<
-    Route,
-    AiError.AiError | DecisionIdCollisionError,
-    DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-  >(
-    self: Registry<Members, S, RouteInput>,
-    input: S['Type'],
-    options?: RouteOptions,
-  ): Effect.Effect<
-    Route,
-    AiError.AiError | DecisionIdCollisionError,
-    DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-} = dual(
-  (args: IArguments) => isRegistry(args[0]),
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-  >(
-    self: Registry<Members, S, RouteInput>,
-    input: S['Type'],
-    options?: RouteOptions,
-  ): Effect.Effect<
-    Route,
-    AiError.AiError | DecisionIdCollisionError,
-    DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  > => self.route(input, options),
-)
-
-/** Route, then run the chosen procedure. */
-export const invoke: {
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-    FallbackValue = never,
-    FallbackError = never,
-    FallbackServices = never,
-  >(
-    input: S['Type'],
-    options: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ): (
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-  ) => Effect.Effect<
-    Value | FallbackValue,
-    | Failure
-    | FallbackError
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError,
-    Requirements | FallbackServices | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-    FallbackValue = never,
-    FallbackError = never,
-    FallbackServices = never,
-  >(
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-    input: S['Type'],
-    options: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ): Effect.Effect<
-    Value | FallbackValue,
-    | Failure
-    | FallbackError
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError,
-    Requirements | FallbackServices | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-  >(
-    input: S['Type'],
-    options?: InvokeOptions<S['Type']>,
-  ): (
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-  ) => Effect.Effect<
-    Value,
-    | Failure
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError
-    | RoutingUncertainError,
-    Requirements | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-  >(
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-    input: S['Type'],
-    options?: InvokeOptions<S['Type']>,
-  ): Effect.Effect<
-    Value,
-    | Failure
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError
-    | RoutingUncertainError,
-    Requirements | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-} = dual(
-  (args: IArguments) => isRegistry(args[0]),
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-    FallbackValue = never,
-    FallbackError = never,
-    FallbackServices = never,
-  >(
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-    input: S['Type'],
-    invokeOptions?:
-      | InvokeOptions<S['Type']>
-      | FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ) => {
-    const { routing, onUncertain } = invokeOptions ?? {}
-    return Option.match(Option.fromUndefinedOr(onUncertain), {
-      onNone: () => self.invoke(input, { routing }),
-      onSome: (uncertain) => self.invoke(input, { routing, onUncertain: uncertain }),
-    })
-  },
-)
-export const invokeWithRoute: {
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-    FallbackValue = never,
-    FallbackError = never,
-    FallbackServices = never,
-  >(
-    input: S['Type'],
-    options: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ): (
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-  ) => Effect.Effect<
-    { readonly route: Route; readonly value: Value | FallbackValue },
-    | Failure
-    | FallbackError
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError,
-    Requirements | FallbackServices | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-    FallbackValue = never,
-    FallbackError = never,
-    FallbackServices = never,
-  >(
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-    input: S['Type'],
-    options: FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ): Effect.Effect<
-    { readonly route: Route; readonly value: Value | FallbackValue },
-    | Failure
-    | FallbackError
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError,
-    Requirements | FallbackServices | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-  >(
-    input: S['Type'],
-    options?: InvokeOptions<S['Type']>,
-  ): (
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-  ) => Effect.Effect<
-    { readonly route: Route; readonly value: Value },
-    | Failure
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError
-    | RoutingUncertainError,
-    Requirements | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-  >(
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-    input: S['Type'],
-    options?: InvokeOptions<S['Type']>,
-  ): Effect.Effect<
-    { readonly route: Route; readonly value: Value },
-    | Failure
-    | AiError.AiError
-    | DecisionIdCollisionError
-    | ProcedureCommandRejectedError
-    | NoEligibleProcedureError
-    | DepthExceededError
-    | RoutingUncertainError,
-    Requirements | DecisionModel.DecisionModel | RouteInput['EncodingServices']
-  >
-} = dual(
-  (args: IArguments) => isRegistry(args[0]),
-  <
-    Members extends Readonly<Record<string, AnyProcedure>>,
-    S extends Schema.Constraint,
-    RouteInput extends Schema.Constraint = S,
-    Value = OutputOf<Members[keyof Members]>,
-    Failure = ErrorOf<Members[keyof Members]>,
-    Requirements = RequirementsOf<Members[keyof Members]>,
-    FallbackValue = never,
-    FallbackError = never,
-    FallbackServices = never,
-  >(
-    self: Registry<Members, S, RouteInput, Value, Failure, Requirements>,
-    input: S['Type'],
-    invokeOptions?:
-      | InvokeOptions<S['Type']>
-      | FallbackInvokeOptions<S['Type'], FallbackValue, FallbackError, FallbackServices>,
-  ) => {
-    const { routing, onUncertain } = invokeOptions ?? {}
-    return Option.match(Option.fromUndefinedOr(onUncertain), {
-      onNone: () => self.invokeWithRoute(input, { routing }),
-      onSome: (uncertain) => self.invokeWithRoute(input, { routing, onUncertain: uncertain }),
-    })
-  },
-)
-
 export const fromRegistry = <
   S extends Schema.Constraint,
-  const Members extends Readonly<Record<string, HomogeneousProcedure<S['Type'], S>>>,
+  const Members extends AnyProcedureRecord,
 >(options: {
   readonly description: string
   readonly examples?: ReadonlyArray<string>

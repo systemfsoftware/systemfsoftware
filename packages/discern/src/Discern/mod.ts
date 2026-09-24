@@ -33,6 +33,7 @@ export type {
   ClassifyDecision,
   ClassifyOptions,
   ClassifyThresholds,
+  DecisionNode,
   DecisionScope,
   ProbabilityBand,
   ProbabilityDecision,
@@ -56,7 +57,6 @@ export {
 } from '../pattern.blueprint.js'
 export type {
   Answers,
-  DecisionNode,
   HandlerResult,
   LeafOptions,
   NodeCore,

@@ -383,3 +383,44 @@ describe('the model builder', () => {
     ).type.toBe<Layer.Layer<DecisionModel.DecisionModel, never, never>>()
   })
 })
+
+describe('the three forms of a blueprint operation', () => {
+  it('Should_AgreeAcrossMethodAndBothDuals_When_ACaseIsAdded', () => {
+    const base = Discern.type(Schema.String)
+    const byMethod = base.when(impact.is('breaking'), (input) => input.length)
+    const byDual = Discern.when(base, impact.is('breaking'), (input) => input.length)
+    const byPipe = base.pipe(Discern.when(impact.is('breaking'), (input) => input.length))
+    expect(byMethod).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
+    expect(byDual).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
+    expect(byPipe).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
+  })
+
+  it('Should_ShrinkTheRemainingLabels_When_ACaseIsAddedInAnyForm', () => {
+    const start = Discern.match(impact)
+    const byMethod = start.caseOf('none', (input) => input.length)
+    const byDual = Discern.case(start, 'none', (input) => input.length)
+    const byPipe = start.pipe(Discern.case('none', (input) => input.length))
+    type Shrunk = Discern.ClassificationMatcher<
+      string,
+      typeof Schema.String,
+      'none' | 'additive' | 'behavioral' | 'breaking',
+      'additive' | 'behavioral' | 'breaking',
+      number
+    >
+    expect(byMethod).type.toBe<Shrunk>()
+    expect(byDual).type.toBe<Shrunk>()
+    expect(byPipe).type.toBe<Shrunk>()
+  })
+
+  it('Should_RefuseAHandledLabel_When_ItIsAddedAgain', () => {
+    const handled = Discern.match(impact).caseOf('none', () => 0)
+    expect(handled.caseOf).type.toBeCallableWith('breaking', () => 1)
+    expect(handled.caseOf).type.not.toBeCallableWith('none', () => 1)
+  })
+
+  it('Should_AgreeAcrossMethodAndBothDuals_When_AProbabilityIsRead', () => {
+    expect(risky.above(0.8)).type.toBe<Discern.Pattern<string>>()
+    expect(Discern.above(risky, 0.8)).type.toBe<Discern.Pattern<string>>()
+    expect(pipe(risky, Discern.above(0.8))).type.toBe<Discern.Pattern<string>>()
+  })
+})
