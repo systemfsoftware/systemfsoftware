@@ -14,7 +14,7 @@ import {
   type SelectorQuestion,
 } from './__fixtures__/pack-eval-memory.fixture.js'
 import {
-  oracleCorrectedRate,
+  oracleCorrectedRates,
   oracleJudgeValidity,
   oraclePointEstimates,
   oracleQuestions,
@@ -64,7 +64,7 @@ const pairKeyOfJudgeKey = (key: string): string => {
 const askedKeysOf = (
   run: InMemoryRun,
 ): { readonly selector: ReadonlyArray<string>; readonly judge: ReadonlyArray<string> } => ({
-  selector: distinctSorted(run.selectorQuestions.map(selectorKeyOf)),
+  selector: run.selectorQuestions.map(selectorKeyOf).toSorted(ascendingOf),
   judge: distinctSorted(run.judgeQuestions.map(judgeKeyOf)),
 })
 
@@ -285,11 +285,10 @@ Differential.compare({
 
 // ---------------------------------------------------------------------------
 // Interval containment (KTD5): every reported routing interval lies in [0, 1]
-// and contains the oracle's point estimate; every corrected-rate interval
-// lies in [0, 1] and contains its own point estimate, and on single-pack
-// worlds also the oracle's complement rate. The corrected-rate relation is
-// deliberately per-pack: the product rates each pack while the oracle's
-// corrected rate is global, so a global containment claim would be false.
+// and contains the oracle's point estimate; the product reports a corrected
+// rate for exactly the packs the oracle derives one for, and each pack's
+// interval lies in [0, 1] and contains both its own estimate and the oracle's
+// value for that pack.
 // ---------------------------------------------------------------------------
 
 interface IntervalRow {
@@ -304,13 +303,14 @@ interface IntervalRow {
 
 interface IntervalCandidate {
   readonly routing: ReadonlyArray<IntervalRow>
-  readonly rates: ReadonlyArray<{ readonly estimate: number; readonly lower: number; readonly upper: number }>
+  readonly rates: ReadonlyArray<
+    { readonly packId: string; readonly estimate: number; readonly lower: number; readonly upper: number }
+  >
 }
 
 interface IntervalReference {
   readonly points: ReadonlyArray<{ readonly key: string; readonly tpr: number; readonly tnr: number }>
-  readonly correctedComplement: number | undefined
-  readonly singlePack: boolean
+  readonly correctedRates: ReadonlyArray<{ readonly packId: string; readonly rate: number }>
 }
 
 const isScored = Schema.is(PackEval.RuleScored)
@@ -334,24 +334,26 @@ const intervalCandidateOf = (run: InMemoryRun): IntervalCandidate => ({
     Match.tag('ContradictionNotEvaluated', () => []),
     Match.tag(
       'ContradictionJudged',
-      (judged) => judged.rates.map((rate) => ({ estimate: rate.estimate, lower: rate.lower, upper: rate.upper })),
+      (judged) =>
+        judged.rates.map((rate) => ({
+          packId: rate.packId,
+          estimate: rate.estimate,
+          lower: rate.lower,
+          upper: rate.upper,
+        })),
     ),
     Match.exhaustive,
   ),
 })
 
-const intervalReferenceOf = (world: World): IntervalReference => {
-  const corrected = oracleCorrectedRate(world, {})
-  return {
-    points: oraclePointEstimates(world, {}).map((point) => ({
-      key: keyOf(point.packId, point.rule, point.split),
-      tpr: point.tpr,
-      tnr: point.tnr,
-    })),
-    correctedComplement: corrected.tag === 'reported' ? 1 - corrected.rate : undefined,
-    singlePack: world.packs.length === 1,
-  }
-}
+const intervalReferenceOf = (world: World): IntervalReference => ({
+  points: oraclePointEstimates(world, {}).map((point) => ({
+    key: keyOf(point.packId, point.rule, point.split),
+    tpr: point.tpr,
+    tnr: point.tnr,
+  })),
+  correctedRates: oracleCorrectedRates(world, {}).map((rate) => ({ packId: rate.packId, rate: rate.rate })),
+})
 
 const within01 = (values: ReadonlyArray<number>): boolean => values.every((value) => value >= 0 && value <= 1)
 
@@ -369,12 +371,18 @@ Differential.compare({
         row.tprLower <= point.tpr && point.tpr <= row.tprUpper &&
         row.tnrLower <= point.tnr && point.tnr <= row.tnrUpper
     }) &&
-    product.rates.every((rate) =>
-      within01([rate.lower, rate.estimate, rate.upper]) &&
-      rate.lower <= rate.estimate && rate.estimate <= rate.upper &&
-      (oracle.correctedComplement === undefined || oracle.singlePack === false ||
-        (rate.lower <= oracle.correctedComplement && oracle.correctedComplement <= rate.upper))
-    )
+    sameKeysOf(
+      product.rates.map((rate) => rate.packId).toSorted(ascendingOf),
+      oracle.correctedRates.map((rate) => rate.packId).toSorted(ascendingOf),
+    ) &&
+    product.rates.every((rate) => {
+      const expected = oracle.correctedRates.find((entry) => entry.packId === rate.packId)
+      return within01([rate.lower, rate.estimate, rate.upper]) &&
+        rate.lower <= rate.estimate && rate.estimate <= rate.upper &&
+        expected !== undefined &&
+        expected.rate === rate.estimate &&
+        rate.lower <= expected.rate && expected.rate <= rate.upper
+    })
   )
 
 type CanonicalTree = string | ReadonlyArray<CanonicalTree>
@@ -457,18 +465,29 @@ Metamorphic.on((world: World) => Effect.map(runInMemory(world, {}), canonicalOf)
 // with the refusal it was built to hold.
 // ---------------------------------------------------------------------------
 
+const refusedRoleOf = (world: World): 'selector' | 'judge' | undefined =>
+  world.answers.selector.some((reply) => reply.kind === 'refused')
+    ? 'selector'
+    : world.answers.judge.some((reply) => reply.kind === 'refused')
+    ? 'judge'
+    : undefined
+
 Differential.compare({
   reference: (world: World) =>
     Effect.succeed({
       intended: world.intended,
       distinctMatchableStrings: hasDistinctMatchableStrings(world),
+      refusedRole: refusedRoleOf(world),
     }),
   candidate: (world: World) => Effect.map(runInMemory(world, {}), (run) => run.exitCode),
 })
   .on(worldArbitrary, { runBudget: 40, interruptAfterTimeLimit: 4000 })
   .assert((generated, exitCode) =>
     generated.distinctMatchableStrings &&
-    (generated.intended === 'admissible' ? exitCode === 0 || exitCode === 1 : exitCode === 2)
+    (generated.intended === 'admissible' ? exitCode === 0 || exitCode === 1 : exitCode === 2) &&
+    (generated.intended === 'provider-refusal'
+      ? generated.refusedRole !== undefined
+      : generated.refusedRole === undefined)
   )
 
 // ---------------------------------------------------------------------------
@@ -554,11 +573,11 @@ Differential.compare({
     }),
   candidate: () => {
     const validity = oracleJudgeValidity(validatedJudgeAnchor.world, {})
-    const corrected = oracleCorrectedRate(validatedJudgeAnchor.world, {})
+    const correctedRates = oracleCorrectedRates(validatedJudgeAnchor.world, {})
     return Effect.succeed({
       tpr: validity.tpr,
       tnr: validity.tnr,
-      correctedRate: corrected.tag === 'reported' ? corrected.rate : undefined,
+      correctedRate: correctedRates[0]?.rate,
       exitCode: oracleRunOutcome(validatedJudgeAnchor.world, {}).exitCode,
     })
   },

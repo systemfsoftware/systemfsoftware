@@ -35,9 +35,12 @@ interface EntryPlan {
   readonly deferredMask: number
 }
 
+type ProviderRefusalRole = 'selector' | 'judge'
+
 interface WorldBlueprint {
   readonly ids: ReadonlyArray<number>
   readonly kind: RefusalKind
+  readonly providerRole: ProviderRefusalRole
   readonly packCount: number
   readonly firstRuleCount: number
   readonly secondRuleCount: number
@@ -69,6 +72,7 @@ const entryPlanArbitrary: fc.Arbitrary<EntryPlan> = fc.record({
 const blueprintArbitrary: fc.Arbitrary<WorldBlueprint> = fc.record({
   ids: fc.uniqueArray(fc.integer({ min: 0, max: 99_999_999 }), { minLength: 40, maxLength: 40 }),
   kind: refusalKindArbitrary,
+  providerRole: fc.constantFrom<ProviderRefusalRole>('selector', 'judge'),
   packCount: fc.integer({ min: 1, max: 2 }),
   firstRuleCount: fc.integer({ min: 3, max: 4 }),
   secondRuleCount: fc.integer({ min: 2, max: 4 }),
@@ -388,7 +392,7 @@ const draftWorldOf = (blueprint: WorldBlueprint): DraftWorld => {
   }
 }
 
-const buildWorld = (draft: DraftWorld): World => {
+const buildWorld = (blueprint: WorldBlueprint, draft: DraftWorld): World => {
   switch (draft.kind) {
     case 'admissible':
       return draft.base
@@ -399,7 +403,7 @@ const buildWorld = (draft: DraftWorld): World => {
     case 'malformed-rule':
       return withMalformedRule(draft.base, {})
     case 'provider-refusal':
-      return withProviderRefusal(draft.base, { role: 'selector' })
+      return withProviderRefusal(draft.base, { role: blueprint.providerRole })
     case 'missing-judge-prompt':
       return withoutJudgePrompt(draft.base)
     case 'unwitnessed-pair':
@@ -407,4 +411,6 @@ const buildWorld = (draft: DraftWorld): World => {
   }
 }
 /** The world generator: admissible worlds and every refusal kind, by construction. */
-export const worldArbitrary: fc.Arbitrary<World> = blueprintArbitrary.map(draftWorldOf).map(buildWorld)
+export const worldArbitrary: fc.Arbitrary<World> = blueprintArbitrary.map((blueprint) =>
+  buildWorld(blueprint, draftWorldOf(blueprint))
+)

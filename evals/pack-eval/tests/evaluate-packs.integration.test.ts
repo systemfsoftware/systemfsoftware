@@ -22,7 +22,7 @@ import {
 } from './__fixtures__/pack-eval-disk.fixture.js'
 import {
   defaultEvidenceFloor,
-  oracleCorrectedRate,
+  oracleCorrectedRates,
   oracleJudgeValidity,
   type OracleQuestions,
   oracleQuestions,
@@ -32,6 +32,8 @@ import {
   oracleWitnessedPairs,
 } from './__fixtures__/pack-eval-oracle.fixture.js'
 import {
+  ascendingOf,
+  contradictionJudgeWorld,
   evaluateWorld,
   servedJudgeModel,
   stemPairsOf,
@@ -114,6 +116,9 @@ const verifyRun = (exitCode: number, report: PackEval.EvalReport, card: string, 
     const refusedRoles = world.answers.selector.flatMap((reply) => reply.kind === 'refused' ? [reply.packId] : [])
     if (refusedRoles.length > 0) {
       expect(card).toContain('selector')
+    }
+    if (world.answers.judge.some((reply) => reply.kind === 'refused')) {
+      expect(card).toContain('judge')
     }
   }
 }
@@ -204,9 +209,13 @@ const verifyJudge = (report: PackEval.EvalReport, card: string, world: World): v
   const judge = judgedOf(report)?.judge
   if (validity.tag === 'validated') {
     expect(judge).toMatchObject({ _tag: 'JudgeValidityValidated', tpr: validity.tpr, tnr: validity.tnr })
-    const corrected = oracleCorrectedRate(world, oracleOptionsOf())
-    if (corrected.tag === 'reported') {
-      expect(rateOf(report, world)?.estimate).toBe(corrected.rate)
+    const expected = oracleCorrectedRates(world, oracleOptionsOf())
+    const reported = judgedOf(report)?.rates ?? []
+    expect(reported.map((rate) => rate.packId).toSorted(ascendingOf)).toEqual(
+      expected.map((rate) => rate.packId).toSorted(ascendingOf),
+    )
+    for (const rate of expected) {
+      expect(reported.find((entry) => entry.packId === rate.packId)?.estimate).toBe(rate.rate)
     }
     return
   }
@@ -287,6 +296,21 @@ const disagreeingJudgeWorld = (): World => {
   return { ...base, answers: { ...base.answers, judge } }
 }
 
+/**
+ * A world whose only pair label is a train example, so judging asks no
+ * validity target and the refused witness request is the only judge request.
+ * Refusing a question that is also a test label would ask it twice -- once as
+ * a validity target and once as a witness target -- and a failed request is
+ * not served from the answer cache.
+ */
+const judgeRefusalWorld = (): World =>
+  withProviderRefusal(
+    contradictionJudgeWorld({
+      pairLabels: contradictionJudgeWorld().pairLabels.filter((label) => label.split === 'train'),
+    }),
+    { role: 'judge' },
+  )
+
 type OutlineHand =
   | ScoredRuleAnchor
   | InsufficientEvidenceAnchor
@@ -340,6 +364,13 @@ const routingRows: ReadonlyArray<OutlineRow> = [
   {
     name: 'a provider that refuses to answer',
     world: withProviderRefusal(evaluateWorld(), {}),
+    seed: materializedSeed,
+    iterations: materializedIterations,
+    hand: undefined,
+  },
+  {
+    name: 'a judge that refuses to answer',
+    world: judgeRefusalWorld(),
     seed: materializedSeed,
     iterations: materializedIterations,
     hand: undefined,

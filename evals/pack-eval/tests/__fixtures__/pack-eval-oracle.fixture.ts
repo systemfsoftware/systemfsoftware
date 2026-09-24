@@ -72,9 +72,10 @@ interface OracleJudgeValidity {
   readonly reason: string | undefined
 }
 
-type OracleCorrectedRate =
-  | Readonly<{ readonly tag: 'reported'; readonly rate: number }>
-  | Readonly<{ readonly tag: 'not-applicable'; readonly reason: string }>
+interface OracleCorrectedRate {
+  readonly packId: string
+  readonly rate: number
+}
 
 type RunOutcome = 'clean' | 'witnessed-contradiction' | 'refused'
 
@@ -436,26 +437,36 @@ const witnessVerdictsOf = (world: World): ReadonlyArray<WorldVerdict> =>
     pair.taskIds.flatMap((taskId) => verdictsOf(world, pair.packId, taskId, pair.ruleA, pair.ruleB))
   )
 
-// Pack-evaluator plan R12 names the corrected contradiction rate among witnessed
-// pairs. judgy estimates the success rate, so the contradiction rate is one minus
-// that estimate.
-const correctedRateImpl = (world: World, options: OracleOptions): OracleCorrectedRate => {
+const packWitnessVerdictsOf = (world: World, packId: string): ReadonlyArray<WorldVerdict> =>
+  oracleWitnessedPairs(world)
+    .filter((pair) => pair.packId === packId)
+    .flatMap((pair) => pair.taskIds.flatMap((taskId) => verdictsOf(world, pair.packId, taskId, pair.ruleA, pair.ruleB)))
+
+// Pack-evaluator plan R12 names the corrected contradiction rate among the
+// witnessed pairs of each pack. judgy estimates the success rate on the test
+// labels, so the contradiction rate is one minus that estimate; the observation
+// the correction is applied to is that pack's own witnessed verdicts, while the
+// calibration stays the run's test labels.
+const correctedRatesImpl = (world: World, options: OracleOptions): ReadonlyArray<OracleCorrectedRate> => {
+  if (admissionRefusal(world) !== undefined || providerRefusal(world) !== undefined) return []
   const validity = judgeValidityImpl(world, options)
-  if (validity.tag !== 'validated' || validity.tpr === undefined || validity.tnr === undefined) {
-    return { tag: 'not-applicable', reason: `judge is ${validity.tag}` }
-  }
-  const verdicts = witnessVerdictsOf(world)
-  if (verdicts.length === 0) return { tag: 'not-applicable', reason: 'no witnessed pair verdicts' }
-  const observed = verdicts.filter((verdict) => verdict === 'Pass').length / verdicts.length
-  const denominator = validity.tpr + validity.tnr - 1
-  if (denominator <= 0) return { tag: 'not-applicable', reason: 'judge is no better than random' }
-  return { tag: 'reported', rate: 1 - clamp01((observed + validity.tnr - 1) / denominator) }
+  const tpr = validity.tpr
+  const tnr = validity.tnr
+  if (validity.tag !== 'validated' || tpr === undefined || tnr === undefined) return []
+  const denominator = tpr + tnr - 1
+  if (denominator <= 0) return []
+  return world.packs.flatMap((pack): ReadonlyArray<OracleCorrectedRate> => {
+    const verdicts = packWitnessVerdictsOf(world, pack.id)
+    if (verdicts.length === 0) return []
+    const observed = verdicts.filter((verdict) => verdict === 'Pass').length / verdicts.length
+    return [{ packId: pack.id, rate: 1 - clamp01((observed + tnr - 1) / denominator) }]
+  })
 }
 
-export const oracleCorrectedRate: {
-  (options: OracleOptions): (world: World) => OracleCorrectedRate
-  (world: World, options: OracleOptions): OracleCorrectedRate
-} = dual(2, correctedRateImpl)
+export const oracleCorrectedRates: {
+  (options: OracleOptions): (world: World) => ReadonlyArray<OracleCorrectedRate>
+  (world: World, options: OracleOptions): ReadonlyArray<OracleCorrectedRate>
+} = dual(2, correctedRatesImpl)
 
 const runOutcomeImpl = (world: World, options: OracleOptions): OracleRunOutcome => {
   const admission = admissionRefusal(world)
@@ -496,7 +507,6 @@ const judgeComparator = (left: OracleJudgeQuestion, right: OracleJudgeQuestion):
 const judgeQuestionsImpl = (world: World, options: OracleOptions): ReadonlyArray<OracleJudgeQuestion> => {
   if (admissionRefusal(world) !== undefined) return []
   if (world.pairLabels.length === 0 || world.judgePrompt === undefined || !judgePresent(options)) return []
-  if (providerRefusal(world) !== undefined) return []
   const selectorClean = world.tasks.every((task) =>
     world.packs.every((pack) => {
       const reply = selectorAnswerOf(world, task.id, pack.id)
