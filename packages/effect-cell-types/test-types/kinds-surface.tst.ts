@@ -68,6 +68,11 @@ describe('Resource', () => {
     expect(withWorkdir).type.not.toBeCallableWith(make('redis:7'), '/srv')
   })
 
+  it('Should_KeepTheVariant_When_ASharedDualConfiguresIt', () => {
+    expect(withPort(job('alpine'), 80)).type.toBe<Job>()
+    expect(pipe(job('alpine'), withPort(80))).type.toBe<Job>()
+  })
+
   it('Should_StandInForItsBaseResource_When_AVariantSharesTheBrand', () => {
     expect<Job>().type.toBeAssignableTo<Container>()
     expect<Container>().type.not.toBeAssignableTo<Job>()

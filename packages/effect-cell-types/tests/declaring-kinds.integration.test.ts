@@ -90,10 +90,13 @@ Feature('Declaring a container and the running instance it becomes')
       'A job ignores ports and runs in the working folder it was given',
       Gherkin.Do.pipe(
         Given('a job for the alpine image')('base', () => Effect.succeed(job('alpine'))),
-        When('port 80 is added and the working folder is set to /srv, then the job runs')('outcome', (s) => {
-          const configured = pipe(s.base.withPort(80), withWorkdir('/srv'))
-          return Effect.map(configured.run, (folder) => ({ configured, folder }))
-        }),
+        When('port 80 is added through the shared pipe step and the working folder is set to /srv, then the job runs')(
+          'outcome',
+          (s) => {
+            const configured = pipe(s.base, withPort(80), withWorkdir('/srv'))
+            return Effect.map(configured.run, (folder) => ({ configured, folder }))
+          },
+        ),
         Then('the job has no ports and ran in /srv')((s) => {
           expect(s.outcome.configured.spec.ports).toEqual([])
           expect(s.outcome.folder).toBe('/srv')

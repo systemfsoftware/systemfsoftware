@@ -29,8 +29,8 @@ export type Resource<
   & { readonly [K in keyof Projections]: ReturnType<Projections[K]> }
 
 export interface Dual<Args extends ReadonlyArray<Top>, R> {
-  (...args: Args): (self: R) => R
-  (self: R, ...args: Args): R
+  (...args: Args): <Self extends R>(self: Self) => Self
+  <Self extends R>(self: Self, ...args: Args): Self
 }
 
 export interface Definition<
@@ -48,6 +48,27 @@ export interface Definition<
       Resource<T, Spec, Combinators, Projections>
     >
   }
+}
+
+const MethodsId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Resource/methods')
+
+type Methods<Combinators> = { readonly [K in keyof Combinators]: (...args: ReadonlyArray<Top>) => object }
+
+function assertCarriesMethods<Combinators>(
+  _self: object,
+): asserts _self is { readonly [MethodsId]: Methods<Combinators> } {}
+
+const methodsOf = <Combinators>(self: object): Methods<Combinators> => {
+  assertCarriesMethods<Combinators>(self)
+  return self[MethodsId]
+}
+
+function assertKeysOf<O>(_keys: ReadonlyArray<string>): asserts _keys is ReadonlyArray<keyof O & string> {}
+
+const keysOf = <O extends object>(o: O): ReadonlyArray<keyof O & string> => {
+  const keys = Object.keys(o)
+  assertKeysOf<O>(keys)
+  return keys
 }
 
 type AnyCombinator<Spec> = (spec: Spec, ...args: ReadonlyArray<Top>) => Spec
@@ -98,17 +119,19 @@ export const make = <Spec>() =>
         { get: () => projection(spec), enumerable: true },
       ]),
     )
-    const self = Object.defineProperties({ ...methods, ...Prototype, spec, [typeId]: typeId }, getters)
+    const self = Object.defineProperties(
+      { ...methods, ...Prototype, spec, [typeId]: typeId, [MethodsId]: methods },
+      getters,
+    )
     assertResource<T, Spec, Combinators, Projections>(self)
     return self
   }
   const duals = Object.fromEntries(
-    Object.entries(combinators).map(([name, combinator]) => [
+    keysOf(combinators).map((name) => [
       name,
       dual(
         (args: IArguments) => is(args[0]),
-        (self: Resource<T, Spec, Combinators, Projections>, ...args: ReadonlyArray<Top>) =>
-          of(applied(combinator)(self.spec, ...args)),
+        (self: object, ...args: ReadonlyArray<Top>) => methodsOf<Combinators>(self)[name](...args),
       ),
     ]),
   )
