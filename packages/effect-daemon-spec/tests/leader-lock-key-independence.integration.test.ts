@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { LeaderLockFromPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -34,11 +33,8 @@ Feature('Leader lock key independence')
               concurrency: 'unbounded',
             })
           })),
-        Then('every key resolves to its own value')((s) =>
-          Effect.sync(() => {
-            const expected = ['alpha', 'beta', 'gamma', 'delta'].map((k) => Option.some(k))
-            expect(s.results).toEqual(expected)
-          })
+        Then('every key resolves to its own value')((s, expect) =>
+          expect(s.results).toEqual(['alpha', 'beta', 'gamma', 'delta'].map((key) => Option.some(key)))
         ),
       ),
     )

@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -7,8 +6,8 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForAll, oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Duration, Effect, Layer, Ref, Schedule, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -66,43 +65,30 @@ Feature('Supervisor cooldown recovery')
               const health = yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
               yield* TestClock.adjust(Duration.millis(80))
               const exhaustionsMid = yield* s.spy.getExhaustions()
-              const unhealthyMid = yield* health.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => true,
-                  onSuccess: () => false,
-                }),
-              )
+              const unhealthyMid = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
               yield* TestClock.adjust(Duration.seconds(2))
               yield* TestClock.adjust(Duration.millis(300))
               const runsAfter = yield* Ref.get(s.state.runsAfterCooldown)
-              const healthyFinal = yield* health.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => false,
-                  onSuccess: () => true,
-                }),
-              )
+              const healthyFinal = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
               const exhaustionsFinal = yield* s.spy.getExhaustions()
               return { exhaustionsMid, unhealthyMid, runsAfter, healthyFinal, exhaustionsFinal }
             }),
         ),
-        Then('the supervisor healthy latch is open again')((s) =>
-          Effect.sync(() => {
-            expect(s.result.healthyFinal).toEqual(true)
-          })
-        ),
-        And('the reporter recorded one exhaustion before recovery')((s) =>
-          Effect.sync(() => {
-            const ex = s.result.exhaustionsFinal.filter((e) => e.name === 'cooldown-recover')
-            expect(ex).toHaveLength(1)
-            expect(s.result.exhaustionsMid.length).toBeGreaterThanOrEqual(1)
-          })
-        ),
-        And('the child ran again after the cooldown boundary')((s) =>
-          Effect.sync(() => {
-            expect(s.result.runsAfter).toBeGreaterThanOrEqual(1)
-            expect(s.result.unhealthyMid).toEqual(true)
+        Then(
+          'the healthy latch closed mid-run and is open again after the cooldown, one exhaustion was recorded before recovery, and the supervisor recovered after the boundary',
+        )((s, expect) =>
+          expect({
+            exhaustionsFinalCount: s.result.exhaustionsFinal.length,
+            exhaustionsMidCount: s.result.exhaustionsMid.length,
+            healthyFinal: s.result.healthyFinal,
+            runsAfter: s.result.runsAfter,
+            unhealthyMid: s.result.unhealthyMid,
+          }).toMatchObject({
+            exhaustionsFinalCount: 1,
+            exhaustionsMidCount: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+            healthyFinal: { _tag: 'Success', success: undefined },
+            runsAfter: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+            unhealthyMid: { _tag: 'Failure', failure: { _tag: 'TimeoutError' } },
           })
         ),
       ),
@@ -163,43 +149,30 @@ Feature('Supervisor cooldown recovery')
               const health = yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
               yield* TestClock.adjust(Duration.millis(80))
               const exhaustionsMid = yield* s.spy.getExhaustions()
-              const unhealthyMid = yield* health.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => true,
-                  onSuccess: () => false,
-                }),
-              )
+              const unhealthyMid = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
               yield* TestClock.adjust(Duration.seconds(2))
               yield* TestClock.adjust(Duration.millis(300))
               const runsAfter = yield* Ref.get(s.state.runsAfterCooldown)
-              const healthyFinal = yield* health.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => false,
-                  onSuccess: () => true,
-                }),
-              )
+              const healthyFinal = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
               const exhaustionsFinal = yield* s.spy.getExhaustions()
               return { exhaustionsMid, unhealthyMid, runsAfter, healthyFinal, exhaustionsFinal }
             }),
         ),
-        Then('the supervisor healthy latch is open again')((s) =>
-          Effect.sync(() => {
-            expect(s.result.healthyFinal).toEqual(true)
-          })
-        ),
-        And('the reporter recorded one exhaustion before recovery')((s) =>
-          Effect.sync(() => {
-            const ex = s.result.exhaustionsFinal.filter((e) => e.name === 'cooldown-recover-oneForAll')
-            expect(ex).toHaveLength(1)
-            expect(s.result.exhaustionsMid.length).toBeGreaterThanOrEqual(1)
-          })
-        ),
-        And('a child ran again after the cooldown boundary')((s) =>
-          Effect.sync(() => {
-            expect(s.result.runsAfter).toBeGreaterThanOrEqual(1)
-            expect(s.result.unhealthyMid).toEqual(true)
+        Then(
+          'the healthy latch closed mid-run and is open again after the cooldown, one exhaustion was recorded before recovery, and the supervisor recovered after the boundary',
+        )((s, expect) =>
+          expect({
+            exhaustionsFinalCount: s.result.exhaustionsFinal.length,
+            exhaustionsMidCount: s.result.exhaustionsMid.length,
+            healthyFinal: s.result.healthyFinal,
+            runsAfter: s.result.runsAfter,
+            unhealthyMid: s.result.unhealthyMid,
+          }).toMatchObject({
+            exhaustionsFinalCount: 1,
+            exhaustionsMidCount: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+            healthyFinal: { _tag: 'Success', success: undefined },
+            runsAfter: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+            unhealthyMid: { _tag: 'Failure', failure: { _tag: 'TimeoutError' } },
           })
         ),
       ),

@@ -1,12 +1,11 @@
-import { expect } from '@effect/vitest'
 import { DynamicLimitExceeded } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { dynamic } from '@systemfsoftware/effect-daemon-spec'
 import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Deferred, Duration, Effect, Latch, Match, Ref, Result, Stream } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Deferred, Duration, Effect, HashSet, Latch, Match, Ref, Result, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
@@ -51,16 +50,15 @@ Feature('Dynamic Supervisor')
             const ref3 = yield* s.handle.startChild(void 0)
             return { ref1, ref2, ref3 }
           })),
-        Then('count is 3')((s) =>
+        Then('the count is 3 and every child ID is distinct')((s, expect) =>
           Effect.gen(function*() {
             const count = yield* s.handle.count
-            expect(count).toBe(3)
-          })
-        ),
-        And('all child IDs are unique')((s) =>
-          Effect.sync(() => {
-            expect(s.refs.ref1.id).not.toBe(s.refs.ref2.id)
-            expect(s.refs.ref2.id).not.toBe(s.refs.ref3.id)
+            const ids = [s.refs.ref1.id, s.refs.ref2.id, s.refs.ref3.id]
+            yield* expect({ count, ids }).toSatisfy(
+              (observed) =>
+                observed.count === 3 && HashSet.size(HashSet.fromIterable(observed.ids)) === observed.ids.length,
+              'three children are active and the three child IDs are distinct',
+            )
           })
         ),
       ),
@@ -76,10 +74,8 @@ Feature('Dynamic Supervisor')
             yield* s.handle.startChild(void 0)
             return yield* s.handle.startChild(void 0).pipe(Effect.result)
           })),
-        Then('the result is Left DynamicLimitExceeded')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 2 })))
-          })
+        Then('the result is Left DynamicLimitExceeded')((s, expect) =>
+          expect(s.result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 2 })))
         ),
       ),
     )
@@ -95,10 +91,9 @@ Feature('Dynamic Supervisor')
             yield* s.handle.startChild(void 0)
             yield* s.handle.stopChild(firstRef)
           })),
-        Then('the active child count is exactly 2')((s) =>
+        Then('the active child count is exactly 2')((s, expect) =>
           Effect.gen(function*() {
-            const count = yield* s.handle.count
-            expect(count).toBe(2)
+            yield* expect(yield* s.handle.count).toBe(2)
           })
         ),
       ),
@@ -115,12 +110,8 @@ Feature('Dynamic Supervisor')
             const ref3 = yield* s.handle.startChild(void 0)
             return { ref1, ref2, ref3 }
           })),
-        Then('IDs are 0, 1, 2 in order')((s) =>
-          Effect.sync(() => {
-            expect(s.refs.ref1.id).toBe(0)
-            expect(s.refs.ref2.id).toBe(1)
-            expect(s.refs.ref3.id).toBe(2)
-          })
+        Then('IDs are 0, 1, 2 in order')((s, expect) =>
+          expect([s.refs.ref1.id, s.refs.ref2.id, s.refs.ref3.id]).toEqual([0, 1, 2])
         ),
       ),
     )
@@ -156,10 +147,10 @@ Feature('Dynamic Supervisor')
             yield* s.ctx.handle.stopChild(ref)
             return yield* Ref.get(s.ctx.ticks)
           })),
-        Then('later clock ticks do not run stopped child work')((s) =>
+        Then('later clock ticks do not run stopped child work')((s, expect) =>
           Effect.gen(function*() {
             yield* TestClock.adjust(Duration.millis(10))
-            expect(yield* Ref.get(s.ctx.ticks)).toBe(s.stoppedAt)
+            yield* expect(yield* Ref.get(s.ctx.ticks)).toBe(s.stoppedAt)
           })
         ),
       ),
@@ -174,10 +165,9 @@ Feature('Dynamic Supervisor')
             yield* s.handle.startChild(void 0)
             yield* s.handle.stopChild({ id: 9999 })
           })),
-        Then('count is still 1')((s) =>
+        Then('count is still 1')((s, expect) =>
           Effect.gen(function*() {
-            const count = yield* s.handle.count
-            expect(count).toBe(1)
+            yield* expect(yield* s.handle.count).toBe(1)
           })
         ),
       ),
@@ -206,10 +196,8 @@ Feature('Dynamic Supervisor')
             const countAfterStart = yield* handle.count
             return { handle, countAfterStart }
           })),
-        Then('the child is tracked after start')((s) =>
-          Effect.sync(() => {
-            expect(s.ctx.countAfterStart).toBeGreaterThanOrEqual(1)
-          })
+        Then('the child is tracked after start')((s, expect) =>
+          expect(s.ctx.countAfterStart).toBeGreaterThanOrEqual(1)
         ),
       ),
     )
@@ -230,14 +218,12 @@ Feature('Dynamic Supervisor')
             )
             return { results }
           })),
-        Then('at most 2 succeed and at least 1 fails with DynamicLimitExceeded')((s) =>
-          Effect.sync(() => {
-            const successes = s.results.results.filter(Result.isSuccess).length
-            const failures = s.results.results.filter(Result.isFailure).length
-            expect(successes).toBeLessThanOrEqual(2)
-            expect(failures).toBeGreaterThanOrEqual(1)
-            expect(successes + failures).toBe(3)
-          })
+        Then('two starts succeed and the third fails with DynamicLimitExceeded, whatever order they complete in')(
+          (s, expect) =>
+            expect({
+              failures: s.results.results.flatMap((result) => (Result.isFailure(result) ? [result.failure] : [])),
+              successes: s.results.results.filter((result) => Result.isSuccess(result)).length,
+            }).toEqual({ failures: [DynamicLimitExceeded.make({ limit: 2 })], successes: 2 }),
         ),
       ),
     )
@@ -265,21 +251,31 @@ Feature('Dynamic Supervisor')
               return { handle, acquired }
             }),
         ),
-        When('first child is stopped then a second is started')('secondRef', (s) =>
+        When('first child is stopped then a second is started')('observed', (s) =>
           Effect.gen(function*() {
             const firstRef = yield* s.ctx.handle.startChild(void 0)
             yield* s.ctx.acquired.await
-            expect(yield* s.ctx.handle.count).toBe(1)
+            const countAtCapacity = yield* s.ctx.handle.count
             const atCapacity = yield* s.ctx.handle.startChild(void 0).pipe(Effect.result)
-            expect(atCapacity).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 1 })))
             yield* s.ctx.handle.stopChild(firstRef)
             yield* firstRef.removed
-            expect(yield* s.ctx.handle.count).toBe(0)
-            return yield* s.ctx.handle.startChild(void 0)
+            const countAfterStop = yield* s.ctx.handle.count
+            const secondRef = yield* s.ctx.handle.startChild(void 0)
+            return { atCapacity, countAfterStop, countAtCapacity, secondRef }
           })),
-        Then('the second child start succeeds with a new id')((s) =>
-          Effect.sync(() => {
-            expect(s.secondRef.id).toBe(1)
+        Then(
+          'the first child is stopped, its capacity is reclaimed, and the second start succeeds with the next id',
+        )((s, expect) =>
+          expect({
+            atCapacity: s.observed.atCapacity,
+            countAfterStop: s.observed.countAfterStop,
+            countAtCapacity: s.observed.countAtCapacity,
+            secondId: s.observed.secondRef.id,
+          }).toEqual({
+            atCapacity: Result.fail(DynamicLimitExceeded.make({ limit: 1 })),
+            countAfterStop: 0,
+            countAtCapacity: 1,
+            secondId: 1,
           })
         ),
       ),
@@ -314,20 +310,19 @@ Feature('Dynamic Supervisor')
               return { handle, gate }
             }),
         ),
-        When('three children start and the finite one is released to finish')('_', (s) =>
+        When('three children start and the finite one is released to finish')('counts', (s) =>
           Effect.gen(function*() {
             const finiteRef = yield* s.ctx.handle.startChild(0)
             yield* s.ctx.handle.startChild(1)
             yield* s.ctx.handle.startChild(2)
-            expect(yield* s.ctx.handle.count).toBe(3)
+            const countWhileAllRunning = yield* s.ctx.handle.count
             yield* Deferred.succeed(s.ctx.gate, undefined)
             yield* finiteRef.removed
-            expect(yield* s.ctx.handle.count).toBe(2)
+            const countAfterFinish = yield* s.ctx.handle.count
+            return { countAfterFinish, countWhileAllRunning }
           })),
-        Then('active count is exactly two')((s) =>
-          Effect.gen(function*() {
-            expect(yield* s.ctx.handle.count).toBe(2)
-          })
+        Then('all three children are active while they run and exactly two after the finite one finishes')(
+          (s, expect) => expect(s.counts).toEqual({ countAfterFinish: 2, countWhileAllRunning: 3 }),
         ),
       ),
     )
@@ -353,15 +348,15 @@ Feature('Dynamic Supervisor')
               return yield* run.dynamic(spec)
             }),
         ),
-        When('one child is started and removal settles')('_', (s) =>
+        When('one child is started and removal settles')('counts', (s) =>
           Effect.gen(function*() {
             const ref = yield* s.handle.startChild(void 0)
             yield* ref.removed
+            const countAfterRemoval = yield* s.handle.count
+            return { countAfterRemoval }
           })),
-        Then('active count returns to zero')((s) =>
-          Effect.gen(function*() {
-            expect(yield* s.handle.count).toBe(0)
-          })
+        Then('the count returns to zero once the immediately completing child is removed')((s, expect) =>
+          expect(s.counts).toEqual({ countAfterRemoval: 0 })
         ),
       ),
     )
@@ -387,18 +382,22 @@ Feature('Dynamic Supervisor')
               return yield* run.dynamic(spec)
             }),
         ),
-        When('the child fails and cleanup settles')('_', (s) =>
+        When('the child fails and cleanup settles')('counts', (s) =>
           Effect.gen(function*() {
             const ref = yield* s.handle.startChild(void 0)
             yield* ref.removed
+            const countAfterRemoval = yield* s.handle.count
+            return { countAfterRemoval }
           })),
-        Then('count returns to zero and capacity can be reused')((s) =>
+        Then('the count falls to zero, then a new child is started and removed to the same zero')((s, expect) =>
           Effect.gen(function*() {
-            expect(yield* s.handle.count).toBe(0)
             const ref = yield* s.handle.startChild(void 0)
             yield* ref.removed
-            expect(yield* s.handle.count).toBe(0)
-          })
+            const countAfterReuse = yield* s.handle.count
+            return { ...s.counts, countAfterReuse }
+          }).pipe(
+            Effect.map((observed) => expect(observed).toEqual({ countAfterRemoval: 0, countAfterReuse: 0 })),
+          )
         ),
       ),
     )
@@ -431,20 +430,27 @@ Feature('Dynamic Supervisor')
             const count = yield* s.ctx.handle.count
             return { count }
           })),
-        Then('the dynamic supervisor ready latch is open')((_s) => Effect.void),
-        And('the dynamic supervisor healthy latch is open')((_s) => Effect.void),
-        And('active child count is zero')((s) =>
-          Effect.sync(() => {
-            expect(s.state.count).toBe(0)
-          })
-        ),
-        And('starting another child succeeds')((s) =>
+        Then(
+          'the ready and healthy latches stay open, a new child starts with the next id and leaves the count at zero',
+        )((s, expect) =>
           Effect.gen(function*() {
+            const ready = yield* s.ctx.handle.health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            const healthy = yield* s.ctx.handle.health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
             const ref2 = yield* s.ctx.handle.startChild(void 0)
-            expect(ref2.id).toBe(1)
             yield* ref2.removed
-            expect(yield* s.ctx.handle.count).toBe(0)
-          })
+            const countAfterRemoval = yield* s.ctx.handle.count
+            return { count: s.state.count, countAfterRemoval, healthy, ready, secondId: ref2.id }
+          }).pipe(
+            Effect.map((observed) =>
+              expect(observed).toEqual({
+                count: 0,
+                countAfterRemoval: 0,
+                healthy: expect.objectContaining({ _tag: 'Success', success: undefined }),
+                ready: expect.objectContaining({ _tag: 'Success', success: undefined }),
+                secondId: 1,
+              })
+            ),
+          )
         ),
       ),
     )
@@ -481,9 +487,9 @@ Feature('Dynamic Supervisor')
             yield* ref.removed
             yield* s.ctx.handle.stopChild(ref)
           })),
-        Then('count remains 0')((s) =>
+        Then('count remains 0')((s, expect) =>
           Effect.gen(function*() {
-            expect(yield* s.ctx.handle.count).toBe(0)
+            yield* expect(yield* s.ctx.handle.count).toBe(0)
           })
         ),
       ),
@@ -501,16 +507,15 @@ Feature('Dynamic Supervisor')
             const count = yield* s.handle.count
             return { count }
           })),
-        Then('all 3 children are active')((s) =>
-          Effect.sync(() => {
-            expect(s.countBefore.count).toBe(3)
-          })
-        ),
-        And('a 4th child fails with DynamicLimitExceeded')((s) =>
+        Then('all three children are active and a fourth fails with DynamicLimitExceeded')((s, expect) =>
           Effect.gen(function*() {
-            const result = yield* s.handle.startChild(void 0).pipe(Effect.result)
-            expect(result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 3 })))
-          })
+            const fourth = yield* s.handle.startChild(void 0).pipe(Effect.result)
+            return { active: s.countBefore.count, fourth }
+          }).pipe(
+            Effect.map((observed) =>
+              expect(observed).toEqual({ active: 3, fourth: Result.fail(DynamicLimitExceeded.make({ limit: 3 })) })
+            ),
+          )
         ),
       ),
     )

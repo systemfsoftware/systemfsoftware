@@ -1,6 +1,5 @@
-import { expect } from '@effect/vitest'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect } from 'effect'
 import { ReporterSpyContext, SpyLayer } from './__fixtures__/ReporterSpy.js'
 
@@ -11,18 +10,22 @@ Feature('Reporter Observability').withScenarioLayer(SpyLayer).body(({ scenario }
     'Noop reporter succeeds silently',
     Gherkin.Do.pipe(
       Given('a noop reporter')('noop', () => Effect.void),
-      When('onRestart is called')('_', (_s) =>
+      When('onRestart is called')('restartExit', (_s) =>
         Effect.gen(function*() {
           const reporter = yield* DaemonReporter
-          yield* reporter.onRestart('daemon', Cause.die(new Error('boom')))
+          return yield* Effect.exit(reporter.onRestart('daemon', Cause.die(new Error('boom'))))
         })),
-      And('onExhausted is called')((_s) =>
+      When('onExhausted is called')('exhaustedExit', (_s) =>
         Effect.gen(function*() {
           const reporter = yield* DaemonReporter
-          yield* reporter.onExhausted('daemon', Cause.die(new Error('boom')))
+          return yield* Effect.exit(reporter.onExhausted('daemon', Cause.die(new Error('boom'))))
+        })),
+      Then('no errors are raised')((s, expect) =>
+        expect({ restart: s.restartExit, exhausted: s.exhaustedExit }).toMatchObject({
+          restart: { _tag: 'Success', value: undefined },
+          exhausted: { _tag: 'Success', value: undefined },
         })
       ),
-      Then('no errors are raised')((_s) => Effect.void),
     ),
   )
 
@@ -34,14 +37,9 @@ Feature('Reporter Observability').withScenarioLayer(SpyLayer).body(({ scenario }
         'result',
         (s) => s.spy.reporter.onRestart('my-daemon', Cause.die(new Error('test'))),
       ),
-      Then('spy recorded exactly one call with name "my-daemon"')((s) =>
+      Then('spy recorded exactly one call with name "my-daemon"')((s, expect) =>
         s.spy.getRestarts().pipe(
-          Effect.flatMap((restarts) =>
-            Effect.sync(() => {
-              expect(restarts).toHaveLength(1)
-              expect(restarts[0]?.name).toBe('my-daemon')
-            })
-          ),
+          Effect.flatMap((restarts) => expect(restarts.map((r) => r.name)).toEqual(['my-daemon'])),
         )
       ),
     ),
@@ -55,14 +53,9 @@ Feature('Reporter Observability').withScenarioLayer(SpyLayer).body(({ scenario }
         'result',
         (s) => s.spy.reporter.onExhausted('test-daemon', Cause.die(new Error('exhausted'))),
       ),
-      Then('spy recorded exactly one exhausted call')((s) =>
+      Then('spy recorded exactly one exhausted call')((s, expect) =>
         s.spy.getExhaustions().pipe(
-          Effect.flatMap((exhaustions) =>
-            Effect.sync(() => {
-              expect(exhaustions).toHaveLength(1)
-              expect(exhaustions[0]?.name).toBe('test-daemon')
-            })
-          ),
+          Effect.flatMap((exhaustions) => expect(exhaustions.map((e) => e.name)).toEqual(['test-daemon'])),
         )
       ),
     ),
@@ -76,21 +69,20 @@ Feature('Reporter Observability').withScenarioLayer(SpyLayer).body(({ scenario }
         'result',
         (s) => s.spy.reporter.onRestart('daemon-a', Cause.die(new Error('error-1'))),
       ),
-      And('onExhausted is called for "daemon-b"')((s) =>
+      When('onExhausted is called for "daemon-b"')((s) =>
         s.spy.reporter.onExhausted('daemon-b', Cause.die(new Error('error-2')))
       ),
-      And('onRestart is called for "daemon-a" again')((s) =>
+      When('onRestart is called for "daemon-a" again')((s) =>
         s.spy.reporter.onRestart('daemon-a', Cause.die(new Error('error-3')))
       ),
-      Then('spy recorded 2 restarts and 1 exhausted in order')((s) =>
+      Then('spy recorded 2 restarts and 1 exhausted in order')((s, expect) =>
         Effect.gen(function*() {
           const restarts = yield* s.spy.getRestarts()
           const exhaustions = yield* s.spy.getExhaustions()
-          expect(restarts).toHaveLength(2)
-          expect(exhaustions).toHaveLength(1)
-          expect(restarts[0]?.name).toBe('daemon-a')
-          expect(exhaustions[0]?.name).toBe('daemon-b')
-          expect(restarts[1]?.name).toBe('daemon-a')
+          yield* expect({
+            restarts: restarts.map((r) => r.name),
+            exhaustions: exhaustions.map((e) => e.name),
+          }).toEqual({ restarts: ['daemon-a', 'daemon-a'], exhaustions: ['daemon-b'] })
         })
       ),
     ),
@@ -104,14 +96,9 @@ Feature('Reporter Observability').withScenarioLayer(SpyLayer).body(({ scenario }
         'result',
         (s) => s.spy.reporter.onRestart('supervisor-1', Cause.die(new Error('supervisor-restart'))),
       ),
-      Then('spy recorded the restart event')((s) =>
+      Then('spy recorded the restart event')((s, expect) =>
         s.spy.getRestarts().pipe(
-          Effect.flatMap((restarts) =>
-            Effect.sync(() => {
-              expect(restarts).toHaveLength(1)
-              expect(restarts[0]?.name).toBe('supervisor-1')
-            })
-          ),
+          Effect.flatMap((restarts) => expect(restarts.map((r) => r.name)).toEqual(['supervisor-1'])),
         )
       ),
     ),

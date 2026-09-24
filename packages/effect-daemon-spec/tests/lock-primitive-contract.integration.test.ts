@@ -1,8 +1,7 @@
-import { expect } from '@effect/vitest'
 import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Fiber, Layer, Result } from 'effect'
 import {
   mkBlockingStatefulLockPrimitive,
@@ -32,15 +31,8 @@ Feature('Lock Primitive Contract')
               }),
             ),
         ),
-        Then('the return value is true')((s) =>
-          Effect.sync(() => {
-            expect(s.results.first).toEqual(true)
-          })
-        ),
-        And('acquiring the same key again from the same scope also returns true')((s) =>
-          Effect.sync(() => {
-            expect(s.results.second).toEqual(true)
-          })
+        Then('the first acquisition is granted and the same key is granted again from the same scope')((s, expect) =>
+          expect({ first: s.results.first, second: s.results.second }).toEqual({ first: true, second: true })
         ),
       ),
     )
@@ -75,12 +67,12 @@ Feature('Lock Primitive Contract')
               }),
             ),
         ),
-        Then('the return value is false')((s) =>
-          Effect.sync(() => {
-            expect(s.acquired).toEqual(false)
+        Then('the acquisition is refused and the holder fiber is interrupted')((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.holder)
+            yield* expect({ acquired: s.acquired }).toEqual({ acquired: false })
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
       ),
     )
 
@@ -106,11 +98,7 @@ Feature('Lock Primitive Contract')
               }),
             ),
         ),
-        Then('the acquisition succeeds')((s) =>
-          Effect.sync(() => {
-            expect(s.acquired).toEqual(true)
-          })
-        ),
+        Then('the acquisition succeeds')((s, expect) => expect({ acquired: s.acquired }).toEqual({ acquired: true })),
       ),
     )
 
@@ -137,11 +125,7 @@ Feature('Lock Primitive Contract')
               }),
             ),
         ),
-        Then('the acquisition succeeds')((s) =>
-          Effect.sync(() => {
-            expect(s.acquired).toEqual(true)
-          })
-        ),
+        Then('the acquisition succeeds')((s, expect) => expect({ acquired: s.acquired }).toEqual({ acquired: true })),
       ),
     )
 
@@ -160,19 +144,13 @@ Feature('Lock Primitive Contract')
             ),
           )),
         When('the fiber is interrupted')('interrupted', (s) => Fiber.interrupt(s.holder)),
-        Then('the lock for key "task-1" is released')((_s) =>
+        Then('the lock for key "task-1" is released')((_s, expect) =>
           Effect.scoped(
             Effect.gen(function*() {
               const prim = yield* LockPrimitive
               return yield* prim.tryAcquire('task-1')
             }),
-          ).pipe(
-            Effect.flatMap((acquired) =>
-              Effect.sync(() => {
-                expect(acquired).toEqual(true)
-              })
-            ),
-          )
+          ).pipe(Effect.map((acquired) => expect({ acquired }).toEqual({ acquired: true })))
         ),
       ),
     )
@@ -202,12 +180,7 @@ Feature('Lock Primitive Contract')
               }),
             ),
         ),
-        Then('both acquire return true')((s) =>
-          Effect.sync(() => {
-            expect(s.a).toEqual(true)
-            expect(s.b).toEqual(true)
-          })
-        ),
+        Then('both keys acquire true')((s, expect) => expect({ a: s.a, b: s.b }).toEqual({ a: true, b: true })),
       ),
     )
 
@@ -228,12 +201,10 @@ Feature('Lock Primitive Contract')
               ),
             ),
         ),
-        Then('the call surfaces an infrastructure failure for the requested key')((s) =>
-          Effect.sync(() => {
-            expect(s.error).toEqual(
-              Result.fail(LockPrimitiveError.make({ key: 'any-key', cause: 'infrastructure unavailable' })),
-            )
-          })
+        Then('the call surfaces an infrastructure failure for the requested key')((s, expect) =>
+          expect(s.error).toEqual(
+            Result.fail(LockPrimitiveError.make({ key: 'any-key', cause: 'infrastructure unavailable' })),
+          )
         ),
       ),
     )
@@ -270,12 +241,12 @@ Feature('Lock Primitive Contract')
               ).pipe(Effect.timeout(Duration.seconds(1))),
             ),
         ),
-        Then('the acquisition returns false within the timeout')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toEqual(Result.succeed(false))
+        Then('the acquisition returns false within the timeout, and the holder fiber is interrupted')((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.holder)
+            yield* expect(s.result).toEqual(Result.succeed(false))
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
       ),
     )
   })

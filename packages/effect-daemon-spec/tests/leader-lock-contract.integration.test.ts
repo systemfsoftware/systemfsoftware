@@ -1,8 +1,7 @@
-import { expect } from '@effect/vitest'
 import { LeaderLockFromPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Fiber, Layer, Option, Result } from 'effect'
 import { mkStatefulLockPrimitive } from './__fixtures__/LockPrimitiveFakes.js'
 
@@ -25,17 +24,14 @@ Feature('LeaderLock Contract')
               return yield* lock.withLock('task-1', Effect.succeed(42))
             }),
         ),
-        Then('the result is Some(result)')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toEqual(Option.some(42))
-          })
-        ),
-        And('after completion, key "task-1" is available again')(() =>
+        Then('the result is Some(42) and key "task-1" is available again afterwards')((s, expect) =>
           Effect.gen(function*() {
             const lock = yield* LeaderLock
-            const out = yield* lock.withLock('task-1', Effect.succeed('again'))
-            expect(out).toEqual(Option.some('again'))
-          })
+            const again = yield* lock.withLock('task-1', Effect.succeed('again'))
+            return { first: s.result, again }
+          }).pipe(
+            Effect.map((observed) => expect(observed).toEqual({ first: Option.some(42), again: Option.some('again') })),
+          )
         ),
       ),
     )
@@ -61,12 +57,12 @@ Feature('LeaderLock Contract')
               return yield* lock.withLock('task-1', Effect.succeed('noop'))
             }),
         ),
-        Then('the result is None')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toEqual(Option.none())
+        Then('the result is None and the holder fiber is interrupted')((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.holder)
+            yield* expect(s.result).toEqual(Option.none())
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
       ),
     )
 
@@ -98,11 +94,8 @@ Feature('LeaderLock Contract')
               return { a, b }
             }),
         ),
-        Then('exactly one fiber observes Some; the other observes None')((s) =>
-          Effect.sync(() => {
-            const someCount = [s.results.a, s.results.b].filter(Option.isSome).length
-            expect(someCount).toBe(1)
-          })
+        Then('exactly one fiber observes Some and the other None, whichever finishes first')((s, expect) =>
+          expect([s.results.a, s.results.b].filter(Option.isSome).length).toBe(1)
         ),
       ),
     )
@@ -130,12 +123,12 @@ Feature('LeaderLock Contract')
               )
             }),
         ),
-        Then('the call returns None without firing the timeout')((s) =>
-          Effect.sync(() => {
-            expect(s.result).toEqual(Result.succeed(Option.none()))
+        Then('the call returns None without firing the timeout, and the holder fiber is interrupted')((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.holder)
+            yield* expect(s.result).toEqual(Result.succeed(Option.none()))
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
       ),
     )
 
@@ -153,11 +146,8 @@ Feature('LeaderLock Contract')
             const lock = yield* LeaderLock
             return yield* lock.withLock('b', Effect.succeed('b-result'))
           })),
-        Then('both return Some')((s) =>
-          Effect.sync(() => {
-            expect(s.a).toEqual(Option.some('a-result'))
-            expect(s.b).toEqual(Option.some('b-result'))
-          })
+        Then('both return Some')((s, expect) =>
+          expect({ a: s.a, b: s.b }).toEqual({ a: Option.some('a-result'), b: Option.some('b-result') })
         ),
       ),
     )
@@ -173,17 +163,17 @@ Feature('LeaderLock Contract')
               return yield* Effect.result(lock.withLock('task-1', Effect.fail('boom')))
             }),
         ),
-        Then('the call fails with the inner failure value')((s) =>
-          Effect.sync(() => {
-            expect(s.failed).toEqual(Result.fail('boom'))
-          })
-        ),
-        And('the lock is released for the next caller')(() =>
-          Effect.gen(function*() {
-            const lock = yield* LeaderLock
-            const out = yield* lock.withLock('task-1', Effect.succeed('ok'))
-            expect(out).toEqual(Option.some('ok'))
-          })
+        Then('the call fails with the inner failure value and the lock is released for the next caller')(
+          (s, expect) =>
+            Effect.gen(function*() {
+              const lock = yield* LeaderLock
+              const released = yield* lock.withLock('task-1', Effect.succeed('ok'))
+              return { failed: s.failed, released }
+            }).pipe(
+              Effect.map((observed) =>
+                expect(observed).toEqual({ failed: Result.fail('boom'), released: Option.some('ok') })
+              ),
+            ),
         ),
       ),
     )
@@ -205,12 +195,11 @@ Feature('LeaderLock Contract')
             }),
         ),
         When('the fiber is interrupted')('interrupted', (s) => Fiber.interrupt(s.holder)),
-        Then('the lock is released')(() =>
+        Then('the lock is released')((_s, expect) =>
           Effect.gen(function*() {
             const lock = yield* LeaderLock
-            const out = yield* lock.withLock('task-1', Effect.succeed('ok'))
-            expect(out).toEqual(Option.some('ok'))
-          })
+            return yield* lock.withLock('task-1', Effect.succeed('ok'))
+          }).pipe(Effect.map((out) => expect(out).toEqual(Option.some('ok'))))
         ),
       ),
     )

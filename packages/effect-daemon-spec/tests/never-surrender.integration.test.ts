@@ -1,11 +1,10 @@
-import { expect } from '@effect/vitest'
 import { DaemonReporter, LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
@@ -48,21 +47,19 @@ Feature('Leader daemon never surrenders under sustained failure')
               yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
 
               yield* TestClock.adjust(Duration.minutes(10))
-              const early = (yield* s.spy.getRestarts()).filter((r) => r.name === 'never-surrender-sup').length
+              const early = (yield* s.spy.getRestarts()).length
               yield* TestClock.adjust(Duration.minutes(30))
-              const late = (yield* s.spy.getRestarts()).filter((r) => r.name === 'never-surrender-sup').length
+              const late = (yield* s.spy.getRestarts()).length
               return { early, late }
             }),
         ),
-        Then('the leader restarted the process at least once within the first 10 minutes')((s) =>
-          Effect.sync(() => {
-            expect(s.result.early).toBeGreaterThan(0)
-          })
-        ),
-        And('the leader continues restarting the process beyond 40 minutes')((s) =>
-          Effect.sync(() => {
-            expect(s.result.late).toBeGreaterThan(s.result.early)
-          })
+        Then(
+          'the leader restarted the process within the first 10 minutes and kept restarting it past 40 minutes',
+        )((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ early, late }) => early > 0 && late > early,
+            'the leader restarts the failing process both inside the first 10 minutes and beyond 40 minutes',
+          )
         ),
       ),
     )

@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter, run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
@@ -6,7 +5,7 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Duration, Effect, Layer, Option, Schedule } from 'effect'
+import { Duration, Effect, Layer, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -50,28 +49,24 @@ Feature('Supervisor exhaustion via DaemonReporter')
             })
             const supHealth = yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
             yield* TestClock.adjust(Duration.seconds(2))
-            const healthyOpen = yield* supHealth.healthy.await.pipe(
-              Effect.timeout('0 millis'),
-              Effect.match({
-                onFailure: () => false,
-                onSuccess: () => true,
-              }),
-            )
+            const healthy = yield* supHealth.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
             const exhaustions = yield* spy.getExhaustions()
-            return { healthyOpen, exhaustions }
+            return { exhaustions, healthy }
           })),
-        Then('healthy latch is closed and spy records one exhaustion for the supervisor')((s) =>
-          Effect.sync(() => {
-            expect(s.out.healthyOpen).toEqual(false)
-            expect(s.out.exhaustions).toHaveLength(1)
-            const exhaustion = Option.getOrThrowWith(
-              Option.fromNullishOr(s.out.exhaustions[0]),
-              () => new Error('expected one supervisor exhaustion event'),
-            )
-            expect(exhaustion.name).toBe('exhaust-sup')
-            expect(exhaustion.cause).toSatisfy(Cause.hasDies)
+        Then('healthy latch is closed and spy records one exhaustion for the supervisor')((s, expect) => {
+          const [exhaustion] = s.out.exhaustions
+          return expect({
+            cause: exhaustion?.cause,
+            exhaustions: s.out.exhaustions.length,
+            healthy: s.out.healthy,
+            name: exhaustion?.name,
+          }).toMatchObject({
+            cause: { reasons: [{ _tag: 'Die', defect: 'boom' }] },
+            exhaustions: 1,
+            healthy: { _tag: 'Failure', failure: { _tag: 'TimeoutError' } },
+            name: 'exhaust-sup',
           })
-        ),
+        }),
       ),
     )
   })

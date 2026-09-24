@@ -1,8 +1,7 @@
-import { expect } from '@effect/vitest'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import type { LockConfig } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Fiber, Layer, Match, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 
@@ -55,12 +54,14 @@ Feature('Daemon Leader Election')
               return yield* Ref.get(s.state.counter)
             }),
         ),
-        Then('the worker never executed its work because the lock was always held')((s) =>
-          Effect.sync(() => {
-            expect(s.count).toBe(0)
+        Then(
+          'the worker never executed its work while the lock was held, and the holder fiber is interrupted',
+        )((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.state.holder)
+            yield* expect(s.count).toBe(0)
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.state.holder)),
       ),
     )
 
@@ -101,16 +102,15 @@ Feature('Daemon Leader Election')
               return health
             }),
         ),
-        Then('the worker never executed its work because the lock was always held')((s) =>
-          Ref.get(s.state.counter).pipe(
-            Effect.flatMap((count) =>
-              Effect.sync(() => {
-                expect(count).toBe(0)
-              })
-            ),
-          )
+        Then(
+          'the worker never executed its work while the lock was held, and the holder fiber is interrupted',
+        )((s, expect) =>
+          Effect.gen(function*() {
+            const observed = yield* Ref.get(s.state.counter)
+            yield* Fiber.interrupt(s.state.holder)
+            yield* expect(observed).toBe(0)
+          })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.state.holder)),
       ),
     )
 
@@ -173,12 +173,15 @@ Feature('Daemon Leader Election')
                 return health
               }),
           ),
-          Then('worker side effects never run')((s) =>
+          Then(
+            'worker side effects never run and the holder fiber is interrupted',
+          )((s, expect) =>
             Effect.gen(function*() {
-              expect(yield* Ref.get(s.state.observed)).toBe(0)
+              const observed = yield* Ref.get(s.state.observed)
+              yield* Fiber.interrupt(s.state.holder)
+              yield* expect(observed).toBe(0)
             })
           ),
-          And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.state.holder)),
         ),
     )
 
@@ -219,12 +222,14 @@ Feature('Daemon Leader Election')
               return yield* Ref.get(s.state.counter)
             }),
         ),
-        Then('the worker incremented (held key is irrelevant without lock config)')((s) =>
-          Effect.sync(() => {
-            expect(s.count).toBeGreaterThan(0)
+        Then(
+          'the worker incremented on most ticks (the held key is irrelevant without lock config) and the holder fiber is interrupted',
+        )((s, expect) =>
+          Effect.gen(function*() {
+            yield* Fiber.interrupt(s.state.holder)
+            yield* expect(s.count).toBeGreaterThan(0)
           })
         ),
-        And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.state.holder)),
       ),
     )
   })

@@ -1,9 +1,8 @@
-import { expect } from '@effect/vitest'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Ref, Result, Schedule } from 'effect'
+import { Duration, Effect, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { CounterRef } from './__fixtures__/TestUtils.js'
@@ -31,14 +30,8 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(110))
             return health
           })),
-        Then('counter is at least 3')((s) =>
-          CounterRef.read(s.counterRef).pipe(
-            Effect.flatMap((count) =>
-              Effect.sync(() => {
-                expect(count).toBeGreaterThanOrEqual(3)
-              })
-            ),
-          )
+        Then('counter is at least 3')((s, expect) =>
+          CounterRef.read(s.counterRef).pipe(Effect.flatMap((count) => expect(count).toBeGreaterThanOrEqual(3)))
         ),
       ),
     )
@@ -60,7 +53,13 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(5))
             return health
           })),
-        Then('ready is open')((s) => s.health.ready.await),
+        Then('ready is open')((s, expect) =>
+          s.health.ready.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success' })),
+          )
+        ),
       ),
     )
 
@@ -88,10 +87,13 @@ Feature('Poll Worker Lifecycle')
             const countAfterResume = yield* CounterRef.read(s.counterRef)
             return { countBeforePause, countWhilePaused, countAfterResume }
           })),
-        Then('the counter remains stable while paused and increments after resume')((s) => {
-          expect(s.result.countWhilePaused).toBe(s.result.countBeforePause)
-          expect(s.result.countAfterResume).toBeGreaterThan(s.result.countWhilePaused)
-        }),
+        Then('the counter remains stable while paused and increments after resume')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ countAfterResume, countBeforePause, countWhilePaused }) =>
+              countWhilePaused === countBeforePause && countAfterResume > countWhilePaused,
+            'the counter did not move while the gate was closed and moved again after it reopened',
+          )
+        ),
       ),
     )
 
@@ -111,16 +113,11 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(5))
             return health
           })),
-        Then('ready stays closed')((s) =>
+        Then('ready stays closed')((s, expect) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
             Effect.result,
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
-              })
-            ),
-            Effect.asVoid,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Failure' })),
           )
         ),
       ),
@@ -142,16 +139,11 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.seconds(91))
             return health
           })),
-        Then('ready stays closed')((s) =>
+        Then('ready stays closed')((s, expect) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
             Effect.result,
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
-              })
-            ),
-            Effect.asVoid,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Failure' })),
           )
         ),
       ),
@@ -182,7 +174,13 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(50))
             return health
           })),
-        Then('ready is open after retry succeeds')((s) => s.health.ready.await),
+        Then('ready is open after retry succeeds')((s, expect) =>
+          s.health.ready.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success' })),
+          )
+        ),
       ),
     )
 
@@ -203,16 +201,11 @@ Feature('Poll Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(300))
             return health
           })),
-        Then('ready stays closed after both retry attempts timeout')((s) =>
+        Then('ready stays closed after both retry attempts timeout')((s, expect) =>
           s.health.ready.await.pipe(
             Effect.timeout('0 millis'),
             Effect.result,
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
-              })
-            ),
-            Effect.asVoid,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Failure' })),
           )
         ),
       ),

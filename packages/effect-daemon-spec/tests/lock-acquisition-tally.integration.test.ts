@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
@@ -6,8 +5,8 @@ import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Context, Deferred, Duration, Effect, Fiber, Layer, Match, Option, Ref, Schedule } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Context, Deferred, Duration, Effect, Fiber, Layer, Match, Option, Ref, Schedule, Schema } from 'effect'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 import { advanceUntil } from './__fixtures__/TestUtils.js'
 
@@ -152,14 +151,10 @@ Feature('Lock acquisition tally on contention')
                 Match.exhaustive,
               ),
           ),
-          Then('no work executes while the lock is held')((s) =>
-            Effect.sync(() => {
-              expect(s.readyOpen.countWhileHeld).toBe(0)
-            })
-          ),
-          And('work runs after the holder releases')((s) =>
-            Effect.sync(() => {
-              expect(s.readyOpen.countAfterRelease).toBeGreaterThan(0)
+          Then('no work runs while the lock is held and work runs after the holder releases')((s, expect) =>
+            expect(s.readyOpen).toMatchObject({
+              countAfterRelease: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              countWhileHeld: 0,
             })
           ),
         ),

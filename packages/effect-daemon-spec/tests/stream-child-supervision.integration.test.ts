@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -7,8 +6,8 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule, Stream } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Duration, Effect, Layer, Ref, Schedule, Schema, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -62,30 +61,21 @@ Feature('Stream child supervision')
               yield* TestClock.adjust(Duration.millis(400))
               const restarts = yield* s.spy.getRestarts()
               const starts = yield* Ref.get(s.streamStarts)
-              const healthyOpen = yield* health.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => false,
-                  onSuccess: () => true,
-                }),
-              )
-              return { restarts, starts, healthyOpen }
+              const healthy = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+              return { restarts, starts, healthy }
             }),
         ),
-        Then('the reporter recorded one restart for the supervisor')((s) =>
-          Effect.sync(() => {
-            const r = s.result.restarts.filter((x) => x.name === 'stream-restart-sup')
-            expect(r.length).toBeGreaterThanOrEqual(1)
-          })
-        ),
-        And('the stream child started more than once')((s) =>
-          Effect.sync(() => {
-            expect(s.result.starts).toBeGreaterThanOrEqual(2)
-          })
-        ),
-        And('the supervisor healthy latch remains open')((s) =>
-          Effect.sync(() => {
-            expect(s.result.healthyOpen).toEqual(true)
+        Then(
+          'the reporter recorded at least one restart for the supervisor, the stream child started more than once, and the healthy latch stays open',
+        )((s, expect) =>
+          expect({
+            healthy: s.result.healthy,
+            restartCount: s.result.restarts.length,
+            starts: s.result.starts,
+          }).toMatchObject({
+            healthy: { _tag: 'Success', success: undefined },
+            restartCount: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+            starts: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(2)))),
           })
         ),
       ),
@@ -131,25 +121,20 @@ Feature('Stream child supervision')
               const health = yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
               yield* TestClock.adjust(Duration.millis(300))
               const exhaustions = yield* s.spy.getExhaustions()
-              const healthyOpen = yield* health.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => false,
-                  onSuccess: () => true,
-                }),
-              )
-              return { exhaustions, healthyOpen }
+              const healthy = yield* health.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+              return { exhaustions, healthy }
             }),
         ),
-        Then('the supervisor healthy latch is closed')((s) =>
-          Effect.sync(() => {
-            expect(s.result.healthyOpen).toEqual(false)
-          })
-        ),
-        And('the reporter recorded one exhaustion for the supervisor')((s) =>
-          Effect.sync(() => {
-            const e = s.result.exhaustions.filter((x) => x.name === 'stream-exhaust-sup')
-            expect(e).toHaveLength(1)
+        Then('the healthy latch is closed and the reporter recorded one exhaustion for the supervisor')((s, expect) =>
+          expect({
+            healthy: s.result.healthy,
+            exhaustedBy: s.result.exhaustions.map((x) => x.name),
+          }).toEqual({
+            healthy: expect.objectContaining({
+              _tag: 'Failure',
+              failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+            }),
+            exhaustedBy: ['stream-exhaust-sup'],
           })
         ),
       ),

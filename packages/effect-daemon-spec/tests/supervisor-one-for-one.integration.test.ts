@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -7,8 +6,8 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Ref, Schedule } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Duration, Effect, Layer, Ref, Schedule, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -62,11 +61,8 @@ Feature('OneForOne Strategy')
             const restarts = yield* s.spy.getRestarts()
             return { restarts }
           })),
-        Then('at least 1 restart was reported for the supervisor')((s) =>
-          Effect.sync(() => {
-            const matching = s.result.restarts.filter((r) => r.name === 'oneForOne-restart')
-            expect(matching.length).toBeGreaterThanOrEqual(1)
-          })
+        Then('exactly one restart was reported for the supervisor')((s, expect) =>
+          expect(s.result.restarts.map((r) => r.name)).toEqual(['oneForOne-restart'])
         ),
       ),
     )
@@ -108,11 +104,8 @@ Feature('OneForOne Strategy')
             const exhaustions = yield* s.spy.getExhaustions()
             return { exhaustions }
           })),
-        Then('exactly 1 exhausted event was reported')((s) =>
-          Effect.sync(() => {
-            expect(s.result.exhaustions).toHaveLength(1)
-            expect(s.result.exhaustions[0]?.name).toBe('oneForOne-exhaust')
-          })
+        Then('exactly one exhausted event was reported for the supervisor')((s, expect) =>
+          expect(s.result.exhaustions.map((e) => e.name)).toEqual(['oneForOne-exhaust'])
         ),
       ),
     )
@@ -172,15 +165,11 @@ Feature('OneForOne Strategy')
             const bAfter = yield* Ref.get(s.counters.b)
             return { aBefore, bBefore, aAfter, bAfter }
           })),
-        Then('child A restarted (count increased)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toBeGreaterThan(s.result.aBefore)
-          })
-        ),
-        And('child B continued ticking (count increased)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.bAfter).toBeGreaterThan(s.result.bBefore)
-          })
+        Then('child A restarted and child B kept ticking, so both counts grew')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ aAfter, aBefore, bAfter, bBefore }) => aAfter > aBefore && bAfter > bBefore,
+            'child A ticked more after its restart and child B ticked more without restarting',
+          )
         ),
       ),
     )
@@ -227,24 +216,14 @@ Feature('OneForOne Strategy')
             })
             const health = yield* run.supervisor(outer).pipe(Effect.provide(NoopLayer))
             yield* TestClock.adjust(Duration.millis(10))
-            const open = yield* health.ready.await.pipe(
-              Effect.timeout('0 millis'),
-              Effect.match({
-                onFailure: () => false,
-                onSuccess: () => true,
-              }),
-            )
+            const ready = yield* health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
             const a = yield* Ref.get(s.counters.a)
-            return { open, a }
+            return { ready, a }
           })),
-        Then('outer supervisor ready is open')((s) =>
-          Effect.sync(() => {
-            expect(s.health.open).toEqual(true)
-          })
-        ),
-        And('inner child ticked at least once')((s) =>
-          Effect.sync(() => {
-            expect(s.health.a).toBeGreaterThanOrEqual(1)
+        Then('the outer supervisor is ready and the inner child ticked at least once')((s, expect) =>
+          expect(s.health).toMatchObject({
+            a: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+            ready: { _tag: 'Success', success: undefined },
           })
         ),
       ),
@@ -283,8 +262,7 @@ Feature('OneForOne Strategy')
                 }),
               )
               yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
-              const countRestarts = () =>
-                Effect.map(s.spy.getRestarts(), (rs) => rs.filter((r) => r.name === 'backoff-sequence').length)
+              const countRestarts = () => Effect.map(s.spy.getRestarts(), (rs) => rs.length)
               const atStart = yield* countRestarts()
               yield* TestClock.adjust(Duration.millis(9))
               const at9 = yield* countRestarts()
@@ -301,29 +279,9 @@ Feature('OneForOne Strategy')
               return { atStart, at9, at10, at29, at30, at69, at70 }
             }),
         ),
-        Then('exactly one restart is reported at the first failure, with none following immediately')((s) =>
-          Effect.sync(() => {
-            expect(s.result.atStart).toBe(1)
-          })
-        ),
-        And('the second restart waited out the 10ms base delay')((s) =>
-          Effect.sync(() => {
-            expect(s.result.at9).toBe(1)
-            expect(s.result.at10).toBe(2)
-          })
-        ),
-        And('the third restart waited out the doubled 20ms delay')((s) =>
-          Effect.sync(() => {
-            expect(s.result.at29).toBe(2)
-            expect(s.result.at30).toBe(3)
-          })
-        ),
-        And('the fourth restart waited out the doubled 40ms delay')((s) =>
-          Effect.sync(() => {
-            expect(s.result.at69).toBe(3)
-            expect(s.result.at70).toBe(4)
-          })
-        ),
+        Then(
+          'each restart lands only after its doubled backoff delay: one at the first failure, then at 10ms, 30ms and 70ms',
+        )((s, expect) => expect(s.result).toEqual({ atStart: 1, at9: 1, at10: 2, at29: 2, at30: 3, at69: 3, at70: 4 })),
       ),
     )
   })

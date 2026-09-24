@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -16,7 +15,7 @@ Feature('Subscription Worker Lifecycle')
       'Runs acquire when started',
       Gherkin.Do.pipe(
         Given('an acquired ref')('acquiredRef', () => Ref.make(false)),
-        When('a subscription worker is started')('health', (s) =>
+        When('a subscription worker is started')('observed', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.subscription({
               name: 'subscriber',
@@ -27,10 +26,17 @@ Feature('Subscription Worker Lifecycle')
             const health = yield* run.worker(worker)
             yield* TestClock.adjust(Duration.millis(5))
             const acquired = yield* Ref.get(s.acquiredRef)
-            expect(acquired).toEqual(true)
-            return health
+            return { acquired, health }
           })),
-        Then('ready is open')((s) => s.health.ready.await),
+        Then('the acquire ran and ready is open')((s, expect) =>
+          Effect.gen(function*() {
+            const ready = yield* s.observed.health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            yield* expect({ acquired: s.observed.acquired, ready }).toEqual({
+              acquired: true,
+              ready: expect.objectContaining({ _tag: 'Success', success: undefined }),
+            })
+          })
+        ),
       ),
     )
 
@@ -38,7 +44,7 @@ Feature('Subscription Worker Lifecycle')
       'Closing the pause gate does not stop a running subscription',
       Gherkin.Do.pipe(
         Given('an acquired ref')('acquiredRef', () => Ref.make(false)),
-        When('a subscription worker is started then gate is closed')('health', (s) =>
+        When('a subscription worker is started then gate is closed')('observed', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.subscription({
               name: 'paused-subscriber',
@@ -49,12 +55,19 @@ Feature('Subscription Worker Lifecycle')
             const health = yield* run.worker(worker)
             yield* TestClock.adjust(Duration.millis(5))
             const acquired = yield* Ref.get(s.acquiredRef)
-            expect(acquired).toEqual(true)
             yield* health.paused.close
             yield* TestClock.adjust(Duration.millis(5))
-            return health
+            return { acquired, health }
           })),
-        Then('ready stays open after gate close')((s) => s.health.ready.await),
+        Then('the acquire ran and ready stays open after the gate close')((s, expect) =>
+          Effect.gen(function*() {
+            const ready = yield* s.observed.health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
+            yield* expect({ acquired: s.observed.acquired, ready }).toEqual({
+              acquired: true,
+              ready: expect.objectContaining({ _tag: 'Success', success: undefined }),
+            })
+          })
+        ),
       ),
     )
   })

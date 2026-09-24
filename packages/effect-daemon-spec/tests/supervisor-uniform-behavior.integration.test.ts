@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -7,8 +6,8 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForAll, oneForOne, restForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Layer, Match, Ref, Schedule } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Duration, Effect, Layer, Match, Ref, Schedule, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -54,7 +53,13 @@ Feature('Uniform Supervisor Behavior')
               yield* TestClock.adjust(Duration.millis(10))
               return { health }
             })),
-          Then('supervisor ready is open')((s) => s.health.health.ready.await),
+          Then('supervisor ready is open')((s, expect) =>
+            s.health.health.ready.await.pipe(
+              Effect.timeout('0 millis'),
+              Effect.result,
+              Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success' })),
+            )
+          ),
         ),
     )
 
@@ -112,23 +117,22 @@ Feature('Uniform Supervisor Behavior')
               yield* TestClock.adjust(Duration.millis(10))
               return { health, counters: s.counters }
             })),
-          Then('supervisor ready is open')((s) => s.health.health.ready.await),
-          And('all started poll children ticked at least once')((s) =>
+          Then('supervisor ready is open and every started poll child ticked at least once')((s, expect) =>
             Effect.gen(function*() {
+              const ready = yield* s.health.health.ready.await.pipe(Effect.timeout('0 millis'), Effect.result)
               const a = yield* Ref.get(s.health.counters.a)
               const b = yield* Ref.get(s.health.counters.b)
-              expect(a).toBeGreaterThanOrEqual(1)
-              expect(b).toBeGreaterThanOrEqual(1)
-              yield* Match.value(row.strategy).pipe(
-                Match.when('restForOne', () =>
-                  Effect.gen(function*() {
-                    const c = yield* Ref.get(s.health.counters.c)
-                    expect(c).toBeGreaterThanOrEqual(1)
-                  })),
-                Match.when('oneForOne', () => Effect.void),
-                Match.when('oneForAll', () => Effect.void),
-                Match.exhaustive,
-              )
+              const c = row.strategy === 'restForOne' ? yield* Ref.get(s.health.counters.c) : 0
+              yield* expect({ ready, ticks: { a, b, c } }).toMatchObject({
+                ready: { _tag: 'Success', success: undefined },
+                ticks: {
+                  a: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+                  b: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))),
+                  c: row.strategy === 'restForOne'
+                    ? expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1))))
+                    : 0,
+                },
+              })
             })
           ),
         ),
@@ -182,11 +186,8 @@ Feature('Uniform Supervisor Behavior')
               const exhaustions = yield* s.spy.getExhaustions()
               return { exhaustions }
             })),
-          Then('exactly 1 exhausted event was reported')((s) =>
-            Effect.sync(() => {
-              expect(s.result.exhaustions).toHaveLength(1)
-              expect(s.result.exhaustions[0]?.name).toBe(`${row.strategy}-exhaust-outline`)
-            })
+          Then('exactly one exhausted event was reported for this supervisor')((s, expect) =>
+            expect(s.result.exhaustions.map((e) => e.name)).toEqual([`${row.strategy}-exhaust-outline`])
           ),
         ),
     )

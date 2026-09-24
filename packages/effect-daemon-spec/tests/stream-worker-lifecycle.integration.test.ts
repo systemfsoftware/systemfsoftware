@@ -1,10 +1,9 @@
-import { expect } from '@effect/vitest'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { dynamic } from '@systemfsoftware/effect-daemon-spec'
 import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Option, Ref, Result, Stream } from 'effect'
+import { Duration, Effect, Option, Ref, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { BufferedRef } from './__fixtures__/TestUtils.js'
@@ -33,14 +32,8 @@ Feature('Stream Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(10))
             return health
           })),
-        Then('buffer contains all elements')((s) =>
-          BufferedRef.readAll(s.buffer).pipe(
-            Effect.flatMap((items) =>
-              Effect.sync(() => {
-                expect(items).toEqual([1, 2, 3])
-              })
-            ),
-          )
+        Then('buffer contains all elements')((s, expect) =>
+          BufferedRef.readAll(s.buffer).pipe(Effect.flatMap((items) => expect(items).toEqual([1, 2, 3])))
         ),
       ),
     )
@@ -63,7 +56,13 @@ Feature('Stream Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(10))
             return health
           })),
-        Then('ready is open')((s) => s.health.ready.await),
+        Then('ready is open')((s, expect) =>
+          s.health.ready.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success' })),
+          )
+        ),
       ),
     )
 
@@ -88,14 +87,10 @@ Feature('Stream Worker Lifecycle')
               const ref = yield* handle.startChild(void 0)
               yield* TestClock.adjust(Duration.seconds(91))
               yield* ref.removed
-              return { removed: true }
+              return { count: yield* handle.count }
             }),
           )),
-        Then('the child ref.removed latch opens after the tick timeout')((s) =>
-          Effect.sync(() => {
-            expect(s.result.removed).toEqual(true)
-          })
-        ),
+        Then('the child ref.removed latch opens after the tick timeout')((s, expect) => expect(s.result.count).toBe(0)),
       ),
     )
 
@@ -125,13 +120,11 @@ Feature('Stream Worker Lifecycle')
                 Effect.timeout('0 millis'),
                 Effect.result,
               )
-              return { stillRunning: Result.isFailure(stillRunning) }
+              return { stillRunning }
             }),
           )),
-        Then('worker is still running after timeout')((s) =>
-          Effect.sync(() => {
-            expect(s.result.stillRunning).toEqual(true)
-          })
+        Then('worker is still running after timeout')((s, expect) =>
+          expect(s.result.stillRunning).toMatchObject({ _tag: 'Failure', failure: { _tag: 'TimeoutError' } })
         ),
       ),
     )
@@ -160,13 +153,13 @@ Feature('Stream Worker Lifecycle')
             yield* TestClock.adjust(Duration.millis(10))
             return health
           })),
-        Then('every stream worker span has no parent')((s) =>
+        Then('every stream worker span has no parent')((s, expect) =>
           Ref.get(s.streamSpanRooted).pipe(
             Effect.flatMap((rooted) =>
-              Effect.sync(() => {
-                expect(rooted.length).toBeGreaterThan(0)
-                expect(rooted).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === true))
-              })
+              expect(rooted).toSatisfy(
+                (values) => values.length > 0 && values.every((isRoot) => isRoot),
+                'at least one stream worker span was recorded and every recorded span is rootless',
+              )
             ),
           )
         ),

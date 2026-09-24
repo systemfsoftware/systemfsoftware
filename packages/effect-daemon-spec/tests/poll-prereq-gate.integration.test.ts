@@ -1,9 +1,9 @@
-import { expect } from '@effect/vitest'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Duration, Effect, Option, Ref, Result } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Duration, Effect, Option, Ref, Schema } from 'effect'
+import type { Tracer } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
@@ -12,9 +12,9 @@ const Feature = makeFeature({ it })
 type AnyAttr<V = unknown> = V
 const SPAN_NAME = 'test.work.span' as const
 
-const recordPrereqSpan = (seen: Ref.Ref<boolean[]>) =>
+const recordPrereqSpan = (spans: Ref.Ref<ReadonlyArray<Tracer.AnySpan | undefined>>) =>
   Effect.option(Effect.currentSpan).pipe(
-    Effect.flatMap((span) => Ref.update(seen, (arr) => [...arr, Option.isSome(span)])),
+    Effect.flatMap((span) => Ref.update(spans, (arr) => [...arr, Option.getOrUndefined(span)])),
   )
 
 const recordWorkSpan = (names: Ref.Ref<string[]>) =>
@@ -22,17 +22,8 @@ const recordWorkSpan = (names: Ref.Ref<string[]>) =>
     Effect.flatMap((span) => Ref.update(names, (arr) => [...arr, span.name])),
   )
 
-const readyStaysClosed = (await_: Effect.Effect<void>) =>
-  await_.pipe(
-    Effect.timeout('0 millis'),
-    Effect.result,
-    Effect.tap((result) =>
-      Effect.sync(() => {
-        expect(result).toEqual(Result.fail(expect.anything()))
-      })
-    ),
-    Effect.asVoid,
-  )
+/** The latch's Result at zero virtual millis: a Success means it was already open. */
+const awaitAtZero = (await_: Effect.Effect<void>) => await_.pipe(Effect.timeout('0 millis'), Effect.result)
 
 Feature('Poll Prereq Gate')
   .withLayer(NoopLayer)
@@ -43,14 +34,14 @@ Feature('Poll Prereq Gate')
       Gherkin.Do.pipe(
         Given('span probes')('probes', () =>
           Effect.all({
-            prereqSpanSeen: Ref.make<boolean[]>([]),
+            prereqSpans: Ref.make<ReadonlyArray<Tracer.AnySpan | undefined>>([]),
             workSpanNames: Ref.make<string[]>([]),
           })),
         When('a poll worker whose prereq finds no work runs')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.poll({
               name: 'gate-none',
-              prereq: recordPrereqSpan(s.probes.prereqSpanSeen).pipe(
+              prereq: recordPrereqSpan(s.probes.prereqSpans).pipe(
                 Effect.as(Option.none<number>()),
               ),
               work: () => recordWorkSpan(s.probes.workSpanNames),
@@ -62,26 +53,19 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return health
           })),
-        Then('no work span is created')((s) =>
-          Ref.get(s.probes.workSpanNames).pipe(
-            Effect.flatMap((names) =>
-              Effect.sync(() => {
-                expect(names).toEqual([])
+        Then('no work span is created, the prereq ran without a span, and the worker still becomes ready')(
+          (s, expect) =>
+            Effect.gen(function*() {
+              const names = yield* Ref.get(s.probes.workSpanNames)
+              const prereqSpans = yield* Ref.get(s.probes.prereqSpans)
+              const ready = yield* awaitAtZero(s.health.ready.await)
+              yield* expect({ names, prereqSpans, ready }).toMatchObject({
+                names: [],
+                prereqSpans: expect.schemaMatching(Schema.NonEmptyArray(Schema.Undefined)),
+                ready: { _tag: 'Success', success: undefined },
               })
-            ),
-          )
+            }),
         ),
-        And('the prereq ran without a span')((s) =>
-          Ref.get(s.probes.prereqSpanSeen).pipe(
-            Effect.flatMap((seen) =>
-              Effect.sync(() => {
-                expect(seen.length).toBeGreaterThan(0)
-                expect(seen).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === false))
-              })
-            ),
-          )
-        ),
-        And('the worker still becomes ready')((s) => s.health.ready.await),
       ),
     )
 
@@ -90,7 +74,7 @@ Feature('Poll Prereq Gate')
       Gherkin.Do.pipe(
         Given('span probes')('probes', () =>
           Effect.all({
-            prereqSpanSeen: Ref.make<boolean[]>([]),
+            prereqSpans: Ref.make<ReadonlyArray<Tracer.AnySpan | undefined>>([]),
             workSpanNames: Ref.make<string[]>([]),
             workData: Ref.make<number[]>([]),
           })),
@@ -98,7 +82,7 @@ Feature('Poll Prereq Gate')
           Effect.gen(function*() {
             const worker = Daemon.poll({
               name: 'gate-some',
-              prereq: recordPrereqSpan(s.probes.prereqSpanSeen).pipe(
+              prereq: recordPrereqSpan(s.probes.prereqSpans).pipe(
                 Effect.as(Option.some(42)),
               ),
               work: (data) =>
@@ -113,33 +97,18 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return health
           })),
-        Then('work runs inside the named span')((s) =>
-          Ref.get(s.probes.workSpanNames).pipe(
-            Effect.flatMap((names) =>
-              Effect.sync(() => {
-                expect(names.length).toBeGreaterThan(0)
-                expect(names).toSatisfy((values: ReadonlyArray<string>) => values.every((name) => name === SPAN_NAME))
+        Then('work runs inside the named span with the data the prereq found, and no prereq tick has a span')(
+          (s, expect) =>
+            Effect.gen(function*() {
+              const names = yield* Ref.get(s.probes.workSpanNames)
+              const data = yield* Ref.get(s.probes.workData)
+              const prereqSpans = yield* Ref.get(s.probes.prereqSpans)
+              yield* expect({ data, names, prereqSpans }).toMatchObject({
+                data: expect.schemaMatching(Schema.Array(Schema.Literal(42))),
+                names: expect.schemaMatching(Schema.NonEmptyArray(Schema.Literal(SPAN_NAME))),
+                prereqSpans: expect.schemaMatching(Schema.Array(Schema.Undefined)),
               })
-            ),
-          )
-        ),
-        And('the work receives the data the prereq found')((s) =>
-          Ref.get(s.probes.workData).pipe(
-            Effect.flatMap((data) =>
-              Effect.sync(() => {
-                expect(data).toSatisfy((values: ReadonlyArray<number>) => values.every((value) => value === 42))
-              })
-            ),
-          )
-        ),
-        And('the prereq ran without a span')((s) =>
-          Ref.get(s.probes.prereqSpanSeen).pipe(
-            Effect.flatMap((seen) =>
-              Effect.sync(() => {
-                expect(seen).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === false))
-              })
-            ),
-          )
+            }),
         ),
       ),
     )
@@ -147,7 +116,7 @@ Feature('Poll Prereq Gate')
     scenario(
       'Each work span starts a new trace, ignoring the caller trace',
       Gherkin.Do.pipe(
-        Given('a rooted probe')('workSpanRooted', () => Ref.make<boolean[]>([])),
+        Given('a rooted probe')('workSpanParents', () => Ref.make<ReadonlyArray<Tracer.AnySpan | undefined>>([])),
         When('a poll worker with work runs while a caller trace is active')('health', (s) =>
           Effect.gen(function*() {
             const worker = Daemon.poll({
@@ -155,7 +124,9 @@ Feature('Poll Prereq Gate')
               prereq: Effect.succeedSome(1),
               work: () =>
                 Effect.currentSpan.pipe(
-                  Effect.flatMap((span) => Ref.update(s.workSpanRooted, (arr) => [...arr, Option.isNone(span.parent)])),
+                  Effect.flatMap((span) =>
+                    Ref.update(s.workSpanParents, (arr) => [...arr, Option.getOrUndefined(span.parent)])
+                  ),
                 ),
               interval: Duration.millis(1),
               tick: { spanName: SPAN_NAME, tickTimeout: Duration.seconds(90) },
@@ -165,12 +136,11 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return health
           })),
-        Then('every work span has no parent')((s) =>
-          Ref.get(s.workSpanRooted).pipe(
-            Effect.flatMap((rooted) =>
-              Effect.sync(() => {
-                expect(rooted.length).toBeGreaterThan(0)
-                expect(rooted).toSatisfy((values: ReadonlyArray<boolean>) => values.every((value) => value === true))
+        Then('every work span has no parent')((s, expect) =>
+          Ref.get(s.workSpanParents).pipe(
+            Effect.flatMap((parents) =>
+              expect({ parents }).toMatchObject({
+                parents: expect.schemaMatching(Schema.NonEmptyArray(Schema.Undefined)),
               })
             ),
           )
@@ -203,13 +173,10 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return health
           })),
-        Then('the work span carries the configured attribute')((s) =>
+        Then('the work span carries the configured attribute')((s, expect) =>
           Ref.get(s.attrs).pipe(
             Effect.flatMap((attrs) =>
-              Effect.sync(() => {
-                expect(attrs).toSatisfy(Option.isSome)
-                expect(Option.getOrThrow(attrs).get('app.gate')).toBe('on')
-              })
+              expect(Option.map(attrs, (attributes) => attributes.get('app.gate'))).toEqual(Option.some('on'))
             ),
           )
         ),
@@ -234,15 +201,18 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return { health }
           })),
-        Then('the worker never becomes ready')((s) => readyStaysClosed(s.result.health.ready.await)),
-        And('work is never invoked')((s) =>
-          Ref.get(s.workCount).pipe(
-            Effect.flatMap((count) =>
-              Effect.sync(() => {
-                expect(count).toBe(0)
-              })
-            ),
-          )
+        Then('the worker never becomes ready and work is never invoked')((s, expect) =>
+          Effect.gen(function*() {
+            const ready = yield* awaitAtZero(s.result.health.ready.await)
+            const workCount = yield* Ref.get(s.workCount)
+            yield* expect({ ready, workCount }).toEqual({
+              ready: expect.objectContaining({
+                _tag: 'Failure',
+                failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+              }),
+              workCount: 0,
+            })
+          })
         ),
       ),
     )
@@ -264,13 +234,13 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return health
           })),
-        Then('a work span is created on every tick')((s) =>
+        Then('a work span is created on every tick')((s, expect) =>
           Ref.get(s.workSpanNames).pipe(
             Effect.flatMap((names) =>
-              Effect.sync(() => {
-                expect(names.length).toBeGreaterThanOrEqual(3)
-                expect(names).toSatisfy((values: ReadonlyArray<string>) => values.every((name) => name === SPAN_NAME))
-              })
+              expect(names).toSatisfy(
+                (values) => values.length >= 3 && values.every((name) => name === SPAN_NAME),
+                `at least three ticks each created a work span named '${SPAN_NAME}'`,
+              )
             ),
           )
         ),
@@ -298,16 +268,19 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.millis(20))
             return health
           })),
-        Then('the work span was entered')((s) =>
-          Ref.get(s.workSpanNames).pipe(
-            Effect.flatMap((names) =>
-              Effect.sync(() => {
-                expect(names).toContain(SPAN_NAME)
-              })
-            ),
-          )
+        Then('the work span was entered at least once and the worker never becomes ready')((s, expect) =>
+          Effect.gen(function*() {
+            const names = yield* Ref.get(s.workSpanNames)
+            const ready = yield* awaitAtZero(s.health.ready.await)
+            yield* expect({ names, ready }).toEqual({
+              names: expect.arrayContaining([SPAN_NAME]),
+              ready: expect.objectContaining({
+                _tag: 'Failure',
+                failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+              }),
+            })
+          })
         ),
-        And('the worker never becomes ready')((s) => readyStaysClosed(s.health.ready.await)),
       ),
     )
 
@@ -331,15 +304,18 @@ Feature('Poll Prereq Gate')
             yield* TestClock.adjust(Duration.seconds(91))
             return { health }
           })),
-        Then('the worker never becomes ready')((s) => readyStaysClosed(s.result.health.ready.await)),
-        And('work is never invoked')((s) =>
-          Ref.get(s.workCount).pipe(
-            Effect.flatMap((count) =>
-              Effect.sync(() => {
-                expect(count).toBe(0)
-              })
-            ),
-          )
+        Then('the worker never becomes ready and work is never invoked')((s, expect) =>
+          Effect.gen(function*() {
+            const ready = yield* awaitAtZero(s.result.health.ready.await)
+            const workCount = yield* Ref.get(s.workCount)
+            yield* expect({ ready, workCount }).toEqual({
+              ready: expect.objectContaining({
+                _tag: 'Failure',
+                failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+              }),
+              workCount: 0,
+            })
+          })
         ),
       ),
     )

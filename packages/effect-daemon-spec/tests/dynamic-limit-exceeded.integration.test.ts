@@ -1,6 +1,5 @@
-import { expect } from '@effect/vitest'
 import { DynamicLimitExceeded } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -15,15 +14,8 @@ Feature('DynamicLimitExceeded error')
           'err',
           () => Effect.sync(() => DynamicLimitExceeded.make({ limit: 42 })),
         ),
-        Then('limit is 42')((s) =>
-          Effect.sync(() => {
-            expect(s.err.limit).toBe(42)
-          })
-        ),
-        And('_tag is "DynamicLimitExceeded"')((s) =>
-          Effect.sync(() => {
-            expect(s.err._tag).toBe('DynamicLimitExceeded')
-          })
+        Then('limit is 42 and the tag is "DynamicLimitExceeded"')((s, expect) =>
+          expect(s.err).toMatchObject({ _tag: 'DynamicLimitExceeded', limit: 42 })
         ),
       ),
     )
