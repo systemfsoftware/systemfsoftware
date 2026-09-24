@@ -96,9 +96,10 @@ const proof = Effect.gen(function*() {
 })
 ```
 
-`SocketMedium.makeLoopbackServer` is the loopback listener the driver dials; its `advance` enacts a
-`ChildScript` step on the server side of the connection the current incarnation holds — greeting it,
-ending it, resetting it, holding it past the child's half-close, or leaving it open and silent. Its
+`SocketMedium.makeLoopbackServer` is the loopback listener the driver dials; its `advance(step, generation)`
+enacts a `ChildScript` step on the server side of that generation's connection — greeting it,
+ending it, resetting it, holding it past the child's half-close, or leaving it open and silent. A
+step for a generation that has not dialled yet is held until it does. Its
 `openConnections` and `receivedFrames` are the peer's own view, which is how teardown and the
 program's writes are observed.
 

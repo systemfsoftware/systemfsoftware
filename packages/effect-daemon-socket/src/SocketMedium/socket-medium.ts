@@ -49,7 +49,7 @@ interface LifeParts {
 }
 
 const socketOf = (evidence: Supervisor.Medium.Started): Option.Option<SocketStarted> =>
-  Option.filter(Option.some(evidence), (candidate): candidate is SocketStarted => SocketStartedTypeId in candidate)
+  Option.liftPredicate(evidence, (candidate): candidate is SocketStarted => SocketStartedTypeId in candidate)
 
 const drainOf = (parts: LifeParts, reader: Socket.Reader): Effect.Effect<void, Socket.SocketError> =>
   Effect.flatMap(reader.pull, (batch) =>
