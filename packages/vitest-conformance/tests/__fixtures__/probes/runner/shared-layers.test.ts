@@ -1,4 +1,4 @@
-import { layer } from '@effect/vitest'
+import { layer } from '@systemfsoftware/vitest'
 import { Context } from 'effect'
 import { Layer } from 'effect'
 

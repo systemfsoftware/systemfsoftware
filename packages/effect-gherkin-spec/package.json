@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-gherkin-spec",
   "license": "Apache-2.0",
-  "version": "4.4.0",
+  "version": "5.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -52,11 +52,11 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
@@ -68,7 +68,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@effect/vitest": "catalog:peers",
+    "@systemfsoftware/vitest": "workspace:^",
     "effect": "catalog:peers",
     "vitest": "catalog:"
   },

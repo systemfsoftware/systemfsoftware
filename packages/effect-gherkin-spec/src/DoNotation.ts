@@ -1,6 +1,6 @@
-import type { Check, Expect } from '@effect/vitest'
-import { type Asserted, step } from '@effect/vitest/integration'
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
+import type { Check, Expect } from '@systemfsoftware/vitest'
+import { type Asserted, step } from '@systemfsoftware/vitest/integration'
 import { Cause, Clock, Context, Duration, Effect, Exit, Schedule } from 'effect'
 import { dual } from 'effect/Function'
 import { StepError } from './StepError.schema.js'

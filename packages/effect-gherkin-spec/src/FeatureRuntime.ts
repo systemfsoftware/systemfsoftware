@@ -1,7 +1,7 @@
 /// <reference types="vitest/importMeta" />
-import type { Expect } from '@effect/vitest'
-import type { Asserted } from '@effect/vitest/integration'
 import type { Suite } from '@systemfsoftware/effect-spec-runtime'
+import type { Expect } from '@systemfsoftware/vitest'
+import type { Asserted } from '@systemfsoftware/vitest/integration'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Layer from 'effect/Layer'

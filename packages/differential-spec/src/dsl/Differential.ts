@@ -1,4 +1,4 @@
-import { it, VitestTestContext } from '@effect/vitest'
+import { it, VitestTestContext } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import * as fc from 'fast-check'
 import type { DualExecutionSupervisorOptions } from '../core/DualExecutionSupervisor.js'

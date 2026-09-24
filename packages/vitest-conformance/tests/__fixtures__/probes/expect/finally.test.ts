@@ -1,4 +1,4 @@
-import { describe, layer } from '@effect/vitest'
+import { describe, layer } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import { appendFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Ref } from 'effect'
 
 const seen = Ref.makeUnsafe(0)

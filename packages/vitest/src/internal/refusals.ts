@@ -232,7 +232,7 @@ export const refuseRawExpect =
 export type refuseRawExpect = typeof refuseRawExpect
 
 /** @internal */
-export const refuseRawIt = "✗ this test was registered with vitest's it; import it from @effect/vitest"
+export const refuseRawIt = "✗ this test was registered with vitest's it; import it from @systemfsoftware/vitest"
 
 /** @internal */
 export type refuseRawIt = typeof refuseRawIt

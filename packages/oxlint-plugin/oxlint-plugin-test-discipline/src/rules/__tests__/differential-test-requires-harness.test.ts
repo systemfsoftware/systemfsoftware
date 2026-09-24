@@ -21,7 +21,7 @@ const runnerImportError = (source: string) => ({
   data: {
     name: `runner import from ${source} in a differential test file`,
     expected: HP,
-    actual: 'a direct vitest / @effect/vitest runner import bypasses the differential oracle',
+    actual: 'a direct vitest / @effect/vitest / @systemfsoftware/vitest runner import bypasses the differential oracle',
     fix: `delete the runner import; ${HP}`,
   },
 })
@@ -83,7 +83,7 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
     {
       name: 'Should_Allow_PlainTest_When_PropertyFile',
       code: `
-        import { it } from '@effect/vitest'
+        import { it } from '@systemfsoftware/vitest'
         it.prop('works', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)
       `,
       filename: '/repo/pkg/src/a.workflow.property.test.ts',
@@ -152,6 +152,24 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       `,
       filename: '/repo/pkg/tests/a.differential.test.ts',
       errors: [missingImportError],
+    },
+    {
+      name: 'Should_Report_RunnerImport_When_ForkRunnerImportedInDifferentialFile',
+      code: `
+        import { Differential } from '@systemfsoftware/differential-spec'
+        import { it } from '@systemfsoftware/vitest'
+      `,
+      filename: '/repo/pkg/tests/a.differential.test.ts',
+      errors: [runnerImportError('@systemfsoftware/vitest')],
+    },
+    {
+      name: 'Should_Report_RunnerImport_When_UpstreamEffectVitestImportedInDifferentialFile',
+      code: `
+        import { Differential } from '@systemfsoftware/differential-spec'
+        import { it } from '@effect/vitest'
+      `,
+      filename: '/repo/pkg/tests/a.differential.test.ts',
+      errors: [runnerImportError('@effect/vitest')],
     },
   ],
 })

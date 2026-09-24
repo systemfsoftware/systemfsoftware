@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Array, Match, Option } from 'effect'
 import { chooseRestartStrategy, type RestartDecisionOutcome } from '../choose-restart-strategy.workflow.js'
 import { DecideInput, type RestartStrategy } from '../RestartDecision.schema.js'

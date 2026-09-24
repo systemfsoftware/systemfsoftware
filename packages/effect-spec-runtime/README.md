@@ -31,7 +31,7 @@ Suite.openShared(bindings, config, { layer: DatabaseFixture }, (register) => {
 })
 ```
 
-- `bindings` (`Suite.Bindings`) are the `@effect/vitest` `it` methods you run under. Every case is registered as a generator body, so the test's own `expect` is the case's and each check is yielded: `it(name, function* ({ expect }) { … })`.
+- `bindings` (`Suite.Bindings`) are the `@systemfsoftware/vitest` `it` methods you run under. Every case is registered as a generator body, so the test's own `expect` is the case's and each check is yielded: `it(name, function* ({ expect }) { … })`.
 - A scenario is the expect-taking run — `Suite.Scenario<B, E, R>` is `(expect: Expect) => Effect<B, E, R | Scope | Asserted>` — and the registrar (`Suite.RegisterFn<B, E, R>`) calls it inside the case body, so a library that writes a flow reaches the test's check callback instead of importing an `expect`.
 - `config` (`Suite.Config`) names the suite, picks the describe collector (`describe` | `skip` | `only`, `Suite.DescribeMode`), carries Vitest `options`, and optionally declares the whole suite live with `live: { reason }`.
 - A live case carries a required reason instead of a boolean, so the run report can name every live case: `config` takes it as `live: { reason }` and a registration takes it as `register('waits on real I/O', (expect) => program, 'run', { reason: 'waits on a socket' })`; a case that waits on the kernel's test clock calls `TestClock.adjust` or `TestClock.setTime` inside its body.
@@ -55,4 +55,4 @@ pnpm add @systemfsoftware/effect-spec-runtime@workspace:^
 ```
 
 > [!NOTE]
-> `effect`, `@effect/vitest`, and `vitest` are peer dependencies — you bring your own.
+> `effect`, `@systemfsoftware/vitest`, and `vitest` are peer dependencies — you bring your own.

@@ -1,5 +1,5 @@
-import type { Check, Expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import type { Check, Expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import { assertionOf, fileOf, type JsonReport, messagesOf, runFixtures, runProbes } from './__fixtures__/run-fixtures'
@@ -25,7 +25,7 @@ const refusal = {
     '✗ hooks share state between tests. Build what a test needs inside it; services come fresh per test from layer(Service.layer)((it) => { ... }).',
   rawExpect:
     '✗ an expect imported from vitest ran; take it from the test callback: it(name, function* ({ expect }) { ... })',
-  foreignIt: "✗ this test was registered with vitest's it; import it from @effect/vitest",
+  foreignIt: "✗ this test was registered with vitest's it; import it from @systemfsoftware/vitest",
   toHaveLength:
     '✗ toHaveLength checks how many, not which. Assert the contents: toEqual([...]); only some of them: toEqual(expect.arrayContaining([...])).',
   toBeDefined:

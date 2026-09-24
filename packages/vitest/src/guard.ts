@@ -1,5 +1,5 @@
 /**
- * The guard setup file, published as `@effect/vitest/guard` and listed in the shared Vitest config's
+ * The guard setup file, published as `@systemfsoftware/vitest/guard` and listed in the shared Vitest config's
  * `setupFiles`. It installs the prototype guard once per worker and refuses any task the fork's `it` did not
  * register, so neither a raw `vitest` `expect` nor a raw `vitest` `it` can sit beside a fork check (KTD8).
  *

@@ -24,7 +24,7 @@
  * state made every legitimate check fail with the raw-expect refusal.
  *
  * The other half is {@link markTask}: the fork's `it` marks each task it registers, and the setup-file entry
- * (`@effect/vitest/guard`) refuses a task that carries no mark. This setup-file hook is internal plumbing; the
+ * (`@systemfsoftware/vitest/guard`) refuses a task that carries no mark. This setup-file hook is internal plumbing; the
  * user-facing hook refusal is the fork's own `beforeEach`.
  *
  * @since 4.0.0

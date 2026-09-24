@@ -1,4 +1,4 @@
-import { describe, it } from '@effect/vitest'
+import { describe, it } from '@systemfsoftware/vitest'
 import { Effect, Equal, Hash } from 'effect'
 
 class Money implements Equal.Equal {

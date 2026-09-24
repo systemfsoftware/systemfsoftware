@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/storybook-gherkin",
   "license": "Apache-2.0",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -58,7 +58,7 @@
     "storybook": ">=10.0.0"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
+    "@systemfsoftware/vitest": "workspace:^",
     "@microsoft/api-extractor": "catalog:",
     "@storybook/addon-vitest": "catalog:",
     "@storybook/react-vite": "catalog:",

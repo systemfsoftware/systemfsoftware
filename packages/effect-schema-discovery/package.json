@@ -45,7 +45,7 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
+    "@systemfsoftware/vitest": "workspace:^",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config-dmmf": "workspace:^",

@@ -1,4 +1,4 @@
-import { layer } from '@effect/vitest'
+import { layer } from '@systemfsoftware/vitest'
 import { Layer } from 'effect'
 
 const started: Array<string> = []

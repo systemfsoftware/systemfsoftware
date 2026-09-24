@@ -1,4 +1,4 @@
-import { makeMethods } from '@effect/vitest'
+import { makeMethods } from '@systemfsoftware/vitest'
 import { Effect, Ref } from 'effect'
 import { it as vitestIt } from 'vitest'
 

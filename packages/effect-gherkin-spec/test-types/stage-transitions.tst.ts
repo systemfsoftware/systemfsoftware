@@ -1,4 +1,3 @@
-import type { Asserted } from '@effect/vitest/integration'
 import { And, But, Gherkin, Given, StageTypeId, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type {
   AssertionStateRefused,
@@ -10,6 +9,7 @@ import type {
   ThenStage,
   WhenStage,
 } from '@systemfsoftware/effect-gherkin-spec'
+import type { Asserted } from '@systemfsoftware/vitest/integration'
 import { Effect } from 'effect'
 import { describe, expect, it } from 'tstyche'
 

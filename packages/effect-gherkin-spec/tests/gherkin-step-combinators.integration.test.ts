@@ -1,4 +1,3 @@
-import { step } from '@effect/vitest/integration'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   And,
@@ -11,6 +10,7 @@ import {
   VitestTaskRef,
   When,
 } from '@systemfsoftware/effect-gherkin-spec'
+import { step } from '@systemfsoftware/vitest/integration'
 import { Chunk, Effect, Layer, Result } from 'effect'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 

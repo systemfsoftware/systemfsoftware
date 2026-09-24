@@ -1,4 +1,4 @@
-import { describe, it } from '@effect/vitest'
+import { describe, it } from '@systemfsoftware/vitest'
 
 describe('a boolean actual', () => {
   it('Should_RefuseTheBooleanActual_When_TheCheckCanOnlyReportTrue', function*({ expect }) {

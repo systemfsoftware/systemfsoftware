@@ -396,7 +396,7 @@ export const describe: {
  * `shared: true`.
  *
  * ```ts
- * import { it, layer } from "@effect/vitest"
+ * import { it, layer } from "@systemfsoftware/vitest"
  * import { Context, Effect, Layer } from "effect"
  *
  * class Foo extends Context.Service<Foo, "foo">()("Foo") {
@@ -487,7 +487,7 @@ export type Gate<R, Provided = never> = Vitest.Gate<R, Provided>
 export type { Check, Checks, Expect }
 
 /**
- * The `Asserted` service a check needs; a library that ends in a check names it, and `@effect/vitest/integration`
+ * The `Asserted` service a check needs; a library that ends in a check names it, and `@systemfsoftware/vitest/integration`
  * exports the step marker that opens a new observed state.
  *
  * @since 4.0.0

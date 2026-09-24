@@ -4,17 +4,17 @@
 
 ```ts
 
-import { Asserted } from '@effect/vitest/integration';
-import { Check } from '@effect/vitest';
+import { Asserted } from '@systemfsoftware/vitest/integration';
+import { Check } from '@systemfsoftware/vitest';
 import { Context } from 'effect';
 import { Duration } from 'effect';
 import * as Effect$1 from 'effect/Effect';
 import { Effect } from 'effect';
-import { Expect } from '@effect/vitest';
-import { it } from '@effect/vitest';
+import { Expect } from '@systemfsoftware/vitest';
+import { it } from '@systemfsoftware/vitest';
 import * as Layer$1 from 'effect/Layer';
 import { Layer } from 'effect';
-import { layer } from '@effect/vitest';
+import { layer } from '@systemfsoftware/vitest';
 import * as Result from 'effect/Result';
 import { Schedule } from 'effect';
 import { Schema } from 'effect';

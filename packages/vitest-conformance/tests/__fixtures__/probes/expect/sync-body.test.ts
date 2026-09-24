@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { expect } from 'vitest'
 
 const total = (quantities: ReadonlyArray<number>): number => quantities.reduce((sum, each) => sum + each, 0)

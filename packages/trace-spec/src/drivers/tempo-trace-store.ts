@@ -96,7 +96,7 @@ const hexOf = (value: bigint, chars: number): string => BigInt.asUintN(chars, va
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   const HexIdCodec = { encode: encodeId, decode: decodeId }
   it.effect.prop(

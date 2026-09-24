@@ -92,7 +92,7 @@ export const predicate: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
 
   it.prop(
     '∀e_BreakWithDump_∈Messages',

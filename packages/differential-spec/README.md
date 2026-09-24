@@ -61,8 +61,8 @@ A check has no wall-clock limit. Each generated input runs on the simulation ker
 The builders register one test per call. To drive a run inside your own test — a Gherkin step, a `Suite` case, or any generator body — take `expect` from the test callback and end in the run's one check:
 
 ```ts
-import { it } from '@effect/vitest'
 import { runDifferentialWithShrink } from '@systemfsoftware/differential-spec'
+import { it } from '@systemfsoftware/vitest'
 import * as fc from 'fast-check'
 
 it('the two totals agree for every generated amount', function*({ expect }) {
@@ -76,5 +76,5 @@ A run answers a `DifferentialReport`: `holds` is whether the relation held, and 
 
 - Every comparison runs both sides on the simulation kernel under explored schedules, and a failure report names the schedule that produced it. `name` becomes the test's name.
 - Targets are plain `Effect` values and may be asynchronous: `Effect.sleep` advances virtual time, and a promise that settles without host I/O resolves inside the run. A target that waits on a real timer, file, or socket fails the comparison with a report naming the wait.
-- Checks register through `@effect/vitest`, so run them under Vitest; each `.assert` / `.relation` call adds one test to the suite.
+- Checks register through `@systemfsoftware/vitest`, so run them under Vitest; each `.assert` / `.relation` call adds one test to the suite.
 - One side crashing is a discrepancy, not an abort: agreeing refusals (same failure fingerprint) still pass.

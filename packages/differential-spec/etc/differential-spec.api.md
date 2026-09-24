@@ -4,11 +4,11 @@
 
 ```ts
 
-import { Asserted } from '@effect/vitest';
-import { Check } from '@effect/vitest';
+import { Asserted } from '@systemfsoftware/vitest';
+import { Check } from '@systemfsoftware/vitest';
 import { Effect } from 'effect';
 import { Exit } from 'effect';
-import { Expect } from '@effect/vitest';
+import { Expect } from '@systemfsoftware/vitest';
 import * as fc from 'fast-check';
 
 // @public (undocumented)

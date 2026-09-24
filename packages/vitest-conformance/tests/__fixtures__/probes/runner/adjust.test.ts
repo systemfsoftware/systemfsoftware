@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Clock } from 'effect'
 import { Effect } from 'effect'
 import { Fiber } from 'effect'

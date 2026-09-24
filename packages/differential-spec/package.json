@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/differential-spec",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -28,8 +28,8 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/effect-sim-kernel": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
     "effect": "catalog:",
     "fast-check": "catalog:"
   },

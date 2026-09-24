@@ -1,4 +1,4 @@
-import { describe, it } from '@effect/vitest'
+import { describe, it } from '@systemfsoftware/vitest'
 
 describe('the refused statics', () => {
   it('Should_RefuseTheAnythingStatic_When_ItIsReadButNotCalled', function*({ expect }) {

@@ -48,7 +48,6 @@ catalog: # ← default catalog: "catalog:" resolves here
   "@effect/platform-node": 4.0.0-rc.117
   "@effect/platform-node-shared": 4.0.0-rc.117
   effect: 4.0.0-rc.117
-  "@effect/vitest": 4.0.0-rc.117
   fast-check: ^4
   vitest: ^5
   "@vitest/snapshot": ^5
@@ -78,7 +77,6 @@ catalog: # ← default catalog: "catalog:" resolves here
 catalogs:
   peers: # ← named catalog: resolves as "catalog:peers"
     effect: 4.0.0-rc.117
-    "@effect/vitest": 4.0.0-rc.117
   oxlint: # ← named catalog: resolves as "catalog:oxlint"
     oxlint: ~1.82.0
     "@oxlint/plugins": ~1.82.0
@@ -110,7 +108,7 @@ Workspace-local packages (other monorepo members) continue using `workspace:^` �
 
 ```json
 "devDependencies": {
-  "@effect/vitest": "catalog:",
+  "@systemfsoftware/vitest": "workspace:^",
   "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
   "@systemfsoftware/oxlint-config": "workspace:^",
   "@systemfsoftware/tsconfig": "workspace:^",
@@ -151,7 +149,7 @@ pnpm check
 
 **Consistent runtime behavior.** Every package in the monorepo tests against the same `effect` version. A bug that only manifests on older versions is caught uniformly rather than lurking in packages that haven't been manually updated.
 
-**Named catalogs model concern separation.** The `stryker` catalog isolates mutation-testing tooling from the main library axis. Bumping `@effect/vitest` does not nudge Stryker deps, and vice versa.
+**Named catalogs model concern separation.** The `stryker` catalog isolates mutation-testing tooling from the main library axis. Bumping `effect` does not nudge Stryker deps, and vice versa.
 
 **CI safety.** `pnpm check` with `--frozen-lockfile` fails if any `package.json` drifts from the lockfile, catching a missed `pnpm install` before it reaches CI.
 
@@ -169,7 +167,6 @@ Named catalogs are appropriate when a subset of packages has a distinct dependen
 
 ```json
 "devDependencies": {
-  "@effect/vitest": "^0.29.0",
   "effect": "^3.21.2",
   "fast-check": "^3.0.0",
   "vitest": "^4.0.0",
@@ -182,7 +179,6 @@ Named catalogs are appropriate when a subset of packages has a distinct dependen
 
 ```json
 "devDependencies": {
-  "@effect/vitest": "catalog:",
   "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
   "effect": "catalog:",
   "fast-check": "catalog:",

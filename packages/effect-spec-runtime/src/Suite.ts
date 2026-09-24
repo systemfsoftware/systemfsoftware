@@ -1,6 +1,6 @@
 /// <reference types="vitest/importMeta" />
-import { type Checks, type Expect, type Vitest, VitestTestContext } from '@effect/vitest'
-import { type Asserted, captureRunBinding, type RunBinding } from '@effect/vitest/integration'
+import { type Checks, type Expect, type Vitest, VitestTestContext } from '@systemfsoftware/vitest'
+import { type Asserted, captureRunBinding, type RunBinding } from '@systemfsoftware/vitest/integration'
 import { Effect, Layer } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'

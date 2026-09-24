@@ -28,7 +28,7 @@ const stringField = (value, key) => {
 
 // The fork is declared under this name: `pnpm-workspace.yaml`'s catalog aliases it to this repo's
 // `@systemfsoftware/vitest` package. A package that cannot resolve it must not run unguarded.
-const forkDependency = '@effect/vitest'
+const forkDependency = '@systemfsoftware/vitest'
 
 // The setup file that installs the fork's guard (KTD8), published by the fork under this subpath.
 const forkGuardSpecifier = `${forkDependency}/guard`
@@ -87,7 +87,7 @@ const guardSetupFile = (cwd, name) => {
   } catch (cause) {
     throw new Error(
       `[@systemfsoftware/vitest-config] ${name} cannot resolve "${forkGuardSpecifier}", so its tests would run without the KTD8 guard. ` +
-        `Declare "@effect/vitest": "catalog:" in devDependencies of ${join(cwd, 'package.json')}, ` +
+        `Declare "@systemfsoftware/vitest": "workspace:^" in devDependencies of ${join(cwd, 'package.json')}, ` +
         `or name the exempt test project in vitest-config's guard exemption table.`,
       { cause },
     )
@@ -217,7 +217,7 @@ export const sharedConfig = {
   // the fork's compat module; on its virtual time `adjust` lets that much time pass.
   resolve: {
     ...sourceResolveConditions.resolve,
-    alias: { 'effect/TestClock': '@effect/vitest/TestClock' },
+    alias: { 'effect/TestClock': '@systemfsoftware/vitest/TestClock' },
   },
   test: {
     globals: false,

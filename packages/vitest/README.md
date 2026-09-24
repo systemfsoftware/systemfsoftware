@@ -2,9 +2,9 @@
 
 A fork of [`@effect/vitest`](https://github.com/Effect-TS/effect/tree/main/packages/vitest) whose defaults make the lazy test a good test. `expect` is the parameter of the test's own body, every check is yielded, and one observed state gets one check. Write the obvious thing and you also get a fresh build of your services, a second run that catches leaked state, virtual time, and properties refuted against a constant impostor. Write the slop form and the refusal names the rewrite.
 
-Everything upstream exports is still exported except what the callback parameter replaces. `it`, `test`, `it.live`, `it.each`, `it.layer`, `layer`, `describe`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods` and `describeWrapped` are here; `expect` and `assert` are not; `it.effect`, `it.scoped` and `it.scopedLive` are refusals carrying the generator rewrite; and the Vitest values the fork keeps are re-exported by name — the list is under [Compatibility](#compatibility-with-effectvitest). Two things differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower. On top of that surface the fork adds `@effect/vitest/integration` (`step`, `captureRunBinding`), `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe.
+Everything upstream exports is still exported except what the callback parameter replaces. `it`, `test`, `it.live`, `it.each`, `it.layer`, `layer`, `describe`, `it.prop`, `it.effect.prop`, `flakyTest`, `addEqualityTesters`, `makeMethods` and `describeWrapped` are here; `expect` and `assert` are not; `it.effect`, `it.scoped` and `it.scopedLive` are refusals carrying the generator rewrite; and the Vitest values the fork keeps are re-exported by name — the list is under [Compatibility](#compatibility-with-effectvitest). Two things differ from upstream: `describe` is the fork's lawful collector, and four accepted-input types are narrower. On top of that surface the fork adds `@systemfsoftware/vitest/integration` (`step`, `captureRunBinding`), `layer(L, { shared: true })`, a lawful `it.prop`, and `VitestTestContext` — the running test's context, published so a library can read it. `it`/`test`/`it.live`/`describeWrapped`/`layer`/`flakyTest` also take a data-last form (`it(body, timeout?)(name)`), so they pipe.
 
-The defaults are forced, not opted into. Every package in this workspace resolves `@effect/vitest` here through a pnpm alias, so libraries keep importing from `@effect/vitest` and never name this package.
+The defaults are forced, not opted into. Every package in this workspace imports `@systemfsoftware/vitest` by its own name, and published packages peer on it directly — nothing resolves through an alias to the upstream specifier.
 
 ## Install
 
@@ -12,16 +12,11 @@ The defaults are forced, not opted into. Every package in this workspace resolve
 pnpm add -D @systemfsoftware/vitest
 ```
 
-To keep the upstream specifier — the one every library published against `@effect/vitest` expects — alias it:
-
-```jsonc
-// package.json
-{ "devDependencies": { "@effect/vitest": "workspace:@systemfsoftware/vitest@*" } }
-```
+Every workspace package and published library imports `@systemfsoftware/vitest` by its own name — there is no alias to the upstream specifier, so a manifest names the runner its tests actually run. Outside a pnpm workspace, install it directly:
 
 ```bash
 # outside a pnpm workspace
-npm install -D @effect/vitest@npm:@systemfsoftware/vitest
+npm install -D @systemfsoftware/vitest
 ```
 
 > [!NOTE]
@@ -30,7 +25,7 @@ npm install -D @effect/vitest@npm:@systemfsoftware/vitest
 ## Quick start
 
 ```ts
-import { it, layer } from '@effect/vitest'
+import { it, layer } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer, Ref } from 'effect'
 
 class Store extends Context.Service<Store, Ref.Ref<ReadonlyArray<string>>>()('Store') {
@@ -67,15 +62,15 @@ it('ships a pending order', function*({ expect }) {
 
 ### The guard
 
-A check is the only way to assert, and the guard is what makes that true rather than advisory. `@effect/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers. The shared Vitest config loads it into every test project, inline projects included, so no import is needed. A project stays out only when vitest-config's exemption table names it together with the foreign runner that registers its tests (oxlint's `RuleTester`, Storybook's plugin). A package outside that table that cannot resolve `@effect/vitest/guard` fails at config load rather than running unguarded. Under it:
+A check is the only way to assert, and the guard is what makes that true rather than advisory. `@systemfsoftware/vitest/guard` installs a wrapper over chai's assertion prototype and marks every task the fork registers. The shared Vitest config loads it into every test project, inline projects included, so no import is needed. A project stays out only when vitest-config's exemption table names it together with the foreign runner that registers its tests (oxlint's `RuleTester`, Storybook's plugin). A package outside that table that cannot resolve `@systemfsoftware/vitest/guard` fails at config load rather than running unguarded. Under it:
 
 - **a raw `vitest` `expect` (or `assert`) is refused**, even beside a real check: "✗ an expect imported from vitest ran; take it from the test callback: it(name, function\* ({ expect }) { ... })";
-- **a test registered with `vitest`'s own `it`/`test` is refused**: "✗ this test was registered with vitest's it; import it from @effect/vitest".
+- **a test registered with `vitest`'s own `it`/`test` is refused**: "✗ this test was registered with vitest's it; import it from @systemfsoftware/vitest".
 
 ## Lanes
 
 ```ts
-import { describe, it, layer } from '@effect/vitest'
+import { describe, it, layer } from '@systemfsoftware/vitest'
 
 it(name, function*({ expect }) { /* virtual time */ })
 it.live(name, function*({ expect }) { /* the real clock */ })
@@ -113,7 +108,7 @@ A failure in a shuffled block names the seed the run used. Pass that seed back w
 Test bodies run on virtual time that advances only when the test's fibers are idle. `Effect.sleep("3 seconds")` returns without waiting; on a deadline tie the background sleepers wake before the test fiber; fractional-millisecond schedules work.
 
 ```ts
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Clock, Effect } from 'effect'
 
 it('three seconds pass at once', function*({ expect }) {
@@ -124,7 +119,7 @@ it('three seconds pass at once', function*({ expect }) {
 })
 ```
 
-`TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@effect/vitest/TestClock`, through the shared Vitest config's `effect/TestClock` alias.
+`TestClock.adjust` still moves the clock — on virtual time, adjusting is letting that much time pass, which is the one clock move a test can ask for. Effect v3 code that imports `TestClock` from `effect/TestClock` resolves to this fork's compat entry, `@systemfsoftware/vitest/TestClock`, through the shared Vitest config's `effect/TestClock` alias.
 
 ## Refusals
 
@@ -159,7 +154,7 @@ A named refusal reads exactly like this:
 A property names the function under test. It runs `runs` times; omit `runs` and the run's configured default applies:
 
 ```ts
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Schema as S } from 'effect'
 
 const sort = (xs: ReadonlyArray<number>): ReadonlyArray<number> => [...xs].sort((a, b) => a - b)
@@ -220,7 +215,7 @@ A class fails only when a sequential statistical test is confident its share is 
 A library takes the test's `expect` by parameter and ends in a check:
 
 ```ts
-import type { Check, Expect } from '@effect/vitest'
+import type { Check, Expect } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 export const runContract = (expect: Expect) =>
@@ -230,10 +225,10 @@ export const runContract = (expect: Expect) =>
   })
 ```
 
-A flow that asserts at several points marks each point with `step` from `@effect/vitest/integration`, so every phase opens its own observed state and each gets one check:
+A flow that asserts at several points marks each point with `step` from `@systemfsoftware/vitest/integration`, so every phase opens its own observed state and each gets one check:
 
 ```ts
-import { step } from '@effect/vitest/integration'
+import { step } from '@systemfsoftware/vitest/integration'
 import { Effect } from 'effect'
 
 export const runPipeline = (expect: Expect) =>
@@ -245,10 +240,10 @@ export const runPipeline = (expect: Expect) =>
   })
 ```
 
-`captureRunBinding` — from `@effect/vitest/integration` — is the test's run binding. Capture it inside the test, then `bind` the effect before handing it to a runtime of your own — its own scheduler, a worker, a simulation kernel — so its checks count as that test's assertions. `bind` provides what a check reads off the test's own fiber (the ledger, and the running task context) and the bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know the ledger. Every run of a bound effect opens its own observed state, so a runtime that re-runs it — a kernel's baseline and its seeded replays — checks each run once; two checks inside one run are still refused:
+`captureRunBinding` — from `@systemfsoftware/vitest/integration` — is the test's run binding. Capture it inside the test, then `bind` the effect before handing it to a runtime of your own — its own scheduler, a worker, a simulation kernel — so its checks count as that test's assertions. `bind` provides what a check reads off the test's own fiber (the ledger, and the running task context) and the bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know the ledger. Every run of a bound effect opens its own observed state, so a runtime that re-runs it — a kernel's baseline and its seeded replays — checks each run once; two checks inside one run are still refused:
 
 ```ts
-import { captureRunBinding } from '@effect/vitest/integration'
+import { captureRunBinding } from '@systemfsoftware/vitest/integration'
 import { Effect } from 'effect'
 
 export const runOnOwnScheduler = <A, E>(
@@ -263,7 +258,7 @@ export const runOnOwnScheduler = <A, E>(
 `VitestTestContext` is the running Vitest `TestContext` under the key `vitestTestContextKey`, provided on every test the fork runs — every generator lane, both property lanes, and each `it.each` row. A library that carries its own view of the task context builds it on that key, so a case lane and a property lane read the same context:
 
 ```ts
-import { vitestTestContextKey } from '@effect/vitest'
+import { vitestTestContextKey } from '@systemfsoftware/vitest'
 import { Context } from 'effect'
 
 export const TaskRef = Context.Reference<{ annotate?: (message: string) => void } | null>(vitestTestContextKey, {
@@ -271,20 +266,20 @@ export const TaskRef = Context.Reference<{ annotate?: (message: string) => void 
 })
 ```
 
-There is no `owned`, no `recordAssertion` and no `@effect/vitest/utils`: a library reports through the caller's check, and the one-check rule is what keeps a verdict a verdict.
+There is no `owned`, no `recordAssertion` and no `@systemfsoftware/vitest/utils`: a library reports through the caller's check, and the one-check rule is what keeps a verdict a verdict.
 
 ## Compatibility with @effect/vitest
 
 This is a fork of the surface, not a superset of it. What changed:
 
 - **No `expect` and no `assert`**, from this package or from its `vitest` re-export; the callback parameter replaces both (and the guard refuses a raw one).
-- **No `it.effect`, `it.scoped`, `it.scopedLive`, `owned`, `recordAssertion`, `@effect/vitest/utils`, or `@effect/vitest/refusals`.** `it.effect.prop` remains. `it.live` is a generator body on the real clock.
+- **No `it.effect`, `it.scoped`, `it.scopedLive`, `owned`, `recordAssertion`, `@systemfsoftware/vitest/utils`, or `@systemfsoftware/vitest/refusals`.** `it.effect.prop` remains. `it.live` is a generator body on the real clock.
 - **`export * from "vitest"` is gone.** The Vitest values the fork keeps — `vi`, `expectTypeOf`, `assertType`, `beforeAll`, `afterAll`, `onTestFailed`, `onTestFinished`, `inject`, `recordArtifact`, `vitest` — are re-exported explicitly, so a refused value cannot arrive through a star export.
 - **A test body is a generator**, so a sync, `async` or Effect-returning body is refused with the rewrite.
 - **`describe` is the fork's lawful collector** (forced concurrency and shuffle, the fork's methods), not upstream's. Vitest's own collector stays reachable as `import { describe } from 'vitest'`.
 - **`skipIf` and `runIf` take a `boolean`**, where upstream took `unknown`; an `unknown` or `any` condition is refused by this repo's lint.
 
-What else differs is what runs by default, what a check refuses, and what `toEqual` means — that is the reason for the alias.
+What else differs is what runs by default, what a check refuses, and what `toEqual` means — that is why the fork is imported under its own name rather than aliasing upstream.
 
 This package is part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
 

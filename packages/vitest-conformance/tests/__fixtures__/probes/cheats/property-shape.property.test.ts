@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 

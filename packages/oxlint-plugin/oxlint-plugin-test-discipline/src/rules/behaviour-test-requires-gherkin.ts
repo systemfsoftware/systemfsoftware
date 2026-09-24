@@ -53,7 +53,7 @@ export const behaviourTestRequiresGherkin = defineRule({
               if (isMakeFeatureSpecifier(specifier)) hasMakeFeature = true
             }
           }
-          if (!FOREIGN_RUNNERS.has(sourceValue)) continue
+          if (FOREIGN_RUNNERS[sourceValue] !== true) continue
           for (const specifier of statement.specifiers) {
             if (specifier.type !== 'ImportSpecifier') continue
             const runnerName = foreignRunnerNameOf(specifier)

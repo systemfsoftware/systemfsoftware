@@ -1,6 +1,6 @@
-import { it as vitestIt, layer } from '@effect/vitest'
-import type { Expect } from '@effect/vitest'
 import { KernelCase, Suite } from '@systemfsoftware/effect-spec-runtime'
+import { it as vitestIt, layer } from '@systemfsoftware/vitest'
+import type { Expect } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer } from 'effect'
 import { describe, expect, it } from 'tstyche'
 

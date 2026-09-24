@@ -1,7 +1,7 @@
-import type { Check, Expect } from '@effect/vitest'
-import type { Asserted } from '@effect/vitest/integration'
 import { Contract, Observation, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import type { Check, Expect } from '@systemfsoftware/vitest'
+import type { Asserted } from '@systemfsoftware/vitest/integration'
 import { Context, Effect, type FileSystem, type Layer, Schema as S } from 'effect'
 import { describe, expect, it } from 'tstyche'
 

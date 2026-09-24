@@ -1,5 +1,5 @@
-import type { Asserted, Expect, Vitest } from '@effect/vitest'
 import { Suite as Runtime } from '@systemfsoftware/effect-spec-runtime'
+import type { Asserted, Expect, Vitest } from '@systemfsoftware/vitest'
 import { Cause, Effect, type FileSystem, Layer, Random, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'

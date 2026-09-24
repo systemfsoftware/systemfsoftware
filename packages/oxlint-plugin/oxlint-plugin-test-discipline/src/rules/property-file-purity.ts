@@ -23,7 +23,7 @@ const PROPERTY_FILE_KIND: PropertyFileKind = {
   plainExpected: 'it.prop(...) or it.effect.prop(...) — property files never mix with scenario tests',
   plainFix:
     'move the scenario test to a plain *.test.ts file, or rewrite it as a property with arbitraries and a boolean-returning predicate',
-  rawFcExpected: 'it.prop(...) or it.effect.prop(...) from @effect/vitest',
+  rawFcExpected: 'it.prop(...) or it.effect.prop(...) from @systemfsoftware/vitest',
   rawFcActualSuffix: 'bypasses the vitest/Effect integration',
   rawFcFix:
     'rewrite as it.prop(name, { of, subject, runs }, holds) returning a boolean; fc.* stays for building arbitraries (fc.pre, fc.stringMatching, ...)',

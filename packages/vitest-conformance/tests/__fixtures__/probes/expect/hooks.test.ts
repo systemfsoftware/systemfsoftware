@@ -1,4 +1,4 @@
-import { beforeEach, describe, it } from '@effect/vitest'
+import { beforeEach, describe, it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 
 interface Order {

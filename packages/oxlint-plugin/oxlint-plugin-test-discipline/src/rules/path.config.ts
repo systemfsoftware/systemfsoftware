@@ -54,7 +54,18 @@ export const CONFORMANCE_PACKAGE = '@systemfsoftware/conformance-spec' as const
 
 export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 
-export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
+export const LAWFUL_RUNNER = '@systemfsoftware/vitest' as const
+
+export const FOREIGN_VITEST_SOURCES: Record<string, true> = {
+  'vitest': true,
+  '@effect/vitest': true,
+}
+
+/** Runners a harness-owned test (Gherkin, conformance, differential) must not import directly. */
+export const FOREIGN_RUNNERS: Record<string, true> = {
+  ...FOREIGN_VITEST_SOURCES,
+  [LAWFUL_RUNNER]: true,
+}
 
 /** Packages whose own tests drive Vitest directly: the runner and its conformance harness. */
 export const RAW_VITEST_PACKAGES: Record<string, true> = {

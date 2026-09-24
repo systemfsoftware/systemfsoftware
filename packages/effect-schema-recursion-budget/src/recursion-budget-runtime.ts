@@ -141,7 +141,7 @@ const deepestObjectOf = (value: unknown): Record<string, unknown> | undefined =>
 const deepestKindOf = (value: unknown): string => kindOf(deepestObjectOf(value))
 
 if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Schema: S } = await import('effect')
 
   type Codec = S.Codec<unknown, unknown>

@@ -1,5 +1,5 @@
-import type { Asserted, Check, Expect } from '@effect/vitest'
 import type { Taxonomy } from '@systemfsoftware/trace-taxonomy'
+import type { Asserted, Check, Expect } from '@systemfsoftware/vitest'
 import { Effect, FileSystem, Match, Option, Predicate } from 'effect'
 import { dual } from 'effect/Function'
 import { type Pipeable, Prototype } from 'effect/Pipeable'

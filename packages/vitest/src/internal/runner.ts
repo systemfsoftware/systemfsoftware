@@ -9,7 +9,7 @@
  *
  * What is a refusal here: a body that is not a generator, and the habit lanes `it.effect`, `it.scoped` and
  * `it.scopedLive` (R2, R9). Registration marks every task this file adds (KTD8), so the guard in
- * `@effect/vitest/guard` can tell the fork's tests from a test registered by Vitest itself.
+ * `@systemfsoftware/vitest/guard` can tell the fork's tests from a test registered by Vitest itself.
  */
 import * as Cause from 'effect/Cause'
 import type * as Context from 'effect/Context'

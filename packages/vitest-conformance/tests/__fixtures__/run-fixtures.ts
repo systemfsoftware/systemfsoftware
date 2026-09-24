@@ -7,7 +7,7 @@
  * the runner is built.
  *
  * The run is in-process through `vitest/node` on the worker-threads pool: no child process, no browser.
- * Fixtures resolve `@effect/vitest` to this worktree's fork source directly, so a report always describes
+ * Fixtures resolve `@systemfsoftware/vitest` to this worktree's fork source directly, so a report always describes
  * the code under conformance rather than an installed copy.
  *
  * Fixtures live in `tests/__fixtures__/probes/**`. A glob handed to {@link runFixtures} is matched relative
@@ -28,7 +28,7 @@ const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
 const forkEntry = fileURLToPath(new URL('../../../vitest/src/mod.ts', import.meta.url))
 const forkGuard = fileURLToPath(new URL('../../../vitest/src/guard.ts', import.meta.url))
-const guardSetupFiles = ['@effect/vitest/guard']
+const guardSetupFiles = ['@systemfsoftware/vitest/guard']
 const forkTestClock = fileURLToPath(new URL('../../../vitest/src/TestClock.ts', import.meta.url))
 
 /**
@@ -201,8 +201,8 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
               {
                 resolve: {
                   alias: {
-                    '@effect/vitest/guard': forkGuard,
-                    '@effect/vitest': forkEntry,
+                    '@systemfsoftware/vitest/guard': forkGuard,
+                    '@systemfsoftware/vitest': forkEntry,
                     'effect/TestClock': forkTestClock,
                   },
                 },

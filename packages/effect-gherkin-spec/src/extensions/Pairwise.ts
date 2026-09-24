@@ -1,5 +1,5 @@
-import type { Asserted } from '@effect/vitest/integration'
-import { step } from '@effect/vitest/integration'
+import type { Asserted } from '@systemfsoftware/vitest/integration'
+import { step } from '@systemfsoftware/vitest/integration'
 import type { Context } from 'effect'
 import { Effect, Layer } from 'effect'
 import { dual } from 'effect/Function'

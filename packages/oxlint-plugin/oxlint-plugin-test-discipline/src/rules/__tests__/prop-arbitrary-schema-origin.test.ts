@@ -432,7 +432,7 @@ ${GUARD_END}`,
     {
       name: 'Should_Report_When_HandBuiltConstantRidesADynamicFastCheckImport',
       code: `${GUARD}
-const { it } = await import('@effect/vitest')
+const { it } = await import('@systemfsoftware/vitest')
 const { FastCheck: fc } = await import('effect/testing')
 it.prop('p', { of: [fc.constant({ a: 1 })], subject: (input) => input, runs: 100 }, (s, [v]) => v !== null)
 ${GUARD_END}`,

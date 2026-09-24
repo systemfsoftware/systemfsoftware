@@ -67,4 +67,4 @@ pnpm add -D @systemfsoftware/effect-gherkin-spec@workspace:^
 > This package is `private: true` — it exists to exercise the effect v4 RC inside the workspace and is never published.
 
 > [!NOTE]
-> `effect`, `@effect/vitest`, and `vitest` are peer dependencies — you bring your own.
+> `effect`, `@systemfsoftware/vitest`, and `vitest` are peer dependencies — you bring your own.

@@ -1,5 +1,3 @@
-import type { Vitest } from '@effect/vitest'
-import { it as vitestIt } from '@effect/vitest'
 import type {
   EffectVitestBindings,
   FeatureBuilder,
@@ -8,6 +6,8 @@ import type {
   ScenarioOptions,
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import type { Vitest } from '@systemfsoftware/vitest'
+import { it as vitestIt } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { describe, expect, it } from 'tstyche'

@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it } from '@systemfsoftware/vitest'
 import { Effect } from 'effect'
 import { Ref } from 'effect'
 import { Schedule } from 'effect'

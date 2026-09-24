@@ -490,7 +490,7 @@ export const named: {
 
 if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published module graph.
-  const { it } = await import('@effect/vitest')
+  const { it } = await import('@systemfsoftware/vitest')
   const { Array: Arr, Effect, Match, Option, Predicate, Result, Schema } = await import('effect')
   const { make } = await import('./Workflow.js')
 

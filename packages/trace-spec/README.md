@@ -43,8 +43,8 @@ const paymentUnderCheckout = Contract.of(checkout)
 `Contract.check(contract, expect, input)` is the test edge over `judge`, and takes the `expect` the test body received. It ends in the judgement's one check: a hold is the check passing, and a break fails it with the report — the relation that broke, the conjunct it was evaluating, the spans it inspected, the trace, and where the decoded graph was written. `Contract.verdictCheck(contract, expect, judgment)` states an already judged contract the same way, and `Contract.Report` — `{ verdict, report }`, the report empty on a hold — is what the check asserts.
 
 ```ts
-import { it } from '@effect/vitest'
 import { Contract } from '@systemfsoftware/trace-spec'
+import { it } from '@systemfsoftware/vitest'
 
 it('a charged settlement satisfies the contract', function*({ expect }) {
   yield* Contract.check(chargeBeneathSettlement, expect, { orderId: 'order-7', charge: true })
@@ -65,8 +65,8 @@ Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`,
 
 ```ts
 import { NodeFileSystem } from '@effect/platform-node'
-import { it } from '@effect/vitest'
 import { Observation, ObservationWindow, Suite } from '@systemfsoftware/trace-spec'
+import { it } from '@systemfsoftware/vitest'
 import { Layer } from 'effect'
 
 const TraceSuite = Suite.make({ it })

@@ -150,6 +150,11 @@
     - effect-rc112
     - modern-ends-know
     - projections-collapsed-into-ports
+"@systemfsoftware/conformance-spec@0.1.0":
+  dir: packages/conformance-spec
+  intents:
+    - calm-fishes-sit
+    - lazy-pens-remain
 "@systemfsoftware/differential-spec@0.1.0":
   dir: packages/differential-spec
   intents:
@@ -172,6 +177,12 @@
   dir: packages/differential-spec
   intents:
     - tame-jeans-tickle
+"@systemfsoftware/differential-spec@0.5.0":
+  dir: packages/differential-spec
+  intents:
+    - good-cooks-dance
+    - hungry-kiwis-change
+    - runner-rename-runtime
 "@systemfsoftware/discern@0.0.0":
   dir: packages/discern
   intents:
@@ -181,6 +192,10 @@
   dir: packages/discern
   intents:
     - discern-cell-kinds
+"@systemfsoftware/discern@0.2.0":
+  dir: packages/discern
+  intents:
+    - good-dodos-teach
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -328,6 +343,10 @@
   dir: packages/atom/effect-atom
   intents:
     - curvy-poets-hide
+"@systemfsoftware/effect-atom@5.1.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - short-eggs-reflect
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -539,6 +558,10 @@
   dir: packages/effect-daemon-spec
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-daemon-spec@4.2.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - curly-keys-stay
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -613,6 +636,11 @@
   dir: packages/effect-gherkin-spec
   intents:
     - clever-carrots-run
+"@systemfsoftware/effect-gherkin-spec@5.0.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - fork-under-own-name
+    - kind-rats-kiss
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -684,6 +712,11 @@
   dir: packages/effect-memfs
   intents:
     - memfs-cell-kinds
+"@systemfsoftware/effect-memfs@4.1.0":
+  dir: packages/effect-memfs
+  intents:
+    - hungry-mugs-wonder
+    - smart-flies-end
 "@systemfsoftware/effect-microsandbox@0.1.0":
   dir: packages/effect-microsandbox
   intents:
@@ -711,6 +744,10 @@
   dir: packages/effect-microsandbox
   intents:
     - microvm-cell-kinds
+"@systemfsoftware/effect-microsandbox@3.1.0":
+  dir: packages/effect-microsandbox
+  intents:
+    - shaggy-zebras-bathe
 "@systemfsoftware/effect-readiness@0.1.0":
   dir: packages/effect-readiness
   intents:
@@ -901,6 +938,10 @@
   dir: packages/effect-schema-law
   intents:
     - young-moose-deny
+"@systemfsoftware/effect-schema-law@3.0.0":
+  dir: packages/effect-schema-law
+  intents:
+    - fork-under-own-name
 "@systemfsoftware/effect-schema-recursion-budget@0.0.0":
   dir: packages/effect-schema-recursion-budget
   intents:
@@ -985,6 +1026,13 @@
   dir: packages/effect-schema-vite
   intents:
     - weak-houses-pretend
+"@systemfsoftware/effect-sim-kernel@0.1.0":
+  dir: packages/effect-sim-kernel
+  intents:
+    - cool-dodos-greet
+    - mighty-beds-yell
+    - quiet-melons-roll
+    - witty-lions-queue
 "@systemfsoftware/effect-spec-runtime@0.0.0":
   dir: packages/effect-spec-runtime
   intents:
@@ -1001,6 +1049,13 @@
   dir: packages/effect-spec-runtime
   intents:
     - tough-tigers-unite
+"@systemfsoftware/effect-spec-runtime@0.3.0":
+  dir: packages/effect-spec-runtime
+  intents:
+    - ancient-clocks-hug
+    - fork-under-own-name
+    - pretty-poets-fail
+    - witty-lions-queue
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -1271,6 +1326,11 @@
   intents:
     - blueprint-handle-rules
     - strong-socks-punch
+"@systemfsoftware/oxlint-config-recommended@3.1.0":
+  dir: packages/oxlint-presets/oxlint-config-recommended
+  intents:
+    - khaki-walls-argue
+    - runner-rename-runtime
 "@systemfsoftware/oxlint-config-rule-authoring@1.1.0":
   dir: packages/oxlint-presets/oxlint-config-rule-authoring
   intents:
@@ -1494,6 +1554,11 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
   intents:
     - weak-houses-pretend
+"@systemfsoftware/oxlint-plugin-effect-platform@1.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-platform
+  intents:
+    - happy-crabs-wave
+    - thick-beds-shave
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -1749,6 +1814,14 @@
   dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
   intents:
     - real-knives-shout
+"@systemfsoftware/oxlint-plugin-test-discipline@4.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-discipline
+  intents:
+    - fast-stars-heal
+    - little-kings-run
+    - lucky-buses-whisper
+    - lucky-lions-shave
+    - test-discipline-own-runner-name
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.10":
   dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
   intents:
@@ -2036,6 +2109,10 @@
   dir: packages/storybook-gherkin
   intents:
     - weak-houses-pretend
+"@systemfsoftware/storybook-gherkin@4.0.2":
+  dir: packages/storybook-gherkin
+  intents:
+    - tough-foxes-repair
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -2874,6 +2951,11 @@
   intents:
     - angry-falcons-travel
     - trace-spec-cell-kinds
+"@systemfsoftware/trace-spec@0.4.0":
+  dir: packages/trace-spec
+  intents:
+    - fork-under-own-name
+    - shaggy-olives-bathe
 "@systemfsoftware/trace-taxonomy@0.0.0":
   dir: packages/trace-taxonomy
   intents:
@@ -2913,4 +2995,7 @@
 "@systemfsoftware/vitest@0.0.0":
   dir: packages/vitest
   intents:
+    - curly-bees-enjoy
+    - runner-rename-runtime
     - thick-cooks-sell
+    - witty-lions-queue
