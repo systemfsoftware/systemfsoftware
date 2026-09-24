@@ -1,9 +1,8 @@
 import { OpenRouterClient, OpenRouterLanguageModel } from '@effect/ai-openrouter'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { PackEval } from '@systemfsoftware/pack-eval'
-import { Effect, Layer, Redacted, Schema } from 'effect'
+import { Effect, Layer, Match, Redacted, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
-import * as Path from 'effect/Path'
 import { expect } from 'vitest'
 import {
   type LoopbackReply,
@@ -12,88 +11,106 @@ import {
   type OpenRouterLoopbackShape,
   type RecordedRequest,
 } from './__fixtures__/openrouter-loopback.fixture.js'
+import {
+  ruleSelectorWorld,
+  type World,
+  type WorldInstruction,
+  type WorldPack,
+  type WorldTask,
+} from './__fixtures__/pack-eval-world.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
-const pack = new PackEval.Pack({
-  id: 'greenhouse',
-  rules: [
-    new PackEval.PackRule({
-      packId: 'greenhouse',
-      stem: 'watering-schedule',
-      title: 'Water on a schedule',
-      appliesWhen: ['touching the watering plan'],
-      tags: ['water'],
-      body: 'Water every second morning and write the amount in the log.',
-    }),
-    new PackEval.PackRule({
-      packId: 'greenhouse',
-      stem: 'night-venting',
-      title: 'Keep the air moving at night',
-      appliesWhen: ['closing the vents for the night'],
-      tags: ['air'],
-      body: 'Leave one vent open a hand width after the last walk-through.',
-    }),
-  ],
-})
-
-const task = new PackEval.Task({
-  id: 'task-trellis',
-  text: 'Tie the tomato shoots to the trellis before the weekend',
-  split: 'dev',
-  dimensions: { crop: 'tomato' },
-})
-
-const instruction = new PackEval.SelectorInstruction({
-  text: 'Load every rule whose applies_when matches the work the task describes.',
-  provenance: new PackEval.SelectorProvenance({
-    consumer: 'greenkeeper',
-    pluginVersion: '1.0.0',
-    sourcePath: 'references/agents/greenkeeper.md',
-  }),
-})
-
-const request: PackEval.RuleSelectionRequest = { pack, task, instruction }
-
 const askedModel = 'acme/planner-large'
-const otherModel = 'acme/planner-small'
 const servedModel = 'acme/planner-large@acme'
+
+const headOf = <T>(values: ReadonlyArray<T>, what: string): T => {
+  const [first] = values
+  if (first === undefined) throw new Error(`the selector world holds no ${what}`)
+  return first
+}
+
+const packOf = (world: World): WorldPack => headOf(world.packs, 'pack')
+const taskOf = (world: World): WorldTask => headOf(world.tasks, 'task')
+
+const instructionOf = (world: World): WorldInstruction => {
+  const instruction = world.instruction
+  if (instruction === undefined) throw new Error('the selector world holds no instruction')
+  return instruction
+}
+
+const ruleRequestOf = (world: World): PackEval.RuleSelectionRequest => {
+  const pack = packOf(world)
+  const task = taskOf(world)
+  const instruction = instructionOf(world)
+  return {
+    pack: new PackEval.Pack({
+      id: pack.id,
+      rules: pack.rules.map((rule) =>
+        new PackEval.PackRule({
+          packId: pack.id,
+          stem: rule.stem,
+          title: rule.title,
+          appliesWhen: [headOf(rule.appliesWhen, 'applies_when'), ...rule.appliesWhen.slice(1)],
+          tags: rule.tags,
+          body: rule.body,
+        })
+      ),
+    }),
+    task: new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions }),
+    instruction: new PackEval.SelectorInstruction({
+      text: instruction.text,
+      provenance: new PackEval.SelectorProvenance({
+        consumer: instruction.consumer,
+        pluginVersion: instruction.pluginVersion,
+        sourcePath: instruction.sourcePath,
+      }),
+    }),
+  }
+}
 
 const answerTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.LoadedStems))
 
-const stemsReply = (loaded: ReadonlyArray<string>): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.map(answerTextOf({ loaded }), (content) => ({
-    status: 200,
-    body: {
-      id: 'gen-loopback-1',
-      object: 'chat.completion',
-      created: 1_760_000_000,
-      model: servedModel,
-      system_fingerprint: null,
-      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-    },
-  }))
+const completionOf = (content: string): LoopbackReply => ({
+  status: 200,
+  body: {
+    id: 'rule-selector-loopback',
+    object: 'chat.completion',
+    created: 1_760_000_000,
+    model: servedModel,
+    system_fingerprint: null,
+    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+  },
+})
+type ReplyKind = 'answered' | 'refused'
 
-const refusedReply: Effect.Effect<LoopbackReply, Schema.SchemaError> = Effect.succeed({
+const refusedReply: LoopbackReply = {
   status: 500,
   body: { error: { message: 'upstream is down' } },
-})
-
-interface World {
-  readonly provider: OpenRouterLoopbackShape
-  readonly cacheDir: string
 }
 
-const worldWith = (replies: ReadonlyArray<Effect.Effect<LoopbackReply, Schema.SchemaError>>) =>
+const replyOf = (kind: ReplyKind, stems: ReadonlyArray<string>): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
+  Match.value(kind).pipe(
+    Match.when('answered', () => Effect.map(answerTextOf({ loaded: stems }), completionOf)),
+    Match.when('refused', () => Effect.succeed(refusedReply)),
+    Match.exhaustive,
+  )
+
+interface SelectorWorld {
+  readonly provider: OpenRouterLoopbackShape
+  readonly cacheDir: string
+  readonly request: PackEval.RuleSelectionRequest
+}
+const scriptedWorldOf = (world: World, kind: ReplyKind, stems: ReadonlyArray<string>) =>
   Effect.gen(function*() {
     const provider = yield* OpenRouterLoopback
     const fileSystem = yield* FileSystem.FileSystem
-    yield* provider.answerWith(yield* Effect.all(replies))
+    yield* provider.answerWith([yield* replyOf(kind, stems)])
     const cacheDir = yield* fileSystem.makeTempDirectoryScoped()
-    return { provider, cacheDir } satisfies World
+    return { provider, cacheDir, request: ruleRequestOf(world) } satisfies SelectorWorld
   })
 
-const selectorStack = (world: World, model: string) =>
+const stackOf = (world: SelectorWorld, model: string) =>
   Layer.provideMerge(
     Layer.provideMerge(
       Layer.provideMerge(
@@ -105,128 +122,108 @@ const selectorStack = (world: World, model: string) =>
     OpenRouterClient.layer({ apiUrl: world.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
   )
 
-const selectOnce = (world: World, model: string) =>
+const selectWith = (world: SelectorWorld, model: string) =>
   Effect.gen(function*() {
     const selector = yield* PackEval.RuleSelector
-    return yield* selector.select(request)
-  }).pipe(Effect.provide(selectorStack(world, model)))
+    return yield* selector.select(world.request)
+  }).pipe(Effect.provide(stackOf(world, model)))
 
-const questionOf = (requests: ReadonlyArray<RecordedRequest>): string => requests[0]?.text ?? ''
+const promptOf = (requests: ReadonlyArray<RecordedRequest>): string => requests[0]?.text ?? ''
+
+const repliedRows = [
+  { reply: 'selected stems', kind: 'answered', stems: ['watering-schedule'] },
+  { reply: 'a stem the pack does not hold', kind: 'answered', stems: ['compost-tea'] },
+  { reply: 'a provider refusal', kind: 'refused', stems: [] },
+] as const
+
+const cachedRows = [
+  { models: 'the same model twice', first: 'acme/planner-large', second: 'acme/planner-large' },
+  { models: 'two different models', first: 'acme/planner-large', second: 'acme/planner-small' },
+] as const
 
 Feature('Deciding which pack rules govern a piece of work')
   .withScenarioLayer(openRouterLoopback)
-  .body(({ scenario }) => {
-    scenario(
-      'A trellis question is answered with the watering rule alone',
-      Gherkin.Do.pipe(
-        Given('a pack offering two rules by title and by when they apply, and a task about the tomato trellis')(
-          'world',
-          () => worldWith([stemsReply(['watering-schedule'])]),
+  .body(({ scenarioOutline }) => {
+    scenarioOutline(
+      'An answer with <reply> is carried, refused, or reported',
+      repliedRows,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a pack, a task, and a scripted provider answer')(
+            'world',
+            () => scriptedWorldOf(ruleSelectorWorld(), row.kind, [...row.stems]),
+          ),
+          When('the selector is asked which rules govern the task')('outcome', (s) =>
+            Effect.gen(function*() {
+              const attempt = yield* Effect.result(selectWith(s.world, askedModel))
+              const asked = yield* s.world.provider.requests
+              return { attempt, asked }
+            })),
+          Then('the question carries the instruction, the rule keys, the task, and never a rule body')((s) => {
+            const question = promptOf(s.outcome.asked)
+            const request = s.world.request
+            expect(question).toContain(request.instruction.text)
+            for (const rule of request.pack.rules) {
+              expect(question).toContain(rule.title)
+              for (const applies of rule.appliesWhen) {
+                expect(question).toContain(applies)
+              }
+              expect(question).not.toContain(rule.body)
+            }
+            expect(question).toContain(request.task.text)
+          }),
+          Then('the answer, refusal, or report matches the scripted reply')((s) =>
+            Match.value(row.reply).pipe(
+              Match.when('selected stems', () => {
+                const selection = Result.getOrThrow(s.outcome.attempt)
+                expect(selection.loadedStems).toEqual([...row.stems])
+                expect(selection.servedModel).toBe(servedModel)
+                expect(selection.requestedModel).toBe(askedModel)
+              }),
+              Match.when('a stem the pack does not hold', () => {
+                const refusal = Result.getOrThrow(Result.flip(s.outcome.attempt))
+                expect(refusal).toMatchObject({
+                  _tag: 'UnknownSelectedStem',
+                  stem: 'compost-tea',
+                  packId: 'greenhouse',
+                })
+              }),
+              Match.when('a provider refusal', () => {
+                const refusal = Result.getOrThrow(Result.flip(s.outcome.attempt))
+                expect(refusal).toMatchObject({ _tag: 'ProviderFailure', role: 'selector', model: askedModel })
+                expect(refusal).not.toMatchObject({ _tag: 'UnknownSelectedStem' })
+              }),
+              Match.exhaustive,
+            )
+          ),
         ),
-        When('the selector is asked which rules govern the task')('outcome', (s) =>
-          Effect.gen(function*() {
-            const selection = yield* selectOnce(s.world, askedModel)
-            const asked = yield* s.world.provider.requests
-            return { selection, asked }
-          })),
-        Then('the question carried the instruction, both rule titles, when each applies, and the task')((s) => {
-          const question = questionOf(s.outcome.asked)
-          expect(question).toContain(instruction.text)
-          expect(question).toContain('Water on a schedule')
-          expect(question).toContain('touching the watering plan')
-          expect(question).toContain('Keep the air moving at night')
-          expect(question).toContain('closing the vents for the night')
-          expect(question).toContain(task.text)
-        }),
-        Then('the question never carried the guidance written under a rule')((s) => {
-          const question = questionOf(s.outcome.asked)
-          expect(question).not.toContain('Water every second morning and write the amount in the log.')
-          expect(question).not.toContain('Leave one vent open a hand width after the last walk-through.')
-        }),
-        Then('the answer names the watering rule alone, and the model the provider says it served')((s) => {
-          expect(s.outcome.selection.loadedStems).toEqual(['watering-schedule'])
-          expect(s.outcome.selection.servedModel).toBe(servedModel)
-          expect(s.outcome.selection.requestedModel).toBe(askedModel)
-        }),
-      ),
     )
 
-    scenario(
-      'An answer naming a rule the pack does not hold is refused before anything is scored',
-      Gherkin.Do.pipe(
-        Given('a provider that answers with a rule the pack does not hold')(
-          'world',
-          () => worldWith([stemsReply(['compost-tea'])]),
+    scenarioOutline(
+      'The same work asked under <models> keeps one answer per model',
+      cachedRows,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a provider scripted once, and answers kept in a scratch folder')(
+            'world',
+            () => scriptedWorldOf(ruleSelectorWorld(), 'answered', ['watering-schedule']),
+          ),
+          When('the work is asked under the first model and then the second')('outcome', (s) =>
+            Effect.gen(function*() {
+              const first = yield* selectWith(s.world, row.first)
+              const second = yield* selectWith(s.world, row.second)
+              const asked = yield* s.world.provider.requestCount
+              return { first, second, asked }
+            })),
+          Then('the provider was reached once per distinct model, and the answers agree where they should')((s) => {
+            const expected = row.first === row.second ? 1 : 2
+            expect(s.outcome.asked).toBe(expected)
+            if (row.first === row.second) {
+              expect(s.outcome.second).toEqual(s.outcome.first)
+            } else {
+              expect(s.outcome.second.servedModel).toBe(servedModel)
+            }
+          }),
         ),
-        When('the selector is asked which rules govern the task')(
-          'refusal',
-          (s) => Effect.flip(selectOnce(s.world, askedModel)),
-        ),
-        Then('the answer is refused, and names the rule the pack does not hold')((s) => {
-          expect(s.refusal).toMatchObject({ _tag: 'UnknownSelectedStem', stem: 'compost-tea', packId: 'greenhouse' })
-        }),
-      ),
-    )
-
-    scenario(
-      'A provider that refuses the call is reported, and no selection is made',
-      Gherkin.Do.pipe(
-        Given('a provider that refuses every call')('world', () => worldWith([refusedReply])),
-        When('the selector is asked which rules govern the task')(
-          'refusal',
-          (s) => Effect.flip(selectOnce(s.world, askedModel)),
-        ),
-        Then('the refusal says the provider failed, and no rules were named')((s) => {
-          expect(s.refusal).toMatchObject({ _tag: 'ProviderFailure', role: 'selector', model: askedModel })
-          expect(s.refusal).not.toMatchObject({ _tag: 'UnknownSelectedStem' })
-        }),
-      ),
-    )
-
-    scenario(
-      'Asking about the same work twice reaches the provider once',
-      Gherkin.Do.pipe(
-        Given('a provider that answers with the watering rule, and answers kept in a scratch folder')(
-          'world',
-          () => worldWith([stemsReply(['watering-schedule'])]),
-        ),
-        When('the same work is asked twice')('second', (s) =>
-          Effect.gen(function*() {
-            const first = yield* selectOnce(s.world, askedModel)
-            const again = yield* selectOnce(s.world, askedModel)
-            const asked = yield* s.world.provider.requestCount
-            return { first, again, asked }
-          })),
-        Then('the provider is asked once, and both answers agree')((s) => {
-          expect(s.second.asked).toBe(1)
-          expect(s.second.again).toEqual(s.second.first)
-        }),
-      ),
-    )
-
-    scenario(
-      'The same work asked under two models keeps each answer apart',
-      Gherkin.Do.pipe(
-        Given('a provider that answers with the watering rule')(
-          'world',
-          () => worldWith([stemsReply(['watering-schedule'])]),
-        ),
-        When('the same work is asked under two different models')('second', (s) =>
-          Effect.gen(function*() {
-            const fileSystem = yield* FileSystem.FileSystem
-            const path = yield* Path.Path
-            const underFirst = yield* selectOnce(s.world, askedModel)
-            const underSecond = yield* selectOnce(s.world, otherModel)
-            const asked = yield* s.world.provider.requestCount
-            const kept = yield* fileSystem.readDirectory(path.join(s.world.cacheDir, 'selector'))
-            return { underFirst, underSecond, asked, kept }
-          })),
-        Then('each model was asked for itself, and both answers were kept')((s) => {
-          expect(s.second.asked).toBe(2)
-          expect(s.second.underFirst.servedModel).toBe(servedModel)
-          expect(s.second.underSecond.servedModel).toBe(servedModel)
-          expect(s.second.kept).toHaveLength(2)
-        }),
-      ),
     )
   })

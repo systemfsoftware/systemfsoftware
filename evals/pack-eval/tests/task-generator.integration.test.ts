@@ -1,64 +1,93 @@
 import { OpenRouterClient, OpenRouterLanguageModel } from '@effect/ai-openrouter'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { PackEval } from '@systemfsoftware/pack-eval'
-import { Effect, Layer, Redacted, Schema } from 'effect'
+import { Effect, Layer, Match, Redacted, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import { expect } from 'vitest'
 import {
   type LoopbackReply,
   OpenRouterLoopback,
   openRouterLoopback,
   type OpenRouterLoopbackShape,
-  type RecordedRequest,
 } from './__fixtures__/openrouter-loopback.fixture.js'
+import {
+  discoveryWorld,
+  withProviderRefusal,
+  type World,
+  type WorldTuple,
+} from './__fixtures__/pack-eval-world.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
 const askedModel = 'acme/drafter-small'
 const servedModel = 'acme/drafter-small@acme'
 
-const dimensions = [
-  new PackEval.Dimension({ name: 'job', captures: 'the work being done', values: ['watering', 'pruning', 'feeding'] }),
-  new PackEval.Dimension({ name: 'pace', captures: 'how the day is going', values: ['steady', 'rushed'] }),
-]
-
-const seeds: ReadonlyArray<PackEval.DimensionTuple> = [{ job: 'watering', pace: 'steady' }]
-
-const tuplesTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.ProposedRows))
-
-const tuplesReply = (
-  rows: ReadonlyArray<ReadonlyArray<PackEval.TupleEntry>>,
-): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.map(tuplesTextOf({ tuples: rows }), (content) => ({
-    status: 200,
-    body: {
-      id: 'gen-loopback-2',
-      object: 'chat.completion',
-      created: 1_760_000_000,
-      model: servedModel,
-      system_fingerprint: null,
-      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-    },
-  }))
-
-const answered = tuplesReply([[{ name: 'job', value: 'pruning' }, { name: 'pace', value: 'rushed' }]])
-
-interface World {
-  readonly provider: OpenRouterLoopbackShape
-  readonly cacheDir: string
+const headOf = <T>(values: ReadonlyArray<T>, what: string): T => {
+  const [first] = values
+  if (first === undefined) throw new Error(`the discovery world holds no ${what}`)
+  return first
 }
 
-const worldWith = (replies: ReadonlyArray<Effect.Effect<LoopbackReply, Schema.SchemaError>>) =>
+const proposalRequestOf = (world: World): PackEval.TupleProposalRequest => {
+  const dimensions = world.dimensions
+  if (dimensions === undefined || dimensions.kind !== 'described') {
+    throw new Error('the discovery world holds no described dimensions')
+  }
+  return {
+    application: dimensions.application,
+    dimensions: dimensions.dimensions.map((dimension) =>
+      new PackEval.Dimension({
+        name: dimension.name,
+        captures: dimension.captures,
+        values: [headOf(dimension.values, 'dimension values'), ...dimension.values.slice(1)],
+      })
+    ),
+    seeds: dimensions.seeds,
+  }
+}
+
+const rowsTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.ProposedRows))
+
+const completionOf = (content: string): LoopbackReply => ({
+  status: 200,
+  body: {
+    id: 'task-generator-loopback',
+    object: 'chat.completion',
+    created: 1_760_000_000,
+    model: servedModel,
+    system_fingerprint: null,
+    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+  },
+})
+
+const proposedReplyOf = (tuples: ReadonlyArray<WorldTuple>, names: ReadonlyArray<string>) =>
+  Effect.map(
+    rowsTextOf({ tuples: tuples.map((tuple) => names.map((name) => ({ name, value: tuple[name] ?? '' }))) }),
+    completionOf,
+  )
+
+const refusedReply: LoopbackReply = {
+  status: 500,
+  body: { error: { message: 'upstream is down' } },
+}
+
+interface GeneratorWorld {
+  readonly provider: OpenRouterLoopbackShape
+  readonly cacheDir: string
+  readonly request: PackEval.TupleProposalRequest
+  readonly world: World
+}
+
+const scriptedWorldOf = (world: World, reply: Effect.Effect<LoopbackReply, Schema.SchemaError>) =>
   Effect.gen(function*() {
     const provider = yield* OpenRouterLoopback
     const fileSystem = yield* FileSystem.FileSystem
-    yield* provider.answerWith(yield* Effect.all(replies))
+    yield* provider.answerWith([yield* reply])
     const cacheDir = yield* fileSystem.makeTempDirectoryScoped()
-    return { provider, cacheDir } satisfies World
+    return { provider, cacheDir, request: proposalRequestOf(world), world } satisfies GeneratorWorld
   })
 
-const generatorStack = (world: World) =>
+const stackOf = (world: GeneratorWorld) =>
   Layer.provideMerge(
     Layer.provideMerge(
       Layer.provideMerge(
@@ -70,49 +99,83 @@ const generatorStack = (world: World) =>
     OpenRouterClient.layer({ apiUrl: world.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
   )
 
-const proposeOnce = (world: World) =>
+const proposeWith = (world: GeneratorWorld) =>
   Effect.gen(function*() {
     const generator = yield* PackEval.TaskGenerator
-    return yield* generator.proposeTuples({
-      application: 'a greenhouse diary',
-      dimensions,
-      seeds,
-    })
-  }).pipe(Effect.provide(generatorStack(world)))
+    return yield* generator.proposeTuples(world.request)
+  }).pipe(Effect.provide(stackOf(world)))
 
-const questionOf = (requests: ReadonlyArray<RecordedRequest>): string => requests[0]?.text ?? ''
+const generatorRows = [
+  { reply: 'proposed tuples', refused: false },
+  { reply: 'a provider refusal', refused: true },
+] as const
 
 Feature('Growing a task set from owner dimensions')
   .withScenarioLayer(openRouterLoopback)
-  .body(({ scenario }) => {
-    scenario(
-      'A proposal is asked from the dimensions and the tuples already chosen',
-      Gherkin.Do.pipe(
-        Given('a generator holding the dimensions of the diary and the tuples already chosen')(
-          'world',
-          () => worldWith([answered]),
+  .body(({ scenarioOutline }) => {
+    scenarioOutline(
+      'A proposal asked from the dimensions comes back <reply>',
+      generatorRows,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('the diary dimensions, the tuples already chosen, and a scripted reply')(
+            'world',
+            () => {
+              const world = row.refused
+                ? withProviderRefusal({ role: 'generator' })(discoveryWorld())
+                : discoveryWorld()
+              const names = world.dimensions !== undefined && world.dimensions.kind === 'described'
+                ? world.dimensions.dimensions.map((dimension) => dimension.name)
+                : []
+              return scriptedWorldOf(
+                world,
+                Match.value(row.refused).pipe(
+                  Match.when(true, () => Effect.succeed(refusedReply)),
+                  Match.when(false, () =>
+                    proposedReplyOf(
+                      headOf(
+                        world.answers.generator.kind === 'proposed' ? [world.answers.generator] : [],
+                        'generator answer',
+                      )
+                        .proposedTuples,
+                      names,
+                    )),
+                  Match.exhaustive,
+                ),
+              )
+            },
+          ),
+          When('the owner asks for more dimension tuples')('outcome', (s) =>
+            Effect.gen(function*() {
+              const fileSystem = yield* FileSystem.FileSystem
+              const path = yield* Path.Path
+              const attempt = yield* Effect.result(proposeWith(s.world))
+              const asked = yield* s.world.provider.requests
+              if (Result.isFailure(attempt)) {
+                const kept: ReadonlyArray<string> = []
+                return { attempt, asked, kept, selectorFolder: false }
+              }
+              const kept = yield* fileSystem.readDirectory(path.join(s.world.cacheDir, 'generator'))
+              const selectorFolder = yield* fileSystem.exists(path.join(s.world.cacheDir, 'selector'))
+              return { attempt, asked, kept, selectorFolder }
+            })),
+          Then('the proposal, or the refusal, matches the scripted reply')((s) =>
+            Match.value(row.refused).pipe(
+              Match.when(true, () => {
+                const refusal = Result.getOrThrow(Result.flip(s.outcome.attempt))
+                expect(refusal).toMatchObject({ _tag: 'ProviderFailure', role: 'generator', model: askedModel })
+              }),
+              Match.when(false, () => {
+                const proposal = Result.getOrThrow(s.outcome.attempt)
+                const expected = s.world.world.answers.generator
+                if (expected.kind !== 'proposed') throw new Error('the proposed row holds no proposed answer')
+                expect(proposal.tuples).toEqual(expected.proposedTuples)
+                expect(s.outcome.kept).toHaveLength(1)
+                expect(s.outcome.selectorFolder).toBe(false)
+              }),
+              Match.exhaustive,
+            )
+          ),
         ),
-        When('the owner asks for more dimension tuples')('outcome', (s) =>
-          Effect.gen(function*() {
-            const fileSystem = yield* FileSystem.FileSystem
-            const path = yield* Path.Path
-            const proposal = yield* proposeOnce(s.world)
-            const asked = yield* s.world.provider.requests
-            const kept = yield* fileSystem.readDirectory(path.join(s.world.cacheDir, 'generator'))
-            const selectorFolder = yield* fileSystem.exists(path.join(s.world.cacheDir, 'selector'))
-            return { proposal, asked, kept, selectorFolder }
-          })),
-        Then('the question carried every dimension, its possible values, and the tuples already chosen')((s) => {
-          const question = questionOf(s.outcome.asked)
-          expect(question).toContain('job: the work being done. Possible values: watering, pruning, feeding')
-          expect(question).toContain('pace: how the day is going. Possible values: steady, rushed')
-          expect(question).toContain('(job: watering, pace: steady)')
-        }),
-        Then('the proposal names what the provider answered, and is kept in the generator folder alone')((s) => {
-          expect(s.outcome.proposal.tuples).toEqual([{ job: 'pruning', pace: 'rushed' }])
-          expect(s.outcome.kept).toHaveLength(1)
-          expect(s.outcome.selectorFolder).toBe(false)
-        }),
-      ),
     )
   })

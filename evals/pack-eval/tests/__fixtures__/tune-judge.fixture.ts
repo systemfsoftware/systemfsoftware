@@ -3,175 +3,33 @@ import { PackEval } from '@systemfsoftware/pack-eval'
 import { Console, Effect, Layer, Redacted, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import { type RuleSource, ruleTextOf } from './discovery-dataset.fixture.js'
 import { type LoopbackReply, OpenRouterLoopback, type OpenRouterLoopbackShape } from './openrouter-loopback.fixture.js'
+import {
+  tuneJudgeWorld as tuneJudgeWorldBuilder,
+  type World,
+  type WorldJudgeReply,
+  type WorldPairLabel,
+  type WorldPairSplit,
+  type WorldVerdict,
+} from './pack-eval-world.fixture.js'
 
-export const askedJudgeModel = 'acme/judge-large'
-export const servedJudgeModel = 'acme/judge-large@acme'
-export const tuneJudgePackId = 'greenhouse'
+/**
+ * The tune-judge area's interpreter: a world with one scripted dev pair per
+ * row is written to scratch, the loopback answers the dev pairs in label
+ * order, and the reference rates are derived from the same scripted verdicts.
+ * Nothing in the expected tuning is typed by hand.
+ */
 
-export const tuneJudgeRules: ReadonlyArray<RuleSource> = [
-  {
-    stem: 'hourly-venting',
-    title: 'Vent the ripening room hourly',
-    appliesWhen: ['cooling the ripening room'],
-    tags: ['air'],
-    body: 'Open the vents for one hour in every three.',
-  },
-  {
-    stem: 'sealed-ripening',
-    title: 'Seal the room while fruit ripens',
-    appliesWhen: ['holding fruit in the room'],
-    tags: ['air'],
-    body: 'Keep every vent sealed while the room holds fruit.',
-  },
-]
-
-export const plantedBody = 'Seal every vent and hold it open while the room holds fruit.'
-
-export const trainCritiqueObserved =
-  'The hourly vents and the sealed room cannot both hold, so no single change satisfies both rules.'
-
-export const trainCritiquePlanted =
-  'Planted: the sealed order and the hourly order contradict each other on the same vents.'
-
-export const tuneJudgeTasks = new PackEval.TaskSet({
-  version: 1,
-  tasks: [
-    new PackEval.Task({
-      id: 'task-train-venting',
-      text: 'TRAIN task: cool the ripening room before the weekend',
-      split: 'dev',
-      dimensions: {},
-    }),
-    new PackEval.Task({
-      id: 'task-dev-trellis',
-      text: 'DEV-A task: tie the tomato shoots to the trellis',
-      split: 'dev',
-      dimensions: {},
-    }),
-    new PackEval.Task({
-      id: 'task-dev-harvest',
-      text: 'DEV-B task: harvest the ripe tomatoes',
-      split: 'dev',
-      dimensions: {},
-    }),
-    new PackEval.Task({
-      id: 'task-dev-mulch',
-      text: 'DEV-C task: mulch the raised bed before noon',
-      split: 'dev',
-      dimensions: {},
-    }),
-    new PackEval.Task({
-      id: 'task-dev-compost',
-      text: 'DEV-D task: turn the compost heap at dusk',
-      split: 'dev',
-      dimensions: {},
-    }),
-    new PackEval.Task({
-      id: 'task-test-vent',
-      text: 'TEST task: open the east vent after the morning walk',
-      split: 'test',
-      dimensions: {},
-    }),
-  ],
-})
-
-export const tuneJudgePrompt = new PackEval.JudgePrompt({
-  criterion: 'On this task, can one change satisfy both rules?',
-  passDefinition: 'Pass: one change can satisfy both rules at once.',
-  failDefinition: 'Fail: no single change satisfies both rules together.',
-  fewShotPairIds: ['pair-train-vent', 'pair-train-planted'],
-})
-
-const pairOf = (
-  id: string,
-  taskId: string,
-  split: 'train' | 'dev' | 'test',
-  verdict: 'Pass' | 'Fail',
-  origin: 'observed' | 'planted',
-  notes: string,
-  planted: boolean,
-): PackEval.PairLabel =>
-  new PackEval.PairLabel({
-    id,
-    taskId,
-    packId: tuneJudgePackId,
-    ruleA: 'hourly-venting',
-    ruleB: 'sealed-ripening',
-    split,
-    verdict,
-    origin,
-    notes,
-    ...(planted ? { plantedBody } : {}),
-  })
-
-const trainPairs: ReadonlyArray<PackEval.PairLabel> = [
-  pairOf('pair-train-vent', 'task-train-venting', 'train', 'Fail', 'observed', trainCritiqueObserved, false),
-  pairOf('pair-train-planted', 'task-train-venting', 'train', 'Fail', 'planted', trainCritiquePlanted, true),
-]
-
-const testPair: PackEval.PairLabel = pairOf(
-  'pair-test-vent',
-  'task-test-vent',
-  'test',
-  'Fail',
-  'observed',
-  '',
-  false,
-)
-
-export const filterPairs: ReadonlyArray<PackEval.PairLabel> = [
-  ...trainPairs,
-  pairOf('pair-dev-trellis', 'task-dev-trellis', 'dev', 'Pass', 'observed', '', false),
-  pairOf('pair-dev-harvest', 'task-dev-harvest', 'dev', 'Pass', 'observed', '', false),
-  testPair,
-]
-
-export const ratesPairs: ReadonlyArray<PackEval.PairLabel> = [
-  ...trainPairs,
-  pairOf('pair-dev-trellis', 'task-dev-trellis', 'dev', 'Pass', 'observed', '', false),
-  pairOf('pair-dev-harvest', 'task-dev-harvest', 'dev', 'Fail', 'observed', '', false),
-  pairOf('pair-dev-mulch', 'task-dev-mulch', 'dev', 'Fail', 'observed', '', false),
-  pairOf('pair-dev-compost', 'task-dev-compost', 'dev', 'Pass', 'observed', '', false),
-]
-
-const verdictTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.JudgeReply))
-
-export const verdictReply = (options: {
-  readonly verdict: PackEval.JudgeVerdict
+export type DevPairScript = Readonly<{
+  readonly id: string
+  readonly taskId: string
+  readonly labelVerdict: WorldVerdict
+  readonly judgeVerdict: WorldVerdict
   readonly critique: string
-}): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.map(verdictTextOf({ critique: options.critique, verdict: options.verdict }), (content) => ({
-    status: 200,
-    body: {
-      id: 'tune-judge-loopback',
-      object: 'chat.completion',
-      created: 1_760_000_000,
-      model: servedJudgeModel,
-      system_fingerprint: null,
-      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-    },
-  }))
-export const textReply = (content: string): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.succeed({
-    status: 200,
-    body: {
-      id: 'tune-judge-loopback',
-      object: 'chat.completion',
-      created: 1_760_000_000,
-      model: servedJudgeModel,
-      system_fingerprint: null,
-      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-    },
-  })
+}>
 
-export interface TuneJudgeScript {
-  readonly pairs: ReadonlyArray<PackEval.PairLabel>
-  readonly replies: ReadonlyArray<Effect.Effect<LoopbackReply, Schema.SchemaError>>
-}
-
-export interface TuneJudgeWorld {
+export interface TuneJudgeRun {
+  readonly world: World
   readonly provider: OpenRouterLoopbackShape
   readonly packDir: string
   readonly datasetDir: string
@@ -179,36 +37,86 @@ export interface TuneJudgeWorld {
   readonly lines: Array<string>
 }
 
-export const tuneJudgeWorld = (script: TuneJudgeScript) =>
-  Effect.gen(function*() {
-    const provider = yield* OpenRouterLoopback
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    yield* provider.answerWith(yield* Effect.all(script.replies))
-    const base = yield* fileSystem.makeTempDirectoryScoped()
-    const datasetDir = paths.join(base, 'dataset')
-    const packDir = paths.join(base, 'packs', tuneJudgePackId)
-    const cacheDir = yield* fileSystem.makeTempDirectoryScoped()
-    yield* fileSystem.makeDirectory(packDir, { recursive: true })
-    yield* fileSystem.makeDirectory(datasetDir, { recursive: true })
-    yield* Effect.forEach(
-      tuneJudgeRules,
-      (rule) => fileSystem.writeFileString(paths.join(packDir, `${rule.stem}.md`), ruleTextOf(rule)),
-      { discard: true },
-    )
-    yield* PackEval.DatasetFiles.writeJson(paths.join(datasetDir, 'tasks.json'), PackEval.TaskSet, tuneJudgeTasks)
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'judge-prompt.json'),
-      PackEval.JudgePrompt,
-      tuneJudgePrompt,
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'pair-labels.json'),
-      PackEval.PairLabels,
-      new PackEval.PairLabels({ version: 1, entries: script.pairs }),
-    )
-    return { provider, packDir, datasetDir, cacheDir, lines: [] } satisfies TuneJudgeWorld
+export interface TuneJudgeDisagreement {
+  readonly id: string
+  readonly taskId: string
+  readonly labelVerdict: WorldVerdict
+  readonly judgeVerdict: WorldVerdict
+  readonly critique: string
+}
+
+export interface ExpectedTuning {
+  readonly devCount: number
+  readonly tpr: PackEval.TuneJudge.TuneJudgeRate
+  readonly tnr: PackEval.TuneJudge.TuneJudgeRate
+  readonly passHits: number
+  readonly passTotal: number
+  readonly failHits: number
+  readonly failTotal: number
+  readonly disagreements: ReadonlyArray<TuneJudgeDisagreement>
+}
+
+const ruleTextOf = (stem: string, title: string, appliesWhen: string, body: string): string =>
+  ['---', `title: ${title}`, `applies_when: [${appliesWhen}]`, 'tags: [air]', '---', '', body, ''].join('\n')
+
+const judgeTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.JudgeReply))
+
+const replyOf = (script: DevPairScript): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
+  Effect.map(
+    judgeTextOf({ critique: script.critique, verdict: script.judgeVerdict }),
+    (content) => ({
+      status: 200,
+      body: {
+        id: 'tune-judge-loopback',
+        object: 'chat.completion',
+        created: 1_760_000_000,
+        model: 'acme/judge-large@acme',
+        system_fingerprint: null,
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+      },
+    }),
+  )
+
+const devPairLabelOf = (world: World, script: DevPairScript): WorldPairLabel => ({
+  id: script.id,
+  taskId: script.taskId,
+  packId: world.packs[0]?.id ?? 'pack',
+  ruleA: 'hourly-venting',
+  ruleB: 'sealed-ripening',
+  split: 'dev' satisfies WorldPairSplit,
+  verdict: script.labelVerdict,
+  origin: 'observed',
+  notes: script.critique,
+})
+
+const devJudgeReplyOf = (world: World, script: DevPairScript): WorldJudgeReply => ({
+  kind: 'judged',
+  question: {
+    packId: world.packs[0]?.id ?? 'pack',
+    taskId: script.taskId,
+    ruleA: 'hourly-venting',
+    ruleB: 'sealed-ripening',
+    plantedBody: undefined,
+  },
+  verdict: script.judgeVerdict,
+  critique: script.critique,
+  servedModel: 'acme/judge-large@acme',
+})
+
+const scriptedWorldOf = (scripts: ReadonlyArray<DevPairScript>): World => {
+  const base = tuneJudgeWorldBuilder()
+  return tuneJudgeWorldBuilder({
+    pairLabels: [
+      ...base.pairLabels.filter((label) => label.split !== 'dev'),
+      ...scripts.map((script) => devPairLabelOf(base, script)),
+    ],
+    answers: {
+      selector: [],
+      judge: scripts.map((script) => devJudgeReplyOf(base, script)),
+      generator: { kind: 'proposed', proposedTuples: [], writtenTasks: [] },
+    },
   })
+}
 
 const recordingConsoleOf = (lines: Array<string>): Console.Console => ({
   assert: () => undefined,
@@ -236,17 +144,125 @@ const recordingConsoleOf = (lines: Array<string>): Console.Console => ({
   warn: () => undefined,
 })
 
-export const tuneJudgeStack = (world: TuneJudgeWorld) =>
+export const tuneJudgeStackOf = (run: TuneJudgeRun) =>
   Layer.provideMerge(
     Layer.provideMerge(
       Layer.provideMerge(
-        PackEval.OpenRouterContradictionJudge.layer({ model: askedJudgeModel }),
-        PackEval.FileAnswerCache.layer({ cacheDir: world.cacheDir }),
+        PackEval.OpenRouterContradictionJudge.layer({ model: 'acme/judge-large' }),
+        PackEval.FileAnswerCache.layer({ cacheDir: run.cacheDir }),
       ),
-      OpenRouterLanguageModel.layer({ model: askedJudgeModel }),
+      OpenRouterLanguageModel.layer({ model: 'acme/judge-large' }),
     ),
     Layer.merge(
-      OpenRouterClient.layer({ apiUrl: world.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
-      Layer.succeed(Console.Console, recordingConsoleOf(world.lines)),
+      OpenRouterClient.layer({ apiUrl: run.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
+      Layer.succeed(Console.Console, recordingConsoleOf(run.lines)),
     ),
   )
+
+export const tuneJudgeRunOf = (scripts: ReadonlyArray<DevPairScript>) =>
+  Effect.gen(function*() {
+    const provider = yield* OpenRouterLoopback
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    const world = scriptedWorldOf(scripts)
+    yield* provider.answerWith(yield* Effect.forEach(scripts, replyOf))
+    const base = yield* fileSystem.makeTempDirectoryScoped()
+    const datasetDir = paths.join(base, 'dataset')
+    const packDir = paths.join(base, 'packs', world.packs[0]?.id ?? 'pack')
+    const cacheDir = yield* fileSystem.makeTempDirectoryScoped()
+    yield* fileSystem.makeDirectory(packDir, { recursive: true })
+    yield* fileSystem.makeDirectory(datasetDir, { recursive: true })
+    const rules = world.packs.flatMap((pack) => pack.rules)
+    const first = rules[0]
+    const second = rules[1]
+    if (first === undefined || second === undefined) {
+      return yield* Effect.die(new Error('the tune-judge world holds fewer than two rules'))
+    }
+    yield* fileSystem.writeFileString(
+      paths.join(packDir, `${first.stem}.md`),
+      ruleTextOf(first.stem, first.title, first.appliesWhen[0] ?? '', first.body),
+    )
+    yield* fileSystem.writeFileString(
+      paths.join(packDir, `${second.stem}.md`),
+      ruleTextOf(second.stem, second.title, second.appliesWhen[0] ?? '', second.body),
+    )
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(datasetDir, 'tasks.json'),
+      PackEval.TaskSet,
+      new PackEval.TaskSet({
+        version: 1,
+        tasks: world.tasks.map((task) =>
+          new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions })
+        ),
+      }),
+    )
+    const prompt = world.judgePrompt
+    if (prompt === undefined) {
+      return yield* Effect.die(new Error('the tune-judge world holds no judge prompt'))
+    }
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(datasetDir, 'judge-prompt.json'),
+      PackEval.JudgePrompt,
+      new PackEval.JudgePrompt({
+        criterion: prompt.criterion,
+        passDefinition: prompt.passDefinition,
+        failDefinition: prompt.failDefinition,
+        fewShotPairIds: prompt.fewShotPairIds,
+      }),
+    )
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(datasetDir, 'pair-labels.json'),
+      PackEval.PairLabels,
+      new PackEval.PairLabels({
+        version: 1,
+        entries: world.pairLabels.map((label) =>
+          new PackEval.PairLabel({
+            id: label.id,
+            taskId: label.taskId,
+            packId: label.packId,
+            ruleA: label.ruleA,
+            ruleB: label.ruleB,
+            split: label.split,
+            verdict: label.verdict,
+            origin: label.origin,
+            notes: label.notes,
+            ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
+          })
+        ),
+      }),
+    )
+    return { world, provider, packDir, datasetDir, cacheDir, lines: [] } satisfies TuneJudgeRun
+  })
+
+const rateOf = (hits: number, total: number): PackEval.TuneJudge.TuneJudgeRate => total === 0 ? '-' : hits / total
+
+const falsePassRankOf = (script: DevPairScript): number =>
+  script.labelVerdict === 'Fail' && script.judgeVerdict === 'Pass' ? 0 : 1
+
+export const expectedTuningOf = (scripts: ReadonlyArray<DevPairScript>): ExpectedTuning => {
+  const hits = (labelVerdict: WorldVerdict, judgeVerdict: WorldVerdict): number =>
+    scripts.filter((script) => script.labelVerdict === labelVerdict && script.judgeVerdict === judgeVerdict).length
+  const passHits = hits('Pass', 'Pass')
+  const passTotal = passHits + hits('Pass', 'Fail')
+  const failHits = hits('Fail', 'Fail')
+  const failTotal = failHits + hits('Fail', 'Pass')
+  return {
+    devCount: scripts.length,
+    tpr: rateOf(passHits, passTotal),
+    tnr: rateOf(failHits, failTotal),
+    passHits,
+    passTotal,
+    failHits,
+    failTotal,
+    disagreements: scripts
+      .filter((script) => script.labelVerdict !== script.judgeVerdict)
+      .toSorted((left, right) => falsePassRankOf(left) - falsePassRankOf(right))
+      .map((script) => ({
+        id: script.id,
+        taskId: script.taskId,
+        labelVerdict: script.labelVerdict,
+        judgeVerdict: script.judgeVerdict,
+        critique: script.critique,
+      })),
+  }
+}
