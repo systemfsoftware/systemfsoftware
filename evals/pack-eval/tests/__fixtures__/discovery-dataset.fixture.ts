@@ -1,160 +1,142 @@
 import { OpenRouterClient, OpenRouterLanguageModel } from '@effect/ai-openrouter'
 import { PackEval } from '@systemfsoftware/pack-eval'
-import { Effect, Layer, Option, Redacted, Schema } from 'effect'
+import { Effect, Layer, Redacted, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import { type LoopbackReply, OpenRouterLoopback, type OpenRouterLoopbackShape } from './openrouter-loopback.fixture.js'
+import type { LoopbackReply, OpenRouterLoopbackShape } from './openrouter-loopback.fixture.js'
+import { materialize, type MaterializedWorld } from './pack-eval-disk.fixture.js'
+import {
+  plannerModel,
+  servedPlannerModel,
+  type World,
+  type WorldDimension,
+  type WorldGeneratorTaskReply,
+  type WorldSelectorReply,
+  type WorldTuple,
+} from './pack-eval-world.fixture.js'
 
-export const askedModel = 'acme/planner-large'
-export const servedModel = 'acme/planner-large@acme'
+/** The scripted tasks the world's generator writes, or none when it refuses. */
+export const generatedTasksOf = (world: World): ReadonlyArray<WorldGeneratorTaskReply> =>
+  world.answers.generator.kind === 'proposed' ? world.answers.generator.writtenTasks : []
 
-export const discoveryPackId = 'greenhouse'
+const proposedTuplesOf = (world: World): ReadonlyArray<WorldTuple> =>
+  world.answers.generator.kind === 'proposed' ? world.answers.generator.proposedTuples : []
 
-export interface RuleSource {
-  readonly stem: string
-  readonly title: string
-  readonly appliesWhen: ReadonlyArray<string>
-  readonly tags: ReadonlyArray<string>
-  readonly body: string
-}
+const describedDimensionsOf = (world: World): ReadonlyArray<WorldDimension> =>
+  world.dimensions !== undefined && world.dimensions.kind === 'described' ? world.dimensions.dimensions : []
 
-export const ruleTextOf = (rule: RuleSource): string =>
-  [
-    '---',
-    `title: ${rule.title}`,
-    `applies_when: [${rule.appliesWhen.join(', ')}]`,
-    `tags: [${rule.tags.join(', ')}]`,
-    '---',
-    '',
-    rule.body,
-    '',
-  ].join('\n')
+/** The dimension names the world's generator prompt names, per KTD7's content matching. */
+export const dimensionNamesOf = (world: World): string =>
+  `(${describedDimensionsOf(world).map((dimension) => dimension.name).join(', ')})`
 
-const completionOf = (content: string): Schema.Json => ({
-  id: 'discovery-loopback',
-  object: 'chat.completion',
-  created: 1_760_000_000,
-  model: servedModel,
-  system_fingerprint: null,
-  choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+const completionOf = (content: string): LoopbackReply => ({
+  status: 200,
+  body: {
+    id: 'discovery-loopback',
+    object: 'chat.completion',
+    created: 1_760_000_000,
+    model: servedPlannerModel,
+    system_fingerprint: null,
+    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+  },
 })
+
+const rowsOf = (
+  tuples: ReadonlyArray<WorldTuple>,
+): ReadonlyArray<ReadonlyArray<Record<'name' | 'value', string>>> =>
+  tuples.map((tuple) => Object.entries(tuple).map(([name, value]) => ({ name, value })))
 
 const proposedRowsJson = Schema.fromJsonString(PackEval.ProposedRows)
 const generatedTaskJson = Schema.fromJsonString(PackEval.GeneratedTask)
-const loadedStemsJson = Schema.fromJsonString(PackEval.LoadedStems)
 
-const completionReply = (
-  content: Effect.Effect<string, Schema.SchemaError>,
+const tuplesReply = (
+  tuples: ReadonlyArray<WorldTuple>,
 ): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.map(content, (text) => ({ status: 200, body: completionOf(text) }))
+  Effect.map(Schema.encodeEffect(proposedRowsJson)({ tuples: rowsOf(tuples) }), completionOf)
 
-export const rowsOf = (
-  tuples: ReadonlyArray<PackEval.DimensionTuple>,
-): ReadonlyArray<ReadonlyArray<PackEval.TupleEntry>> =>
-  tuples.map((tuple) => Object.entries(tuple).map(([name, value]) => ({ name, value })))
+const taskReply = (text: string): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
+  Effect.map(Schema.encodeEffect(generatedTaskJson)({ text }), completionOf)
 
-export const tuplesReply = (
-  tuples: ReadonlyArray<PackEval.DimensionTuple>,
-): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  completionReply(Schema.encodeEffect(proposedRowsJson)({ tuples: rowsOf(tuples) }))
+/** The replies the world's generator asks for, in the order it asks them. */
+export const generatorRepliesOf = (
+  world: World,
+): Effect.Effect<ReadonlyArray<LoopbackReply>, Schema.SchemaError> =>
+  Effect.all([
+    tuplesReply(proposedTuplesOf(world)),
+    ...generatedTasksOf(world).map((written) => taskReply(written.text)),
+  ])
 
-export const taskReply = (text: string): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  completionReply(Schema.encodeEffect(generatedTaskJson)({ text }))
+/** The scripted stems the world answers with for one traced task. */
+export const selectorStemsOf = (options: { readonly world: World; readonly taskId: string }): ReadonlyArray<string> =>
+  options.world.answers.selector.flatMap((reply: WorldSelectorReply) =>
+    reply.kind === 'selected' && reply.taskId === options.taskId ? reply.stems : []
+  )
 
-export const stemsReply = (loaded: ReadonlyArray<string>): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  completionReply(Schema.encodeEffect(loadedStemsJson)({ loaded }))
-
-export interface DiscoveryWorld {
-  readonly provider: OpenRouterLoopbackShape
-  readonly datasetDir: string
-  readonly packDir: string
-  readonly workDir: string
-  readonly cacheDir: string
-}
-
-export interface DiscoveryLayout {
-  readonly replies: ReadonlyArray<Effect.Effect<LoopbackReply, Schema.SchemaError>>
-  readonly dimensions?: PackEval.TaskDimensions | undefined
-  readonly rawDimensions?: string | undefined
-  readonly tasks?: PackEval.TaskSet | undefined
-  readonly instruction?: PackEval.SelectorInstruction | undefined
-  readonly rules?: ReadonlyArray<RuleSource> | undefined
-}
-
-export const discoveryWorld = (layout: DiscoveryLayout) =>
+export const generationScenarioOf = (world: World) =>
   Effect.gen(function*() {
-    const provider = yield* OpenRouterLoopback
+    const materialized: MaterializedWorld = yield* materialize(world)
+    yield* materialized.provider.answerWith(yield* generatorRepliesOf(world))
+    return { world, materialized }
+  })
+
+export const tracingScenarioOf = (world: World) =>
+  Effect.map(materialize(world), (materialized) => ({ world, materialized }))
+
+/** The generator's dependencies against the scenario's cache and loopback provider. */
+export const generatorStack = (options: {
+  readonly cacheDir: string
+  readonly provider: OpenRouterLoopbackShape
+}) =>
+  Layer.provideMerge(
+    Layer.provideMerge(
+      Layer.provideMerge(
+        PackEval.OpenRouterTaskGenerator.layer({ model: plannerModel }),
+        PackEval.FileAnswerCache.layer({ cacheDir: options.cacheDir }),
+      ),
+      OpenRouterLanguageModel.layer({ model: plannerModel }),
+    ),
+    OpenRouterClient.layer({ apiUrl: options.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
+  )
+
+/** The selector's dependencies against the scenario's cache and loopback provider. */
+export const selectorStack = (options: {
+  readonly cacheDir: string
+  readonly provider: OpenRouterLoopbackShape
+}) =>
+  Layer.provideMerge(
+    Layer.provideMerge(
+      Layer.provideMerge(
+        PackEval.OpenRouterRuleSelector.layer({ model: plannerModel }),
+        PackEval.FileAnswerCache.layer({ cacheDir: options.cacheDir }),
+      ),
+      OpenRouterLanguageModel.layer({ model: plannerModel }),
+    ),
+    OpenRouterClient.layer({ apiUrl: options.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
+  )
+
+/** The refused ask the dimensions failure leaves behind. */
+export const refusedPathOf = (error: PackEval.DatasetFileRefusal | PackEval.TaskGenerationError): string =>
+  Schema.is(PackEval.DatasetFileRefusal)(error) ? error.path : ''
+
+export const candidatesOf = (options: { readonly workDir: string }) =>
+  Effect.gen(function*() {
+    const paths = yield* Path.Path
+    return yield* PackEval.DatasetFiles.readJson(
+      paths.join(options.workDir, 'candidates.json'),
+      PackEval.CandidateTasks,
+    )
+  })
+
+/** The trace file names the run wrote under the world's pack. */
+export const traceNamesOf = (options: { readonly workDir: string; readonly packId: string }) =>
+  Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem
     const paths = yield* Path.Path
-    yield* provider.answerWith(yield* Effect.all(layout.replies))
-    const base = yield* fileSystem.makeTempDirectoryScoped()
-    const datasetDir = paths.join(base, 'dataset')
-    const packDir = paths.join(base, 'packs', discoveryPackId)
-    const workDir = paths.join(base, 'work')
-    const dimensionsPath = paths.join(datasetDir, 'dimensions.json')
-    yield* fileSystem.makeDirectory(packDir, { recursive: true })
-    yield* fileSystem.makeDirectory(datasetDir, { recursive: true })
-    yield* Effect.forEach(
-      layout.rules ?? [],
-      (rule) => fileSystem.writeFileString(paths.join(packDir, `${rule.stem}.md`), ruleTextOf(rule)),
-      { discard: true },
-    )
-    yield* Option.match(Option.fromUndefinedOr(layout.dimensions), {
-      onNone: () => Effect.void,
-      onSome: (dimensions) => PackEval.DatasetFiles.writeJson(dimensionsPath, PackEval.TaskDimensions, dimensions),
-    })
-    yield* Option.match(Option.fromUndefinedOr(layout.rawDimensions), {
-      onNone: () => Effect.void,
-      onSome: (text) => fileSystem.writeFileString(dimensionsPath, text),
-    })
-    yield* Option.match(Option.fromUndefinedOr(layout.tasks), {
-      onNone: () => Effect.void,
-      onSome: (tasks) => PackEval.DatasetFiles.writeJson(paths.join(datasetDir, 'tasks.json'), PackEval.TaskSet, tasks),
-    })
-    yield* Option.match(Option.fromUndefinedOr(layout.instruction), {
-      onNone: () => Effect.void,
-      onSome: (instruction) =>
-        PackEval.DatasetFiles.writeJson(
-          paths.join(datasetDir, 'selector-instruction.json'),
-          PackEval.SelectorInstruction,
-          instruction,
-        ),
-    })
-    const cacheDir = yield* fileSystem.makeTempDirectoryScoped()
-    return { provider, datasetDir, packDir, workDir, cacheDir }
+    return yield* fileSystem.readDirectory(paths.join(options.workDir, 'traces', options.packId))
   })
 
-export const generatorStack = (world: DiscoveryWorld) =>
-  Layer.provideMerge(
-    Layer.provideMerge(
-      Layer.provideMerge(
-        PackEval.OpenRouterTaskGenerator.layer({ model: askedModel }),
-        PackEval.FileAnswerCache.layer({ cacheDir: world.cacheDir }),
-      ),
-      OpenRouterLanguageModel.layer({ model: askedModel }),
-    ),
-    OpenRouterClient.layer({ apiUrl: world.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
-  )
-
-export const selectorStack = (world: DiscoveryWorld) =>
-  Layer.provideMerge(
-    Layer.provideMerge(
-      Layer.provideMerge(
-        PackEval.OpenRouterRuleSelector.layer({ model: askedModel }),
-        PackEval.FileAnswerCache.layer({ cacheDir: world.cacheDir }),
-      ),
-      OpenRouterLanguageModel.layer({ model: askedModel }),
-    ),
-    OpenRouterClient.layer({ apiUrl: world.provider.apiUrl, apiKey: Redacted.make('sk-loopback') }),
-  )
-
-export const candidatesAt = (workDir: string) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    return yield* PackEval.DatasetFiles.readJson(paths.join(workDir, 'candidates.json'), PackEval.CandidateTasks)
-  })
-
-export const traceAt = (options: { readonly workDir: string; readonly packId: string; readonly taskId: string }) =>
+/** The trace the run wrote for one task and pack. */
+export const traceOf = (options: { readonly workDir: string; readonly packId: string; readonly taskId: string }) =>
   Effect.gen(function*() {
     const paths = yield* Path.Path
     return yield* PackEval.DatasetFiles.readJson(
@@ -163,33 +145,17 @@ export const traceAt = (options: { readonly workDir: string; readonly packId: st
     )
   })
 
-export const traceNamesAt = (options: { readonly workDir: string; readonly packId: string }) =>
+export const fileTextOf = (options: { readonly path: string }) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    return yield* fileSystem.readFileString(options.path)
+  })
+
+export const pathExists = (options: { readonly segments: ReadonlyArray<string> }) =>
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem
     const paths = yield* Path.Path
-    return yield* fileSystem.readDirectory(paths.join(options.workDir, 'traces', options.packId))
+    return yield* fileSystem.exists(paths.join(...options.segments))
   })
-
-export const candidatesFileExists = (workDir: string) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.exists(paths.join(workDir, 'candidates.json'))
-  })
-
-export const pathExists = (...segments: ReadonlyArray<string>) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.exists(paths.join(...segments))
-  })
-
-export const taskSetExists = (datasetDir: string) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.exists(paths.join(datasetDir, 'tasks.json'))
-  })
-
-export const dimensionsPathAt = (datasetDir: string) =>
-  Effect.map(Path.Path, (paths) => paths.join(datasetDir, 'dimensions.json'))
+export const packIdOf = (world: World): string =>
+  world.packs.length === 1 && world.packs[0] !== undefined ? world.packs[0].id : 'missing-pack'

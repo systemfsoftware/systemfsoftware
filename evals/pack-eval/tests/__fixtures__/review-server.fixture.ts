@@ -10,73 +10,260 @@ import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
 import * as HttpServer from 'effect/unstable/http/HttpServer'
 import * as NetAddress from 'effect/unstable/net/NetAddress'
 import { createServer } from 'node:http'
-
-export const reviewPackId = 'greenhouse'
-export const wateringStem = 'watering-schedule'
-export const ventingStem = 'night-venting'
-
-export interface ReviewRuleSource {
-  readonly stem: string
-  readonly title: string
-  readonly appliesWhen: ReadonlyArray<string>
-  readonly tags: ReadonlyArray<string>
-  readonly body: string
-}
-
-export const wateringRule: ReviewRuleSource = {
-  stem: wateringStem,
-  title: 'Water on a schedule',
-  appliesWhen: ['touching the watering plan'],
-  tags: ['water'],
-  body: 'Water every second morning and write the amount in the log.',
-}
-
-export const ventingRule: ReviewRuleSource = {
-  stem: ventingStem,
-  title: 'Keep the air moving at night',
-  appliesWhen: ['closing the vents for the night'],
-  tags: ['air'],
-  body: 'Leave one vent open a hand width after the last walk-through.',
-}
-
-export const compostingRule: ReviewRuleSource = {
-  stem: 'compost-turning',
-  title: 'Turn the heap weekly',
-  appliesWhen: ['tending the compost heap'],
-  tags: ['soil'],
-  body: 'Turn the heap every seventh morning and note the smell.',
-}
-
-export const mulchingRule: ReviewRuleSource = {
-  stem: 'bed-mulching',
-  title: 'Mulch the bare beds',
-  appliesWhen: ['covering bare soil'],
-  tags: ['soil'],
-  body: 'Spread straw two knuckles deep on every bare bed.',
-}
-
-export interface ReviewWorld {
-  readonly datasetDir: string
-  readonly workDir: string
-  readonly packId: string
-  readonly packDir: string
-  readonly baseUrl: string
-}
+import type { World, WorldRuleFile } from './pack-eval-world.fixture.js'
 
 /**
- * The dataset, work directory, and running review server one scenario talks to. The server
- * reads every file per request, so a scenario fills these directories in its own steps.
+ * The review server reads one pack directory, whose name is the pack id. A review world holds
+ * this pack alone, so `writeWorld` lays it out where the server looks for it.
  */
-export class ReviewFixture extends Context.Service<ReviewFixture, ReviewWorld>()(
-  '@systemfsoftware/pack-eval/tests/__fixtures__/review-server.fixture/ReviewFixture',
-) {}
+export const reviewPackId = 'greenhouse'
 
+/** One review reply as text, before the route's own schema decodes it. */
 export interface TextReply {
   readonly status: number
   readonly body: string
 }
 
-const boundBaseUrl = (address: NetAddress.InetAddress): string => Result.getOrThrow(NetAddress.toUrl(address)).origin
+/** The directories and address one review scenario talks to. */
+export interface ReviewLocations {
+  readonly datasetDir: string
+  readonly workDir: string
+  readonly packsRoot: string
+  readonly baseUrl: string
+}
+
+/** The dataset, work directory, and running review server one scenario talks to. */
+export class ReviewFixture extends Context.Service<ReviewFixture, ReviewLocations>()(
+  '@systemfsoftware/pack-eval/tests/__fixtures__/review-server.fixture/ReviewFixture',
+) {}
+
+/** The element at an index, or a failure naming what the world should have held. */
+export const requiredElementOf = <T>(options: {
+  readonly values: ReadonlyArray<T>
+  readonly index: number
+  readonly what: string
+}): T => {
+  const found = options.values[options.index]
+  if (found === undefined) throw new Error(`the world holds no ${options.what} at ${options.index}`)
+  return found
+}
+
+export const taskPathOf = (taskId: string): string => `/api/tasks/${encodeURIComponent(taskId)}`
+
+export const labelsPathOf = (options: { readonly taskId: string; readonly packId: string }): string =>
+  `${taskPathOf(options.taskId)}/labels?pack=${encodeURIComponent(options.packId)}`
+
+export const pairsPathOf = (options: { readonly taskId: string; readonly packId: string }): string =>
+  `${taskPathOf(options.taskId)}/pairs?pack=${encodeURIComponent(options.packId)}`
+
+const ruleTextOf = (rule: WorldRuleFile): string =>
+  rule.malformed === true ? 'not frontmatter at all\n' : [
+    '---',
+    `title: ${rule.title}`,
+    `applies_when: [${rule.appliesWhen.join(', ')}]`,
+    `tags: [${rule.tags.join(', ')}]`,
+    '---',
+    '',
+    rule.body,
+    '',
+  ].join('\n')
+
+const writeRules = (locations: ReviewLocations, world: World) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    yield* fileSystem.makeDirectory(locations.packsRoot, { recursive: true })
+    yield* Effect.forEach(
+      world.packs,
+      (pack) =>
+        Effect.gen(function*() {
+          const dir = paths.join(locations.packsRoot, pack.id)
+          yield* fileSystem.makeDirectory(dir, { recursive: true })
+          yield* Effect.forEach(
+            pack.rules,
+            (rule) => fileSystem.writeFileString(paths.join(dir, `${rule.stem}.md`), ruleTextOf(rule)),
+            { discard: true },
+          )
+        }),
+      { discard: true },
+    )
+  })
+
+const writeJudgePrompt = (locations: ReviewLocations, world: World) => {
+  const prompt = world.judgePrompt
+  if (prompt === undefined) return Effect.void
+  return Effect.map(Path.Path, (paths) =>
+    PackEval.DatasetFiles.writeJson(
+      paths.join(locations.datasetDir, 'judge-prompt.json'),
+      PackEval.JudgePrompt,
+      new PackEval.JudgePrompt({
+        criterion: prompt.criterion,
+        passDefinition: prompt.passDefinition,
+        failDefinition: prompt.failDefinition,
+        fewShotPairIds: prompt.fewShotPairIds,
+      }),
+    ))
+}
+
+/**
+ * Write the world's rules, dataset files, recorded traces, and offered candidates under the
+ * scenario's directories. A review row writes its whole world once, in its Given step.
+ */
+export const writeWorld = (options: { readonly locations: ReviewLocations; readonly world: World }) =>
+  Effect.gen(function*() {
+    const locations = options.locations
+    const world = options.world
+    const paths = yield* Path.Path
+    yield* writeRules(locations, world)
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(locations.datasetDir, 'tasks.json'),
+      PackEval.TaskSet,
+      new PackEval.TaskSet({
+        version: 1,
+        tasks: world.tasks.map((task) =>
+          new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions })
+        ),
+      }),
+    )
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(locations.datasetDir, 'routing-labels.json'),
+      PackEval.RoutingLabels,
+      new PackEval.RoutingLabels({
+        version: 1,
+        entries: world.routingLabels.map((entry) =>
+          new PackEval.RoutingLabelEntry({
+            taskId: entry.taskId,
+            packId: entry.packId,
+            governing: entry.governing,
+            deferred: entry.deferred,
+          })
+        ),
+      }),
+    )
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(locations.datasetDir, 'pair-labels.json'),
+      PackEval.PairLabels,
+      new PackEval.PairLabels({
+        version: 1,
+        entries: world.pairLabels.map((label) =>
+          new PackEval.PairLabel({
+            id: label.id,
+            taskId: label.taskId,
+            packId: label.packId,
+            ruleA: label.ruleA,
+            ruleB: label.ruleB,
+            split: label.split,
+            verdict: label.verdict,
+            origin: label.origin,
+            notes: label.notes,
+            ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
+          })
+        ),
+      }),
+    )
+    yield* writeJudgePrompt(locations, world)
+    yield* PackEval.DatasetFiles.writeJson(
+      paths.join(locations.workDir, 'candidates.json'),
+      PackEval.CandidateTasks,
+      new PackEval.CandidateTasks({
+        version: 1,
+        candidates: world.candidates.map((candidate) =>
+          new PackEval.CandidateTask({
+            id: candidate.id,
+            text: candidate.text,
+            dimensions: candidate.dimensions,
+          })
+        ),
+      }),
+    )
+    yield* Effect.forEach(
+      world.traces,
+      (trace) =>
+        PackEval.DatasetFiles.writeJson(
+          paths.join(locations.workDir, PackEval.DatasetFiles.traceRelativePathOf(trace.packId, trace.taskId)),
+          PackEval.SelectionTrace,
+          new PackEval.SelectionTrace({
+            taskId: trace.taskId,
+            packId: trace.packId,
+            loadedStems: trace.loadedStems,
+            requestedModel: trace.requestedModel,
+            servedModel: trace.servedModel,
+            instructionDigest: trace.instructionDigest,
+            rawResponse: trace.rawResponse,
+          }),
+        ),
+      { discard: true },
+    )
+  })
+
+export const taskSetOf = (locations: ReviewLocations) =>
+  Effect.gen(function*() {
+    const paths = yield* Path.Path
+    return yield* PackEval.DatasetFiles.readJson(paths.join(locations.datasetDir, 'tasks.json'), PackEval.TaskSet)
+  })
+
+export const routingLabelsTextOf = (locations: ReviewLocations) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.readFileString(paths.join(locations.datasetDir, 'routing-labels.json'))
+  })
+
+export const pairLabelsTextOf = (locations: ReviewLocations) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.readFileString(paths.join(locations.datasetDir, 'pair-labels.json'))
+  })
+
+export const routingLabelsOf = (locations: ReviewLocations) =>
+  Effect.gen(function*() {
+    const paths = yield* Path.Path
+    return yield* PackEval.DatasetFiles.readJson(
+      paths.join(locations.datasetDir, 'routing-labels.json'),
+      PackEval.RoutingLabels,
+    )
+  })
+
+/** Write a marker file under the work directory, to prove a later write did not land there. */
+export const writeMarkerOf = (options: {
+  readonly locations: ReviewLocations
+  readonly relative: string
+  readonly content: string
+}) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    yield* fileSystem.writeFileString(paths.join(options.locations.workDir, options.relative), options.content)
+  })
+
+/** Read a marker file the work directory holds. */
+export const markerTextOf = (options: { readonly locations: ReviewLocations; readonly relative: string }) =>
+  Effect.gen(function*() {
+    const fileSystem = yield* FileSystem.FileSystem
+    const paths = yield* Path.Path
+    return yield* fileSystem.readFileString(paths.join(options.locations.workDir, options.relative))
+  })
+
+/** Send one review request and read its reply as text. */
+export const textRequest = (options: {
+  readonly locations: ReviewLocations
+  readonly method: 'GET' | 'POST' | 'PUT'
+  readonly path: string
+  readonly body?: Schema.Json
+}): Effect.Effect<TextReply, HttpClientError.HttpClientError, HttpClient.HttpClient> =>
+  Effect.gen(function*() {
+    const request = HttpClientRequest.make(options.method)(
+      new URL(options.path, `${options.locations.baseUrl}/`).toString(),
+    )
+    const withBody = Option.match(Option.fromUndefinedOr(options.body), {
+      onNone: () => request,
+      onSome: (body) => HttpClientRequest.bodyJsonUnsafe(request, body),
+    })
+    const response = yield* HttpClient.execute(withBody)
+    const body = yield* response.text
+    return { status: response.status, body }
+  })
 
 /**
  * Decode a reply text by its route schema: the wire speaks plain JSON, and the route schema
@@ -91,224 +278,32 @@ export const decodeReply = <S extends Schema.Constraint>(
     Effect.flatMap((unknownBody) => Schema.decodeUnknownEffect(schema)(unknownBody)),
   )
 
-const ruleTextOf = (rule: ReviewRuleSource): string =>
-  [
-    '---',
-    `title: ${rule.title}`,
-    `applies_when: [${rule.appliesWhen.join(', ')}]`,
-    `tags: [${rule.tags.join(', ')}]`,
-    '---',
-    '',
-    rule.body,
-    '',
-  ].join('\n')
+const boundBaseUrl = (address: NetAddress.InetAddress): string => Result.getOrThrow(NetAddress.toUrl(address)).origin
 
-export const writePackRules = (
-  options: { readonly world: ReviewWorld; readonly rules: ReadonlyArray<ReviewRuleSource> },
-) =>
-  Effect.forEach(options.rules, (rule) =>
-    Effect.gen(function*() {
-      const fileSystem = yield* FileSystem.FileSystem
-      const paths = yield* Path.Path
-      const path = paths.join(options.world.packDir, `${rule.stem}.md`)
-      yield* fileSystem.writeFileString(path, ruleTextOf(rule))
-    }), { discard: true })
-
-export const writeCandidates = (options: {
-  readonly world: ReviewWorld
-  readonly candidates: PackEval.CandidateTasks
-}) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(options.world.workDir, 'candidates.json'),
-      PackEval.CandidateTasks,
-      options.candidates,
-    )
-  })
-
-export const writeTaskSet = (options: { readonly world: ReviewWorld; readonly tasks: PackEval.TaskSet }) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(options.world.datasetDir, 'tasks.json'),
-      PackEval.TaskSet,
-      options.tasks,
-    )
-  })
-
-export const writeLabels = (options: { readonly world: ReviewWorld; readonly labels: PackEval.RoutingLabels }) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(options.world.datasetDir, 'routing-labels.json'),
-      PackEval.RoutingLabels,
-      options.labels,
-    )
-  })
-
-export const writeTrace = (options: {
-  readonly world: ReviewWorld
-  readonly taskId: string
-  readonly loadedStems: ReadonlyArray<string>
-}) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    const trace = new PackEval.SelectionTrace({
-      taskId: options.taskId,
-      packId: options.world.packId,
-      loadedStems: [...options.loadedStems],
-      requestedModel: 'acme/planner-large',
-      servedModel: 'acme/planner-large@acme',
-      instructionDigest: 'fixture-instruction-digest',
-      rawResponse: '{"loaded":[]}',
-    })
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(
-        options.world.workDir,
-        PackEval.DatasetFiles.traceRelativePathOf(options.world.packId, options.taskId),
-      ),
-      PackEval.SelectionTrace,
-      trace,
-    )
-  })
-
-export const writePairLabels = (options: {
-  readonly world: ReviewWorld
-  readonly labels: PackEval.PairLabels
-}) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(options.world.datasetDir, 'pair-labels.json'),
-      PackEval.PairLabels,
-      options.labels,
-    )
-  })
-
-export const writeJudgePrompt = (options: {
-  readonly world: ReviewWorld
-  readonly prompt: PackEval.JudgePrompt
-}) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(options.world.datasetDir, 'judge-prompt.json'),
-      PackEval.JudgePrompt,
-      options.prompt,
-    )
-  })
-
-export const readPairLabels = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    return yield* PackEval.DatasetFiles.readJson(paths.join(world.datasetDir, 'pair-labels.json'), PackEval.PairLabels)
-  })
-
-export const pairLabelsFileText = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.readFileString(paths.join(world.datasetDir, 'pair-labels.json'))
-  })
-
-export const pairLabelsFileExists = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.exists(paths.join(world.datasetDir, 'pair-labels.json'))
-  })
-
-export const placeOutsideProbe = (options: { readonly base: string; readonly relative: string }) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    yield* fileSystem.makeDirectory(paths.dirname(paths.join(options.base, options.relative)), { recursive: true })
-    yield* fileSystem.writeFileString(paths.join(options.base, options.relative), '{"loaded":[]}')
-  })
-
-export const outsideProbeExists = (options: { readonly base: string; readonly relative: string }) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.exists(paths.join(options.base, options.relative))
-  })
-
-export const readCandidates = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    return yield* PackEval.DatasetFiles.readJson(
-      paths.join(world.workDir, 'candidates.json'),
-      PackEval.CandidateTasks,
-    )
-  })
-
-export const readTaskSet = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    return yield* PackEval.DatasetFiles.readJson(paths.join(world.datasetDir, 'tasks.json'), PackEval.TaskSet)
-  })
-
-export const readLabels = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const paths = yield* Path.Path
-    return yield* PackEval.DatasetFiles.readJson(
-      paths.join(world.datasetDir, 'routing-labels.json'),
-      PackEval.RoutingLabels,
-    )
-  })
-
-export const labelsFileText = (world: ReviewWorld) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.readFileString(paths.join(world.datasetDir, 'routing-labels.json'))
-  })
-
-export const readPack = (world: ReviewWorld) => PackEval.DatasetFiles.readPack(world.packDir)
-
-export const textRequest = (options: {
-  readonly world: ReviewWorld
-  readonly method: 'GET' | 'POST' | 'PUT'
-  readonly path: string
-  readonly body?: Schema.Json
-}): Effect.Effect<TextReply, HttpClientError.HttpClientError, HttpClient.HttpClient> =>
-  Effect.gen(function*() {
-    const request = HttpClientRequest.make(options.method)(
-      new URL(options.path, `${options.world.baseUrl}/`).toString(),
-    )
-    const withBody = Option.match(Option.fromUndefinedOr(options.body), {
-      onNone: () => request,
-      onSome: (body) => HttpClientRequest.bodyJsonUnsafe(request, body),
-    })
-    const response = yield* HttpClient.execute(withBody)
-    const body = yield* response.text
-    return { status: response.status, body }
-  })
-
-const worldLayer = Layer.unwrap(
+const locationsLayer = Layer.unwrap(
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem
     const paths = yield* Path.Path
     const base = yield* fileSystem.makeTempDirectoryScoped()
     const datasetDir = paths.join(base, 'dataset')
     const workDir = paths.join(base, 'work')
-    const packDir = paths.join(base, 'packs', reviewPackId)
+    const packsRoot = paths.join(base, 'packs')
+    const packDir = paths.join(packsRoot, reviewPackId)
     yield* fileSystem.makeDirectory(datasetDir, { recursive: true })
+    yield* fileSystem.makeDirectory(workDir, { recursive: true })
     yield* fileSystem.makeDirectory(packDir, { recursive: true })
     const server = yield* HttpServer.HttpServer
     if (NetAddress.isUnixPathAddress(server.address)) {
       return yield* Effect.die(new Error('the review server listened on a unix socket'))
     }
-    const world: ReviewWorld = {
+    const locations: ReviewLocations = {
       datasetDir,
       workDir,
-      packId: reviewPackId,
-      packDir,
+      packsRoot,
       baseUrl: boundBaseUrl(server.address),
     }
     return Layer.mergeAll(
-      Layer.succeed(ReviewFixture, world),
+      Layer.succeed(ReviewFixture, locations),
       PackEval.ReviewServer.layer({ datasetDir, workDir, packDirs: [packDir] }),
     )
   }),
@@ -322,7 +317,7 @@ export const reviewServerFixture: Layer.Layer<
   ReviewFixture | HttpClient.HttpClient | FileSystem.FileSystem | Path.Path
 > = Layer.orDie(
   Layer.provideMerge(
-    worldLayer,
+    locationsLayer,
     Layer.mergeAll(
       NodeHttpServer.layer(() => createServer(), { host: '127.0.0.1', port: 0 }),
       FetchHttpClient.layer,
