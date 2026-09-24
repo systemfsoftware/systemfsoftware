@@ -1,7 +1,5 @@
 import { Schema as S } from 'effect'
-import { SkuId } from '../inventory/inventory.schema.js'
-
-const Quantity = S.Int.pipe(S.check(S.isGreaterThan(0)))
+import { Quantity, SkuId } from '../inventory/inventory.schema.js'
 
 export class OrderLine extends S.Class<OrderLine>('OrderLine')({
   sku: SkuId,

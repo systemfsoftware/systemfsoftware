@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { PgRuntime, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
+import { Persistence, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
 import { ConfigProvider, Context, Effect, Layer, Match, Ref } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { Pool } from 'pg'
@@ -25,7 +25,7 @@ const options = ConfigProvider.layer(
 const startPool = (cell: Ref.Ref<PoolState>): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
     const context = yield* Layer.build(rawClient)
-    const pool = Context.get(context, PgRuntime).pool
+    const pool = Context.get(context, Persistence.PgRuntime.PgRuntime).pool
     yield* Ref.update(cell, (state) => ({ ...state, pool, opened: state.opened + 1 }))
   }).pipe(Effect.provide(options))
 

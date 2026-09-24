@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { DrizzleSession, PgRuntime, warehouses } from '@systemfsoftware/example-inventory-fulfillment'
+import { Persistence } from '@systemfsoftware/example-inventory-fulfillment'
 import { ConfigProvider, Context, Effect, Layer } from 'effect'
 import { PgSocketServer, PgSocketServerLive } from './__fixtures__/pg-socket.fixture.js'
 
@@ -22,10 +22,10 @@ const writeAndReadWarehouse = (databaseUrl: string): Effect.Effect<ReadonlyArray
   Effect.orDie(
     Effect.scoped(
       Effect.gen(function*() {
-        const context = yield* Layer.build(PgRuntime.Live)
-        const session = Context.get(context, DrizzleSession)
-        yield* session.insert(warehouses).values({ id: 'warehouse-release-check', region: 'north' })
-        return yield* session.select().from(warehouses)
+        const context = yield* Layer.build(Persistence.PgRuntime.PgRuntimeLive)
+        const session = Context.get(context, Persistence.DrizzleSession.DrizzleSession)
+        yield* session.insert(Persistence.Tables.warehouses).values({ id: 'warehouse-release-check', region: 'north' })
+        return yield* session.select().from(Persistence.Tables.warehouses)
       }),
     ),
   ).pipe(Effect.provide(options(databaseUrl)))

@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsdown -l warn",
     "lint": "oxlint .",
+    "race": "node scripts/race.ts",
     "test": "vitest run",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "typecheck": "tsc -b"

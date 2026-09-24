@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    includeSource: ['src/**/*.ts'],
     server: {
       deps: {
         inline: [/better-auth/, /@better-auth\//, /better-call/, /@better-fetch\//, /@opentelemetry\//],

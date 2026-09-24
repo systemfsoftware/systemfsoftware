@@ -31,6 +31,7 @@ export default defineConfig({
     index: './src/mod.ts',
     main: './src/main.ts',
   },
+  define: { 'import.meta.vitest': 'undefined' },
   format: 'esm',
   dts: true,
   exports: {
