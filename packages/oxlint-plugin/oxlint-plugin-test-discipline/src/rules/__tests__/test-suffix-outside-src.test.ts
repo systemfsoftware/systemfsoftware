@@ -40,6 +40,16 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       code: '',
       filename: '/repo/pkg/src/a.test.ts',
     },
+    {
+      name: 'Should_Allow_BareTest_When_RunnerPackageDrivesVitestDirectly',
+      code: '',
+      filename: '/repo/packages/vitest/tests/runner.test.ts',
+    },
+    {
+      name: 'Should_Allow_ProbeFixture_When_RunnerPackageHoldsNestedRunProbes',
+      code: '',
+      filename: '/repo/packages/vitest-conformance/tests/__fixtures__/probes/expect/allowed.test.ts',
+    },
   ],
   invalid: [
     {

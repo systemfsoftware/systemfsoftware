@@ -1,7 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { CONFORMANCE_SUFFIX, DIFFERENTIAL_SUFFIX, INTEGRATION_SUFFIX, TRACE_SUFFIX } from './path.config.js'
-import { basenameOf, isTestFile, isUnderSrc } from './path.js'
+import { basenameOf, isRawVitestPackage, isTestFile, isUnderSrc } from './path.js'
 import {
   meta,
   UNSANCTIONED_SUFFIX_ACTUAL,
@@ -16,6 +16,7 @@ export const testSuffixOutsideSrc = defineRule({
   create(context: Context) {
     const filename = context.filename
     if (isUnderSrc(filename)) return {}
+    if (isRawVitestPackage(filename)) return {}
     const basename = basenameOf(filename)
     if (!isTestFile(basename)) return {}
     if (

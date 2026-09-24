@@ -85,6 +85,17 @@ type PredicateShape = {
   callsDomainFunction: boolean
 }
 
+/**
+ * The fork's lawful `it.prop(name, { of, subject }, holds)` hands the function
+ * under test to `holds` as its first parameter. Calling that parameter is
+ * calling the subject, so it reaches this module's code by construction — even
+ * when the parameter name would otherwise read as a codec accessor.
+ */
+const subjectParameterOf = (predicate: ESTree.ArrowFunctionExpression | ESTree.Function): string | undefined => {
+  const first = predicate.params[0]
+  return first !== undefined && first.type === 'Identifier' ? first.name : undefined
+}
+
 const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
 
 const mentionsImportMetaVitest = (value: unknown): boolean => {
@@ -107,9 +118,14 @@ const mentionsImportMetaVitest = (value: unknown): boolean => {
   return false
 }
 
-const collectPredicateShape = (provenance: Provenance, node: unknown, shape: PredicateShape): void => {
+const collectPredicateShape = (
+  provenance: Provenance,
+  node: unknown,
+  shape: PredicateShape,
+  subjectParameter: string | undefined,
+): void => {
   if (Array.isArray(node)) {
-    for (const item of node) collectPredicateShape(provenance, item, shape)
+    for (const item of node) collectPredicateShape(provenance, item, shape, subjectParameter)
     return
   }
   if (!isNode(node)) return
@@ -132,10 +148,12 @@ const collectPredicateShape = (provenance: Provenance, node: unknown, shape: Pre
         if (provenance.classifyCall(name, node) === 'domain' || receiverIsLocal) shape.callsDomainFunction = true
       }
     } else if (callee.type === 'Identifier') {
+      const callsSubject = subjectParameter !== undefined && callee.name === subjectParameter
       if (
-        CODEC_ACCESSORS[callee.name] !== true &&
-        NEUTRAL_METHODS[callee.name] !== true &&
-        provenance.classifyCall(callee.name, node) === 'domain'
+        callsSubject ||
+        (CODEC_ACCESSORS[callee.name] !== true &&
+          NEUTRAL_METHODS[callee.name] !== true &&
+          provenance.classifyCall(callee.name, node) === 'domain')
       ) {
         shape.callsDomainFunction = true
       }
@@ -143,7 +161,7 @@ const collectPredicateShape = (provenance: Provenance, node: unknown, shape: Pre
   }
   for (const [key, child] of Object.entries(node)) {
     if (key === 'parent') continue
-    collectPredicateShape(provenance, child, shape)
+    collectPredicateShape(provenance, child, shape, subjectParameter)
   }
 }
 
@@ -151,7 +169,7 @@ const checkPropCall = (provenance: Provenance, context: Context, call: ESTree.Ca
   const predicate = call.arguments[call.arguments.length - 1]
   if (predicate === undefined || predicate.type !== 'ArrowFunctionExpression') return
   const shape: PredicateShape = { usesCompilerProbe: false, callsDomainFunction: false }
-  collectPredicateShape(provenance, predicate.body, shape)
+  collectPredicateShape(provenance, predicate.body, shape, subjectParameterOf(predicate))
   if (shape.usesCompilerProbe) {
     context.report({
       node: call,

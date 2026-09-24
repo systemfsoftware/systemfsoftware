@@ -10,7 +10,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Outside src/, a test file ends .integration.test.ts, .differential.test.ts, .trace.test.ts, or .conformance.test.ts.',
+      'Outside src/, a test file ends .integration.test.ts, .differential.test.ts, .trace.test.ts, or .conformance.test.ts. A runner-driving package (Vitest itself, the fork, effect-spec-runtime) keeps plain *.test.ts runners and nested-run probes, so the lane taxonomy does not apply there.',
   },
   schema: [],
   messages: {
