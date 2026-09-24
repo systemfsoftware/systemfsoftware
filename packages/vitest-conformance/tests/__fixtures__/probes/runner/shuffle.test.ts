@@ -1,10 +1,13 @@
-import { describe, expect, it } from '@systemfsoftware/vitest'
-import { Effect } from 'effect'
+import { describe, it } from '@systemfsoftware/vitest'
 
 const doubled = (n: number): number => n * 2
 
 describe('shuffled pair', () => {
-  it.effect('Should_DoubleTwo_When_TheShuffleRunsItFirst', () => Effect.sync(() => expect(doubled(2)).toEqual(4)))
+  it('Should_DoubleTwo_When_TheShuffleRunsItFirst', function*({ expect }) {
+    yield* expect(doubled(2)).toEqual(4)
+  })
 
-  it.effect('Should_DoubleThree_When_TheShuffleRunsItSecond', () => Effect.sync(() => expect(doubled(3)).toEqual(6)))
+  it('Should_DoubleThree_When_TheShuffleRunsItSecond', function*({ expect }) {
+    yield* expect(doubled(3)).toEqual(6)
+  })
 })

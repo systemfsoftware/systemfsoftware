@@ -1,5 +1,5 @@
 name: Setup Node runtime
-description: Install Node.js, enable Corepack
+description: Install Node.js, enable its Corepack, then cache the pnpm store
 
 inputs:
   node-version:
@@ -10,10 +10,22 @@ inputs:
 runs:
   using: composite
   steps:
+    # Node goes first, so `corepack enable` places the pnpm shims beside the
+    # Corepack this Node bundles, the same one `corepack pnpm` resolves later.
+    # `check-latest` gives every runner the newest release in the spec: a
+    # runner image's cached Node can bundle a Corepack that predates pnpm 12's
+    # `bin` layout and fails with "Cannot find module .../bin/pnpm.cjs".
+    - id: node
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+        check-latest: true
     - name: Enable Corepack
       shell: bash
       run: corepack enable
+    # The pnpm store cache needs pnpm on PATH, so it is set up after Corepack,
+    # on the exact Node the first step installed.
     - uses: actions/setup-node@v7
       with:
-        node-version: ${{ inputs.node-version }}
+        node-version: ${{ steps.node.outputs.node-version }}
         cache: pnpm

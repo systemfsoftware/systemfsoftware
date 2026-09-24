@@ -1,13 +1,11 @@
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { expect } from '@systemfsoftware/vitest'
 import { ConfigProvider, Effect, Layer } from 'effect'
 import { fiberPatternOf } from './__fixtures__/kernelFixtures.js'
 import {
   allThreeClaimed,
   checkThenSet,
   firstFailureValue,
-  isOverBudget,
   outcomeBound,
   queueProgram,
   raceDetected,
@@ -141,14 +139,17 @@ Feature('Searching schedules until a concurrency fault shows')
           'outcome',
           (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
         ),
-        Then('the search finishes within its stated bound')((s) => {
-          expect(s.outcome).not.toSatisfy(isOverBudget)
-        }),
-        And('the bound reports pruning is off and names the queue')((s) => {
-          const bound = outcomeBound(s.outcome)
-          expect(bound.pruning.enabled).toBe(false)
-          expect(bound.pruning.disabledBy).toContain('Queue')
-        }),
+        Then('the search finishes within its stated bound, naming the queue among the primitives it cannot watch')(
+          (s, expect) => {
+            const bound = outcomeBound(s.outcome)
+            return expect({ tag: s.outcome._tag, enabled: bound.pruning.enabled, disabledBy: bound.pruning.disabledBy })
+              .toMatchObject({
+                tag: 'Completed',
+                enabled: false,
+                disabledBy: expect.arrayContaining(['Queue']),
+              })
+          },
+        ),
       ),
     )
 
@@ -172,14 +173,19 @@ Feature('Searching schedules until a concurrency fault shows')
               )
             ),
         ),
-        Then('each search finds a run where both workers believed they took the slot')((s) => {
-          expect(firstFailureValue(s.searches.pruned)).toEqual([true, true])
-          expect(firstFailureValue(s.searches.unpruned)).toEqual([true, true])
-        }),
-        And('each failing schedule spends its one pause')((s) => {
-          expect(s.searches.pruned.failures[0]?.preemptions).toBe(1)
-          expect(s.searches.unpruned.failures[0]?.preemptions).toBe(1)
-        }),
+        Then('each search finds a run where both workers took the slot, spending its one pause')((s, expect) =>
+          expect({
+            pruned: firstFailureValue(s.searches.pruned),
+            unpruned: firstFailureValue(s.searches.unpruned),
+            prunedPauses: s.searches.pruned.failures[0]?.preemptions,
+            unprunedPauses: s.searches.unpruned.failures[0]?.preemptions,
+          }).toMatchObject({
+            pruned: [true, true],
+            unpruned: [true, true],
+            prunedPauses: 1,
+            unprunedPauses: 1,
+          })
+        ),
       ),
     )
 
@@ -202,16 +208,19 @@ Feature('Searching schedules until a concurrency fault shows')
               )
             ),
         ),
-        Then('one pause never lets all three believe they won')((s) => {
-          expect(s.searches.onePause).not.toSatisfy(isOverBudget)
-          expect(s.searches.onePause.failures).toEqual([])
-        }),
-        And('two pauses catch a run where all three believed they won')((s) => {
-          expect(firstFailureValue(s.searches.twoPauses)).toEqual([true, true, true])
-        }),
-        And('the caught run spent both of its pauses')((s) => {
-          expect(s.searches.twoPauses.failures[0]?.preemptions).toBe(2)
-        }),
+        Then('one pause finds nothing, and two pauses catch a run that spent both of them')((s, expect) =>
+          expect({
+            onePauseTag: s.searches.onePause._tag,
+            onePauseFailures: s.searches.onePause.failures,
+            twoPauseValue: firstFailureValue(s.searches.twoPauses),
+            twoPausePauses: s.searches.twoPauses.failures[0]?.preemptions,
+          }).toMatchObject({
+            onePauseTag: 'Completed',
+            onePauseFailures: [],
+            twoPauseValue: [true, true, true],
+            twoPausePauses: 2,
+          })
+        ),
       ),
     )
 
@@ -226,12 +235,13 @@ Feature('Searching schedules until a concurrency fault shows')
           'shrunk',
           (s) => Effect.promise(() => Kernel.shrink(checkThenSet, { path: s.path, isFailure: raceDetected })),
         ),
-        Then('only the detour that decides the race is left')((s) => {
-          expect(s.shrunk.deviations).toBe(1)
-        }),
-        And('the shrunk schedule still fails on replay')((s) => {
-          expect(replayValueOf(s.shrunk)).toEqual([true, true])
-        }),
+        Then('only the detour that decides the race is left, and the shrunk schedule still fails on replay')(
+          (s, expect) =>
+            expect({ deviations: s.shrunk.deviations, replay: replayValueOf(s.shrunk) }).toMatchObject({
+              deviations: 1,
+              replay: [true, true],
+            }),
+        ),
       ),
     )
 
@@ -246,12 +256,22 @@ Feature('Searching schedules until a concurrency fault shows')
           'runs',
           (s) => Effect.promise(() => twiceWithSeed(s.seed)),
         ),
-        Then('both runs take the same decisions in the same order')((s) => {
-          expect(s.runs.first.decisions).toEqual(s.runs.second.decisions)
-        }),
-        And('both runs hand control to the same workers at the same moments')((s) => {
-          expect(fiberPatternOf(s.runs.first.steps)).toEqual(fiberPatternOf(s.runs.second.steps))
-        }),
+        Then('both runs take the same decisions and hand control to the same workers at the same moments')((
+          s,
+          expect,
+        ) =>
+          expect({
+            firstDecisions: s.runs.first.decisions,
+            secondDecisions: s.runs.second.decisions,
+            firstFibers: fiberPatternOf(s.runs.first.steps),
+            secondFibers: fiberPatternOf(s.runs.second.steps),
+          }).toEqual({
+            firstDecisions: s.runs.second.decisions,
+            secondDecisions: s.runs.second.decisions,
+            firstFibers: fiberPatternOf(s.runs.second.steps),
+            secondFibers: fiberPatternOf(s.runs.second.steps),
+          })
+        ),
       ),
     )
 
@@ -270,12 +290,13 @@ Feature('Searching schedules until a concurrency fault shows')
               perChange: Kernel.seedsFor(s.budget, 'per-change'),
             })),
         ),
-        Then('the nightly count is the derived count')((s) => {
-          expect(s.counts.nightly).toBe(Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))))
-        }),
-        And('the per-change count stays at two hundred and fifty')((s) => {
-          expect(s.counts.perChange).toBe(250)
-        }),
+        Then('the nightly count is the derived count and the per-change count stays at two hundred and fifty')(
+          (s, expect) =>
+            expect(s.counts).toMatchObject({
+              nightly: Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))),
+              perChange: 250,
+            }),
+        ),
       ),
     )
 
@@ -299,10 +320,12 @@ Feature('Searching schedules until a concurrency fault shows')
               )
             ),
         ),
-        Then('the count is the derived count rather than the per-change count')((s) => {
-          expect(s.count).toBe(Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))))
-          expect(s.count).not.toBe(250)
-        }),
+        Then('the count is the derived count rather than the per-change count')((s, expect) =>
+          expect({ chosen: s.count, perChange: Kernel.seedsFor(s.budget, 'per-change') }).toMatchObject({
+            chosen: Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))),
+            perChange: 250,
+          })
+        ),
       ),
     )
 
@@ -318,9 +341,13 @@ Feature('Searching schedules until a concurrency fault shows')
           (s) =>
             Effect.promise(() => Kernel.search(s.target, { preemptions: 2, maxSchedules: 1, isFailure: raceDetected })),
         ),
-        Then('the search reports it ran out before covering its bound')((s) => {
-          expect(s.outcome).toSatisfy(isOverBudget)
-        }),
+        Then('the search reports it ran out before covering its bound')((s, expect) =>
+          expect(s.outcome).toMatchObject({
+            _tag: 'OverBudget',
+            failures: [],
+            bound: expect.objectContaining({ preemptions: 2 }),
+          })
+        ),
       ),
     )
 
@@ -334,12 +361,15 @@ Feature('Searching schedules until a concurrency fault shows')
             'outcome',
             (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
           ),
-          Then(`the bound reports pruning ${row.pruning}`)((s) => {
-            expect(outcomeBound(s.outcome).pruning.enabled).toBe(row.pruned)
-          }),
-          And('the bound names only the cleanup two workers share')((s) => {
-            expect(outcomeBound(s.outcome).pruning.disabledBy).toEqual(row.names)
-          }),
+          Then(`the bound reports pruning ${row.pruning} and names only the cleanup two workers share`)(
+            (s, expect) => {
+              const bound = outcomeBound(s.outcome)
+              return expect({ enabled: bound.pruning.enabled, disabledBy: bound.pruning.disabledBy }).toMatchObject({
+                enabled: row.pruned,
+                disabledBy: row.names,
+              })
+            },
+          ),
         ),
     )
   })

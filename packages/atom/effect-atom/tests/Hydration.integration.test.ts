@@ -1,6 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { SavedText } from './__fixtures__/SavedText.schema.js'
@@ -48,10 +47,9 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { firstReading, secondReading }
             }),
         ),
-        Then('the reloaded page shows the saved value both times')((s) => {
-          expect(s.result.firstReading).toBe(42)
-          expect(s.result.secondReading).toBe(42)
-        }),
+        Then('the reloaded page shows the saved value both times')(
+          (s, expect) => expect(s.result).toMatchObject({ firstReading: 42, secondReading: 42 }),
+        ),
       ),
     )
     scenario(
@@ -85,9 +83,9 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return reading
             }),
         ),
-        Then('the reloaded page shows the value as already finished, with the saved answer')((s) => {
-          expect(s.reading).toMatchObject({ _tag: 'Success', value: 123 })
-        }),
+        Then('the reloaded page shows the value as already finished, with the saved answer')(
+          (s, expect) => expect(s.reading).toMatchObject({ _tag: 'Success', value: 123 }),
+        ),
       ),
     )
     scenario(
@@ -123,10 +121,13 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { beforeItFinishes, afterItFinishes }
             }),
         ),
-        Then('the reloaded page starts out loading, then fills in with the finished answer on its own')((s) => {
-          expect(s.reading.beforeItFinishes).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.reading.afterItFinishes).toMatchObject({ _tag: 'Success', value: 42 })
-        }),
+        Then('the reloaded page starts out loading, then fills in with the finished answer on its own')(
+          (s, expect) =>
+            expect(s.reading).toMatchObject({
+              beforeItFinishes: { _tag: 'Initial' },
+              afterItFinishes: { _tag: 'Success', value: 42 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -146,9 +147,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             return { page, stillLoading }
           })),
         When('the page is saved')('saved', (s) => Effect.sync(() => Atom.Hydration.dehydrate(s.ctx.page))),
-        Then('the still-loading value is not included')((s) => {
-          expect(s.saved).toHaveLength(0)
-        }),
+        Then('the still-loading value is not included')((s, expect) => expect(s.saved).toEqual([])),
       ),
     )
     scenario(
@@ -187,10 +186,13 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { beforeItFinishes, afterItFinishes }
             }),
         ),
-        Then('the reloaded page starts out loading and then fills in with the finished answer on its own')((s) => {
-          expect(s.reading.beforeItFinishes).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.reading.afterItFinishes).toMatchObject({ _tag: 'Success', value: 42 })
-        }),
+        Then('the reloaded page starts out loading and then fills in with the finished answer on its own')(
+          (s, expect) =>
+            expect(s.reading).toMatchObject({
+              beforeItFinishes: { _tag: 'Initial' },
+              afterItFinishes: { _tag: 'Success', value: 42 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -211,13 +213,12 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             return { page }
           })),
         When('the page is saved')('saved', (s) => Effect.sync(() => Atom.Hydration.dehydrate(s.ctx.page))),
-        Then('only the saved value is included')((s) => {
-          expect(s.saved).toHaveLength(1)
-          const [entry] = s.saved
-          if (entry === undefined) throw new Error('expected one saved value')
-          expect(entry.key).toBe('k-plain')
-          expect(entry.value).toBe(42)
-        }),
+        Then('only the saved value is included')(
+          (s, expect) =>
+            expect(s.saved.map((entry) => ({ key: entry.key, value: entry.value }))).toEqual([
+              { key: 'k-plain', value: 42 },
+            ]),
+        ),
       ),
     )
     scenario(
@@ -247,14 +248,16 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               notes: Atom.Registry.refusals(s.ctx.page),
             }
           })),
-        Then('one note names the number and the broken rule, and the page shows its own number')((s) => {
-          expect(s.result.reading).toBe(7)
-          expect(s.result.notes).toHaveLength(1)
-          const [note] = s.result.notes
-          if (note === undefined) throw new Error('expected one refusal note')
-          expect(note.key).toBe('count-above-zero')
-          expect(note.issue).toContain('greater than')
-        }),
+        Then('one note names the number and the broken rule, and the page shows its own number')(
+          (s, expect) =>
+            expect({
+              reading: s.result.reading,
+              notes: s.result.notes.map((note) => ({ key: note.key, issue: note.issue })),
+            }).toEqual({
+              reading: 7,
+              notes: [{ key: 'count-above-zero', issue: expect.stringMatching(/greater than/) }],
+            }),
+        ),
       ),
     )
     scenario(
@@ -282,10 +285,13 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             saved: Atom.Hydration.dehydrate(s.ctx.page).map((entry) => entry.key),
             notes: Atom.Registry.refusals(s.ctx.page),
           }))),
-        Then('only the valid word is saved and the broken number is noted by name')((s) => {
-          expect(s.result.saved).toEqual(['label'])
-          expect(s.result.notes.map((note) => note.key)).toEqual(['count-must-be-positive'])
-        }),
+        Then('only the valid word is saved and the broken number is noted by name')(
+          (s, expect) =>
+            expect({ saved: s.result.saved, noted: s.result.notes.map((note) => note.key) }).toEqual({
+              saved: ['label'],
+              noted: ['count-must-be-positive'],
+            }),
+        ),
       ),
     )
     scenario(
@@ -327,14 +333,14 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               }
             }),
         ),
-        Then('the garbled entry is noted and the good number still loads')((s) => {
-          expect(s.result.firstReading).toBe(1)
-          expect(s.result.secondReading).toBe(9)
-          expect(s.result.notes).toHaveLength(1)
-          const [note] = s.result.notes
-          if (note === undefined) throw new Error('expected one refusal note')
-          expect(note.key).toBe('first-number')
-        }),
+        Then('the garbled entry is noted and the good number still loads')(
+          (s, expect) =>
+            expect({
+              firstReading: s.result.firstReading,
+              secondReading: s.result.secondReading,
+              noted: s.result.notes.map((note) => note.key),
+            }).toEqual({ firstReading: 1, secondReading: 9, noted: ['first-number'] }),
+        ),
       ),
     )
     scenario(
@@ -361,13 +367,13 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               notes: Atom.Registry.refusals(s.ctx.page),
             }
           })),
-        Then('the nameless entry is noted without a name and the page is untouched')((s) => {
-          expect(s.result.reading).toBe(3)
-          expect(s.result.notes).toHaveLength(1)
-          const [note] = s.result.notes
-          if (note === undefined) throw new Error('expected one refusal note')
-          expect(note.key).toBeUndefined()
-        }),
+        Then('the nameless entry is noted without a name and the page is untouched')(
+          (s, expect) =>
+            expect({ reading: s.result.reading, noted: s.result.notes.map((note) => note.key) }).toEqual({
+              reading: 3,
+              noted: [undefined],
+            }),
+        ),
       ),
     )
     scenario(
@@ -401,11 +407,14 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { text, beforeItFinishes, afterItFinishes }
             }),
         ),
-        Then('the text copy hides the machinery and the reloaded page still fills in')((s) => {
-          expect(s.reading.text).not.toContain('Deferred')
-          expect(s.reading.beforeItFinishes).toSatisfy(Atom.AsyncResult.isInitial)
-          expect(s.reading.afterItFinishes).toMatchObject({ _tag: 'Success', value: 42 })
-        }),
+        Then('the text copy hides the machinery and the reloaded page still fills in')(
+          (s, expect) =>
+            expect(s.reading).toMatchObject({
+              text: expect.stringMatching(/^(?!.*Deferred)/),
+              beforeItFinishes: { _tag: 'Initial' },
+              afterItFinishes: { _tag: 'Success', value: 42 },
+            }),
+        ),
       ),
     )
     scenario(
@@ -434,9 +443,9 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               }),
             ),
         ),
-        Then('the reloaded page shows the value as already finished, with the saved answer')((s) => {
-          expect(s.reading).toMatchObject({ _tag: 'Success', value: 123 })
-        }),
+        Then('the reloaded page shows the value as already finished, with the saved answer')(
+          (s, expect) => expect(s.reading).toMatchObject({ _tag: 'Success', value: 123 }),
+        ),
       ),
     )
   })

@@ -5,9 +5,8 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Deferred, Duration, Effect, Fiber, Layer, Match, Ref, Schedule } from 'effect'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Deferred, Duration, Effect, Fiber, Layer, Match, Ref, Schedule, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 import { advanceUntil } from './__fixtures__/TestUtils.js'
@@ -73,10 +72,10 @@ Feature('Lock acquisition retry on contention')
                     },
                     tick: { tickTimeout: Duration.seconds(90) },
                   })
-                  yield* run.worker(worker)
+                  const health = yield* run.worker(worker)
                   yield* Effect.forkChild(TestClock.adjust(Duration.millis(200)))
                   yield* Deferred.await(firstWork)
-                  return true
+                  return yield* health.ready.await.pipe(Effect.timeout('30 seconds'), Effect.result)
                 })
               : (s) =>
                 Effect.gen(function*() {
@@ -105,22 +104,21 @@ Feature('Lock acquisition retry on contention')
                   const supHealth = yield* run.supervisor(supervisor)
                   yield* Effect.forkChild(TestClock.adjust(Duration.millis(200)))
                   yield* Deferred.await(firstWork)
-                  yield* supHealth.ready.await
-                  return true
+                  return yield* supHealth.ready.await.pipe(Effect.timeout('30 seconds'), Effect.result)
                 }),
           ),
-          Then('the daemon performs work after the resource frees')((s) =>
-            Effect.sync(() => {
-              expect(s.readyOpen).toEqual(true)
-            })
-          ),
-          And('work eventually runs')((s) =>
+          Then(
+            'the daemon becomes ready once the resource frees, runs work eventually, and the holder fiber has completed',
+          )((s, expect) =>
             Effect.gen(function*() {
-              const count = yield* Ref.get(s.state.counter)
-              expect(count).toBeGreaterThan(0)
+              const runs = yield* Ref.get(s.state.counter)
+              yield* Fiber.await(s.state.holder)
+              yield* expect({ ready: s.readyOpen, runs }).toMatchObject({
+                ready: { _tag: 'Success', success: undefined },
+                runs: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              })
             })
           ),
-          And('the holder fiber has completed')((s) => Fiber.await(s.state.holder).pipe(Effect.asVoid)),
         ),
     )
 
@@ -170,9 +168,9 @@ Feature('Lock acquisition retry on contention')
                       },
                       tick: { tickTimeout: Duration.seconds(90) },
                     })
-                    yield* run.worker(worker)
+                    const health = yield* run.worker(worker)
                     yield* advanceUntil(firstWork, Duration.millis(1))
-                    return true
+                    return yield* health.ready.await.pipe(Effect.timeout('30 seconds'), Effect.result)
                   })),
                 Match.when('supervisor', () =>
                   Effect.gen(function*() {
@@ -200,24 +198,23 @@ Feature('Lock acquisition retry on contention')
                     })
                     const supHealth = yield* run.supervisor(supervisor)
                     yield* advanceUntil(firstWork, Duration.millis(1))
-                    yield* supHealth.ready.await
-                    return true
+                    return yield* supHealth.ready.await.pipe(Effect.timeout('30 seconds'), Effect.result)
                   })),
                 Match.exhaustive,
               ),
           ),
-          Then('the daemon performs work after the resource frees')((s) =>
-            Effect.sync(() => {
-              expect(s.readyOpen).toEqual(true)
-            })
-          ),
-          And('work eventually runs')((s) =>
+          Then(
+            'the daemon becomes ready once the resource frees, runs work eventually, and the holder fiber has completed',
+          )((s, expect) =>
             Effect.gen(function*() {
-              const count = yield* Ref.get(s.state.counter)
-              expect(count).toBeGreaterThan(0)
+              const runs = yield* Ref.get(s.state.counter)
+              yield* Fiber.await(s.state.holder)
+              yield* expect({ ready: s.readyOpen, runs }).toMatchObject({
+                ready: { _tag: 'Success', success: undefined },
+                runs: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              })
             })
           ),
-          And('the holder fiber has completed')((s) => Fiber.await(s.state.holder).pipe(Effect.asVoid)),
         ),
     )
   })

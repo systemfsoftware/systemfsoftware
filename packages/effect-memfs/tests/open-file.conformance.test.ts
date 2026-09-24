@@ -1,11 +1,10 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Context, Effect, Layer, Match, Option, Ref, type Scope } from 'effect'
+import { Context, Effect, Layer, Match, Option, Ref, Schema, type Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
 import { HandleLeftOpen } from './__fixtures__/HandleLeftOpen.schema.js'
-import { passedHistories } from './__fixtures__/memfs-store.js'
 import {
   FileHandleCommand,
   type FileHandleResponse,
@@ -84,12 +83,14 @@ const openNote: Layer.Layer<OpenNote> = Layer.effect(
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.open(note, { flag: 'r+' })),
 ).pipe(Layer.provide(MemoryFileSystem.make({ [note]: OpenedNoteText }).layer), Layer.orDie)
 
+const budgetedHistories = 500
+
 const openFileCheck = (subject: Layer.Layer<OpenNote>) =>
   Conformance.sequential(subject, {
     commands: FileHandleCommand,
     model: openFileModel,
     run: runFileCommand,
-    sequences: 500,
+    sequences: budgetedHistories,
     operations: 10,
   })
 
@@ -134,9 +135,9 @@ Feature('Reading and writing an open note from a position that moves', { timeout
           'report',
           (s) => openFileCheck(s.subject),
         ),
-        Then('every round gets what a plain note and a bookmark would')((s) => {
-          passedHistories(s.report)
-        }),
+        Then('every round gets what a plain note and a bookmark would')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: budgetedHistories })
+        ),
       ),
     )
 
@@ -158,9 +159,12 @@ Feature('Reading and writing an open note from a position that moves', { timeout
               probe: noHandleLeftOpen(s.borrowed.stash),
             }),
         ),
-        Then('the borrowed note reads as given up after any stop')((s) => {
-          passedHistories(s.report)
-        }),
+        Then('the borrowed note reads as given up after any stop')((s, expect) =>
+          expect(s.report).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
   })

@@ -16,7 +16,7 @@ const FEATURE_IMPORTS = `
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { expect, vi } from '@systemfsoftware/vitest'
+import { vi } from '@systemfsoftware/vitest'
 
 const Feature = makeFeature({ it })
 `
@@ -94,7 +94,7 @@ const Feature = makeFeature({ it, layer })
       code: `
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { describe, expect } from '@systemfsoftware/vitest'
+import { describe } from '@systemfsoftware/vitest'
 
 const Feature = makeFeature({ it, layer })
 `,

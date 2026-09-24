@@ -11,7 +11,7 @@ export namespace KernelCase {
 
 // @public (undocumented)
 export namespace Suite {
-    export { Bindings, Config$1 as Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Shared, open, openCase, openShared, openSharedCase };
+    export { Bindings, Config$1 as Config, DescribeMode, LiveCase, Options, RegisterFn, RegisterMode, Scenario, Shared, open, openCase, openShared, openSharedCase };
 }
 
 // @public (undocumented)

@@ -1,5 +1,6 @@
 /// <reference types="vitest/importMeta" />
-import type { Vitest } from '@systemfsoftware/vitest'
+import { type Checks, type Expect, type Vitest, VitestTestContext } from '@systemfsoftware/vitest'
+import { type Asserted, captureRunBinding, type RunBinding } from '@systemfsoftware/vitest/integration'
 import { Effect, Layer } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
@@ -29,8 +30,15 @@ export interface Shared<R> {
   readonly layer: Layer.Layer<R>
 }
 
+/**
+ * A registered case: the runner's own `expect` arrives as the argument, so a case's assertion
+ * steps check through the test's callback rather than an import. `R` is what the case's layer
+ * provides; every marked step needs the runner's scope and check service beside it.
+ */
+export type Scenario<B, E, R> = (expect: Expect) => Effect.Effect<B, E, R | Scope.Scope | Asserted>
+
 export interface RegisterFn<B, E, R> {
-  (name: string, body: Effect.Effect<B, E, R>, mode: Register.RegisterMode, live?: LiveCase): void
+  (name: string, scenario: Scenario<B, E, R>, mode: Register.RegisterMode, live?: LiveCase): void
 }
 
 const caseEffectOf = <B, E, R, RIn extends Scope.Scope>(
@@ -42,17 +50,55 @@ const caseEffectOf = <B, E, R, RIn extends Scope.Scope>(
   return KernelCase.caseProgram(body, env)
 }
 
-const registerCase = <B, E>(
+/**
+ * One case's program: the callback's own `expect` builds the scenario Effect, and the case's
+ * layers build fresh around it — under the kernel's scheduled exploration, or on the live clock
+ * when the case declares a reason.
+ */
+const caseProgramOf = <B, E, R, RIn extends Scope.Scope>(
+  scenario: Scenario<B, E, R | RIn | Scope.Scope>,
+  env: Layer.Layer<R, never, RIn>,
+  live: LiveCase | undefined,
+  binding: RunBinding,
+): (expect: Expect) => Effect.Effect<B, E, Scope.Scope> =>
+(expect) => {
+  const bound: Effect.Effect<B, E, R | RIn | Scope.Scope> = binding.bind(scenario(expect))
+  return caseEffectOf(bound, env, live)
+}
+
+/**
+ * The fork's generator body for one case: it hands the callback's `expect` to the scenario, hands
+ * the running Vitest task to the step annotations, and runs the program the case declared — under
+ * the kernel's explored schedules, or on the live clock.
+ */
+const caseBody = <B, E, R, RIn extends Scope.Scope>(
+  scenario: Scenario<B, E, R | RIn | Scope.Scope>,
+  env: Layer.Layer<R, never, RIn>,
+  live: LiveCase | undefined,
+) =>
+  function*({ expect }: Checks) {
+    const ctx = yield* VitestTestContext
+    const binding = yield* captureRunBinding
+    const program = TaskRef.provideTaskRef(caseProgramOf(scenario, env, live, binding)(expect), ctx)
+    if (live === undefined) {
+      yield* Register.exploredProgram(program)
+      return
+    }
+    yield* program
+  }
+
+const registerCase = <B, E, R, RIn extends Scope.Scope>(
   register: Vitest.Test<Scope.Scope>,
   name: string,
-  program: Effect.Effect<B, E, Scope.Scope>,
+  scenario: Scenario<B, E, R | RIn | Scope.Scope>,
+  env: Layer.Layer<R, never, RIn>,
   live: LiveCase | undefined,
 ): void => {
   if (live === undefined) {
-    register(name, Register.exploredBody(program), Register.UNTIMED)
+    register(name, caseBody(scenario, env, live), Register.UNTIMED)
     return
   }
-  register(name, (ctx) => TaskRef.provideTaskRef(program, ctx))
+  register(name, caseBody(scenario, env, live))
 }
 
 const registrarFor = <B, E, R, RIn extends Scope.Scope>(
@@ -60,14 +106,9 @@ const registrarFor = <B, E, R, RIn extends Scope.Scope>(
   config: Config,
   env: Layer.Layer<R, never, RIn>,
 ): RegisterFn<B, E, R | RIn | Scope.Scope> =>
-(name, body, mode, caseLive) => {
+(name, scenario, mode, caseLive) => {
   const live = caseLive ?? config.live
-  registerCase(
-    Register.selectCaseRunner(methodsIt, mode, live),
-    name,
-    caseEffectOf(body, env, live),
-    live,
-  )
+  registerCase(Register.selectCaseRunner(methodsIt, mode, live), name, scenario, env, live)
 }
 
 const openImpl = <B, E, C>(

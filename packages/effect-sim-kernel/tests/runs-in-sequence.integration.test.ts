@@ -1,6 +1,5 @@
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer, Ref } from 'effect'
 import { completedValueOf } from './__fixtures__/kernelFixtures.js'
 
@@ -24,9 +23,7 @@ Feature('Running one program after another in the same process')
           'read',
           (s) => Effect.promise(() => Kernel.run(Ref.get(s.counter))),
         ),
-        Then('the second run reads 7')((s) => {
-          expect(completedValueOf(s.read)).toBe(7)
-        }),
+        Then('the second run reads 7')((s, expect) => expect(completedValueOf(s.read)).toBe(7)),
       ),
     )
 
@@ -49,12 +46,13 @@ Feature('Running one program after another in the same process')
               return { inside, outside: Kernel.isStepping() }
             }),
         ),
-        Then('the program saw itself inside a step')((s) => {
-          expect(s.states.inside).toSatisfy(completedValueOf)
-        }),
-        And('after the run the kernel reports it is not inside a step')((s) => {
-          expect(s.states.outside).toBe(false)
-        }),
+        Then('the program saw itself inside a step, and after the run the kernel reports it is not inside a step')(
+          (s, expect) =>
+            expect({ inside: completedValueOf(s.states.inside), outside: s.states.outside }).toMatchObject({
+              inside: true,
+              outside: false,
+            }),
+        ),
       ),
     )
   })

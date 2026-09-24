@@ -1,7 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Result, Schema } from 'effect'
+import { Effect, Schema } from 'effect'
 import { Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -20,9 +19,12 @@ Feature('Recognizing a well-formed refusal')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.UncertainMatchError)(s.payload)),
         ),
-        Then('the unnamed case is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unnamed case is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["caseId"\]/) },
+          })
+        ),
       ),
     )
 
@@ -37,9 +39,12 @@ Feature('Recognizing a well-formed refusal')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionIdCollisionError)(s.payload)),
         ),
-        Then('the unnamed id is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unnamed id is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["decisionId"\]/) },
+          })
+        ),
       ),
     )
 
@@ -57,9 +62,12 @@ Feature('Recognizing a well-formed refusal')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.InvalidThresholdError)(s.payload)),
         ),
-        Then('the unnamed limit is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unnamed limit is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["limit"\]/) },
+          })
+        ),
       ),
     )
 
@@ -78,9 +86,12 @@ Feature('Recognizing a well-formed refusal')
           'outcome',
           (s) => Effect.succeed(Schema.decodeResult(Discern.InvalidThresholdError)(s.payload)),
         ),
-        Then('the non-finite value is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the non-finite value is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["value"\]/) },
+          })
+        ),
       ),
     )
   })

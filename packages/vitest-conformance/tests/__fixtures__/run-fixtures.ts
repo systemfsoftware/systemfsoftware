@@ -7,8 +7,8 @@
  * the runner is built.
  *
  * The run is in-process through `vitest/node` on the worker-threads pool: no child process, no browser.
- * Fixtures resolve `@systemfsoftware/vitest` to this worktree's fork source directly, so a report always
- * describes the code under conformance rather than an installed copy.
+ * Fixtures resolve `@systemfsoftware/vitest` to this worktree's fork source directly, so a report always describes
+ * the code under conformance rather than an installed copy.
  *
  * Fixtures live in `tests/__fixtures__/probes/**`. A glob handed to {@link runFixtures} is matched relative
  * to that directory; a glob that already starts with `tests/` or `/` is matched relative to the package root.
@@ -16,9 +16,10 @@
  * lint reads as a place where the fork's `it.effect` bodies may hold `expect` calls.
  */
 import { Effect, Function, Schema } from 'effect'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ProvidedContext } from 'vitest'
 import { startVitest } from 'vitest/node'
@@ -26,8 +27,19 @@ import { startVitest } from 'vitest/node'
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
 // The fork is a sibling package; resolving by path keeps the conformance run independent of install state.
 const forkEntry = fileURLToPath(new URL('../../../vitest/src/mod.ts', import.meta.url))
-const forkRefusals = fileURLToPath(new URL('../../../vitest/src/Refusals.ts', import.meta.url))
+const forkGuard = fileURLToPath(new URL('../../../vitest/src/guard.ts', import.meta.url))
+const guardSetupFiles = ['@systemfsoftware/vitest/guard']
 const forkTestClock = fileURLToPath(new URL('../../../vitest/src/TestClock.ts', import.meta.url))
+
+/**
+ * Where a fixture appends evidence the report cannot carry, one file per glob, named from the fixture's own
+ * stem: a test's scope finalizer runs after its report entry is written, so only a side file can show it ran.
+ */
+export const evidenceFilePath = (glob: string): string =>
+  join(tmpdir(), `vitest-conformance-${basename(glob, '.test.ts')}.evidence.txt`)
+
+const evidenceIn = (files: ReadonlyArray<string>): string =>
+  files.filter((file) => existsSync(file)).map((file) => readFileSync(file, 'utf8')).join('')
 
 const AssertionSchema = Schema.Struct({
   title: Schema.String,
@@ -61,11 +73,16 @@ const ReportShape = Schema.Struct({
 /** The nested Vitest report, narrowed to the fields the features assert on. */
 export interface JsonReport extends Schema.Schema.Type<typeof ReportShape> {}
 
-/** A nested run plus what it exposed beyond the report: the seed it shuffled with, if it shuffled. */
+/** A nested run plus what it exposed beyond the report: the seed it shuffled with, and the evidence file. */
 export interface ProbeRun {
   readonly report: JsonReport
   /** The shuffle seed the run used, or null when the run did not shuffle. */
   readonly seed: number | null
+  /**
+   * What the fixtures appended to the file named by {@link evidenceFilePath}, which holds a fact the report
+   * cannot carry: a test's scope finalizer runs after its report entry is written. Empty when nothing wrote.
+   */
+  readonly evidence: string
 }
 
 export interface ProbeRunOptions {
@@ -147,6 +164,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
     if (options.globs.length === 0) {
       return yield* new ProbeFailure({ stage: 'prepare', detail: 'probes: name at least one fixture glob' })
     }
+    const evidenceFiles = options.globs.map(evidenceFilePath)
     const report = yield* Effect.acquireUseRelease(
       Effect.gen(function*() {
         const workdir = yield* Effect.tryPromise({
@@ -154,6 +172,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
           catch: (cause) => new ProbeFailure({ stage: 'prepare', detail: 'probes: no report directory', cause }),
         })
         const outputFile = join(workdir, 'report.json')
+        evidenceFiles.forEach((file) => rmSync(file, { force: true }))
         const vitest = yield* Effect.tryPromise({
           try: () =>
             startVitest(
@@ -169,6 +188,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                 passWithNoTests: false,
                 bail: 0,
                 silent: true,
+                setupFiles: guardSetupFiles,
                 reporters: [['json', { outputFile }]],
                 testTimeout: 60_000,
                 hookTimeout: 60_000,
@@ -176,13 +196,12 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                   shuffle: options.shuffle ?? false,
                   ...(options.seed === undefined ? {} : { seed: options.seed }),
                 },
-                ...(options.env === undefined ? {} : { env: options.env }),
                 ...(options.provide === undefined ? {} : { provide: options.provide }),
               },
               {
                 resolve: {
                   alias: {
-                    '@systemfsoftware/vitest/refusals': forkRefusals,
+                    '@systemfsoftware/vitest/guard': forkGuard,
                     '@systemfsoftware/vitest': forkEntry,
                     'effect/TestClock': forkTestClock,
                   },
@@ -196,7 +215,16 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
           try: () => vitest.close(),
           catch: (cause) => new ProbeFailure({ stage: 'close', detail: 'nested run failed to close', cause }),
         })
-        return { cleanup: Effect.promise(() => rm(workdir, { recursive: true, force: true })), outputFile, seed }
+        return {
+          cleanup: Effect.promise(() =>
+            rm(workdir, { recursive: true, force: true }).then(() => {
+              evidenceFiles.forEach((file) => rmSync(file, { force: true }))
+            })
+          ),
+          evidenceFiles,
+          outputFile,
+          seed,
+        }
       }),
       (run) =>
         Effect.gen(function*() {
@@ -209,7 +237,8 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
               new ProbeFailure({ stage: 'report', detail: 'nested report has an unexpected shape' })
             ),
           )
-          return { report: decoded, seed: run.seed }
+          const evidence = evidenceIn(run.evidenceFiles)
+          return { evidence, report: decoded, seed: run.seed }
         }),
       (run, exit) => run.cleanup.pipe(Effect.andThen(exit)),
     )

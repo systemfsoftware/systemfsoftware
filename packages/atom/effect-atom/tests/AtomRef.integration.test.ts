@@ -1,6 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Equal, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -56,9 +55,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               return s.ctx
             }),
         ),
-        Then('the derived value only reports the one real change')((s) => {
-          expect(s.ctx.notifications).toEqual([true])
-        }),
+        Then('the derived value only reports the one real change')(
+          (s, expect) => expect(s.ctx.notifications).toEqual([true]),
+        ),
       ),
     )
     scenario(
@@ -75,9 +74,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.set(s.ctx.middleItem, 99)
             return s.ctx
           })),
-        Then('only the middle item changed, its neighbours are untouched')((s) => {
-          expect(Atom.Ref.get(s.ctx.list)).toEqual([10, 99, 30])
-        }),
+        Then('only the middle item changed, its neighbours are untouched')(
+          (s, expect) => expect(Atom.Ref.get(s.ctx.list)).toEqual([10, 99, 30]),
+        ),
       ),
     )
     scenario(
@@ -111,10 +110,11 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             }),
         ),
         Then('the collection reflects the removal, and editing the removed item no longer notifies the collection')(
-          (s) => {
-            expect(s.result.remaining).toEqual([1, 3])
-            expect(s.result.afterStaleEditNotifications).toBe(s.result.afterRemoveNotifications)
-          },
+          (s, expect) =>
+            expect({
+              remaining: s.result.remaining,
+              staleEditNotificationDelta: s.result.afterStaleEditNotifications - s.result.afterRemoveNotifications,
+            }).toEqual({ remaining: [1, 3], staleEditNotificationDelta: 0 }),
         ),
       ),
     )
@@ -138,11 +138,14 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.set(s.ctx.value, 1)
             return s.ctx
           })),
-        Then('the departed listener heard nothing while the others heard the change')((s) => {
-          expect(s.ctx.first).toEqual([1])
-          expect(s.ctx.second).toEqual([])
-          expect(s.ctx.third).toEqual([1])
-        }),
+        Then('the departed listener heard nothing while the others heard the change')(
+          (s, expect) =>
+            expect({ first: s.ctx.first, second: s.ctx.second, third: s.ctx.third }).toEqual({
+              first: [1],
+              second: [],
+              third: [1],
+            }),
+        ),
       ),
     )
     scenario(
@@ -162,9 +165,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.set(s.ctx.record, { other: 'changed', name: 'arrived' })
             return s.ctx
           })),
-        Then('the view stayed quiet until the name existed, then reported it')((s) => {
-          expect(s.ctx.heard).toEqual(['arrived'])
-        }),
+        Then('the view stayed quiet until the name existed, then reported it')(
+          (s, expect) => expect(s.ctx.heard).toEqual(['arrived']),
+        ),
       ),
     )
     scenario(
@@ -181,9 +184,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.update(s.ctx.middleItem, (n) => n + 1)
             return s.ctx
           })),
-        Then('only the middle item changed, its neighbours are untouched')((s) => {
-          expect(Atom.Ref.get(s.ctx.list)).toEqual([10, 21, 30])
-        }),
+        Then('only the middle item changed, its neighbours are untouched')(
+          (s, expect) => expect(Atom.Ref.get(s.ctx.list)).toEqual([10, 21, 30]),
+        ),
       ),
     )
     scenario(
@@ -207,10 +210,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             s.ctx.cancel()
             return result
           })),
-        Then('the collection is unchanged and its listener heard nothing')((s) => {
-          expect(s.result.remaining).toEqual([1, 2, 3])
-          expect(s.result.notifications).toBe(0)
-        }),
+        Then('the collection is unchanged and its listener heard nothing')(
+          (s, expect) => expect(s.result).toEqual({ remaining: [1, 2, 3], notifications: 0 }),
+        ),
       ),
     )
     scenario(
@@ -227,9 +229,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.update(s.ctx.name, (n) => n.toUpperCase())
             return s.ctx
           })),
-        Then('only that field changed, its neighbour is untouched')((s) => {
-          expect(Atom.Ref.get(s.ctx.record)).toEqual({ name: 'ADA', other: 'x' })
-        }),
+        Then('only that field changed, its neighbour is untouched')(
+          (s, expect) => expect(Atom.Ref.get(s.ctx.record)).toEqual({ name: 'ADA', other: 'x' }),
+        ),
       ),
     )
     scenario(
@@ -277,17 +279,24 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
         ),
         Then(
           'the collection heard each change while the item was present, the nested views stayed in sync, and silence returned after the removal',
-        )((s) => {
-          expect(s.result.afterFieldSet.notifications).toBe(1)
-          expect(s.result.afterFieldSet.city).toBe('london')
-          expect(s.result.afterNestedUpdate.notifications).toBe(2)
-          expect(s.result.afterNestedUpdate.items).toEqual([
-            { name: 'bob', address: { city: 'LONDON' } },
-            { name: 'grace', address: { city: 'paris' } },
-          ])
-          expect(s.result.afterRemoval.notifications).toBe(3)
-          expect(s.result.afterRemoval.items).toEqual([{ name: 'grace', address: { city: 'paris' } }])
-        }),
+        )(
+          (s, expect) =>
+            expect({
+              afterFieldSet: s.result.afterFieldSet,
+              afterNestedUpdate: s.result.afterNestedUpdate,
+              afterRemoval: s.result.afterRemoval,
+            }).toEqual({
+              afterFieldSet: { notifications: 1, city: 'london' },
+              afterNestedUpdate: {
+                notifications: 2,
+                items: [
+                  { name: 'bob', address: { city: 'LONDON' } },
+                  { name: 'grace', address: { city: 'paris' } },
+                ],
+              },
+              afterRemoval: { notifications: 3, items: [{ name: 'grace', address: { city: 'paris' } }] },
+            }),
+        ),
       ),
     )
     scenario(
@@ -310,10 +319,11 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             }),
         ),
         Then('the listener only heard the real change, and setting the same value handed back the same reference')(
-          (s) => {
-            expect(s.result.heard).toEqual([6])
-            expect(s.result.sameRef).toBe(s.result.value)
-          },
+          (s, expect) =>
+            expect({ heard: s.result.heard, sameRef: s.result.sameRef, value: s.result.value }).toSatisfy(
+              ({ heard, sameRef, value }) => Equal.equals(heard, [6]) && Object.is(sameRef, value),
+              'the listener only heard the real change, and setting the same value handed back the same reference',
+            ),
         ),
       ),
     )
@@ -338,11 +348,14 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               return { heard: s.ctx.heard, afterAppearing, current: Atom.Ref.get(s.ctx.name) }
             }),
         ),
-        Then('the view reported the name when it appeared and always reads the current name')((s) => {
-          expect(s.result.heard).toEqual(['ada', 'bob'])
-          expect(s.result.afterAppearing).toBe('ada')
-          expect(s.result.current).toBe('bob')
-        }),
+        Then('the view reported the name when it appeared and always reads the current name')(
+          (s, expect) =>
+            expect({
+              heard: s.result.heard,
+              afterAppearing: s.result.afterAppearing,
+              current: s.result.current,
+            }).toEqual({ heard: ['ada', 'bob'], afterAppearing: 'ada', current: 'bob' }),
+        ),
       ),
     )
     scenario(
@@ -369,10 +382,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               return { afterUnrelatedChange, heard: s.ctx.heard }
             }),
         ),
-        Then('the view stayed quiet for the unrelated change and only reported the watched field changing')((s) => {
-          expect(s.result.afterUnrelatedChange).toEqual([])
-          expect(s.result.heard).toEqual(['bob'])
-        }),
+        Then('the view stayed quiet for the unrelated change and only reported the watched field changing')(
+          (s, expect) =>
+            expect({ afterUnrelatedChange: s.result.afterUnrelatedChange, heard: s.result.heard }).toEqual({
+              afterUnrelatedChange: [],
+              heard: ['bob'],
+            }),
+        ),
       ),
     )
     scenario(
@@ -387,15 +403,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
               return { first, second }
             }),
         ),
-        When('the two pieces are compared by identity and by value')('result', (s) =>
-          Effect.sync(() => ({
-            sameIdentity: Object.is(s.ctx.first, s.ctx.second),
-            equal: Equal.equals(s.ctx.first, s.ctx.second),
-          }))),
-        Then('each piece has its own identity while equal values still compare as equal')((s) => {
-          expect(s.result.sameIdentity).toBe(false)
-          expect(s.result.equal).toBe(true)
-        }),
+        Then('each piece has its own identity while equal values still compare as equal')(
+          (s, expect) =>
+            expect({ first: s.ctx.first, second: s.ctx.second }).toSatisfy(
+              ({ first, second }) => !Object.is(first, second) && Equal.equals(first, second),
+              'two separate pieces of state holding equal values',
+            ),
+        ),
       ),
     )
     scenario(
@@ -415,10 +429,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.set(s.ctx.value, 9)
             return s.ctx
           })),
-        Then('each listener heard the new value exactly once')((s) => {
-          expect(s.ctx.first).toEqual([9])
-          expect(s.ctx.second).toEqual([9])
-        }),
+        Then('each listener heard the new value exactly once')(
+          (s, expect) => expect({ first: s.ctx.first, second: s.ctx.second }).toEqual({ first: [9], second: [9] }),
+        ),
       ),
     )
     scenario(
@@ -436,10 +449,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.set(Atom.Ref.prop(s.ctx.record, 'name'), 'grace')
             return s.ctx
           })),
-        Then('the parent carries the new field and its watchers heard the whole parent')((s) => {
-          expect(Atom.Ref.get(s.ctx.record)).toEqual({ name: 'grace', other: 'x' })
-          expect(s.ctx.heard).toEqual([{ name: 'grace', other: 'x' }])
-        }),
+        Then('the parent carries the new field and its watchers heard the whole parent')(
+          (s, expect) =>
+            expect({ record: Atom.Ref.get(s.ctx.record), heard: s.ctx.heard }).toEqual({
+              record: { name: 'grace', other: 'x' },
+              heard: [{ name: 'grace', other: 'x' }],
+            }),
+        ),
       ),
     )
     scenario(
@@ -460,10 +476,13 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             Atom.Ref.remove(s.ctx.items, added)
             return { heard: s.ctx.heard, remaining: Atom.Ref.toArray(s.ctx.items) }
           })),
-        Then('the listener heard the addition and the removal, and only the original items remain')((s) => {
-          expect(s.result.heard).toEqual([[1, 2, 3], [1, 2]])
-          expect(s.result.remaining).toEqual([1, 2])
-        }),
+        Then('the listener heard the addition and the removal, and only the original items remain')(
+          (s, expect) =>
+            expect({ heard: s.result.heard, remaining: s.result.remaining }).toEqual({
+              heard: [[1, 2, 3], [1, 2]],
+              remaining: [1, 2],
+            }),
+        ),
       ),
     )
     scenarioOutline(
@@ -528,9 +547,9 @@ Feature('Keeping a piece of shared local state in sync across several parts of t
             }))),
           When('the helper is called directly and through a pipe')('result', (s) =>
             Effect.sync(() => row.attempt(s.ctx))),
-          Then('both calls agreed with each other')((s) => {
+          Then('both calls agreed with each other')((s, expect) =>
             expect(s.result.piped).toEqual(s.result.direct)
-          }),
+          ),
         ),
     )
   })

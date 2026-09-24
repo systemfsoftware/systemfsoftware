@@ -1,7 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Array as Arr, Effect, Match, Option, Result, Schema } from 'effect'
+import { Array as Arr, Effect, Match, Option, Schema } from 'effect'
 import { answering, CountingModel, probabilityEverywhere, withProvider } from './__fixtures__/counting-model.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -59,11 +58,17 @@ Feature('Inspecting a policy before trusting it')
           'second',
           () => Effect.succeed(Discern.compile(buildReviewPolicy())),
         ),
-        Then('both plans are identical, naming the question and the plan fingerprint')((s) => {
-          expect(s.second).toStrictEqual(s.first)
-          expect(Arr.map(s.first.decisions, (decision) => decision.id)).toStrictEqual(['impact'])
-          expect(s.first.fingerprint).toMatch(/^plan_/)
-        }),
+        Then('both plans are identical, naming the question and the plan fingerprint')((s, expect) =>
+          expect({
+            second: s.second,
+            decisionIds: Arr.map(s.first.decisions, (decision) => decision.id),
+            fingerprint: s.first.fingerprint,
+          }).toEqual({
+            second: s.first,
+            decisionIds: ['impact'],
+            fingerprint: expect.stringMatching(/^plan_/),
+          })
+        ),
       ),
     )
 
@@ -80,16 +85,27 @@ Feature('Inspecting a policy before trusting it')
             const model = yield* CountingModel
             return yield* withProvider(s.policy.runWithTrace('x'), model.model)
           })),
-        Then('the trace names the weighed case, the fallback, and the answer the model gave')((s) =>
+        Then('the trace names the weighed case, the fallback, and the answer the model gave')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(s.answer.value).toBe('ship')
-            expect(s.answer.trace.version).toBe(2)
-            expect(caseOutcomesOf(s.answer.trace)).toStrictEqual([['high', 'Miss']])
-            expect(selectedBranchOf(s.answer.trace)).toBe('fallback')
-            expect(recordedProbabilityOf(s.answer.trace)).toBe(0.2)
-            expect(model.calls()).toBe(1)
-          })
+            return {
+              value: s.answer.value,
+              traceVersion: s.answer.trace.version,
+              caseOutcomes: caseOutcomesOf(s.answer.trace),
+              selectedBranch: selectedBranchOf(s.answer.trace),
+              recordedProbability: recordedProbabilityOf(s.answer.trace),
+              modelCalls: model.calls(),
+            }
+          }).pipe(Effect.map((answer) =>
+            expect(answer).toEqual({
+              value: 'ship',
+              traceVersion: 2,
+              caseOutcomes: [['high', 'Miss']],
+              selectedBranch: 'fallback',
+              recordedProbability: 0.2,
+              modelCalls: 1,
+            })
+          ))
         ),
       ),
     )
@@ -109,9 +125,12 @@ Feature('Inspecting a policy before trusting it')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.CompiledPlan)(s.payload)),
         ),
-        Then('the unknown plan format is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unknown plan format is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["version"\]/) },
+          })
+        ),
       ),
     )
 
@@ -130,9 +149,12 @@ Feature('Inspecting a policy before trusting it')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Trace)(s.payload)),
         ),
-        Then('the unknown trace format is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unknown trace format is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["version"\]/) },
+          })
+        ),
       ),
     )
 
@@ -151,9 +173,12 @@ Feature('Inspecting a policy before trusting it')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Trace)(s.payload)),
         ),
-        Then('the unknown branch is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unknown branch is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["selected"\]/) },
+          })
+        ),
       ),
     )
 
@@ -168,9 +193,12 @@ Feature('Inspecting a policy before trusting it')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.CaseTrace)(s.payload)),
         ),
-        Then('the unknown outcome is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unknown outcome is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["status"\]/) },
+          })
+        ),
       ),
     )
 
@@ -188,9 +216,12 @@ Feature('Inspecting a policy before trusting it')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionInspection)(s.payload)),
         ),
-        Then('the unknown kind of question is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unknown kind of question is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["kind"\]/) },
+          })
+        ),
       ),
     )
 
@@ -207,10 +238,21 @@ Feature('Inspecting a policy before trusting it')
             unresolved: Schema.decodeUnknownResult(Discern.PatternMatched)(s.unresolved),
             unreadable: Schema.decodeUnknownResult(Discern.PatternMatched)(s.unreadable),
           })),
-        Then('both verdicts are refused')(({ outcomes }) => {
-          expect(outcomes.unresolved).toSatisfy(Result.isFailure)
-          expect(outcomes.unreadable).toSatisfy(Result.isFailure)
-        }),
+        Then('both verdicts are refused')(({ outcomes }, expect) =>
+          expect({
+            unresolved: outcomes.unresolved,
+            unreadable: outcomes.unreadable,
+          }).toMatchObject({
+            unresolved: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["_tag"\]/) },
+            },
+            unreadable: {
+              _tag: 'Failure',
+              failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["reason"\]/) },
+            },
+          })
+        ),
       ),
     )
   })

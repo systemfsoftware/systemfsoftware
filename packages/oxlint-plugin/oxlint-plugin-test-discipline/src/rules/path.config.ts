@@ -67,6 +67,7 @@ export const FOREIGN_RUNNERS: Record<string, true> = {
   [LAWFUL_RUNNER]: true,
 }
 
+/** Packages whose own tests drive Vitest directly: the runner and its conformance harness. */
 export const RAW_VITEST_PACKAGES: Record<string, true> = {
   'effect-spec-runtime': true,
   'vitest': true,

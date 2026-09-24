@@ -1,9 +1,9 @@
 import { layer as nodeFileSystemLayer } from '@effect/platform-node/NodeFileSystem'
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MicroVM } from '@systemfsoftware/effect-microsandbox'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { ConfigProvider, Crypto, Effect, Layer, Match } from 'effect'
+import { ConfigProvider, Crypto, Effect, Layer, Schema } from 'effect'
 import { nothingLeftHeld, recordingSandboxRuntime, SandboxLedger } from './__fixtures__/sandbox-runtime.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -27,16 +27,6 @@ const bootAgainstFakes = Layer.mergeAll(
   recordingSandboxRuntime,
 )
 
-const passRuns = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(
-        `expected every stopped boot to tear down what it created, but the check read: ${Conformance.render(report)}`,
-      )
-    }),
-  )
-
 Feature('Booting a microVM leaves nothing behind when the boot is stopped', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -54,17 +44,15 @@ Feature('Booting a microVM leaves nothing behind when the boot is stopped', { ti
               probe: Effect.provide(nothingLeftHeld, s.environment),
             }),
         ),
-        Then('no started sandbox is left undestroyed and no host port stays taken')((s) => {
-          passRuns(s.checked)
-        }),
-        And('the boot started at least one sandbox, so the release proves something')((s) =>
-          Effect.gen(function*() {
-            const ledger = yield* SandboxLedger
-            const created = yield* ledger.created
-            if (created === 0) {
-              throw new Error('the boot started no sandbox, so the release proves nothing')
-            }
-          }).pipe(Effect.provide(s.environment))
+        Then('no started sandbox is left undestroyed, and the boot started at least one')((state, expect) =>
+          Effect.map(
+            Effect.flatMap(SandboxLedger, (ledger) => ledger.created),
+            (created) =>
+              expect({ report: state.checked, created }).toMatchObject({
+                report: { _tag: 'Pass' },
+                created: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+              }),
+          ).pipe(Effect.provide(state.environment))
         ),
       ),
     )

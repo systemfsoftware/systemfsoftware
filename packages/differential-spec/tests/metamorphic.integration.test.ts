@@ -1,9 +1,7 @@
-import { runMetamorphicWithShrink } from '@systemfsoftware/differential-spec'
+import { metamorphicReport, reportCheck } from '@systemfsoftware/differential-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Exit, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import { integers } from './__fixtures__/arbitraries.js'
-import { disparityReportOf } from './__fixtures__/disparityReport.js'
 
 const Feature = makeFeature({ it })
 
@@ -18,17 +16,16 @@ Feature('Proving a system obeys a relation when its input is transformed', { tim
           'system',
           () => Effect.succeed((x: number) => Effect.succeed(x * 2)),
         ),
-        When('the metamorphic check runs over generated integers')('outcome', (s) =>
-          Effect.exit(
-            runMetamorphicWithShrink(s.system, integers, (x) => x + 1, (a, b) => a === b),
-          )),
-        Then('the report names the seed input and its follow-up with both outputs shown')((s) => {
-          const report = disparityReportOf(s.outcome)
-          expect(report).toContain('seed')
-          expect(report).toContain('followUp')
-          expect(report).toContain('Output A: 0')
-          expect(report).toContain('Output B: 2')
-        }),
+        When('the metamorphic check runs over generated integers')(
+          'report',
+          (s) => metamorphicReport(s.system, integers, (x) => x + 1, (a, b) => a === b),
+        ),
+        Then('the report names the seed, its follow-up and both outputs')((s, expect) =>
+          expect(s.report).toEqual({
+            holds: false,
+            report: expect.stringMatching(/seed[\s\S]*followUp[\s\S]*Output A: 0[\s\S]*Output B: 2/),
+          })
+        ),
       ),
     )
 
@@ -47,13 +44,11 @@ Feature('Proving a system obeys a relation when its input is transformed', { tim
               })
             ),
         ),
-        When('the metamorphic check runs over generated integers')('outcome', (s) =>
-          Effect.exit(
-            runMetamorphicWithShrink(s.system, integers, (x) => x * 2, (a, b) => b === a * 2),
-          )),
-        Then('the asynchronous run completes without complaint')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isSuccess)
-        }),
+        When('the metamorphic check runs over generated integers')(
+          'report',
+          (s) => metamorphicReport(s.system, integers, (x) => x * 2, (a, b) => b === a * 2),
+        ),
+        Then('the asynchronous run completes without complaint')((s, expect) => reportCheck(s.report, expect)),
       ),
     )
   })

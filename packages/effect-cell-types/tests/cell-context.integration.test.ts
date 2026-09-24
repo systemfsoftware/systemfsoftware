@@ -1,6 +1,5 @@
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -73,16 +72,19 @@ Feature('Binding the vault once for many readings')
               return { first, second, eventsWhileOpen, eventsAfterClose }
             }),
         ),
-        Then('both readings draw on the vault')((s) => {
-          expect(s.bound.first).toBe('ok:4')
-          expect(s.bound.second).toBe('ok:2')
-        }),
-        And('the vault opened once and stayed open between the readings')((s) => {
-          expect(s.bound.eventsWhileOpen).toEqual(['opened'])
-        }),
-        And('the vault closed only when the readings were done')((s) => {
-          expect(s.bound.eventsAfterClose).toEqual(['opened', 'closed'])
-        }),
+        Then('both readings draw on one vault, which opened once and closed only when they were done')((s, expect) =>
+          expect({
+            first: s.bound.first,
+            second: s.bound.second,
+            eventsWhileOpen: s.bound.eventsWhileOpen,
+            eventsAfterClose: s.bound.eventsAfterClose,
+          }).toEqual({
+            first: 'ok:4',
+            second: 'ok:2',
+            eventsWhileOpen: ['opened'],
+            eventsAfterClose: ['opened', 'closed'],
+          })
+        ),
       ),
     )
   })

@@ -1,5 +1,4 @@
-import { expect, layer } from '@systemfsoftware/vitest'
-import { Effect } from 'effect'
+import { layer } from '@systemfsoftware/vitest'
 import { Context } from 'effect'
 import { Layer } from 'effect'
 
@@ -10,17 +9,15 @@ class Store extends Context.Service<Store, { readonly values: Array<number> }>()
 }
 
 layer(Store.layer)('layer store isolation', (it) => {
-  it.effect('Should_SeeAnEmptyStore_When_RunningTestAlreadyWrote', () =>
-    Effect.gen(function*() {
-      const store = yield* Store
-      expect(store.values).toEqual([])
-      store.values.push(1)
-      expect(store.values).toEqual([1])
-    }))
+  it('Should_SeeAnEmptyStore_When_RunningTestAlreadyWrote', function*({ expect }) {
+    const store = yield* Store
+    const before = [...store.values]
+    store.values.push(1)
+    yield* expect({ before, after: store.values }).toEqual({ before: [], after: [1] })
+  })
 
-  it.effect('Should_SeeAnEmptyStore_When_AnotherTestWroteFirst', () =>
-    Effect.gen(function*() {
-      const store = yield* Store
-      expect(store.values).toEqual([])
-    }))
+  it('Should_SeeAnEmptyStore_When_AnotherTestWroteFirst', function*({ expect }) {
+    const store = yield* Store
+    yield* expect(store.values).toEqual([])
+  })
 })

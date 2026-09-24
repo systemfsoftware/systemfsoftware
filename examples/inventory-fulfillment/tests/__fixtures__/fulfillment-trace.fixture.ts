@@ -191,10 +191,3 @@ export const retriedSettlementContract = Contract.of(Fulfillment.Taxonomy.fulfil
       Rel.fromTaxonomy(Fulfillment.Taxonomy.fulfillmentTaxonomy, { path: 'allocate' }),
     ),
   )
-
-export const disparityOf = (failure: Contract.CheckFailure<never>): Contract.TraceDisparityError => {
-  if (!S.is(Contract.TraceDisparityError)(failure)) {
-    throw new Error('the refusal was not a trace disparity')
-  }
-  return failure
-}

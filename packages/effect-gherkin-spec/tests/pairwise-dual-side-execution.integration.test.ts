@@ -1,14 +1,5 @@
-/**
- * pairwiseFor — dual-side execution across two layers.
- *
- * Drives the `pairwiseFor` use case end-to-end through `makeFeature.scenario`
- * to prove that one workload runs against two distinct service layers and
- * receives both results back into the scope. Failure and layer-acquisition
- * behaviours are covered through the same scenario surface.
- */
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { Gherkin, pairwiseFor, StepError, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, pairwiseFor, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref, Result } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -25,6 +16,12 @@ const PairwiseAB = pairwiseFor(
   Widget,
 )
 
+const stepErrorFacts = (result: Result.Result<object, StepError>) =>
+  Result.match(result, {
+    onFailure: (error) => ({ _tag: error._tag, keyword: error.keyword, text: error.text, cause: error.cause }),
+    onSuccess: () => null,
+  })
+
 Feature('pairwiseFor — dual-side execution')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
@@ -32,12 +29,12 @@ Feature('pairwiseFor — dual-side execution')
       'Running a workload against two sides yields distinct service values',
       Gherkin.Do.pipe(
         PairwiseAB('the workload reads Widget')('dual', () => (w) => Effect.succeed(w.value)),
-        Then('the two values match their layers')(({ dual }) =>
-          Effect.sync(() => {
-            expect(dual.a).toBe('side-a')
-            expect(dual.b).toBe('side-b')
-            expect(dual.aLabel).toBe('A')
-            expect(dual.bLabel).toBe('B')
+        Then('the two values match their layers')(({ dual }, expect) =>
+          expect({ a: dual.a, b: dual.b, aLabel: dual.aLabel, bLabel: dual.bLabel }).toEqual({
+            a: 'side-a',
+            b: 'side-b',
+            aLabel: 'A',
+            bLabel: 'B',
           })
         ),
       ),
@@ -45,47 +42,57 @@ Feature('pairwiseFor — dual-side execution')
 
     scenario(
       'A failure on side B specifically attributes the step error to side B',
-      Effect.gen(function*() {
-        const workload = (w: { readonly value: string }) => {
-          if (w.value === 'side-a') {
-            return Effect.succeed(true)
-          }
-          return Effect.fail('side_b_defect')
-        }
-        const piped = Gherkin.Do.pipe(
-          PairwiseAB('executing widget operation')('dual', (_s) => workload),
-          Then('unreachable step')(() => Effect.void),
+      (() => {
+        const workload = (w: { readonly value: string }) =>
+          w.value === 'side-a' ? Effect.succeed(true) : Effect.fail('side_b_defect')
+        return Gherkin.Do.pipe(
+          When('the pairwise workload runs against both sides')('result', () =>
+            Effect.result(
+              Gherkin.Do.pipe(PairwiseAB('executing widget operation')('dual', (_s) => workload)),
+            )),
+          Then('the failure is attributed to side B with its own cause')((s, expect) =>
+            expect({ failure: stepErrorFacts(s.result) }).toEqual({
+              failure: {
+                _tag: 'StepError',
+                keyword: 'pairwise',
+                text: 'executing widget operation [B]',
+                cause: 'side_b_defect',
+              },
+            })
+          ),
         )
-        const result = yield* Effect.result(piped)
-        if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
-        expect(result.failure).toBeInstanceOf(StepError)
-        expect(result.failure.keyword).toBe('pairwise')
-        expect(result.failure.text).toBe('executing widget operation [B]')
-        expect(result.failure.cause).toBe('side_b_defect')
-      }),
+      })(),
     )
 
     scenario(
       'A failure on side A halts execution immediately and never evaluates side B',
-      Effect.gen(function*() {
-        let sideBExecuted = false
+      (() => {
+        const sideBExecuted = { value: false }
         const workload = (w: { readonly value: string }) => {
           if (w.value === 'side-a') {
             return Effect.fail('side_a_fatal')
           }
-          sideBExecuted = true
+          sideBExecuted.value = true
           return Effect.succeed(true)
         }
-        const piped = Gherkin.Do.pipe(
-          PairwiseAB('executing widget operation')('dual', (_s) => workload),
-          Then('unreachable step')(() => Effect.void),
+        return Gherkin.Do.pipe(
+          When('the pairwise workload runs against both sides')('result', () =>
+            Effect.result(
+              Gherkin.Do.pipe(PairwiseAB('executing widget operation')('dual', (_s) => workload)),
+            )),
+          Then('side A fails, side B never runs, and the failure is attributed to side A')((s, expect) =>
+            expect({ failure: stepErrorFacts(s.result), sideBExecuted: sideBExecuted.value }).toEqual({
+              failure: {
+                _tag: 'StepError',
+                keyword: 'pairwise',
+                text: 'executing widget operation [A]',
+                cause: 'side_a_fatal',
+              },
+              sideBExecuted: false,
+            })
+          ),
         )
-        const result = yield* Effect.result(piped)
-        if (!Result.isFailure(result)) throw new Error('Expected Result.failure')
-        expect(result.failure).toBeInstanceOf(StepError)
-        expect(result.failure.cause).toBe('side_a_fatal')
-        expect(sideBExecuted).toBe(false)
-      }),
+      })(),
     )
 
     scenario(
@@ -102,13 +109,10 @@ Feature('pairwiseFor — dual-side execution')
           { a: { name: 'FA', layer: layerSide }, b: { name: 'FB', layer: layerSide } },
           Widget,
         )
-        yield* Gherkin.Do.pipe(
+        return yield* Gherkin.Do.pipe(
           PairwiseFresh('read widget')('dual', () => (w) => Effect.succeed(w.value)),
-          Then('two sequential acquire increments')(({ dual }) =>
-            Effect.sync(() => {
-              expect(dual.a).toBe('fresh-1')
-              expect(dual.b).toBe('fresh-2')
-            })
+          Then('two sequential acquires increment the shared counter')(({ dual }, expect) =>
+            expect({ a: dual.a, b: dual.b }).toEqual({ a: 'fresh-1', b: 'fresh-2' })
           ),
         )
       }),

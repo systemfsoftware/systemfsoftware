@@ -1,6 +1,5 @@
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { expect } from '@systemfsoftware/vitest'
 import { type Cause, Effect, Fiber, Option, Queue, type Scope, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Error from 'effect/PlatformError'
@@ -97,10 +96,8 @@ Feature('Being told when a watched folder or letter changes')
               }),
           ),
           When(`a letter is ${row.change}`)(() => Effect.flatMap(filesystem, (fs) => row.act(fs, row.folder))),
-          Then('the watcher is told which letter changed and how')((s) =>
-            Effect.map(Queue.take(s.reports), (event) => {
-              expect(event).toEqual({ _tag: row.reported, path: row.path })
-            })
+          Then('the watcher is told which letter changed and how')((s, expect) =>
+            Effect.map(Queue.take(s.reports), (event) => expect(event).toEqual({ _tag: row.reported, path: row.path }))
           ),
         ),
     )
@@ -126,10 +123,8 @@ Feature('Being told when a watched folder or letter changes')
         When('a third letter arrives')(() =>
           Effect.flatMap(filesystem, (fs) => fs.writeFile('/inbox/third.txt', encode('3')))
         ),
-        Then('the new watcher hears only about the third letter')((s) =>
-          Effect.map(Queue.take(s.reports), (event) => {
-            expect(event).toEqual({ _tag: 'Create', path: 'third.txt' })
-          })
+        Then('the new watcher hears only about the third letter')((s, expect) =>
+          Effect.map(Queue.take(s.reports), (event) => expect(event).toEqual({ _tag: 'Create', path: 'third.txt' }))
         ),
       ),
     )
@@ -155,13 +150,15 @@ Feature('Being told when a watched folder or letter changes')
               Effect.andThen(Fiber.join(s.helper)),
             ),
         ),
-        Then('the helper hears about the new letter')((s) => {
-          expect(s.heard).toEqual(Option.some({ _tag: 'Create', path: 'letter.txt' }))
-        }),
-        And('the store lists no open watch once the helper has stopped')(() =>
-          Effect.map(openWatches, (paths) => {
-            expect(paths).toEqual([])
-          })
+        Then('the helper hears about the new letter, and the store lists no open watch once it has stopped')((
+          s,
+          expect,
+        ) =>
+          Effect.map(openWatches, (open) =>
+            expect({ heard: s.heard, open }).toEqual({
+              heard: Option.some({ _tag: 'Create', path: 'letter.txt' }),
+              open: [],
+            }))
         ),
       ),
     )
@@ -181,9 +178,7 @@ Feature('Being told when a watched folder or letter changes')
             }),
         ),
         When('someone asks which watches are open')('open', () => openWatches),
-        Then('only the inbox is listed')((s) => {
-          expect(s.open).toEqual(['/inbox'])
-        }),
+        Then('only the inbox is listed')((s, expect) => expect(s.open).toEqual(['/inbox'])),
       ),
     )
   })

@@ -4,8 +4,7 @@ import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne, restForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
@@ -88,20 +87,12 @@ Feature('RestForOne Strategy')
             const cAfter = yield* Ref.get(s.counters.c)
             return { aBefore, bBefore, cBefore, aAfter, bAfter, cAfter }
           })),
-        Then('child A count is unchanged')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toEqual(s.result.aBefore)
-          })
-        ),
-        And('child B count increased (restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.bAfter).toBeGreaterThan(s.result.bBefore)
-          })
-        ),
-        And('child C count increased (tail restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.cAfter).toBeGreaterThan(s.result.cBefore)
-          })
+        Then('child A is untouched while child B and the tail child C both restarted')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ aAfter, aBefore, bAfter, bBefore, cAfter, cBefore }) =>
+              aAfter === aBefore && bAfter > bBefore && cAfter > cBefore,
+            'child A ticked no further, child B ticked more after its restart, and tail child C ticked more after being restarted with it',
+          )
         ),
       ),
     )
@@ -170,20 +161,12 @@ Feature('RestForOne Strategy')
             const cAfter = yield* Ref.get(s.counters.c)
             return { aBefore, bBefore, cBefore, aAfter, bAfter, cAfter }
           })),
-        Then('child A count increased (restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toBeGreaterThan(s.result.aBefore)
-          })
-        ),
-        And('child B count increased (entire tail restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.bAfter).toBeGreaterThan(s.result.bBefore)
-          })
-        ),
-        And('child C count increased (entire tail restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.cAfter).toBeGreaterThan(s.result.cBefore)
-          })
+        Then('the head failure restarted child A and the entire tail, so every count grew')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ aAfter, aBefore, bAfter, bBefore, cAfter, cBefore }) =>
+              aAfter > aBefore && bAfter > bBefore && cAfter > cBefore,
+            'child A, child B and child C each ticked more after the head failure restarted the whole group',
+          )
         ),
       ),
     )
@@ -269,20 +252,11 @@ Feature('RestForOne Strategy')
             const cAfter = yield* Ref.get(s.counters.c)
             return { aBefore, bBefore, aAfter, bAfter, cAfter }
           })),
-        Then('child A count is unchanged (head unaffected)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.aAfter).toEqual(s.result.aBefore)
-          })
-        ),
-        And('child B count is unchanged (head unaffected)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.bAfter).toEqual(s.result.bBefore)
-          })
-        ),
-        And('child C count increased (restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.cAfter).toBeGreaterThan(0)
-          })
+        Then('the head children are untouched and the failing last child restarted')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ aAfter, aBefore, bAfter, bBefore, cAfter }) => aAfter === aBefore && bAfter === bBefore && cAfter > 0,
+            'child A and child B ticked no further, while child C ticked after its restart',
+          )
         ),
       ),
     )
@@ -346,15 +320,11 @@ Feature('RestForOne Strategy')
             const c = yield* Ref.get(s.startCounts.c)
             return { a, c }
           })),
-        Then('child A started exactly once')((s) =>
-          Effect.sync(() => {
-            expect(s.result.a).toBe(1)
-          })
-        ),
-        And('child C restarted at least twice')((s) =>
-          Effect.sync(() => {
-            expect(s.result.c).toBeGreaterThanOrEqual(2)
-          })
+        Then('child A started exactly once and child C restarted at least twice')((s, expect) =>
+          expect(s.result).toSatisfy(
+            ({ a, c }) => a === 1 && c >= 2,
+            'the head child started exactly once while the tail child restarted at least twice',
+          )
         ),
       ),
     )
@@ -435,10 +405,8 @@ Feature('RestForOne Strategy')
             const cAfter = yield* Ref.get(s.counters.c)
             return { cBefore, cAfter }
           })),
-        Then('child C count increased (tail including nested subtree restarted)')((s) =>
-          Effect.sync(() => {
-            expect(s.result.cAfter).toBeGreaterThan(s.result.cBefore)
-          })
+        Then('child C count increased (tail including nested subtree restarted)')((s, expect) =>
+          expect(s.result.cAfter).toBeGreaterThan(s.result.cBefore)
         ),
       ),
     )

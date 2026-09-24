@@ -1,7 +1,6 @@
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { Graph } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Context, Effect, Layer } from 'effect'
 import * as HttpClient from 'effect/unstable/http/HttpClient'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
@@ -78,6 +77,9 @@ const readBack = (baseUrl: string, traceId: string) => TempoTraceStore.source({ 
 const namedSpan = (spans: ReadonlyArray<Graph.SpanRecord>, name: string): Graph.SpanRecord | undefined =>
   spans.find((span) => span.name === name)
 
+const parentOf = (spans: ReadonlyArray<Graph.SpanRecord>, name: string): string | null | undefined =>
+  namedSpan(spans, name)?.parentSpanId
+
 const Feature = makeFeature({ it })
 
 Feature('Reading a finished trace back out of a remote trace store')
@@ -89,15 +91,15 @@ Feature('Reading a finished trace back out of a remote trace store')
       Gherkin.Do.pipe(
         givenStoreAnswering('answers for the trace of a pushed order'),
         When('the trace is read back by its id')('spans', (s) => readBack(s.baseUrl, TEMPO_TRACE_ID)),
-        Then('the reader sees the order and its payment exactly as they were pushed')((s) => {
-          expect(s.spans).toStrictEqual(expectedSpanRecords)
-        }),
-        And('the payment is attached beneath the order that triggered it')((s) => {
-          const order = namedSpan(s.spans, 'PlaceOrder')
-          const payment = namedSpan(s.spans, 'PaymentCapture')
-          expect(payment?.parentSpanId).toBe(order?.spanId)
-          expect(payment?.parentSpanId).toBe(TEMPO_ROOT_SPAN_ID)
-        }),
+        Then('the reader sees the pushed spans, the payment attached beneath the order that triggered it')((
+          s,
+          expect,
+        ) =>
+          expect({ spans: s.spans, paymentParent: parentOf(s.spans, 'PaymentCapture') }).toStrictEqual({
+            spans: expectedSpanRecords,
+            paymentParent: TEMPO_ROOT_SPAN_ID,
+          })
+        ),
       ),
     )
 
@@ -106,10 +108,10 @@ Feature('Reading a finished trace back out of a remote trace store')
       Gherkin.Do.pipe(
         givenStoreAnswering('lists the payment before the order'),
         When('the trace is read back by its id')('spans', (s) => readBack(s.baseUrl, 'child-before-root')),
-        Then('the payment still points at the order it belongs to')((s) => {
-          expect(s.spans.map((span) => span.name)).toStrictEqual(['PaymentCapture', 'PlaceOrder'])
-          expect(namedSpan(s.spans, 'PaymentCapture')?.parentSpanId).toBe(TEMPO_ROOT_SPAN_ID)
-        }),
+        Then('the payment still points at the order it belongs to')((s, expect) =>
+          expect({ names: s.spans.map((span) => span.name), paymentParent: parentOf(s.spans, 'PaymentCapture') })
+            .toStrictEqual({ names: ['PaymentCapture', 'PlaceOrder'], paymentParent: TEMPO_ROOT_SPAN_ID })
+        ),
       ),
     )
 
@@ -121,9 +123,9 @@ Feature('Reading a finished trace back out of a remote trace store')
           'outcome',
           (s) => Effect.flip(readBack(s.baseUrl, 'marked-unfinished')),
         ),
-        Then('the reader is told the answer was unfinished, and how much of it there was')((s) => {
+        Then('the reader is told the answer was unfinished, and how much of it there was')((s, expect) =>
           expect(s.outcome).toMatchObject({ _tag: 'IncompleteObservationError', spanCount: 2 })
-        }),
+        ),
       ),
     )
 
@@ -138,12 +140,12 @@ Feature('Reading a finished trace back out of a remote trace store')
           'outcome',
           (s) => Effect.flip(readBack(s.gone, TEMPO_TRACE_ID)),
         ),
-        Then('the reader is told the store could not be reached, at the address it was asked at')((s) => {
+        Then('the reader is told the store could not be reached, at the address it was asked at')((s, expect) =>
           expect(s.outcome).toMatchObject({
             _tag: 'TransportObservationError',
             source: `${s.gone}/api/v2/traces/${TEMPO_TRACE_ID}`,
           })
-        }),
+        ),
       ),
     )
 
@@ -154,10 +156,12 @@ Feature('Reading a finished trace back out of a remote trace store')
         Gherkin.Do.pipe(
           givenStoreAnswering(`refuses the read with ${row.status}`),
           When('the trace is read back by its id')('outcome', (s) => Effect.flip(readBack(s.baseUrl, row.trace))),
-          Then('the reader is told the read was refused, naming the refusal')((s) => {
-            expect(s.outcome._tag).toBe('TransportObservationError')
-            expect(s.outcome.detail).toContain(String(row.status))
-          }),
+          Then('the reader is told the read was refused, naming the refusal')((s, expect) =>
+            expect(s.outcome).toMatchObject({
+              _tag: 'TransportObservationError',
+              detail: expect.stringContaining(String(row.status)),
+            })
+          ),
         ),
     )
 
@@ -169,10 +173,12 @@ Feature('Reading a finished trace back out of a remote trace store')
           'outcome',
           (s) => Effect.flip(readBack(s.baseUrl, 'unreadable-answer')),
         ),
-        Then('the reader is told the answer could not be understood')((s) => {
-          expect(s.outcome._tag).toBe('TransportObservationError')
-          expect(s.outcome.detail).toContain('undecodable trace body')
-        }),
+        Then('the reader is told the answer could not be understood')((s, expect) =>
+          expect(s.outcome).toMatchObject({
+            _tag: 'TransportObservationError',
+            detail: expect.stringContaining('undecodable trace body'),
+          })
+        ),
       ),
     )
 
@@ -184,10 +190,12 @@ Feature('Reading a finished trace back out of a remote trace store')
           'outcome',
           (s) => Effect.flip(readBack(s.baseUrl, 'traceless-answer')),
         ),
-        Then('the reader is told the answer could not be understood, not told the trace was empty')((s) => {
-          expect(s.outcome._tag).toBe('TransportObservationError')
-          expect(s.outcome.detail).toContain('undecodable trace body')
-        }),
+        Then('the reader is told the answer could not be understood, not told the trace was empty')((s, expect) =>
+          expect(s.outcome).toMatchObject({
+            _tag: 'TransportObservationError',
+            detail: expect.stringContaining('undecodable trace body'),
+          })
+        ),
       ),
     )
 
@@ -196,10 +204,12 @@ Feature('Reading a finished trace back out of a remote trace store')
       Gherkin.Do.pipe(
         givenStoreAnswering('carries a span id the wire cannot carry'),
         When('the trace is read back by its id')('outcome', (s) => Effect.flip(readBack(s.baseUrl, 'unwireable-span'))),
-        Then('the reader is told the answer could not be understood')((s) => {
-          expect(s.outcome._tag).toBe('TransportObservationError')
-          expect(s.outcome.detail).toContain('undecodable trace body')
-        }),
+        Then('the reader is told the answer could not be understood')((s, expect) =>
+          expect(s.outcome).toMatchObject({
+            _tag: 'TransportObservationError',
+            detail: expect.stringContaining('undecodable trace body'),
+          })
+        ),
       ),
     )
 
@@ -208,9 +218,9 @@ Feature('Reading a finished trace back out of a remote trace store')
       Gherkin.Do.pipe(
         givenStoreAnswering('knows the trace but holds no spans for it'),
         When('the trace is read back by its id')('spans', (s) => readBack(s.baseUrl, 'nothing-yet')),
-        Then('the reader is given an empty answer rather than a refusal')((s) => {
+        Then('the reader is given an empty answer rather than a refusal')((s, expect) =>
           expect(s.spans).toStrictEqual([])
-        }),
+        ),
       ),
     )
 
@@ -232,9 +242,9 @@ Feature('Reading a finished trace back out of a remote trace store')
               )
             }),
         ),
-        Then('the store answers the tenant reader with the pushed spans')((s) => {
+        Then('the store answers the tenant reader with the pushed spans')((s, expect) =>
           expect(s.spans).toStrictEqual(expectedSpanRecords)
-        }),
+        ),
       ),
     )
   })

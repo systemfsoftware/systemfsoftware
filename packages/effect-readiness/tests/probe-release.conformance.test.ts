@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Match } from 'effect'
+import { Effect, Schema } from 'effect'
 import { type LoopbackService, loopbackService } from './__fixtures__/loopback-service.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -24,16 +24,6 @@ const healthExchange = (service: LoopbackService): Effect.Effect<Readiness.HttpE
     Effect.provide(Readiness.NodeHostProber.layer),
   )
 
-const passRuns = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (passed) => passed.histories),
-    Match.orElse(() => {
-      throw new Error(
-        `expected the service to release every stopped probe, but the check read: ${Conformance.render(report)}`,
-      )
-    }),
-  )
-
 Feature('Releasing every readiness probe connection when the wait stops early')
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -45,14 +35,13 @@ Feature('Releasing every readiness probe connection when the wait stops early')
           'checked',
           (s) => Conformance.released(connectionAttempt(s.service), { probe: s.service.released }),
         ),
-        Then('the service reports no connection left open')((s) => {
-          passRuns(s.checked)
-        }),
-        And('the service saw the wait connect at least once')((s) => {
-          if (s.service.accepted() === 0) {
-            throw new Error('the service never saw the wait connect, so the release proves nothing')
-          }
-        }),
+        Then('the release run passes and the service saw the wait connect at least once')(
+          (state, expect) =>
+            expect({ report: state.checked, accepted: state.service.accepted() }).toMatchObject({
+              report: { _tag: 'Pass' },
+              accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            }),
+        ),
       ),
     )
 
@@ -64,14 +53,13 @@ Feature('Releasing every readiness probe connection when the wait stops early')
           'checked',
           (s) => Conformance.released(healthExchange(s.service), { probe: s.service.released }),
         ),
-        Then('the service reports no connection left open')((s) => {
-          passRuns(s.checked)
-        }),
-        And('the service saw the wait connect at least once')((s) => {
-          if (s.service.accepted() === 0) {
-            throw new Error('the service never saw the wait connect, so the release proves nothing')
-          }
-        }),
+        Then('the release run passes and the service saw the wait connect at least once')(
+          (state, expect) =>
+            expect({ report: state.checked, accepted: state.service.accepted() }).toMatchObject({
+              report: { _tag: 'Pass' },
+              accepted: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            }),
+        ),
       ),
     )
   })

@@ -11,7 +11,7 @@
  */
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect, vi } from '@systemfsoftware/vitest'
+import { vi } from '@systemfsoftware/vitest'
 import { Effect, Layer, Option, Schema } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -108,9 +108,16 @@ const watchVisibilityListeners = () => {
   }
 }
 
+/** The query a rewritten address carries, keyed by name. */
+const addressQuery = (address: string): Record<string, string> =>
+  Object.fromEntries(new URL(address, window.location.href).searchParams)
+
 const waitUntilRegistryEmpties = (registry: Atom.Registry.Registry) =>
   vi.waitFor(() => {
-    expect(Atom.Registry.getNodes(registry).size).toBe(0)
+    const nodes = Atom.Registry.getNodes(registry).size
+    if (nodes !== 0) {
+      throw new Error(`the page still holds ${nodes} nodes`)
+    }
   })
 
 const clearBrowserState = (): void => {
@@ -160,11 +167,14 @@ Feature('Keeping watched values in step with the browser page')
             const afterSecondVisit = Atom.Registry.get(s.ctx.page, s.ctx.focusCount)
             return { afterFirstVisit, afterSecondVisit, whileAway }
           })),
-        Then('the count rose once per visit and never while the page was away')((s) => {
-          expect(s.readings.afterFirstVisit).toBe(1)
-          expect(s.readings.whileAway).toBe(1)
-          expect(s.readings.afterSecondVisit).toBe(2)
-        }),
+        Then('the count rose once per visit and never while the page was away')(
+          (s, expect) =>
+            expect({
+              afterFirstVisit: s.readings.afterFirstVisit,
+              whileAway: s.readings.whileAway,
+              afterSecondVisit: s.readings.afterSecondVisit,
+            }).toEqual({ afterFirstVisit: 1, whileAway: 1, afterSecondVisit: 2 }),
+        ),
       ),
     )
 
@@ -193,11 +203,18 @@ Feature('Keeping watched values in step with the browser page')
             const afterSecondVisit = s.ctx.reads.seen()
             return { afterFirstVisit, afterSecondVisit, before, whileAway }
           })),
-        Then('the value was reread once per visit and never while the page was away')((s) => {
-          expect(s.readings.afterFirstVisit).toBe(s.readings.before + 1)
-          expect(s.readings.whileAway).toBe(s.readings.before + 1)
-          expect(s.readings.afterSecondVisit).toBe(s.readings.before + 2)
-        }),
+        Then('the value was reread once per visit and never while the page was away')(
+          (s, expect) =>
+            expect({
+              afterFirstVisit: s.readings.afterFirstVisit,
+              whileAway: s.readings.whileAway,
+              afterSecondVisit: s.readings.afterSecondVisit,
+            }).toEqual({
+              afterFirstVisit: s.readings.before + 1,
+              whileAway: s.readings.before + 1,
+              afterSecondVisit: s.readings.before + 2,
+            }),
+        ),
       ),
     )
 
@@ -227,12 +244,19 @@ Feature('Keeping watched values in step with the browser page')
             announceThePageCameIntoView()
             return { added, readsAfterLeaving: s.ctx.reads.seen(), readsWhileWatched, removed }
           })),
-        Then('the page no longer listens for visibility changes and the value stays put')((s) => {
-          expect(s.observed.readsWhileWatched).toBeGreaterThan(0)
-          expect(s.observed.readsAfterLeaving).toBe(s.observed.readsWhileWatched)
-          expect(s.observed.added).toBeGreaterThan(0)
-          expect(s.observed.removed).toBe(s.observed.added)
-        }),
+        Then('the page no longer listens for visibility changes and the value stays put')(
+          (s, expect) =>
+            expect({
+              readsWhileWatched: s.observed.readsWhileWatched,
+              readsAfterLeaving: s.observed.readsAfterLeaving,
+              added: s.observed.added,
+              removed: s.observed.removed,
+            }).toSatisfy(
+              ({ readsWhileWatched, readsAfterLeaving, added, removed }) =>
+                readsWhileWatched > 0 && readsAfterLeaving === readsWhileWatched && added > 0 && removed === added,
+              'the page stopped listening for visibility changes and the value stayed put',
+            ),
+        ),
       ),
     )
 
@@ -265,11 +289,18 @@ Feature('Keeping watched values in step with the browser page')
               value: Atom.Registry.get(s.ctx.page, s.ctx.refreshed),
             }
           })),
-        Then('the value refreshed once per signal change')((s) => {
-          expect(s.readings.afterFirstChange).toBe(s.readings.before + 1)
-          expect(s.readings.afterSecondChange).toBe(s.readings.before + 2)
-          expect(s.readings.value).toBe(s.readings.afterSecondChange)
-        }),
+        Then('the value refreshed once per signal change')(
+          (s, expect) =>
+            expect({
+              afterFirstChange: s.readings.afterFirstChange,
+              afterSecondChange: s.readings.afterSecondChange,
+              value: s.readings.value,
+            }).toEqual({
+              afterFirstChange: s.readings.before + 1,
+              afterSecondChange: s.readings.before + 2,
+              value: s.readings.before + 2,
+            }),
+        ),
       ),
     )
 
@@ -296,7 +327,10 @@ Feature('Keeping watched values in step with the browser page')
             Atom.Registry.set(s.ctx.page, s.ctx.chosenPage, '8')
             yield* Effect.promise(() =>
               vi.waitFor(() => {
-                expect(new URLSearchParams(window.location.search).get('page')).toBe('8')
+                const page = new URLSearchParams(window.location.search).get('page')
+                if (page !== '8') {
+                  throw new Error(`the address still names page ${page ?? 'nothing'}`)
+                }
               }, { interval: 25, timeout: 5_000 })
             )
             return {
@@ -304,11 +338,13 @@ Feature('Keeping watched values in step with the browser page')
               search: new URLSearchParams(window.location.search).get('page'),
             }
           })),
-        Then('the address first named page 7, now names page 8, and the page never reloaded')((s) => {
-          expect(s.seen.readFromAddress).toBe('7')
-          expect(s.seen.search).toBe('8')
-          expect(s.ctx.marker).toSatisfy((marker: HTMLElement) => document.body.contains(marker))
-        }),
+        Then('the address first named page 7, now names page 8, and the page never reloaded')((s, expect) =>
+          expect({
+            readFromAddress: s.seen.readFromAddress,
+            search: s.seen.search,
+            markerAttached: s.ctx.marker.isConnected,
+          }).toEqual({ readFromAddress: '7', search: '8', markerAttached: true })
+        ),
       ),
     )
 
@@ -341,11 +377,9 @@ Feature('Keeping watched values in step with the browser page')
               return { addresses: s.ctx.recording.writtenAddresses() }
             }),
         ),
-        Then('the address bar is rewritten once and names both choices')((s) => {
-          expect(s.written.addresses).toHaveLength(1)
-          expect(s.written.addresses[0]).toContain('size=1')
-          expect(s.written.addresses[0]).toContain('colour=2')
-        }),
+        Then('the address bar is rewritten once and names both choices')(
+          (s, expect) => expect(s.written.addresses.map(addressQuery)).toEqual([{ size: '1', colour: '2' }]),
+        ),
       ),
     )
 
@@ -367,10 +401,9 @@ Feature('Keeping watched values in step with the browser page')
             announceTheAddressChanged()
             return { after: Atom.Registry.get(s.ctx.page, s.ctx.chosenPage), before }
           })),
-        Then('the tracked choice follows the new address')((s) => {
-          expect(s.seen.before).toBe('1')
-          expect(s.seen.after).toBe('2')
-        }),
+        Then('the tracked choice follows the new address')(
+          (s, expect) => expect({ before: s.seen.before, after: s.seen.after }).toEqual({ before: '1', after: '2' }),
+        ),
       ),
     )
 
@@ -396,9 +429,9 @@ Feature('Keeping watched values in step with the browser page')
             })),
           When('the page number is read')('read', (s) =>
             Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.chosenPage))),
-          Then('the reading matches the address')((s) => {
+          Then('the reading matches the address')((s, expect) =>
             expect(s.read).toEqual(row.expected)
-          }),
+          ),
         ),
     )
 
@@ -430,11 +463,13 @@ Feature('Keeping watched values in step with the browser page')
               return { addresses: s.ctx.recording.writtenAddresses(), readBack }
             }),
         ),
-        Then('the value read was the decoded number and the rewrite carries its encoding')((s) => {
-          expect(s.written.readBack).toEqual(Option.some(42))
-          expect(s.written.addresses).toHaveLength(1)
-          expect(s.written.addresses[0]).toContain('page=7')
-        }),
+        Then('the value read was the decoded number and the rewrite carries its encoding')(
+          (s, expect) =>
+            expect({ readBack: s.written.readBack, addresses: s.written.addresses.map(addressQuery) }).toEqual({
+              readBack: Option.some(42),
+              addresses: [{ page: '7' }],
+            }),
+        ),
       ),
     )
 
@@ -473,11 +508,13 @@ Feature('Keeping watched values in step with the browser page')
               }
             }),
         ),
-        Then('the value written wins and the announcement changes nothing')((s) => {
-          expect(s.written.addresses).toHaveLength(1)
-          expect(s.written.addresses[0]).toContain('size=2')
-          expect(s.written.value).toBe('2')
-        }),
+        Then('the value written wins and the announcement changes nothing')(
+          (s, expect) =>
+            expect({ addresses: s.written.addresses.map(addressQuery), value: s.written.value }).toEqual({
+              addresses: [{ size: '2' }],
+              value: '2',
+            }),
+        ),
       ),
     )
 
@@ -516,12 +553,13 @@ Feature('Keeping watched values in step with the browser page')
               return { addresses: s.ctx.recording.writtenAddresses(), firstWrite }
             }),
         ),
-        Then('each page wrote only its own choice, once each')((s) => {
-          expect(s.written.addresses).toHaveLength(2)
-          expect(s.written.firstWrite).toHaveLength(1)
-          expect(s.written.firstWrite[0]).toContain('size=1')
-          expect(s.written.addresses[1]).toContain('size=2')
-        }),
+        Then('each page wrote only its own choice, once each')(
+          (s, expect) =>
+            expect({
+              addresses: s.written.addresses.map(addressQuery),
+              firstWrite: s.written.firstWrite.map(addressQuery),
+            }).toEqual({ addresses: [{ size: '1' }, { size: '2' }], firstWrite: [{ size: '1' }] }),
+        ),
       ),
     )
   })

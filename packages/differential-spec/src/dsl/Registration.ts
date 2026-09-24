@@ -1,17 +1,19 @@
-import type { TestContext, TestOptions } from '@systemfsoftware/vitest'
 import { Effect, Option } from 'effect'
+import type * as V from 'vitest'
 import type { DualExecutionSupervisorOptions, HostBound } from '../core/DualExecutionSupervisor.js'
 
-const UNTIMED: TestOptions = { timeout: 0 }
+const UNTIMED: V.TestOptions = { timeout: 0 }
 
 const boundOf = (options?: DualExecutionSupervisorOptions): HostBound | undefined => options?.hostBound
 
-const silent = (_ctx: TestContext): Effect.Effect<void> => Effect.void
+const silent: (ctx: V.TestContext | null) => Effect.Effect<void> = () => Effect.void
 
-const announcerFor = (bound: HostBound): (ctx: TestContext) => Effect.Effect<void> => (ctx) =>
-  Effect.asVoid(Effect.promise(() => ctx.annotate(`host-bound check: ${bound.reason}`)))
+const announcerFor = (bound: HostBound): (ctx: V.TestContext | null) => Effect.Effect<void> => (ctx) =>
+  ctx === null
+    ? Effect.void
+    : Effect.asVoid(Effect.promise(() => ctx.annotate(`host-bound check: ${bound.reason}`)))
 
-export const checkOptions = (options?: DualExecutionSupervisorOptions): TestOptions =>
+export const checkOptions = (options?: DualExecutionSupervisorOptions): V.TestOptions =>
   Option.match(Option.fromNullishOr(boundOf(options)), {
     onNone: () => UNTIMED,
     onSome: (bound) => ({ timeout: bound.timeout }),
@@ -19,5 +21,5 @@ export const checkOptions = (options?: DualExecutionSupervisorOptions): TestOpti
 
 export const announceHostBound = (
   options?: DualExecutionSupervisorOptions,
-): (ctx: TestContext) => Effect.Effect<void> =>
+): (ctx: V.TestContext | null) => Effect.Effect<void> =>
   Option.match(Option.fromNullishOr(boundOf(options)), { onNone: () => silent, onSome: announcerFor })

@@ -1,6 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Option } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Error from 'effect/PlatformError'
@@ -222,9 +221,7 @@ Feature('Rearranging notes and folders kept in memory')
         Gherkin.Do.pipe(
           Given('a notes folder holding a greeting')('fs', () => filesystem),
           When('the greeting is changed')('seen', (s) => Effect.andThen(row.attempt(s.fs), row.look(s.fs))),
-          Then('looking again shows the change')((s) => {
-            expect(s.seen).toBe(row.seen)
-          }),
+          Then('looking again shows the change')((s, expect) => expect(s.seen).toBe(row.seen)),
         ),
     )
 
@@ -235,9 +232,7 @@ Feature('Rearranging notes and folders kept in memory')
         Gherkin.Do.pipe(
           Given('a notes folder holding a greeting')('fs', () => filesystem),
           When('the folders are changed')('seen', (s) => Effect.andThen(row.attempt(s.fs), row.look(s.fs))),
-          Then('looking again shows the change')((s) => {
-            expect(s.seen).toBe(row.seen)
-          }),
+          Then('looking again shows the change')((s, expect) => expect(s.seen).toBe(row.seen)),
         ),
     )
   })

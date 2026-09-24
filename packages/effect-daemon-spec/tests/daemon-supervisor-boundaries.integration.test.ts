@@ -8,7 +8,6 @@ import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
 import { Duration, Effect, Layer, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
@@ -50,28 +49,28 @@ Feature('Daemon supervisor boundaries')
             })
             return yield* run.dynamic(spec)
           })),
-        When('a child is started, stopped, then stopped again')('count', (s) =>
+        When('a child is started, stopped, then stopped again')('counts', (s) =>
           Effect.gen(function*() {
             const ref = yield* s.handle.startChild(void 0)
-            expect(yield* s.handle.count).toBe(1)
+            const afterStart = yield* s.handle.count
             yield* s.handle.stopChild(ref)
             yield* ref.removed
-            expect(yield* s.handle.count).toBe(0)
+            const afterStop = yield* s.handle.count
             yield* s.handle.stopChild(ref)
-            return yield* s.handle.count
+            const afterSecondStop = yield* s.handle.count
+            return { afterStart, afterStop, afterSecondStop }
           })),
-        Then('the count stays at zero')((s) =>
-          Effect.sync(() => {
-            expect(s.count).toBe(0)
-          })
-        ),
+        Then('the count rises to one on start, returns to zero on stop, and stays there on a second stop')((
+          s,
+          expect,
+        ) => expect(s.counts).toEqual({ afterStart: 1, afterStop: 0, afterSecondStop: 0 })),
       ),
     )
 
     scenario(
       'Stream worker terminates when a tick exceeds the timeout',
       Gherkin.Do.pipe(
-        When('a stream worker with a silent stream runs past the tick timeout')('removed', () =>
+        When('a stream worker with a silent stream runs past the tick timeout')('observed', () =>
           Effect.scoped(
             Effect.gen(function*() {
               const worker = Daemon.stream({
@@ -89,13 +88,11 @@ Feature('Daemon supervisor boundaries')
               const ref = yield* handle.startChild(void 0)
               yield* TestClock.adjust(Duration.seconds(91))
               yield* ref.removed
-              return true
+              return { count: yield* handle.count }
             }),
           )),
-        Then('the worker child is removed after the tick timeout fires')((s) =>
-          Effect.sync(() => {
-            expect(s.removed).toEqual(true)
-          })
+        Then('the worker child is removed after the tick timeout fires')((s, expect) =>
+          expect(s.observed.count).toBe(0)
         ),
       ),
     )
@@ -103,7 +100,7 @@ Feature('Daemon supervisor boundaries')
     scenario(
       'Subscription worker terminates when a tick exceeds the timeout',
       Gherkin.Do.pipe(
-        When('a subscription worker with a slow acquire runs past the tick timeout')('removed', () =>
+        When('a subscription worker with a slow acquire runs past the tick timeout')('observed', () =>
           Effect.scoped(
             Effect.gen(function*() {
               const worker = Daemon.subscription({
@@ -121,13 +118,11 @@ Feature('Daemon supervisor boundaries')
               const ref = yield* handle.startChild(void 0)
               yield* TestClock.adjust(Duration.seconds(91))
               yield* ref.removed
-              return true
+              return { count: yield* handle.count }
             }),
           )),
-        Then('the worker child is removed after the tick timeout fires')((s) =>
-          Effect.sync(() => {
-            expect(s.removed).toEqual(true)
-          })
+        Then('the worker child is removed after the tick timeout fires')((s, expect) =>
+          expect(s.observed.count).toBe(0)
         ),
       ),
     )
@@ -167,13 +162,11 @@ Feature('Daemon supervisor boundaries')
             const exhaustions = yield* s.ctx.spy.getExhaustions()
             return { restarts, exhaustions }
           })),
-        Then('the budget is exceeded on the first failure with no restart')((s) =>
-          Effect.sync(() => {
-            const matching = s.result.restarts.filter((r) => r.name === 'zero-budget-sup')
-            expect(matching.length).toBe(0)
-            const exhaustions = s.result.exhaustions.filter((e) => e.name === 'zero-budget-sup')
-            expect(exhaustions).toHaveLength(1)
-          })
+        Then('the budget is exceeded on the first failure with no restart')((s, expect) =>
+          expect({
+            restarts: s.result.restarts.map((r) => r.name),
+            exhaustions: s.result.exhaustions.map((e) => e.name),
+          }).toEqual({ restarts: [], exhaustions: ['zero-budget-sup'] })
         ),
       ),
     )

@@ -1,5 +1,4 @@
-import { And, But, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Exit, Layer, Ref } from 'effect'
 import { InsufficientFundsError, OutOfStockError } from './__fixtures__/OrderFulfillment.schema.js'
 
@@ -103,24 +102,20 @@ Feature('Order fulfillment and wallet debiting')
               return { remaining }
             }),
         ),
-        Then('the customer wallet is debited leaving the expected balance')((s) =>
+        Then('the purchase debits the wallet, reserves the stock and records the audit trail')((s, expect) =>
           Effect.gen(function*() {
-            expect(s.purchaseResult.remaining).toBe(40)
             const liveBalance = yield* s.wallet.balance
-            expect(liveBalance).toBe(40)
-          })
-        ),
-        And('the reserved stock is deducted from the inventory')((s) =>
-          Effect.gen(function*() {
             const liveStock = yield* s.inventory.stock('widget')
-            expect(liveStock).toBe(3)
-          })
-        ),
-        And('the transaction is permanently recorded in the order audit journal')((s) =>
-          Effect.gen(function*() {
             const events = yield* s.audit.history
-            expect(events).toEqual(['order_completed:widget:2'])
-          })
+            return { remaining: s.purchaseResult.remaining, liveBalance, liveStock, events }
+          }).pipe(Effect.map((facts) =>
+            expect(facts).toEqual({
+              remaining: 40,
+              liveBalance: 40,
+              liveStock: 3,
+              events: ['order_completed:widget:2'],
+            })
+          ))
         ),
       ),
     )
@@ -166,20 +161,18 @@ Feature('Order fulfillment and wallet debiting')
                 }),
               )
             })),
-          Then('the checkout outcome matches expectation')((s) => {
-            expect(s.outcome).toBe(row.expected)
-          }),
-          And('the wallet balance remains consistent with the outcome')((s) =>
+          Then('the outcome, the wallet balance and the stock all match the expected result')((s, expect) =>
             Effect.gen(function*() {
-              const bal = yield* s.services.wallet.balance
-              expect(bal).toBe(row.remainingBalance)
-            })
-          ),
-          But('the inventory stock is only reduced when checkout succeeds')((s) =>
-            Effect.gen(function*() {
-              const stk = yield* s.services.inventory.stock('widget')
-              expect(stk).toBe(row.remainingStock)
-            })
+              const balance = yield* s.services.wallet.balance
+              const stock = yield* s.services.inventory.stock('widget')
+              return { outcome: s.outcome, balance, stock }
+            }).pipe(Effect.map((facts) =>
+              expect(facts).toEqual({
+                outcome: row.expected,
+                balance: row.remainingBalance,
+                stock: row.remainingStock,
+              })
+            ))
           ),
         ),
     )

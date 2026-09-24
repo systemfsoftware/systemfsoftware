@@ -6,8 +6,7 @@ import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { oneForAll, oneForOne, restForOne } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
-import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Match, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
@@ -64,7 +63,13 @@ Feature('Per-child restart policy')
               return supHealth
             }),
         ),
-        Then('the system is still operational')((s) => s.supHealth.healthy.await),
+        Then('the system is still operational')((s, expect) =>
+          s.supHealth.healthy.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success', success: undefined })),
+          )
+        ),
       ),
     )
 
@@ -104,8 +109,12 @@ Feature('Per-child restart policy')
               return supHealth
             }),
         ),
-        Then('the system is still operational because the per-task budget prevented any restart')((s) =>
-          s.supHealth.healthy.await
+        Then('the system is still operational because the per-task budget prevented any restart')((s, expect) =>
+          s.supHealth.healthy.await.pipe(
+            Effect.timeout('0 millis'),
+            Effect.result,
+            Effect.flatMap((result) => expect(result).toMatchObject({ _tag: 'Success', success: undefined })),
+          )
         ),
       ),
     )
@@ -193,15 +202,20 @@ Feature('Per-child restart policy')
                 return { supHealth, exhaustions, restarts }
               }),
           ),
-          Then('supervisor healthy latch stays open')((s) => s.out.supHealth.healthy.await),
-          And('reporter records no supervisor exhaustion events')((s) =>
-            Effect.sync(() => {
-              expect(s.out.exhaustions).toHaveLength(0)
-            })
-          ),
-          And('reporter records no supervisor restart events')((s) =>
-            Effect.sync(() => {
-              expect(s.out.restarts).toHaveLength(0)
+          Then(
+            'the supervisor healthy latch stays open and the reporter records no exhaustion or restart events',
+          )((s, expect) =>
+            Effect.gen(function*() {
+              const healthy = yield* s.out.supHealth.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+              yield* expect({
+                healthy,
+                exhaustions: s.out.exhaustions,
+                restarts: s.out.restarts,
+              }).toMatchObject({
+                healthy: { _tag: 'Success', success: undefined },
+                exhaustions: [],
+                restarts: [],
+              })
             })
           ),
         )
@@ -243,20 +257,20 @@ Feature('Per-child restart policy')
               const supHealth = yield* run.supervisor(sup).pipe(Effect.provide(reporterLayer))
               yield* TestClock.adjust(Duration.seconds(2))
               const exhaustions = yield* spy.getExhaustions()
-              const healthyOpen = yield* supHealth.healthy.await.pipe(
-                Effect.timeout('0 millis'),
-                Effect.match({
-                  onFailure: () => false,
-                  onSuccess: () => true,
-                }),
-              )
-              return { exhaustions, healthyOpen }
+              const healthy = yield* supHealth.healthy.await.pipe(Effect.timeout('0 millis'), Effect.result)
+              return { exhaustions, healthy }
             }),
         ),
-        Then('healthy latch closes and supervisor exhaustion is reported')((s) =>
-          Effect.sync(() => {
-            expect(s.out.healthyOpen).toEqual(false)
-            expect(s.out.exhaustions.length).toBeGreaterThanOrEqual(1)
+        Then('healthy latch closes and supervisor exhaustion is reported')((s, expect) =>
+          expect({
+            healthy: s.out.healthy,
+            exhaustedBy: s.out.exhaustions.map((e) => e.name),
+          }).toEqual({
+            healthy: expect.objectContaining({
+              _tag: 'Failure',
+              failure: expect.objectContaining({ _tag: 'TimeoutError' }),
+            }),
+            exhaustedBy: ['default-policy-parent'],
           })
         ),
       ),

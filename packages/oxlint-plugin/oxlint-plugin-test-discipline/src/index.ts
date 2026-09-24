@@ -5,7 +5,6 @@ import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gh
 import { conformanceTestRequiresHarness } from './rules/conformance-test-requires-harness.js'
 import { dampTestNaming } from './rules/damp-test-naming.js'
 import { differentialTestRequiresHarness } from './rules/differential-test-requires-harness.js'
-import { expectBooleanPredicate } from './rules/expect-boolean-predicate.js'
 import { inSourceTestPropOnly } from './rules/in-source-test-prop-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { modelFixtureImportsSubject } from './rules/model-fixture-imports-subject.js'
@@ -54,7 +53,6 @@ const recommendedRules = {
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
-  [rule('expect-boolean-predicate')]: 'error',
   [rule('vitest-from-systemfsoftware-vitest')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
@@ -92,7 +90,6 @@ export default {
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
     'no-pseudo-gherkin-unit-tests': noPseudoGherkinUnitTests,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
-    'expect-boolean-predicate': expectBooleanPredicate,
     'vitest-from-systemfsoftware-vitest': vitestFromSystemfsoftwareVitest,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,

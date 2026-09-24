@@ -1,6 +1,5 @@
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 
 import { fileReadProgram, hostTimerProgram, makeHostFiles, removeHostFiles } from './__fixtures__/externalFixtures.js'
@@ -10,9 +9,6 @@ import { answeringService, askAfterConnecting } from './__fixtures__/socketFixtu
 const Feature = makeFeature({ it })
 
 const realReport = Effect.acquireRelease(makeHostFiles, removeHostFiles)
-
-const everyStepInDefaultOrder = (steps: ReadonlyArray<Kernel.StepRecord>): boolean =>
-  steps.every((step) => step.deviation === false)
 
 const refusalOf = <A>(run: () => Promise<A>): Effect.Effect<string> =>
   Effect.tryPromise({
@@ -32,9 +28,7 @@ Feature('Waiting on the host outside the controlled schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(fileReadProgram(s.files.report), { external: 'fail' })),
         ),
-        Then('the run fails, naming a wait on a file')((s) => {
-          expect(blockedFailureOf(s.run).on).toBe('File')
-        }),
+        Then('the run fails, naming a wait on a file')((s, expect) => expect(blockedFailureOf(s.run).on).toBe('File')),
       ),
     )
 
@@ -46,11 +40,12 @@ Feature('Waiting on the host outside the controlled schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(fileReadProgram(s.files.report), { external: 'await' })),
         ),
-        Then('the program gets the report back')((s) => {
-          expect(completedValueOf(s.run)).toBe(s.files.expected)
-        }),
-        And('every step keeps the default order')((s) => {
-          expect(completedRunOf(s.run).steps).toSatisfy(everyStepInDefaultOrder)
+        Then('the program gets the report back and every step keeps the default order')((s, expect) => {
+          const steps = completedRunOf(s.run).steps
+          return expect({ report: completedValueOf(s.run), choices: steps.map((step) => step.choice) }).toMatchObject({
+            report: s.files.expected,
+            choices: steps.map((step) => step.fallback),
+          })
         }),
       ),
     )
@@ -66,9 +61,7 @@ Feature('Waiting on the host outside the controlled schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(askAfterConnecting(s.service.port), { external: 'await' })),
         ),
-        Then('the program gets "pong" back')((s) => {
-          expect(completedValueOf(s.run)).toBe('pong')
-        }),
+        Then('the program gets "pong" back')((s, expect) => expect(completedValueOf(s.run)).toBe('pong')),
       ),
     )
 
@@ -83,9 +76,9 @@ Feature('Waiting on the host outside the controlled schedule')
           'run',
           (s) => Effect.promise(() => Kernel.run(s.program, { external: 'await' })),
         ),
-        Then('the run fails because the timer escaped the controlled schedule')((s) => {
+        Then('the run fails because the timer escaped the controlled schedule')((s, expect) =>
           expect(escapeOf(s.run).timer).toBe('setTimeout')
-        }),
+        ),
       ),
     )
 
@@ -97,9 +90,9 @@ Feature('Waiting on the host outside the controlled schedule')
           'refusal',
           (s) => refusalOf(() => Kernel.run(fileReadProgram(s.files.report), { external: 'await', choose: () => 0 })),
         ),
-        Then('the run is refused because host waits only follow the default order')((s) => {
+        Then('the run is refused because host waits only follow the default order')((s, expect) =>
           expect(s.refusal).toContain('own order')
-        }),
+        ),
       ),
     )
   })

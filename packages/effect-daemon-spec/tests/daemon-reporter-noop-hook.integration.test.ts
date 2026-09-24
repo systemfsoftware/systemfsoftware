@@ -11,13 +11,19 @@ Feature('Daemon reporter Noop hook shape')
       'Noop onRestart and onExhausted return finishable Effects',
       Gherkin.Do.pipe(
         Given('the noop reporter service')('_', () => Effect.void),
-        When('both hooks are invoked')('_', () =>
+        When('both hooks are invoked')('exits', () =>
           Effect.gen(function*() {
             const reporter = yield* DaemonReporter
-            yield* reporter.onRestart('noop-check', Cause.empty)
-            yield* reporter.onExhausted('noop-check', Cause.empty)
+            const onRestart = yield* Effect.exit(reporter.onRestart('noop-check', Cause.empty))
+            const onExhausted = yield* Effect.exit(reporter.onExhausted('noop-check', Cause.empty))
+            return { onRestart, onExhausted }
           })),
-        Then('no failure is raised')((_s) => Effect.void),
+        Then('no failure is raised')((s, expect) =>
+          expect(s.exits).toMatchObject({
+            onRestart: { _tag: 'Success', value: undefined },
+            onExhausted: { _tag: 'Success', value: undefined },
+          })
+        ),
       ),
     )
   })

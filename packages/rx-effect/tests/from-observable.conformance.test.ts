@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Match, Stream } from 'effect'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Cause, Effect, Exit, Match, Schema, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
 import type { Observable } from 'rxjs'
 
@@ -15,20 +15,6 @@ const bridging = (source: Observable<number>): Stream.Stream<number, UnknownErro
 
 const readingOne = (source: Observable<number>): Effect.Effect<void, UnknownError> =>
   Stream.runDrain(bridging(source).pipe(Stream.take(1)))
-
-const passing = (report: Conformance.Report<never, never>): Conformance.Pass =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (pass) => pass),
-    Match.orElse(() => {
-      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
-    }),
-  )
-
-const provedAtLeastOneStop = (checked: Conformance.Report<never, never>): void => {
-  if (passing(checked).histories <= 0) {
-    throw new Error('expected the check to have tried at least one stop')
-  }
-}
 
 const endingInAFailure = (source: Observable<number>): Effect.Effect<void> =>
   Effect.flatMap(
@@ -45,6 +31,12 @@ const endingInCompletion = (source: Observable<number>): Effect.Effect<void> =>
       ? Effect.void
       : Effect.die(new Error('the source completion never reached the reader')))
 
+const stopsSearched = (report: Conformance.Report<never, never>): number =>
+  Match.value(report).pipe(
+    Match.tag('Pass', (passed) => passed.histories),
+    Match.orElse(() => 0),
+  )
+
 Feature('Letting go of a source subscription when the reader stops')
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -59,12 +51,12 @@ Feature('Letting go of a source subscription when the reader stops')
           'checked',
           (s) => Conformance.released(readingOne(s.bridge.source), s.bridge.check),
         ),
-        Then('nobody is left subscribed to the observable after any stop')((s) => {
-          passing(s.checked)
-        }),
-        And('at least one stop was tried')((s) => {
-          provedAtLeastOneStop(s.checked)
-        }),
+        Then('nobody is left subscribed after any stop, and the seeded search tries at least one')((s, expect) =>
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+            report: { _tag: 'Pass' },
+            stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
 
@@ -79,14 +71,14 @@ Feature('Letting go of a source subscription when the reader stops')
           'checked',
           (s) => Conformance.released(endingInAFailure(s.bridge.source), s.bridge.check),
         ),
-        Then("nobody is left subscribed to the observable after any stop, and Ada's reader is handed the failure")(
-          (s) => {
-            passing(s.checked)
-          },
+        Then(
+          "nobody is left subscribed after any stop, Ada's reader is handed the failure, and the seeded search tries at least one",
+        )((s, expect) =>
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+            report: { _tag: 'Pass' },
+            stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
         ),
-        And('at least one stop was tried')((s) => {
-          provedAtLeastOneStop(s.checked)
-        }),
       ),
     )
 
@@ -101,14 +93,14 @@ Feature('Letting go of a source subscription when the reader stops')
           'checked',
           (s) => Conformance.released(endingInCompletion(s.bridge.source), s.bridge.check),
         ),
-        Then("nobody is left subscribed to the observable after any stop, and Ada's reader reaches the end")(
-          (s) => {
-            passing(s.checked)
-          },
+        Then(
+          "nobody is left subscribed after any stop, Ada's reader reaches the end, and the seeded search tries at least one",
+        )((s, expect) =>
+          expect({ report: s.checked, stops: stopsSearched(s.checked) }).toMatchObject({
+            report: { _tag: 'Pass' },
+            stops: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
         ),
-        And('at least one stop was tried')((s) => {
-          provedAtLeastOneStop(s.checked)
-        }),
       ),
     )
   })

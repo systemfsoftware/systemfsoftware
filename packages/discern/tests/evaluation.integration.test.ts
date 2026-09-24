@@ -1,7 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Array as Arr, Effect, Result, Schema } from 'effect'
+import { Array as Arr, Effect, Schema } from 'effect'
 import {
   type AnswerFor,
   answering,
@@ -66,13 +65,19 @@ Feature('Measuring a question against labelled examples')
               )
             }),
         ),
-        Then('each example was asked once and the middle threshold is perfect')((s) =>
+        Then('each example was asked once and the middle threshold is perfect')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(model.calls()).toBe(s.examples.length)
-            expect(s.result.best.value).toBe(0.7)
-            expect(s.result.best.report.metrics.f1).toBe(1)
-          })
+            return {
+              modelCalls: model.calls(),
+              bestValue: s.result.best.value,
+              bestF1: s.result.best.report.metrics.f1,
+            }
+          }).pipe(
+            Effect.map((answer) =>
+              expect(answer).toEqual({ modelCalls: s.examples.length, bestValue: 0.7, bestF1: 1 })
+            ),
+          )
         ),
       ),
     )
@@ -101,15 +106,14 @@ Feature('Measuring a question against labelled examples')
               )
             }),
         ),
-        Then('only the guarded-in file was asked, and every threshold scores perfectly')((s) =>
+        Then('only the guarded-in file was asked, and every threshold scores perfectly')((s, expect) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
-            expect(model.calls()).toBe(1)
-            expect(Arr.map(s.results, (entry) => [entry.value, entry.report.metrics.accuracy])).toStrictEqual([
-              [0.5, 1],
-              [0.9, 1],
-            ])
-          })
+            return {
+              modelCalls: model.calls(),
+              scores: Arr.map(s.results, (entry) => [entry.value, entry.report.metrics.accuracy]),
+            }
+          }).pipe(Effect.map((answer) => expect(answer).toEqual({ modelCalls: 1, scores: [[0.5, 1], [0.9, 1]] })))
         ),
       ),
     )
@@ -125,9 +129,12 @@ Feature('Measuring a question against labelled examples')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.EvalRecord)(s.payload)),
         ),
-        Then('the unknown outcome is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the unknown outcome is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["status"\]/) },
+          })
+        ),
       ),
     )
 
@@ -155,9 +162,12 @@ Feature('Measuring a question against labelled examples')
           'outcome',
           (s) => Effect.succeed(Schema.decodeResult(Discern.EvalMetrics)(s.payload)),
         ),
-        Then('the non-finite number is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the non-finite number is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["f1"\]/) },
+          })
+        ),
       ),
     )
 
@@ -172,9 +182,12 @@ Feature('Measuring a question against labelled examples')
           'outcome',
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.EvalMetrics)(s.payload)),
         ),
-        Then('the incomplete record is refused')(({ outcome }) => {
-          expect(outcome).toSatisfy(Result.isFailure)
-        }),
+        Then('the incomplete record is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["coverage"\]/) },
+          })
+        ),
       ),
     )
   })

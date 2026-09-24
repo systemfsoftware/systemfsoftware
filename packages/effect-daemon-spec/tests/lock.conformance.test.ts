@@ -8,7 +8,7 @@ import {
   runLockCommand,
 } from '@systemfsoftware/effect-daemon-spec/testing'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Context, Effect, Layer, Match, Option } from 'effect'
+import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { LeadershipStillHeld } from './__fixtures__/LeadershipStillHeld.schema.js'
 import { mkStatefulLockPrimitive } from './__fixtures__/LockPrimitiveFakes.js'
 
@@ -38,14 +38,6 @@ const freshClaimant: Effect.Effect<void, LeadershipStillHeld | LeaderLockInfraEr
   ),
 )
 
-const passedRuns = <C, R>(report: Conformance.Report<C, R>): number =>
-  Match.value(report).pipe(
-    Match.tag('Pass', (pass) => pass.histories),
-    Match.orElse(() => {
-      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
-    }),
-  )
-
 Feature('Keeping one leadership for one daemon at a time', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario, scenarioOutline }) => {
@@ -71,9 +63,12 @@ Feature('Keeping one leadership for one daemon at a time', { timeout: 0 })
                 maxSchedules: 100_000,
               }),
           ),
-          Then('every interleaving matches the daemons taking turns one after the other')((s) => {
-            passedRuns(s.report)
-          }),
+          Then('every interleaving matches the daemons taking turns one after the other')((s, expect) =>
+            expect(s.report).toMatchObject({
+              _tag: 'Pass',
+              histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+            })
+          ),
         ),
     )
 
@@ -91,9 +86,12 @@ Feature('Keeping one leadership for one daemon at a time', { timeout: 0 })
               probe: Effect.provide(freshClaimant, s.locks),
             }),
         ),
-        Then('the fresh claimant gets the leadership after every stop')((s) => {
-          passedRuns(s.report)
-        }),
+        Then('the fresh claimant gets the leadership after every stop')((s, expect) =>
+          expect(s.report).toMatchObject({
+            _tag: 'Pass',
+            histories: expect.schemaMatching(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
+          })
+        ),
       ),
     )
   })

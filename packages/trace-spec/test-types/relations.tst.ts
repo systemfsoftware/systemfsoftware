@@ -87,16 +87,16 @@ describe('Graph.decode', () => {
   })
 })
 
-describe('TraceDisparityError', () => {
-  it('Should_CarryFailureWithoutGherkinVocabulary_When_DisparityErrorRead', () => {
-    expect<Contract.TraceDisparityError>().type.not.toBeAssignableTo<{ readonly keyword: string }>()
-    expect<Contract.TraceDisparityError>().type.not.toBeAssignableTo<{ readonly text: string }>()
+describe('Contract.Report', () => {
+  it('Should_CarryTheVerdictWithoutGherkinVocabulary_When_ReportRead', () => {
+    expect<Contract.Report>().type.not.toBeAssignableTo<{ readonly keyword: string }>()
+    expect<Contract.Report>().type.not.toBeAssignableTo<{ readonly text: string }>()
   })
 
-  it('Should_CarryBrokenRelationAndDumpPath_When_DisparityErrorRead', () => {
-    expect<Contract.TraceDisparityError>().type.toBeAssignableTo<{
-      readonly relationId: string
-      readonly dumpPath: string | null
+  it('Should_CarryTheVerdictAndTheReportTheJudgementLeaves_When_ReportRead', () => {
+    expect<Contract.Report>().type.toBe<{
+      readonly verdict: 'Hold' | 'Break'
+      readonly report: string
     }>()
   })
 })

@@ -1,6 +1,5 @@
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -100,14 +99,16 @@ Feature('Admitting submissions at the door')
           'outcome',
           ({ door }) => door.run({ id: 'abcd' }),
         ),
-        Then('the submission is admitted with its length noted')((s) => {
-          expect(s.outcome).toBe('admitted:4')
-        }),
-        And('the door keeps the admission on record')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual(['admitted:4'])
-            }))
+        Then('the submission is admitted with its length noted and the door keeps it on record')((s, expect) =>
+          Effect.flatMap(
+            Ledger,
+            (ledger) =>
+              Effect.map(
+                ledger.lines,
+                (lines) =>
+                  expect({ outcome: s.outcome, lines }).toEqual({ outcome: 'admitted:4', lines: ['admitted:4'] }),
+              ),
+          )
         ),
       ),
     )
@@ -123,16 +124,18 @@ Feature('Admitting submissions at the door')
           'outcome',
           ({ door }) => door.run({ id: 'ab' }),
         ),
-        Then('the submission is refused for being too short')((s) => {
-          expect(s.outcome).toBe('refused:too short')
-        }),
-        And('the slip on record is a plain written slip with no private markings')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual([
-                'refused:{"_tag":"Rejected","why":"too short"}:plain:true',
-              ])
-            }))
+        Then(
+          'the submission is refused for being too short and its slip is a plain written slip with no private markings',
+        )((s, expect) =>
+          Effect.flatMap(
+            Ledger,
+            (ledger) =>
+              Effect.map(ledger.lines, (lines) =>
+                expect({ outcome: s.outcome, lines }).toEqual({
+                  outcome: 'refused:too short',
+                  lines: ['refused:{"_tag":"Rejected","why":"too short"}:plain:true'],
+                })),
+          )
         ),
       ),
     )
@@ -148,26 +151,30 @@ Feature('Admitting submissions at the door')
           'outcome',
           ({ door }) => Effect.exit(door.run({ id: 'abcd' })),
         ),
-        Then('the door turns the submission away and records why')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isSuccess)
-          expect(s.outcome).toStrictEqual(Exit.succeed('turned away'))
-        }),
-        And('the turned-away submission is on record')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines.length).toBe(1)
-              expect(lines[0]).toSatisfy((line: string | undefined) =>
-                line !== undefined && line.startsWith('turned away:')
-              )
-            }))
-        ),
-        And('the run itself is recorded as a refusal, not as a broken run')(() =>
-          Effect.map(refusalSnapshotsOf('cell.admission.damaged'), (refusals) => {
-            expect(refusals.length).toBe(1)
-            const [first] = refusals
-            if (first?.type !== 'Histogram') throw new Error('the door records refused runs on its duration histogram')
-            expect(first.state.count).toBe(1)
-          })
+        Then(
+          'the door turns the submission away, keeps exactly one turned-away slip, and records the run as a refusal',
+        )((s, expect) =>
+          Effect.flatMap(
+            Ledger,
+            (ledger) =>
+              Effect.flatMap(refusalSnapshotsOf('cell.admission.damaged'), (refusals) =>
+                Effect.map(ledger.lines, (lines) =>
+                  expect({
+                    outcome: s.outcome,
+                    lineCount: lines.length,
+                    firstLine: lines[0],
+                    refusalCount: refusals.length,
+                    snapshotType: refusals[0]?.type,
+                    firstRefusalState: refusals[0]?.state,
+                  }).toEqual({
+                    outcome: Exit.succeed('turned away'),
+                    lineCount: 1,
+                    firstLine: expect.stringMatching(/^turned away:/),
+                    refusalCount: 1,
+                    snapshotType: 'Histogram',
+                    firstRefusalState: expect.objectContaining({ count: 1 }),
+                  }))),
+          )
         ),
       ),
     )
@@ -183,19 +190,26 @@ Feature('Admitting submissions at the door')
           'outcome',
           ({ door }) => Effect.exit(door.run({ id: 'abcd' })),
         ),
-        Then('the door answers that the submission is unreadable')((s) => {
-          expect(s.outcome).toStrictEqual(Exit.succeed('unreadable'))
-        }),
-        And('the unreadable measurement is on record as written')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual(['unreadable:-3'])
-            }))
-        ),
-        And('the run itself is recorded as a refusal, not as a broken run')(() =>
-          Effect.map(refusalSnapshotsOf('cell.admission.negative'), (refusals) => {
-            expect(refusals.length).toBe(1)
-          })
+        Then(
+          'the door answers that the submission is unreadable, keeps it on record, and records the run as a refusal',
+        )((s, expect) =>
+          Effect.flatMap(
+            Ledger,
+            (ledger) =>
+              Effect.flatMap(refusalSnapshotsOf('cell.admission.negative'), (refusals) =>
+                Effect.map(ledger.lines, (lines) =>
+                  expect({
+                    outcome: s.outcome,
+                    lines,
+                    refusalCount: refusals.length,
+                    firstRefusalState: refusals[0]?.state,
+                  }).toEqual({
+                    outcome: Exit.succeed('unreadable'),
+                    lines: ['unreadable:-3'],
+                    refusalCount: 1,
+                    firstRefusalState: expect.objectContaining({ count: 1 }),
+                  }))),
+          )
         ),
       ),
     )
@@ -216,11 +230,8 @@ Feature('Admitting submissions at the door')
             'outcome',
             ({ door }) => door.run({ id: row.id }),
           ),
-          Then('the door keeps exactly that record')(() =>
-            Effect.flatMap(Ledger, (ledger) =>
-              Effect.map(ledger.lines, (lines) => {
-                expect(lines).toEqual([row.record])
-              }))
+          Then('the door keeps exactly that record')((_, expect) =>
+            Effect.flatMap(Ledger, (ledger) => Effect.map(ledger.lines, (lines) => expect(lines).toEqual([row.record])))
           ),
         ),
     )

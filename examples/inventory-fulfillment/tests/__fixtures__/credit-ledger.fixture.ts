@@ -117,6 +117,8 @@ export const ledgerSpec: Conformance.Specification<
   maxSchedules: 5_000,
 }
 
+export const budgetedHistories = 20
+
 export const ledgerSequenceSpec: Conformance.SequentialSpecification<
   LedgerCommand,
   LedgerState,
@@ -127,6 +129,6 @@ export const ledgerSequenceSpec: Conformance.SequentialSpecification<
   commands: LedgerCommand,
   model: { ...creditLedgerModel, precondition: () => true },
   run: chargeThroughStore,
-  sequences: 20,
+  sequences: budgetedHistories,
   operations: 4,
 }

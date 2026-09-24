@@ -1,6 +1,5 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage, createPackageFromTarballData, packPackage } from '@systemfsoftware/npm-package'
-import { expect } from '@systemfsoftware/vitest'
 import { Effect, Layer } from 'effect'
 
 const Feature = makeFeature({ it })
@@ -46,15 +45,34 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
               return createPackageFromTarballData(tarball)
             }),
         ),
-        Then('all metadata, file lists, and file contents match identically')((s) => {
-          expect(s.extracted.packageName).toBe(s.original.packageName)
-          expect(s.extracted.packageVersion).toBe(s.original.packageVersion)
-          const originalPaths = s.original.listFiles('/').sort()
-          const extractedPaths = s.extracted.listFiles('/').sort()
-          expect(extractedPaths).toEqual(originalPaths)
-          for (const path of originalPaths) {
-            expect(s.extracted.tryReadFile(path)).toBe(s.original.tryReadFile(path))
-          }
+        Then('all metadata, file lists, and file contents match identically')((s, expect) => {
+          const files = [
+            '/node_modules/extract-pack-test/README.md',
+            '/node_modules/extract-pack-test/dist/index.d.ts',
+            '/node_modules/extract-pack-test/dist/index.js',
+            '/node_modules/extract-pack-test/package.json',
+          ]
+          return expect({
+            packageName: s.extracted.packageName,
+            packageVersion: s.extracted.packageVersion,
+            files: s.extracted.listFiles('/').sort(),
+            contents: files.map((path) => s.extracted.tryReadFile(path)),
+          }).toEqual({
+            packageName: 'extract-pack-test',
+            packageVersion: '1.0.0',
+            files,
+            contents: [
+              '# hello\n',
+              'export declare const a: number;\n',
+              'module.exports = { a: 1 };\n',
+              jsonString({
+                name: 'extract-pack-test',
+                version: '1.0.0',
+                main: './dist/index.js',
+                types: './dist/index.d.ts',
+              }),
+            ],
+          })
         }),
       ),
     )
@@ -79,9 +97,9 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
             const extracted = createPackageFromTarballData(packPackage(s.ctx.original))
             return extracted.tryReadBytes('/node_modules/bin-test/asset.bin')
           })),
-        Then('the extracted binary bytes match the original buffer bit-for-bit')((s) => {
+        Then('the extracted binary bytes match the original buffer bit-for-bit')((s, expect) =>
           expect(Array.from(uint8Of(s.readBytes))).toEqual(Array.from(s.ctx.binary))
-        }),
+        ),
       ),
     )
 
@@ -93,14 +111,14 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
           Effect.sync(() => {
             try {
               createPackageFromTarballData(s.bytes)
-              return { threw: false }
-            } catch {
-              return { threw: true }
+              return { message: undefined }
+            } catch (err) {
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the extractor rejects the corrupt payload')((s) => {
-          expect(s.attempt.threw).toBe(true)
-        }),
+        Then('the extractor rejects the corrupt payload')((s, expect) =>
+          expect(s.attempt).toMatchObject({ message: 'Tarball is empty' })
+        ),
       ),
     )
 
@@ -115,14 +133,14 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
           Effect.sync(() => {
             try {
               createPackageFromTarballData(s.bytes)
-              return { threw: false }
-            } catch {
-              return { threw: true }
+              return { message: undefined }
+            } catch (err) {
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the extractor rejects the truncated stream')((s) => {
-          expect(s.attempt.threw).toBe(true)
-        }),
+        Then('the extractor rejects the truncated stream')((s, expect) =>
+          expect(s.attempt).toMatchObject({ message: 'Tarball is empty' })
+        ),
       ),
     )
 
@@ -137,14 +155,14 @@ Feature('Tarball extract proof — pack then extract round-trips (AE5/AE8)')
           Effect.sync(() => {
             try {
               createPackageFromTarballData(s.bytes)
-              return { threw: false }
-            } catch {
-              return { threw: true }
+              return { message: undefined }
+            } catch (err) {
+              return { message: err instanceof Error ? err.message : undefined }
             }
           })),
-        Then('the extractor rejects the uncompressed text stream')((s) => {
-          expect(s.attempt.threw).toBe(true)
-        }),
+        Then('the extractor rejects the uncompressed text stream')((s, expect) =>
+          expect(s.attempt).toMatchObject({ message: 'Tarball is empty' })
+        ),
       ),
     )
   })

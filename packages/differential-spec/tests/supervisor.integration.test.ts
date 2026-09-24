@@ -1,7 +1,6 @@
-import { runDifferentialWithShrink } from '@systemfsoftware/differential-spec'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { expect } from '@systemfsoftware/vitest'
-import { Effect, Exit, Layer } from 'effect'
+import { differentialReport, reportCheck } from '@systemfsoftware/differential-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Effect, Layer } from 'effect'
 import { integers } from './__fixtures__/arbitraries.js'
 import { CandidateDefect } from './__fixtures__/CandidateDefect.schema.js'
 import {
@@ -10,7 +9,6 @@ import {
   sequentialBumps,
   splitWorkerBumps,
 } from './__fixtures__/concurrentCounters.js'
-import { disparityReportOf } from './__fixtures__/disparityReport.js'
 
 const Feature = makeFeature({ it })
 
@@ -31,17 +29,16 @@ Feature('Proving two implementations agree under generated schedules', { timeout
               candidate: (x: number) => Effect.succeed(x * 2 + 1),
             }),
         ),
-        When('the two implementations are compared over generated amounts')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, sameOutcome),
-          )),
-        Then('the report names zero as the smallest amount with both results shown')((s) => {
-          const report = disparityReportOf(s.outcome)
-          expect(report).toContain('Input: 0')
-          expect(report).toContain('Output A: 0')
-          expect(report).toContain('Output B: 1')
-          expect(report).toContain('seed')
-        }),
+        When('the parity check runs over generated integers')(
+          'report',
+          (s) => differentialReport(s.targets.reference, s.targets.candidate, integers, sameOutcome),
+        ),
+        Then('the report names zero as the minimal input with both sides and its seed')((s, expect) =>
+          expect(s.report).toEqual({
+            holds: false,
+            report: expect.stringMatching(/Input: 0[\s\S]*Output A: 0[\s\S]*Output B: 1[\s\S]*seed/),
+          })
+        ),
       ),
     )
 
@@ -56,13 +53,11 @@ Feature('Proving two implementations agree under generated schedules', { timeout
               candidate: (x: number) => (x < 0 ? Effect.fail(new CandidateDefect()) : Effect.succeed(x + x)),
             }),
         ),
-        When('the two implementations are compared over generated amounts')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, sameOutcome),
-          )),
-        Then('the comparison holds for every generated amount')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isSuccess)
-        }),
+        When('the parity check runs over generated integers')(
+          'report',
+          (s) => differentialReport(s.targets.reference, s.targets.candidate, integers, sameOutcome),
+        ),
+        Then('the run completes without complaint')((s, expect) => reportCheck(s.report, expect)),
       ),
     )
 
@@ -73,23 +68,22 @@ Feature('Proving two implementations agree under generated schedules', { timeout
           'implementations',
           () => Effect.succeed({ reference: sequentialBumps, candidate: splitWorkerBumps }),
         ),
-        When('the two implementations are compared over generated starting counts')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.implementations.reference, s.implementations.candidate, integers, sameOutcome, {
+        When('the two implementations are compared over generated starting counts')(
+          'report',
+          (s) =>
+            differentialReport(s.implementations.reference, s.implementations.candidate, integers, sameOutcome, {
               runBudget: 1000,
             }),
-          )),
-        Then('the comparison fails at the smallest starting count with both counts shown')((s) => {
-          const report = disparityReportOf(s.outcome)
-          expect(report).toContain('Input: 0')
-          expect(report).toContain('Output A: 2')
-          expect(report).toContain('Output B: 1')
-        }),
-        And('the schedule in the report carries the single choice that decides the race')((s) => {
-          const report = disparityReportOf(s.outcome)
-          expect(report).toMatch(/schedule: search with 1 preemption, deviations 1,/)
-          expect(report).toMatch(/path \[.+\]/)
-        }),
+        ),
+        Then('the comparison fails at the smallest starting count with both counts and the deciding schedule shown')(
+          (s, expect) =>
+            expect(s.report).toEqual({
+              holds: false,
+              report: expect.stringMatching(
+                /Input: 0[\s\S]*Output A: 2[\s\S]*Output B: 1[\s\S]*schedule: search with 1 preemption, deviations 1,[\s\S]*path \[.+\]/,
+              ),
+            }),
+        ),
       ),
     )
 
@@ -100,13 +94,11 @@ Feature('Proving two implementations agree under generated schedules', { timeout
           'implementations',
           () => Effect.succeed({ reference: atomicBumps, candidate: atomicBumpsByModify }),
         ),
-        When('the two implementations are compared over generated starting counts')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.implementations.reference, s.implementations.candidate, integers, sameOutcome),
-          )),
-        Then('the comparison holds for every generated starting count')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isSuccess)
-        }),
+        When('the two implementations are compared over generated starting counts')(
+          'report',
+          (s) => differentialReport(s.implementations.reference, s.implementations.candidate, integers, sameOutcome),
+        ),
+        Then('the comparison holds for every generated starting count')((s, expect) => reportCheck(s.report, expect)),
       ),
     )
     scenario(
@@ -120,13 +112,11 @@ Feature('Proving two implementations agree under generated schedules', { timeout
               candidate: (x: number) => Effect.promise(() => Promise.resolve(x + x)),
             }),
         ),
-        When('the parity check runs over generated integers')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
-          )),
-        Then('the asynchronous run completes without complaint')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isSuccess)
-        }),
+        When('the parity check runs over generated integers')(
+          'report',
+          (s) => differentialReport(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
+        ),
+        Then('the asynchronous run completes without complaint')((s, expect) => reportCheck(s.report, expect)),
       ),
     )
 
@@ -141,17 +131,16 @@ Feature('Proving two implementations agree under generated schedules', { timeout
               candidate: (x: number) => Effect.promise(() => Promise.resolve(x * 2 + 1)),
             }),
         ),
-        When('the parity check runs over generated integers')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
-          )),
-        Then('the report names zero as the minimal input with both sides shown')((s) => {
-          const report = disparityReportOf(s.outcome)
-          expect(report).toContain('Input: 0')
-          expect(report).toContain('Output A: 0')
-          expect(report).toContain('Output B: 1')
-          expect(report).toContain('seed')
-        }),
+        When('the parity check runs over generated integers')(
+          'report',
+          (s) => differentialReport(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
+        ),
+        Then('the report names zero as the minimal input with both sides and its seed')((s, expect) =>
+          expect(s.report).toEqual({
+            holds: false,
+            report: expect.stringMatching(/Input: 0[\s\S]*Output A: 0[\s\S]*Output B: 1[\s\S]*seed/),
+          })
+        ),
       ),
     )
 
@@ -174,13 +163,11 @@ Feature('Proving two implementations agree under generated schedules', { timeout
                 }),
             }),
         ),
-        When('the parity check runs over generated integers')('outcome', (s) =>
-          Effect.exit(
-            runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
-          )),
-        Then('the deferred run completes without complaint')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isSuccess)
-        }),
+        When('the parity check runs over generated integers')(
+          'report',
+          (s) => differentialReport(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
+        ),
+        Then('the deferred run completes without complaint')((s, expect) => reportCheck(s.report, expect)),
       ),
     )
   })
