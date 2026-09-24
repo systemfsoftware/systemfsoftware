@@ -2,6 +2,11 @@
   "$schema": "https://v2-10-1.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
+    // The kernel's runtime needs no workspace package. Its only building workspace dev dependency is the
+    // Gherkin runner its tests use, which depends on the kernel through effect-spec-runtime: ^build would cycle.
+    "build": {
+      "dependsOn": []
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
