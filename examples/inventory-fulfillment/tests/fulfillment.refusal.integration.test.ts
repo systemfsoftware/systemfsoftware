@@ -1,8 +1,7 @@
-import { it } from '@effect/vitest'
+import { describe, expect, it } from '@effect/vitest'
 import { Fulfillment } from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract } from '@systemfsoftware/trace-spec'
 import { Effect } from 'effect'
-import { describe, expect } from 'vitest'
 import {
   allocateContract,
   disparityOf,

@@ -88,35 +88,18 @@ const nonEmpty = (value: string): boolean => value.length > 0
 const positiveInteger = (value: number): boolean => Number.isSafeInteger(value) && value > 0
 const nonNegativeInteger = (value: number): boolean => Number.isSafeInteger(value) && value >= 0
 
-const skuIdVerdicts = (candidates: readonly string[]): boolean =>
-  Arr.every(candidates, (candidate) => Result.isSuccess(S.decodeResult(SkuId)(candidate)) === nonEmpty(candidate))
+const verdictsAgainst = <Value>(
+  decodes: (value: Value) => boolean,
+  shape: (value: Value) => boolean,
+  candidates: readonly Value[],
+): boolean => Arr.every(candidates, (candidate) => decodes(candidate) === shape(candidate))
 
-const warehouseIdVerdicts = (candidates: readonly string[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(WarehouseId)(candidate)) === nonEmpty(candidate),
-  )
-
-const lotIdVerdicts = (candidates: readonly string[]): boolean =>
-  Arr.every(candidates, (candidate) => Result.isSuccess(S.decodeResult(LotId)(candidate)) === nonEmpty(candidate))
-
-const versionVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(Version)(candidate)) === positiveInteger(candidate),
-  )
-
-const quantityVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(Quantity)(candidate)) === positiveInteger(candidate),
-  )
-
-const quantityOnHandVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(QuantityOnHand)(candidate)) === nonNegativeInteger(candidate),
-  )
+const skuIdDecodes = (value: string): boolean => Result.isSuccess(S.decodeResult(SkuId)(value))
+const warehouseIdDecodes = (value: string): boolean => Result.isSuccess(S.decodeResult(WarehouseId)(value))
+const lotIdDecodes = (value: string): boolean => Result.isSuccess(S.decodeResult(LotId)(value))
+const versionDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(Version)(value))
+const quantityDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(Quantity)(value))
+const quantityOnHandDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(QuantityOnHand)(value))
 
 const cursorSeeds = [
   '',
@@ -140,64 +123,64 @@ const stockCursorShape = (token: string): boolean =>
     onSuccess: (plain) => Result.isSuccess(S.decodeResult(jsonPosition)(plain)),
   })
 
-const stockCursorVerdicts = (candidates: readonly string[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(StockCursor)(candidate)) === stockCursorShape(candidate),
-  )
+const stockCursorDecodes = (token: string): boolean => Result.isSuccess(S.decodeResult(StockCursor)(token))
 
 const pageSizeSeeds = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 101, 1, 100]
 
 const pageSizeShape = (value: number): boolean => positiveInteger(value) && value <= 100
 
-const pageSizeVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(StockPageSize)(candidate)) === pageSizeShape(candidate),
-  )
+const stockPageSizeDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(StockPageSize)(value))
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so a static
   // import would enter the published module graph (packages/effect-memfs/src/driver-values.ts).
   const { it } = await import('@effect/vitest')
 
-  it.prop('∀s_SkuIdRefusal_≡NonEmpty', [S.String], ([value]) => skuIdVerdicts(Arr.append(identifierSeeds, value)))
+  it.prop(
+    '∀s_SkuIdRefusal_≡NonEmpty',
+    { of: [S.String], subject: skuIdDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, nonEmpty, Arr.append(identifierSeeds, value)),
+  )
 
   it.prop(
     '∀s_WarehouseIdRefusal_≡NonEmpty',
-    [S.String],
-    ([value]) => warehouseIdVerdicts(Arr.append(identifierSeeds, value)),
+    { of: [S.String], subject: warehouseIdDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, nonEmpty, Arr.append(identifierSeeds, value)),
   )
 
-  it.prop('∀s_LotIdRefusal_≡NonEmpty', [S.String], ([value]) => lotIdVerdicts(Arr.append(identifierSeeds, value)))
+  it.prop(
+    '∀s_LotIdRefusal_≡NonEmpty',
+    { of: [S.String], subject: lotIdDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, nonEmpty, Arr.append(identifierSeeds, value)),
+  )
 
   it.prop(
     '∀n_VersionRefusal_≡Positive',
-    [S.Finite],
-    ([value]) => versionVerdicts(Arr.append(positiveIntegerSeeds, value)),
+    { of: [S.Finite], subject: versionDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, positiveInteger, Arr.append(positiveIntegerSeeds, value)),
   )
 
   it.prop(
     '∀n_QuantityRefusal_≡Positive',
-    [S.Finite],
-    ([value]) => quantityVerdicts(Arr.append(positiveIntegerSeeds, value)),
+    { of: [S.Finite], subject: quantityDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, positiveInteger, Arr.append(positiveIntegerSeeds, value)),
   )
 
   it.prop(
     '∀n_QuantityOnHandRefusal_≡NonNegative',
-    [S.Finite],
-    ([value]) => quantityOnHandVerdicts(Arr.append(nonNegativeIntegerSeeds, value)),
+    { of: [S.Finite], subject: quantityOnHandDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, nonNegativeInteger, Arr.append(nonNegativeIntegerSeeds, value)),
   )
 
   it.prop(
     '∀s_StockCursorRefusal_≡Base64JsonPosition',
-    [S.String],
-    ([value]) => stockCursorVerdicts(Arr.append(cursorSeeds, value)),
+    { of: [S.String], subject: stockCursorDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, stockCursorShape, Arr.append(cursorSeeds, value)),
   )
 
   it.prop(
     '∀n_StockPageSizeRefusal_≡BoundedPositive',
-    [S.Finite],
-    ([value]) => pageSizeVerdicts(Arr.append(pageSizeSeeds, value)),
+    { of: [S.Finite], subject: stockPageSizeDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, pageSizeShape, Arr.append(pageSizeSeeds, value)),
   )
 }

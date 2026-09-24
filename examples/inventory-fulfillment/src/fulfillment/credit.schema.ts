@@ -46,36 +46,36 @@ const nonNegativeFinite = (value: number): boolean => Number.isFinite(value) && 
 const inScoreRange = (value: number): boolean => value >= 0 && value <= 100
 const boundedInteger = (value: number): boolean => Number.isInteger(value) && inScoreRange(value)
 
-const moneyVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(Money)(candidate)) === nonNegativeFinite(candidate),
-  )
+const moneyDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(Money)(value))
+const amountDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(Amount)(value))
+const fraudRiskScoreDecodes = (value: number): boolean => Result.isSuccess(S.decodeResult(FraudRiskScore)(value))
 
-const amountVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(Amount)(candidate)) === nonNegativeFinite(candidate),
-  )
-
-const fraudRiskScoreVerdicts = (candidates: readonly number[]): boolean =>
-  Arr.every(
-    candidates,
-    (candidate) => Result.isSuccess(S.decodeResult(FraudRiskScore)(candidate)) === boundedInteger(candidate),
-  )
+const verdictsAgainst = (
+  decodes: (value: number) => boolean,
+  shape: (value: number) => boolean,
+  candidates: readonly number[],
+): boolean => Arr.every(candidates, (candidate) => decodes(candidate) === shape(candidate))
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so a static
   // import would enter the published module graph (packages/effect-memfs/src/driver-values.ts).
   const { it } = await import('@effect/vitest')
 
-  it.prop('∀n_MoneyRefusal_≡NonNegative', [S.Finite], ([value]) => moneyVerdicts(Arr.append(amountSeeds, value)))
+  it.prop(
+    '∀n_MoneyRefusal_≡NonNegative',
+    { of: [S.Finite], subject: moneyDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, nonNegativeFinite, Arr.append(amountSeeds, value)),
+  )
 
-  it.prop('∀n_AmountRefusal_≡NonNegative', [S.Finite], ([value]) => amountVerdicts(Arr.append(amountSeeds, value)))
+  it.prop(
+    '∀n_AmountRefusal_≡NonNegative',
+    { of: [S.Finite], subject: amountDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, nonNegativeFinite, Arr.append(amountSeeds, value)),
+  )
 
   it.prop(
     '∀n_FraudRiskScoreRefusal_∈Bounds',
-    [S.Finite],
-    ([value]) => fraudRiskScoreVerdicts(Arr.append(fraudRiskScoreSeeds, value)),
+    { of: [S.Finite], subject: fraudRiskScoreDecodes, runs: 100 },
+    (subject, [value]) => verdictsAgainst(subject, boundedInteger, Arr.append(fraudRiskScoreSeeds, value)),
   )
 }
