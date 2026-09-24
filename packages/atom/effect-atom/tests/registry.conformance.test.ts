@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Atom, Registry } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Context, Effect, Fiber, Layer, Match, Option, Scheduler, Scope } from 'effect'
 
 import {
@@ -119,26 +119,37 @@ const writtenThrough = (graph: RegistryGraph, command: RegistryCommand): number 
 const runRegistryCommand = (command: RegistryCommand): Effect.Effect<number | undefined, never, Graph> =>
   Effect.flatMap(Graph, (graph) => Effect.sync(() => writtenThrough(graph, command)))
 
-const registryCheck = (spec: { readonly fibers: number; readonly operations: number }) =>
-  Conformance.linearizable(graphLayer, {
+const CONCURRENCY_BOUND = {
+  preemptions: 2,
+  maxSchedules: 200_000,
+  timeoutMs: 60_000,
+  now: () => performance.now(),
+} as const
+
+const registryCheck = (
+  subject: Layer.Layer<Graph>,
+  spec: { readonly fibers: number; readonly operations: number },
+) =>
+  Conformance.linearizable(subject, {
     commands: RegistryCommand,
     model: registryModel,
     run: runRegistryCommand,
     fibers: spec.fibers,
     operations: spec.operations,
-    preemptions: 1,
-    maxSchedules: 2000,
+    ...CONCURRENCY_BOUND,
   })
 
-const derivedCheck = (spec: { readonly fibers: number; readonly operations: number }) =>
-  Conformance.linearizable(graphLayer, {
+const derivedCheck = (
+  subject: Layer.Layer<Graph>,
+  spec: { readonly fibers: number; readonly operations: number },
+) =>
+  Conformance.linearizable(subject, {
     commands: DerivedCommand,
     model: derivedModel,
     run: runRegistryCommand,
     fibers: spec.fibers,
     operations: spec.operations,
-    preemptions: 1,
-    maxSchedules: 2000,
+    ...CONCURRENCY_BOUND,
   })
 
 interface SubscriptionHandle {
@@ -197,8 +208,11 @@ const runSubscriptionCommand = (
 ): Effect.Effect<ReadonlyArray<number>, never, Subscriptions> =>
   Effect.flatMap(Subscriptions, (handle) => Effect.sync(() => notifiedThrough(handle, command)))
 
-const subscriptionCheck = (spec: { readonly sequences: number; readonly operations: number }) =>
-  Conformance.sequential(subscriptionLayer, {
+const subscriptionCheck = (
+  subject: Layer.Layer<Subscriptions>,
+  spec: { readonly sequences: number; readonly operations: number },
+) =>
+  Conformance.sequential(subject, {
     commands: SubscriptionCommand,
     model: subscriptionModel,
     run: runSubscriptionCommand,
@@ -266,8 +280,11 @@ const runLifetimeCommand = (
   command: LifetimeCommand,
 ): Effect.Effect<void | boolean, never, Lifetimes> =>
   Effect.flatMap(Lifetimes, (handle) => livedThrough(handle, command))
-const lifetimeCheck = (spec: { readonly sequences: number; readonly operations: number }) =>
-  Conformance.sequential(lifetimeLayer, {
+const lifetimeCheck = (
+  subject: Layer.Layer<Lifetimes>,
+  spec: { readonly sequences: number; readonly operations: number },
+) =>
+  Conformance.sequential(subject, {
     commands: LifetimeCommand,
     model: lifetimeModel,
     run: runLifetimeCommand,
@@ -283,41 +300,47 @@ const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
     }),
   )
 
-Feature('A registry that behaves like its model under concurrent readers and writers')
-  .live('the scenario drives its own simulation-kernel run, and a conformance check cannot run inside one')
-  .body(({ scenario }) => {
-    scenario(
-      'Two callers reading and writing keep every schedule with the model',
-      Gherkin.Do.pipe(
-        Given('a registry built on the run that steps it, with a source and a doubled reader')(
-          'checked',
-          () => registryCheck({ fibers: 2, operations: 4 }),
+Feature('A registry that keeps readers, writers, listeners, and idle entries consistent', { timeout: 120_000 })
+  .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
+  .body(({ scenario, scenarioOutline }) => {
+    scenarioOutline(
+      '<writers> reading and writing one counter always match them taking turns one after the other',
+      [
+        { callers: 2, operations: 4, writers: 'Ada and Bo' },
+        { callers: 3, operations: 1, writers: 'Ada, Bo, and Cy' },
+      ] as const,
+      (row) =>
+        Gherkin.Do.pipe(
+          Given('a counter starting at 0 and a reader showing double the counter')(
+            'subject',
+            () => Effect.succeed(graphLayer),
+          ),
+          When(`${row.writers} read the counter and write new values`)(
+            'report',
+            (s) => registryCheck(s.subject, { fibers: row.callers, operations: row.operations }),
+          ),
+          Then(`every interleaving matches ${row.writers} taking turns one after the other`)((s) => {
+            passHistories(s.report)
+          }),
         ),
-        Then('every explored schedule matches some sequential order of the model')((s) => {
-          passHistories(s.checked)
-        }),
-      ),
     )
 
     scenario(
-      'Three callers reading and writing keep every schedule with the model',
+      'A doubling reader only ever shows 0, 2, or 4 while Ada and Bo write',
       Gherkin.Do.pipe(
-        Given('a registry built on the run that steps it, shared across one more caller')(
-          'checked',
-          () => registryCheck({ fibers: 3, operations: 3 }),
+        Given('a counter starting at 0 and a reader showing double the counter')(
+          'subject',
+          () => Effect.succeed(graphLayer),
         ),
-        Then('every explored schedule matches some sequential order of the model')((s) => {
-          passHistories(s.checked)
+        When('Ada writes 1 and Bo writes 2 while the doubled counter is read')(
+          'report',
+          (s) => derivedCheck(s.subject, { fibers: 2, operations: 2 }),
+        ),
+        Then('the reader only ever shows 0, 2, or 4')((s) => {
+          passHistories(s.report)
         }),
-      ),
-    )
-
-    scenario(
-      'Two callers reading a doubling reader while another overwrites the source',
-      Gherkin.Do.pipe(
-        Given('a doubled reader read beside a writer')('checked', () => derivedCheck({ fibers: 2, operations: 4 })),
-        Then('every doubling observation is either the old doubled value or the new doubled one')((s) => {
-          passHistories(s.checked)
+        And('every interleaving matches Ada and Bo taking turns one after the other')((s) => {
+          passHistories(s.report)
         }),
       ),
     )
@@ -325,25 +348,38 @@ Feature('A registry that behaves like its model under concurrent readers and wri
     scenario(
       'A listener subscribed before a write hears the write exactly once',
       Gherkin.Do.pipe(
-        Given('a listener registered ahead of the writes it hears')(
-          'checked',
-          () => subscriptionCheck({ sequences: 50, operations: 8 }),
+        Given('a counter starting at 0 with a listener ready to subscribe')(
+          'subject',
+          () => Effect.succeed(subscriptionLayer),
+        ),
+        When('the listener subscribes and fifty rounds of writes arrive')(
+          'report',
+          (s) => subscriptionCheck(s.subject, { sequences: 50, operations: 8 }),
         ),
         Then('every write is heard exactly once, in the order it happened')((s) => {
-          passHistories(s.checked)
+          passHistories(s.report)
         }),
       ),
     )
 
     scenario(
-      'An unmounted entry with an idle deadline leaves the registry once the deadline passes',
+      'An entry kept for a while after its last reader leaves is gone once the wait passes',
       Gherkin.Do.pipe(
-        Given('a mounted entry released before its idle deadline')(
-          'checked',
-          () => lifetimeCheck({ sequences: 60, operations: 12 }),
+        Given('an entry mounted with a reader holding it')(
+          'subject',
+          () => Effect.succeed(lifetimeLayer),
         ),
-        Then('the released entry is gone after the deadline, and a held entry never leaves')((s) => {
-          passHistories(s.checked)
+        When(
+          'sixty rounds of mounting, letting the reader leave, waiting past the keep-alive, and checking the entry are run',
+        )(
+          'report',
+          (s) => lifetimeCheck(s.subject, { sequences: 60, operations: 12 }),
+        ),
+        Then('a released entry is gone once the wait passes')((s) => {
+          passHistories(s.report)
+        }),
+        And('a held entry is never gone')((s) => {
+          passHistories(s.report)
         }),
       ),
     )
