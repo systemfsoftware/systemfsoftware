@@ -105,3 +105,5 @@ packages:
   - packages/toolchain/*
   - omp/plugins/*
   - examples/*
+patchedDependencies:
+  effect@4.0.0-rc.116: patches/effect@4.0.0-rc.116.patch
