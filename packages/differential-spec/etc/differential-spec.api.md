@@ -4,21 +4,31 @@
 
 ```ts
 
+import { Asserted } from '@effect/vitest';
+import { Check } from '@effect/vitest';
 import { Effect } from 'effect';
 import { Exit } from 'effect';
+import { Expect } from '@effect/vitest';
 import * as fc from 'fast-check';
-import { Schema } from 'effect';
-import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
 export namespace Differential {
     export { Comparison, DifferentialBuilder, compare };
 }
 
-// Warning: (ae-forgotten-export) The symbol "DisparityError_base" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export class DisparityError extends DisparityError_base {}
+export interface DifferentialReport {
+    // (undocumented)
+    readonly holds: boolean;
+    // (undocumented)
+    readonly report: string;
+}
+
+// @public (undocumented)
+export const differentialReport: {
+    <Input, OutputA, OutputB, E>(targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, options?: DualExecutionSupervisorOptions): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<DifferentialReport, never>;
+    <Input, OutputA, OutputB, E>(targetA: (input: Input) => Effect.Effect<OutputA, E>, targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, options?: DualExecutionSupervisorOptions): Effect.Effect<DifferentialReport, never>;
+};
 
 // @public (undocumented)
 export interface DisparityRecord<Input = unknown> {
@@ -34,7 +44,7 @@ export interface DisparityRecord<Input = unknown> {
     readonly trace: string;
 }
 
-// @public
+// @public (undocumented)
 export interface DualExecutionSupervisorOptions {
     // (undocumented)
     readonly hostBound?: HostBound;
@@ -59,6 +69,12 @@ export namespace Metamorphic {
 }
 
 // @public (undocumented)
+export const metamorphicReport: {
+    <Input, Output, E>(arb: fc.Arbitrary<Input>, transformInput: (input: Input) => Input, relation: (outputA: Output, outputB: Output) => boolean, options?: DualExecutionSupervisorOptions): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<DifferentialReport, never>;
+    <Input, Output, E>(system: (input: Input) => Effect.Effect<Output, E>, arb: fc.Arbitrary<Input>, transformInput: (input: Input) => Input, relation: (outputA: Output, outputB: Output) => boolean, options?: DualExecutionSupervisorOptions): Effect.Effect<DifferentialReport, never>;
+};
+
+// @public (undocumented)
 export type RelationalOracle<OutputA, OutputB> = (outputA: OutputA, outputB: OutputB) => boolean;
 
 // @public (undocumented)
@@ -68,15 +84,21 @@ export const renderExit: <A, E>(exit: Exit.Exit<A, E>) => string;
 export const renderUnknown: <V = unknown>(value: V) => string;
 
 // @public (undocumented)
+export const reportCheck: {
+    (expect: Expect): (report: DifferentialReport) => Check;
+    (report: DifferentialReport, expect: Expect): Check;
+};
+
+// @public (undocumented)
 export const runDifferentialWithShrink: {
-    <Input, OutputA, OutputB, E>(targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, options?: DualExecutionSupervisorOptions): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<void, DisparityError>;
-    <Input, OutputA, OutputB, E>(targetA: (input: Input) => Effect.Effect<OutputA, E>, targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, options?: DualExecutionSupervisorOptions): Effect.Effect<void, DisparityError>;
+    <Input, OutputA, OutputB, E>(targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, expect: Expect, options?: DualExecutionSupervisorOptions): (targetA: (input: Input) => Effect.Effect<OutputA, E>) => Effect.Effect<void, never, Asserted>;
+    <Input, OutputA, OutputB, E>(targetA: (input: Input) => Effect.Effect<OutputA, E>, targetB: (input: Input) => Effect.Effect<OutputB, E>, arb: fc.Arbitrary<Input>, oracle: (outputA: OutputA, outputB: OutputB) => boolean, expect: Expect, options?: DualExecutionSupervisorOptions): Effect.Effect<void, never, Asserted>;
 };
 
 // @public (undocumented)
 export const runMetamorphicWithShrink: {
-    <Input, Output, E>(arb: fc.Arbitrary<Input>, transformInput: (input: Input) => Input, relation: (outputA: Output, outputB: Output) => boolean, options?: DualExecutionSupervisorOptions): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<void, DisparityError>;
-    <Input, Output, E>(system: (input: Input) => Effect.Effect<Output, E>, arb: fc.Arbitrary<Input>, transformInput: (input: Input) => Input, relation: (outputA: Output, outputB: Output) => boolean, options?: DualExecutionSupervisorOptions): Effect.Effect<void, DisparityError>;
+    <Input, Output, E>(arb: fc.Arbitrary<Input>, transformInput: (input: Input) => Input, relation: (outputA: Output, outputB: Output) => boolean, expect: Expect, options?: DualExecutionSupervisorOptions): (system: (input: Input) => Effect.Effect<Output, E>) => Effect.Effect<void, never, Asserted>;
+    <Input, Output, E>(system: (input: Input) => Effect.Effect<Output, E>, arb: fc.Arbitrary<Input>, transformInput: (input: Input) => Input, relation: (outputA: Output, outputB: Output) => boolean, expect: Expect, options?: DualExecutionSupervisorOptions): Effect.Effect<void, never, Asserted>;
 };
 
 // (No @packageDocumentation comment for this package)

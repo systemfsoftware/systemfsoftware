@@ -1,4 +1,4 @@
-import { it } from '@effect/vitest'
+import { it, VitestTestContext } from '@effect/vitest'
 import { Effect } from 'effect'
 import * as fc from 'fast-check'
 import type { DualExecutionSupervisorOptions } from '../core/DualExecutionSupervisor.js'
@@ -22,13 +22,13 @@ export const compare = <Input, OutputA, OutputB, E>(
 ): DifferentialBuilder<Input, OutputA, OutputB> => ({
   on: (arb, options) => ({
     assert: (oracle) => {
-      it.effect(
-        comparison.name,
-        (ctx) =>
-          Effect.andThen(
-            announceHostBound(options)(ctx),
-            runDifferentialWithShrink(comparison.reference, comparison.candidate, arb, oracle, options),
-          ),
+      it(
+        `${comparison.name}`,
+        function*({ expect }) {
+          const ctx = yield* VitestTestContext
+          yield* announceHostBound(options)(ctx)
+          yield* runDifferentialWithShrink(comparison.reference, comparison.candidate, arb, oracle, expect, options)
+        },
         checkOptions(options),
       )
     },
