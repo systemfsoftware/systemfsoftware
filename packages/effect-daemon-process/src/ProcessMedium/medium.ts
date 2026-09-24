@@ -94,7 +94,7 @@ const isProcessStarted = (evidence: Supervisor.Medium.Started): evidence is Proc
   ProcessStartedTypeId in evidence
 
 const processOf = (evidence: Supervisor.Medium.Started): Option.Option<ProcessStarted> =>
-  Option.filter(Option.some(evidence), isProcessStarted)
+  Option.liftPredicate(evidence, isProcessStarted)
 
 /**
  * A signal name reaches the medium only through the failure `exitCode` raises, so the

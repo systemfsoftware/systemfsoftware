@@ -40,7 +40,7 @@ const isWorkloadStarted = (evidence: Supervisor.Medium.Started): evidence is Wor
   WorkloadTypeId in evidence
 
 const workloadStartedOf = (evidence: Supervisor.Medium.Started): Option.Option<WorkloadStarted> =>
-  Option.filter(Option.some(evidence), isWorkloadStarted)
+  Option.liftPredicate(evidence, isWorkloadStarted)
 
 const resourceOf = (workload: MicroVMWorkload, options: MicroVMMediumOptions) =>
   Option.match(Option.fromNullishOr(options.memoryMb), {

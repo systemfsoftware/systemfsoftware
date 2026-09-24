@@ -39,7 +39,7 @@ const isClusterStarted = (evidence: Supervisor.Medium.Started): evidence is Clus
   ClusterStartedTypeId in evidence
 
 const clusterOf = (evidence: Supervisor.Medium.Started): Option.Option<ClusterStarted> =>
-  Option.filter(Option.some(evidence), isClusterStarted)
+  Option.liftPredicate(evidence, isClusterStarted)
 
 const shutdownTermination: Supervisor.Medium.TerminationReason = { _tag: 'Shutdown' }
 const normalTermination: Supervisor.Medium.TerminationReason = { _tag: 'Normal' }

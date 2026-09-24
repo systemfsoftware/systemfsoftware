@@ -43,7 +43,7 @@ const fiberStarted = (
 
 const isFiberStarted = (evidence: Started): evidence is FiberStarted => FiberStartedTypeId in evidence
 
-const fiberOf = (evidence: Started): Option.Option<FiberStarted> => Option.filter(Option.some(evidence), isFiberStarted)
+const fiberOf = (evidence: Started): Option.Option<FiberStarted> => Option.liftPredicate(evidence, isFiberStarted)
 
 const normalTermination: TerminationReason = { _tag: 'Normal' }
 

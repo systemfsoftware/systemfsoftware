@@ -1,5 +1,5 @@
 import { defineRule } from '@oxlint/plugins'
-import type { Context, ESTree } from '@oxlint/plugins'
+import type { Context } from '@oxlint/plugins'
 
 import {
   type BoundaryFunction,
@@ -7,6 +7,7 @@ import {
   isTestOrFixturePath,
   originMemberIs,
   originOf,
+  propertyNameIs,
   recordFunctionsOf,
   recoveryCalleeName,
   typeRegionsOf,
@@ -30,10 +31,6 @@ interface MediumPort {
   readonly fn: BoundaryFunction
   readonly port: string
 }
-
-const propertyNameIs = (node: ESTree.Node, name: string): boolean =>
-  node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' &&
-  node.property.name === name
 
 /**
  * The `Medium.make` calls of the file and the port functions their options

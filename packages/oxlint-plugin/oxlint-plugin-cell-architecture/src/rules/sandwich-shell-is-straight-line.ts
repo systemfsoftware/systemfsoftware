@@ -9,6 +9,7 @@ import {
   isTestOrFixturePath,
   originMemberIs,
   originOf,
+  propertyNameIs,
   recordFunctionsOf,
   typeRegionsOf,
   walkSubtree,
@@ -47,10 +48,6 @@ interface SandwichCell {
   readonly readNode: ESTree.Node | null
   readonly handlersNode: ESTree.Node | null
 }
-
-const propertyNameIs = (node: ESTree.Node, name: string): boolean =>
-  node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' &&
-  node.property.name === name
 
 const objectOf = (node: ESTree.Node): ESTree.Node | null => node.type === 'MemberExpression' ? node.object : null
 

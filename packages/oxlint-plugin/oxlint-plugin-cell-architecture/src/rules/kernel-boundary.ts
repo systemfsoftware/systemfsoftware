@@ -19,6 +19,10 @@ export type BoundaryFunction =
 
 const isWalkable = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
+export const propertyNameIs = (node: ESTree.Node, name: string): boolean =>
+  node.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier' &&
+  node.property.name === name
+
 export const isArrowFunction = (node: ESTree.Node): node is ESTree.ArrowFunctionExpression =>
   node.type === 'ArrowFunctionExpression'
 
@@ -145,7 +149,7 @@ interface ScopeLike {
 }
 
 const isScopeLike = (value: unknown): value is ScopeLike =>
-  typeof value === 'object' && value !== null && 'references' in value && 'upper' in value
+  isWalkable(value) && 'references' in value && 'upper' in value
 
 /**
  * The variable a reference resolves to, found by identity in the reference's

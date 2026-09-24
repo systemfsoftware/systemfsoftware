@@ -119,12 +119,9 @@ const commandOf = (command: Command): ObservedCommand =>
   )
 
 const commandsOf = (commands: Commands): ReadonlyArray<ObservedCommand> =>
-  Arr.appendAll(
-    Arr.appendAll(
-      Arr.appendAll(Arr.map(commands.stops, commandOf), Arr.map(commands.starts, commandOf)),
-      Arr.appendAll(Arr.map(commands.arms, commandOf), Arr.map(commands.replies, commandOf)),
-    ),
-    Arr.map(commands.terminates, commandOf),
+  Arr.flatMap(
+    [commands.stops, commands.starts, commands.arms, commands.replies, commands.terminates],
+    (bucket) => Arr.map(bucket, commandOf),
   )
 
 const decisionOf = (decision: Decision): ObservedDecision =>
