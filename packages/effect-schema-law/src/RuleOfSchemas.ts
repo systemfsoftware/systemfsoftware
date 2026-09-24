@@ -1,5 +1,5 @@
 import { it } from '@effect/vitest'
-import { Equivalence, Function, Option, Schema, Schema as S, SchemaAST } from 'effect'
+import { Equivalence, Function, Match, Option, Schema, Schema as S, SchemaAST } from 'effect'
 
 type CodecPair<A, I> = {
   readonly decode: (value: I) => Option.Option<A>
@@ -92,29 +92,13 @@ const SINGLE_ATOMS: ReadonlyArray<(ast: SchemaAST.AST) => boolean> = [
 
 const isAtomicSingle = (ast: SchemaAST.AST): boolean => SINGLE_ATOMS.some((isAtom) => isAtom(ast))
 
-const singleValueIfAtom = (ast: SchemaAST.AST): boolean | undefined => isAtomicSingle(ast) ? true : undefined
-
-const singleValueIfSuspend = (ast: SchemaAST.AST, path: Set<SchemaAST.AST>): boolean | undefined =>
-  SchemaAST.isSuspend(ast) ? singleValueWithin(ast.thunk(), path) : undefined
-
-const singleValueIfUnion = (ast: SchemaAST.AST, path: Set<SchemaAST.AST>): boolean | undefined =>
-  SchemaAST.isUnion(ast) ? singleUnionMember(ast, path) : undefined
-
-const singleValueIfObjects = (ast: SchemaAST.AST, path: Set<SchemaAST.AST>): boolean | undefined =>
-  SchemaAST.isObjects(ast) ? singleObject(ast, path) : undefined
-
-const singleValueIfDeclaration = (ast: SchemaAST.AST, path: Set<SchemaAST.AST>): boolean | undefined =>
-  SchemaAST.isDeclaration(ast) ? singleDeclaration(ast, path) : undefined
-
-const orElse = <A>(value: A | undefined, fallback: A): A => value !== undefined ? value : fallback
-
 const singleValueStep = (ast: SchemaAST.AST, path: Set<SchemaAST.AST>): boolean =>
-  orElse(
-    orElse(singleValueIfAtom(ast), singleValueIfSuspend(ast, path)),
-    orElse(
-      orElse(singleValueIfUnion(ast, path), singleValueIfObjects(ast, path)),
-      orElse(singleValueIfDeclaration(ast, path), false),
-    ),
+  Match.value(ast).pipe(
+    Match.when(SchemaAST.isSuspend, (suspend) => singleValueWithin(suspend.thunk(), path)),
+    Match.when(SchemaAST.isUnion, (union) => singleUnionMember(union, path)),
+    Match.when(SchemaAST.isObjects, (objects) => singleObject(objects, path)),
+    Match.when(SchemaAST.isDeclaration, (declaration) => singleDeclaration(declaration, path)),
+    Match.orElse(isAtomicSingle),
   )
 
 const singleValueWithin = (ast: SchemaAST.AST, path: Set<SchemaAST.AST>): boolean => {
@@ -144,8 +128,12 @@ const singleObject = (ast: SchemaAST.Objects, path: Set<SchemaAST.AST>): boolean
 const everyParameterSingle = (ast: SchemaAST.Declaration, path: Set<SchemaAST.AST>): boolean =>
   ast.typeParameters.every((parameter) => singleValueWithin(parameter, path))
 
+const encodingLinkOf = (ast: SchemaAST.Declaration): SchemaAST.Link | undefined => ast.encoding?.[0]
+
+const wrapsItsParameter = (ast: SchemaAST.Declaration): boolean => encodingLinkOf(ast)?.to === ast.typeParameters[0]
+
 const singleDeclaration = (ast: SchemaAST.Declaration, path: Set<SchemaAST.AST>): boolean =>
-  ast.typeParameters.length > 0 && everyParameterSingle(ast, path)
+  wrapsItsParameter(ast) && everyParameterSingle(ast, path)
 
 const isSingleInhabitant = (ast: SchemaAST.AST): boolean => singleValueWithin(ast, new Set<SchemaAST.AST>())
 
@@ -190,3 +178,34 @@ export const ruleOfSchemas: {
     )
   },
 )
+
+if (import.meta.vitest !== void 0) {
+  const Lit = S.Literal(1)
+
+  class WrappedLiteral extends S.Class<WrappedLiteral>('WrappedLiteral')({ a: Lit }) {}
+  class WrappedEmpty extends S.TaggedClass<WrappedEmpty>()('WrappedEmpty', {}) {}
+  class WrappedWide extends S.Class<WrappedWide>('WrappedWide')({ n: S.Int }) {}
+
+  const DECLARED_INHABITANCE: ReadonlyArray<{ readonly ast: SchemaAST.AST; readonly single: boolean }> = [
+    { ast: S.Option(Lit).ast, single: false },
+    { ast: S.Chunk(Lit).ast, single: false },
+    { ast: S.ReadonlySet(Lit).ast, single: false },
+    { ast: S.ReadonlyMap(S.Literal('a'), Lit).ast, single: false },
+    { ast: S.Result(Lit, S.Literal(2)).ast, single: false },
+    { ast: WrappedLiteral.ast, single: true },
+    { ast: WrappedEmpty.ast, single: true },
+    { ast: WrappedWide.ast, single: false },
+  ]
+
+  const DeclarationIndex = S.Int.pipe(S.check(S.isBetween({ minimum: 0, maximum: DECLARED_INHABITANCE.length - 1 })))
+
+  it.prop(
+    '∀s_DeclarationInhabitance_=Declared',
+    { of: [DeclarationIndex], subject: { isSingleInhabitant }, runs: RUNS },
+    (subject, [index]) => {
+      const declared = DECLARED_INHABITANCE[index]
+      if (declared === undefined) return false
+      return subject.isSingleInhabitant(declared.ast) === declared.single
+    },
+  )
+}
