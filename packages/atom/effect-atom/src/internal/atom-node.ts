@@ -5,11 +5,11 @@ import * as Option from 'effect/Option'
 import * as Pipeable from 'effect/Pipeable'
 import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
-import type * as Atom from './Atom.js'
-import { decideNodeFate, type NodeLifetimeInput } from './internal/NodeLifetime.js'
-import type { NodeFate } from './internal/NodeLifetime.schema.js'
-import type { RegistryImpl } from './Registry.js'
-import * as Result from './Result.js'
+import * as Result from '../async-result.js'
+import type * as Atom from '../Atom.js'
+import { decideNodeFate, type NodeLifetimeInput } from './node-lifetime.js'
+import type { NodeFate } from './node-lifetime.schema.js'
+import type { RegistryImpl } from './registry-engine.js'
 
 type AnyNode<A = unknown> = NodeImpl<A>
 type AnyLifetime<A = unknown> = Lifetime<A>
@@ -42,6 +42,9 @@ const NodeState: {
 }
 type NodeState = number
 
+/**
+ * @internal
+ */
 export class NodeImpl<A = unknown> extends Pipeable.Class {
   constructor(
     registry: RegistryImpl,
@@ -979,6 +982,9 @@ class WriteContextImpl<A> extends Pipeable.Class implements Atom.WriteContext<A>
 // batching
 // -----------------------------------------------------------------------------
 
+/**
+ * @internal
+ */
 export const BatchPhase: {
   readonly disabled: 0
   readonly collect: 1
@@ -989,8 +995,14 @@ export const BatchPhase: {
   commit: 2,
 }
 
+/**
+ * @internal
+ */
 export type BatchPhase = 0 | 1 | 2
 
+/**
+ * @internal
+ */
 export const batchState: {
   phase: BatchPhase
   depth: number
@@ -1003,6 +1015,9 @@ export const batchState: {
   notify: new Set(),
 }
 
+/**
+ * @internal
+ */
 export function runInternalBatch(f: () => void): void {
   batchState.phase = BatchPhase.collect
   batchState.depth++

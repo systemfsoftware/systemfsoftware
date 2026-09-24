@@ -14,7 +14,8 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
 import { readable, transform, writable } from './AtomCore.js'
-import * as Registry from './Registry.js'
+import type { RegistryImpl } from './internal/registry-engine.js'
+import * as Registry from './registry.handle.js'
 
 type AnyAtom<A = unknown> = Atom<A>
 type StringCodec<Type = unknown, Encoded extends string = string> = Schema.ConstraintCodec<Type, Encoded>
@@ -162,7 +163,7 @@ function makeSearchParam<S extends StringCodec = never>(
 
   function readWithWindow(get: {
     readonly addFinalizer: (f: () => void) => void
-    readonly registry: Registry.RegistryImpl
+    readonly registry: RegistryImpl
     readonly setSelf: (value: R) => void
     readonly self: () => Option.Option<R>
   }): R {

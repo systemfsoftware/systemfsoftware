@@ -60,9 +60,10 @@ export {
   WritableTypeId,
 } from './AtomCore.js'
 import * as Result from 'effect/Result'
-import { Current } from './Registry.js'
-import * as Registry from './Registry.js'
-import * as AsyncResult from './Result.js'
+import * as AsyncResult from './async-result.js'
+import { Current } from './current-registry.service.js'
+import type { RegistryImpl } from './internal/registry-engine.js'
+import * as Registry from './registry.handle.js'
 
 /**
  * Reactive value read by a registry, with metadata controlling caching, laziness, refresh behavior, and initial value targeting.
@@ -169,7 +170,7 @@ export interface AtomContext {
     readonly immediate?: boolean
   }): void
   isFn?: boolean | undefined
-  readonly registry: Registry.RegistryImpl
+  readonly registry: RegistryImpl
 }
 
 /**
@@ -2822,7 +2823,7 @@ export interface FnContext {
   subscribe<A>(this: FnContext, atom: Atom<A>, f: (_: A) => void, options?: {
     readonly immediate?: boolean
   }): void
-  readonly registry: Registry.RegistryImpl
+  readonly registry: RegistryImpl
 }
 
 /**

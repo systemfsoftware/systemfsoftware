@@ -1,4 +1,4 @@
-import type { NodeFate } from './NodeLifetime.schema.js'
+import type { NodeFate } from './node-lifetime.schema.js'
 
 /** @internal */
 export interface NodeLifetimeInput {

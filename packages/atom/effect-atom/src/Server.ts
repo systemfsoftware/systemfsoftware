@@ -9,9 +9,9 @@
  * @since 4.0.0
  */
 import { constant, dual } from 'effect/Function'
+import * as AsyncResult from './async-result.js'
 import type { Atom, Type } from './Atom.js'
-import * as Registry from './Registry.js'
-import * as AsyncResult from './Result.js'
+import * as Registry from './registry.handle.js'
 
 type AnyAtom<A = unknown> = Atom<A>
 type AnyAsyncResultAtom<A = unknown, E = unknown> = Atom<AsyncResult.Result<A, E>>

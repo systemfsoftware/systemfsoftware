@@ -27,9 +27,9 @@ import type * as HttpApiGroup from 'effect/unstable/httpapi/HttpApiGroup'
 import type * as HttpApiMiddleware from 'effect/unstable/httpapi/HttpApiMiddleware'
 import * as HttpApiSchema from 'effect/unstable/httpapi/HttpApiSchema'
 import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
+import * as AsyncResult from './async-result.js'
+import { schemaCodec } from './async-result.js'
 import * as Atom from './Atom.js'
-import * as AsyncResult from './Result.js'
-import { schemaCodec } from './ResultSchema.js'
 type AnyAtom<A = unknown> = Atom.Atom<A>
 type Top<A = unknown> = A
 type ReactivityKeys<K = unknown> = readonly K[] | ReadonlyRecord<string, readonly K[]>
