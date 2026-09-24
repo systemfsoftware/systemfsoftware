@@ -3,6 +3,7 @@ import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import type { World } from './pack-eval-world.fixture.js'
+import { ruleTextOf } from './pack-eval-world.fixture.js'
 
 type DatasetWriteEffect = Effect.Effect<
   void,
@@ -150,3 +151,80 @@ export const writeDatasetFilesOf = (options: {
         { discard: true },
       ),
   )
+
+export const writeCandidateTasksOf = (options: {
+  readonly world: World
+  readonly workDir: string
+}): DatasetWriteEffect =>
+  options.world.candidates.length === 0
+    ? Effect.void
+    : Effect.flatMap(
+      Path.Path,
+      (paths) =>
+        PackEval.DatasetFiles.writeJson(
+          paths.join(options.workDir, 'candidates.json'),
+          PackEval.CandidateTasks,
+          new PackEval.CandidateTasks({
+            version: 1,
+            candidates: options.world.candidates.map((candidate) =>
+              new PackEval.CandidateTask({
+                id: candidate.id,
+                text: candidate.text,
+                dimensions: candidate.dimensions,
+              })
+            ),
+          }),
+        ),
+    )
+
+export const writeSelectionTracesOf = (options: {
+  readonly world: World
+  readonly workDir: string
+}): DatasetWriteEffect =>
+  Effect.flatMap(
+    Path.Path,
+    (paths) =>
+      Effect.forEach(
+        options.world.traces,
+        (trace) =>
+          PackEval.DatasetFiles.writeJson(
+            paths.join(options.workDir, PackEval.DatasetFiles.traceRelativePathOf(trace.packId, trace.taskId)),
+            PackEval.SelectionTrace,
+            new PackEval.SelectionTrace({
+              taskId: trace.taskId,
+              packId: trace.packId,
+              loadedStems: trace.loadedStems,
+              requestedModel: trace.requestedModel,
+              servedModel: trace.servedModel,
+              instructionDigest: trace.instructionDigest,
+              rawResponse: trace.rawResponse,
+            }),
+          ),
+        { discard: true },
+      ),
+  )
+
+export const writePackRulesOf = (options: {
+  readonly world: World
+  readonly packsRoot: string
+}): DatasetWriteEffect =>
+  Effect.flatMap(Path.Path, (paths) =>
+    Effect.flatMap(FileSystem.FileSystem, (fileSystem) =>
+      Effect.andThen(
+        fileSystem.makeDirectory(options.packsRoot, { recursive: true }).pipe(Effect.orDie),
+        Effect.forEach(
+          options.world.packs,
+          (pack) =>
+            Effect.gen(function*() {
+              const dir = paths.join(options.packsRoot, pack.id)
+              yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
+              yield* Effect.forEach(
+                pack.rules,
+                (rule) =>
+                  fileSystem.writeFileString(paths.join(dir, `${rule.stem}.md`), ruleTextOf(rule)).pipe(Effect.orDie),
+                { discard: true },
+              )
+            }),
+          { discard: true },
+        ),
+      )))

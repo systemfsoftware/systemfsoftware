@@ -5,6 +5,7 @@ import { Effect, Layer, Match, Redacted, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { expect } from 'vitest'
 import {
+  completionReplyOf,
   type LoopbackReply,
   OpenRouterLoopback,
   openRouterLoopback,
@@ -71,17 +72,7 @@ const ruleRequestOf = (world: World): PackEval.RuleSelectionRequest => {
 
 const answerTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.LoadedStems))
 
-const completionOf = (content: string): LoopbackReply => ({
-  status: 200,
-  body: {
-    id: 'rule-selector-loopback',
-    object: 'chat.completion',
-    created: 1_760_000_000,
-    model: servedModel,
-    system_fingerprint: null,
-    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-  },
-})
+const answerOf = (content: string): LoopbackReply => completionReplyOf({ content, servedModel })
 type ReplyKind = 'answered' | 'refused'
 
 const refusedReply: LoopbackReply = {
@@ -91,7 +82,7 @@ const refusedReply: LoopbackReply = {
 
 const replyOf = (kind: ReplyKind, stems: ReadonlyArray<string>): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
   Match.value(kind).pipe(
-    Match.when('answered', () => Effect.map(answerTextOf({ loaded: stems }), completionOf)),
+    Match.when('answered', () => Effect.map(answerTextOf({ loaded: stems }), answerOf)),
     Match.when('refused', () => Effect.succeed(refusedReply)),
     Match.exhaustive,
   )

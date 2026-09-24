@@ -2,7 +2,9 @@ import { PackEval } from '@systemfsoftware/pack-eval'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import type { World, WorldRuleFile } from './pack-eval-world.fixture.js'
+import { writeDatasetFilesOf } from './pack-eval-dataset.fixture.js'
+import type { World } from './pack-eval-world.fixture.js'
+import { ruleTextOf } from './pack-eval-world.fixture.js'
 
 /**
  * The fingerprint area's interpreter: a world's checkout written to a scratch
@@ -31,18 +33,6 @@ const fingerprintIterations = 200
 const fingerprintConfidence = 0.95
 const fingerprintJudgeMinimum = 0.8
 
-const ruleTextOf = (rule: WorldRuleFile): string =>
-  [
-    '---',
-    `title: ${rule.title}`,
-    `applies_when: [${rule.appliesWhen.join(', ')}]`,
-    `tags: [${rule.tags.join(', ')}]`,
-    '---',
-    '',
-    rule.body,
-    '',
-  ].join('\n')
-
 const writePacks = (world: World, fileSystem: FileSystem.FileSystem, paths: Path.Path, baseDir: string) =>
   Effect.gen(function*() {
     const packDir = paths.join(baseDir, 'packs', world.packs[0]?.id ?? 'pack')
@@ -60,87 +50,6 @@ const writePacks = (world: World, fileSystem: FileSystem.FileSystem, paths: Path
     return packDir
   })
 
-const writeDataset = (world: World, fileSystem: FileSystem.FileSystem, paths: Path.Path, datasetDir: string) =>
-  Effect.gen(function*() {
-    yield* fileSystem.makeDirectory(datasetDir, { recursive: true })
-    const instruction = world.instruction
-    if (instruction !== undefined) {
-      yield* PackEval.DatasetFiles.writeJson(
-        paths.join(datasetDir, 'selector-instruction.json'),
-        PackEval.SelectorInstruction,
-        new PackEval.SelectorInstruction({
-          text: instruction.text,
-          provenance: new PackEval.SelectorProvenance({
-            consumer: instruction.consumer,
-            pluginVersion: instruction.pluginVersion,
-            sourcePath: instruction.sourcePath,
-          }),
-        }),
-      )
-    }
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'tasks.json'),
-      PackEval.TaskSet,
-      new PackEval.TaskSet({
-        version: 1,
-        tasks: world.tasks.map((task) =>
-          new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions })
-        ),
-      }),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'routing-labels.json'),
-      PackEval.RoutingLabels,
-      new PackEval.RoutingLabels({
-        version: 1,
-        entries: world.routingLabels.map((entry) =>
-          new PackEval.RoutingLabelEntry({
-            taskId: entry.taskId,
-            packId: entry.packId,
-            governing: entry.governing,
-            deferred: entry.deferred,
-          })
-        ),
-      }),
-    )
-    if (world.pairLabels.length > 0) {
-      yield* PackEval.DatasetFiles.writeJson(
-        paths.join(datasetDir, 'pair-labels.json'),
-        PackEval.PairLabels,
-        new PackEval.PairLabels({
-          version: 1,
-          entries: world.pairLabels.map((label) =>
-            new PackEval.PairLabel({
-              id: label.id,
-              taskId: label.taskId,
-              packId: label.packId,
-              ruleA: label.ruleA,
-              ruleB: label.ruleB,
-              split: label.split,
-              verdict: label.verdict,
-              origin: label.origin,
-              notes: label.notes,
-              ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
-            })
-          ),
-        }),
-      )
-    }
-    const prompt = world.judgePrompt
-    if (prompt !== undefined) {
-      yield* PackEval.DatasetFiles.writeJson(
-        paths.join(datasetDir, 'judge-prompt.json'),
-        PackEval.JudgePrompt,
-        new PackEval.JudgePrompt({
-          criterion: prompt.criterion,
-          passDefinition: prompt.passDefinition,
-          failDefinition: prompt.failDefinition,
-          fewShotPairIds: prompt.fewShotPairIds,
-        }),
-      )
-    }
-  })
-
 interface FingerprintCheckoutInput {
   readonly world: World
   readonly baseDir: string
@@ -153,7 +62,8 @@ export const fingerprintCheckoutOf = (input: FingerprintCheckoutInput) =>
     const datasetDir = paths.join(input.baseDir, 'dataset')
     const codeRoot = paths.join(input.baseDir, 'code')
     const packDir = yield* writePacks(input.world, fileSystem, paths, input.baseDir)
-    yield* writeDataset(input.world, fileSystem, paths, datasetDir)
+    yield* fileSystem.makeDirectory(datasetDir, { recursive: true })
+    yield* writeDatasetFilesOf({ world: input.world, datasetDir })
     const lockfilePath = paths.join(input.baseDir, 'pnpm-lock.yaml')
     yield* fileSystem.makeDirectory(paths.join(codeRoot, 'src'), { recursive: true })
     yield* Effect.forEach(

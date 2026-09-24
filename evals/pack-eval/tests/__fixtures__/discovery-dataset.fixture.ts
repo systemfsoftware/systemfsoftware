@@ -3,7 +3,7 @@ import { PackEval } from '@systemfsoftware/pack-eval'
 import { Effect, Layer, Redacted, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import type { LoopbackReply, OpenRouterLoopbackShape } from './openrouter-loopback.fixture.js'
+import { completionReplyOf, type LoopbackReply, type OpenRouterLoopbackShape } from './openrouter-loopback.fixture.js'
 import { materialize, type MaterializedWorld } from './pack-eval-disk.fixture.js'
 import {
   plannerModel,
@@ -29,18 +29,6 @@ const describedDimensionsOf = (world: World): ReadonlyArray<WorldDimension> =>
 export const dimensionNamesOf = (world: World): string =>
   `(${describedDimensionsOf(world).map((dimension) => dimension.name).join(', ')})`
 
-const completionOf = (content: string): LoopbackReply => ({
-  status: 200,
-  body: {
-    id: 'discovery-loopback',
-    object: 'chat.completion',
-    created: 1_760_000_000,
-    model: servedPlannerModel,
-    system_fingerprint: null,
-    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-  },
-})
-
 const rowsOf = (
   tuples: ReadonlyArray<WorldTuple>,
 ): ReadonlyArray<ReadonlyArray<Record<'name' | 'value', string>>> =>
@@ -49,13 +37,15 @@ const rowsOf = (
 const proposedRowsJson = Schema.fromJsonString(PackEval.ProposedRows)
 const generatedTaskJson = Schema.fromJsonString(PackEval.GeneratedTask)
 
+const answerOf = (content: string): LoopbackReply => completionReplyOf({ content, servedModel: servedPlannerModel })
+
 const tuplesReply = (
   tuples: ReadonlyArray<WorldTuple>,
 ): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.map(Schema.encodeEffect(proposedRowsJson)({ tuples: rowsOf(tuples) }), completionOf)
+  Effect.map(Schema.encodeEffect(proposedRowsJson)({ tuples: rowsOf(tuples) }), answerOf)
 
 const taskReply = (text: string): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
-  Effect.map(Schema.encodeEffect(generatedTaskJson)({ text }), completionOf)
+  Effect.map(Schema.encodeEffect(generatedTaskJson)({ text }), answerOf)
 
 /** The replies the world's generator asks for, in the order it asks them. */
 const generatorRepliesOf = (

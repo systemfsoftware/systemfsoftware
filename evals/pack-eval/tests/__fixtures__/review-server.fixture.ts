@@ -10,7 +10,13 @@ import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
 import * as HttpServer from 'effect/unstable/http/HttpServer'
 import * as NetAddress from 'effect/unstable/net/NetAddress'
 import { createServer } from 'node:http'
-import type { World, WorldRuleFile } from './pack-eval-world.fixture.js'
+import {
+  writeCandidateTasksOf,
+  writeDatasetFilesOf,
+  writePackRulesOf,
+  writeSelectionTracesOf,
+} from './pack-eval-dataset.fixture.js'
+import type { World } from './pack-eval-world.fixture.js'
 
 /**
  * The review server reads one pack directory, whose name is the pack id. A review world holds
@@ -56,144 +62,14 @@ export const labelsPathOf = (options: { readonly taskId: string; readonly packId
 export const pairsPathOf = (options: { readonly taskId: string; readonly packId: string }): string =>
   `${taskPathOf(options.taskId)}/pairs?pack=${encodeURIComponent(options.packId)}`
 
-const ruleTextOf = (rule: WorldRuleFile): string =>
-  rule.malformed === true ? 'not frontmatter at all\n' : [
-    '---',
-    `title: ${rule.title}`,
-    `applies_when: [${rule.appliesWhen.join(', ')}]`,
-    `tags: [${rule.tags.join(', ')}]`,
-    '---',
-    '',
-    rule.body,
-    '',
-  ].join('\n')
-
-const writeRules = (locations: ReviewLocations, world: World) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    yield* fileSystem.makeDirectory(locations.packsRoot, { recursive: true })
-    yield* Effect.forEach(
-      world.packs,
-      (pack) =>
-        Effect.gen(function*() {
-          const dir = paths.join(locations.packsRoot, pack.id)
-          yield* fileSystem.makeDirectory(dir, { recursive: true })
-          yield* Effect.forEach(
-            pack.rules,
-            (rule) => fileSystem.writeFileString(paths.join(dir, `${rule.stem}.md`), ruleTextOf(rule)),
-            { discard: true },
-          )
-        }),
-      { discard: true },
-    )
-  })
-
-const writeJudgePrompt = (locations: ReviewLocations, world: World) => {
-  const prompt = world.judgePrompt
-  if (prompt === undefined) return Effect.void
-  return Effect.map(Path.Path, (paths) =>
-    PackEval.DatasetFiles.writeJson(
-      paths.join(locations.datasetDir, 'judge-prompt.json'),
-      PackEval.JudgePrompt,
-      new PackEval.JudgePrompt({
-        criterion: prompt.criterion,
-        passDefinition: prompt.passDefinition,
-        failDefinition: prompt.failDefinition,
-        fewShotPairIds: prompt.fewShotPairIds,
-      }),
-    ))
-}
-
-/**
- * Write the world's rules, dataset files, recorded traces, and offered candidates under the
- * scenario's directories. A review row writes its whole world once, in its Given step.
- */
 export const writeWorld = (options: { readonly locations: ReviewLocations; readonly world: World }) =>
   Effect.gen(function*() {
     const locations = options.locations
     const world = options.world
-    const paths = yield* Path.Path
-    yield* writeRules(locations, world)
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(locations.datasetDir, 'tasks.json'),
-      PackEval.TaskSet,
-      new PackEval.TaskSet({
-        version: 1,
-        tasks: world.tasks.map((task) =>
-          new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions })
-        ),
-      }),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(locations.datasetDir, 'routing-labels.json'),
-      PackEval.RoutingLabels,
-      new PackEval.RoutingLabels({
-        version: 1,
-        entries: world.routingLabels.map((entry) =>
-          new PackEval.RoutingLabelEntry({
-            taskId: entry.taskId,
-            packId: entry.packId,
-            governing: entry.governing,
-            deferred: entry.deferred,
-          })
-        ),
-      }),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(locations.datasetDir, 'pair-labels.json'),
-      PackEval.PairLabels,
-      new PackEval.PairLabels({
-        version: 1,
-        entries: world.pairLabels.map((label) =>
-          new PackEval.PairLabel({
-            id: label.id,
-            taskId: label.taskId,
-            packId: label.packId,
-            ruleA: label.ruleA,
-            ruleB: label.ruleB,
-            split: label.split,
-            verdict: label.verdict,
-            origin: label.origin,
-            notes: label.notes,
-            ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
-          })
-        ),
-      }),
-    )
-    yield* writeJudgePrompt(locations, world)
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(locations.workDir, 'candidates.json'),
-      PackEval.CandidateTasks,
-      new PackEval.CandidateTasks({
-        version: 1,
-        candidates: world.candidates.map((candidate) =>
-          new PackEval.CandidateTask({
-            id: candidate.id,
-            text: candidate.text,
-            dimensions: candidate.dimensions,
-          })
-        ),
-      }),
-    )
-    yield* Effect.forEach(
-      world.traces,
-      (trace) =>
-        PackEval.DatasetFiles.writeJson(
-          paths.join(locations.workDir, PackEval.DatasetFiles.traceRelativePathOf(trace.packId, trace.taskId)),
-          PackEval.SelectionTrace,
-          new PackEval.SelectionTrace({
-            taskId: trace.taskId,
-            packId: trace.packId,
-            loadedStems: trace.loadedStems,
-            requestedModel: trace.requestedModel,
-            servedModel: trace.servedModel,
-            instructionDigest: trace.instructionDigest,
-            rawResponse: trace.rawResponse,
-          }),
-        ),
-      { discard: true },
-    )
+    yield* writePackRulesOf({ world, packsRoot: locations.packsRoot })
+    yield* writeDatasetFilesOf({ world, datasetDir: locations.datasetDir })
+    yield* writeCandidateTasksOf({ world, workDir: locations.workDir })
+    yield* writeSelectionTracesOf({ world, workDir: locations.workDir })
   })
 
 export const taskSetOf = (locations: ReviewLocations) =>

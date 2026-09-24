@@ -5,6 +5,7 @@ import { Effect, Layer, Match, Redacted, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { expect } from 'vitest'
 import {
+  completionReplyOf,
   type LoopbackReply,
   OpenRouterLoopback,
   openRouterLoopback,
@@ -93,24 +94,14 @@ const judgeRequestOf = (world: World): PackEval.ContradictionJudgeRequest => {
 
 const answerTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.JudgeReply))
 
-const completionOf = (content: string): LoopbackReply => ({
-  status: 200,
-  body: {
-    id: 'contradiction-judge-loopback',
-    object: 'chat.completion',
-    created: 1_760_000_000,
-    model: servedModel,
-    system_fingerprint: null,
-    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-  },
-})
+const answerOf = (content: string): LoopbackReply => completionReplyOf({ content, servedModel })
 
 const judgedReplyOf = (
   critique: string,
   verdict: PackEval.JudgeVerdict,
-): Effect.Effect<LoopbackReply, Schema.SchemaError> => Effect.map(answerTextOf({ critique, verdict }), completionOf)
+): Effect.Effect<LoopbackReply, Schema.SchemaError> => Effect.map(answerTextOf({ critique, verdict }), answerOf)
 
-const verdictlessReply: LoopbackReply = completionOf('{"verdict":"Fail"}')
+const verdictlessReply: LoopbackReply = answerOf('{"verdict":"Fail"}')
 
 interface JudgeWorld {
   readonly provider: OpenRouterLoopbackShape

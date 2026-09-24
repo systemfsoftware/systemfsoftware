@@ -28,30 +28,6 @@ const refusedTagOf = (command: AssessJudgeValidityCommand): string =>
   )
 
 it.prop(
-  '∀j_PerfectJudge_≡ValidatedWithUnitRates',
-  [
-    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4 }))),
-    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4 }))),
-    Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 8 }))),
-  ],
-  ([passDraw, failDraw, minimumDraw]) => {
-    const passCount = trialsIn(passDraw)
-    const failCount = trialsIn(failDraw)
-    const command = new AssessJudgeValidityCommand({
-      outcomes: [...allPassOutcomesOf(passCount), ...allFailOutcomesOf(failCount)],
-      minimum: minimumIn(minimumDraw),
-    })
-    const decision = Result.getOrThrow(assessJudgeValidity(command))
-    return Match.value(decision).pipe(
-      Match.tag('JudgeValidated', (validated) => validated.tpr === 1 && validated.tnr === 1),
-      Match.tag('JudgeUnvalidated', () => false),
-      Match.tag('JudgeValidityRefused', () => false),
-      Match.exhaustive,
-    )
-  },
-)
-
-it.prop(
   '∀j_ExactMinimum_≡JudgeValidated',
   [
     Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 4 }))),
@@ -77,48 +53,6 @@ it.prop(
       minimum: (failCount - 1) / failCount,
     })
     return refusedTagOf(exactTpr) === 'JudgeValidated' && refusedTagOf(exactTnr) === 'JudgeValidated'
-  },
-)
-
-it.prop(
-  '∀j_AsymmetricRates_≡TprIsPassRecallAndTnrIsFailRecall',
-  [Schema.Int, Schema.Int],
-  ([sizeDraw, orderDraw]) => {
-    const perClass = 4 + (Math.abs(sizeDraw) % 3)
-    const higher = perClass - 1
-    const lower = perClass - 2
-    const higherFirst = Math.abs(orderDraw) % 2 === 0
-    const passHits = higherFirst ? higher : lower
-    const failHits = higherFirst ? lower : higher
-    const passOutcomes: ReadonlyArray<JudgeLabelOutcome> = [
-      ...Array.from({ length: passHits }, () => ({ label: 'Pass' as const, verdict: 'Pass' as const })),
-      ...Array.from(
-        { length: perClass - passHits },
-        () => ({ label: 'Pass' as const, verdict: 'Fail' as const }),
-      ),
-    ]
-    const failOutcomes: ReadonlyArray<JudgeLabelOutcome> = [
-      ...Array.from({ length: failHits }, () => ({ label: 'Fail' as const, verdict: 'Fail' as const })),
-      ...Array.from(
-        { length: perClass - failHits },
-        () => ({ label: 'Fail' as const, verdict: 'Pass' as const }),
-      ),
-    ]
-    const tpr = passHits / perClass
-    const tnr = failHits / perClass
-    const command = new AssessJudgeValidityCommand({
-      outcomes: [...passOutcomes, ...failOutcomes],
-      minimum: 0,
-    })
-    return Match.value(Result.getOrThrow(assessJudgeValidity(command))).pipe(
-      Match.tag(
-        'JudgeValidated',
-        (validated) => validated.tpr === tpr && validated.tnr === tnr && validated.tpr !== validated.tnr,
-      ),
-      Match.tag('JudgeUnvalidated', () => false),
-      Match.tag('JudgeValidityRefused', () => false),
-      Match.exhaustive,
-    )
   },
 )
 

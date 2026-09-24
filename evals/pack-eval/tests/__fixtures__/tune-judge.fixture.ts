@@ -3,8 +3,15 @@ import { PackEval } from '@systemfsoftware/pack-eval'
 import { Console, Effect, Layer, Redacted, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import { type LoopbackReply, OpenRouterLoopback, type OpenRouterLoopbackShape } from './openrouter-loopback.fixture.js'
 import {
+  completionReplyOf,
+  type LoopbackReply,
+  OpenRouterLoopback,
+  type OpenRouterLoopbackShape,
+} from './openrouter-loopback.fixture.js'
+import { writeDatasetFilesOf } from './pack-eval-dataset.fixture.js'
+import {
+  ruleTextOf,
   tuneJudgeWorld as tuneJudgeWorldBuilder,
   type World,
   type WorldJudgeReply,
@@ -57,25 +64,12 @@ interface ExpectedTuning {
   readonly disagreements: ReadonlyArray<TuneJudgeDisagreement>
 }
 
-const ruleTextOf = (stem: string, title: string, appliesWhen: string, body: string): string =>
-  ['---', `title: ${title}`, `applies_when: [${appliesWhen}]`, 'tags: [air]', '---', '', body, ''].join('\n')
-
 const judgeTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.JudgeReply))
 
 const replyOf = (script: DevPairScript): Effect.Effect<LoopbackReply, Schema.SchemaError> =>
   Effect.map(
     judgeTextOf({ critique: script.critique, verdict: script.judgeVerdict }),
-    (content) => ({
-      status: 200,
-      body: {
-        id: 'tune-judge-loopback',
-        object: 'chat.completion',
-        created: 1_760_000_000,
-        model: 'acme/judge-large@acme',
-        system_fingerprint: null,
-        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-      },
-    }),
+    (content) => completionReplyOf({ content, servedModel: 'acme/judge-large@acme' }),
   )
 
 const devPairLabelOf = (world: World, script: DevPairScript): WorldPairLabel => ({
@@ -155,57 +149,16 @@ export const tuneJudgeRunOf = (scripts: ReadonlyArray<DevPairScript>) =>
     }
     yield* fileSystem.writeFileString(
       paths.join(packDir, `${first.stem}.md`),
-      ruleTextOf(first.stem, first.title, first.appliesWhen[0] ?? '', first.body),
+      ruleTextOf(first),
     )
     yield* fileSystem.writeFileString(
       paths.join(packDir, `${second.stem}.md`),
-      ruleTextOf(second.stem, second.title, second.appliesWhen[0] ?? '', second.body),
+      ruleTextOf(second),
     )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'tasks.json'),
-      PackEval.TaskSet,
-      new PackEval.TaskSet({
-        version: 1,
-        tasks: world.tasks.map((task) =>
-          new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions })
-        ),
-      }),
-    )
-    const prompt = world.judgePrompt
-    if (prompt === undefined) {
+    if (world.judgePrompt === undefined) {
       return yield* Effect.die(new Error('the tune-judge world holds no judge prompt'))
     }
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'judge-prompt.json'),
-      PackEval.JudgePrompt,
-      new PackEval.JudgePrompt({
-        criterion: prompt.criterion,
-        passDefinition: prompt.passDefinition,
-        failDefinition: prompt.failDefinition,
-        fewShotPairIds: prompt.fewShotPairIds,
-      }),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'pair-labels.json'),
-      PackEval.PairLabels,
-      new PackEval.PairLabels({
-        version: 1,
-        entries: world.pairLabels.map((label) =>
-          new PackEval.PairLabel({
-            id: label.id,
-            taskId: label.taskId,
-            packId: label.packId,
-            ruleA: label.ruleA,
-            ruleB: label.ruleB,
-            split: label.split,
-            verdict: label.verdict,
-            origin: label.origin,
-            notes: label.notes,
-            ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
-          })
-        ),
-      }),
-    )
+    yield* writeDatasetFilesOf({ world, datasetDir })
     return { world, provider, packDir, datasetDir, cacheDir, lines: [] } satisfies TuneJudgeRun
   })
 

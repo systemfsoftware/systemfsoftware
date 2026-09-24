@@ -5,6 +5,7 @@ import { Effect, Layer, Match, Redacted, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import {
+  completionReplyOf,
   type LoopbackReply,
   OpenRouterLoopback,
   openRouterLoopback,
@@ -48,22 +49,12 @@ const proposalRequestOf = (world: World): PackEval.TupleProposalRequest => {
 
 const rowsTextOf = Schema.encodeEffect(Schema.fromJsonString(PackEval.ProposedRows))
 
-const completionOf = (content: string): LoopbackReply => ({
-  status: 200,
-  body: {
-    id: 'task-generator-loopback',
-    object: 'chat.completion',
-    created: 1_760_000_000,
-    model: servedModel,
-    system_fingerprint: null,
-    choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-  },
-})
+const answerOf = (content: string): LoopbackReply => completionReplyOf({ content, servedModel })
 
 const proposedReplyOf = (tuples: ReadonlyArray<WorldTuple>, names: ReadonlyArray<string>) =>
   Effect.map(
     rowsTextOf({ tuples: tuples.map((tuple) => names.map((name) => ({ name, value: tuple[name] ?? '' }))) }),
-    completionOf,
+    answerOf,
   )
 
 const refusedReply: LoopbackReply = {

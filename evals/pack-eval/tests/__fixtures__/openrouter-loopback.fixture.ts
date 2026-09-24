@@ -55,6 +55,28 @@ export class OpenRouterLoopback extends Context.Service<OpenRouterLoopback, Open
   '@systemfsoftware/pack-eval/tests/__fixtures__/openrouter-loopback.fixture/OpenRouterLoopback',
 ) {}
 
+/** The OpenRouter chat-completion body one served answer carries. */
+export const completionBodyOf = (options: {
+  readonly content: string
+  readonly servedModel: string
+}): Schema.Json => ({
+  id: 'pack-eval-loopback',
+  object: 'chat.completion',
+  created: 1_760_000_000,
+  model: options.servedModel,
+  system_fingerprint: null,
+  choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: options.content } }],
+})
+
+/** A 200 reply carrying one chat-completion body for a served model. */
+export const completionReplyOf = (options: {
+  readonly content: string
+  readonly servedModel: string
+}): LoopbackReply => ({
+  status: 200,
+  body: completionBodyOf(options),
+})
+
 const decodeJson = Schema.decodeEffect(Schema.fromJsonString(Schema.Json))
 
 type Script =

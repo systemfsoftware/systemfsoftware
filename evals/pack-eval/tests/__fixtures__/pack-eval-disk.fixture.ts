@@ -3,13 +3,14 @@ import { Effect, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import {
+  completionBodyOf,
   type LoopbackReply,
   OpenRouterLoopback,
   type OpenRouterLoopbackShape,
   type QuestionKey,
   type ScriptedAnswer,
 } from './openrouter-loopback.fixture.js'
-import { writeDatasetFilesOf } from './pack-eval-dataset.fixture.js'
+import { writeCandidateTasksOf, writeDatasetFilesOf, writeSelectionTracesOf } from './pack-eval-dataset.fixture.js'
 import { defaultEvidenceFloor } from './pack-eval-oracle.fixture.js'
 import {
   ruleTextOf,
@@ -43,15 +44,6 @@ export interface MaterializedWorld {
   readonly provider: OpenRouterLoopbackShape
   readonly request: PackEval.EvaluatePacks.EvaluatePacksRequest
 }
-
-const completionOf = (content: string, servedModel: string): Schema.Json => ({
-  id: 'pack-eval-disk-loopback',
-  object: 'chat.completion',
-  created: 1_760_000_000,
-  model: servedModel,
-  system_fingerprint: null,
-  choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
-})
 
 const refusalReplyOf = (refusal: WorldProviderRefusal): LoopbackReply => ({
   status: refusal.status,
@@ -94,7 +86,7 @@ const selectedAnswerOf = (world: World, reply: WorldSelectedReply) =>
     Schema.encodeEffect(loadedStemsJson)({ loaded: reply.stems }),
     (content): ScriptedAnswer => ({
       key: selectorKeyOf(world, reply),
-      reply: { status: 200, body: completionOf(content, reply.servedModel) },
+      reply: { status: 200, body: completionBodyOf({ content, servedModel: reply.servedModel }) },
     }),
   )
 
@@ -108,7 +100,7 @@ const judgedAnswerOf = (world: World, reply: WorldJudgedReply) =>
     Schema.encodeEffect(judgeReplyJson)({ critique: reply.critique, verdict: reply.verdict }),
     (content): ScriptedAnswer => ({
       key: judgeKeyOf(world, reply),
-      reply: { status: 200, body: completionOf(content, reply.servedModel) },
+      reply: { status: 200, body: completionBodyOf({ content, servedModel: reply.servedModel }) },
     }),
   )
 
@@ -163,44 +155,6 @@ const writeDimensions = (fileSystem: FileSystem.FileSystem, paths: Path.Path, da
   return PackEval.DatasetFiles.writeJson(dimensionsPath, PackEval.TaskDimensions, described)
 }
 
-const writeCandidates = (paths: Path.Path, workDir: string, world: World) => {
-  if (world.candidates.length === 0) return Effect.void
-  return PackEval.DatasetFiles.writeJson(
-    paths.join(workDir, 'candidates.json'),
-    PackEval.CandidateTasks,
-    new PackEval.CandidateTasks({
-      version: 1,
-      candidates: world.candidates.map((candidate) =>
-        new PackEval.CandidateTask({
-          id: candidate.id,
-          text: candidate.text,
-          dimensions: candidate.dimensions,
-        })
-      ),
-    }),
-  )
-}
-
-const writeTraces = (paths: Path.Path, workDir: string, world: World) =>
-  Effect.forEach(
-    world.traces,
-    (trace) =>
-      PackEval.DatasetFiles.writeJson(
-        paths.join(workDir, PackEval.DatasetFiles.traceRelativePathOf(trace.packId, trace.taskId)),
-        PackEval.SelectionTrace,
-        new PackEval.SelectionTrace({
-          taskId: trace.taskId,
-          packId: trace.packId,
-          loadedStems: trace.loadedStems,
-          requestedModel: trace.requestedModel,
-          servedModel: trace.servedModel,
-          instructionDigest: trace.instructionDigest,
-          rawResponse: trace.rawResponse,
-        }),
-      ),
-    { discard: true },
-  )
-
 const writeRules = (world: World, fileSystem: FileSystem.FileSystem, paths: Path.Path, base: string) =>
   Effect.forEach(
     world.packs,
@@ -236,8 +190,8 @@ export const materialize = (world: World) =>
 
     yield* writeDatasetFilesOf({ world, datasetDir })
     yield* writeDimensions(fileSystem, paths, datasetDir, world)
-    yield* writeCandidates(paths, workDir, world)
-    yield* writeTraces(paths, workDir, world)
+    yield* writeCandidateTasksOf({ world, workDir })
+    yield* writeSelectionTracesOf({ world, workDir })
     yield* provider.answerBy(yield* scriptedAnswersOf(world))
 
     return {
