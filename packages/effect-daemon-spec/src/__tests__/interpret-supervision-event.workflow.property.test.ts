@@ -549,7 +549,7 @@ it.prop(
 
     const tolerated = Arr.every(Arr.take(outcome.decisions, intensity), isRestartFamily)
     const exhausted = isStopChildren(lastDecisionOf(outcome))
-    const confirmed = folded(subject, outcome.state, [stoppedEvent('c0', intensity + 1, t0 + intensity + 1)])
+    const confirmed = folded(subject, outcome.state, [stoppedEvent('c0', intensity, t0 + intensity + 1)])
     const finalized = Match.value(lastDecisionOf(confirmed)).pipe(
       Match.tag('Terminate', (terminated) => terminatorCountOf(terminated.commands) === 1),
       Match.orElse(() => false),
@@ -785,7 +785,10 @@ it.prop(
     const state: SupervisorState = Match.value(phase).pipe(
       Match.when('Restarting', () => new Restarting({ core, pending: [] })),
       Match.when('CoolingDown', () => new CoolingDown({ core, millis: PERIOD_MILLIS })),
-      Match.when('ShuttingDown', () => new ShuttingDown({ core, reason: { _tag: 'Shutdown' } })),
+      Match.when(
+        'ShuttingDown',
+        () => new ShuttingDown({ core, reason: { _tag: 'Shutdown' }, exit: { _tag: 'RequestedExit' } }),
+      ),
       Match.exhaustive,
     )
     const decision = decidedOf(interpretSupervisionEvent, stepOf(state, dynamicStopEvent('r0', 'c0', generation, at)))

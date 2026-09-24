@@ -1,10 +1,10 @@
 import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Exit, Fiber, Match, Option, Queue, Ref, Scope } from 'effect'
 import { settled, terminatedIn, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 /** What a child on the test medium runs: an in-process program, not a fiber program. */
 type PortTask = Effect.Effect<void, never, Scope.Scope>

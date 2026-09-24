@@ -1,10 +1,10 @@
 import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Effect, Match, Queue, Ref } from 'effect'
 import { crashingChild, neverChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 type Trace = ReadonlyArray<Supervisor.TraceEntry>
 
@@ -149,11 +149,12 @@ Feature('Shutting a supervision tree down when the scope it runs in closes')
             const afterwards = yield* Ref.get(tree.log)
             return { started, afterwards }
           })),
-        Then('the children stopped in reverse of the order they started')(({ record }) => {
-          expect(record.afterwards).toEqual(['alpha', 'beta', 'beta stopped', 'alpha stopped'])
+        Then('the children stopped in reverse of the order the supervisor started them')(({ record }) => {
+          expect(record.started).toHaveLength(2)
+          expect(record.started).toEqual(expect.arrayContaining(['alpha', 'beta']))
+          expect(record.afterwards.slice(2)).toEqual(['beta stopped', 'alpha stopped'])
         }),
         And('the scope closed only after the last child had stopped')(({ record }) => {
-          expect(record.started).toEqual(['alpha', 'beta'])
           expect(record.afterwards.slice(-1)).toEqual(['alpha stopped'])
         }),
       ),

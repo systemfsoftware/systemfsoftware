@@ -25,7 +25,9 @@ import type {
   TerminateSupervisor,
 } from '../kernel/SupervisorCommand.schema.js'
 import type { TerminationReason } from '../kernel/TerminationReport.schema.js'
+import type { IntensityExceededExit } from '../kernel/TerminationReport.schema.js'
 import type { BoundChild } from './bound-child.js'
+import * as FiberMedium from './FiberMedium.js'
 import type { Started } from './Medium.js'
 import type { DynamicOutcome, RunningSupervisor } from './running-supervisor.handle.js'
 import {
@@ -38,6 +40,7 @@ import {
   repliesOf,
   terminatedLatchOf,
 } from './running-supervisor.handle.js'
+import { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 /** The running supervisor a command executes against. */
 export interface AcquiredSupervisor {
@@ -276,13 +279,49 @@ const executeReply = (
 ): Effect.Effect<void, never, never> =>
   Ops.resolveWaiting(repliesOf(acquired.handle), reply.requestId, outcomeOf(reply))
 
+const giveUpCauseOf = (
+  handle: RunningSupervisor,
+  exit: IntensityExceededExit,
+  reason: TerminationReason,
+): Effect.Effect<Cause.Cause<SupervisorTerminated | TerminationReason>> =>
+  Effect.flatMap(
+    Ref.get(evidenceOf(handle)),
+    (evidence) =>
+      Option.match(HashMap.get(evidence, evidenceKeyOf(exit.childId, exit.generation)), {
+        onNone: () => Effect.succeed(Cause.fail(reason)),
+        onSome: (started) =>
+          Option.match(FiberMedium.failureCauseOf(started), {
+            onNone: () => Effect.succeed(Cause.fail(reason)),
+            onSome: (awaited) => Effect.map(awaited, (cause) => Option.getOrElse(cause, () => Cause.fail(reason))),
+          }),
+      }),
+  )
+
+const clearEvidence = (handle: RunningSupervisor): Effect.Effect<void> =>
+  Ref.update(evidenceOf(handle), () => HashMap.empty<string, Started>())
+
 const executeTerminate = (
   acquired: AcquiredSupervisor,
-  _command: TerminateSupervisor,
+  command: TerminateSupervisor,
 ): Effect.Effect<void, never, never> =>
-  Effect.andThen(
-    Ref.update(evidenceOf(acquired.handle), () => HashMap.empty<string, Started>()),
-    Deferred.succeed(terminatedLatchOf(acquired.handle), void 0),
+  Match.value(command.exit).pipe(
+    Match.tag('RequestedExit', () =>
+      Effect.andThen(
+        clearEvidence(acquired.handle),
+        Effect.asVoid(Deferred.succeed(terminatedLatchOf(acquired.handle), void 0)),
+      )),
+    Match.tag('IntensityExceededExit', (exit) =>
+      Effect.flatMap(giveUpCauseOf(acquired.handle, exit, command.reason), (cause) =>
+        Effect.andThen(
+          clearEvidence(acquired.handle),
+          Effect.asVoid(
+            Deferred.fail(
+              terminatedLatchOf(acquired.handle),
+              new SupervisorTerminated({ name: acquired.handle.name, reason: command.reason, cause }),
+            ),
+          ),
+        ))),
+    Match.exhaustive,
   )
 
 const bucketRunnerOf = (

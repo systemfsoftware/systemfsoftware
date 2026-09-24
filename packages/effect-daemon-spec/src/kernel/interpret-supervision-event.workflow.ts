@@ -1,5 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Array as Arr, Match, Number as Num, Option, Result, Schema } from 'effect'
+import { Array as Arr, Cause, Match, Number as Num, Option, Result, Schema } from 'effect'
 import { SupervisionEvent } from './SupervisionEvent.schema.js'
 import type { TimerKind } from './SupervisionEvent.schema.js'
 import { Millis, PositiveMillis } from './SupervisionLimits.schema.js'
@@ -29,7 +29,8 @@ import type {
 import type { ShutdownMode } from './SupervisorPolicy.schema.js'
 import { ChildStart, SupervisorCore } from './SupervisorState.schema.js'
 import { ChildInstance } from './SupervisorState.schema.js'
-import { TerminationReason } from './TerminationReport.schema.js'
+import type { FailureReport, IntensityExceededExit, RequestedExit } from './TerminationReport.schema.js'
+import { SupervisorExit, TerminationReason } from './TerminationReport.schema.js'
 
 export class Stale extends Schema.TaggedClass<Stale>()('Stale', {}) {
   readonly [DecisionTypeId] = DecisionTypeId
@@ -68,6 +69,7 @@ export class CoolDown extends Schema.TaggedClass<CoolDown>()('CoolDown', {
 export class StopChildren extends Schema.TaggedClass<StopChildren>()('StopChildren', {
   core: SupervisorCore,
   reason: TerminationReason,
+  exit: SupervisorExit,
   commands: SupervisorCommands,
 }) {
   readonly [DecisionTypeId] = DecisionTypeId
@@ -119,6 +121,7 @@ export class CoolingDown extends Schema.TaggedClass<CoolingDown>()('CoolingDown'
 export class ShuttingDown extends Schema.TaggedClass<ShuttingDown>()('ShuttingDown', {
   core: SupervisorCore,
   reason: TerminationReason,
+  exit: SupervisorExit,
 }) {
   readonly [StateTypeId] = StateTypeId
 }
@@ -331,9 +334,10 @@ const coolDownCommandOf = (deadline: EventTime): ArmSupervisorTimer => ({
   deadline,
 })
 
-const terminateCommandOf = (reason: TerminationReason): TerminateSupervisor => ({
+const terminateCommandOf = (reason: TerminationReason, exit: SupervisorExit): TerminateSupervisor => ({
   _tag: 'TerminateSupervisor',
   reason,
+  exit,
 })
 
 const replyAcceptedOf = (requestId: RequestId, start: ChildStart): ReplyStartAccepted => ({
@@ -354,20 +358,44 @@ const holdOf = (core: SupervisorCore): SupervisionDecision => new Continue({ cor
 
 const terminatedReason: TerminationReason = { _tag: 'Shutdown' }
 
-const terminateDecisionOf = (reason: TerminationReason): SupervisionDecision =>
-  new Terminate({ reason, commands: commandsIn({ terminates: [terminateCommandOf(reason)] }) })
+const requestedExit: RequestedExit = { _tag: 'RequestedExit' }
 
-const stopEverything = (core: SupervisorCore, reason: TerminationReason): SupervisionDecision =>
+const failureReportOf = (reason: TerminationReason): FailureReport =>
+  Match.value(reason).pipe(
+    Match.tag('Abnormal', (abnormal) => abnormal.report),
+    Match.orElse((): FailureReport => ({ _tag: 'CauseReport', cause: Cause.pretty(Cause.fail(reason)) })),
+  )
+
+const giveUpReasonOf = (termination: Termination): TerminationReason => ({
+  _tag: 'Abnormal',
+  report: failureReportOf(termination.reason),
+})
+
+const giveUpExitOf = (termination: Termination): IntensityExceededExit => ({
+  _tag: 'IntensityExceededExit',
+  childId: termination.childId,
+  generation: termination.generation,
+})
+
+const terminateDecisionOf = (reason: TerminationReason, exit: SupervisorExit): SupervisionDecision =>
+  new Terminate({ reason, commands: commandsIn({ terminates: [terminateCommandOf(reason, exit)] }) })
+
+const stopEverything = (
+  core: SupervisorCore,
+  reason: TerminationReason,
+  exit: SupervisorExit,
+): SupervisionDecision =>
   Match.value(Arr.isReadonlyArrayNonEmpty(core.children)).pipe(
     Match.when(true, () =>
       new StopChildren({
         core: withChildren(core, Arr.map(core.children, stoppingOf)),
         reason,
+        exit,
         commands: commandsIn({
           stops: Arr.map(Arr.reverse(core.children), (child) => stopCommandOf(core.policy, child)),
         }),
       })),
-    Match.when(false, () => terminateDecisionOf(reason)),
+    Match.when(false, () => terminateDecisionOf(reason, exit)),
     Match.exhaustive,
   )
 
@@ -471,15 +499,20 @@ const phasedCommands = (
 
 const exhaustedDecisionOf = (
   policy: SupervisionPolicy,
-  core: SupervisorCore,
+  original: SupervisorCore,
+  restarted: SupervisorCore,
   stops: ReadonlyArray<StopChild>,
   at: EventTime,
+  termination: Termination,
 ): SupervisionDecision =>
   Match.value(policy.coolDown).pipe(
     Match.tag('CoolDownAfter', ({ millis }) =>
-      new CoolDown({ core, millis, commands: commandsIn({ stops, arms: [coolDownCommandOf(at + millis)] }) })),
-    Match.tag('NoCoolDown', () =>
-      stopEverything(core, terminatedReason)),
+      new CoolDown({
+        core: restarted,
+        millis,
+        commands: commandsIn({ stops, arms: [coolDownCommandOf(at + millis)] }),
+      })),
+    Match.tag('NoCoolDown', () => stopEverything(original, giveUpReasonOf(termination), giveUpExitOf(termination))),
     Match.exhaustive,
   )
 
@@ -508,12 +541,18 @@ const restartOutcomeOf = (core: SupervisorCore, scope: RestartScope, at: EventTi
   }
 }
 
-const restartedDecisionOf = (core: SupervisorCore, outcome: RestartOutcome, at: EventTime): SupervisionDecision =>
+const restartedDecisionOf = (
+  core: SupervisorCore,
+  outcome: RestartOutcome,
+  termination: Termination,
+): SupervisionDecision =>
   Match.value(outcome.exhausted).pipe(
-    Match.when(true, () => exhaustedDecisionOf(core.policy, outcome.core, outcome.stops, at)),
+    Match.when(true, () =>
+      exhaustedDecisionOf(core.policy, core, outcome.core, outcome.stops, termination.at, termination)),
     Match.when(false, () =>
       Match.value(Arr.length(outcome.pending) === 0).pipe(
-        Match.when(true, () => new StartChildren({ core: outcome.core, commands: outcome.commands })),
+        Match.when(true, () =>
+          new StartChildren({ core: outcome.core, commands: outcome.commands })),
         Match.when(false, () =>
           new RestartChildren({ core: outcome.core, pending: outcome.pending, commands: outcome.commands })),
         Match.exhaustive,
@@ -546,7 +585,7 @@ const shutdownOrContinue = (
   remaining: ReadonlyArray<ChildInstance>,
 ): SupervisionDecision =>
   Match.value(autoShutsDown(core.policy, removed, remaining)).pipe(
-    Match.when(true, () => stopEverything(withChildren(core, remaining), terminatedReason)),
+    Match.when(true, () => stopEverything(withChildren(core, remaining), terminatedReason, requestedExit)),
     Match.when(false, () => new Continue({ core: withChildren(core, remaining), commands: noCommands })),
     Match.exhaustive,
   )
@@ -608,7 +647,7 @@ const restartSplitOf = (core: SupervisorCore, failedIndex: number, termination: 
 
 const terminatedIndexed = (core: SupervisorCore, failedIndex: number, termination: Termination): SupervisionDecision =>
   Match.value(restartSplitOf(core, failedIndex, termination)).pipe(
-    Match.tag('Restarted', (restarted) => restartedDecisionOf(core, restarted.outcome, termination.at)),
+    Match.tag('Restarted', (restarted) => restartedDecisionOf(core, restarted.outcome, termination)),
     Match.tag('Quiet', (quiet) =>
       shutdownOrContinue(
         core,
@@ -692,12 +731,13 @@ const becomingReady = (core: SupervisorCore, child: ChildInstance, at: EventTime
 const stoppedInShuttingDown = (
   core: SupervisorCore,
   reason: TerminationReason,
+  exit: SupervisorExit,
   childId: ChildId,
   generation: Generation,
 ): SupervisionDecision => {
   const next = removalOf(core, childId, generation)
   return Match.value(Arr.every(next.children, (child) => child.status !== 'stopping')).pipe(
-    Match.when(true, () => terminateDecisionOf(reason)),
+    Match.when(true, () => terminateDecisionOf(reason, exit)),
     Match.when(false, () => new Continue({ core: next, commands: noCommands })),
     Match.exhaustive,
   )
@@ -1022,7 +1062,10 @@ const onChildTerminated = (state: SupervisorState, termination: Termination): Su
       })),
     Match.tag('Restarting', () => new Stale({})),
     Match.tag('CoolingDown', ({ core }) => holdOf(core)),
-    Match.tag('ShuttingDown', ({ core }) => terminatedShuttingDown(core, ShuttingDownReasonOf(state), termination)),
+    Match.tag(
+      'ShuttingDown',
+      ({ core }) => terminatedShuttingDown(core, ShuttingDownReasonOf(state), ShuttingDownExitOf(state), termination),
+    ),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
   )
@@ -1033,11 +1076,18 @@ const ShuttingDownReasonOf = (state: SupervisorState): TerminationReason =>
     Match.orElse(() => terminatedReason),
   )
 
+const ShuttingDownExitOf = (state: SupervisorState): SupervisorExit =>
+  Match.value(state).pipe(
+    Match.tag('ShuttingDown', ({ exit }) => exit),
+    Match.orElse((): SupervisorExit => requestedExit),
+  )
+
 const terminatedShuttingDown = (
   core: SupervisorCore,
   reason: TerminationReason,
+  exit: SupervisorExit,
   termination: Termination,
-): SupervisionDecision => stoppedInShuttingDown(core, reason, termination.childId, termination.generation)
+): SupervisionDecision => stoppedInShuttingDown(core, reason, exit, termination.childId, termination.generation)
 
 const stoppedInRunning = (core: SupervisorCore, childId: ChildId, generation: Generation): SupervisionDecision =>
   Match.value(currentIncarnation(core, childId, generation)).pipe(
@@ -1051,7 +1101,10 @@ const onChildStopped = (state: SupervisorState, childId: ChildId, generation: Ge
     Match.tag('Running', ({ core }) => stoppedInRunning(core, childId, generation)),
     Match.tag('Restarting', () => new Stale({})),
     Match.tag('CoolingDown', ({ core }) => holdOf(core)),
-    Match.tag('ShuttingDown', ({ core, reason }) => stoppedInShuttingDown(core, reason, childId, generation)),
+    Match.tag(
+      'ShuttingDown',
+      ({ core, reason, exit }) => stoppedInShuttingDown(core, reason, exit, childId, generation),
+    ),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
   )
@@ -1134,9 +1187,9 @@ const onDynamicStopRequested = (
 
 const onShutdownRequested = (state: SupervisorState, reason: TerminationReason): SupervisionDecision =>
   Match.value(state).pipe(
-    Match.tag('Running', ({ core }) => stopEverything(core, reason)),
-    Match.tag('Restarting', ({ core }) => stopEverything(core, reason)),
-    Match.tag('CoolingDown', ({ core }) => stopEverything(core, reason)),
+    Match.tag('Running', ({ core }) => stopEverything(core, reason, requestedExit)),
+    Match.tag('Restarting', ({ core }) => stopEverything(core, reason, requestedExit)),
+    Match.tag('CoolingDown', ({ core }) => stopEverything(core, reason, requestedExit)),
     Match.tag('ShuttingDown', ({ core }) => holdOf(core)),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,

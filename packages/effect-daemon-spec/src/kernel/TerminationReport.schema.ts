@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { ProbeThreshold } from './SupervisionLimits.schema.js'
+import { ChildId, Generation, ProbeThreshold } from './SupervisionLimits.schema.js'
 
 /**
  * What a medium can say about why a child died (R16): a fiber supplies a cause, a process
@@ -33,3 +33,21 @@ export type AbnormalTermination = typeof AbnormalTermination.Type
 
 export const TerminationReason = Schema.Union([NormalTermination, ShutdownTermination, AbnormalTermination])
 export type TerminationReason = typeof TerminationReason.Type
+
+/**
+ * Why the supervisor itself is terminating: a shutdown something asked of it, or a
+ * give-up after its children terminated more often than its intensity allows. The
+ * decision and command data carry this, so the shell never infers which one it is.
+ * A give-up names the child incarnation whose termination exhausted the intensity.
+ */
+export const RequestedExit = Schema.TaggedStruct('RequestedExit', {})
+export type RequestedExit = typeof RequestedExit.Type
+
+export const IntensityExceededExit = Schema.TaggedStruct('IntensityExceededExit', {
+  childId: ChildId,
+  generation: Generation,
+})
+export type IntensityExceededExit = typeof IntensityExceededExit.Type
+
+export const SupervisorExit = Schema.Union([RequestedExit, IntensityExceededExit])
+export type SupervisorExit = typeof SupervisorExit.Type

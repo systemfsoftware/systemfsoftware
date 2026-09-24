@@ -1,17 +1,26 @@
 import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Deferred, Duration, Effect, Match, Queue, Ref } from 'effect'
 import { crashingChild, settled, traceUntil } from './__fixtures__/SupervisorHarness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 type Trace = ReadonlyArray<Supervisor.TraceEntry>
 
 const FIRST_INCARNATION = 0
 
-const recordingChild = (childId: string, stopped: Ref.Ref<ReadonlyArray<string>>): Supervisor.FiberProgram =>
-  Supervisor.readyOnStart(Effect.never.pipe(Effect.ensuring(Ref.update(stopped, (seen) => Arr.append(seen, childId)))))
+const recordingChild = (
+  childId: string,
+  started: Deferred.Deferred<void>,
+  stopped: Ref.Ref<ReadonlyArray<string>>,
+): Supervisor.FiberProgram =>
+  Supervisor.readyOnStart(
+    Effect.ensuring(
+      Effect.andThen(Deferred.succeed(started, void 0), Effect.never),
+      Ref.update(stopped, (seen) => Arr.append(seen, childId)),
+    ),
+  )
 
 const slowStoppingChild = (
   childId: string,
@@ -62,18 +71,19 @@ const firstIncarnationEndings = (childId: string) => (trace: Trace): number =>
 
 const nestedRestartTree = Effect.gen(function*() {
   const crashes = yield* Queue.unbounded<void>()
+  const idlerStarted = yield* Deferred.make<void>()
   const stopped = yield* Ref.make<ReadonlyArray<string>>([])
   const inner = Supervisor.make('inner').pipe(
     Supervisor.intensity(3, 5_000),
     Supervisor.children([
       Supervisor.ChildSpecs.make('grinder', crashingChild(crashes)),
-      Supervisor.ChildSpecs.make('idler', recordingChild('idler', stopped)),
+      Supervisor.ChildSpecs.make('idler', recordingChild('idler', idlerStarted, stopped)),
     ]),
   )
   const parent = yield* Supervisor.make('outer').pipe(
     Supervisor.children([Supervisor.ChildSpecs.make('inner', inner)]),
   ).scoped
-  return { crashes, stopped, parent }
+  return { crashes, idlerStarted, stopped, parent }
 })
 
 const slowStoppingTree = Effect.gen(function*() {
@@ -106,6 +116,7 @@ Feature('Supervising a supervisor')
           ({ tree }) =>
             Effect.gen(function*() {
               const watching = yield* traceUntil(tree.parent, childEnded('inner'))
+              yield* Deferred.await(tree.idlerStarted)
               yield* Effect.forEach(Arr.range(1, 4), () => Queue.offer(tree.crashes, void 0), { discard: true })
               const trace = yield* settled(watching)
               const stopped = yield* Ref.get(tree.stopped)

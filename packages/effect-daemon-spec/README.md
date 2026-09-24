@@ -54,7 +54,7 @@ Use `app.scoped` instead of `app.layer` to get the running supervisor handle ins
 | `one_for_all`           | Every child stops in reverse order, then all start again in declared order.                      |
 | `rest_for_one`          | The children declared after it stop in reverse order; it and they start again in declared order. |
 
-`Supervisor.intensity(n, periodMillis)` allows at most `n` restarts within `periodMillis`. The default is OTP's: one restart in five seconds. One more restart than that stops every child and terminates the supervisor, and its parent sees that as an ordinary child termination.
+`Supervisor.intensity(n, periodMillis)` allows at most `n` restarts within `periodMillis`. The default is OTP's: one restart in five seconds. One more restart than that stops every child and terminates the supervisor; whoever is waiting on it observes a give-up (see [Observing a running supervisor](#observing-a-running-supervisor)).
 
 ## Children
 
@@ -147,7 +147,9 @@ Two behaviours OTP does not have are available when you declare them:
 
 ## Observing a running supervisor
 
-`Supervisor.traceOf(running)` is a `Stream` of every step the supervisor takes: the event it received (a child started, terminated, a timer elapsed, a request arrived) and the decision it made, including the children it stopped and started. `Supervisor.statusOf(running)` reads its current phase and children, and `Supervisor.awaitTerminated(running)` completes when it has terminated.
+`Supervisor.traceOf(running)` is a `Stream` of every step the supervisor takes: the event it received (a child started, terminated, a timer elapsed, a request arrived) and the decision it made, including the children it stopped and started. `Supervisor.statusOf(running)` reads its current phase and children, and `Supervisor.awaitTerminated(running)` settles when it has terminated.
+
+The wait succeeds when the supervisor ended because it was asked to shut down or because a significant child's exit shut it down. It fails with `Supervisor.SupervisorTerminated` when the supervisor gave up after exceeding its restart intensity: the error carries the supervisor's name, its own termination reason, and the `Cause` of the child termination that exhausted it — a fiber child's real exit cause, or the child's termination reason for any other medium. Every child has stopped and its finalizers have run before the wait settles. A supervisor that gives up under a parent ends as an abnormal child of that parent, so a chain of give-ups escalates to the top-level owner.
 
 ## License
 

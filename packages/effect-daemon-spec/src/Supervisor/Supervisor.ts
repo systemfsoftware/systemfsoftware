@@ -28,6 +28,7 @@ import {
   stateOf,
 } from './running-supervisor.handle.js'
 import { Steps, type SupervisorStepCell, supervisorStepFor } from './supervisor-step.cell.js'
+import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 export const SpecTypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/SupervisorSpec')
 export type SpecTypeId = typeof SpecTypeId
@@ -35,7 +36,7 @@ export type SpecTypeId = typeof SpecTypeId
 /** A fiber-hosted child: a bare effect, a function of `ready`, or a nested spec. */
 export type FiberChild<R = never> =
   | BareFiberProgram
-  | ((ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>)
+  | ((ready: Effect.Effect<void>) => Effect.Effect<void, SupervisorTerminated, Scope.Scope | R>)
   | SupervisorSpec<R>
 
 /** Any child program, on any medium. */
@@ -145,7 +146,7 @@ const scopedOf = <R>(parts: SpecParts<R>): Effect.Effect<RunningSupervisor, neve
     const step = supervisorStepFor(Steps.runtimeOf({ handle }))
     yield* Effect.forkIn(drainOf(handle, step), supervisorScope)
     yield* offerEvent(handle, { _tag: 'SupervisorStarted', at: 0 })
-    yield* Effect.addFinalizer(() => shutdown(handle))
+    yield* Effect.addFinalizer(() => Effect.catchTag(shutdown(handle), 'SupervisorTerminated', () => Effect.void))
     return handle
   })
 
@@ -277,14 +278,14 @@ const declarationOf = (
 
 type FiberRunnable<R> =
   | BareFiberProgram
-  | ((ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>)
+  | ((ready: Effect.Effect<void>) => Effect.Effect<void, SupervisorTerminated, Scope.Scope | R>)
 
-const isFiberRunnable = <R>(value: FiberChild<R>): value is FiberRunnable<R> =>
-  typeof value === 'function' || Effect.isEffect(value)
+const isNestedSpec = <R>(value: FiberChild<R>): value is SupervisorSpec<R> =>
+  hasSpecTag(value) && value[SpecTypeId] === SpecTypeId
 
 const nestedProgramOf = <R>(
   nested: SupervisorSpec<R>,
-): (ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R> =>
+): (ready: Effect.Effect<void>) => Effect.Effect<void, SupervisorTerminated, Scope.Scope | R> =>
 (ready) =>
   Effect.flatMap(
     nested.scoped,
@@ -292,7 +293,7 @@ const nestedProgramOf = <R>(
   )
 
 const fiberMediumForChild = <R>(): Medium<
-  (ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>,
+  (ready: Effect.Effect<void>) => Effect.Effect<void, SupervisorTerminated, Scope.Scope | R>,
   never,
   Scope.Scope | R
 > => mediumFor<R>()
@@ -319,9 +320,9 @@ const childSpecMake = <R = never>(
   program: FiberChild<R>,
   options?: ChildOptions,
 ): ChildSpec<R> =>
-  isFiberRunnable(program)
-    ? { childId, declaration: declarationOf(childId, false, options), binding: bindFiberChild(program), ...Prototype }
-    : { childId, declaration: declarationOf(childId, true, options), binding: bindNestedChild(program), ...Prototype }
+  isNestedSpec(program)
+    ? { childId, declaration: declarationOf(childId, true, options), binding: bindNestedChild(program), ...Prototype }
+    : { childId, declaration: declarationOf(childId, false, options), binding: bindFiberChild(program), ...Prototype }
 
 const childSpecOn = <Program, StartError, R = never>(
   port: Context.Service<

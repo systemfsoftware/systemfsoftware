@@ -4,7 +4,7 @@ import { SupervisionDecision } from './interpret-supervision-event.workflow.js'
 import { PositiveMillis } from './SupervisionLimits.schema.js'
 import { StateTypeId } from './SupervisionTypeIds.js'
 import { ChildStart, SupervisorCore } from './SupervisorState.schema.js'
-import { TerminationReason } from './TerminationReport.schema.js'
+import { SupervisorExit, TerminationReason } from './TerminationReport.schema.js'
 
 export class Running extends Schema.TaggedClass<Running>()('Running', { core: SupervisorCore }) {
   readonly [StateTypeId] = StateTypeId
@@ -27,6 +27,7 @@ export class CoolingDown extends Schema.TaggedClass<CoolingDown>()('CoolingDown'
 export class ShuttingDown extends Schema.TaggedClass<ShuttingDown>()('ShuttingDown', {
   core: SupervisorCore,
   reason: TerminationReason,
+  exit: SupervisorExit,
 }) {
   readonly [StateTypeId] = StateTypeId
 }
@@ -50,7 +51,7 @@ const withCore = (state: SupervisorState, core: SupervisorCore): SupervisorState
     Match.tag('Running', () => new Running({ core })),
     Match.tag('Restarting', (restarting) => new Restarting({ core, pending: restarting.pending })),
     Match.tag('CoolingDown', (cooling) => new CoolingDown({ core, millis: cooling.millis })),
-    Match.tag('ShuttingDown', (shutting) => new ShuttingDown({ core, reason: shutting.reason })),
+    Match.tag('ShuttingDown', (shutting) => new ShuttingDown({ core, reason: shutting.reason, exit: shutting.exit })),
     Match.tag('Terminated', (terminated) => new Terminated({ reason: terminated.reason })),
     Match.exhaustive,
   )
@@ -66,7 +67,10 @@ const evolved = (state: SupervisorState, decision: SupervisionDecision): Supervi
     ),
     Match.tag('StartChildren', (started) => new Running({ core: started.core })),
     Match.tag('CoolDown', (cooling) => new CoolingDown({ core: cooling.core, millis: cooling.millis })),
-    Match.tag('StopChildren', (stopping) => new ShuttingDown({ core: stopping.core, reason: stopping.reason })),
+    Match.tag(
+      'StopChildren',
+      (stopping) => new ShuttingDown({ core: stopping.core, reason: stopping.reason, exit: stopping.exit }),
+    ),
     Match.tag('Terminate', (terminated) => new Terminated({ reason: terminated.reason })),
     Match.exhaustive,
   )

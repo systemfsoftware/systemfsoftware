@@ -10,8 +10,9 @@ import {
   type Stopped,
   stopped,
 } from './Medium.js'
+import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
-export type BareFiberProgram = Effect.Effect<void, never, Scope.Scope>
+export type BareFiberProgram = Effect.Effect<void, SupervisorTerminated, Scope.Scope>
 
 export type FiberProgram = (ready: Effect.Effect<void>) => BareFiberProgram
 
@@ -25,12 +26,12 @@ const FiberStartedTypeId: unique symbol = Symbol.for(
 type FiberStartedTypeId = typeof FiberStartedTypeId
 interface FiberStarted extends Started {
   readonly [FiberStartedTypeId]: FiberStartedTypeId
-  readonly fiber: Fiber.Fiber<void, never>
+  readonly fiber: Fiber.Fiber<void, SupervisorTerminated>
   readonly scope: Scope.Scope
 }
 
 const fiberStarted = (
-  fiber: Fiber.Fiber<void, never>,
+  fiber: Fiber.Fiber<void, SupervisorTerminated>,
   scope: Scope.Scope,
   ready: Effect.Effect<void>,
 ): FiberStarted => ({
@@ -49,12 +50,12 @@ const normalTermination: TerminationReason = { _tag: 'Normal' }
 
 const shutdownTermination: TerminationReason = { _tag: 'Shutdown' }
 
-const abnormalOf = (cause: Cause.Cause<never>): TerminationReason => ({
+const abnormalOf = (cause: Cause.Cause<SupervisorTerminated>): TerminationReason => ({
   _tag: 'Abnormal',
   report: { _tag: 'CauseReport', cause: Cause.pretty(cause) },
 })
 
-const terminationOf = (exit: Exit.Exit<void, never>): TerminationReason =>
+const terminationOf = (exit: Exit.Exit<void, SupervisorTerminated>): TerminationReason =>
   Exit.match(exit, {
     onSuccess: () => normalTermination,
     onFailure: (cause) => (Cause.hasInterruptsOnly(cause) ? shutdownTermination : abnormalOf(cause)),
@@ -80,8 +81,13 @@ const stopOf = (self: FiberStarted, mode: ShutdownMode): Effect.Effect<void> =>
     Match.exhaustive,
   )
 
+export const failureCauseOf = (
+  evidence: Started,
+): Option.Option<Effect.Effect<Option.Option<Cause.Cause<SupervisorTerminated>>>> =>
+  Option.map(fiberOf(evidence), (self) => Effect.map(Fiber.await(self.fiber), Exit.getCause))
+
 export const mediumFor = <R = never>(): MediumShape<
-  (ready: Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope | R>,
+  (ready: Effect.Effect<void>) => Effect.Effect<void, SupervisorTerminated, Scope.Scope | R>,
   never,
   Scope.Scope | R
 > =>

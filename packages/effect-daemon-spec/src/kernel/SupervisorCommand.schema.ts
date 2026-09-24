@@ -2,7 +2,7 @@ import { Schema } from 'effect'
 import { TimerKind } from './SupervisionEvent.schema.js'
 import { ChildId, Deadline, Generation, RequestId } from './SupervisionLimits.schema.js'
 import { ShutdownMode } from './SupervisorPolicy.schema.js'
-import { TerminationReason } from './TerminationReport.schema.js'
+import { SupervisorExit, TerminationReason } from './TerminationReport.schema.js'
 
 export const StartChild = Schema.TaggedStruct('StartChild', { childId: ChildId, generation: Generation })
 export type StartChild = typeof StartChild.Type
@@ -41,7 +41,10 @@ export type ReplyStartRefused = typeof ReplyStartRefused.Type
 export const ReplyStopped = Schema.TaggedStruct('ReplyStopped', { requestId: RequestId })
 export type ReplyStopped = typeof ReplyStopped.Type
 
-export const TerminateSupervisor = Schema.TaggedStruct('TerminateSupervisor', { reason: TerminationReason })
+export const TerminateSupervisor = Schema.TaggedStruct('TerminateSupervisor', {
+  reason: TerminationReason,
+  exit: SupervisorExit,
+})
 export type TerminateSupervisor = typeof TerminateSupervisor.Type
 
 export const SupervisorCommand = Schema.Union([

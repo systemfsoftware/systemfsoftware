@@ -32,12 +32,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./package.json": "./package.json",
-    "./testing": {
-      "@systemfsoftware/source": "./src/testing/LockPrimitiveConformance.ts",
-      "types": "./dist/lock-primitive-conformance.d.ts",
-      "default": "./dist/lock-primitive-conformance.mjs"
-    }
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -103,11 +98,7 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./package.json": "./package.json",
-      "./testing": {
-        "types": "./dist/lock-primitive-conformance.d.ts",
-        "default": "./dist/lock-primitive-conformance.mjs"
-      }
+      "./package.json": "./package.json"
     },
     "provenance": true
   }

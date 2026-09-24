@@ -48,8 +48,8 @@ const persistStep = (
     Effect.suspend(() => Effect.succeed(persistedOf(previous, decision))),
     (next) =>
       Effect.andThen(
-        PubSub.publish(tracePubSubOf(runtime.acquired.handle), { event, decision } satisfies TraceEntry),
         Ref.set(stateOf(runtime.acquired.handle), next),
+        PubSub.publish(tracePubSubOf(runtime.acquired.handle), { event, decision } satisfies TraceEntry),
       ),
   )
 

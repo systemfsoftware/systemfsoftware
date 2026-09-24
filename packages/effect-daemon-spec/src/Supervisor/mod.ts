@@ -38,3 +38,4 @@ export {
   strategy,
 } from './Supervisor.js'
 export type { ChildOptions, ChildProgram, ChildSpec, DynamicOptions, FiberChild, SupervisorSpec } from './Supervisor.js'
+export { SupervisorTerminated } from './SupervisorTerminated.schema.js'

@@ -92,6 +92,7 @@ Each row traces to the OTP `supervisor` reference at https://www.erlang.org/doc/
 
 - R8. A declared backoff schedule spaces consecutive restarts of the same child.
 - R9. A supervisor can declare cool-down instead of termination on intensity exhaustion: it stops its children, waits the declared duration, then starts them again.
+- R37. A supervisor that gives up on intensity exhaustion fails its owner's wait with a typed error carrying the `Cause` of the last abnormal child termination. The failure is observable only after every child has stopped and its finalizers have run. A requested shutdown succeeds the wait. A nested supervisor that gives up ends as an abnormal child of its parent, so escalation reaches the top-level owner (issue #515).
 - R10. A child counts as started when its medium reports it ready; a start that is not ready within its declared start timeout is an abnormal termination.
 
 **Kernel purity**
@@ -444,7 +445,7 @@ execute(ArmTimer(k, d))    = fork sleep(d) then offer TimerElapsed(k)
 ### U6. Kernel shell, builder, handle and fiber medium
 
 - **Goal:** A supervision tree built from `Supervisor.make` runs on the fiber medium with the semantics U1 proves.
-- **Requirements:** R13, R14, R17–R19, R32, R33; KTD3, KTD5, KTD9–KTD12.
+- **Requirements:** R13, R14, R17–R19, R32, R33, R37; KTD3, KTD5, KTD9–KTD12.
 - **Files:** `packages/effect-daemon-spec/src/Supervisor/mod.ts`, the builder resource, `running-supervisor.handle.ts`, `supervisor-step.cell.ts`, the fiber medium; `packages/effect-daemon-spec/tests/*.integration.test.ts`.
 - **Approach:** Build the handle once per `.scoped` acquisition, holding the state `Ref`, the mailbox, the timer fibers and the trace `PubSub`. Any `Layer.provide` inside the handle goes through the `??=` cache binding (`grain-table-identifier-three-fates.md:44-45`). The fiber medium forks the child program into a sub-scope and reports its `Exit` projected to a termination reason. Readiness is a capability the child calls. Children that declare no readiness are ready on start.
 - **Test scenarios:** Sociable, in-process, fiber medium, `TestClock`, no spawning.

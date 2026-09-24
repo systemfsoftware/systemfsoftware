@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Supervisor {
-    export { BareFiberProgram, ChildOptions, ChildProgram, ChildSpec, ChildSpecs, DynamicOptions, DynamicOutcome, DynamicStartAccepted, DynamicStartOutcome, DynamicStartRefused, DynamicStopDone, DynamicStopMissed, DynamicStopOutcome, FiberChild, FiberMedium_d_exports as FiberMedium, FiberProgram, Medium_d_exports as Medium, RunningSupervisor, SpecTypeId, SupervisorSpec, TraceEntry, TypeId, autoShutdown, awaitTerminated, backoff, child, children, coolDown, dynamic, intensity, isRunningSupervisor, isSupervisorSpec, make, readyOnStart, shutdown, startChild, statusOf, stopChild, strategy, traceOf };
+    export { BareFiberProgram, ChildOptions, ChildProgram, ChildSpec, ChildSpecs, DynamicOptions, DynamicOutcome, DynamicStartAccepted, DynamicStartOutcome, DynamicStartRefused, DynamicStopDone, DynamicStopMissed, DynamicStopOutcome, FiberChild, FiberMedium_d_exports as FiberMedium, FiberProgram, Medium_d_exports as Medium, RunningSupervisor, SpecTypeId, SupervisorSpec, SupervisorTerminated, TraceEntry, TypeId, autoShutdown, awaitTerminated, backoff, child, children, coolDown, dynamic, intensity, isRunningSupervisor, isSupervisorSpec, make, readyOnStart, shutdown, startChild, statusOf, stopChild, strategy, traceOf };
 }
 
 // (No @packageDocumentation comment for this package)

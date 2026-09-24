@@ -8,6 +8,7 @@ import type { ChildId, Generation } from '../kernel/SupervisionLimits.schema.js'
 import { Binder, type BoundChild } from './bound-child.js'
 import type { FiberProgram } from './FiberMedium.js'
 import type { Medium, Started } from './Medium.js'
+import type { SupervisorTerminated } from './SupervisorTerminated.schema.js'
 
 /** Brands a running supervisor handle. */
 export const TypeId = Symbol.for('@systemfsoftware/effect-daemon-spec/RunningSupervisor')
@@ -60,7 +61,7 @@ interface SupervisorSlot {
   readonly boundChildren: Ref.Ref<HashMap.HashMap<ChildId, BoundChild>>
   readonly pending: Ref.Ref<HashMap.HashMap<string, BoundChild>>
   readonly requests: Ref.Ref<number>
-  readonly terminated: Deferred.Deferred<void>
+  readonly terminated: Deferred.Deferred<void, SupervisorTerminated>
   readonly scope: Scope.Scope
   readonly context: Context.Context<Scope.Scope>
   readonly fiber: Medium<FiberProgram, never, Scope.Scope>
@@ -96,7 +97,7 @@ export const RunningSupervisorHandle = {
         boundChildren: yield* Ref.make(children),
         pending: yield* Ref.make(HashMap.empty<string, BoundChild>()),
         requests: yield* Ref.make(0),
-        terminated: yield* Deferred.make<void>(),
+        terminated: yield* Deferred.make<void, SupervisorTerminated>(),
         scope,
         context,
         fiber,
@@ -137,7 +138,7 @@ export const fiberMediumOf = (self: RunningSupervisor): Medium<FiberProgram, nev
 const boundFiberProgramOf = (self: RunningSupervisor, program: FiberProgram): BoundChild =>
   Binder.bind(program, fiberMediumOf(self), fiberContextOf(self))
 
-export const terminatedLatchOf = (self: RunningSupervisor): Deferred.Deferred<void> =>
+export const terminatedLatchOf = (self: RunningSupervisor): Deferred.Deferred<void, SupervisorTerminated> =>
   RunningSupervisorDef.slot(self).terminated
 
 export const ownerScopeOf = (self: RunningSupervisor): Scope.Scope => RunningSupervisorDef.slot(self).scope
@@ -168,15 +169,15 @@ const shutdownEventOf = (now: number): SupervisionEvent => ({
   reason: { _tag: 'Shutdown' },
 })
 
-/** Completes once the supervisor has terminated. */
-export const awaitTerminated = (self: RunningSupervisor): Effect.Effect<void> =>
+/** Completes once the supervisor has terminated; fails when it gave up. */
+export const awaitTerminated = (self: RunningSupervisor): Effect.Effect<void, SupervisorTerminated> =>
   Deferred.await(RunningSupervisorDef.slot(self).terminated)
 
 /**
  * Asks the supervisor to shut down and waits until it has terminated: children stop
  * in reverse start order through their media before this completes.
  */
-export const shutdown = (self: RunningSupervisor): Effect.Effect<void> =>
+export const shutdown = (self: RunningSupervisor): Effect.Effect<void, SupervisorTerminated> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.flatMap(Clock.currentTimeMillis, (now) =>
       Effect.andThen(
@@ -195,7 +196,7 @@ const awaitReply = (
   self: RunningSupervisor,
   requestId: string,
   eventOf: (now: number) => SupervisionEvent,
-): Effect.Effect<DynamicOutcome> =>
+): Effect.Effect<DynamicOutcome, SupervisorTerminated> =>
   Effect.flatMap(Deferred.make<DynamicOutcome>(), (waiter) =>
     Effect.andThen(
       Ref.update(RunningSupervisorDef.slot(self).replies, (known) => HashMap.set(known, requestId, waiter)),
@@ -221,11 +222,11 @@ const awaitReply = (
  * answers `accepted` with that id, or `refused` at the declared ceiling.
  */
 export const startChild: {
-  (program: FiberProgram): (self: RunningSupervisor) => Effect.Effect<DynamicOutcome>
-  (self: RunningSupervisor, program: FiberProgram): Effect.Effect<DynamicOutcome>
+  (program: FiberProgram): (self: RunningSupervisor) => Effect.Effect<DynamicOutcome, SupervisorTerminated>
+  (self: RunningSupervisor, program: FiberProgram): Effect.Effect<DynamicOutcome, SupervisorTerminated>
 } = dual(
   2,
-  (self: RunningSupervisor, program: FiberProgram): Effect.Effect<DynamicOutcome> =>
+  (self: RunningSupervisor, program: FiberProgram): Effect.Effect<DynamicOutcome, SupervisorTerminated> =>
     Effect.flatMap(nextRequestId(self, 'start'), (requestId) =>
       Effect.andThen(
         Ref.update(
@@ -241,11 +242,22 @@ export const startChild: {
  * `missed` when that incarnation is no longer current.
  */
 export const stopChild: {
-  (childId: ChildId, generation: Generation): (self: RunningSupervisor) => Effect.Effect<DynamicOutcome>
-  (self: RunningSupervisor, childId: ChildId, generation: Generation): Effect.Effect<DynamicOutcome>
+  (
+    childId: ChildId,
+    generation: Generation,
+  ): (self: RunningSupervisor) => Effect.Effect<DynamicOutcome, SupervisorTerminated>
+  (
+    self: RunningSupervisor,
+    childId: ChildId,
+    generation: Generation,
+  ): Effect.Effect<DynamicOutcome, SupervisorTerminated>
 } = dual(
   3,
-  (self: RunningSupervisor, childId: ChildId, generation: Generation): Effect.Effect<DynamicOutcome> =>
+  (
+    self: RunningSupervisor,
+    childId: ChildId,
+    generation: Generation,
+  ): Effect.Effect<DynamicOutcome, SupervisorTerminated> =>
     Effect.flatMap(nextRequestId(self, 'stop'), (requestId) =>
       awaitReply(
         self,

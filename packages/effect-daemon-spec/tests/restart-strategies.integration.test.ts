@@ -1,6 +1,6 @@
 import { expect } from '@effect/vitest'
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Queue } from 'effect'
 import {
   crashingChild,
@@ -12,7 +12,7 @@ import {
   traceUntil,
 } from './__fixtures__/SupervisorHarness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const restForOneTree = Effect.gen(function*() {
   const crashes = yield* Queue.unbounded<void>()
