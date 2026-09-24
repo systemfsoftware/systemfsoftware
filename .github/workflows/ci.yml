@@ -54,6 +54,9 @@ jobs:
   checks:
     name: build · lint · typecheck · test
     needs: conflicts
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/reusable-checks.yml
   contract:
     name: contract · integration tests

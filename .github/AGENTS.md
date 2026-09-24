@@ -5,13 +5,16 @@ Read this file when a check fails, not before.
 ## Reproduce locally
 
 ```bash
-pnpm check:ci         # the fast CI lane (reusable-checks.yml)
+pnpm check:ci         # everything reusable-checks.yml runs: check:static plus every package's tests
+pnpm check:static     # the static-checks job alone (format, lint, typecheck, type tests, attw, build)
+pnpm --filter <pkg> test --shard=<i>/<n> --reporter=blob   # one shard of a test job; `test --merge-reports` judges the merged shards
 pnpm check:contract   # the contract lane (reusable-contract.yml); needs a container runtime
 ```
 
 ## Standing facts
 
 - **Each CI lane owns its turbo cache key prefix** (`turbo-<os>-<lane>-<sha>`). actions/cache keys are immutable: lanes sharing a key race, and the faster lane's partial save silently drops the slower lane's entries.
+- **Test jobs are planned from main's timings.** The `plan` job reads the newest `test-timings` artifact from main and packs packages into free `ubuntu-latest` jobs of at most 5 minutes (`scripts/tools/test-timings.ts`); a package over 5 minutes runs as vitest shards, and its `merge` job judges conformance coverage once over the merged shards, failing if a shard's files are missing. The `timings` job records every measured package into this run's `test-timings` artifact, so the next run on main re-packs automatically.
 - **Never re-trigger a release by hand.** `scripts/tools/plan-release.ts` derives the phase from registry state, so a killed publish leaves 404s the next push re-plans. npm's 409 "previously staged version" / 403 "previously published versions" means `held`, not failed (`scripts/tools/publish-set.test.ts`).
 - **CI cannot debut a package** (OIDC cannot publish a first version): a maintainer runs `pnpm publish:unpublished` and registers the trusted publisher.
 

@@ -5,10 +5,44 @@ on:
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  TIMINGS: deno run --config=scripts/deno.jsonc --lock=scripts/deno.lock --allow-read --allow-write --allow-env scripts/tools/test-timings.ts
 
 jobs:
-  check:
-    name: the gate (pnpm check:ci)
+  plan:
+    name: plan · test jobs from main's timings
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.plan.outputs.jobs }}
+      merges: ${{ steps.plan.outputs.merges }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+      - name: Main's latest timing record
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .timings/previous
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=test-timings&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].id // empty') || id=
+          if [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip; then
+            unzip -o -q .timings/previous.zip -d .timings/previous || true
+          fi
+          ls .timings/previous
+      - id: plan
+        run: $TIMINGS plan --record .timings/previous/test-timings.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-timings-previous
+          path: .timings/previous/
+          if-no-files-found: ignore
+          retention-days: 1
+
+  static:
+    name: static checks (pnpm check:static)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -16,19 +50,15 @@ jobs:
       CI: "true"
       OXLINT_FORMAT: github
       TSGO_FORMAT: github-actions
+      TURBO_LOG_ORDER: stream
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
-      # dprint is a flake package, not an npm dependency; bin/dprint takes the
-      # first dprint on PATH.
       - uses: cachix/install-nix-action@v31
       - name: dprint from the flake
         run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
-      # The runner image ships no Deno, and `pnpm check:ci` runs the Deno guards
-      # (`//#check:exported-wiring`) inside gate:tasks, so the runtime must be on PATH.
-      # Same reason changeset-check.yml and release.yml already carry this step.
       - uses: denoland/setup-deno@v2
       - name: Turbo cache
         uses: actions/cache@v6
@@ -38,8 +68,36 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-checks-
             turbo-${{ runner.os }}-
-      # atom-react tests run in Vitest browser mode (playwright chromium).
+      - name: Static checks
+        run: corepack pnpm check:static
+
+  test:
+    name: test · ${{ matrix.job.name }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        job: ${{ fromJSON(needs.plan.outputs.jobs) }}
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - uses: denoland/setup-deno@v2
+      - name: Turbo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-test-${{ matrix.job.id }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-test-${{ matrix.job.id }}-
+            turbo-${{ runner.os }}-checks-
+            turbo-${{ runner.os }}-
       - name: Cache Playwright browsers
+        if: matrix.job.browser
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
@@ -47,7 +105,138 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Install Playwright chromium
+        if: matrix.job.browser
         run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
-      # Root package.json `check:ci` is the one definition. Never re-enumerate its steps here.
-      - name: Gate
-        run: corepack pnpm check:ci
+      - name: Test
+        if: matrix.job.shard == null
+        run: corepack pnpm exec turbo run test --continue --summarize --output-logs=new-only --log-order=stream ${{ matrix.job.filters }}
+      - name: Build for shard
+        if: matrix.job.shard != null
+        run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream ${{ matrix.job.filters }}
+      - name: Test shard
+        id: shard
+        if: matrix.job.shard != null
+        env:
+          PACKAGE: ${{ matrix.job.shard.package }}
+          SHARD: ${{ matrix.job.shard.index }}/${{ matrix.job.shard.count }}
+        run: |
+          start=$SECONDS
+          code=0
+          corepack pnpm --filter "$PACKAGE" test --shard="$SHARD" --passWithNoTests \
+            --reporter=default --reporter=github-actions --reporter=blob || code=$?
+          echo "seconds=$((SECONDS - start))" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+      - name: Record timings
+        if: always()
+        env:
+          JOB_ID: ${{ matrix.job.id }}
+          PACKAGE: ${{ matrix.job.shard.package }}
+          SHARD: ${{ matrix.job.shard.index }}/${{ matrix.job.shard.count }}
+          SECONDS_TAKEN: ${{ steps.shard.outputs.seconds }}
+          EXIT_CODE: ${{ steps.shard.outputs.code }}
+        run: |
+          mkdir -p .timings
+          if [ -n "$SECONDS_TAKEN" ]; then
+            $TIMINGS part --job "$JOB_ID" --out ".timings/$JOB_ID.json" \
+              --package "$PACKAGE" --shard "$SHARD" --seconds "$SECONDS_TAKEN" --exit "$EXIT_CODE"
+          else
+            $TIMINGS part --job "$JOB_ID" --out ".timings/$JOB_ID.json"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-timings-part-${{ matrix.job.id }}
+          path: .timings/${{ matrix.job.id }}.json
+          if-no-files-found: ignore
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always() && matrix.job.shard != null
+        with:
+          name: blob-${{ matrix.job.shard.slug }}-${{ matrix.job.shard.index }}
+          path: ${{ matrix.job.shard.dir }}/.vitest/blob/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 1
+
+  merge:
+    name: merge · ${{ matrix.target.slug }}
+    needs: [plan, test]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.merges != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.merges) }}
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/install-deps
+      - name: Turbo cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-test-${{ matrix.target.slug }}-1-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-test-${{ matrix.target.slug }}-1-
+            turbo-${{ runner.os }}-checks-
+            turbo-${{ runner.os }}-
+      - name: Build the package's dependencies
+        run: corepack pnpm exec turbo run build --output-logs=errors-only "--filter=${{ matrix.target.package }}^..."
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: blob-${{ matrix.target.slug }}-*
+          path: ${{ matrix.target.dir }}/.vitest/blob
+          merge-multiple: true
+      - name: Merge shards and judge
+        env:
+          PACKAGE: ${{ matrix.target.package }}
+        run: corepack pnpm --filter "$PACKAGE" test --merge-reports --reporter=default --reporter=github-actions
+
+  timings:
+    name: record test timings
+    needs: [plan, test]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: test-timings-part-*
+          path: .timings/parts
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: test-timings-previous
+          path: .timings/previous
+      - name: Merge this run into the record
+        run: $TIMINGS merge --previous .timings/previous/test-timings.json --parts .timings/parts --out .timings/test-timings.json --sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-timings
+          path: .timings/test-timings.json
+          retention-days: 30
+
+  check:
+    name: the gate (pnpm check:ci)
+    needs: [plan, static, test, merge]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every lane passed
+        env:
+          PLAN: ${{ needs.plan.result }}
+          STATIC: ${{ needs.static.result }}
+          TEST: ${{ needs.test.result }}
+          MERGE: ${{ needs.merge.result }}
+        run: |
+          echo "plan=$PLAN static=$STATIC test=$TEST merge=$MERGE"
+          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$TEST" = success ] \
+            && { [ "$MERGE" = success ] || [ "$MERGE" = skipped ]; }
