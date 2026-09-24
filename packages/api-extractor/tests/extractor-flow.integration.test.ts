@@ -1,10 +1,10 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
+import { expect } from '@effect/vitest'
 import { Extractor } from '@systemfsoftware/api-extractor'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import { expect } from 'vitest'
 
 import {
   changedEntries,
@@ -16,7 +16,7 @@ import {
   withFixtureProject,
 } from './__fixtures__/extractor-harness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const compilerFolderMessage = 'No usable TypeScript compiler package found in this folder'
 
@@ -34,24 +34,25 @@ const withoutReportFolder = ({ projectRoot }: FixtureSandbox) =>
 const reviewVerbosely = ({ projectRoot }: FixtureSandbox) =>
   Effect.gen(function*() {
     const path = yield* Path.Path
-    const observed = yield* reviewProject(
+    const observed = yield* reviewProject({
       projectRoot,
-      path.join(projectRoot, 'api-extractor.json'),
-      { cliFlags: { verbose: true } },
-    )
+      configPath: path.join(projectRoot, 'api-extractor.json'),
+      options: { cliFlags: { verbose: true } },
+    })
     return { ...observed, reportPath: path.join(projectRoot, 'etc/simple-pkg.api.md') }
   })
 
 const reviewWithoutCompiler = ({ projectRoot }: FixtureSandbox) =>
   Effect.gen(function*() {
     const path = yield* Path.Path
-    return yield* runExtraction(path.join(projectRoot, 'api-extractor.json'), {
-      typescriptCompilerFolder: projectRoot,
-      cliFlags: { verbose: true },
+    return yield* runExtraction({
+      configPath: path.join(projectRoot, 'api-extractor.json'),
+      options: { typescriptCompilerFolder: projectRoot, cliFlags: { verbose: true } },
     })
   })
 
 Feature('Keeping a committed API report in step with a package\u2019s declarations')
+  .live('the review runs the real extractor over a fixture project on the host filesystem')
   .withLayer(NodeServices.layer)
   .body(({ scenario }) => {
     scenario(
@@ -63,7 +64,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         ),
         When('the package is reviewed in verification mode')(
           'observed',
-          (s) => reviewFixture(s.fixture),
+          (s) => reviewFixture({ fixture: s.fixture }),
         ),
         Then('the review passes without errors or warnings')((s) => {
           expect(s.observed.run.outcome).toMatchObject({
@@ -73,7 +74,9 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         }),
         Then('nothing outside the report draft folder changed')((s) => {
           expect(
-            changedEntries(s.observed.before, s.observed.after).filter((entry) => entry.split('/')[0] !== 'temp'),
+            changedEntries({ before: s.observed.before, after: s.observed.after }).filter((entry) =>
+              entry.split('/')[0] !== 'temp'
+            ),
           ).toEqual([])
         }),
         Then('the report draft carries the declaration the report promises')((s) => {
@@ -93,7 +96,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         ),
         When('the package is reviewed in verification mode')(
           'observed',
-          (s) => reviewFixture(s.fixture),
+          (s) => reviewFixture({ fixture: s.fixture }),
         ),
         Then('the review fails because the committed report is out of date')((s) => {
           expect(s.observed.run.outcome).toMatchObject({
@@ -120,7 +123,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         ),
         When('the package is reviewed as part of a local build')(
           'observed',
-          (s) => reviewFixture(s.fixture, { localBuild: true }),
+          (s) => reviewFixture({ fixture: s.fixture, options: { localBuild: true } }),
         ),
         Then('the review passes')((s) => {
           expect(s.observed.run.outcome).toMatchObject({
@@ -147,7 +150,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         ),
         When('the package is reviewed as part of a local build')(
           'observed',
-          (s) => reviewFixture(s.fixture, { localBuild: true }, withoutReportFolder),
+          (s) => reviewFixture({ fixture: s.fixture, options: { localBuild: true }, prepare: withoutReportFolder }),
         ),
         Then('the review fails with a single error and no warnings')((s) => {
           expect(s.observed.run.outcome).toMatchObject({
@@ -172,7 +175,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         ),
         When('the package is reviewed')(
           'observed',
-          (s) => withFixtureProject(s.fixture, reviewVerbosely),
+          (s) => withFixtureProject({ fixture: s.fixture, use: reviewVerbosely }),
         ),
         Then('the narration opens with the tool banner and the configuration it read')((s) => {
           const lines = stdoutLines(s.observed.run)
@@ -206,7 +209,7 @@ Feature('Keeping a committed API report in step with a package\u2019s declaratio
         ),
         When('the package is reviewed against that folder')(
           'observed',
-          (s) => withFixtureProject(s.fixture, reviewWithoutCompiler),
+          (s) => withFixtureProject({ fixture: s.fixture, use: reviewWithoutCompiler }),
         ),
         Then('the review is refused because no compiler could be loaded from that folder')((s) => {
           expect(s.observed.outcome).toMatchObject({

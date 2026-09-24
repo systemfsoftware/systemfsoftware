@@ -116,10 +116,17 @@ const liveTsCandidate = (pair: CompilerTargetPair): Effect.Effect<TsCompilationO
   Effect.sync(() => compileTsVirtual(pair, 'pinItem'))
 
 Differential.compare({
+  name: 'the pinned TypeScript compiler and the installed one agree on a virtual project',
   reference: pinnedTsReference,
   candidate: liveTsCandidate,
 })
-  .on(compilerTargetPairs, { runBudget: 10, interruptAfterTimeLimit: 30_000 })
+  .on(compilerTargetPairs, {
+    runBudget: 10,
+    hostBound: {
+      timeout: 30_000,
+      reason: 'the live side compiles a virtual project with the installed TypeScript compiler',
+    },
+  })
   .assert((pinned, live) =>
     pinned.version === live.version &&
     pinned.parsedFileCount === live.parsedFileCount &&

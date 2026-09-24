@@ -32,6 +32,38 @@ export interface ReviewObservation {
   readonly run: ExtractionRun
 }
 
+export interface ExtractionRequest {
+  readonly configPath: string
+  readonly options?: Extractor.ExtractorRunOptions
+}
+
+export interface ProjectReviewRequest {
+  readonly projectRoot: string
+  readonly configPath: string
+  readonly options?: Extractor.ExtractorRunOptions
+}
+
+export interface FixtureReviewRequest {
+  readonly fixture: string
+  readonly options?: Extractor.ExtractorRunOptions
+  readonly prepare?: FixtureSetup
+}
+
+export interface FixtureProjectRequest<A, E, R> {
+  readonly fixture: string
+  readonly use: (sandbox: FixtureSandbox) => Effect.Effect<A, E, R>
+}
+
+export interface FixtureFileRequest {
+  readonly fixture: string
+  readonly relativePath: string
+}
+
+export interface TreeComparison {
+  readonly before: Readonly<Record<string, string>>
+  readonly after: Readonly<Record<string, string>>
+}
+
 type FixtureSetup = (sandbox: FixtureSandbox) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path>
 
 const sinkInto = (lines: string[]): Extractor.TextWritable => ({
@@ -41,8 +73,7 @@ const sinkInto = (lines: string[]): Extractor.TextWritable => ({
 })
 
 export const runExtraction = (
-  configPath: string,
-  options: Extractor.ExtractorRunOptions = {},
+  { configPath, options = {} }: ExtractionRequest,
 ): Effect.Effect<ExtractionRun, never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const stdout: string[] = []
@@ -55,8 +86,7 @@ export const runExtraction = (
   })
 
 export const withFixtureProject = <A, E, R>(
-  fixture: string,
-  use: (sandbox: FixtureSandbox) => Effect.Effect<A, E, R>,
+  { fixture, use }: FixtureProjectRequest<A, E, R>,
 ): Effect.Effect<A, FixtureFailure | E, R | FileSystem.FileSystem | Path.Path> =>
   Effect.scoped(
     Effect.gen(function*() {
@@ -71,32 +101,31 @@ export const withFixtureProject = <A, E, R>(
   )
 
 export const reviewProject = (
-  projectRoot: string,
-  configPath: string,
-  options: Extractor.ExtractorRunOptions = {},
+  { projectRoot, configPath, options = {} }: ProjectReviewRequest,
 ): Effect.Effect<ReviewObservation, PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const before = yield* readTree(projectRoot)
-    const run = yield* runExtraction(configPath, options)
+    const run = yield* runExtraction({ configPath, options })
     const after = yield* readTree(projectRoot)
     return { projectRoot, configPath, before, after, run }
   })
 
 export const reviewFixture = (
-  fixture: string,
-  options: Extractor.ExtractorRunOptions = {},
-  prepare: FixtureSetup = () => Effect.void,
+  { fixture, options = {}, prepare = () => Effect.void }: FixtureReviewRequest,
 ): Effect.Effect<ReviewObservation, FixtureFailure, FileSystem.FileSystem | Path.Path> =>
-  withFixtureProject(fixture, (sandbox) =>
-    Effect.gen(function*() {
-      const path = yield* Path.Path
-      yield* prepare(sandbox)
-      return yield* reviewProject(
-        sandbox.projectRoot,
-        path.join(sandbox.projectRoot, 'api-extractor.json'),
-        options,
-      )
-    }))
+  withFixtureProject({
+    fixture,
+    use: (sandbox) =>
+      Effect.gen(function*() {
+        const path = yield* Path.Path
+        yield* prepare(sandbox)
+        return yield* reviewProject({
+          projectRoot: sandbox.projectRoot,
+          configPath: path.join(sandbox.projectRoot, 'api-extractor.json'),
+          options,
+        })
+      }),
+  })
 
 export const readTree = (
   root: string,
@@ -114,16 +143,14 @@ export const readTree = (
   })
 
 export const changedEntries = (
-  before: Readonly<Record<string, string>>,
-  after: Readonly<Record<string, string>>,
+  { before, after }: TreeComparison,
 ): readonly string[] =>
   [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter((entry) => before[entry] !== after[entry])
     .sort((left, right) => left.localeCompare(right))
 
 export const readFixtureFile = (
-  fixture: string,
-  relativePath: string,
+  { fixture, relativePath }: FixtureFileRequest,
 ): Effect.Effect<string, FixtureFailure, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem

@@ -57,8 +57,10 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
     "@systemfsoftware/differential-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",
@@ -105,7 +107,6 @@
     "./package.json": "./package.json"
   },
   "inlinedDependencies": {
-    "@effect/vitest": "4.0.0-rc.116",
     "@jridgewell/sourcemap-codec": "1.6.0",
     "chai": "6.2.2",
     "expect-type": "1.4.0",

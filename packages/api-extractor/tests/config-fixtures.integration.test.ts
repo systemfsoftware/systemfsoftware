@@ -1,11 +1,11 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
+import { expect } from '@effect/vitest'
 import { Extractor } from '@systemfsoftware/api-extractor'
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
-import { expect } from 'vitest'
 
 import {
   changedEntries,
@@ -16,7 +16,7 @@ import {
   withFixtureProject,
 } from './__fixtures__/extractor-harness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const workingPackage = 'extractor-flow/simple-pkg'
 
@@ -36,21 +36,21 @@ const reviewWithConfiguration = (config: string) => ({ projectRoot }: FixtureSan
     const path = yield* Path.Path
     const configPath = path.join(projectRoot, 'api-extractor.json')
     yield* fs.writeFileString(configPath, config)
-    return { configPath, run: yield* runExtraction(configPath) } satisfies ConfigurationReview
+    return { configPath, run: yield* runExtraction({ configPath }) } satisfies ConfigurationReview
   })
 
 const reviewUnreadableConfiguration = ({ projectRoot }: FixtureSandbox) =>
   Effect.gen(function*() {
     const path = yield* Path.Path
     const configPath = path.join(projectRoot, 'corrupt-config', 'broken.json.txt')
-    return { configPath, run: yield* runExtraction(configPath) } satisfies ConfigurationReview
+    return { configPath, run: yield* runExtraction({ configPath }) } satisfies ConfigurationReview
   })
 
 const reviewMissingConfiguration = ({ projectRoot }: FixtureSandbox) =>
   Effect.gen(function*() {
     const path = yield* Path.Path
     const configPath = path.join(projectRoot, 'nowhere', 'api-extractor.json')
-    return { configPath, run: yield* runExtraction(configPath) } satisfies ConfigurationReview
+    return { configPath, run: yield* runExtraction({ configPath }) } satisfies ConfigurationReview
   })
 
 const reviewPairOfConfigurations = ({ projectRoot }: FixtureSandbox) =>
@@ -60,7 +60,7 @@ const reviewPairOfConfigurations = ({ projectRoot }: FixtureSandbox) =>
     const firstPath = path.join(projectRoot, 'first.json')
     yield* fs.writeFileString(firstPath, '{"extends": "./second.json"}')
     yield* fs.writeFileString(path.join(projectRoot, 'second.json'), '{"extends": "./first.json"}')
-    return { configPath: firstPath, run: yield* runExtraction(firstPath) } satisfies ConfigurationReview
+    return { configPath: firstPath, run: yield* runExtraction({ configPath: firstPath }) } satisfies ConfigurationReview
   })
 
 const reviewConfigurationWithoutCompilerSettings = ({ root }: FixtureSandbox) =>
@@ -75,7 +75,7 @@ const reviewConfigurationWithoutCompilerSettings = ({ root }: FixtureSandbox) =>
       '{"mainEntryPointFilePath": "<projectFolder>/index.d.ts", "apiReport": {"enabled": false},' +
         ' "docModel": {"enabled": false}, "dtsRollup": {"enabled": false}}',
     )
-    return { configPath, run: yield* runExtraction(configPath) } satisfies ConfigurationReview
+    return { configPath, run: yield* runExtraction({ configPath }) } satisfies ConfigurationReview
   })
 
 const inheritedBaseConfiguration = `{
@@ -105,7 +105,7 @@ const reviewExtendingProject = ({ projectRoot }: FixtureSandbox) =>
     const configFolder = path.join(projectRoot, 'config-lookup1')
     yield* fs.writeFileString(path.join(configFolder, 'inherited-base.json'), inheritedBaseConfiguration)
     yield* fs.writeFileString(path.join(configFolder, 'derived.json'), derivedConfiguration)
-    return yield* reviewProject(configFolder, path.join(configFolder, 'derived.json'))
+    return yield* reviewProject({ projectRoot: configFolder, configPath: path.join(configFolder, 'derived.json') })
   })
 
 /**
@@ -121,7 +121,7 @@ const reviewPublishedConfiguration = ({ projectRoot }: FixtureSandbox) =>
     yield* fs.writeFileString(path.join(projectRoot, 'api-extractor.json'), committed)
     yield* fs.copy(path.join(projectRoot, 'lib/index.d.ts'), path.join(projectRoot, 'dist/index.d.ts'))
     yield* fs.copy(path.join(projectRoot, 'tsconfig.json'), path.join(projectRoot, 'tsconfig.api.json'))
-    return yield* reviewProject(projectRoot, path.join(projectRoot, 'api-extractor.json'))
+    return yield* reviewProject({ projectRoot, configPath: path.join(projectRoot, 'api-extractor.json') })
   })
 
 const unrecognizedConfigurationValues = [
@@ -148,6 +148,7 @@ const unrecognizedConfigurationValues = [
 ] as const
 
 Feature('Locating and reading a project\u2019s extractor configuration')
+  .live('the review runs the real extractor over a fixture project on the host filesystem')
   .withLayer(NodeServices.layer)
   .body(({ scenario, scenarioOutline }) => {
     scenario(
@@ -155,7 +156,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       Gherkin.Do.pipe(
         Given('a project whose configuration extends a shared base')(
           'review',
-          () => withFixtureProject('config-lookup', reviewExtendingProject),
+          () => withFixtureProject({ fixture: 'config-lookup', use: reviewExtendingProject }),
         ),
         Then('the list the derived configuration declares replaces the base list')((s) => {
           expect(reportOutcomesOf(s.review.run).map((outcome) => outcome.variant)).toEqual(['complete', 'beta'])
@@ -169,7 +170,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
         Then('the compiler settings the base declares are inherited')((s) => {
           const generated = reportOutcomesOf(s.review.run).map((outcome) => outcome.generatedText)
           expect(generated.length).toBeGreaterThan(0)
-          expect(generated.every((text) => text.includes('export const a = 1'))).toBe(true)
+          expect(generated.filter((text) => !text.includes('export const a = 1'))).toEqual([])
         }),
       ),
     )
@@ -179,10 +180,10 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       Gherkin.Do.pipe(
         Given('the configuration a published workspace package commits')(
           'review',
-          () => withFixtureProject(workingPackage, reviewPublishedConfiguration),
+          () => withFixtureProject({ fixture: workingPackage, use: reviewPublishedConfiguration }),
         ),
         Then('its entry point points at the built declarations')((s) => {
-          expect(changedEntries(s.review.before, s.review.after)).toContain('dist/index.d.ts')
+          expect(changedEntries({ before: s.review.before, after: s.review.after })).toContain('dist/index.d.ts')
         }),
         Then('its reports are written beside the package')((s) => {
           const [report] = reportOutcomesOf(s.review.run)
@@ -200,7 +201,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
         Gherkin.Do.pipe(
           Given('a project whose configuration sets a value the engine does not recognize')(
             'review',
-            () => withFixtureProject(workingPackage, reviewWithConfiguration(row.config)),
+            () => withFixtureProject({ fixture: workingPackage, use: reviewWithConfiguration(row.config) }),
           ),
           Then('the review is refused')((s) => {
             expect(s.review.run.outcome).toMatchObject({ _tag: 'Failure', failure: { _tag: row.refusal } })
@@ -217,13 +218,13 @@ Feature('Locating and reading a project\u2019s extractor configuration')
         Given('a project whose entry point is written under an unknown "<sourceFolder>" placeholder')(
           'review',
           () =>
-            withFixtureProject(
-              workingPackage,
-              reviewWithConfiguration(
+            withFixtureProject({
+              fixture: workingPackage,
+              use: reviewWithConfiguration(
                 '{"mainEntryPointFilePath": "<sourceFolder>/index.d.ts", "apiReport": {"enabled": false},' +
                   ' "docModel": {"enabled": false}, "dtsRollup": {"enabled": false}}',
               ),
-            ),
+            }),
         ),
         Then('the review is refused because of the unknown placeholder')((s) => {
           expect(s.review.run.outcome).toMatchObject({
@@ -239,7 +240,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       Gherkin.Do.pipe(
         Given('a project whose configuration file stops midway through')(
           'review',
-          () => withFixtureProject('extractor-flow', reviewUnreadableConfiguration),
+          () => withFixtureProject({ fixture: 'extractor-flow', use: reviewUnreadableConfiguration }),
         ),
         Then('the review is refused because the configuration could not be read')((s) => {
           expect(s.review.run.outcome).toMatchObject({
@@ -255,7 +256,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       Gherkin.Do.pipe(
         Given('a project reviewed at a configuration path that holds no file')(
           'review',
-          () => withFixtureProject(workingPackage, reviewMissingConfiguration),
+          () => withFixtureProject({ fixture: workingPackage, use: reviewMissingConfiguration }),
         ),
         Then('the review is refused because the configuration is missing')((s) => {
           expect(s.review.run.outcome).toMatchObject({
@@ -271,7 +272,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       Gherkin.Do.pipe(
         Given('a project holding two configurations that each extend the other')(
           'review',
-          () => withFixtureProject(workingPackage, reviewPairOfConfigurations),
+          () => withFixtureProject({ fixture: workingPackage, use: reviewPairOfConfigurations }),
         ),
         Then('the review is refused because the inheritance never ends')((s) => {
           expect(s.review.run.outcome).toMatchObject({
@@ -300,7 +301,7 @@ Feature('Locating and reading a project\u2019s extractor configuration')
       Gherkin.Do.pipe(
         Given('a configuration that sits in a folder with no compiler settings anywhere above it')(
           'review',
-          () => withFixtureProject(workingPackage, reviewConfigurationWithoutCompilerSettings),
+          () => withFixtureProject({ fixture: workingPackage, use: reviewConfigurationWithoutCompilerSettings }),
         ),
         Then('the review is refused because the project folder cannot be located')((s) => {
           expect(s.review.run.outcome).toMatchObject({

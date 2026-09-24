@@ -1,10 +1,10 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import * as Ts from 'typescript'
-import { expect } from 'vitest'
 
 import {
   readFixtureFile,
@@ -13,7 +13,7 @@ import {
   withFixtureProject,
 } from './__fixtures__/extractor-harness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 interface RollupReview {
   readonly run: ReviewObservation
@@ -22,15 +22,18 @@ interface RollupReview {
 }
 
 const reviewRollup = (fixture: string, bundleName: string) =>
-  withFixtureProject(fixture, ({ projectRoot }) =>
-    Effect.gen(function*() {
-      const fs = yield* FileSystem.FileSystem
-      const path = yield* Path.Path
-      const run = yield* reviewProject(projectRoot, path.join(projectRoot, 'api-extractor.json'))
-      const emitted = yield* fs.readFileString(path.join(projectRoot, 'dist', bundleName))
-      const committed = yield* readFixtureFile(fixture, `expected/${bundleName}`)
-      return { run, emitted, committed } satisfies RollupReview
-    }))
+  withFixtureProject({
+    fixture,
+    use: ({ projectRoot }) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        const run = yield* reviewProject({ projectRoot, configPath: path.join(projectRoot, 'api-extractor.json') })
+        const emitted = yield* fs.readFileString(path.join(projectRoot, 'dist', bundleName))
+        const committed = yield* readFixtureFile({ fixture, relativePath: `expected/${bundleName}` })
+        return { run, emitted, committed } satisfies RollupReview
+      }),
+  })
 
 const diagnosticsOf = (declarationText: string): readonly string[] => {
   const options: Ts.CompilerOptions = {
@@ -58,6 +61,7 @@ const diagnosticsOf = (declarationText: string): readonly string[] => {
 }
 
 Feature('Bundling a package\u2019s declarations with namespace exports')
+  .live('the review runs the real extractor over a fixture project on the host filesystem')
   .withLayer(NodeServices.layer)
   .body(({ scenario }) => {
     scenario(

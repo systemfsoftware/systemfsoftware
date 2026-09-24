@@ -1,6 +1,7 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
+import { expect } from '@effect/vitest'
 import { Extractor } from '@systemfsoftware/api-extractor'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import type * as Exit from 'effect/Exit'
@@ -8,11 +9,10 @@ import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as Runtime from 'effect/Runtime'
 import { Command } from 'effect/unstable/cli'
-import { expect } from 'vitest'
 
 import { type FixtureSandbox, withFixtureProject } from './__fixtures__/extractor-harness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const cleanPackage = 'extractor-flow/simple-pkg'
 
@@ -112,6 +112,7 @@ const reviewedQuietly = (
   })
 
 Feature('Invoking the api-extractor command line over a package')
+  .live('the review runs the real extractor over a fixture project on the host filesystem')
   .withLayer(NodeServices.layer)
   .body(({ scenario }) => {
     scenario(
@@ -141,7 +142,11 @@ Feature('Invoking the api-extractor command line over a package')
         ),
         When('the package is reviewed as part of a local build with the tool silenced')(
           'journey',
-          (s) => withFixtureProject(s.fixture, (sandbox) => reviewedQuietly(sandbox, ['--local', '--quiet'])),
+          (s) =>
+            withFixtureProject({
+              fixture: s.fixture,
+              use: (sandbox) => reviewedQuietly(sandbox, ['--local', '--quiet']),
+            }),
         ),
         Then('the review exits successfully having printed nothing at all')((s) => {
           expect(s.journey).toEqual({ exit: 0, stdout: '', stderr: '' })
@@ -158,7 +163,7 @@ Feature('Invoking the api-extractor command line over a package')
         ),
         When('the package is reviewed in verification mode with the tool silenced')(
           'journey',
-          (s) => withFixtureProject(s.fixture, (sandbox) => reviewedQuietly(sandbox, ['--quiet'])),
+          (s) => withFixtureProject({ fixture: s.fixture, use: (sandbox) => reviewedQuietly(sandbox, ['--quiet']) }),
         ),
         Then('the review fails, explains that the report is out of date, and reports the outcome on the error stream')(
           (s) => {

@@ -1,15 +1,16 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 
 import { reviewFixture } from './__fixtures__/extractor-harness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const parityPackage = 'report-parity/simple-pkg'
 
 Feature('Publishing the API reports a package promises')
+  .live('the review runs the real extractor over a fixture project on the host filesystem')
   .withLayer(NodeServices.layer)
   .body(({ scenario }) => {
     scenario(
@@ -21,7 +22,7 @@ Feature('Publishing the API reports a package promises')
         ),
         When('the package is reviewed in verification mode')(
           'observed',
-          (s) => reviewFixture(s.fixture),
+          (s) => reviewFixture({ fixture: s.fixture }),
         ),
         Then('the review passes without errors or warnings')((s) => {
           expect(s.observed.run.outcome).toMatchObject({
@@ -64,7 +65,7 @@ Feature('Publishing the API reports a package promises')
         ),
         When('the package is reviewed in verification mode')(
           'observed',
-          (s) => reviewFixture(s.fixture),
+          (s) => reviewFixture({ fixture: s.fixture }),
         ),
         Then('the report calls out the internal declaration inside the report text')((s) => {
           expect(s.observed.after['temp/simple-pkg.api.md']).toContain(

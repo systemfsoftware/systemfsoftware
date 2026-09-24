@@ -1,8 +1,8 @@
 import * as NodeServices from '@effect/platform-node/NodeServices'
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { expect } from '@effect/vitest'
+import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import * as Path from 'effect/Path'
-import { expect } from 'vitest'
 
 import {
   readFixtureFile,
@@ -11,7 +11,7 @@ import {
   withFixtureProject,
 } from './__fixtures__/extractor-harness.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const analyzerPackage = 'analyzer'
 
@@ -23,15 +23,22 @@ interface AnalyzerReview {
 }
 
 const reviewAnalyzerPackage = () =>
-  withFixtureProject(analyzerPackage, ({ projectRoot }) =>
-    Effect.gen(function*() {
-      const path = yield* Path.Path
-      const run = yield* reviewProject(projectRoot, path.join(projectRoot, 'api-extractor.json'))
-      const committedReport = yield* readFixtureFile(analyzerPackage, 'expected/analyzer-fixture.api.md')
-      return { run, committedReport } satisfies AnalyzerReview
-    }))
+  withFixtureProject({
+    fixture: analyzerPackage,
+    use: ({ projectRoot }) =>
+      Effect.gen(function*() {
+        const path = yield* Path.Path
+        const run = yield* reviewProject({ projectRoot, configPath: path.join(projectRoot, 'api-extractor.json') })
+        const committedReport = yield* readFixtureFile({
+          fixture: analyzerPackage,
+          relativePath: 'expected/analyzer-fixture.api.md',
+        })
+        return { run, committedReport } satisfies AnalyzerReview
+      }),
+  })
 
 Feature('Reporting what a package\u2019s entry point leaves out')
+  .live('the review runs the real extractor over a fixture project on the host filesystem')
   .withLayer(NodeServices.layer)
   .body(({ scenario }) => {
     scenario(
