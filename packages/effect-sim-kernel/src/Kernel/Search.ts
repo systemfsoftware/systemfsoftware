@@ -77,8 +77,6 @@ interface Schedule {
   readonly used: number
 }
 
-const branchable = (position: number, explored: number): boolean => position >= explored
-
 interface Observed<A, E> {
   readonly result: RunResult<A, E>
   readonly schedule: Schedule
@@ -177,8 +175,14 @@ const runOptions = <A, E>(
   return { choose, maxSteps }
 }
 
-const spentAt = <A, E>(result: RunResult<A, E>, position: number): number =>
-  result.steps.slice(0, position).filter((step) => step.deviation).length
+const deviationsBefore = (steps: ReadonlyArray<{ readonly deviation: boolean }>): ReadonlyArray<number> => {
+  let spent = 0
+  return steps.map((step) => {
+    const before = spent
+    spent += Number(step.deviation)
+    return before
+  })
+}
 
 const indices = (count: number): ReadonlyArray<number> => Array.from({ length: count }, (_value, index) => index)
 
@@ -221,32 +225,26 @@ const stepBranches = <A, E>(
   state: SearchState<A, E>,
   result: RunResult<A, E>,
   position: number,
+  spent: number,
 ): ReadonlyArray<Schedule> => {
   const step = result.steps[position]
   if (step === undefined) return []
-  const spent = spentAt(result, position)
   return indices(step.options).flatMap((alt) => {
     const branch = visibleBranch(state, step, position, result.decisions, spent, alt)
     return branch === undefined ? [] : [branch]
   })
 }
 
-const freshBranches = <A, E>(
-  state: SearchState<A, E>,
-  result: RunResult<A, E>,
-  explored: number,
-  position: number,
-): ReadonlyArray<Schedule> => {
-  if (!branchable(position, explored)) return []
-  return stepBranches(state, result, position)
-}
-
 const branchesOf = <A, E>(
   state: SearchState<A, E>,
   result: RunResult<A, E>,
   explored: number,
-): ReadonlyArray<Schedule> =>
-  result.decisions.flatMap((_decision, position) => freshBranches(state, result, explored, position))
+): ReadonlyArray<Schedule> => {
+  const spent = deviationsBefore(result.steps)
+  return result.decisions.slice(explored).flatMap((_decision, offset) =>
+    stepBranches(state, result, explored + offset, spent[explored + offset] ?? 0)
+  )
+}
 
 const absorb = <A, E>(state: SearchState<A, E>, observed: Observed<A, E>): void => {
   state.schedules += 1
