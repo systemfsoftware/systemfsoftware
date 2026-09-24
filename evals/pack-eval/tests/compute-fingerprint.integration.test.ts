@@ -11,36 +11,11 @@ import {
   fingerprintRequestOf,
 } from './__fixtures__/fingerprint-checkout.fixture.js'
 import { type FingerprintMutation, fingerprintWorld } from './__fixtures__/pack-eval-world.fixture.js'
+import { recordingConsoleOf } from './__fixtures__/recording-console.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
 const fileLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
-
-const recordingConsoleOf = (lines: Array<string>): Console.Console => ({
-  assert: () => undefined,
-  clear: () => undefined,
-  count: () => undefined,
-  countReset: () => undefined,
-  debug: () => undefined,
-  dir: () => undefined,
-  dirxml: () => undefined,
-  error(...args: ReadonlyArray<string>) {
-    lines.push(args.join(' '))
-  },
-  group: () => undefined,
-  groupCollapsed: () => undefined,
-  groupEnd: () => undefined,
-  info: () => undefined,
-  log(...args: ReadonlyArray<string>) {
-    lines.push(args.join(' '))
-  },
-  table: () => undefined,
-  time: () => undefined,
-  timeEnd: () => undefined,
-  timeLog: () => undefined,
-  trace: () => undefined,
-  warn: () => undefined,
-})
 
 const digestOf = (checkout: FingerprintCheckout, lines: Array<string>, parameters?: FingerprintParameters) =>
   PackEval.ComputeFingerprint.run.run(fingerprintRequestOf({ checkout, parameters })).pipe(
