@@ -78,10 +78,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         When('the user is read, the page is reloaded, and read again on the fresh page')(
           'result',
           (s) =>
-            Effect.gen(function*() {
+            Effect.sync(() => {
               const unmount = s.ctx.registry.mount(s.ctx.user)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
               const savedPage = Hydration.dehydrate(s.ctx.registry)
               unmount()
               const freshPage = Registry.make()
@@ -121,11 +119,9 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return { first, second, registry, callsMade: () => callCount }
           })),
         When('both queries are mounted and read')('result', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             s.ctx.registry.mount(s.ctx.first)
             s.ctx.registry.mount(s.ctx.second)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             return { sameAtom: s.ctx.first === s.ctx.second, calls: s.ctx.callsMade() }
           })),
         Then('both queries share one atom and the server is called once')((s) => {
@@ -154,12 +150,9 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             s.ctx.registry.mount(s.ctx.create)
             s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             return s.ctx.registry.get(s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
@@ -194,16 +187,11 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return { feed, registry, callsMade: () => callCount }
           })),
         When('the feed is mounted and pulled until the server finishes')('final', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             const unmount = s.ctx.registry.mount(s.ctx.feed)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             s.ctx.registry.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             s.ctx.registry.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             s.ctx.registry.set(s.ctx.feed, void 0)
-            yield* Effect.yieldNow
             const final = s.ctx.registry.get(s.ctx.feed)
             unmount()
             return final
@@ -255,20 +243,13 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
         When(
           'the user is read, a record is submitted while invalidating the users key, and the user is read again',
         )('readings', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             const unmount = s.ctx.registry.mount(s.ctx.user)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const first = s.ctx.registry.get(s.ctx.user)
             s.ctx.registry.set(s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['users'],
             })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const second = s.ctx.registry.get(s.ctx.user)
             const calls = s.ctx.callsMade()
             unmount()
@@ -301,10 +282,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             return { user, registry }
           })),
         When('the user is read')('outcome', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             const unmount = s.ctx.registry.mount(s.ctx.user)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const outcome = s.ctx.registry.get(s.ctx.user)
             unmount()
             return outcome
@@ -359,10 +338,8 @@ Feature('Reusing an rpc-fetched user after the page reloads, without calling the
             }
           })),
         When('the user is read and the page is reloaded')('result', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             const unmount = s.ctx.registry.mount(s.ctx.user)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             const savedPage = Hydration.dehydrate(s.ctx.registry)
             unmount()
             const freshPage = Registry.make()

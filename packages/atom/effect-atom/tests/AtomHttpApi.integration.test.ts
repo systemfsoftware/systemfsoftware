@@ -1,15 +1,40 @@
+import * as AtomRuntime from '@systemfsoftware/effect-atom/Atom'
 import * as AtomHttpApi from '@systemfsoftware/effect-atom/AtomHttpApi'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as Registry from '@systemfsoftware/effect-atom/Registry'
 import * as Result from '@systemfsoftware/effect-atom/Result'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const waitForValue = <A, W>(
+  registry: Registry.Registry,
+  atom: AtomRuntime.Writable<A, W> | AtomRuntime.Atom<A>,
+  holds: (value: A) => boolean,
+): Effect.Effect<A> =>
+  Effect.callback((resume) => {
+    const handle: { unsubscribe?: () => void } = {}
+    handle.unsubscribe = registry.subscribe(
+      atom,
+      (value) => {
+        if (!holds(value)) return
+        resume(Effect.succeed(value))
+        handle.unsubscribe?.()
+      },
+      { immediate: true },
+    )
+    return Effect.sync(() => handle.unsubscribe?.())
+  })
+
+const waitForSettled = <A, E, W>(
+  registry: Registry.Registry,
+  atom: AtomRuntime.Writable<Result.Result<A, E>, W> | AtomRuntime.Atom<Result.Result<A, E>>,
+): Effect.Effect<Result.Result<A, E>> =>
+  waitForValue(registry, atom, (value) => Result.isNotInitial(value) && !Result.isWaiting(value))
+const Feature = makeFeature({ it })
 
 /**
  * A test double that answers every request through the same preprocess and
@@ -89,9 +114,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) =>
             Effect.gen(function*() {
               const unmount = s.ctx.registry.mount(s.ctx.profile)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
+              yield* waitForSettled(s.ctx.registry, s.ctx.profile)
               const savedPage = Hydration.dehydrate(s.ctx.registry)
               unmount()
               const freshPage = Registry.make()
@@ -161,10 +184,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             s.ctx.registry.mount(s.ctx.create)
             s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return yield* waitForSettled(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
           expect(Result.isSuccess(s.outcome)).toBe(true)
@@ -199,12 +219,9 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             s.ctx.registry.mount(s.ctx.create)
             s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             return s.ctx.registry.get(s.ctx.create)
           })),
         Then('the submission is reported as failed')((s) => {
@@ -233,9 +250,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         When('the profile is read')('outcome', (s) =>
           Effect.gen(function*() {
             const unmount = s.ctx.registry.mount(s.ctx.profile)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
             const outcome = s.ctx.registry.get(s.ctx.profile)
             unmount()
             return outcome
@@ -284,18 +299,13 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
         )('readings', (s) =>
           Effect.gen(function*() {
             const unmount = s.ctx.registry.mount(s.ctx.profile)
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
             const first = s.ctx.registry.get(s.ctx.profile)
             s.ctx.registry.set(s.ctx.create, {
               payload: { name: 'grace' },
               reactivityKeys: ['profiles'],
             })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
+            yield* waitForSettled(s.ctx.registry, s.ctx.profile)
             const second = s.ctx.registry.get(s.ctx.profile)
             const calls = s.ctx.callsMade()
             unmount()
@@ -333,12 +343,9 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return { create, registry }
           })),
         When('a new record is submitted')('outcome', (s) =>
-          Effect.gen(function*() {
+          Effect.sync(() => {
             s.ctx.registry.mount(s.ctx.create)
             s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
             return s.ctx.registry.get(s.ctx.create)
           })),
         Then('the raw response is reported')((s) => {
@@ -388,9 +395,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) =>
             Effect.gen(function*() {
               const unmount = s.ctx.registry.mount(s.ctx.profile)
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
-              yield* Effect.yieldNow
+              yield* waitForSettled(s.ctx.registry, s.ctx.profile)
               const savedPage = Hydration.dehydrate(s.ctx.registry)
               unmount()
               const freshPage = Registry.make()
@@ -439,10 +444,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             s.ctx.registry.mount(s.ctx.create)
             s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return yield* waitForSettled(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a defect rather than a normal failure')((s) => {
           expect(Result.isFailure(s.outcome)).toBe(true)
@@ -481,10 +483,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           Effect.gen(function*() {
             s.ctx.registry.mount(s.ctx.create)
             s.ctx.registry.set(s.ctx.create, { payload: { name: 'grace' } })
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            yield* Effect.yieldNow
-            return s.ctx.registry.get(s.ctx.create)
+            return yield* waitForSettled(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a normal failure with the described error')((s) => {
           expect(Result.isFailure(s.outcome)).toBe(true)
