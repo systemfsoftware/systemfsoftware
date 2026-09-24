@@ -1,6 +1,8 @@
 export * from '../admit-dataset.workflow.js'
 export * from '../answer-cache.service.js'
 export * from '../bootstrap-rate-interval.workflow.js'
+export * from '../dataset-file.schema.js'
+export * as DatasetFiles from '../drivers/dataset-files.js'
 export * as FileAnswerCache from '../drivers/file-answer-cache.js'
 export * as OpenRouterRuleSelector from '../drivers/openrouter-rule-selector.js'
 export * as OpenRouterTaskGenerator from '../drivers/openrouter-task-generator.js'
