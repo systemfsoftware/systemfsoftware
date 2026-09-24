@@ -1,21 +1,24 @@
 /**
  * Patterns: uncertainty-aware, composable predicates over one input.
  *
- * A pattern is either a semantic leaf (a question asked of a `DecisionModel`
- * through a decision node) or a three-valued composition of other patterns.
- * Kleene semantics govern the boolean algebra: `Miss` dominates conjunction,
- * `Match` dominates disjunction, and negation swaps `Match` and `Miss` while
- * preserving `Uncertain`.
+ * A pattern is a {@link Blueprint} value: each operation (`evaluate`,
+ * `preview`) is declared once as a type-level transition, and the kind
+ * derives the method, the data-first dual, and the data-last dual from it.
+ * `id`, `decisions`, `ast`, and `refusals` are compilation targets read as
+ * properties. A pattern is either a semantic leaf (a question asked of a
+ * `DecisionModel` through a decision node) or a three-valued composition of
+ * other patterns. Kleene semantics govern the boolean algebra: `Miss`
+ * dominates conjunction, `Match` dominates disjunction, and negation swaps
+ * `Match` and `Miss` while preserving `Uncertain`.
  */
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Match } from 'effect'
 import type * as Effect from 'effect/Effect'
 import { dual, identity } from 'effect/Function'
 import * as Option from 'effect/Option'
-import type { Pipeable } from 'effect/Pipeable'
-import { Prototype } from 'effect/Pipeable'
 import type * as Schema from 'effect/Schema'
 import type * as Decision from 'effect/unstable/ai/Decision'
-import { hash } from './decision-model.resource.js'
+import { hash } from './decision-model.blueprint.js'
 import type { PatternAst } from './PatternAst.schema.js'
 import { PatternMatched, PatternMissed, PatternUncertain } from './Verdict.schema.js'
 import type { PatternResult, PatternStatus } from './Verdict.schema.js'
@@ -32,7 +35,7 @@ export interface LeafOptions {
 /**
  * A decision node as the rest of the package consumes it: its identity, its
  * decision definition, and the input schema it was bound to. Interpretation
- * methods live on {@link DecisionNode}; patterns, plans, and observation
+ * methods live on the node blueprint; patterns, plans, and observation
  * batches only ever need this shape.
  */
 export interface NodeCore {
@@ -40,23 +43,6 @@ export interface NodeCore {
   readonly fingerprint: string
   readonly decision: Decision.Any
   readonly schema: Schema.Constraint | undefined
-}
-
-/** A named semantic question bound to the input it is asked about. */
-export interface DecisionNode<
-  in Input = unknown,
-  D extends Decision.Any = Decision.Any,
-  S extends Schema.Constraint | undefined = undefined,
-> extends NodeCore, Pipeable {
-  readonly decision: D
-  readonly schema: S
-  /** A binary custom interpretation. Prefer `whereResult` when uncertainty matters. */
-  readonly where: (predicate: (answer: Decision.Answer<D>) => boolean, options?: LeafOptions) => Pattern<Input>
-  /** A custom tri-state interpretation of this semantic answer. */
-  readonly whereResult: (
-    resolve: (answer: Decision.Answer<D>) => PatternResult,
-    options?: LeafOptions,
-  ) => Pattern<Input>
 }
 
 /** The result of evaluating the deterministic structure of a pattern. */
@@ -73,16 +59,101 @@ export interface PatternRefusal {
   readonly message: string
 }
 
-/** A composable, three-valued predicate over one input. */
-export interface Pattern<in Input = never> extends Pipeable {
-  readonly [PatternTypeId]: typeof PatternTypeId
-  readonly [PatternEvaluatorTypeId]: PatternEvaluator<Input>
+/** The blueprint identity of every pattern. `Symbol.for` identity is preserved. */
+export const TypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Pattern')
+export type TypeId = typeof TypeId
+
+/** The cold description one pattern value carries: identity, structure, and evaluation closures. */
+export interface PatternSpec {
   readonly id: string
   readonly decisions: ReadonlyArray<NodeCore>
   readonly ast: PatternAst
-  /** Thresholds a caller crossed building this pattern; the run refuses instead of judging. */
   readonly refusals: ReadonlyArray<PatternRefusal>
+  /** Reached only through the `evaluate` and `preview` operations. */
+  readonly evaluate: (input: never, answers: Answers) => PatternResult
+  /** The deterministic preview of the structure, without model answers. */
+  readonly preview: (input: never) => Preview
 }
+
+/**
+ * The type index of one pattern: the input it decides over, encoded with a
+ * variance marker so the value stays contravariant in `Input` (a pattern over
+ * a wider input stands in where a narrower one is expected).
+ */
+export interface PatternIndex {
+  readonly Input: (input: never) => void
+}
+
+type InputOf<X> = X extends { readonly Input: (input: infer I) => void } ? I : never
+
+interface Evaluate extends Blueprint.Operation {
+  readonly params: readonly [input: InputOf<this['Index']>, answers: Answers]
+  readonly out: PatternResult
+}
+
+interface GetPreview extends Blueprint.Operation {
+  readonly params: readonly [input: InputOf<this['Index']>]
+  readonly out: Preview
+}
+
+interface PatternId extends Blueprint.Target {
+  readonly target: string
+}
+
+interface PatternDecisions extends Blueprint.Target {
+  readonly target: ReadonlyArray<NodeCore>
+}
+
+interface PatternAstTarget extends Blueprint.Target {
+  readonly target: PatternAst
+}
+
+interface PatternRefusals extends Blueprint.Target {
+  readonly target: ReadonlyArray<PatternRefusal>
+}
+
+/** The one transition per operation every pattern derives its method and duals from. */
+export interface PatternOps {
+  readonly evaluate: Evaluate
+  readonly preview: GetPreview
+  readonly id: PatternId
+  readonly decisions: PatternDecisions
+  readonly ast: PatternAstTarget
+  readonly refusals: PatternRefusals
+}
+
+/** A composable, three-valued predicate over one input. */
+export type Pattern<Input = never> = Blueprint.Blueprint<
+  TypeId,
+  PatternSpec,
+  PatternOps,
+  { readonly Input: (input: Input) => void }
+>
+
+/** Any pattern, for implementations that read only the spec. */
+export type AnyPattern = Pattern<never>
+
+const Patterns = Blueprint.make<PatternSpec, PatternIndex>()(TypeId).operations<PatternOps>()({
+  operations: {
+    evaluate: (self: AnyPattern, input: never, answers: Answers): PatternResult => self.spec.evaluate(input, answers),
+    preview: (self: AnyPattern, input: never): Preview => self.spec.preview(input),
+  },
+  targets: {
+    id: (self: AnyPattern): string => self.spec.id,
+    decisions: (self: AnyPattern): ReadonlyArray<NodeCore> => self.spec.decisions,
+    ast: (self: AnyPattern): PatternAst => self.spec.ast,
+    refusals: (self: AnyPattern): ReadonlyArray<PatternRefusal> => self.spec.refusals,
+  },
+})
+
+/** Identity guard for the pattern blueprint. */
+export const isPattern = Patterns.is
+
+/** Resolve one pattern for one input against already-observed answers. */
+export const evaluate = Patterns.operations.evaluate
+
+/** Resolve what the deterministic structure of one pattern already settles for one input. */
+export const preview = Patterns.operations.preview
 
 /** The evaluation closures a pattern carries; reached only through {@link evaluate} and {@link preview}. */
 export interface PatternEvaluator<in Input = never> {
@@ -90,24 +161,6 @@ export interface PatternEvaluator<in Input = never> {
   readonly preview: (input: Input) => Preview
 }
 
-/** Resolve one pattern for one input against already-observed answers. */
-export const evaluate: {
-  <Input>(input: Input, answers: Answers): (self: Pattern<Input>) => PatternResult
-  <Input>(self: Pattern<Input>, input: Input, answers: Answers): PatternResult
-} = dual(
-  3,
-  <Input>(self: Pattern<Input>, input: Input, answers: Answers): PatternResult =>
-    self[PatternEvaluatorTypeId].evaluate(input, answers),
-)
-
-/** Resolve what the deterministic structure of one pattern already settles for one input. */
-export const preview: {
-  <Input>(input: Input): (self: Pattern<Input>) => Preview
-  <Input>(self: Pattern<Input>, input: Input): Preview
-} = dual(
-  2,
-  <Input>(self: Pattern<Input>, input: Input): Preview => self[PatternEvaluatorTypeId].preview(input),
-)
 /** What a case handler may return: a bare value or an Effect producing one. */
 export type HandlerResult<Value, Err, Req> = Value | Effect.Effect<Value, Err, Req>
 
@@ -116,10 +169,6 @@ export interface UncertainContext {
   readonly caseId: string
   readonly result: PatternResult
 }
-
-const PatternTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Pattern')
-
-const PatternEvaluatorTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/Pattern/evaluator')
 
 // -------------------------------------------------------------------------------------------------
 // Verdict constructors
@@ -181,8 +230,8 @@ const settledPreview = (resolved: PatternResult): Preview => ({ resolved, decisi
 
 const openPreview = (decisions: ReadonlyArray<NodeCore>): Preview => ({ resolved: undefined, decisions })
 
-const undecidedOf = (preview: Preview): ReadonlyArray<NodeCore> =>
-  preview.resolved === undefined ? preview.decisions : []
+const undecidedOf = (previewed: Preview): ReadonlyArray<NodeCore> =>
+  previewed.resolved === undefined ? previewed.decisions : []
 
 /** The verdict a set of previews already resolved to the given status, if any. */
 const settledOn = (parts: ReadonlyArray<Preview>, status: PatternStatus): Option.Option<PatternResult> =>
@@ -234,15 +283,15 @@ const makePattern = <Input>(parts: {
   readonly refusals: ReadonlyArray<PatternRefusal>
   readonly evaluate: (input: Input, answers: Answers) => PatternResult
   readonly preview: (input: Input) => Preview
-}): Pattern<Input> => ({
-  [PatternTypeId]: PatternTypeId,
-  [PatternEvaluatorTypeId]: { evaluate: parts.evaluate, preview: parts.preview },
-  id: parts.id,
-  decisions: parts.decisions,
-  ast: parts.ast,
-  refusals: parts.refusals,
-  ...Prototype,
-})
+}): Pattern<Input> =>
+  Patterns.of<{ readonly Input: (input: Input) => void }>({
+    id: parts.id,
+    decisions: parts.decisions,
+    ast: parts.ast,
+    refusals: parts.refusals,
+    evaluate: parts.evaluate,
+    preview: parts.preview,
+  })
 
 export interface SemanticLeafOptions {
   readonly node: NodeCore
@@ -268,7 +317,7 @@ const keepFirst = (previous: NodeCore | undefined, node: NodeCore): NodeCore => 
  * Collapse decision nodes that repeat exactly (same id and fingerprint), and
  * keep everything else — including a repeated id whose definitions differ, so
  * the observation batch that is built from these nodes can refuse the
- * collision by id (`decisionsOf` in decision.resource.ts). One decision id
+ * collision by id (`decisionsOf` in decision.blueprint.ts). One decision id
  * must mean one definition, or the recorded observations of the two would be
  * indistinguishable.
  */
@@ -305,6 +354,7 @@ export const distinctDecisions = (patterns: ReadonlyArray<Pattern<never>>): Read
 // -------------------------------------------------------------------------------------------------
 
 const isMiss = isStatus('Miss')
+
 const isUncertain = isStatus('Uncertain')
 
 /** Kleene AND over verdicts: `Miss` dominates; otherwise `Uncertain` dominates. */
@@ -368,7 +418,7 @@ const notPreview = <Input>(self: Pattern<Input>, input: Input): Preview => {
 /**
  * Negation preserves `Uncertain` and swaps `Match` and `Miss`.
  *
- * The public `not` lives in decision.resource.ts, where the classification
+ * The public `not` lives in decision.blueprint.ts, where the classification
  * reading of `not(node, label)` is decided beside the node's own answer
  * check; this is its pattern half.
  */

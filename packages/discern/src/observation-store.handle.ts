@@ -1,8 +1,8 @@
-import { Match, Option, Predicate, Result, Schema } from 'effect'
+import { Handle } from '@systemfsoftware/effect-cell-types'
+import { Match, Option, Result, Schema } from 'effect'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as MutableRef from 'effect/MutableRef'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import {
   MalformedObservationSnapshotError,
   Observation,
@@ -15,12 +15,13 @@ import {
 export const TypeId = Symbol.for('@systemfsoftware/discern/ObservationStore')
 export type TypeId = typeof TypeId
 
-export interface ObservationStore extends Pipeable {
-  readonly [TypeId]: typeof TypeId
+const ObservationStore = Handle.make<{
   readonly observations: MutableRef.MutableRef<ReadonlyMap<string, Observation>>
-}
+}>()(TypeId)
 
-export const isObservationStore = (u: unknown): u is ObservationStore => Predicate.hasProperty(u, TypeId)
+export type ObservationStore = Handle.Of<typeof ObservationStore>
+
+export const isObservationStore = ObservationStore.is
 
 const declaredVersionOf = (snapshot: Schema.Json): number | undefined =>
   Option.getOrUndefined(
@@ -50,11 +51,8 @@ const decodeSnapshot = (snapshot: Schema.Json): Effect.Effect<Observations, Obse
 const entriesOf = (initial: Observations | undefined): ReadonlyMap<string, Observation> =>
   new Map(initial === undefined ? [] : Object.entries(initial.entries))
 
-export const store = (initial?: Observations): ObservationStore => ({
-  [TypeId]: TypeId,
-  observations: MutableRef.make(entriesOf(initial)),
-  ...Prototype,
-})
+export const store = (initial?: Observations): ObservationStore =>
+  ObservationStore.make({ observations: MutableRef.make(entriesOf(initial)) })
 
 export const get: {
   (address: string): (self: ObservationStore) => Effect.Effect<Option.Option<Observation>>

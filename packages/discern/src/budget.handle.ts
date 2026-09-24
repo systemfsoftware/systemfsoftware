@@ -1,29 +1,23 @@
-import { Predicate } from 'effect'
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as MutableRef from 'effect/MutableRef'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type { BudgetLimits, BudgetSpend } from './Budget.schema.js'
 
 export const TypeId = Symbol.for('@systemfsoftware/discern/Budget')
 export type TypeId = typeof TypeId
 
-export interface Budget extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly limits: BudgetLimits
-  readonly counters: MutableRef.MutableRef<BudgetSpend>
-}
+const Budget = Handle.make<{ readonly limits: BudgetLimits; readonly counters: MutableRef.MutableRef<BudgetSpend> }>()(
+  TypeId,
+)
 
-export const isBudget = (u: unknown): u is Budget => Predicate.hasProperty(u, TypeId)
+export type Budget = Handle.Of<typeof Budget>
+
+export const isBudget = Budget.is
 
 const noSpend: BudgetSpend = { decisions: 0, calls: 0 }
 
-export const budget = (limits: BudgetLimits): Budget => ({
-  [TypeId]: TypeId,
-  limits,
-  counters: MutableRef.make(noSpend),
-  ...Prototype,
-})
+export const budget = (limits: BudgetLimits): Budget => Budget.make({ limits, counters: MutableRef.make(noSpend) })
 
 export const spent = (self: Budget): Effect.Effect<BudgetSpend> => Effect.sync(() => MutableRef.get(self.counters))
 

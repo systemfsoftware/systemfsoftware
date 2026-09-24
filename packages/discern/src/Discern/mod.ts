@@ -25,7 +25,7 @@ export {
   rate,
   where,
   whereResult,
-} from '../decision.resource.js'
+} from '../decision.blueprint.js'
 export type {
   Answer,
   AnyDecision,
@@ -33,13 +33,14 @@ export type {
   ClassifyDecision,
   ClassifyOptions,
   ClassifyThresholds,
+  DecisionNode,
   DecisionScope,
   ProbabilityBand,
   ProbabilityDecision,
   ProbabilityOptions,
   RateDecision,
   RateOptions,
-} from '../decision.resource.js'
+} from '../decision.blueprint.js'
 
 export {
   and,
@@ -53,10 +54,9 @@ export {
   statusIs,
   statusOf,
   uncertain,
-} from '../pattern.resource.js'
+} from '../pattern.blueprint.js'
 export type {
   Answers,
-  DecisionNode,
   HandlerResult,
   LeafOptions,
   NodeCore,
@@ -65,7 +65,7 @@ export type {
   PatternRefusal,
   Preview,
   UncertainContext,
-} from '../pattern.resource.js'
+} from '../pattern.blueprint.js'
 
 export {
   caseOf as case,
@@ -78,8 +78,8 @@ export {
   type,
   value,
   when,
-} from '../matcher.resource.js'
-export type { ClassificationMatcher, FinishedMatcher, Matcher, MatcherFlavor } from '../matcher.resource.js'
+} from '../matcher.blueprint.js'
+export type { ClassificationMatcher, FinishedMatcher, Matcher, MatcherFlavor } from '../matcher.blueprint.js'
 
 export { runWithTrace } from '../run-policy.cell.js'
 export type { Policy, PolicyRun, PolicyTraced } from '../run-policy.cell.js'

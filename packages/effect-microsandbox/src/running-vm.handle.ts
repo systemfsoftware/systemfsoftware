@@ -1,7 +1,7 @@
-import { Effect, Option, Predicate, Stream } from 'effect'
+import { Handle } from '@systemfsoftware/effect-cell-types'
+import { Effect, Option, Stream } from 'effect'
 import * as Arr from 'effect/Array'
 import { dual } from 'effect/Function'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import type { Sandbox } from 'microsandbox'
 import { ExecError, PortAllocationError, SandboxBootError } from './MicroVMError.schema.js'
 import type { PortBinding } from './render-sandbox-plan.schema.js'
@@ -9,9 +9,14 @@ import type { PortBinding } from './render-sandbox-plan.schema.js'
 export const TypeId = Symbol.for('~systemfsoftware/microvm/RunningVM')
 export type TypeId = typeof TypeId
 
-const SandboxTypeId: unique symbol = Symbol.for('~systemfsoftware/microvm/RunningVM/sandbox')
+const RunningVM = Handle.make<
+  { readonly name: string; readonly portBindings: ReadonlyArray<PortBinding> },
+  Sandbox
+>()(TypeId)
 
-export const isRunningVM = (u: unknown): u is RunningVM => Predicate.hasProperty(u, TypeId)
+export type RunningVM = Handle.Of<typeof RunningVM>
+
+export const isRunningVM = RunningVM.is
 
 export interface ExecResult {
   readonly code: number
@@ -24,24 +29,11 @@ export interface LogLine {
   readonly text: string
 }
 
-export interface RunningVM extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [SandboxTypeId]: Sandbox
-  readonly name: string
-  readonly portBindings: ReadonlyArray<PortBinding>
-}
-
 export const make = (options: {
   readonly name: string
   readonly portBindings: ReadonlyArray<PortBinding>
   readonly sandbox: Sandbox
-}): RunningVM => ({
-  [TypeId]: TypeId,
-  [SandboxTypeId]: options.sandbox,
-  name: options.name,
-  portBindings: options.portBindings,
-  ...Prototype,
-})
+}): RunningVM => RunningVM.make({ name: options.name, portBindings: options.portBindings }, options.sandbox)
 
 const hostPortOf = (bindings: ReadonlyArray<PortBinding>, guest: number) =>
   Option.map(
@@ -95,7 +87,7 @@ export const exec: {
     const argv = [cmd, ...args]
     return Effect.map(
       Effect.tryPromise({
-        try: () => self[SandboxTypeId].exec(cmd, [...args]),
+        try: () => RunningVM.slot(self).exec(cmd, [...args]),
         catch: (cause) => new ExecError({ argv, cause }),
       }),
       (output): ExecResult => ({ code: output.status.code, stdout: output.stdout(), stderr: output.stderr() }),
@@ -107,7 +99,7 @@ export const logs = (self: RunningVM): Stream.Stream<LogLine, SandboxBootError> 
   Stream.flatMap(
     Stream.fromEffect(
       Effect.tryPromise({
-        try: () => self[SandboxTypeId].logStream({ follow: true }),
+        try: () => RunningVM.slot(self).logStream({ follow: true }),
         catch: (cause) => new SandboxBootError({ sandboxName: self.name, cause }),
       }),
     ),
@@ -118,7 +110,7 @@ export const logs = (self: RunningVM): Stream.Stream<LogLine, SandboxBootError> 
   )
 
 export const ping = (self: RunningVM): Effect.Effect<boolean> =>
-  Effect.map(Effect.option(Effect.promise(() => self[SandboxTypeId].ping())), Option.isSome)
+  Effect.map(Effect.option(Effect.promise(() => RunningVM.slot(self).ping())), Option.isSome)
 
 export const use: {
   <A>(f: (sandbox: Sandbox) => Promise<A>): (self: RunningVM) => Effect.Effect<A, SandboxBootError>
@@ -127,32 +119,27 @@ export const use: {
   2,
   <A>(self: RunningVM, f: (sandbox: Sandbox) => Promise<A>): Effect.Effect<A, SandboxBootError> =>
     Effect.tryPromise({
-      try: () => f(self[SandboxTypeId]),
+      try: () => f(RunningVM.slot(self)),
       catch: (cause) => new SandboxBootError({ sandboxName: self.name, cause }),
     }),
 )
 
 if (import.meta.vitest !== void 0) {
+  // The test-only dependencies cannot be imported statically: `import.meta.vitest` is only
+  // defined when vitest transforms this file, so a static import would land in the bundle.
   const { it } = await import('@effect/vitest')
   const { Schema } = await import('effect')
-  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
   const { GuestPort } = await import('./MicroVMSpec.schema.js')
 
   const uniqueGuests = Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique()))
-  const bindings = Arbitrary.map(
-    Arbitrary.schema(uniqueGuests),
-    (guests) => guests.map((guest, index) => ({ guest, host: '127.0.0.1', hostPort: 49152 + index })),
-  )
 
-  it.prop(
-    '∀bg_PortLookup_≡Declared',
-    [bindings, GuestPort],
-    ([drawn, guest]) =>
-      Option.match(hostPortOf(drawn, guest), {
-        onNone: () => !drawn.some((binding) => binding.guest === guest),
-        onSome: (hostPort) => drawn.some((binding) => binding.guest === guest && binding.hostPort === hostPort),
-      }),
-  )
+  it.prop('∀bg_PortLookup_≡Declared', [uniqueGuests, GuestPort], ([guests, guest]) => {
+    const drawn = guests.map((guestPort, index) => ({ guest: guestPort, host: '127.0.0.1', hostPort: 49152 + index }))
+    return Option.match(hostPortOf(drawn, guest), {
+      onNone: () => !drawn.some((binding) => binding.guest === guest),
+      onSome: (hostPort) => drawn.some((binding) => binding.guest === guest && binding.hostPort === hostPort),
+    })
+  })
 
   it.prop(
     '∀p_PrefixSlash_≡Idempotent',

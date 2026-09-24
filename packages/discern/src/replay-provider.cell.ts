@@ -3,7 +3,7 @@ import * as Effect from 'effect/Effect'
 import * as AiError from 'effect/unstable/ai/AiError'
 import type * as Decision from 'effect/unstable/ai/Decision'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import type { ObservationSplit, Provider } from './decision-model.resource.js'
+import type { ObservationSplit, Provider } from './decision-model.blueprint.js'
 import type { ProviderAnswer } from './Observation.schema.js'
 import { SelectObservationSource, selectObservationSource } from './select-observation-source.workflow.js'
 

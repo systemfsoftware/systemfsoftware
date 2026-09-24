@@ -15,8 +15,9 @@ export {
   replayLayer,
   tree,
   unavailable,
-} from '../decision-model.resource.js'
-export type { Interceptor, Provider, RegionTree } from '../decision-model.resource.js'
+} from '../decision-model.blueprint.js'
+export { Model, model } from '../decision-model.blueprint.js'
+export type { Interceptor, ModelSpec, Provider, RegionTree } from '../decision-model.blueprint.js'
 export { clear, get, isObservationStore, load, set, size, snapshot, store } from '../observation-store.handle.js'
 export type { ObservationStore } from '../observation-store.handle.js'
 export { Observation, Observations } from '../Observation.schema.js'

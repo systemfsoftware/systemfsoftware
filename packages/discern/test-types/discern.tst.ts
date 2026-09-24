@@ -1,6 +1,7 @@
 import { Discern } from '@systemfsoftware/discern'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
+import type * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
@@ -345,5 +346,81 @@ describe('the budget the model hands out', () => {
       spent: () => ({ decisions: 0, calls: 0 }),
       reset: () => {},
     }).type.not.toBeAssignableTo<Discern.Model.Budget>()
+  })
+})
+
+const nakedModel = Discern.Model.model(Discern.Model.unavailable)
+const figuredModel = Discern.Model.model(Discern.Model.unavailable).pipe(
+  Discern.Model.Model.operations.recording(observations),
+  Discern.Model.Model.operations.caching(observations),
+  Discern.Model.Model.operations.replaying(observations),
+  Discern.Model.Model.operations.budgeted(spend),
+)
+
+describe('the model builder', () => {
+  it('Should_KeepTheModelResource_When_CombinatorsAreApplied', () => {
+    expect(figuredModel).type.toBe<Discern.Model.Model>()
+    expect(
+      Discern.Model.model(Discern.Model.unavailable).recording(observations).caching(observations),
+    ).type.toBe<Discern.Model.Model>()
+  })
+
+  it('Should_CombineTheInterceptorStacks_When_MethodsAndDualsAreMixed', () => {
+    expect(nakedModel.pipe(Discern.Model.Model.operations.recording(observations))).type.toBe<
+      Discern.Model.Model
+    >()
+    expect(Discern.Model.Model.operations.recording(nakedModel, observations)).type.toBe<Discern.Model.Model>()
+    expect(Discern.Model.Model.operations.budgeted).type.toBeCallableWith(spend)
+    expect(Discern.Model.Model.operations.budgeted).type.not.toBeCallableWith(observations)
+  })
+
+  it('Should_CompileTheBuilderAgainstTheDual_When_TheLayerProjectionIsRead', () => {
+    expect(
+      Discern.Model.model(Discern.Model.unavailable).recording(observations).budgeted(spend).layer,
+    ).type.toBe<Layer.Layer<DecisionModel.DecisionModel, never, never>>()
+    expect(
+      Discern.Model.layer(Discern.Model.unavailable, [Discern.Model.recording(observations)]),
+    ).type.toBe<Layer.Layer<DecisionModel.DecisionModel, never, never>>()
+  })
+})
+
+describe('the three forms of a blueprint operation', () => {
+  it('Should_AgreeAcrossMethodAndBothDuals_When_ACaseIsAdded', () => {
+    const base = Discern.type(Schema.String)
+    const byMethod = base.when(impact.is('breaking'), (input) => input.length)
+    const byDual = Discern.when(base, impact.is('breaking'), (input) => input.length)
+    const byPipe = base.pipe(Discern.when(impact.is('breaking'), (input) => input.length))
+    expect(byMethod).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
+    expect(byDual).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
+    expect(byPipe).type.toBe<Discern.Matcher<string, typeof Schema.String, number>>()
+  })
+
+  it('Should_ShrinkTheRemainingLabels_When_ACaseIsAddedInAnyForm', () => {
+    const start = Discern.match(impact)
+    const byMethod = start.caseOf('none', (input) => input.length)
+    const byDual = Discern.case(start, 'none', (input) => input.length)
+    const byPipe = start.pipe(Discern.case('none', (input) => input.length))
+    type Shrunk = Discern.ClassificationMatcher<
+      string,
+      typeof Schema.String,
+      'none' | 'additive' | 'behavioral' | 'breaking',
+      'additive' | 'behavioral' | 'breaking',
+      number
+    >
+    expect(byMethod).type.toBe<Shrunk>()
+    expect(byDual).type.toBe<Shrunk>()
+    expect(byPipe).type.toBe<Shrunk>()
+  })
+
+  it('Should_RefuseAHandledLabel_When_ItIsAddedAgain', () => {
+    const handled = Discern.match(impact).caseOf('none', () => 0)
+    expect(handled.caseOf).type.toBeCallableWith('breaking', () => 1)
+    expect(handled.caseOf).type.not.toBeCallableWith('none', () => 1)
+  })
+
+  it('Should_AgreeAcrossMethodAndBothDuals_When_AProbabilityIsRead', () => {
+    expect(risky.above(0.8)).type.toBe<Discern.Pattern<string>>()
+    expect(Discern.above(risky, 0.8)).type.toBe<Discern.Pattern<string>>()
+    expect(pipe(risky, Discern.above(0.8))).type.toBe<Discern.Pattern<string>>()
   })
 })

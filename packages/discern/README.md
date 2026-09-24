@@ -141,6 +141,8 @@ await Effect.runPromise(review('drop Node 18').pipe(Effect.provide(metered)))
 console.log(await Effect.runPromise(Discern.Model.spent(spend))) // { decisions: 2, calls: 1 }
 ```
 
+The same stack is a builder: `Discern.Model.model(cautious).recording(store).budgeted(spend).layer` appends one interceptor at a time and compiles the same layer.
+
 Answers are keyed by the question's content and the input's structure. Rewording instructions or reordering criteria is a new question; reordering an input object's keys is not.
 
 Stores and budgets are handles: `Discern.Model.snapshot`, `load`, `get`, `set`, `size`, `clear`, `spent` and `reset` are Effects over them. A recording is plain data: encode the `snapshot` with the `Discern.Model.Observations` schema to save it, and `load` it back. `Discern.Model.intercept(interceptors)` applies the same decorators to a `DecisionModel` layer you already have, such as `TypeSafeDecisionModel.layer({ model: 'jev-latest' })` from `@effect/ai-typesafe` or the OpenRouter layer from `@effect/ai-openrouter`.
