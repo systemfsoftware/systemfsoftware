@@ -1,0 +1,63 @@
+---
+title: Guide Documents > Utilization Cases > Jev
+---
+
+import { Callout } from "nextra/components";
+
+# Jev
+
+[`@typia/jev`](https://github.com/samchon/typia/tree/master/packages/jev) converts the questions of [`typia.llm.evaluation<T>()`](/docs/llm/evaluation) to the wire format of [Jev](https://docs.typesafe.ai), TypeSafe's System One model. Jev answers typed questions with calibrated probabilities, and never returns a value outside the declared options.
+
+`typia.llm.evaluation<T>()` emits the provider-neutral questions of Vercel AI SDK's `experimental_evaluate()`, which spells a yes/no question `"boolean"`. Jev's own wire format spells it `"noul"`, and that format is shared by TypeSafe's API and SDK and by OpenRouter's Decisions API. `toJevQuestions()` renames exactly that question type; choice and score questions pass through unchanged.
+
+```bash filename="Terminal" copy
+npm install typia @typia/jev @typesafe-ai/sdk
+npx typia setup
+```
+
+<Callout type="info">
+  Through Vercel AI SDK, pass `evaluation.questions` to
+  `experimental_evaluate()` as they are; its TypeSafe and OpenRouter providers
+  convert them. Use `@typia/jev` to call Jev without AI SDK.
+</Callout>
+
+## Usage
+
+```typescript copy filename="typesafe.ts"
+import { TypeSafeClient } from "@typesafe-ai/sdk";
+import { toJevQuestions } from "@typia/jev";
+import typia from "typia";
+
+interface ITriage {
+  /** Is the ticket urgent? */
+  urgent: boolean;
+
+  /** Which team owns the ticket? */
+  team: "billing" | "technical";
+}
+
+const evaluation = typia.llm.evaluation<ITriage>();
+const client = new TypeSafeClient(); // reads TYPESAFE_API_KEY
+const { answers } = await client.systemOne({
+  model: "jev-1.13.0",
+  state: "The payment page crashes for every customer.",
+  questions: toJevQuestions(evaluation.questions),
+});
+const result = evaluation.decode(answers);
+```
+
+The answers need no wire-format conversion: `decode()` accepts Jev's native `{ type: "noul", noul }` answer as it is, and folds every answer back into `ITriage` by the [conversion rules](/docs/llm/evaluation) of `typia.llm.evaluation<T>()`. The direct TypeSafe SDK does not return an AI SDK-style `rounding` declaration, so this call uses strict distribution checks. Pass a precision only when your endpoint explicitly guarantees it. The raw `answers` keep what `ITriage` has no room for, such as the probability of every option.
+
+Pin a versioned model once you tune [probability thresholds](/docs/llm/evaluation), because TypeSafe's aliases such as `jev-latest` move when a new release ships.
+
+## Wire format
+
+`toJevQuestions()` returns a new map keyed like its input:
+
+| Neutral question                             | Jev question                     |
+| -------------------------------------------- | -------------------------------- |
+| `{ type: "boolean", instructions }`          | `{ type: "noul", instructions }` |
+| `{ type: "choice", instructions, criteria }` | unchanged                        |
+| `{ type: "score", instructions, criteria }`  | unchanged                        |
+
+The returned questions type-check against `@typesafe-ai/sdk`'s `Question`, so they can be passed to `systemOne()` directly.

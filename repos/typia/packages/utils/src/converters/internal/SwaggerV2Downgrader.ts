@@ -1,6 +1,7 @@
 import { OpenApi, SwaggerV2 } from "@typia/interface";
 
 import { ObjectDictionary } from "../../utils/internal/ObjectDictionary";
+import { OpenApiReferenceKey } from "../../utils/internal/OpenApiReferenceKey";
 import { OpenApiTypeChecker } from "../../validators/OpenApiTypeChecker";
 import { SwaggerV2TypeChecker } from "../../validators/SwaggerV2TypeChecker";
 
@@ -408,10 +409,12 @@ export namespace SwaggerV2Downgrader {
         return input;
       if (visited.has(input.$ref)) return undefined;
       visited.add(input.$ref);
-      const key: string = input.$ref.split("/").pop()!;
       const resolved: OpenApi.IJsonSchema | undefined = resolveSchema(
         collection,
-      )(collection.original.schemas?.[key], visited);
+      )(
+        OpenApiReferenceKey.get(collection.original.schemas, input.$ref),
+        visited,
+      );
       if (resolved === undefined) return undefined;
       return {
         ...resolved,
@@ -542,7 +545,7 @@ export namespace SwaggerV2Downgrader {
         if (value !== undefined)
           ObjectDictionary.set(
             collection.downgraded,
-            key.split("/").pop()!,
+            key,
             downgradeSchema(collection)(value),
           );
     }
@@ -652,11 +655,7 @@ export namespace SwaggerV2Downgrader {
         else if (OpenApiTypeChecker.isArray(schema))
           union.push({
             ...schema,
-            // TOLERATE A SPEC-VIOLATING ARRAY WITHOUT `items` AS `any[]`
-            items:
-              schema.items === undefined
-                ? {}
-                : downgradeSchema(collection)(schema.items),
+            items: downgradeSchema(collection)(schema.items),
             examples: schema.examples
               ? Object.values(schema.examples)
               : undefined,
@@ -782,15 +781,15 @@ export namespace SwaggerV2Downgrader {
     (visited: Set<string>) =>
     (collection: IComponentsCollection) =>
     (schema: SwaggerV2.IJsonSchema.IReference): void => {
-      const key: string = schema.$ref.split("/").pop()!;
-      if (key.endsWith(".Nullable")) return;
+      if (OpenApiReferenceKey.read(schema.$ref)?.endsWith(".Nullable")) return;
 
-      const found: OpenApi.IJsonSchema | undefined = ObjectDictionary.get(
+      const entry = OpenApiReferenceKey.find(
         collection.original.schemas,
-        key,
+        schema.$ref,
       );
-      if (found === undefined) return;
-      else if (isNullable(visited)(collection.original)(found) === true) return;
+      if (entry === undefined) return;
+      const { key, value: found } = entry;
+      if (isNullable(visited)(collection.original)(found) === true) return;
       else if (
         ObjectDictionary.get(collection.downgraded, `${key}.Nullable`) ===
         undefined
@@ -878,10 +877,9 @@ export namespace SwaggerV2Downgrader {
       else if (OpenApiTypeChecker.isReference(schema)) {
         if (visited.has(schema.$ref)) return false;
         visited.add(schema.$ref);
-        const key: string = schema.$ref.split("/").pop()!;
-        const next: OpenApi.IJsonSchema | undefined = ObjectDictionary.get(
+        const next: OpenApi.IJsonSchema | undefined = OpenApiReferenceKey.get(
           components.schemas,
-          key,
+          schema.$ref,
         );
         return next ? isNullable(visited)(components)(next) : false;
       }

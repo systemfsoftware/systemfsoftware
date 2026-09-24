@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "@typia/test-interface",
-  "version": "14.0.6",
+  "version": "15.0.0",
   "description": "Type tests for @typia/interface.",
   "scripts": {
     "start": "ttsc"
@@ -23,6 +23,7 @@
   "homepage": "https://typia.io",
   "devDependencies": {
     "@standard-schema/spec": "^1.1.0",
+    "ai": "^7.0.103",
     "ttsc": "catalog:typescript",
     "typescript": "catalog:typescript"
   },
