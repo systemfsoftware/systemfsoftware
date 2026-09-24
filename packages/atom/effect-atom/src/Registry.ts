@@ -9,8 +9,10 @@
  *
  * @since 4.0.0
  */
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import { constVoid, dual, type LazyArg } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -20,6 +22,7 @@ import { hasProperty } from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import type { Scheduler, SchedulerDispatcher } from 'effect/Scheduler'
 import { MixedScheduler } from 'effect/Scheduler'
+import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import type * as Atom from './Atom.js'
@@ -144,6 +147,45 @@ export const make = (
  * @since 4.0.0
  */
 export class Current extends Context.Service<Current, Registry>()('@systemfsoftware/effect-atom/Registry/Current') {}
+
+class Refusals extends Context.Service<Refusals, { readonly entries: Array<PreloadRefused> }>()(
+  '@systemfsoftware/effect-atom/Registry/Refusals',
+) {}
+
+/**
+ * A recorded serialization refusal: a value that could not be encoded while
+ * dehydrating, or an external payload entry that could not be preloaded, with
+ * the atom key it named (when one was legible) and the schema issue that
+ * rejected it.
+ *
+ * @since 4.0.0
+ */
+export interface PreloadRefused {
+  readonly key: string | undefined
+  readonly issue: string
+}
+
+const refusalLog = (self: Registry): { readonly entries: Array<PreloadRefused> } =>
+  self[engine].storageFor(Refusals, () => ({ entries: [] }))
+
+/**
+ * Records a serialization refusal on the registry.
+ *
+ * @since 4.0.0
+ */
+export const recordRefusal: {
+  (refusal: PreloadRefused): (self: Registry) => void
+  (self: Registry, refusal: PreloadRefused): void
+} = dual(2, (self: Registry, refusal: PreloadRefused): void => {
+  refusalLog(self).entries.push(refusal)
+})
+
+/**
+ * Returns every serialization refusal recorded on the registry, oldest first.
+ *
+ * @since 4.0.0
+ */
+export const refusals = (self: Registry): ReadonlyArray<PreloadRefused> => [...refusalLog(self).entries]
 
 /**
  * Creates a layer that provides a registry for the given service tag,
@@ -573,18 +615,13 @@ const constImmediate = { immediate: true }
 
 const SerializableTypeId: Atom.SerializableTypeId = '~effect-atom/atom/Atom/Serializable'
 
-/**
- * The serializable-atom shape this module reads. `Atom` is imported type-only
- * here (a value import would cycle back through the registry), so the
- * `Atom.isSerializable` discriminant is re-stated as a local guard.
- */
 interface SerializableAtom {
   readonly [SerializableTypeId]: {
     readonly key: string
+    readonly codecJson: Schema.ConstraintCodec<AnyValue, AnyValue>
     readonly decode: (encoded: AnyValue) => AnyValue
   }
 }
-
 const isSerializableAtom = (atom: Atom.Atom): atom is Atom.Atom & SerializableAtom => SerializableTypeId in atom
 
 function atomKey<A>(atom: Atom.Atom<A>): Atom.Atom<A> | string {
@@ -677,13 +714,24 @@ function applyDecodedSerializable(
   atom: Atom.Atom & SerializableAtom,
   encoded: AnyValue,
 ): void {
-  let decoded: AnyValue
-  try {
-    decoded = atom[SerializableTypeId].decode(encoded)
-  } catch {
+  const exit = Schema.decodeUnknownExit(atom[SerializableTypeId].codecJson)(encoded)
+  if (Exit.isFailure(exit)) {
+    recordRefusalOn(registry, atom[SerializableTypeId].key, exit.cause)
     return
   }
-  assignDecodedSerializable(registry, node, atom, decoded)
+  assignDecodedSerializable(registry, node, atom, exit.value)
+}
+
+function recordRefusalOn(registry: RegistryImpl, key: string, cause: Cause.Cause<Schema.SchemaError>): void {
+  refusalLog(registry.handle).entries.push({ key, issue: formatSchemaError(cause) })
+}
+
+function formatSchemaError(cause: Cause.Cause<Schema.SchemaError>): string {
+  const found = Cause.findErrorOption(cause)
+  if (Option.isNone(found)) {
+    return 'undecodable value'
+  }
+  return found.value.message
 }
 
 function assignDecodedSerializable(

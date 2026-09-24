@@ -3888,8 +3888,7 @@ export type SerializableJson =
 export interface Serializable<S extends Schema.Constraint> {
   readonly [SerializableTypeId]: {
     readonly key: string
-    readonly encode: (value: S['Type']) => SerializableJson
-    readonly decode: (value: SerializableJson) => S['Type']
+    readonly codecJson: Schema.toCodecJson<S>
   }
 }
 
@@ -3906,8 +3905,9 @@ export const isSerializable = (self: Atom<unknown>): self is Atom<Top> & Seriali
  *
  * **Details**
  *
- * The schema is converted to a JSON codec for synchronous encode/decode, and the
- * key is also used as the atom label when the atom does not already have one.
+ * The schema is converted to a JSON codec used to encode values when a
+ * registry is dehydrated and to decode them when one is hydrated; values that
+ * fail either direction are recorded as refusals on the registry.
  *
  * @since 4.0.0
  */
@@ -3929,8 +3929,7 @@ export const serializable: {
     label: serializableLabel(self, options.key),
     [SerializableTypeId]: {
       key: options.key,
-      encode: (value: A): SerializableJson => Option.getOrThrow(Schema.encodeOption(codecJson)(value)),
-      decode: (encoded: SerializableJson): A => Option.getOrThrow(Schema.decodeOption(codecJson)(encoded)),
+      codecJson,
     },
   })
 })

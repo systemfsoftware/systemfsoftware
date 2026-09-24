@@ -10,17 +10,24 @@
  *
  * @since 4.0.0
  */
+import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import type * as Fiber from 'effect/Fiber'
-import { dual } from 'effect/Function'
+import { constVoid, dual } from 'effect/Function'
+import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
+import * as Schema from 'effect/Schema'
 import * as Atom from './Atom.js'
+import { DehydratedAtomValue as DehydratedAtomValueSchema } from './internal/HydrationEnvelope.schema.js'
 import * as Registry from './Registry.js'
 import * as AsyncResult from './Result.js'
 
 type AnyAtom<A = unknown> = Atom.Atom<A>
 type AnyValue<A = unknown> = A
+
 /**
  * Marker interface for entries in a dehydrated atom registry state.
  *
@@ -47,14 +54,32 @@ export interface DehydratedAtomValue<V = unknown> extends DehydratedAtom {
 }
 
 /**
- * Non-serializable completion channel for entries dehydrated in `'deferred'`
- * mode. Keyed by entry identity so nothing appears on the public surface: the
- * same objects `dehydrate` returns must be handed to `hydrate`. A `Deferred`
- * cannot cross a serialization boundary anyway, so entries that do cross one
- * are simply applied as plain preloads.
+ * One entry of a hydration payload as received from outside the process: the
+ * in-process `DehydratedAtomValue` returned by `dehydrate`, or any JSON value
+ * parsed from a transport. Every entry is decoded before it reaches the
+ * registry; entries that fail to decode are recorded as refusals.
+ *
+ * @since 4.0.0
  */
-type PendingDeferred<V = unknown> = Deferred.Deferred<V>
-const pendingResults = new WeakMap<DehydratedAtomValue, PendingDeferred>()
+export type HydrationEntry = DehydratedAtomValue | Schema.Json
+
+const pendingResultSlot: unique symbol = Symbol('~effect-atom/Hydration/pendingResult')
+
+const readPendingResult = (entry: HydrationEntry): Option.Option<Deferred.Deferred<AnyValue>> =>
+  Option.some(entry).pipe(
+    Option.filter(Predicate.hasProperty(pendingResultSlot)),
+    Option.map((withSlot) => withSlot[pendingResultSlot]),
+    Option.filter(Deferred.isDeferred<AnyValue, never>),
+  )
+
+const writePendingResult = (entry: DehydratedAtomValue, deferred: Deferred.Deferred<AnyValue>): void => {
+  Object.defineProperty(entry, pendingResultSlot, {
+    value: deferred,
+    enumerable: false,
+    configurable: true,
+    writable: false,
+  })
+}
 
 /**
  * Encodes the serializable atoms currently stored in a registry into dehydrated
@@ -163,10 +188,12 @@ const shouldSkipInitial = (
   return isInitial
 }
 
+type Serializer = Atom.Serializable<Schema.Unknown>[typeof Atom.SerializableTypeId]
+
 const dehydrateSerializable = (
   registry: Registry.Registry,
   atom: AnyAtom,
-  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  serializer: Serializer,
   value: AnyValue,
   key: AnyValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
@@ -180,10 +207,31 @@ const dehydrateSerializable = (
   dehydrateKeyed(registry, atom, serializer, value, key, encodeInitialResultMode, isInitial, now, arr)
 }
 
+const encodeOrRefuse = (
+  registry: Registry.Registry,
+  serializer: Serializer,
+  value: AnyValue,
+): Option.Option<AnyValue> => {
+  const exit = Schema.encodeUnknownExit(serializer.codecJson)(value)
+  if (Exit.isSuccess(exit)) {
+    return Option.some(exit.value)
+  }
+  refuseEncode(registry, serializer.key, exit.cause)
+  return Option.none()
+}
+
+const refuseEncode = (registry: Registry.Registry, key: string, cause: Cause.Cause<Schema.SchemaError>): void => {
+  const issue = Option.match(Cause.findErrorOption(cause), {
+    onNone: () => 'value could not be encoded',
+    onSome: (error) => error.message,
+  })
+  Registry.recordRefusal(registry, { key, issue })
+}
+
 const dehydrateKeyed = (
   registry: Registry.Registry,
   atom: AnyAtom,
-  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  serializer: Serializer,
   value: AnyValue,
   key: AnyValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
@@ -194,14 +242,19 @@ const dehydrateKeyed = (
   if (typeof key !== 'string') {
     return
   }
-  const entry: DehydratedAtomValue = {
-    '~effect/reactivity/DehydratedAtom': true,
-    key,
-    value: serializer.encode(value),
-    dehydratedAt: now,
-  }
-  attachDeferred(registry, atom, serializer, entry, encodeInitialResultMode, isInitial)
-  arr.push(entry)
+  Option.match(encodeOrRefuse(registry, serializer, value), {
+    onNone: constVoid,
+    onSome: (encoded) => {
+      const entry: DehydratedAtomValue = {
+        '~effect/reactivity/DehydratedAtom': true,
+        key,
+        value: encoded,
+        dehydratedAt: now,
+      }
+      attachDeferred(registry, atom, serializer, entry, encodeInitialResultMode, isInitial)
+      arr.push(entry)
+    },
+  })
 }
 
 const shouldAttachDeferred = (
@@ -224,7 +277,7 @@ const isSettledResult = <V = unknown>(newValue: V): boolean => {
 const attachDeferred = (
   registry: Registry.Registry,
   atom: AnyAtom,
-  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  serializer: Serializer,
   entry: DehydratedAtomValue,
   encodeInitialResultMode: 'ignore' | 'deferred' | 'value-only',
   isInitial: boolean,
@@ -234,22 +287,29 @@ const attachDeferred = (
   }
   const deferred = Deferred.makeUnsafe<AnyValue>()
   const unsubscribe = Registry.subscribe(registry, atom, (newValue) => {
-    completeDeferred(deferred, unsubscribe, serializer, newValue)
+    completeDeferred(registry, deferred, unsubscribe, serializer, newValue)
   })
-  pendingResults.set(entry, deferred)
+  writePendingResult(entry, deferred)
 }
 
 const completeDeferred = (
+  registry: Registry.Registry,
   deferred: Deferred.Deferred<AnyValue>,
   unsubscribe: () => void,
-  serializer: { readonly encode: <V = unknown>(value: V) => Atom.SerializableJson },
+  serializer: Serializer,
   newValue: AnyValue,
 ): void => {
   if (!isSettledResult(newValue)) {
     return
   }
-  Deferred.doneUnsafe(deferred, Effect.succeed(serializer.encode(newValue)))
   unsubscribe()
+  Deferred.doneUnsafe(
+    deferred,
+    Option.match(encodeOrRefuse(registry, serializer, newValue), {
+      onNone: () => Effect.interrupt,
+      onSome: Effect.succeed,
+    }),
+  )
 }
 
 /**
@@ -273,42 +333,72 @@ const completeDeferred = (
  *
  * @since 4.0.0
  */
+
 export const hydrate: {
-  (
-    dehydratedState: Iterable<DehydratedAtomValue>,
-  ): (registry: Registry.Registry) => Fiber.Fiber<void, never>
-  (
-    registry: Registry.Registry,
-    dehydratedState: Iterable<DehydratedAtomValue>,
-  ): Fiber.Fiber<void, never>
+  (dehydratedState: Iterable<HydrationEntry>): (registry: Registry.Registry) => Fiber.Fiber<void, never>
+  (registry: Registry.Registry, dehydratedState: Iterable<HydrationEntry>): Fiber.Fiber<void, never>
 } = dual(
   2,
-  (
-    registry: Registry.Registry,
-    dehydratedState: Iterable<DehydratedAtomValue>,
-  ): Fiber.Fiber<void, never> => {
+  (registry: Registry.Registry, dehydratedState: Iterable<HydrationEntry>): Fiber.Fiber<void, never> => {
     const pending: Effect.Effect<void>[] = []
-    for (const datom of dehydratedState) {
-      hydrateOne(registry, pending, datom)
+    for (const entry of dehydratedState) {
+      hydrateOne(registry, pending, entry)
     }
     return Effect.runFork(Effect.forEach(pending, (effect) => effect, { discard: true }))
   },
 )
 
-const hydrateOne = (
+const refuseMalformedEntry = (
+  registry: Registry.Registry,
+  cause: Cause.Cause<Schema.SchemaError>,
+): void => {
+  const found = Cause.findErrorOption(cause)
+  const issue = Option.match(found, {
+    onNone: () => 'entry is not a dehydrated atom value',
+    onSome: (error) => error.message,
+  })
+  Registry.recordRefusal(registry, { key: undefined, issue })
+}
+
+const queuePendingResult = (
   registry: Registry.Registry,
   pending: Effect.Effect<void>[],
   datom: DehydratedAtomValue,
+  result: Deferred.Deferred<AnyValue>,
+): void => {
+  pending.push(
+    Deferred.await(result).pipe(
+      Effect.exit,
+      Effect.map(Exit.match({
+        onFailure: constVoid,
+        onSuccess: (resolvedValue) => Registry.setSerializable(registry, datom.key, resolvedValue),
+      })),
+    ),
+  )
+}
+
+const applyDecodedEntry = (
+  registry: Registry.Registry,
+  pending: Effect.Effect<void>[],
+  datom: DehydratedAtomValue,
+  entry: HydrationEntry,
 ): void => {
   Registry.setSerializable(registry, datom.key, datom.value)
-  const result = pendingResults.get(datom)
-  if (result === undefined) {
+  Option.match(readPendingResult(entry), {
+    onNone: constVoid,
+    onSome: (result) => queuePendingResult(registry, pending, datom, result),
+  })
+}
+
+const hydrateOne = (
+  registry: Registry.Registry,
+  pending: Effect.Effect<void>[],
+  entry: HydrationEntry,
+): void => {
+  const exit = Schema.decodeUnknownExit(DehydratedAtomValueSchema)(entry)
+  if (Exit.isSuccess(exit)) {
+    applyDecodedEntry(registry, pending, exit.value, entry)
     return
   }
-  pending.push(
-    Effect.flatMap(Deferred.await(result), (resolvedValue) =>
-      Effect.sync(() => {
-        Registry.setSerializable(registry, datom.key, resolvedValue)
-      })),
-  )
+  refuseMalformedEntry(registry, exit.cause)
 }
