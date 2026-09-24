@@ -1,11 +1,11 @@
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Duration, Effect, Fiber, Layer, Match } from 'effect'
+import { Duration, Effect, Fiber, Match } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { type DialMode, ProbeHarness, probeHarness } from './__fixtures__/probe-harness.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const GUEST_PORT = 8080
 const TIGHT_WAIT = { timeoutMs: 300, pollMs: 25 } as const
@@ -26,7 +26,7 @@ const dialCount = Effect.flatMap(ProbeHarness, (harness) => harness.dials)
 const answerWith = (behaviour: DialMode) => Effect.flatMap(ProbeHarness, (harness) => harness.answerWith(behaviour))
 
 Feature('Waiting for a guest service to answer before the check gives up')
-  .withScenarioLayer(Layer.mergeAll(probeHarness, TestClock.layer()))
+  .withScenarioLayer(probeHarness)
   .body(({ scenario }) => {
     scenario(
       'A service that answers on the first attempt satisfies the wait without further probing',
@@ -39,7 +39,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
         Then('the check reports the service is ready')(({ outcome }) => {
           expect(reportedReady(outcome.verdict)).toBe(true)
         }),
-        And('the check dialled the service exactly once')(({ outcome }) => {
+        And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBe(1)
         }),
       ),
@@ -52,7 +52,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
         When('readiness is checked for connection acceptance')('outcome', () =>
           Effect.gen(function*() {
             const checking = yield* Effect.forkChild(awaitOver)
-            yield* Effect.yieldNow
+            yield* Effect.flatMap(ProbeHarness, (harness) => harness.enteredDial)
             yield* TestClock.adjust(Duration.millis(400))
             const verdict = yield* Fiber.join(checking)
             return { verdict, attempts: yield* dialCount }
@@ -60,7 +60,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
         Then('the check gives up reporting the service is not ready')(({ outcome }) => {
           expect(reportedReady(outcome.verdict)).toBe(false)
         }),
-        And('the check retried the connection until the deadline passed')(({ outcome }) => {
+        And('the mapped port saw more than one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBeGreaterThan(1)
         }),
       ),
@@ -73,7 +73,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
         When('readiness is checked for connection acceptance')('outcome', () =>
           Effect.gen(function*() {
             const checking = yield* Effect.forkChild(awaitOver)
-            yield* Effect.yieldNow
+            yield* Effect.flatMap(ProbeHarness, (harness) => harness.enteredDial)
             yield* TestClock.adjust(Duration.millis(400))
             const verdict = yield* Fiber.join(checking)
             return { verdict, attempts: yield* dialCount }
@@ -81,7 +81,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
         Then('the check gives up reporting the service is not ready')(({ outcome }) => {
           expect(reportedReady(outcome.verdict)).toBe(false)
         }),
-        And('the check attempted the connection exactly once')(({ outcome }) => {
+        And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBe(1)
         }),
       ),

@@ -1,11 +1,11 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Match } from 'effect'
 import { expect } from 'vitest'
 import { GuestService } from './__fixtures__/guest-service.fixture.js'
 import { scenarioEnvironment } from './__fixtures__/readiness-environment.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const GUEST_PORT = 8080
 const TIGHT_WAIT = { timeoutMs: 300, pollMs: 25 } as const
@@ -35,14 +35,14 @@ const reportedReady = (verdict: Readiness.Satisfied | Readiness.TimedOut): boole
   )
 
 Feature('Probing guest network services for readiness')
-  .liveClock()
+  .live('scenarios probe a real guest service over loopback sockets the kernel cannot observe')
   .withScenarioLayer(scenarioEnvironment)
   .body(({ scenario, scenarioOutline }) => {
     scenario(
       'A service already accepting connections becomes ready on the first attempt',
       Gherkin.Do.pipe(
         Given('a guest service deployed on mapped port 8080')('target', () => targetOfMappedGuest),
-        When('readiness is checked for connection acceptance')(
+        When('readiness is checked for a service answering on the port')(
           'verdict',
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
@@ -64,7 +64,7 @@ Feature('Probing guest network services for readiness')
               return targetOf([bindingOf(guest.hostPort)])
             }),
         ),
-        When('readiness is checked for connection acceptance')(
+        When('readiness is checked for a service behind the port')(
           'verdict',
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
@@ -82,7 +82,7 @@ Feature('Probing guest network services for readiness')
           'verdict',
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
-        Then('the check gives up without dialling any host socket')(({ verdict }) => {
+        Then('the check gives up without opening any host connection')(({ verdict }) => {
           expect(reportedReady(verdict)).toBe(false)
         }),
       ),

@@ -1,6 +1,7 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
-import { Effect, Match } from 'effect'
+import { Duration, Effect, Fiber, Match } from 'effect'
+import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import {
   DynamicLogStream,
@@ -8,7 +9,7 @@ import {
   unreadableLogEnvironment,
 } from './__fixtures__/readiness-environment.fixture.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const TIGHT_WAIT = { timeoutMs: 400, pollMs: 25 } as const
 
@@ -31,7 +32,6 @@ const reportedLogFailure = (error: Readiness.LogSourceError | Readiness.ProbeInp
   )
 
 Feature('Observing guest log output for readiness')
-  .liveClock()
   .withScenarioLayer(dynamicScenarioEnvironment([]))
   .body(({ scenario }) => {
     scenario(
@@ -41,15 +41,23 @@ Feature('Observing guest log output for readiness')
           'target',
           () => Effect.succeed(target),
         ),
-        When('readiness is checked while a background process emits the log line after a delay')(
+        When('readiness is checked while a starting service writes its ready line after a delay')(
           'verdict',
           () =>
             Effect.gen(function*() {
-              const stream = yield* DynamicLogStream
-              yield* Effect.forkScoped(
-                Effect.delay(stream.append('2026-09-22T01:00:00Z [info] worker ready on port 8080'), '50 millis'),
+              const checking = yield* Effect.forkChild(
+                Effect.flatMap(DynamicLogStream, (stream) =>
+                  Effect.delay(
+                    stream.append('2026-09-22T01:00:00Z [info] worker ready on port 8080'),
+                    '50 millis',
+                  )),
               )
-              return yield* awaitOver(Readiness.Wait.forLog('worker ready on port 8080'))
+              const waiting = yield* Effect.forkChild(awaitOver(Readiness.Wait.forLog('worker ready on port 8080')))
+              yield* TestClock.adjust(Duration.millis(400))
+              yield* Fiber.join(checking)
+              const verdict = yield* Fiber.join(waiting)
+              yield* TestClock.adjust(Duration.millis(100))
+              return verdict
             }),
         ),
         Then('the check reports the service is ready')(({ verdict }) => {
@@ -70,7 +78,7 @@ Feature('Observing guest log output for readiness')
               yield* stream.append('[SUCCESS] Ready for traffic: https://0.0.0.0:8080/v1\nHandling events...')
             }),
         ),
-        When('readiness is checked for exact pattern "Ready for traffic: https://0.0.0.0:8080/v1"')(
+        When('readiness is checked for the service address line amid boot and banner text')(
           'verdict',
           () => awaitOver(Readiness.Wait.forLog('Ready for traffic: https://0.0.0.0:8080/v1')),
         ),
@@ -92,11 +100,16 @@ Feature('Observing guest log output for readiness')
               yield* stream.append('heartbeat tick 2')
             }),
         ),
-        When('readiness is checked for pattern "service fully operational"')(
+        When('readiness is checked for a line the heartbeats never print')(
           'verdict',
-          () => awaitOver(Readiness.Wait.forLog('service fully operational')),
+          () =>
+            Effect.gen(function*() {
+              const waiting = yield* Effect.forkChild(awaitOver(Readiness.Wait.forLog('service fully operational')))
+              yield* TestClock.adjust(Duration.millis(400))
+              return yield* Fiber.join(waiting)
+            }),
         ),
-        Then('the check gives up reporting timed out')(({ verdict }) => {
+        Then('the check gives up reporting the service is not ready')(({ verdict }) => {
           expect(reportedReady(verdict)).toBe(false)
         }),
       ),
@@ -110,11 +123,11 @@ Feature('Observing guest log output for readiness')
           'target',
           () => Effect.succeed(target),
         ),
-        When('readiness is checked for log line matching "listening"')(
+        When('readiness is checked for the word the broken stream should contain')(
           'outcome',
           () => awaitOver(Readiness.Wait.forLog('listening')).pipe(Effect.flip),
         ),
-        Then('the check fails with the underlying stream read failure')(({ outcome }) => {
+        Then('the check reports the broken stream as the reason')(({ outcome }) => {
           expect(reportedLogFailure(outcome)).toBe(true)
         }),
       ),
