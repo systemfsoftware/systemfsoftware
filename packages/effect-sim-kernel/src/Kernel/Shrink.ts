@@ -209,7 +209,17 @@ const commandsPass = <C>(state: CommandsState<C>): Promise<ReadonlyArray<C>> => 
   return tryIndex<C>(state, 0)
 }
 
-export const shrinkCommands = <C>(
+const shrinkCommandsImpl = <C>(
   commands: ReadonlyArray<C>,
   stillFails: (candidate: ReadonlyArray<C>) => Promise<boolean>,
 ): Promise<ReadonlyArray<C>> => commandsPass<C>({ commands, stillFails, passes: 0 })
+
+export const shrinkCommands: {
+  <C>(
+    commands: ReadonlyArray<C>,
+    stillFails: (candidate: ReadonlyArray<C>) => Promise<boolean>,
+  ): Promise<ReadonlyArray<C>>
+  <C>(
+    stillFails: (candidate: ReadonlyArray<C>) => Promise<boolean>,
+  ): (commands: ReadonlyArray<C>) => Promise<ReadonlyArray<C>>
+} = dual((args: IArguments): boolean => Array.isArray(args[0]), shrinkCommandsImpl)

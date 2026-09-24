@@ -21,6 +21,10 @@ export interface Escape {
 
 type TimerFunction = (...args: ReadonlyArray<Field>) => Field
 
+/** The untouched host timer the kernel's own machinery yields with. */
+/** @internal */
+export type HostTimer = (handler: () => void, ...rest: ReadonlyArray<Field>) => Field
+
 // Frames inside this package are the recorder's own machinery, not the call site.
 // Matches both `src/` (resolved through the workspace source condition) and `dist/`.
 const OWN_MODULE = /effect-sim-kernel[/\\](?:src|dist)[/\\]/u
@@ -67,14 +71,25 @@ const reinstall = (originals: ReadonlyMap<TimerName, TimerFunction>): void => {
 /**
  * Wrap the global timer functions so every call made while the run is live is
  * reported, then still carried out so the run can be classified. Returns the
- * restore function; a run installs the recorder at its start and restores it in
- * its `finally`, so nothing outside a run is ever observed.
+ * restore function and the untouched host timer the kernel's own machinery
+ * uses to yield to completed host work; a run installs the recorder at its
+ * start and restores it in its `finally`, so nothing outside a run is ever
+ * observed.
  */
 /** @internal */
-export const installEscapeRecorder = (report: Report): () => void => {
+export const installEscapeRecorder = (
+  report: Report,
+): { readonly restore: () => void; readonly hostImmediate: HostTimer } => {
   const originals = capturedTimers()
   for (const [name, original] of originals) {
     Reflect.set(globalThis, name, wrapperOf(name, original, report))
   }
-  return () => reinstall(originals)
+  return { restore: () => reinstall(originals), hostImmediate: hostImmediateOf(originals) }
 }
+
+const hostImmediateOf = (originals: ReadonlyMap<TimerName, TimerFunction>): HostTimer => {
+  const immediate = originals.get('setImmediate')
+  return immediate === undefined ? syncImmediate : immediate
+}
+
+const syncImmediate: HostTimer = (handler) => handler()

@@ -1,43 +1,56 @@
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import {
-  firstRaceFinding,
-  guardedInOneStep,
-  raceFindingsWithoutPreemption,
-  raceValueOf,
-  wrapperVariants,
-} from './__fixtures__/selfTestFixtures.js'
+import { firstRaceFinding, guardedInOneStep, raceValueOf, wrapperVariants } from './__fixtures__/selfTestFixtures.js'
+import type { RaceFinding, WrapperVariant } from './__fixtures__/selfTestFixtures.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
-Feature('A race between two workers claiming one shared slot')
+const searchWithoutPause = (
+  programs: ReadonlyArray<WrapperVariant['program']>,
+): Promise<ReadonlyArray<RaceFinding>> =>
+  programs.reduce<Promise<ReadonlyArray<RaceFinding>>>(
+    (pending, program) =>
+      pending.then((findings) => firstRaceFinding(0)(program).then((finding) => [...findings, finding])),
+    Promise.resolve([]),
+  )
+
+Feature('Two workers claiming one shared slot')
+  .live('drives its own simulation-kernel run')
   .withLayer(Layer.empty)
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
-      'One pause finds both workers holding the slot <protection>',
+      'One pause between the workers leaves both holding the slot <protection>',
       wrapperVariants,
       (variant) =>
         Gherkin.Do.pipe(
-          Given('two workers each take the shared slot only while it is still empty, <protection>')(
-            'finding',
-            () => Effect.promise(() => firstRaceFinding(variant.program, 1)),
+          Given('two workers that take the shared slot only while it is still empty, <protection>')(
+            'contestants',
+            () => Effect.succeed(variant.program),
           ),
-          Then('the search reports a schedule where both workers took the slot')((s) => {
+          When('the two workers run with one pause between them')(
+            'finding',
+            (s) => Effect.promise(() => firstRaceFinding(1)(s.contestants)),
+          ),
+          Then('both workers hold the slot')((s) => {
             expect(raceValueOf(s.finding)).toEqual([true, true])
           }),
-          Then('that schedule spends exactly one pause')((s) => {
+          And('the schedule spends exactly one pause')((s) => {
             expect(s.finding?.preemptions).toBe(1)
           }),
         ),
     )
 
     scenario(
-      'Without a pause the workers never both take the slot',
+      'Without a pause neither worker takes a slot the other also takes',
       Gherkin.Do.pipe(
-        Given('the same pair of workers is searched under every protection, and no pause is allowed')(
+        Given('the same two workers under every protection')(
+          'contestants',
+          () => Effect.succeed(wrapperVariants.map((variant) => variant.program)),
+        ),
+        When('every pair runs with no pause allowed')(
           'findings',
-          () => Effect.promise(() => raceFindingsWithoutPreemption()),
+          (s) => Effect.promise(() => searchWithoutPause(s.contestants)),
         ),
         Then('no schedule leaves both workers holding the slot')((s) => {
           expect(s.findings.map(raceValueOf)).toEqual([undefined, undefined, undefined, undefined])
@@ -48,9 +61,13 @@ Feature('A race between two workers claiming one shared slot')
     scenario(
       'A guard that checks and changes in one step cannot be raced',
       Gherkin.Do.pipe(
-        Given('two workers guarded by a single indivisible step, and one pause is allowed')(
+        Given('two workers guarded by a single indivisible step')(
+          'contestants',
+          () => Effect.succeed(guardedInOneStep),
+        ),
+        When('the two workers run with one pause between them')(
           'finding',
-          () => Effect.promise(() => firstRaceFinding(guardedInOneStep, 1)),
+          (s) => Effect.promise(() => firstRaceFinding(1)(s.contestants)),
         ),
         Then('no schedule leaves both workers holding the slot')((s) => {
           expect(raceValueOf(s.finding)).toBeUndefined()

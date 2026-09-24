@@ -1,10 +1,10 @@
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Queue } from 'effect'
 import { expect } from 'vitest'
 import { sweepLostWakeups } from './__fixtures__/queueFixtures.js'
 import type { Take } from './__fixtures__/queueFixtures.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const waits: ReadonlyArray<{ readonly wait: string; readonly take: Take }> = [
   { wait: 'takes one message', take: (queue) => Effect.ignore(Queue.take(queue)) },
@@ -15,6 +15,7 @@ const waits: ReadonlyArray<{ readonly wait: string; readonly take: Take }> = [
 ]
 
 Feature('A waiting reader receives a message offered to its queue')
+  .live("reproduces the defect on Effect's own scheduler, which the kernel would replace")
   .withLayer(Layer.empty)
   .body(({ scenarioOutline }) => {
     scenarioOutline(
@@ -22,9 +23,13 @@ Feature('A waiting reader receives a message offered to its queue')
       waits,
       (row) =>
         Gherkin.Do.pipe(
-          Given('a reader forced to pause just before it starts waiting, at every point it could pause')(
+          Given(`a reader that ${row.wait}, paused just before it starts waiting`)(
+            'take',
+            () => Effect.succeed(row.take),
+          ),
+          When('a message is offered during the pause, at every point the pause can fall')(
             'stranded',
-            () => Effect.promise(() => sweepLostWakeups(row.take)),
+            (s) => Effect.promise(() => sweepLostWakeups(s.take)),
           ),
           Then('no reader is left waiting beside a message already in its queue')((s) => {
             expect(s.stranded).toEqual([])

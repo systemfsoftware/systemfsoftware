@@ -1,6 +1,6 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Exit, Fiber, Ref } from 'effect'
-import { checkThenSet, raceDetected } from './searchFixtures.js'
+import { checkThenSet } from './searchFixtures.js'
 
 type RaceProgram = Effect.Effect<ReadonlyArray<boolean>>
 
@@ -38,15 +38,16 @@ export const guardedInOneStep: RaceProgram = Effect.gen(function*() {
   return [firstResult, secondResult]
 })
 
-export const firstRaceFinding = (program: RaceProgram, preemptions: number): Promise<RaceFinding> =>
-  Kernel.search(program, { preemptions, isFailure: raceDetected }).then((outcome) => outcome.failures[0])
+/** Both workers report taking the slot: the failure every one-pause search hunts. */
+const bothHolding = (result: Kernel.RunResult<ReadonlyArray<boolean>, never>): boolean => {
+  if (!('exit' in result) || !Exit.isSuccess(result.exit)) return false
+  const value: ReadonlyArray<boolean> = result.exit.value
+  return value[0] === true && value[1] === true
+}
 
-export const raceFindingsWithoutPreemption = (): Promise<ReadonlyArray<RaceFinding>> =>
-  wrapperVariants.reduce<Promise<ReadonlyArray<RaceFinding>>>(
-    (pending, variant) =>
-      pending.then((findings) => firstRaceFinding(variant.program, 0).then((finding) => [...findings, finding])),
-    Promise.resolve([]),
-  )
+/** First schedule leaving both workers holding the slot, for the pauses allowed. */
+export const firstRaceFinding = (preemptions: number) => (program: RaceProgram): Promise<RaceFinding> =>
+  Kernel.search(program, { preemptions, isFailure: bothHolding }).then((outcome) => outcome.failures[0])
 
 const exitOf = (
   result: Kernel.RunResult<ReadonlyArray<boolean>, never>,

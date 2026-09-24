@@ -48,13 +48,22 @@ await Kernel.run(program, {
 
 Each step record tells you which fiber ran, what the default choice was, whether the schedule deviated, and whether the step touched state another fiber can observe (`visible` — the pruning seam for preemption-bounded search).
 
-## In-process wakeups
+## External waits
 
-Promises and `queueMicrotask` that settle inside the process run between kernel steps, and a fiber they wake becomes the next step's scheduling choice — in-process asynchrony never needs a declaration. Only real timers are escapes.
+Stalls on host waits (files, sockets) fail the run by default so an explored schedule stays replayable: the `Blocked` failure names the wait and the resources it holds. One mode awaits them instead:
+
+```ts
+// fail fast on any host wait (the default)
+await Kernel.run(program, { external: 'fail' })
+// wait for real file and socket waits on Effect's order, then keep stepping
+await Kernel.run(program, { external: 'await' })
+```
+
+A real-timer wait still fails (`Escape`) under `'await'` — timers go through the controlled clock instead. `'await'` beside `path` or `choose` is refused, since an awaited host wait cannot take an explored schedule. For checks that run one ordered program against the real system, use `'await'` with no exploration options.
 
 ## One kernel at a time
 
-The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed for the lifetime of one run and restored at its release. A second `Kernel.run` started while one is active throws immediately instead of sharing the hooks.
+The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed for the lifetime of one run and restored at its release. A second `Kernel.run` started while one is active throws immediately instead of sharing the hooks — one kernel owns the process at a time, so a scenario that drives its own run declares that it does and never nests one run inside another.
 
 ## Exploration boundary
 

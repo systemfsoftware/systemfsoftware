@@ -12,12 +12,13 @@
  * microtask checkpoint — exactly the in-process work R36 hands to the kernel.
  */
 import { Clock, Effect, Exit } from 'effect'
+import { dual } from 'effect/Function'
 
 import { stepClocks } from './clocks.js'
 import { describeSuspended, newResources, resourceCounts, waitKindOf } from './deadlock.js'
 import type { AnyFiber, SuspendedFiber, WaitKind } from './deadlock.js'
 import { installEscapeRecorder } from './escapeRecorder.js'
-import type { Escape, TimerName } from './escapeRecorder.js'
+import type { Escape, HostTimer, TimerName } from './escapeRecorder.js'
 import { makeKernel } from './kernel.js'
 import type { Task } from './kernel.js'
 import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord } from './kernel.js'
@@ -106,6 +107,15 @@ export interface RunOptions {
   /** Interrupts one fiber at a chosen step (R5). */
   readonly interrupt?: Interruption
   /**
+   * What a stall on the host means. `'fail'` (the default) names the wait and
+   * fails the run, so an explored schedule stays replayable (R36). `'await'`
+   * yields to the host until a file or socket wait settles, then continues
+   * stepping, for checks that run one ordered program against the real system.
+   * A real-timer wait still fails (`Escape`, per R2); `'await'` beside `path`
+   * or `choose` is rejected, so it cannot silently weaken an exploring run.
+   */
+  readonly external?: 'fail' | 'await'
+  /**
    * `'body'` keeps every decision before `beginExploration` on Effect's order,
    * so a harness's own setup is never explored (R15).
    */
@@ -127,6 +137,7 @@ export interface RunOptions {
 const DEFAULT_MAX_STEPS = 50_000
 const DEFAULT_STEP_TURNS = 4
 const DEFAULT_QUIESCENCE_TURNS = 1_000
+const MAX_HOST_WAITS = 10_000
 
 interface Drive<A, E> {
   readonly kernel: Kernel
@@ -134,6 +145,7 @@ interface Drive<A, E> {
   readonly options: RunOptions
   readonly before: ReadonlyMap<string, number>
   readonly guard: number
+  readonly hostImmediate: HostTimer
 }
 
 /**
@@ -210,12 +222,6 @@ const runawayOf = (kernel: Kernel, options: RunOptions, guard: number): RunFailu
   return { ...runOutcomeTags.runaway, steps: kernel.steps.length, pending: kernel.pending.length }
 }
 
-const escapeOrRunaway = (kernel: Kernel, options: RunOptions, guard: number): RunFailure | undefined => {
-  const escaped = kernel.escapes[0]
-  if (escaped !== undefined) return escapeFailureOf(escaped)
-  return runawayOf(kernel, options, guard)
-}
-
 const quiescenceFailure = (kernel: Kernel, before: ReadonlyMap<string, number>): RunFailure => {
   const resources = newResources(before)
   if (resources.length === 0) {
@@ -223,6 +229,70 @@ const quiescenceFailure = (kernel: Kernel, before: ReadonlyMap<string, number>):
   }
   return { ...runOutcomeTags.blocked, on: waitKindOf(resources), resources }
 }
+
+const isBlockedStall = (excuse: RunFailure): excuse is BlockedFailure => 'on' in excuse
+
+const isAwaitableKind = (excuse: BlockedFailure): boolean => excuse.on === 'File' || excuse.on === 'Socket'
+
+const isAwaitableStall = (excuse: RunFailure): boolean => isBlockedStall(excuse) && isAwaitableKind(excuse)
+
+const awaitsStall = (options: RunOptions, excuse: RunFailure): boolean =>
+  options.external === 'await' && isAwaitableStall(excuse)
+const tasksPending = <A, E>(state: Drive<A, E>): boolean => state.kernel.pending.length > 0
+
+const hostCheckYield = <A, E>(state: Drive<A, E>): Promise<void> => {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  state.hostImmediate(() => resolve(undefined))
+  return promise
+}
+
+const hostYield = <A, E>(state: Drive<A, E>): Promise<void> =>
+  hostCheckYield(state).then(() => drain(DEFAULT_STEP_TURNS)).then(() => drain(DEFAULT_QUIESCENCE_TURNS))
+
+const awaitedResources = <A, E>(state: Drive<A, E>): ReadonlyArray<string> => newResources(state.before)
+
+const waitsRemain = (resources: ReadonlyArray<string>): boolean =>
+  resources.some((resource) => waitKindOf([resource]) === 'File' || waitKindOf([resource]) === 'Socket')
+
+const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
+  drive({ ...state, before: resourceCounts() })
+
+const waitedOutcome = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => revivedAfterHost(state, 0)
+
+const revivedAfterHost = <A, E>(state: Drive<A, E>, waited: number): Promise<RunResult<A, E> | undefined> =>
+  hostYield(state).then(() => revivedAfterYield(state, waited))
+
+const revivedAfterYield = <A, E>(state: Drive<A, E>, waited: number): Promise<RunResult<A, E> | undefined> =>
+  tasksPending(state) ? revivedDrive(state) : revivedByResources(state, waited)
+
+const revivedByResources = <A, E>(state: Drive<A, E>, waited: number): Promise<RunResult<A, E> | undefined> =>
+  waitsRemain(awaitedResources(state)) ? revivedAfterLimit(state, waited) : revivedAfterHost(state, waited + 1)
+
+const revivedAfterLimit = <A, E>(state: Drive<A, E>, waited: number): Promise<RunResult<A, E> | undefined> =>
+  waited > MAX_HOST_WAITS
+    ? Promise.resolve(failedOn<A, E>(state.kernel, quiescenceFailure(state.kernel, state.before)))
+    : revivedAfterHost(state, waited + 1)
+
+const waitForExternal = <A, E>(state: Drive<A, E>, _excuse: RunFailure): Promise<RunResult<A, E> | undefined> =>
+  drain(quiescenceTurnsOf(state.options)).then(() => waitedOutcome(state))
+
+const awaitedStall = <A, E>(
+  state: Drive<A, E>,
+  excuse: RunFailure,
+): Promise<RunResult<A, E> | undefined> =>
+  awaitsStall(state.options, excuse)
+    ? waitForExternal(state, excuse)
+    : Promise.resolve(failedOn<A, E>(state.kernel, excuse))
+
+const stallByExternal = <A, E>(state: Drive<A, E>, excuse: RunFailure): Promise<RunResult<A, E> | undefined> =>
+  awaitedStall(state, excuse)
+
+const classifyStall = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> =>
+  seamOffersProgress(state.options.onQuiescent)
+    ? Promise.resolve(undefined)
+    : stallByExternal(state, quiescenceFailure(state.kernel, state.before))
+
+const seamOrFailure = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => classifyStall(state)
 
 const completedOn = <A, E>(kernel: Kernel, exit: Exit.Exit<A, E>): RunResult<A, E> => ({
   ...runOutcomeTags.completed,
@@ -263,16 +333,10 @@ const advance = <A, E>(state: Drive<A, E>): Promise<void> => {
 
 const seamOffersProgress = (seam: (() => boolean) | undefined): boolean => seam !== undefined && seam()
 
-const seamOrFailure = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
-  if (seamOffersProgress(state.options.onQuiescent)) return Promise.resolve(undefined)
-  return Promise.resolve(failedOn<A, E>(state.kernel, quiescenceFailure(state.kernel, state.before)))
-}
-
 const resettled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   if (state.kernel.pending.length > 0) return Promise.resolve(undefined)
   return seamOrFailure(state)
 }
-
 const stalled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> =>
   drain(quiescenceTurnsOf(state.options)).then(() => resettled(state))
 
@@ -286,12 +350,31 @@ const settled = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined>
   if (state.kernel.pending.length > 0) return Promise.resolve(undefined)
   return quiescent(state)
 }
-
 const progressed = <A, E>(
   state: Drive<A, E>,
   done: RunResult<A, E> | undefined,
 ): Promise<RunResult<A, E> | undefined> =>
   done !== undefined ? Promise.resolve(done) : advance(state).then(() => undefined)
+
+const escapeOrRunaway = (kernel: Kernel, options: RunOptions, guard: number): RunFailure | undefined => {
+  const escaped = kernel.escapes[0]
+  if (escaped !== undefined) return escapeFailureOf(escaped)
+  return runawayOf(kernel, options, guard)
+}
+
+const rejectsChosenExploration = (options: RunOptions): boolean =>
+  options.path !== undefined || options.choose !== undefined
+
+const rejectsAwaitedExploration = (options: RunOptions): boolean =>
+  options.external === 'await' && rejectsChosenExploration(options)
+
+const rejectAwaitedExploration = (options: RunOptions): void => {
+  if (rejectsAwaitedExploration(options)) {
+    throw new Error(
+      'effect-sim-kernel: external "await" runs only on Effect\'s own order, so it refuses path and choose',
+    )
+  }
+}
 
 const iteration = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => {
   const halt = escapeOrRunaway(state.kernel, state.options, state.guard)
@@ -309,6 +392,30 @@ const continued = <A, E>(
 const drive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
   iteration(state).then((halted) => continued(state, halted))
 
+type KernelField<A = unknown> = A
+
+const RUN_OPTION_KEYS: ReadonlyArray<string> = [
+  'choose',
+  'explore',
+  'external',
+  'interrupt',
+  'maxSteps',
+  'onQuiescent',
+  'path',
+  'quiescenceTurns',
+  'stepTurns',
+]
+
+const isHostObject = (candidate: KernelField): candidate is object => typeof candidate === 'object'
+
+const hasOptionKeys = (candidate: object): boolean =>
+  Object.keys(candidate).every((key) => RUN_OPTION_KEYS.includes(key))
+
+const isRunOptions = (candidate: KernelField): candidate is RunOptions =>
+  isHostObject(candidate) && hasOptionKeys(candidate)
+
+const isProgram = (candidate: KernelField): boolean => !isRunOptions(candidate)
+
 /**
  * Runs one Effect program under one kernel (R2: every clock the program can
  * reach is the kernel's virtual root clock; R37: at quiescence the kernel
@@ -317,13 +424,13 @@ const drive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
  * taken, and a per-step record of which fiber ran. A second run started while
  * one is active fails immediately instead of sharing the global hooks.
  */
-/** @internal */
-export const runKernel = <A, E>(
+const runKernelImpl = <A, E>(
   program: Effect.Effect<A, E>,
   options: RunOptions = {},
 ): Promise<RunResult<A, E>> => {
+  rejectAwaitedExploration(options)
   const kernel = makeKernel({ exploring: options.explore !== 'body' })
-  const restore = installEscapeRecorder((escape) => {
+  const recorder = installEscapeRecorder((escape) => {
     kernel.escapes.push(escape)
   })
   const userSeam = options.onQuiescent
@@ -338,8 +445,14 @@ export const runKernel = <A, E>(
     options: { ...options, onQuiescent: () => stepClocks(kernel.clocks) || seamOffersProgress(userSeam) },
     before: resourceCounts(),
     guard: 0,
+    hostImmediate: recorder.hostImmediate,
   }).finally(() => {
-    restore()
+    recorder.restore()
     kernel.release()
   })
 }
+/** @internal */
+export const runKernel: {
+  <A, E>(program: Effect.Effect<A, E>, options?: RunOptions): Promise<RunResult<A, E>>
+  (options?: RunOptions): <A, E>(program: Effect.Effect<A, E>) => Promise<RunResult<A, E>>
+} = dual((args: IArguments): boolean => args.length > 0 && isProgram(args[0]), runKernelImpl)

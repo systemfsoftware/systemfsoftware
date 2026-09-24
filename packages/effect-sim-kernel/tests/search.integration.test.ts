@@ -1,4 +1,4 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { ConfigProvider, Effect, Layer } from 'effect'
 import { expect } from 'vitest'
@@ -8,35 +8,118 @@ import {
   checkThenSet,
   firstFailureValue,
   isOverBudget,
-  nightlySeeds,
   outcomeBound,
-  perChangeSeeds,
   queueProgram,
   raceDetected,
   replayValueOf,
   scopedProgram,
-  seededTwice,
-  threeDeviationPath,
 } from './__fixtures__/searchFixtures.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
-const nightlyCount = Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2)))
+const TEST_FIBERS = 3
+const TEST_STEPS = 400
+const THREE_WORKERS_STEP_COUNT = 60
 
-Feature('Exploring schedules to catch concurrency faults')
+type SparsePath = ReadonlyArray<number | undefined>
+
+interface StrayDetour {
+  readonly position: number
+  readonly choice: number
+}
+
+const deviationEntriesOf = (run: Kernel.RunResult<ReadonlyArray<boolean>, never>): SparsePath =>
+  run.steps.map((step) => (step.deviation ? step.choice : undefined))
+
+const racePositionOf = (run: Kernel.RunResult<ReadonlyArray<boolean>, never>): number =>
+  run.steps.findIndex((step) => step.deviation)
+
+const detoursAt = (step: Kernel.StepRecord, position: number): ReadonlyArray<StrayDetour> =>
+  Array.from({ length: step.options }, (_value, choice) => ({ position, choice })).filter(
+    (detour) => detour.choice !== step.fallback,
+  )
+
+const strayDetoursOf = (run: Kernel.RunResult<ReadonlyArray<boolean>, never>): ReadonlyArray<StrayDetour> => {
+  const race = racePositionOf(run)
+  return run.steps.flatMap((step, position) => (position > race ? detoursAt(step, position) : []))
+}
+
+const detourPairsOf = (detours: ReadonlyArray<StrayDetour>): ReadonlyArray<readonly [StrayDetour, StrayDetour]> =>
+  detours.flatMap((first, index) =>
+    detours.slice(index + 1).filter((second) => second.position !== first.position).map((second) =>
+      [first, second] as const
+    )
+  )
+
+const withDetours = (entries: SparsePath, pair: readonly [StrayDetour, StrayDetour]): SparsePath =>
+  entries.map((entry, position) => pair.find((detour) => detour.position === position)?.choice ?? entry)
+
+const threeDetours = (run: Kernel.RunResult<ReadonlyArray<boolean>, never>): boolean =>
+  raceDetected(run) && run.steps.filter((step) => step.deviation).length === 3
+
+const triedPair = (
+  entries: SparsePath,
+  pair: readonly [StrayDetour, StrayDetour],
+): Promise<Kernel.RunResult<ReadonlyArray<boolean>, never> | undefined> =>
+  Kernel.run(checkThenSet, { path: withDetours(entries, pair) }).then((run) => (threeDetours(run) ? run : undefined))
+
+const firstThreeDetourRun = (
+  failing: Kernel.RunResult<ReadonlyArray<boolean>, never>,
+): Promise<Kernel.RunResult<ReadonlyArray<boolean>, never> | undefined> => {
+  const entries = deviationEntriesOf(failing)
+  return detourPairsOf(strayDetoursOf(failing)).reduce<
+    Promise<Kernel.RunResult<ReadonlyArray<boolean>, never> | undefined>
+  >(
+    (pending, pair) => pending.then((found) => found ?? triedPair(entries, pair)),
+    Promise.resolve(undefined),
+  )
+}
+
+const oneDetourFailure = (): Promise<Kernel.RunResult<ReadonlyArray<boolean>, never>> =>
+  Kernel.search(checkThenSet, { preemptions: 1, isFailure: raceDetected }).then((outcome) => {
+    const failure = outcome.failures[0]
+    if (failure === undefined) throw new Error('expected the race to be found with one pause')
+    return Kernel.run(checkThenSet, { path: failure.path })
+  })
+
+const threeDetourPath = (): Promise<ReadonlyArray<number>> =>
+  oneDetourFailure().then(firstThreeDetourRun).then((run) => {
+    if (run === undefined) throw new Error('expected a pair of stray detours to keep the race lost')
+    return run.decisions
+  })
+
+const twiceWithSeed = (
+  seed: number,
+): Promise<{
+  readonly first: Kernel.RunResult<ReadonlyArray<boolean>, never>
+  readonly second: Kernel.RunResult<ReadonlyArray<boolean>, never>
+}> => {
+  const chooserFor = () => Kernel.pick({ seed, depth: Kernel.pctDepth, steps: THREE_WORKERS_STEP_COUNT })
+  const first = Kernel.run(checkThenSet, { choose: chooserFor() })
+  return first.then((firstRun) =>
+    Kernel.run(checkThenSet, { choose: chooserFor() }).then((secondRun) => ({ first: firstRun, second: secondRun }))
+  )
+}
+
+Feature('Searching schedules until a concurrency fault shows')
+  .live('drives its own simulation-kernel run')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A queue the kernel cannot watch turns pruning off, and the result says so',
+      'A queue the search cannot watch turns pruning off, and the result says so',
       Gherkin.Do.pipe(
-        Given('a target whose shared state includes a queue the kernel does not watch')(
+        Given('a program whose shared state holds a queue')(
+          'target',
+          () => Effect.succeed(queueProgram),
+        ),
+        When('the program is searched with one pause allowed')(
           'outcome',
-          () => Effect.promise(() => Kernel.search(queueProgram, { preemptions: 1 })),
+          (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
         ),
         Then('the search finishes within its stated bound')((s) => {
           expect(isOverBudget(s.outcome)).toBe(false)
         }),
-        Then('the explored bound reports pruning was off and names the queue')((s) => {
+        And('the bound reports pruning is off and names the queue')((s) => {
           const bound = outcomeBound(s.outcome)
           expect(bound.pruning.enabled).toBe(false)
           expect(bound.pruning.disabledBy).toContain('Queue')
@@ -45,28 +128,32 @@ Feature('Exploring schedules to catch concurrency faults')
     )
 
     scenario(
-      'Two workers racing for an empty slot are caught at one preemption, pruned and unpruned',
+      'Two workers racing for an empty slot are caught with one pause, pruned and unpruned',
       Gherkin.Do.pipe(
         Given('two workers that each take an empty slot only while it is still empty')(
+          'target',
+          () => Effect.succeed(checkThenSet),
+        ),
+        When('the same target is searched pruned and unpruned')(
           'searches',
-          () =>
+          (s) =>
             Effect.promise(() =>
-              Kernel.search(checkThenSet, { preemptions: 1, isFailure: raceDetected }).then((watched) =>
-                Kernel.search(checkThenSet, {
+              Kernel.search(s.target, { preemptions: 1, isFailure: raceDetected }).then((pruned) =>
+                Kernel.search(s.target, {
                   preemptions: 1,
                   prune: false,
                   isFailure: raceDetected,
-                }).then((unwatched) => ({ watched, unwatched }))
+                }).then((unpruned) => ({ pruned, unpruned }))
               )
             ),
         ),
         Then('each search finds a run where both workers believed they took the slot')((s) => {
-          expect(firstFailureValue(s.searches.watched)).toEqual([true, true])
-          expect(firstFailureValue(s.searches.unwatched)).toEqual([true, true])
+          expect(firstFailureValue(s.searches.pruned)).toEqual([true, true])
+          expect(firstFailureValue(s.searches.unpruned)).toEqual([true, true])
         }),
-        Then('each failing schedule spends its one preemption')((s) => {
-          expect(s.searches.watched.failures[0]?.preemptions).toBe(1)
-          expect(s.searches.unwatched.failures[0]?.preemptions).toBe(1)
+        And('each failing schedule spends its one pause')((s) => {
+          expect(s.searches.pruned.failures[0]?.preemptions).toBe(1)
+          expect(s.searches.unpruned.failures[0]?.preemptions).toBe(1)
         }),
       ),
     )
@@ -74,11 +161,9 @@ Feature('Exploring schedules to catch concurrency faults')
     scenario(
       'A failing schedule padded with stray detours shrinks back to the detour that matters',
       Gherkin.Do.pipe(
-        Given(
-          'a randomly steered schedule that loses the race after three detours, two of which the race does not need',
-        )(
+        Given('a recorded schedule that loses the race only after three detours')(
           'path',
-          () => Effect.promise(() => threeDeviationPath()),
+          () => Effect.promise(() => threeDetourPath()),
         ),
         When('the failing schedule is shrunk')(
           'shrunk',
@@ -87,20 +172,27 @@ Feature('Exploring schedules to catch concurrency faults')
         Then('only the detour that decides the race is left')((s) => {
           expect(s.shrunk.deviations).toBe(1)
         }),
-        Then('the shrunk schedule still fails on replay')((s) => {
+        And('the shrunk schedule still fails on replay')((s) => {
           expect(replayValueOf(s.shrunk)).toEqual([true, true])
         }),
       ),
     )
 
     scenario(
-      'The same seed steers two runs down the same schedule',
+      'The same starting number steers two runs down the same schedule',
       Gherkin.Do.pipe(
-        Given('two runs steered by one seed')('runs', () => Effect.promise(() => seededTwice(7))),
+        Given('two runs steered by one starting number')(
+          'seed',
+          () => Effect.succeed(7),
+        ),
+        When('both runs start from that number')(
+          'runs',
+          (s) => Effect.promise(() => twiceWithSeed(s.seed)),
+        ),
         Then('both runs take the same decisions in the same order')((s) => {
           expect(s.runs.first.decisions).toEqual(s.runs.second.decisions)
         }),
-        Then('both runs hand control to the same workers at the same moments')((s) => {
+        And('both runs hand control to the same workers at the same moments')((s) => {
           expect(fiberPatternOf(s.runs.first.steps)).toEqual(fiberPatternOf(s.runs.second.steps))
         }),
       ),
@@ -109,38 +201,50 @@ Feature('Exploring schedules to catch concurrency faults')
     scenario(
       'The nightly profile budgets the derived run count while per-change keeps two hundred and fifty',
       Gherkin.Do.pipe(
-        Given('a scenario measured at three fibers and four hundred steps')(
-          'counts',
-          () => Effect.sync(() => ({ nightly: nightlySeeds(), perChange: perChangeSeeds() })),
+        Given('a budget measured at three workers and four hundred steps')(
+          'budget',
+          () => Effect.succeed({ fibers: TEST_FIBERS, steps: TEST_STEPS }),
         ),
-        Then('the nightly budget is the derived count')((s) => {
-          expect(s.counts.nightly).toBe(nightlyCount)
+        When('the nightly and per-change run counts are read')(
+          'counts',
+          (s) =>
+            Effect.sync(() => ({
+              nightly: Kernel.seedsFor(s.budget, 'nightly'),
+              perChange: Kernel.seedsFor(s.budget, 'per-change'),
+            })),
+        ),
+        Then('the nightly count is the derived count')((s) => {
+          expect(s.counts.nightly).toBe(Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))))
         }),
-        Then('the per-change budget stays at two hundred and fifty')((s) => {
+        And('the per-change count stays at two hundred and fifty')((s) => {
           expect(s.counts.perChange).toBe(250)
         }),
       ),
     )
 
     scenario(
-      'Naming the nightly profile in the environment selects the derived budget',
+      'Naming the nightly profile in the environment selects the derived count',
       Gherkin.Do.pipe(
-        Given('the environment names the nightly profile')(
+        Given('a budget measured at three workers and four hundred steps')(
           'budget',
-          () =>
+          () => Effect.succeed({ fibers: TEST_FIBERS, steps: TEST_STEPS }),
+        ),
+        When('the count is read with the nightly profile named')(
+          'count',
+          (s) =>
             Effect.promise(() =>
               Effect.runPromise(
                 Effect.provideService(
-                  Kernel.currentSeedsFor({ fibers: 3, steps: 400 }),
+                  Kernel.currentSeedsFor(s.budget),
                   ConfigProvider.ConfigProvider,
                   ConfigProvider.fromEnvRecord({ CONFORMANCE_PROFILE: 'nightly' }),
                 ),
               )
             ),
         ),
-        Then('the budget is the derived count rather than the per-change count')((s) => {
-          expect(s.budget).toBe(nightlyCount)
-          expect(s.budget).not.toBe(250)
+        Then('the count is the derived count rather than the per-change count')((s) => {
+          expect(s.count).toBe(Math.ceil(Math.log(0.01) / Math.log(1 - 1 / (3 * 400 ** 2))))
+          expect(s.count).not.toBe(250)
         }),
       ),
     )
@@ -149,16 +253,18 @@ Feature('Exploring schedules to catch concurrency faults')
       'A search out of schedules fails over and names the schedule budget',
       Gherkin.Do.pipe(
         Given('a search allowed a single schedule before the race can appear')(
+          'target',
+          () => Effect.succeed(checkThenSet),
+        ),
+        When('the search runs out of schedules')(
           'outcome',
-          () =>
-            Effect.promise(() =>
-              Kernel.search(checkThenSet, { preemptions: 2, maxSchedules: 1, isFailure: raceDetected })
-            ),
+          (s) =>
+            Effect.promise(() => Kernel.search(s.target, { preemptions: 2, maxSchedules: 1, isFailure: raceDetected })),
         ),
         Then('the search reports it ran out before covering its bound')((s) => {
           expect(isOverBudget(s.outcome)).toBe(true)
         }),
-        Then('the named limit is the schedule budget')((s) => {
+        And('the named limit is the schedule budget')((s) => {
           expect(budgetLimitOf(s.outcome)).toBe('schedule budget')
         }),
       ),
@@ -168,42 +274,52 @@ Feature('Exploring schedules to catch concurrency faults')
       'A search out of time fails over and names the wall-clock bound',
       Gherkin.Do.pipe(
         Given('a search whose clock already passed its time budget')(
-          'outcome',
+          'options',
           () => {
-            const ticking = (() => {
-              let at = 0
-              return () => {
+            let at = 0
+            return Effect.succeed({
+              preemptions: 2 as const,
+              timeoutMs: 1 as const,
+              now: () => {
                 at += 10
                 return at
-              }
-            })()
-            return Effect.promise(() =>
+              },
+            })
+          },
+        ),
+        When('the search runs with the clock already past its budget')(
+          'outcome',
+          (s) =>
+            Effect.promise(() =>
               Kernel.search(checkThenSet, {
-                preemptions: 2,
-                timeoutMs: 1,
-                now: ticking,
+                preemptions: s.options.preemptions,
+                timeoutMs: s.options.timeoutMs,
+                now: s.options.now,
                 isFailure: raceDetected,
               })
-            )
-          },
+            ),
         ),
         Then('the search reports it ran out before covering its bound')((s) => {
           expect(isOverBudget(s.outcome)).toBe(true)
         }),
-        Then('the named limit is the wall-clock bound')((s) => {
+        And('the named limit is the wall-clock bound')((s) => {
           expect(budgetLimitOf(s.outcome)).toBe('wall-clock bound')
         }),
       ),
     )
 
     scenario(
-      'A resource cleaned up through a scope turns pruning off, and the result names it',
+      'A resource cleaned up through its own lifetime turns pruning off, and the result names it',
       Gherkin.Do.pipe(
-        Given('a target that acquires and releases a resource within a scope')(
-          'outcome',
-          () => Effect.promise(() => Kernel.search(scopedProgram, { preemptions: 1 })),
+        Given('a program that opens and closes a resource within one lifetime')(
+          'target',
+          () => Effect.succeed(scopedProgram),
         ),
-        Then('the explored bound reports pruning was off and names the resource cleanup')((s) => {
+        When('the program is searched with one pause allowed')(
+          'outcome',
+          (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
+        ),
+        Then('the bound reports pruning is off and names the cleanup')((s) => {
           const bound = outcomeBound(s.outcome)
           expect(bound.pruning.enabled).toBe(false)
           expect(bound.pruning.disabledBy).toContain('Scope finalizer')

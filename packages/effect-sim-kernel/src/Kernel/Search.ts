@@ -370,8 +370,8 @@ const searchImpl = <A, E>(
 }
 
 export const search: {
-  <A, E>(options: SearchOptions<A, E>): (program: Effect.Effect<A, E>) => Promise<SearchReport<A, E>>
   <A, E>(program: Effect.Effect<A, E>, options?: SearchOptions<A, E>): Promise<SearchReport<A, E>>
+  <A, E>(options?: SearchOptions<A, E>): (program: Effect.Effect<A, E>) => Promise<SearchReport<A, E>>
 } = dual(
   (args: IArguments): boolean => args.length === 2 || Effect.isEffect(args[0]),
   searchImpl,

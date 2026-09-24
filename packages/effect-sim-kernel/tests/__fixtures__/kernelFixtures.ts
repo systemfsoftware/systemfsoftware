@@ -28,11 +28,6 @@ export const callOnNextMicrotask = (callback: () => void): void => {
 /** A finished run of the racing program: what each fiber wrote, in order. */
 export type RaceRun = Kernel.RunResult<ReadonlyArray<string>, never>
 
-export interface RaceReplays {
-  readonly second: RaceRun
-  readonly third: RaceRun
-}
-
 const isCompletedRun = <A, E>(result: Kernel.RunResult<A, E>): result is Kernel.RunCompleted<A, E> => 'exit' in result
 
 const isFailedRun = <A, E>(
@@ -132,15 +127,6 @@ export const deviateAtFirstChoice = deviateOnceAt(competingOption)
 
 /** Takes the last pending task at every explored step. */
 export const alwaysLast = (choice: Kernel.Choice): Kernel.Decision => choice.options.length - 1
-
-/** Runs the program twice more on a recorded path, one run after the other. */
-export const replayRaceTwice = (
-  program: Effect.Effect<ReadonlyArray<string>>,
-  path: ReadonlyArray<Kernel.Decision>,
-): Promise<RaceReplays> => {
-  const second = Kernel.run(program, { path })
-  return second.then((secondRun) => Kernel.run(program, { path }).then((third) => ({ second: secondRun, third })))
-}
 
 const ordinalOf = (known: Map<number, number>, id: number): number => {
   const mapped = known.get(id)

@@ -1,4 +1,5 @@
 import { Config, Effect, Option } from 'effect'
+import { dual } from 'effect/Function'
 
 export type ProfileName = 'per-change' | 'nightly'
 
@@ -35,8 +36,15 @@ const isNightlyBudget = (budget: Budget, profile: ProfileName): boolean => isNig
 
 const seedsOf = (budget: Budget, nightly: boolean): number => (nightly ? nightlyOf(budget) : perChangeSeeds)
 
-export const seedsFor = (budget: Budget, profile: ProfileName = 'per-change'): number =>
+const seedsForImpl = (budget: Budget, profile: ProfileName = 'per-change'): number =>
   seedsOf(budget, isNightlyBudget(budget, profile))
+
+const isBudgetFirst = (args: IArguments): boolean => args.length === 0 || typeof args[0] !== 'string'
+
+export const seedsFor: {
+  (budget: Budget, profile?: ProfileName): number
+  (profile?: ProfileName): (budget: Budget) => number
+} = dual(isBudgetFirst, seedsForImpl)
 
 export const currentSeedsFor = (budget: Budget): Effect.Effect<number, Config.ConfigError> =>
   Effect.map(currentProfile, (profile) => seedsFor(budget, profile))

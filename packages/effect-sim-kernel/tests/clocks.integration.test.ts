@@ -1,17 +1,20 @@
-import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Clock, Duration, Effect, Exit, Fiber, Layer, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { alwaysLast, completedValueOf, deadlockOf, escapeOf } from './__fixtures__/kernelFixtures.js'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
+
+const TEST_CLOCK = 91_000
+const ONE_HOUR = 3_600_000
 
 /**
- * A worker forked with a 90-second tick timeout whose stream sleeps 100
- * seconds, moved by 91 seconds before the worker has started.
+ * A worker that finishes after 90 virtual seconds while its 100-second sleep
+ * has not, moved 91 seconds before the worker starts.
  */
-const streamWorker = Effect.gen(function*() {
+const pastTimeoutWorker = Effect.gen(function*() {
   const worker = Effect.timeout(
     Stream.runCollect(Stream.fromEffect(Effect.sleep(Duration.seconds(100)))),
     Duration.seconds(90),
@@ -23,18 +26,18 @@ const streamWorker = Effect.gen(function*() {
   return { now, removed: Exit.isFailure(exit) }
 })
 
-/** Two sleepers due at 5 s and 10 s, moved together by one 10-second adjust. */
-const twoSleepers = Effect.gen(function*() {
+/** A five-second wait and a ten-second wait, moved together by ten seconds. */
+const fiveAndTenSecondWaits = Effect.gen(function*() {
   const events: Array<string> = []
   const first = Effect.gen(function*() {
     yield* Effect.sleep(Duration.seconds(5))
-    yield* Effect.sync(() => events.push('the five-second sleeper woke'))
+    yield* Effect.sync(() => events.push('the five-second wait finished'))
     yield* Effect.yieldNow
-    yield* Effect.sync(() => events.push('the five-second sleeper finished its woken work'))
+    yield* Effect.sync(() => events.push('the five-second wait finished its follow-up work'))
   })
   const second = Effect.gen(function*() {
     yield* Effect.sleep(Duration.seconds(10))
-    yield* Effect.sync(() => events.push('the ten-second sleeper woke'))
+    yield* Effect.sync(() => events.push('the ten-second wait finished'))
   })
   yield* Effect.forkChild(first)
   yield* Effect.forkChild(second)
@@ -42,18 +45,18 @@ const twoSleepers = Effect.gen(function*() {
   return events
 })
 
-/** A sleeper under the test clock suites provide today, never moved. */
-const sleepingUnderTestClock = Effect.provide(
-  Effect.as(Effect.sleep(Duration.seconds(10)), 'slept under the test clock'),
+/** A ten-second sleep on a hand-built clock that is never moved. */
+const neverMovedSleep = Effect.provide(
+  Effect.as(Effect.sleep(Duration.seconds(10)), 'slept on a hand-built clock'),
   TestClock.layer(),
 )
 
-/** A move with nothing due, beside a sleeper not due for two hours. */
-const idleClock = Effect.gen(function*() {
+/** A one-hour move beside a wait that is not due for two hours. */
+const idleMove = Effect.gen(function*() {
   const events: Array<string> = []
   const late = Effect.gen(function*() {
     yield* Effect.sleep(Duration.seconds(7200))
-    yield* Effect.sync(() => events.push('the late sleeper woke'))
+    yield* Effect.sync(() => events.push('the late wait finished'))
   })
   yield* Effect.forkChild(late)
   yield* TestClock.adjust(Duration.hours(1))
@@ -61,75 +64,92 @@ const idleClock = Effect.gen(function*() {
   return { events, now }
 })
 
-Feature('Test time that moves only when nothing can run')
+Feature('Waiting until nothing moves, then moving virtual time')
+  .live('drives its own simulation-kernel run')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A worker whose stream outlasts its tick timeout is removed when time moves past the timeout',
+      'A worker that outlasts its own timeout is stopped once time passes the timeout',
       Gherkin.Do.pipe(
-        Given('a worker forked with a 90-second tick timeout whose stream sleeps 100 seconds')(
+        Given('a worker with a 90-second timeout whose work sleeps for 100 seconds')(
+          'program',
+          () => Effect.succeed(pastTimeoutWorker),
+        ),
+        When('the worker runs while time moves 91 seconds')(
           'run',
-          () =>
+          (s) =>
             Effect.promise(() =>
-              streamWorker.pipe(
+              s.program.pipe(
                 Effect.provide(Kernel.TestClock.layer),
                 Kernel.run({ choose: alwaysLast }),
               )
             ),
         ),
-        Then('the worker is removed by its timeout before the move completes')((s) => {
+        Then('the timeout stops the worker before the move completes')((s) => {
           expect(completedValueOf(s.run).removed).toBe(true)
         }),
-        Then('the move completes with the clock at 91 seconds')((s) => {
-          expect(completedValueOf(s.run).now).toBe(91_000)
+        And('the move lands at 91 seconds')((s) => {
+          expect(completedValueOf(s.run).now).toBe(TEST_CLOCK)
         }),
       ),
     )
 
     scenario(
-      'Work woken by the five-second sleeper runs to a stop before the ten-second sleeper fires',
+      'Work woken by the five-second wait finishes before the ten-second wait fires',
       Gherkin.Do.pipe(
-        Given('a five-second sleeper and a ten-second sleeper, moved together by ten seconds')(
-          'run',
-          () => Effect.promise(() => Kernel.run(Effect.provide(twoSleepers, Kernel.TestClock.layer))),
+        Given('a five-second wait and a ten-second wait')(
+          'program',
+          () => Effect.succeed(fiveAndTenSecondWaits),
         ),
-        Then('the woken work finishes before the ten-second sleeper wakes')((s) => {
+        When('both waits run while time moves ten seconds')(
+          'run',
+          (s) => Effect.promise(() => Kernel.run(Effect.provide(s.program, Kernel.TestClock.layer))),
+        ),
+        Then('the woken work finishes before the ten-second wait fires')((s) => {
           expect(completedValueOf(s.run)).toEqual([
-            'the five-second sleeper woke',
-            'the five-second sleeper finished its woken work',
-            'the ten-second sleeper woke',
+            'the five-second wait finished',
+            'the five-second wait finished its follow-up work',
+            'the ten-second wait finished',
           ])
         }),
       ),
     )
 
     scenario(
-      'A sleeper under the test clock suites provide today never reaches a real timer',
+      'A sleep on a hand-built clock that is never moved stays stuck instead of escaping',
       Gherkin.Do.pipe(
-        Given('a program asleep for ten seconds under the test clock, never moved')(
-          'run',
-          () => Effect.promise(() => Kernel.run(sleepingUnderTestClock)),
+        Given('a ten-second sleep on a hand-built clock')(
+          'program',
+          () => Effect.succeed(neverMovedSleep),
         ),
-        Then('the run is reported as stuck rather than escaping to a timer')((s) => {
+        When('the sleep runs with the clock never moved')(
+          'run',
+          (s) => Effect.promise(() => Kernel.run(s.program)),
+        ),
+        Then('the run reports the sleep as stuck')((s) => {
           expect(deadlockOf(s.run).suspended.length).toBeGreaterThanOrEqual(1)
         }),
-        Then('no timer escape was recorded')((s) => {
+        And('no timer escape is reported')((s) => {
           expect(() => escapeOf(s.run)).toThrow('expected a timer escape, got another failure')
         }),
       ),
     )
 
     scenario(
-      'A move with nothing due lands the clock and returns without waking anything',
+      'A move with nothing due lands the clock without waking anything',
       Gherkin.Do.pipe(
-        Given('a sleeper not due for two hours, beside a one-hour move')(
-          'run',
-          () => Effect.promise(() => Kernel.run(Effect.provide(idleClock, Kernel.TestClock.layer))),
+        Given('a wait that is not due for two hours')(
+          'program',
+          () => Effect.succeed(idleMove),
         ),
-        Then('the move lands the clock at one hour')((s) => {
-          expect(completedValueOf(s.run).now).toBe(3_600_000)
+        When('time moves one hour with nothing due')(
+          'run',
+          (s) => Effect.promise(() => Kernel.run(Effect.provide(s.program, Kernel.TestClock.layer))),
+        ),
+        Then('the move lands at one hour')((s) => {
+          expect(completedValueOf(s.run).now).toBe(ONE_HOUR)
         }),
-        Then('the late sleeper is still asleep')((s) => {
+        And('the late wait is still asleep')((s) => {
           expect(completedValueOf(s.run).events).toEqual([])
         }),
       ),

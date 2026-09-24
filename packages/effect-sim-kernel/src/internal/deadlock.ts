@@ -146,7 +146,7 @@ const renderFrame = (frame: Field): string => {
 }
 
 const renderedFrames = (stack: ReadonlyArray<Field>): ReadonlyArray<string> =>
-  stack.slice(-FRAME_DEPTH).reverse().map(renderFrame)
+  stack.slice(1, FRAME_DEPTH + 1).map(renderFrame)
 
 const framesOf = (fiber: AnyFiber): ReadonlyArray<string> => {
   const stack: Field = Reflect.get(fiber, '_stack')

@@ -134,7 +134,7 @@ const installSetContext = (proto: object, original: (...args: ReadonlyArray<Fiel
   })
 }
 
-const fiberProto = (): object | undefined => claimed(protoOf(Effect.runFork(Effect.void)))
+const fiberProto = (): object | undefined => Effect.runFork(Effect.void).pipe(protoOf, claimed)
 
 const withOriginalSetContext = (proto: object): void => {
   const original = originalSetContext(proto)

@@ -254,8 +254,8 @@ const pctImpl = <A, E>(
 }
 
 export const pct: {
-  <A, E>(options: PctOptions<A, E>): (program: Effect.Effect<A, E>) => Promise<PctOutcome<A, E>>
   <A, E>(program: Effect.Effect<A, E>, options?: PctOptions<A, E>): Promise<PctOutcome<A, E>>
+  <A, E>(options?: PctOptions<A, E>): (program: Effect.Effect<A, E>) => Promise<PctOutcome<A, E>>
 } = dual(
   (args: IArguments): boolean => args.length === 2 || Effect.isEffect(args[0]),
   pctImpl,
