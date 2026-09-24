@@ -112,8 +112,8 @@ All metrics trace directly to the prototype investigation in `.context/compound-
 └───────────────────────────┬────────────────────────────┘
                             │
               Step check failed?
-              ├──► Yes: Interrupt fibers before next step;
-              │         Report all step failures as AfterFailedExpect.
+              ├──► Yes: Interrupt fibers before next step; report the recorded
+              │         checks, plus AfterFailedExpect only for a real later throw.
               └──► No:  Proceed to assertion accounting.
                             │
                             ▼
@@ -139,6 +139,11 @@ In an Effect test pipeline, assertions evaluated within an individual step recor
 $$\text{FiberState}_{n+1} = \begin{cases} \text{Interrupted}, & \text{if } \text{Failures}(\text{Step}_n) > 0 \\ \text{Step}(\text{FiberState}_n), & \text{otherwise} \end{cases}$$
 
 This prevents downstream fibers from executing side effects or mutating fixtures against invalid prerequisite state.
+
+Two runtime facts shape this invariant:
+
+- **A same-step throw is lost to the interrupt.** Effect's `FiberImpl.runLoop` (in `repos/effect/packages/effect/src/internal/effect.ts`) replaces a die raised in the step that failed a check with the pending interrupt cause. The only throw that survives to be labelled `AfterFailedExpect` is one raised while the interrupt unwinds, such as a finalizer that throws. A stop whose cause holds only interrupts must settle with no error of its own. Before this was fixed, the runner rejected with a sentinel, and every failed check gained an invented `AfterFailedExpect`. The `expect/check-only` probe pins exactly one message.
+- **Vitest drops shuffle for concurrent suites.** A suite whose tests are concurrent runs them in declaration order even when `sequence.shuffle` is set. The forced shuffle is therefore observable only in a block declared `{ concurrent: false }`, and the `runner/layer-shuffle` probe uses that shape. Concurrency is what exposes order dependence in the default blocks.
 
 ### Invariant 2: Impostor Property Refutation
 
@@ -200,4 +205,4 @@ it.layer(CounterLive)('increments', (it) => {
 1. **Targeted Conformance Suite:** Validated in `packages/vitest-conformance` executing nested Vitest runs via in-process worker threads.
 2. **Cheat Corpus Conformance:** Enforces 9 of 9 cheat detections from Prototype Question 1.
 3. **Double Execution Verification:** Confirms state leakage detection on non-shared layers without global process isolation.
-4. **Lint Enforcement:** `packages/oxlint-plugins/test-discipline` prohibits importing `expect` directly from `vitest` and forbids boolean predicate collapses.
+4. **Lint Enforcement:** `packages/oxlint-plugin/oxlint-plugin-test-discipline` prohibits importing `expect` directly from `vitest` and forbids boolean predicate collapses.
