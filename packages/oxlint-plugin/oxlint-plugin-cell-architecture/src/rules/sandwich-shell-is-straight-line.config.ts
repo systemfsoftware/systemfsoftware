@@ -46,17 +46,26 @@ export const CLOCK_ACTUAL = 'a Clock reference inside the write phase' as const
 export const CLOCK_FIX =
   'read the clock in the cell\u2019s read phase and pass the timestamp to decide and write as data' as const
 
+export const SHELL_DISPATCH_FIX =
+  'hand each branch to the cell\u2019s decide workflow as a decision variant and dispatch there with Match.exhaustive; the phase runs one path' as const
+
+export const dispatchName = (callee: string): string => `${callee} in a Sandwich shell phase`
+
+export const dispatchActual = (phase: string): string =>
+  `a branch-callback dispatch inside the ${phase} phase of a Sandwich cell`
+
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Refuse control flow, Match pipelines, and clock reads inside the read and write phases of a Sandwich cell: the shell phases are straight-line',
+      'Refuse control flow, dispatcher calls, Match pipelines, and clock reads inside the read and write phases of a Sandwich cell: the shell phases are straight-line',
   },
   schema: [],
   messages: {
     controlFlowInShell: MESSAGE,
+    dispatchInShell: MESSAGE,
     matchPipelineInShell: MESSAGE,
     clockReadInWrite: MESSAGE,
   },

@@ -3,6 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 
 import {
   type BoundaryFunction,
+  dispatchCalleeName,
   functionValueOf,
   isEffectModuleBinding,
   isTestOrFixturePath,
@@ -17,6 +18,8 @@ import {
   CLOCK_EXPECTED,
   CLOCK_FIX,
   CLOCK_NAME,
+  dispatchActual,
+  dispatchName,
   MATCH_ACTUAL,
   MATCH_FIX,
   MATCH_NAME,
@@ -24,6 +27,7 @@ import {
   SANDWICH_OWNER,
   SANDWICH_SOURCE,
   SHELL_CONTROL_FIX,
+  SHELL_DISPATCH_FIX,
   SHELL_EXPECTED,
   SHELL_LOGICAL_NAME,
   shellControlActual,
@@ -32,7 +36,7 @@ import {
 
 export type Options = []
 
-export type MessageIds = 'controlFlowInShell' | 'matchPipelineInShell' | 'clockReadInWrite'
+export type MessageIds = 'controlFlowInShell' | 'dispatchInShell' | 'matchPipelineInShell' | 'clockReadInWrite'
 
 interface ShellPhase {
   readonly fn: BoundaryFunction
@@ -150,6 +154,18 @@ export const sandwichShellIsStraightLine = defineRule({
                 SHELL_EXPECTED,
                 MATCH_ACTUAL,
                 MATCH_FIX,
+              )
+            }
+            const callee = dispatchCalleeName(origin)
+            if (callee !== null) {
+              reportReference(
+                node,
+                `dispatch:${callee}`,
+                'dispatchInShell',
+                dispatchName(callee),
+                SHELL_EXPECTED,
+                dispatchActual(target.phase),
+                SHELL_DISPATCH_FIX,
               )
             }
             if (target.phase === 'write' && isEffectModuleBinding(origin, 'Clock')) {

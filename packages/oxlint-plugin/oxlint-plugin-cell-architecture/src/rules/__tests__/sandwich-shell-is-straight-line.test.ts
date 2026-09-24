@@ -6,11 +6,14 @@ import {
   CLOCK_EXPECTED,
   CLOCK_FIX,
   CLOCK_NAME,
+  dispatchActual,
+  dispatchName,
   MATCH_ACTUAL,
   MATCH_FIX,
   MATCH_NAME,
   SHELL_CONTROL_FIX,
   SHELL_CONTROL_NAME,
+  SHELL_DISPATCH_FIX,
   SHELL_EXPECTED,
   SHELL_LOGICAL_NAME,
   shellControlActual,
@@ -60,6 +63,27 @@ const clockError = {
   messageId: 'clockReadInWrite' as const,
   data: { name: CLOCK_NAME, expected: CLOCK_EXPECTED, actual: CLOCK_ACTUAL, fix: CLOCK_FIX },
 }
+
+const dispatchError = (callee: string, phase: 'read' | 'write') => ({
+  messageId: 'dispatchInShell' as const,
+  data: {
+    name: dispatchName(callee),
+    expected: SHELL_EXPECTED,
+    actual: dispatchActual(phase),
+    fix: SHELL_DISPATCH_FIX,
+  },
+})
+
+const dispatchCell = (imports: string, handler: string): string =>
+  `${imports}
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
+  .decide((command) => command)
+  .write({
+    Restarted: ${handler},
+  })
+`
 
 const PRELUDE = `import { Effect } from 'effect'
 import * as Clock from 'effect/Clock'
@@ -154,9 +178,9 @@ export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
       filename: PROD,
     },
     {
-      // Option.match is a value dispatcher over a closed type, not a Match
-      // pipeline and not an AST control-flow form; the shell may run it.
-      name: 'Should_Pass_When_WriteHandlerDispatchesWithOptionMatch',
+      // A fallback supplier over the same value is not a branch: getOrElse
+      // takes one lazy argument, not two callbacks.
+      name: 'Should_Pass_When_WriteHandlerFallsBackWithOptionGetOrElse',
       code: `import { Effect, Option } from 'effect'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 
@@ -164,10 +188,67 @@ export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
   .decide((command) => command)
   .write({
     Restarted: (decision: Option.Option<string>, command: { readonly id: string }) =>
-      Option.match(decision, {
-        onNone: () => Effect.succeed(command),
-        onSome: (value) => Effect.succeed(command),
-      }),
+      Effect.succeed(Option.getOrElse(decision, () => command.id)),
+  })
+`,
+      filename: PROD,
+    },
+    {
+      // The dispatcher belongs to the decide workflow, and the shell rule
+      // never enters a Workflow.make body.
+      name: 'Should_Pass_When_OptionMatchSitsInAWorkflowMakeBody',
+      code: `import { Effect, Option } from 'effect'
+import { Sandwich, Workflow } from '@systemfsoftware/effect-cell-types'
+
+const decideStep = Workflow.make({
+  command: {},
+  decision: {},
+  error: {},
+  decide: (command: { readonly id: string }) =>
+    Option.match(Option.some(command.id), {
+      onNone: () => command.id,
+      onSome: (value) => value,
+    }),
+})
+
+export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
+  .decide(decideStep)
+  .write(${straightWrite})
+`,
+      filename: PROD,
+    },
+    {
+      // A `.match` on a module that is not `effect` is nobody's branch.
+      name: 'Should_Pass_When_MatchBelongsToANonEffectModule',
+      code: `import { Effect } from 'effect'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+const routes = {
+  match: (path: string) => path.length,
+}
+
+export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
+  .decide((command) => command)
+  .write({
+    Restarted: (_decision: unknown, command: { readonly id: string }) =>
+      Effect.succeed(\`\${command.id}:\${routes.match(command.id)}\`),
+  })
+`,
+      filename: PROD,
+    },
+    {
+      // `effect/Cron` exports a real `match`, and it is a cron predicate, not
+      // a branch dispatcher: the module gate keeps it lawful.
+      name: 'Should_Pass_When_CronMatchRunsInAWriteHandler',
+      code: `import { Effect } from 'effect'
+import * as Cron from 'effect/Cron'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
+  .decide((command) => command)
+  .write({
+    Restarted: (decision: { readonly cron: Cron.Cron; readonly at: unknown }, command: { readonly id: string }) =>
+      Effect.succeed(\`\${command.id}:\${Cron.match(decision.cron, decision.at)}\`),
   })
 `,
       filename: PROD,
@@ -390,6 +471,236 @@ export const stepCell = Sandwich.named('supervisor.step')(readEnvelope)
 `,
       filename: PROD,
       errors: [controlError('ConditionalExpression', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectWhen',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.when(Effect.succeed(command.id.length > 0))(Effect.succeed(command))`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.when', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectMatchEffect',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.matchEffect(Effect.succeed(command), {
+        onFailure: () => Effect.succeed(command),
+        onSuccess: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.matchEffect', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectMatchEager',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.matchEager(Effect.succeed(command.id), {
+        onFailure: () => 'refused',
+        onSuccess: (value) => value,
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.matchEager', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectMatchCause',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.matchCause(Effect.succeed(command), {
+        onFailure: () => command,
+        onSuccess: (value) => value,
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.matchCause', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectMatchCauseEager',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.succeed(Effect.matchCauseEager(Effect.succeed(command), {
+        onFailure: () => command.id,
+        onSuccess: (value) => value.id,
+      }))`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.matchCauseEager', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectMatchCauseEffect',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.matchCauseEffect(Effect.succeed(command), {
+        onFailure: () => Effect.succeed(command),
+        onSuccess: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.matchCauseEffect', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithEffectMatchCauseEffectEager',
+      code: dispatchCell(
+        `import { Effect } from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.matchCauseEffectEager(Effect.succeed(command.id), {
+        onFailure: () => Effect.succeed('refused'),
+        onSuccess: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Effect.matchCauseEffectEager', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_EffectIsImportedAsTheRootNamespace',
+      code: dispatchCell(
+        `import * as Effect from 'effect'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Effect.match(Effect.succeed(command), {
+        onFailure: () => Effect.succeed(command),
+        onSuccess: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('match', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithArrayMatch',
+      code: dispatchCell(
+        `import * as Arr from 'effect/Array'`,
+        `(_decision: unknown, command: { readonly ids: ReadonlyArray<string> }) =>
+      Arr.match(command.ids, {
+        onEmpty: () => Effect.succeed('none'),
+        onNonEmpty: (head) => Effect.succeed(head),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Array.match', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithArrayMatchLeft',
+      code: dispatchCell(
+        `import * as Arr from 'effect/Array'`,
+        `(_decision: unknown, command: { readonly ids: ReadonlyArray<string> }) =>
+      Arr.matchLeft(command.ids, {
+        onEmpty: () => Effect.succeed('none'),
+        onNonEmpty: (head) => Effect.succeed(head),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Array.matchLeft', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithArrayMatchRight',
+      code: dispatchCell(
+        `import * as Arr from 'effect/Array'`,
+        `(_decision: unknown, command: { readonly ids: ReadonlyArray<string> }) =>
+      Arr.matchRight(command.ids, {
+        onEmpty: () => Effect.succeed('none'),
+        onNonEmpty: (last) => Effect.succeed(last),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Array.matchRight', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ReadDispatchesWithOptionMatch',
+      code: `import { Effect, Option } from 'effect'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+export const stepCell = Sandwich.named('supervisor.step')((envelope: { readonly id: Option.Option<string> }) =>
+  Effect.succeed(Option.match(envelope.id, {
+    onNone: () => ({ at: 0 }),
+    onSome: (value) => ({ at: value.length }),
+  })),
+)
+  .decide((command) => command)
+  .write(${straightWrite})
+`,
+      filename: PROD,
+      errors: [dispatchError('Option.match', 'read')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithOptionMatch',
+      code: dispatchCell(
+        `import { Effect, Option } from 'effect'`,
+        `(decision: Option.Option<string>, command: { readonly id: string }) =>
+      Option.match(decision, {
+        onNone: () => Effect.succeed(command),
+        onSome: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Option.match', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithResultMatch',
+      code: dispatchCell(
+        `import * as Result from 'effect/Result'`,
+        `(_decision: unknown, command: { readonly id: string }) =>
+      Result.match(Result.succeed(command.id), {
+        onFailure: () => Effect.succeed(command),
+        onSuccess: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Result.match', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteCallsAHelperThatRunsBooleanMatch',
+      code: `import { Boolean, Effect } from 'effect'
+import { Sandwich } from '@systemfsoftware/effect-cell-types'
+
+const describeReadiness = (ready: boolean) =>
+  Boolean.match(ready, {
+    onFalse: () => Effect.succeed('not-ready'),
+    onTrue: () => Effect.succeed('ready'),
+  })
+
+export const stepCell = Sandwich.named('supervisor.step')(${straightRead})
+  .decide((command) => command)
+  .write({
+    Restarted: (_decision: unknown, command: { readonly id: string }) =>
+      describeReadiness(command.id.length > 0),
+  })
+`,
+      filename: PROD,
+      errors: [dispatchError('Boolean.match', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_WriteHandlerDispatchesWithExitMatch',
+      code: dispatchCell(
+        `import { Effect, Exit } from 'effect'`,
+        `(decision: Exit.Exit<string, string>, command: { readonly id: string }) =>
+      Exit.match(decision, {
+        onFailure: () => Effect.succeed(command),
+        onSuccess: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Exit.match', 'write')],
+    },
+    {
+      name: 'Should_ReportViolation_When_OptionIsImportedUnderAnAlias',
+      code: dispatchCell(
+        `import { Effect, Option as O } from 'effect'`,
+        `(decision: O.Option<string>, command: { readonly id: string }) =>
+      O.match(decision, {
+        onNone: () => Effect.succeed(command),
+        onSome: (value) => Effect.succeed(value),
+      })`,
+      ),
+      filename: PROD,
+      errors: [dispatchError('Option.match', 'write')],
     },
   ],
 })

@@ -315,6 +315,60 @@ export const recoveryCalleeName = (origin: ImportOrigin): string | null => {
 }
 
 /**
+ * The branch-callback dispatchers a Sandwich shell phase must not run, verified
+ * against the vendored effect tree (`repos/effect/packages/effect/src/`):
+ *
+ * - Effect: `when` (Effect.ts:5276), `match` (Effect.ts:5340), `matchEager`
+ *   (Effect.ts:5393), `matchCause` (Effect.ts:5441), `matchCauseEager`
+ *   (Effect.ts:5484), `matchCauseEffectEager` (Effect.ts:5518),
+ *   `matchCauseEffect` (Effect.ts:5592), `matchEffect` (Effect.ts:5656)
+ * - Option: `match` (Option.ts:403); Result: `match` (Result.ts:863)
+ * - Array: `match` (Array.ts:423), `matchLeft` (Array.ts:478), `matchRight`
+ *   (Array.ts:533); Boolean: `match` (Boolean.ts:89); Exit: `match`
+ *   (Exit.ts:752)
+ *
+ * `Effect.if`, `Effect.unless`, `Effect.whenEffect` and `Effect.unlessEffect`
+ * have no `export const` in this rc, and Predicate and Cause export none of
+ * the dispatchers — none are refused. Non-dispatch combinators (`getOrElse`,
+ * `map`, `flatMap`, `catchTag`, `filterOrFail`) carry other member names and
+ * never hit this table. `effect/Cron.match` (Cron.ts:714) and
+ * `effect/String.match` (String.ts:690) are predicates over their own types,
+ * and their modules are not in the owner sets, so they stay lawful.
+ */
+const DISPATCH_MEMBERS: Readonly<Record<string, Readonly<Record<string, true>>>> = {
+  when: { Effect: true },
+  match: { Effect: true, Option: true, Result: true, Array: true, Boolean: true, Exit: true },
+  matchEager: { Effect: true },
+  matchEffect: { Effect: true },
+  matchCause: { Effect: true },
+  matchCauseEager: { Effect: true },
+  matchCauseEffect: { Effect: true },
+  matchCauseEffectEager: { Effect: true },
+  matchLeft: { Array: true },
+  matchRight: { Array: true },
+}
+
+const EFFECT_MODULE_PREFIX = 'effect/'
+
+export const dispatchCalleeName = (origin: ImportOrigin): string | null => {
+  if (origin.source !== 'effect' && !origin.source.startsWith(EFFECT_MODULE_PREFIX)) return null
+  const sequence = originMemberSequence(origin)
+  const member = sequence[sequence.length - 1]
+  if (member === undefined) return null
+  const owners = DISPATCH_MEMBERS[member]
+  if (owners === undefined) return null
+  const owner = sequence.length >= 2 ? sequence[sequence.length - 2] : undefined
+  if (owner !== undefined) {
+    return owners[owner] === true ? `${owner}.${member}` : null
+  }
+  if (origin.source !== 'effect') {
+    const module = origin.source.slice(EFFECT_MODULE_PREFIX.length)
+    return owners[module] === true ? `${module}.${member}` : null
+  }
+  return member
+}
+
+/**
  * Test and fixture paths are out of scope: a branch that only exists to
  * exercise production code is not authoring drift in the product surface.
  * Mirrors the in-rule boundary `ban-classes` and `make-body-purity` draw,
