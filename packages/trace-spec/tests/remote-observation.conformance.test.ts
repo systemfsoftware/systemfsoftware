@@ -2,7 +2,7 @@ import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 
-import { CheckRejected, passedRuns, remoteStoreLayer, runTraceCommand } from './__fixtures__/remote-store.js'
+import { remoteStoreLayer, runTraceCommand } from './__fixtures__/remote-store.js'
 import { TraceCommand, traceStoreModel } from './__fixtures__/trace-store.model.js'
 
 const Feature = makeFeature({ it })
@@ -31,10 +31,9 @@ Feature('Keeping observed traces in step with the store that serves them', { tim
               operations: ACTIONS_PER_ROUND,
             }),
         ),
-        Then('every reading answers exactly what the store holds for the trace it was asked about')((s) => {
-          const judged = passedRuns(s.report)
-          if (judged !== ROUNDS) throw new CheckRejected({ report: `${judged} rounds were judged, not ${ROUNDS}` })
-        }),
+        Then('every reading answers exactly what the store holds for the trace it was asked about')((s, expect) =>
+          expect(s.report).toMatchObject({ _tag: 'Pass', histories: ROUNDS })
+        ),
       ),
     )
   })

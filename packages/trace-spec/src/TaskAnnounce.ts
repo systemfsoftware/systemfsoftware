@@ -1,6 +1,6 @@
 import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
-import { Effect, Option } from 'effect'
-import type { TraceDisparityError } from './TraceDisparityError.schema.js'
+import { Effect, Option, Schema } from 'effect'
+import { Break, type Verdict } from './Verdict.schema.js'
 
 export interface Annotate {
   (message: string, type?: string): Promise<void> | void
@@ -8,6 +8,11 @@ export interface Annotate {
 
 const forget = (annotation: Promise<void> | void): void => {
   void Promise.resolve(annotation)
+}
+
+export interface Judged {
+  readonly verdict: Verdict
+  readonly dumpPath: string | null
 }
 
 const dispatchAnnotate = (annotate: Annotate | undefined, message: string, type: string): Effect.Effect<void> =>
@@ -32,8 +37,14 @@ const record = (message: string, type: string): Effect.Effect<void> =>
     return yield* announcement(taskContext, message, type)
   })
 
-export const announceDump = (error: TraceDisparityError): Effect.Effect<void> =>
-  Option.match(Option.fromNullishOr(error.dumpPath), {
+const dumpMessageOf = (judged: Judged): Option.Option<string> =>
+  Option.map(
+    Option.flatMap(Option.liftPredicate(judged.verdict, Schema.is(Break)), () => Option.fromNullishOr(judged.dumpPath)),
+    (dumpPath) => `trace contract failed; observed graph dumped to ${dumpPath}`,
+  )
+
+export const announceDump = (judged: Judged): Effect.Effect<void> =>
+  Option.match(dumpMessageOf(judged), {
     onNone: () => Effect.void,
-    onSome: (dumpPath) => record(`trace contract failed; observed graph dumped to ${dumpPath}`, 'info'),
+    onSome: (message) => record(message, 'info'),
   })

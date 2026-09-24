@@ -99,18 +99,10 @@ const lensProbeRuntime = Layer.merge(scenarioLayer, harness).pipe(
   Layer.provide(harness),
 )
 
-it.effect('Should_Fail_When_UnbuiltLifecycleBuild', () =>
-  lensContract(99).pipe(
-    Contract.check<undefined>(undefined),
-    Effect.flip,
-    Effect.flatMap((failure) => Schema.is(Contract.TraceDisparityError)(failure) ? Effect.void : Effect.die(failure)),
-    Effect.asVoid,
-    Effect.provide(lensProbeRuntime),
-  ))
+it.fails('Should_FailTheCheck_When_TheLifecycleBuildWasNeverProduced', function*({ expect }) {
+  yield* Contract.check(lensContract(99), expect, undefined).pipe(Effect.provide(lensProbeRuntime))
+})
 
-it.effect('Should_Hold_When_NextLifecycleBuild', () =>
-  lifecycleContract(1).pipe(
-    Contract.check<undefined>(undefined),
-    Effect.asVoid,
-    Effect.provide(sharedProbeRuntime),
-  ))
+it('Should_HoldTheCheck_When_TheNextLifecycleBuildIsProduced', function*({ expect }) {
+  yield* Contract.check(lifecycleContract(1), expect, undefined).pipe(Effect.provide(sharedProbeRuntime))
+})

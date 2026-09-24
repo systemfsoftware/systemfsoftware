@@ -10,7 +10,7 @@ In a system with queues, workers, and background consumers, a `200` is not the o
 pnpm add @systemfsoftware/trace-spec @systemfsoftware/trace-taxonomy effect
 ```
 
-The package exports nine namespaces — `Contract`, `Graph`, `Observation`, `ObservationWindow`, `RemoteObservation`, `Rel`, `Stimulus`, `Suite`, `TempoTraceStore`. Errors and verdicts belong to the capability that raises them: `Contract.ContractDecodeError`, `Contract.TraceDisparityError`, `Observation.EmptyObservationError`, `Observation.IncompleteObservationError`, `Observation.TransportObservationError`, `Suite.StimulusFailure`, and `Rel.Hold`/`Rel.Break`/`Rel.Verdict`.
+The package exports nine namespaces — `Contract`, `Graph`, `Observation`, `ObservationWindow`, `RemoteObservation`, `Rel`, `Stimulus`, `Suite`, `TempoTraceStore`. Errors belong to the capability that raises them: `Contract.ContractDecodeError`, `Observation.EmptyObservationError`, `Observation.IncompleteObservationError`, `Observation.TransportObservationError`, `Suite.StimulusFailure`; the verdicts are `Rel.Hold`/`Rel.Break`/`Rel.Verdict`. A break is not an error: it is the check the contract states in the test, and the report is that check's message.
 
 ## Write a contract
 
@@ -40,11 +40,22 @@ const paymentUnderCheckout = Contract.of(checkout)
 
 `Contract.judge(contract, input)` stimulates the behaviour under its minted trace, collects that trace's spans, decodes them against the taxonomy (`Graph.decode` answers `Result<TraceGraph, Contract.ContractDecodeError>`), applies the relation, and on a break writes the decoded graph under `artifacts/traces/`. It answers a `Contract.Judgment` — the run, the verdict, and the dump path — so a break is a value, not a failure. Behaviour failures and infrastructure refusals (`Contract.ContractDecodeError` and the three `Observation` failures) stay on the error channel.
 
-`Contract.check(contract, input)` is the test edge over `judge`: a break fails with `Contract.TraceDisparityError`. Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`, and `Graph.descendants`.
+`Contract.check(contract, expect, input)` is the test edge over `judge`, and takes the `expect` the test body received. It ends in the judgement's one check: a hold is the check passing, and a break fails it with the report — the relation that broke, the conjunct it was evaluating, the spans it inspected, the trace, and where the decoded graph was written. `Contract.verdictCheck(contract, expect, judgment)` states an already judged contract the same way, and `Contract.Report` — `{ verdict, report }`, the report empty on a hold — is what the check asserts.
+
+```ts
+import { it } from '@effect/vitest'
+import { Contract } from '@systemfsoftware/trace-spec'
+
+it('a charged settlement satisfies the contract', function*({ expect }) {
+  yield* Contract.check(chargeBeneathSettlement, expect, { orderId: 'order-7', charge: true })
+})
+```
+
+Navigation over the decoded graph is standalone: `Graph.byId`, `Graph.children`, and `Graph.descendants`.
 
 | Outcome                                       | Failure                                  | Meaning                                                                                            |
 | --------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| The relation broke                            | `Contract.TraceDisparityError`           | names the broken conjunct, the spans inspected, and where the decoded graph was written            |
+| The relation broke                            | the judgement's check                    | its message is the report: the broken conjunct, the spans inspected, the trace and the dump path   |
 | A contracted span lacked a required attribute | `Contract.ContractDecodeError`           | names the declaration and the attribute — never reported as a broken relation                      |
 | Nothing ran under the owned trace             | `Observation.EmptyObservationError`      | the observation was empty, which is its own outcome, not a break                                   |
 | The trace never finished arriving             | `Observation.IncompleteObservationError` | spans were read but kept changing, or the store marked the trace partial; carries the span count   |
@@ -72,7 +83,7 @@ TraceSuite('checkout.place_order')
 
 `.withLayer(shared)` registers the suite over a layer rebuilt fresh for each case for replay; the shared layer then carries the observation harness, and `.withScenarioLayer(scenario)` can follow it for what each case needs fresh.
 
-`Case.prop(title, contract, schema)` runs the contract over inputs drawn from the Schema's derived arbitrary through `it.effect.prop` on the suite's runner, so shrinking is the runner's own: a failing draw fails the property and the runner reports the smallest failing input. The dump is named after the case title, so every failing draw overwrites one file and the surviving dump is the reported counterexample's evidence. When a case fails with a `Contract.TraceDisparityError`, the test carries a Vitest annotation naming that dump, so the decoded graph is found from the failing test.
+`Case.prop(title, contract, schema)` runs the contract over inputs drawn from the Schema's derived arbitrary through `it.effect.prop` on the suite's runner, so shrinking is the runner's own: a failing draw fails the property and the runner reports the smallest failing input. The dump is named after the case title, so every failing draw overwrites one file and the surviving dump is the reported counterexample's evidence. When a case's relation breaks, its check fails with the report and the test carries a Vitest annotation naming that dump, so the decoded graph is found from the failing test.
 
 ## Observe in memory
 

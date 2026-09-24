@@ -1,6 +1,6 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
 import { it } from '@effect/vitest'
-import { expect } from '@effect/vitest'
+import { step } from '@effect/vitest/integration'
 import { Contract, Observation, ObservationWindow, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Clock, Duration, Effect, FileSystem, Layer, Schema } from 'effect'
@@ -76,18 +76,18 @@ TraceSuite('kernel case runner')
     Case('two cases seeding their own trace ids never share one', idContract('cases/pair'), undefined)
   })
 
-it.effect('Should_Hold_When_TwoCasesSeedDistinctTraceIds', () =>
-  Effect.gen(function*() {
-    const first = yield* idContract('cases/first').pipe(
-      Contract.check<undefined>(undefined),
-      Effect.provide(Layer.merge(harness, recordingFileSystem(written))),
-    )
-    const second = yield* idContract('cases/second').pipe(
-      Contract.check<undefined>(undefined),
-      Effect.provide(Layer.merge(harness, recordingFileSystem(written))),
-    )
-    expect(first.run.traceId).not.toBe(second.run.traceId)
-  }))
+it('Should_Hold_When_TwoCasesSeedDistinctTraceIds', function*({ expect }) {
+  const first = yield* idContract('cases/first').pipe(
+    Contract.judge(undefined),
+    Effect.provide(Layer.merge(harness, recordingFileSystem(written))),
+  )
+  const second = yield* idContract('cases/second').pipe(
+    Contract.judge(undefined),
+    Effect.provide(Layer.merge(harness, recordingFileSystem(written))),
+  )
+  yield* expect([first.verdict._tag, second.verdict._tag]).toEqual(['Hold', 'Hold'])
+  yield* step(expect(first.run.traceId).not.toBe(second.run.traceId))
+})
 
 TraceSuite('live declaration at the declared stage')
   .live('the kernel declaration forbids what this case drives')

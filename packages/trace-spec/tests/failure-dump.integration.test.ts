@@ -1,18 +1,11 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
-import { Effect, FileSystem, Layer, Schema } from 'effect'
+import { Effect, FileSystem, Layer } from 'effect'
+import * as PlatformError from 'effect/PlatformError'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
 const Feature = makeFeature({ it })
-
-const disparityOf = (failure: Contract.CheckFailure<never>): Contract.TraceDisparityError => {
-  if (!Schema.is(Contract.TraceDisparityError)(failure)) {
-    throw new Error('expected the contract to refuse with a trace disparity')
-  }
-  return failure
-}
 
 const memoryTraceFileSystem = Layer.effect(
   FileSystem.FileSystem,
@@ -29,6 +22,13 @@ const memoryTraceFileSystem = Layer.effect(
   }),
 )
 
+interface Refusal {
+  readonly verdict: Rel.Verdict
+  readonly dumpPath: string
+  readonly traceId: string
+  readonly dump: string
+}
+
 type Order = { readonly orderId: string }
 
 const recordSettleAndOrphanCharge = Stimulus.make({
@@ -40,6 +40,16 @@ const recordSettleAndOrphanCharge = Stimulus.make({
       return input.orderId
     }),
 })
+
+const refusalOf = (
+  judgment: Contract.Judgment<Order, string>,
+): Effect.Effect<Refusal, PlatformError.PlatformError, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const dumpPath = judgment.dumpPath ?? ''
+    const dump = dumpPath === '' ? '' : yield* fs.readFileString(dumpPath)
+    return { verdict: judgment.verdict, dumpPath, traceId: judgment.run.traceId, dump }
+  })
 
 const chargeBeneathSettlement = Contract.of(FulfillmentTaxonomy)
   .stimulate(recordSettleAndOrphanCharge)
@@ -56,24 +66,25 @@ Feature('A failed trace contract')
           () => Effect.succeed({ orderId: 'order-7' }),
         ),
         When('the settlement is held to the contract')(
-          'refusal',
-          (s) => Effect.flip(Contract.check(chargeBeneathSettlement, s.order)).pipe(Effect.map(disparityOf)),
+          'judgment',
+          (s) => Contract.judge(chargeBeneathSettlement, s.order),
         ),
-        Then('the refusal names the parent it inspected and where the trace was written')((s) => {
-          expect(s.refusal.relationId).toContain('child(fulfillment.settle')
-          expect(s.refusal.breaks).toHaveLength(1)
-          expect(s.refusal.breaks[0]?.inspected).toHaveLength(2)
-          expect(s.refusal.dumpPath).toContain('artifacts/traces/')
-          expect(s.refusal.dumpPath).toContain(s.refusal.traceId)
-        }),
-        And('the written trace names both recorded spans')((s) =>
-          Effect.gen(function*() {
-            const fs = yield* FileSystem.FileSystem
-            const dump = s.refusal.dumpPath === null ? '' : yield* fs.readFileString(s.refusal.dumpPath)
-            expect(dump).toContain('fulfillment.settle')
-            expect(dump).toContain('credit.charge')
-            expect(dump).toContain(s.refusal.traceId)
-          })
+        Then('the refusal names the parent it inspected, the trace it wrote and both recorded spans')((s, expect) =>
+          Effect.map(refusalOf(s.judgment), (refusal) =>
+            expect(refusal).toMatchObject({
+              verdict: {
+                _tag: 'Break',
+                conjunct: `child(${Settle.id},${Charge.id})`,
+                inspected: [expect.any(String), expect.any(String)],
+              },
+              traceId: s.judgment.run.traceId,
+              dumpPath: expect.stringMatching(
+                new RegExp(`artifacts/traces/.*${s.judgment.run.traceId}`),
+              ),
+              dump: expect.stringMatching(
+                new RegExp(`${s.judgment.run.traceId}[\\s\\S]*${Settle.name}[\\s\\S]*${Charge.name}`),
+              ),
+            }))
         ),
       ),
     )

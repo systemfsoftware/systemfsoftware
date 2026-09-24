@@ -1,18 +1,10 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
-import { Effect, FileSystem, Layer, Schema } from 'effect'
+import { Effect, FileSystem, Layer } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
 const Feature = makeFeature({ it })
-
-const disparityOf = (failure: Contract.CheckFailure<never>): Contract.TraceDisparityError => {
-  if (!Schema.is(Contract.TraceDisparityError)(failure)) {
-    throw new Error('expected the contract to refuse with a trace disparity')
-  }
-  return failure
-}
 
 const recordingFileSystem = Layer.effect(
   FileSystem.FileSystem,
@@ -58,12 +50,14 @@ Feature('Settling an order under a contract that names the charge')
         ),
         When('the settlement is held to the contract')(
           'checked',
-          (s) => Contract.check(chargeBeneathSettlement, s.order),
+          (s) => Contract.judge(chargeBeneathSettlement, s.order),
         ),
-        Then('the settlement is accepted and its charge is on the same trace')((s) => {
-          expect(s.checked.run.output).toBe('settled:order-11')
-          expect(s.checked.verdict).toSatisfy(Schema.is(Rel.Hold))
-        }),
+        Then('the settlement is accepted and its charge is on the same trace')((s, expect) =>
+          expect({ output: s.checked.run.output, verdict: s.checked.verdict }).toMatchObject({
+            output: 'settled:order-11',
+            verdict: { _tag: 'Hold', conjunct: chargeBeneathSettlement.relation.id },
+          })
+        ),
       ),
     )
 
@@ -75,13 +69,15 @@ Feature('Settling an order under a contract that names the charge')
           () => Effect.succeed({ orderId: 'order-12', charge: false }),
         ),
         When('the settlement is held to the contract')(
-          'refusal',
-          (s) => Effect.flip(Contract.check(chargeBeneathSettlement, s.order)).pipe(Effect.map(disparityOf)),
+          'judgment',
+          (s) => Contract.judge(chargeBeneathSettlement, s.order),
         ),
-        Then('the refusal names the missing charge and where the trace was written')((s) => {
-          expect(s.refusal.relationId).toContain('credit.charge')
-          expect(s.refusal.dumpPath).toContain('artifacts/traces/')
-        }),
+        Then('the refusal names the missing charge and where the trace was written')((s, expect) =>
+          expect({ verdict: s.judgment.verdict, dumpPath: s.judgment.dumpPath }).toMatchObject({
+            verdict: { _tag: 'Break', conjunct: `child(${Settle.id},${Charge.id})` },
+            dumpPath: expect.stringContaining('artifacts/traces/'),
+          })
+        ),
       ),
     )
   })

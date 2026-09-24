@@ -1,8 +1,7 @@
-import { expect } from '@effect/vitest'
-import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
-import { Effect, Layer, Result, Schema } from 'effect'
+import { Effect, Layer, Result } from 'effect'
 import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
 
 const Feature = makeFeature({ it })
@@ -25,6 +24,10 @@ const observedGraph = (traceId: string) =>
     return Result.getOrThrow(Graph.decode(traceId, spans, FulfillmentTaxonomy))
   })
 
+const chargedBeneathSettled = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))
+
+const orderOf = (graph: Graph.TraceGraph) => Graph.byId(graph, Settle).map((node) => node.attrs['app.order.id'])
+
 Feature('Holding a settlement to the trace it produced')
   .withScenarioLayer(ObservationWindow.make('trace-spec').layer)
   .body(({ scenario }) => {
@@ -37,11 +40,12 @@ Feature('Holding a settlement to the trace it produced')
         ),
         When('the settlement runs under a trace of its own')('run', (s) => settlement(s.order)),
         When('the finished trace is read back')('graph', (s) => observedGraph(s.run.traceId)),
-        Then('the trace shows the charge beneath the settlement')((s) => {
-          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))(s.graph)
-          expect(verdict).toSatisfy(Schema.is(Rel.Hold))
-          expect(s.run.output).toBe('settled:order-7')
-        }),
+        Then('the trace shows the charge beneath the settlement and the output it settled')((s, expect) =>
+          expect({ output: s.run.output, verdict: chargedBeneathSettled(s.graph) }).toMatchObject({
+            output: 'settled:order-7',
+            verdict: { _tag: 'Hold' },
+          })
+        ),
       ),
     )
 
@@ -57,10 +61,9 @@ Feature('Holding a settlement to the trace it produced')
               return yield* Effect.flip(observation.collect(s.idle.traceId))
             }),
         ),
-        Then('the reader is told the trace was empty rather than that a relation broke')((s) => {
-          expect(s.outcome._tag).toBe('EmptyObservationError')
-          expect(s.outcome.traceId).toBe(s.idle.traceId)
-        }),
+        Then('the reader is told the trace was empty rather than that a relation broke')((s, expect) =>
+          expect(s.outcome).toMatchObject({ _tag: 'EmptyObservationError', traceId: s.idle.traceId })
+        ),
       ),
     )
 
@@ -72,16 +75,15 @@ Feature('Holding a settlement to the trace it produced')
           'second',
           () => settlement({ orderId: 'order-2', total: 2 }),
         ),
-        Then('each trace carries only the spans of its own settlement')((s) =>
-          Effect.gen(function*() {
-            const firstGraph = yield* observedGraph(s.first.traceId)
-            const secondGraph = yield* observedGraph(s.second.traceId)
-            const orderOf = (graph: Graph.TraceGraph) =>
-              Graph.byId(graph, Settle).map((node) => node.attrs['app.order.id'])
-            expect(orderOf(firstGraph)).toStrictEqual(['order-1'])
-            expect(orderOf(secondGraph)).toStrictEqual(['order-2'])
-            expect(firstGraph.traceId).not.toBe(secondGraph.traceId)
-          })
+        When('both finished traces are read back')(
+          'graphs',
+          (s) => Effect.all([observedGraph(s.first.traceId), observedGraph(s.second.traceId)]),
+        ),
+        Then('each trace carries only the spans of its own settlement under its own id')((s, expect) =>
+          expect({
+            orders: s.graphs.map(orderOf),
+            traces: new Set(s.graphs.map((graph) => graph.traceId)).size,
+          }).toEqual({ orders: [['order-1'], ['order-2']], traces: 2 })
         ),
       ),
     )
@@ -110,14 +112,18 @@ Feature('Holding a settlement to the trace it produced')
                   Effect.provide(window),
                 )).pipe(Effect.flip),
           )),
-        Then('the separate window is told there is nothing to read')((s) => {
-          expect(s.reread._tag).toBe('EmptyObservationError')
-          expect(s.reread.traceId).toBe(s.window.run.traceId)
-        }),
-        And('the window that served the settlement still answers with its graph')((s) => {
-          const verdict = Rel.all(Rel.exists(Settle), Rel.child(Settle, Charge))(s.window.graph)
-          expect(verdict).toSatisfy(Schema.is(Rel.Hold))
-        }),
+        Then('the separate window is told there is nothing to read while the window that served it still answers')((
+          s,
+          expect,
+        ) =>
+          expect({
+            reread: s.reread,
+            verdict: chargedBeneathSettled(s.window.graph),
+          }).toMatchObject({
+            reread: { _tag: 'EmptyObservationError', traceId: s.window.run.traceId },
+            verdict: { _tag: 'Hold' },
+          })
+        ),
       ),
     )
   })

@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Contract, Rel, RemoteObservation, Stimulus, TempoTraceStore } from '@systemfsoftware/trace-spec'
 import { Duration, Effect, Encoding, FileSystem, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
@@ -281,13 +280,6 @@ const judgingLayer = Layer.provideMerge(
   Layer.mergeAll(LoopbackLive, recordingFileSystem),
 )
 
-const disparityOf = (failure: Contract.CheckFailure<HttpClientError>): Contract.TraceDisparityError => {
-  if (!Schema.is(Contract.TraceDisparityError)(failure)) {
-    throw new Error('expected the contract to refuse with a trace disparity')
-  }
-  return failure
-}
-
 const storeFailureOf = (failure: StoreFailure): Contract.TransportObservationError => {
   if (!Schema.is(Contract.TransportObservationError)(failure)) {
     throw new Error('expected the judge to refuse with a store failure')
@@ -317,12 +309,14 @@ Feature('Holding a settlement to a trace contract through a remote store')
         ),
         When('the settlement is held to the contract')(
           'checked',
-          (s) => Contract.check(chargeBeneathSettlement, s.order),
+          (s) => Contract.judge(chargeBeneathSettlement, s.order),
         ),
-        Then('the settlement is accepted and its charge is on the same trace')((s) => {
-          expect(s.checked.run.output).toBe('settled:order-41')
-          expect(s.checked.verdict).toSatisfy(Schema.is(Rel.Hold))
-        }),
+        Then('the settlement is accepted and its charge is on the same trace')((s, expect) =>
+          expect({ output: s.checked.run.output, verdict: s.checked.verdict }).toMatchObject({
+            output: 'settled:order-41',
+            verdict: { _tag: 'Hold', conjunct: chargeBeneathSettlement.relation.id },
+          })
+        ),
       ),
     )
 
@@ -334,13 +328,15 @@ Feature('Holding a settlement to a trace contract through a remote store')
           () => Effect.succeed<Order>({ orderId: 'order-42', charge: false, mode: 'recorded' }),
         ),
         When('the settlement is held to the contract')(
-          'refusal',
-          (s) => Effect.flip(Contract.check(chargeBeneathSettlement, s.order)).pipe(Effect.map(disparityOf)),
+          'judgment',
+          (s) => Contract.judge(chargeBeneathSettlement, s.order),
         ),
-        Then('the refusal names the missing charge and where the trace was written')((s) => {
-          expect(s.refusal.relationId).toContain(Charge.id)
-          expect(s.refusal.dumpPath).toContain('artifacts/traces/')
-        }),
+        Then('the refusal names the missing charge and where the trace was written')((s, expect) =>
+          expect({ verdict: s.judgment.verdict, dumpPath: s.judgment.dumpPath }).toMatchObject({
+            verdict: { _tag: 'Break', conjunct: `child(${Settle.id},${Charge.id})` },
+            dumpPath: expect.stringContaining('artifacts/traces/'),
+          })
+        ),
       ),
     )
 
@@ -358,10 +354,14 @@ Feature('Holding a settlement to a trace contract through a remote store')
               Effect.map(([elapsed, failure]) => ({ elapsed, failure: storeFailureOf(failure) })),
             ),
         ),
-        Then('the store failure names the refusal and arrives well inside the deadline')((s) => {
-          expect(s.timed.failure.detail).toContain(String(REFUSED_STATUS))
-          expect(Duration.toMillis(s.timed.elapsed)).toBeLessThan(Duration.toMillis(OBSERVATION_OPTIONS.timeout))
-        }),
+        Then('the store failure names the refusal and arrives well inside the deadline')((s, expect) =>
+          expect({ detail: s.timed.failure.detail, elapsed: Duration.toMillis(s.timed.elapsed) }).toSatisfy(
+            (timed) =>
+              timed.detail.includes(String(REFUSED_STATUS)) &&
+              timed.elapsed < Duration.toMillis(OBSERVATION_OPTIONS.timeout),
+            `the refusal names ${REFUSED_STATUS} and arrives inside the observation deadline`,
+          )
+        ),
       ),
     )
 
@@ -376,10 +376,12 @@ Feature('Holding a settlement to a trace contract through a remote store')
           'outcome',
           (s) => Effect.flip(Contract.judge(chargeBeneathSettlement, s.order)).pipe(Effect.map(storeFailureOf)),
         ),
-        Then('the judge reports the answer could not be understood')((s) => {
-          expect(s.outcome.detail).toContain('undecodable trace body')
-          expect(s.outcome.source).toContain(TRACES_ROUTE)
-        }),
+        Then('the judge reports the answer could not be understood at the address it read')((s, expect) =>
+          expect(s.outcome).toMatchObject({
+            detail: expect.stringContaining('undecodable trace body'),
+            source: expect.stringContaining(TRACES_ROUTE),
+          })
+        ),
       ),
     )
 
@@ -394,9 +396,9 @@ Feature('Holding a settlement to a trace contract through a remote store')
           'outcome',
           (s) => Effect.flip(Contract.judge(chargeBeneathSettlement, s.order)).pipe(Effect.map(unfinishedOf)),
         ),
-        Then('the judge reports the trace as unfinished, naming how much of it arrived')((s) => {
+        Then('the judge reports the trace as unfinished, naming how much of it arrived')((s, expect) =>
           expect(s.outcome.spanCount).toBeGreaterThan(2)
-        }),
+        ),
       ),
     )
   })

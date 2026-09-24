@@ -1,4 +1,4 @@
-import type { Vitest } from '@effect/vitest'
+import type { Asserted, Expect, Vitest } from '@effect/vitest'
 import { Suite as Runtime } from '@systemfsoftware/effect-spec-runtime'
 import { Cause, Effect, type FileSystem, Layer, Random, Schema } from 'effect'
 import { dual } from 'effect/Function'
@@ -11,7 +11,6 @@ import type { Observation } from './Observation.service.js'
 import * as Prop from './Prop.js'
 import { StimulusFailure } from './StimulusFailure.schema.js'
 import * as TaskAnnounce from './TaskAnnounce.js'
-import { TraceDisparityError } from './TraceDisparityError.schema.js'
 
 export { StimulusFailure }
 
@@ -94,22 +93,15 @@ const caseFailureOf = (stimulus: string, salt: string) => <E>(failure: E | CaseF
     ? failure
     : new StimulusFailure({ stimulus, detail: `${Cause.pretty(Cause.fail(failure))}\nrandom salt: ${salt}` })
 
-const rethrowAfter = (
-  annotation: Effect.Effect<void>,
-  error: TraceDisparityError,
-): Effect.Effect<never, TraceDisparityError> => Effect.andThen(annotation, () => Effect.fail(error))
-
-const annotateDisparity = (error: TraceDisparityError): Effect.Effect<never, TraceDisparityError> =>
-  rethrowAfter(TaskAnnounce.announceDump(error), error)
-
 const caseBody = <Input, Output, E, Provided>(
+  expect: Expect,
   contract: Contract.Contract<Input, Output, E, Provided>,
   input: Input,
   salt: string,
-): Effect.Effect<void, CaseFailure, Provided | Harness> =>
-  Contract.check(contract, input).pipe(
-    Effect.catchIf(Schema.is(TraceDisparityError), annotateDisparity),
-    Effect.asVoid,
+): Effect.Effect<void, CaseFailure, Asserted | Provided | Harness> =>
+  Contract.judge(contract, input).pipe(
+    Effect.tap(TaskAnnounce.announceDump),
+    Effect.flatMap((judgment) => Contract.verdictCheck(contract, expect, judgment)),
     Effect.mapError(caseFailureOf(contract.stimulus.name, salt)),
   )
 
@@ -121,7 +113,7 @@ const caseTools = <Provided, ScenarioRequired>(
 ): CaseTools<Provided | Harness> => {
   const Case: CaseRegistrar<Provided | Harness> = (name, contract, input) => {
     const salt = saltOf()
-    register(name, caseBody(contract, input, salt).pipe(Random.withSeed(salt)), 'run')
+    register(name, (expect) => caseBody(expect, contract, input, salt).pipe(Random.withSeed(salt)), 'run')
   }
   Case.prop = <Input, Output, E>(
     name: string,

@@ -1,3 +1,5 @@
+import type { Check, Expect } from '@effect/vitest'
+import type { Asserted } from '@effect/vitest/integration'
 import { Contract, Observation, Rel, Stimulus, Suite } from '@systemfsoftware/trace-spec'
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Context, Effect, type FileSystem, type Layer, Schema as S } from 'effect'
@@ -17,6 +19,8 @@ declare const harnessWithInventory: Layer.Layer<Observation.Observation | FileSy
 declare const fileSystemOnly: Layer.Layer<FileSystem.FileSystem>
 declare const inventoryWithHarness: Layer.Layer<Inventory | Observation.Observation | FileSystem.FileSystem>
 declare const generatedInputs: S.Schema<string>
+declare const testExpect: Expect
+declare const judgment: Contract.Judgment<string, string>
 
 const Settle = Span.declare({ id: 'settle', name: 'settle', attrs: S.Struct({ 'app.order.id': S.String }) })
 const taxonomy = Taxonomy.make('t').pipe(Taxonomy.add(Settle))
@@ -55,10 +59,13 @@ describe('Contract stages', () => {
     const stimulated = Contract.of(taxonomy).stimulate(settle)
     expect(Contract.judge).type.toBeCallableWith(complete, 'order-1')
     expect(Contract.judge).type.not.toBeCallableWith(stimulated, 'order-1')
-    expect(Contract.check).type.toBeCallableWith(complete, 'order-1')
-    expect(Contract.check).type.not.toBeCallableWith(stimulated, 'order-1')
-    expect(Contract.check('order-1')).type.toBeCallableWith(complete)
-    expect(Contract.check('order-1')).type.not.toBeCallableWith(stimulated)
+    expect(Contract.check).type.toBeCallableWith(complete, testExpect, 'order-1')
+    expect(Contract.check).type.not.toBeCallableWith(stimulated, testExpect, 'order-1')
+    expect(Contract.check(testExpect, 'order-1')).type.toBeCallableWith(complete)
+    expect(Contract.check(testExpect, 'order-1')).type.not.toBeCallableWith(stimulated)
+    expect(Contract.verdictCheck).type.toBeCallableWith(complete, testExpect, judgment)
+    expect(Contract.verdictCheck).type.not.toBeCallableWith(stimulated, testExpect, judgment)
+    expect(Contract.verdictCheck(testExpect, judgment)).type.toBeCallableWith(complete)
   })
 
   it('Should_AnswerVerdictOnSuccessAndRefuseBreakOnError_When_JudgeAndCheckCalled', () => {
@@ -82,29 +89,29 @@ describe('Contract stages', () => {
         Observation.Observation | FileSystem.FileSystem
       >
     >()
-    expect(Contract.check(selfContained, 'order-1')).type.toBe<
+    expect(Contract.check(selfContained, testExpect, 'order-1')).type.toBe<
       Effect.Effect<
-        Contract.Judgment<string, string>,
+        void,
         | Contract.ContractDecodeError
         | Observation.EmptyObservationError
         | Observation.IncompleteObservationError
-        | Observation.TransportObservationError
-        | Contract.TraceDisparityError,
-        Observation.Observation | FileSystem.FileSystem
+        | Observation.TransportObservationError,
+        Asserted | Observation.Observation | FileSystem.FileSystem
       >
     >()
+    expect(Contract.verdictCheck(selfContained, testExpect, judgment)).type.toBe<Check>()
   })
 
   it('Should_CarryBehaviourFailureOnErrorChannel_When_CheckCalled', () => {
-    const checked = needsInventory.pipe(Contract.check('order-1'))
+    const checked = Contract.check(needsInventory, testExpect, 'order-1')
     expect(checked).type.toBe<
       Effect.Effect<
-        Contract.Judgment<string, string>,
-        Contract.CheckFailure<InventoryFailure>,
-        Inventory | Observation.Observation | FileSystem.FileSystem
+        void,
+        Contract.JudgeFailure<InventoryFailure>,
+        Asserted | Inventory | Observation.Observation | FileSystem.FileSystem
       >
     >()
-    expect(checked).type.not.toBe<Effect.Effect<Contract.Judgment<string, string>, never, never>>()
+    expect(checked).type.not.toBe<Effect.Effect<void, never, never>>()
   })
 })
 
