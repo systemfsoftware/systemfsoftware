@@ -9,7 +9,7 @@
  *
  * @since 4.0.0
  */
-import { expect, vi } from '@effect/vitest'
+import { vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -31,8 +31,11 @@ Feature('Server-side rendering of React atom hooks')
       Gherkin.Do.pipe(
         Given('an atom whose read runs the atom function during SSR')('ctx', () =>
           Effect.sync(() => {
-            const getCount = vi.fn<() => number>(() => 0)
-            const counterAtom = Atom.make(getCount)
+            let reads = 0
+            const counterAtom = Atom.make(() => {
+              reads += 1
+              return 0
+            })
 
             function TestComponent() {
               const count = AtomReact.useAtomValue(counterAtom)
@@ -46,13 +49,15 @@ Feature('Server-side rendering of React atom hooks')
                 React.createElement(TestComponent),
               ),
             )
-            return { getCount, ssrHtml }
+            return { reads: () => reads, ssrHtml }
           })),
         When('the rendered markup is inspected')('result', (s) => Effect.sync(() => s.ctx)),
-        Then('the atom read function was called and the value is in the markup')((s) => {
-          expect(s.result.getCount).toHaveBeenCalled()
-          expect(s.result.ssrHtml).toContain('0')
-        }),
+        Then('the atom read function was called and the value is in the markup')((s, expect) =>
+          expect({ html: s.result.ssrHtml, reads: s.result.reads() }).toEqual({
+            html: '<div>0</div>',
+            reads: 1,
+          })
+        ),
       ),
     )
 
@@ -85,19 +90,25 @@ Feature('Server-side rendering of React atom hooks')
                 React.createElement(TestComponent),
               ),
             )
-            expect(mockFetchData).not.toHaveBeenCalled()
-            expect(ssrHtml).toContain('Initial')
-            return { mockFetchData, ssrHtml, registry, userDataAtom }
+            return { mockFetchData, registry, ssrHtml, userDataAtom }
           })),
+        Then('the server markup shows the atom has not run its effect yet')((s, expect) =>
+          expect({ calls: s.ctx.mockFetchData.mock.calls, html: s.ctx.ssrHtml }).toMatchObject({
+            calls: [],
+            html: '<div>Initial</div>',
+          })
+        ),
         When('the server markup is observed and the client reads the atom')('result', (s) =>
           Effect.sync(() => {
             const clientValue = Atom.Registry.get(s.ctx.registry, s.ctx.userDataAtom)
             return { clientValue }
           })),
-        Then('the client read ran the effect and settled the atom')((s) => {
-          expect(s.ctx.mockFetchData).toHaveBeenCalled()
-          expect(s.result.clientValue).toSatisfy(Atom.AsyncResult.isSuccess)
-        }),
+        Then('the client read ran the effect and settled the atom')((s, expect) =>
+          expect({ calls: s.ctx.mockFetchData.mock.calls, clientValue: s.result.clientValue }).toMatchObject({
+            calls: [[]],
+            clientValue: { _tag: 'Success', value: 0 },
+          })
+        ),
       ),
     )
 
@@ -186,12 +197,14 @@ Feature('Server-side rendering of React atom hooks')
             }),
         ),
         When('the rendered markup is inspected')('result', () => Effect.succeed(true)),
-        Then('the dehydrated values are present in the markup')((s) => {
-          expect(s.ctx.ssrHtml).toContain('data-testid="value">1<')
-          expect(s.ctx.ssrHtml).toContain('data-testid="value-1">123<')
-          expect(s.ctx.ssrHtml).toContain('data-testid="error-2">Error<')
-          expect(s.ctx.ssrHtml).toContain('data-testid="loading-3">Loading...<')
-        }),
+        Then('the dehydrated values are present in the markup')((s, expect) =>
+          expect(s.ctx.ssrHtml).toEqual(
+            '<div data-testid="value">1</div>' +
+              '<div data-testid="value-1">123</div>' +
+              '<div data-testid="error-2">Error</div>' +
+              '<div data-testid="loading-3">Loading...</div>',
+          )
+        ),
       ),
     )
 
@@ -266,15 +279,19 @@ Feature('Server-side rendering of React atom hooks')
               return Atom.AsyncResult.getOrThrow(Atom.Registry.get(s.ctx.readerRegistry, s.ctx.atom))
             }),
         ),
-        Then('the deferred value is applied to the hydration registry once')((s) => {
-          expect(s.ctx.before.start).toBe(1)
-          expect(s.ctx.before.stop).toBe(0)
-          expect(s.ctx.ssrHtml).toContain('Initial')
-          const counters = s.ctx.readCounters()
-          expect(counters.start).toBe(1)
-          expect(s.settled).toBe(1)
-          expect(counters.stop).toBe(1)
-        }),
+        Then('the deferred value is applied to the hydration registry once')((s, expect) =>
+          expect({
+            before: s.ctx.before,
+            counters: s.ctx.readCounters(),
+            html: s.ctx.ssrHtml,
+            settled: s.settled,
+          }).toMatchObject({
+            before: { start: 1, stop: 0 },
+            counters: { start: 1, stop: 1 },
+            html: '<div>Initial</div>',
+            settled: 1,
+          })
+        ),
       ),
     )
   })

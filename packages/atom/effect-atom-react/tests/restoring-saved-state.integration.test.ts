@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
@@ -42,10 +41,10 @@ Feature('Restoring saved page state')
             return {}
           })),
         When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the saved value is already on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
-          })
+        Then('the saved value is already on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('fresh-temperature')).pipe(
+            Effect.map((temperature) => expect(temperature).toHaveTextContent('23')),
+          )
         ),
       ),
     )
@@ -75,10 +74,10 @@ Feature('Restoring saved page state')
             }),
         ),
         When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the value that was set is still on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
-          })
+        Then('the value that was set is still on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('plain-room')).pipe(
+            Effect.map((room) => expect(room).toHaveTextContent('4')),
+          )
         ),
       ),
     )

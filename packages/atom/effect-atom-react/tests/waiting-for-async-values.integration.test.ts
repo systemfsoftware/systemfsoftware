@@ -1,7 +1,6 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
@@ -10,6 +9,7 @@ import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
+import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 import { Unavailable } from './__fixtures__/Unavailable.schema.js'
@@ -59,13 +59,9 @@ Feature('Waiting for asynchronous values')
               return Promise.resolve(next)
             }),
         ),
-        Then('the loaded value is on screen')(() =>
-          Effect.promise(() => screen.findByTestId('loaded-value')).pipe(
-            Effect.tap((el) =>
-              Effect.sync(() => {
-                expect(el).toHaveTextContent('5')
-              })
-            ),
+        Then('the loaded value is on screen')((_s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'loaded-value', text: '5' })).pipe(
+            Effect.map((widget) => expect(widget).toHaveTextContent('5')),
           )
         ),
       ),
@@ -114,36 +110,44 @@ Feature('Waiting for asynchronous values')
         When('the first value arrives, the reader asks for a refresh, and the newer value arrives')(
           'settled',
           (s) =>
-            Effect.promise(() => {
-              const [firstPending] = s.ctx.pending
-              if (firstPending === undefined) {
-                throw new Error('expected a pending deferred')
-              }
-              return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(firstPending, 1))))
-                .then(function firstValue() {
-                  return expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('1')
+            Effect.promise(() =>
+              Promise.resolve()
+                .then(() => {
+                  const [firstPending] = s.ctx.pending
+                  if (firstPending === undefined) {
+                    throw new Error('expected a pending deferred')
+                  }
+                  return act(() => Effect.runPromise(Deferred.succeed(firstPending, 1)))
                 })
-                .then(function refresh() {
-                  return Promise.resolve(act(() => {
+                .then(() => findWidgetShowing({ testId: 'refreshed-value', text: '1' }))
+                .then(() =>
+                  Promise.resolve(act(() => {
                     s.ctx.refresh()()
                   }))
-                })
-                .then(function waitPending() {
-                  return expect.poll(() => s.ctx.pending.length).toBe(2)
-                })
-                .then(function secondValue() {
+                )
+                .then(() =>
+                  waitFor(() => {
+                    if (s.ctx.pending.length !== 2) {
+                      throw new Error(`the widget has asked for ${s.ctx.pending.length} values, not 2`)
+                    }
+                  })
+                )
+                .then(() => {
                   const secondPending = s.ctx.pending[1]
                   if (secondPending === undefined) {
                     throw new Error('expected a second pending deferred')
                   }
-                  return Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(secondPending, 2))))
+                  return act(() => Effect.runPromise(Deferred.succeed(secondPending, 2)))
                 })
-            }),
+                .then(() => findWidgetShowing({ testId: 'refreshed-value', text: '2' }))
+                .then(() => ({ pendingReads: s.ctx.pending.length }))
+            ),
         ),
-        Then('the widget shows the refreshed value')(() =>
-          Effect.promise(function showRefreshed() {
-            return expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('2')
-          })
+        Then('the widget shows the refreshed value')((s, expect) =>
+          expect({
+            pendingReads: s.settled.pendingReads,
+            refreshed: screen.getByTestId('refreshed-value').textContent,
+          }).toEqual({ pendingReads: 2, refreshed: '2' })
         ),
       ),
     )
@@ -176,14 +180,15 @@ Feature('Waiting for asynchronous values')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the error boundary shows the failure message and the widget is not rendered')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load').then(
-              () => {
-                expect(screen.queryByTestId('unexpected-widget')).toBeNull()
-              },
-            )
-          })
+        Then('the error boundary shows the failure message and the widget is not rendered')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('failure-message')).pipe(
+            Effect.map((message) =>
+              expect({
+                message: message.textContent,
+                unexpectedWidget: screen.queryByTestId('unexpected-widget'),
+              }).toEqual({ message: 'failed to load', unexpectedWidget: null })
+            ),
+          )
         ),
       ),
     )

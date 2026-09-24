@@ -1,10 +1,7 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
-import { renderSuspending } from './__fixtures__/render-suspending.js'
-import '@vitest/browser/matchers'
-import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -12,6 +9,7 @@ import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
+import { renderSuspending } from './__fixtures__/render-suspending.js'
 
 const Feature = makeFeature({ it })
 
@@ -53,21 +51,22 @@ Feature('Suspending a screen until its value is ready')
         When('the value is delivered')(
           'seen',
           (s) =>
-            Effect.sync(() => screen.queryByTestId('waiting-note') !== null).pipe(
+            Effect.sync(() => ({ noteWhileWaiting: screen.queryByTestId('waiting-note')?.textContent ?? null })).pipe(
               Effect.tap(() =>
                 Effect.promise(() => Promise.resolve(act(() => Effect.runPromise(Deferred.succeed(s.ctx.source, 9)))))
               ),
-              Effect.map((noteWhileWaiting) => ({ noteWhileWaiting })),
             ),
         ),
-        Then('the note was shown while waiting, and now the value is on screen and the note is gone')((s) =>
-          Effect.promise(function showValue() {
-            return screen.findByTestId('arrived-value').then(function hideNote(arrived) {
-              expect(s.seen.noteWhileWaiting).toBe(true)
-              expect(arrived.textContent).toBe('9')
-              expect(screen.queryByTestId('waiting-note')).toBeNull()
-            })
-          })
+        Then('the note was shown while waiting, and now the value is on screen and the note is gone')((s, expect) =>
+          Effect.promise(() => screen.findByTestId('arrived-value')).pipe(
+            Effect.map((arrived) =>
+              expect({
+                arrived: arrived.textContent,
+                noteNow: screen.queryByTestId('waiting-note'),
+                noteWhileWaiting: s.seen.noteWhileWaiting,
+              }).toEqual({ arrived: '9', noteNow: null, noteWhileWaiting: 'still waiting' })
+            ),
+          )
         ),
       ),
     )
@@ -101,16 +100,17 @@ Feature('Suspending a screen until its value is ready')
             const next = act(() => Effect.runPromise(Deferred.succeed(s.ctx.source, 4)))
             return Promise.resolve(next)
           })),
-        Then('both screens show the delivered value and the note is gone')(() =>
-          Effect.promise(function bothScreens() {
-            return Promise.all([screen.findByTestId('left-value'), screen.findByTestId('right-value')]).then(
-              function hideNote([left, right]) {
-                expect(left.textContent).toBe('4')
-                expect(right.textContent).toBe('4')
-                expect(screen.queryByTestId('waiting-note')).toBeNull()
-              },
+        Then('both screens show the delivered value and the note is gone')((_s, expect) =>
+          Effect.promise(() => Promise.all([screen.findByTestId('left-value'), screen.findByTestId('right-value')]))
+            .pipe(
+              Effect.map(([left, right]) =>
+                expect({
+                  left: left.textContent,
+                  note: screen.queryByTestId('waiting-note'),
+                  right: right.textContent,
+                }).toEqual({ left: '4', note: null, right: '4' })
+              ),
             )
-          })
         ),
       ),
     )
@@ -143,14 +143,15 @@ Feature('Suspending a screen until its value is ready')
             return {}
           })),
         When('the broken value settles')('shown', () => Effect.succeed(true)),
-        Then('the notice is on screen and the screen is not rendered')(() =>
-          Effect.promise(function showNote() {
-            return expect.element(screen.getByTestId('problem-note')).toHaveTextContent('could not load').then(
-              function hideScreen() {
-                expect(screen.queryByTestId('never-screen')).toBeNull()
-              },
-            )
-          })
+        Then('the notice is on screen and the screen is not rendered')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('problem-note')).pipe(
+            Effect.map((notice) =>
+              expect({
+                neverScreen: screen.queryByTestId('never-screen'),
+                notice: notice.textContent,
+              }).toEqual({ neverScreen: null, notice: 'could not load' })
+            ),
+          )
         ),
       ),
     )

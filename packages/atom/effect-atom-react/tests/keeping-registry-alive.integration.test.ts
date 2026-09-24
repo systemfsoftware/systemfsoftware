@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -31,10 +30,10 @@ Feature('Keeping a shared registry alive')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the value the provider starts with is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('provided-rating')).toHaveTextContent('0')
-          })
+        Then('the value the provider starts with is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('provided-rating')).pipe(
+            Effect.map((rating) => expect(rating).toHaveTextContent('0')),
+          )
         ),
       ),
     )
@@ -69,13 +68,16 @@ Feature('Keeping a shared registry alive')
             }),
         ),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the error message says a provider is what supplies the data source')(() =>
-          Effect.promise(function() {
-            return screen.findByTestId('missing-registry').then((notice) => {
-              expect(notice.textContent).toContain('RegistryProvider')
-              expect(screen.queryByTestId('unprovided-value')).toBeNull()
-            })
-          })
+        Then('the error message says a provider is what supplies the data source')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('missing-registry')).pipe(
+            Effect.map((notice) =>
+              expect({ notice: notice.textContent, unprovidedValue: screen.queryByTestId('unprovided-value') })
+                .toMatchObject({
+                  notice: expect.stringMatching(/RegistryProvider/),
+                  unprovidedValue: null,
+                })
+            ),
+          )
         ),
       ),
     )
@@ -113,14 +115,13 @@ Feature('Keeping a shared registry alive')
             }),
         ),
         When('both widgets are shown')('shown', () => Effect.succeed(true)),
-        Then('each widget shows the value its own provider holds')(() =>
-          Effect.promise(function leftProvider() {
-            return expect.element(screen.getByTestId('left-rating')).toHaveTextContent('2').then(
-              function rightProvider() {
-                return expect.element(screen.getByTestId('right-rating')).toHaveTextContent('6')
-              },
+        Then('each widget shows the value its own provider holds')((_s, expect) =>
+          Effect.promise(() => Promise.all([screen.findByTestId('left-rating'), screen.findByTestId('right-rating')]))
+            .pipe(
+              Effect.map(([left, right]) =>
+                expect({ left: left.textContent, right: right.textContent }).toEqual({ left: '2', right: '6' })
+              ),
             )
-          })
         ),
       ),
     )
@@ -157,9 +158,7 @@ Feature('Keeping a shared registry alive')
               s.ctx.tick()
             })
           })),
-        Then('every render saw the same registry')((s) => {
-          expect(new Set(s.ctx.seenRegistries).size).toBe(1)
-        }),
+        Then('every render saw the same registry')((s, expect) => expect(new Set(s.ctx.seenRegistries).size).toBe(1)),
       ),
     )
   })

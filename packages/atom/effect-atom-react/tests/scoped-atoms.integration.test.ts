@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
@@ -8,6 +7,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
+import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -57,10 +57,10 @@ Feature('Scoped atoms that belong to one part of the page')
               })
             }),
         ),
-        Then('the widget shows the updated counter')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
-          })
+        Then('the widget shows the updated counter')((_s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'scoped-counter', text: '6' })).pipe(
+            Effect.map((counter) => expect(counter).toHaveTextContent('6')),
+          )
         ),
       ),
     )
@@ -86,10 +86,10 @@ Feature('Scoped atoms that belong to one part of the page')
             return {}
           })),
         When('the greeting is shown')('shown', () => Effect.succeed(true)),
-        Then('the input name is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
-          })
+        Then('the input name is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('greeting')).pipe(
+            Effect.map((greeting) => expect(greeting).toHaveTextContent('Ada')),
+          )
         ),
       ),
     )
@@ -128,10 +128,10 @@ Feature('Scoped atoms that belong to one part of the page')
               s.ctx.rename()()
             })
           })),
-        Then('the original atom is still on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
-          })
+        Then('the original atom is still on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('kept-name')).pipe(
+            Effect.map((keptName) => expect(keptName).toHaveTextContent('Ada')),
+          )
         ),
       ),
     )
@@ -164,10 +164,10 @@ Feature('Scoped atoms that belong to one part of the page')
             }),
         ),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the error boundary reports the missing provider')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
-          })
+        Then('the error boundary reports the missing provider')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('missing-provider')).pipe(
+            Effect.map((missingProvider) => expect(missingProvider).toHaveTextContent('provider missing')),
+          )
         ),
       ),
     )

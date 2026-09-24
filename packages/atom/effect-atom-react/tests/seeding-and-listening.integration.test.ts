@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
@@ -38,10 +37,10 @@ Feature('Seeding and listening to shared values')
             return {}
           })),
         When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('only the first seed is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
-          })
+        Then('only the first seed is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('seeded-balance')).pipe(
+            Effect.map((seededBalance) => expect(seededBalance).toHaveTextContent('7')),
+          )
         ),
       ),
     )
@@ -77,14 +76,15 @@ Feature('Seeding and listening to shared values')
             }),
         ),
         When('both pages are shown')('shown', () => Effect.succeed(true)),
-        Then('each page shows its own starting value')(() =>
-          Effect.promise(function firstBalance() {
-            return expect.element(screen.getByTestId('first-balance')).toHaveTextContent('3').then(
-              function secondBalance() {
-                return expect.element(screen.getByTestId('second-balance')).toHaveTextContent('8')
-              },
-            )
-          })
+        Then('each page shows its own starting value')((_s, expect) =>
+          Effect.promise(() =>
+            Promise.all([screen.findByTestId('first-balance'), screen.findByTestId('second-balance')])
+          ).pipe(
+            Effect.map(([first, second]) =>
+              expect({ first: first.textContent, second: second.textContent })
+                .toEqual({ first: '3', second: '8' })
+            ),
+          )
         ),
       ),
     )
@@ -117,9 +117,7 @@ Feature('Seeding and listening to shared values')
             })
             return s.ctx.heard
           })),
-        Then('the listener heard only the change, not the starting value')((s) => {
-          expect(s.heard).toEqual([5])
-        }),
+        Then('the listener heard only the change, not the starting value')((s, expect) => expect(s.heard).toEqual([5])),
       ),
     )
   })

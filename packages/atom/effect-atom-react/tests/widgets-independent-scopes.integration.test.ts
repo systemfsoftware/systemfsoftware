@@ -1,4 +1,4 @@
-import { expect, vi } from '@effect/vitest'
+import { vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -70,19 +70,19 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
 
               vi.advanceTimersByTime(100)
 
-              const firstLoading = screen.queryByTestId('first-loading') !== null
-              const secondLoading = screen.queryByTestId('second-loading') !== null
+              const first = screen.queryByTestId('first-value')?.textContent ?? null
+              const second = screen.queryByTestId('second-value')?.textContent ?? null
 
               vi.useRealTimers()
-              return { firstLoading, secondLoading }
+              return { first, second }
             }),
         ),
-        Then('the widgets do not both flip to the same state together')((s) => {
+        Then('the widgets do not both flip to the same state together')((s, expect) =>
           expect(s.state).toSatisfy(
-            (state: { readonly firstLoading: boolean; readonly secondLoading: boolean }) =>
-              state.firstLoading || state.secondLoading,
+            (state) => state.first === null || state.second === null,
+            'at least one widget is still waiting for its value, so one cleanup did not settle both',
           )
-        }),
+        ),
       ),
     )
   })

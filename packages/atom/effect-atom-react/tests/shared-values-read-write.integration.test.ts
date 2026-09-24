@@ -1,15 +1,15 @@
-import { expect, vi } from '@effect/vitest'
+import { vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { Suspense } from 'react'
+import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
@@ -45,9 +45,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             const confirmed = yield* s.ctx.save()(42)
             return confirmed
           })),
-        Then('the save is confirmed with the stored draft')((s) => {
-          expect(s.saved).toBe(42)
-        }),
+        Then('the save is confirmed with the stored draft')((s, expect) => expect(s.saved).toBe(42)),
       ),
     )
 
@@ -72,10 +70,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             return {}
           })),
         When('the page is shown')('shown', () => Effect.succeed(true)),
-        Then('the seeded value is already on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
-          })
+        Then('the seeded value is already on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('balance')).pipe(
+            Effect.map((balance) => expect(balance).toHaveTextContent('7')),
+          )
         ),
       ),
     )
@@ -113,10 +111,10 @@ Feature('Reading and changing shared values from on-screen widgets')
               s.ctx.refresh()()
             })
           })),
-        Then('the widget shows the recomputed reading')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
-          })
+        Then('the widget shows the recomputed reading')((_s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'reading', text: '3' })).pipe(
+            Effect.map((reading) => expect(reading).toHaveTextContent('3')),
+          )
         ),
       ),
     )
@@ -152,9 +150,9 @@ Feature('Reading and changing shared values from on-screen widgets')
             })
             return s.ctx.heard
           })),
-        Then('the listener heard the starting value and both changes')((s) => {
+        Then('the listener heard the starting value and both changes')((s, expect) =>
           expect(s.heard).toEqual([3, 5, 8])
-        }),
+        ),
       ),
     )
 
@@ -185,12 +183,13 @@ Feature('Reading and changing shared values from on-screen widgets')
               s.ctx.nameRef().pipe(Atom.Ref.set('grace'))
             })
           })),
-        Then('the view shows the new value and the rest of the record is untouched')((s) =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('name')).toHaveTextContent('grace').then(() => {
-              expect(Atom.Ref.get(s.ctx.record)).toEqual({ name: 'grace', age: 36 })
-            })
-          })
+        Then('the view shows the new value and the rest of the record is untouched')((s, expect) =>
+          Effect.promise(() => findWidgetShowing({ testId: 'name', text: 'grace' })).pipe(
+            Effect.map((name) =>
+              expect({ name: name.textContent, record: Atom.Ref.get(s.ctx.record) })
+                .toEqual({ name: 'grace', record: { name: 'grace', age: 36 } })
+            ),
+          )
         ),
       ),
     )
@@ -226,19 +225,14 @@ Feature('Reading and changing shared values from on-screen widgets')
           'outcomes',
           (s) =>
             Effect.gen(function*() {
-              const accepted = yield* Effect.exit(s.ctx.save()(5))
-              const rejected = yield* Effect.exit(s.ctx.save()(-1))
+              const accepted = yield* s.ctx.save()(5)
+              const rejected = yield* Effect.flip(s.ctx.save()(-1))
               return { accepted, rejected }
             }),
         ),
-        Then('the first save is reported as accepted and the second as rejected')((s) => {
-          let acceptedValue: number | null = null
-          if (Exit.isSuccess(s.outcomes.accepted)) {
-            acceptedValue = s.outcomes.accepted.value
-          }
-          expect(acceptedValue).toBe(5)
-          expect(s.outcomes.rejected).toSatisfy(Exit.isFailure)
-        }),
+        Then('the first save is reported as accepted and the second as rejected')((s, expect) =>
+          expect(s.outcomes).toEqual({ accepted: 5, rejected: 'rejected' })
+        ),
       ),
     )
 
@@ -262,10 +256,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the transformed value is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
-          })
+        Then('the transformed value is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('tripled')).pipe(
+            Effect.map((tripled) => expect(tripled).toHaveTextContent('21')),
+          )
         ),
       ),
     )
@@ -294,10 +288,10 @@ Feature('Reading and changing shared values from on-screen widgets')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
-        Then('the failure is on screen')(() =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
-          })
+        Then('the failure is on screen')((_s, expect) =>
+          Effect.promise(() => screen.findByTestId('outcome')).pipe(
+            Effect.map((outcome) => expect(outcome).toHaveTextContent('Failure')),
+          )
         ),
       ),
     )
@@ -335,11 +329,13 @@ Feature('Reading and changing shared values from on-screen widgets')
               return {}
             }),
         ),
-        When('the page settles after the saved data is committed')('settled', () =>
-          Effect.promise(function() {
-            return expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
-          })),
-        Then('the newer saved value is what ends up on screen')(() => Effect.succeed(true)),
+        When('the page settles after the saved data is committed')(
+          'settled',
+          () => Effect.promise(() => findWidgetShowing({ testId: 'temperature', text: '23' })),
+        ),
+        Then('the newer saved value is what ends up on screen')((s, expect) =>
+          expect(s.settled).toHaveTextContent('23')
+        ),
       ),
     )
 
@@ -369,9 +365,9 @@ Feature('Reading and changing shared values from on-screen widgets')
             vi.advanceTimersByTime(1000)
             vi.useRealTimers()
           })),
-        Then('the data source no longer answers')((s) => {
+        Then('the data source no longer answers')((s, expect) =>
           expect(() => Atom.Registry.get(s.ctx.registry(), Atom.make(1))).toThrow('registry is disposed')
-        }),
+        ),
       ),
     )
 
@@ -409,9 +405,9 @@ Feature('Reading and changing shared values from on-screen widgets')
             vi.advanceTimersByTime(1000)
             vi.useRealTimers()
           })),
-        Then('the page still shows the same value, from a data source that never went away')((s) => {
+        Then('the page still shows the same value, from a data source that never went away')((s, expect) =>
           expect(s.ctx.readSavedValue()).toBe(41)
-        }),
+        ),
       ),
     )
   })
