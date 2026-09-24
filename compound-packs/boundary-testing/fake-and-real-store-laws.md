@@ -1,49 +1,46 @@
 ---
-title: Fake and real store adapters must satisfy an identical contract suite of declared store laws
+title: Fake and real store adapters must pass one shared suite of the store's declared laws
 applies_when:
   - implementing in-memory test doubles or fakes for store interfaces
   - verifying real database adapters (e.g. Postgres, SQLite, Drizzle) against store contracts
   - authoring integration tests in tests/ for store persistence
-tags: [boundary, store, laws, contract-test, fakes, integration]
+tags: [boundary, store, laws, contract-test, fakes, integration, unit-of-work]
 ---
 
-A store is a capability port over shared state that outlives a single interaction. Every port managing persistent shared state must ship a shared law contract test suite that both its in-memory fake and real database adapters pass.
+A store is a port over shared state that outlives one interaction and ships a law suite that its in-memory fake and its real adapter both pass. The suite is the store's declaration: it states the laws its operations obey, which operations are atomic, and the consistency its reads see. A port with no law suite is not a store, and the store rules do not apply to it.
 
-A test double that diverges from real database semantics invalidates all higher-level tests relying on it (James Shore, _Testing Without Mocks_; https://www.jamesshore.com/v2/projects/nullables/testing-without-mocks). A fake store must not be a bespoke mock configured with canned return values. It is a stateful in-process implementation obeying the exact same transactional, consistency, and commutativity laws as production adapters:
+A test double that behaves differently from the real adapter makes every test built on it wrong (James Shore, _Testing Without Mocks_, https://www.jamesshore.com/v2/projects/nullables/testing-without-mocks). A fake store is a stateful in-process implementation that obeys the same laws as the real one, not a mock with canned returns.
 
-1. **Shared In-Process Law Suite**: The contract suite lives outside `src/` as a `*.integration.test.ts` file (e.g. `tests/settlement-store.integration.test.ts`). It executes against both the in-memory fake (e.g. `Settlement.Memory.layer(seed)`) and the production adapter running on an embedded engine (e.g. `Settlement.Drizzle.layer` over PGlite).
-2. **Mandatory Algebraic Base Laws**: Every store's law suite must test and prove at least three properties:
-   - **Read-after-write**: Reading a key immediately following a successful save returns the value written.
-   - **Repeated read stability**: Repeating a read without intervening writes yields identical state and causes no mutations.
-   - **Commutativity of disjoint keys**: Operations addressing independent keys commute; their execution order does not affect final observed state.
-3. **Write Semantics**: A store supporting blind writes adds last-write-wins. A store providing conditional writes adds mutual exclusion: when two concurrent writes present the same observed version, exactly one applies and the other is rejected as a conflict.
-4. **Zero Subprocess Spawning**: The suite runs entirely in-process without spawning external database daemon processes or docker containers.
-5. **Fixed Interleavings for Concurrency**: Because embedded engines like PGlite serialize statements using a single-permit semaphore (`repos/effect/packages/sql/pglite/src/PgliteClient.ts`, line 213), concurrent laws must be asserted using fixed, deterministic interleavings rather than nondeterministic timing races:
-   - Two read operations issue proofs based on the same observed version.
-   - The first save succeeds and commits.
-   - The second save using the now-stale proof fails with a conflict.
-6. **Key and Proof Isolation**: The suite must prove that proofs issued for one key or entity are refused when presented on another key.
+1. **One suite, both adapters.** The suite lives outside `src/` as a `*.integration.test.ts` file (e.g. `tests/settlement-store.integration.test.ts`). It runs each history against the fake (e.g. `Settlement.Memory.layer(seed)`) and the real adapter on an embedded engine (e.g. `Settlement.Drizzle.layer(spec)` over PGlite). It uses fixed histories, not generated inputs, and spawns no processes.
+2. **Base laws, for every store:**
+   - read-after-write: a read after a successful save returns the value written;
+   - a repeated read changes nothing and returns the same value;
+   - operations on different keys commute: their order does not change the final state.
+
+   A store with blind writes adds last-write-wins.
+3. **Unit-of-work laws, for a store with a unit of work:**
+   - a unit of work that fails writes nothing, on both adapters;
+   - on the fake, concurrent units of work for one key leave the state some serial order would leave;
+   - on the real adapter, a serialization failure raised by the engine (SQLSTATE `40001`) re-runs the whole unit, and the unit commits once.
+
+   Never fake the engine's error in an adapter or fixture. Raise it from the engine, for example with a test-only trigger that raises `40001` while an arming row says so.
+4. **PGlite cannot race.** `@effect/sql-pglite` has one connection and holds a single-permit semaphore from `BEGIN` to commit (`repos/effect/packages/sql/pglite/src/PgliteClient.ts`, lines 212–224), so units on PGlite run one at a time. The suite proves atomicity and the retry path, never isolation. Real concurrency is proven by a race against a Postgres server, run by hand or by a dedicated job.
 
 ```ts
-// WRONG: a canned fake that never conflicts; every test above it passes a race the real store refuses
-const fakeSettlementStore = Layer.succeed(SettlementStore, {
-  readCredit: () => Effect.succeed(creditRead),
-  readAllStock: Effect.succeed(stockRead),
-  settle: () => Effect.succeed('Committed'),
-})
+// WRONG: a fake whose unitOfWork does not serialize. Two concurrent orders for one
+// customer with room for one are both granted, and every test above it passes a race
+// the real store refuses.
+const leakyUnitOfWork = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, UnitOfWork, { open: true })
 
-// RIGHT: one history, run against both adapters
-const twoSettlesOnOneVersion = Effect.gen(function*() {
+// RIGHT: one history, run against both adapters. The fake runs units one at a time
+// on a staged copy of its state, so a failed unit writes nothing.
+const twoOrdersWithRoomForOne = Effect.gen(function*() {
   const store = yield* SettlementStore
-  const first = yield* store.readCredit('customer-1')
-  const second = yield* store.readCredit('customer-1')
-  const stock = yield* store.readAllStock
-  return [
-    yield* store.settle(commandFor('order-1', first.proof, stock.proof)),
-    yield* store.settle(commandFor('order-2', second.proof, stock.proof)),
-  ]
+  yield* Effect.all([placeOrder(store, 'order-1'), placeOrder(store, 'order-2')], { concurrency: 2 })
+  return yield* store.unitOfWork(store.load(customerKey))
 })
-// expected: ['Committed', 'Conflict'] for Settlement.Memory.layer(seed) and Settlement.Drizzle.layer over PGlite
+// expected: exactly one charge, for Settlement.Memory.layer(seed) and Settlement.Drizzle.layer(spec) over PGlite
 ```
 
-Gate: `review` — verify that any port managing shared state across interactions defines formal consistency guarantees and runs against a shared law contract suite in `tests/` passing on both in-memory fakes and production database adapters, asserting base laws (read-after-write, stability, commutativity) and deterministic concurrent interleavings.
+Gate: `review` — verify that every store ships one `*.integration.test.ts` law suite that its fake and its real adapter both pass, covering the base laws and, for a store with a unit of work, the three unit-of-work laws, with serialization failures raised by the engine and real concurrency left to a race against a Postgres server.

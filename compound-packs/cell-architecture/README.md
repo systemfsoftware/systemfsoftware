@@ -16,5 +16,5 @@ Rules in this pack govern:
 - Staged lawful builders and resource-vs-handle duality.
 - Handle state privacy and pipeable dual parity.
 - Single primary namespace barrels.
-- Re-checking observed invariant values at a single atomic commit point (`store-recheck-at-one-commit`).
-- Compile-time safety for conditional writes via store-issued proofs (`store-issued-proofs`).
+- Running a read-decide-save that protects a non-confluent invariant inside one serializable unit of work, retried whole on a serialization failure (`store-serializable-unit-of-work`).
+- Compile-time enforcement that a store's reads and saves run inside its unit of work (`store-unit-of-work-in-requirements`).
