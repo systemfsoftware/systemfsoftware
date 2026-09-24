@@ -66,7 +66,7 @@ On this code even a perfect mutation score would prove nothing. Deleting a lock 
 - **The kernel owns every clock and every in-process wakeup.** Microtasks and Promises that settle inside the process are kernel work: they run between steps, and a fiber they wake becomes one more scheduling choice. The kernel also supplies the clock the test clock treats as live, so no in-process wait reaches a real timer. A second prototype found that settling Promises only when no fiber could run never reached the one outcome Effect's default scheduler always produced. It also found that memfs reports watch events through `queueMicrotask`, and that every `TestClock` sleep starts a live one-second warning timer. (session-settled: user-directed — "state of the art"; chosen over settling Promises only when no fiber can run, and over exempting TestClock's warning timer by call site.) Governs R2, R36.
 - **Test time moves only when nothing can run.** `TestClock.adjust` and `setTime` suspend the caller; the kernel then fires due sleeps in timestamp order and lets everything they wake run to a stop before the next one, the way simulators and Tokio's paused clock auto-advance only once the runtime is idle. Effect's own `TestClock` opens each due sleep and yields once, which is only enough under its FIFO dispatcher: on randomized schedules the supervisor, readiness, and poll-worker scenarios failed because a worker had not yet registered its sleep when time moved. With the kernel's clock none of them failed in 100 runs each. (session-settled: user-directed — "state of the art"; chosen over keeping Effect's `TestClock` under the kernel.) Governs R2, R37.
 - **Suites run on the kernel under one deterministic schedule plus seeded randomized schedules; bounded exhaustive search is for conformance checks.** Randomized schedulers with probabilistic guarantees (PCT) scale to whole test suites, and exhaustive search suits small targets. In the second prototype, searching every schedule with at most two preemptions took about 2 s for a one-fiber scenario, and 30 of 36 real scenarios exhausted a 10 s budget. The harness's own environment is built before exploration starts, because @effect/vitest's two test layers alone produced 7,024 schedules for an empty test. (session-settled: user-directed — "state of the art"; chosen over bounded exhaustive search of every scenario on each change, and over leaving suites on Effect's default scheduler.) Governs R15, R16.
-- **Conformance adoption is enforced by a repo guard, not by review.** (session-settled: user-approved — chosen over leaving R29's inventory as a document.) Governs R29.
+- **Conformance adoption is enforced by a gate, not by review, and measured rather than declared.** Each package's test run recomputes its concurrency-primitive sites from source and fails when one never executes under a conformance check. (session-settled: user-approved — chosen over leaving R29's inventory as a document; user-directed — measured inside vitest, chosen over a hand-kept inventory file.) Governs R29.
 - **Releases need a fresh green nightly.** A release with no recent nightly has no evidence at the nightly bound. (session-settled: user-approved — chosen over letting publishing pass until the first nightly exists.) Governs R31.
 - **memfs is checked through a pure filesystem model that is itself checked against a real filesystem.** Replaying every candidate order on a real temporary directory is far slower than checking against a model. (session-settled: user-approved — chosen over replaying candidate orders on a real temporary directory.) Governs R24.
 
@@ -145,7 +145,7 @@ flowchart TB
 - R25. Probe resources in `effect-readiness` are checked with the release check.
 - R26. `effect-microsandbox` VM lifecycle release is checked against the real host at generated interruption points, and a refused sandbox start is reported as a failure and never as success. Both run in an existing end-to-end journey outside the in-process test lane.
 - R27. Existing scenarios whose claim a conformance check now covers are deleted, not kept alongside it, including the hand-ordered `Effect.yieldNow` cases in `lock-primitive-contract.integration.test.ts`. Scenarios that stay establish what their `Given` claims with a signal, not `yieldNow`: the "held lock" and "contention" lock scenarios and the two leader-election scenarios whose holder fiber must hold the lock first fail on randomized schedules today and pass all of them once the holder signals that it holds the lock.
-- R29. Every package whose production source forks fibers, holds `Queue`, `Deferred`, `Ref`, or `Semaphore` state, or acquires scoped resources is inventoried, including which shared primitives it uses, and each adopts the check that fits it. A repo guard fails when such a package is missing from the inventory, or when an inventoried package has no conformance test. R21-R26 are the packages identified by name.
+- R29. Every concurrency-primitive site in a package's production source (a fiber fork, `Queue`, `Deferred`, `Ref`, or `Semaphore` state, a scoped acquisition) executes under a conformance check in that package's test run, and the run fails when one does not. The checkers and the packages they run on are judged by whether their own tests run each site. A repo guard fails when a package holding such a site does not run that gate. R21-R26 are the packages identified by name.
 
 **Scale**
 
@@ -282,7 +282,7 @@ This plan was reviewed under the Substitution lens: replacing "extend `different
 - KTD10. **Conformance checks get their own lane, `.conformance.test.ts`, enforced by a new `conformance-test-requires-harness` rule.** A new suffix needs its own enforcing rule; extending the differential lane would make a lane mean two harnesses. Governs R18.
 - KTD11. **`effect-spec-runtime` owns the kernel case runner, so Gherkin and trace-spec move together.** A case's live declaration becomes a required reason string instead of the `liveClock` boolean, and the run report lists every live case. Governs R15, R16.
 - KTD12. **The time-source rule lives in `oxlint-plugin-effect-platform` as `no-unported-time-source`, with a `ports` option listing the files allowed to touch time, randomness, and task scheduling.** It flags `Date.now`, argument-less `new Date()`, `performance.now`, `process.hrtime`, `Math.random`, `crypto.getRandomValues`, `crypto.randomUUID`, `setTimeout`, `setInterval`, `setImmediate`, and static or dynamic imports of `node:timers`. It does not flag `queueMicrotask` (R2). The rule must see guard-local dynamic imports (`docs/solutions/integration-issues/dynamic-import-blinds-static-provenance-rules.md`). Governs R19, R20.
-- KTD13. **The adoption inventory is a data file read by an Evaluator guard, `scripts/guards/check-conformance-inventory.ts`, wired into `guard:projects`.** The guard derives the package set from source (the R29 predicate), compares it with `scripts/guards/conformance-inventory.json`, and requires a `.conformance.test.ts` in each inventoried package, or a smoke-journey entry for R26. Governs R29.
+- KTD13. **Adoption is measured inside every vitest run, not declared.** `@systemfsoftware/vitest-config`'s `defineConfig` adds a conformance-coverage plugin to every package config. It recomputes each concurrency-primitive site in the run's `coverage.include` from source, records which sites execute while a checker (`conformance-spec`, `differential-spec`) drives a program through `Kernel.run`/`Kernel.search`, and fails the run when any site never did. The checkers and the workspace packages they run on are judged by whether their own tests ran each site. `scripts/guards/check-conformance-enrollment.ts` (in `guard:projects`) fails when a package with a primitive in its source does not run vitest through that `defineConfig`. Governs R29.
 - KTD14. **The nightly run is `.github/workflows/nightly-conformance.yml`, and `release.yml` gains a gate job that reads the latest nightly run on main through the GitHub API.** A manual `workflow_dispatch` on the nightly workflow covers the first run. Governs R28, R31.
 - KTD15. **effect-memfs exposes watch readiness as a scoped operation that completes only after the OS watcher is registered and returns the event stream.** A scoped acquisition gives a consumer the exact moment without polling, and its release closes the watcher. Governs R24.
 - KTD16. **effect-daemon-spec publishes the `LockPrimitive` conformance suite at a `./testing` subpath, with `conformance-spec` as an optional peer dependency.** Production importers of the root entry pull in no test code. Governs R21.
@@ -359,29 +359,29 @@ Released.check(name, { program: Effect<A, E, Scope>, probe: Effect<void, ProbeFa
 
 ## Implementation Units
 
-| U-ID | Title                                                          | Key files                                                               | Depends on                             |
-| ---- | -------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------- |
-| U1   | Patch Effect's `Queue` lost wakeup                             | `package.json`, `patches/effect@4.0.0-rc.116.patch`                     | U5                                     |
-| U2   | Kernel core: scheduler, step loop, replay                      | `packages/effect-sim-kernel/src/`                                       | —                                      |
-| U3   | Kernel clocks                                                  | `packages/effect-sim-kernel/src/KernelClock.ts`, `KernelTestClock.ts`   | U2                                     |
-| U4   | Schedule search, PCT, pruning, shrinking                       | `packages/effect-sim-kernel/src/Search.ts`, `Pct.ts`, `Shrink.ts`       | U2                                     |
-| U5   | Kernel self-tests and Effect regression cases                  | `packages/effect-sim-kernel/tests/`                                     | U2, U3, U4                             |
-| U6   | Linearizability check and history recording                    | `packages/conformance-spec/src/Linearizable.ts`                         | U4, U9                                 |
-| U7   | Sequential model check                                         | `packages/conformance-spec/src/SequentialModel.ts`                      | U6                                     |
-| U8   | Interruption-release check                                     | `packages/conformance-spec/src/Released.ts`                             | U4, U9                                 |
-| U9   | Conformance test lane and lint acceptance                      | `packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/`       | —                                      |
-| U10  | Gherkin and trace-spec cases on the kernel                     | `packages/effect-spec-runtime/src/`, `packages/trace-spec/src/Suite.ts` | U3, U4                                 |
-| U11  | Differential and Metamorphic on the kernel, caller-named tests | `packages/differential-spec/src/`                                       | U4                                     |
-| U12  | Every existing suite passes on the kernel                      | suites under `packages/*/tests/`                                        | U10, U14, U16                          |
-| U13  | Time-source port rule                                          | `packages/oxlint-plugin/oxlint-plugin-effect-platform/src/rules/`       | —                                      |
-| U14  | Lock conformance in effect-daemon-spec                         | `packages/effect-daemon-spec/`                                          | U6, U8, U9                             |
-| U15  | Registry and `AtomRef.Collection` conformance                  | `packages/atom/effect-atom/tests/`                                      | U6, U7, U9                             |
-| U16  | effect-memfs model, watch readiness, conformance               | `packages/effect-memfs/`                                                | U6, U7, U8, U9                         |
-| U17  | effect-readiness release check                                 | `packages/effect-readiness/tests/`                                      | U8, U9                                 |
-| U18  | microsandbox VM release journey                                | `packages/effect-microsandbox/examples/`                                | U4                                     |
-| U19  | Conformance inventory guard and remaining adopters             | `scripts/guards/`, remaining packages                                   | U14-U18                                |
-| U20  | Nightly conformance workflow and release gate                  | `.github/workflows/`                                                    | U10, U19                               |
-| U21  | Planted concurrency faults gate                                | `.github/workflows/mutation.yml`, adopters' Stryker configs             | U19; blocked on `stryker-js-effect#83` |
+| U-ID | Title                                                          | Key files                                                                  | Depends on                             |
+| ---- | -------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------- |
+| U1   | Patch Effect's `Queue` lost wakeup                             | `package.json`, `patches/effect@4.0.0-rc.116.patch`                        | U5                                     |
+| U2   | Kernel core: scheduler, step loop, replay                      | `packages/effect-sim-kernel/src/`                                          | —                                      |
+| U3   | Kernel clocks                                                  | `packages/effect-sim-kernel/src/KernelClock.ts`, `KernelTestClock.ts`      | U2                                     |
+| U4   | Schedule search, PCT, pruning, shrinking                       | `packages/effect-sim-kernel/src/Search.ts`, `Pct.ts`, `Shrink.ts`          | U2                                     |
+| U5   | Kernel self-tests and Effect regression cases                  | `packages/effect-sim-kernel/tests/`                                        | U2, U3, U4                             |
+| U6   | Linearizability check and history recording                    | `packages/conformance-spec/src/Linearizable.ts`                            | U4, U9                                 |
+| U7   | Sequential model check                                         | `packages/conformance-spec/src/SequentialModel.ts`                         | U6                                     |
+| U8   | Interruption-release check                                     | `packages/conformance-spec/src/Released.ts`                                | U4, U9                                 |
+| U9   | Conformance test lane and lint acceptance                      | `packages/oxlint-plugin/oxlint-plugin-test-discipline/src/rules/`          | —                                      |
+| U10  | Gherkin and trace-spec cases on the kernel                     | `packages/effect-spec-runtime/src/`, `packages/trace-spec/src/Suite.ts`    | U3, U4                                 |
+| U11  | Differential and Metamorphic on the kernel, caller-named tests | `packages/differential-spec/src/`                                          | U4                                     |
+| U12  | Every existing suite passes on the kernel                      | suites under `packages/*/tests/`                                           | U10, U14, U16                          |
+| U13  | Time-source port rule                                          | `packages/oxlint-plugin/oxlint-plugin-effect-platform/src/rules/`          | —                                      |
+| U14  | Lock conformance in effect-daemon-spec                         | `packages/effect-daemon-spec/`                                             | U6, U8, U9                             |
+| U15  | Registry and `AtomRef.Collection` conformance                  | `packages/atom/effect-atom/tests/`                                         | U6, U7, U9                             |
+| U16  | effect-memfs model, watch readiness, conformance               | `packages/effect-memfs/`                                                   | U6, U7, U8, U9                         |
+| U17  | effect-readiness release check                                 | `packages/effect-readiness/tests/`                                         | U8, U9                                 |
+| U18  | microsandbox VM release journey                                | `packages/effect-microsandbox/examples/`                                   | U4                                     |
+| U19  | Conformance coverage gate and remaining adopters               | `packages/toolchain/vitest-config/`, `scripts/guards/`, remaining packages | U14-U18                                |
+| U20  | Nightly conformance workflow and release gate                  | `.github/workflows/`                                                       | U10, U19                               |
+| U21  | Planted concurrency faults gate                                | `.github/workflows/mutation.yml`, adopters' Stryker configs                | U19; blocked on `stryker-js-effect#83` |
 
 ### U1. Patch Effect's `Queue` lost wakeup
 
@@ -663,20 +663,20 @@ Released.check(name, { program: Effect<A, E, Scope>, probe: Effect<void, ProbeFa
   - A sandbox start refused by the plan fails the journey with the refusal, never passes it.
 - **Verification:** The smoke job passes in CI; it does not run in the in-process test lane.
 
-### U19. Conformance inventory guard and remaining adopters
+### U19. Conformance coverage gate and remaining adopters
 
-- **Goal:** A guard fails when a package that owns concurrent or stateful behaviour is not inventoried or has no conformance test, and every inventoried package passes.
+- **Goal:** A package's test run fails when a concurrency-primitive site in its source never executes under a conformance check, and every package passes.
 - **Requirements:** R29. KTD13.
 - **Dependencies:** U14, U15, U16, U17, U18.
-- **Files:** `scripts/guards/check-conformance-inventory.ts`, `scripts/guards/conformance-inventory.json`, the root `guard:projects` script, and one `.conformance.test.ts` per remaining inventoried package (effect-cell-types, rx-effect, storybook-gherkin, trace-spec, and any the guard adds).
-- **Approach:** The guard lands first, in its own commit, observed red on the current tree; the remaining adopters then turn it green. Each entry names the primitives the package uses and the check that fits it.
+- **Files:** `packages/toolchain/vitest-config/lib/conformance-*.js`, `scripts/guards/check-conformance-enrollment.ts`, the root `guard:projects` script, and the `.conformance.test.ts` files that cover each uncovered site.
+- **Approach:** The gate lands first, in its own commit, observed red on the current tree; the adopters then turn it green by adding checks that fail on a planted fault at the sites they cover.
 - **Test scenarios:**
-  - The guard's selftest fails for a package that forks fibers and is missing from the inventory.
-  - It fails for an inventoried package with no `.conformance.test.ts` and no smoke-journey entry.
-  - It passes on the finished tree.
-  - rx-effect's `fromObservable` interrupted at each step leaves no subscription open.
-  - effect-cell-types' sandwich interrupted at each step records a settled result class.
-- **Verification:** `pnpm guard:projects` passes; each new conformance file passes.
+  - A site that runs only in integration tests is reported with the test that ran it.
+  - A site no test runs is reported as never run.
+  - Instrumentation adds no Effect operation: kernel step and operation counts are unchanged.
+  - A vitest started by a test is neither instrumented nor judged.
+  - rx-effect's `fromObservable` interrupted at each step leaves no subscription open, on the value, error, and completion paths.
+- **Verification:** every package's `vitest run` reports all sites exercised; `pnpm guard:projects` passes.
 
 ### U20. Nightly conformance workflow and release gate
 
