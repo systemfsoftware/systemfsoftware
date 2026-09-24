@@ -1,5 +1,8 @@
 import { dual } from 'effect/Function'
 import {
+  ascendingOf,
+  distinctSorted,
+  keyOf,
   type World,
   type WorldJudgeReply,
   type WorldPairLabel,
@@ -7,20 +10,20 @@ import {
   type WorldVerdict,
 } from './pack-eval-world.fixture.js'
 
-export type OracleSplit = WorldTaskSplit
+type OracleSplit = WorldTaskSplit
 
-export type RuleVerdictTag = 'scored' | 'insufficient-evidence' | 'unlabelled'
+type RuleVerdictTag = 'scored' | 'insufficient-evidence' | 'unlabelled'
 
-export interface OracleEvidenceFloor {
+interface OracleEvidenceFloor {
   readonly positives: number
   readonly negatives: number
 }
 
 export const defaultEvidenceFloor: OracleEvidenceFloor = { positives: 3, negatives: 3 }
 
-export const defaultJudgeMinimum = 0.8
+const defaultJudgeMinimum = 0.8
 
-export interface OracleOptions {
+interface OracleOptions {
   readonly evidenceFloor?: OracleEvidenceFloor | undefined
   readonly judgeMinimum?: number | undefined
   readonly judgeModelPresent?: boolean | undefined
@@ -28,7 +31,7 @@ export interface OracleOptions {
   readonly seed?: number | undefined
 }
 
-export interface OracleRuleCounts {
+interface OracleRuleCounts {
   readonly packId: string
   readonly rule: string
   readonly split: OracleSplit
@@ -38,14 +41,14 @@ export interface OracleRuleCounts {
   readonly tn: number
 }
 
-export interface OracleRuleVerdict {
+interface OracleRuleVerdict {
   readonly packId: string
   readonly rule: string
   readonly split: OracleSplit
   readonly tag: RuleVerdictTag
 }
 
-export interface OraclePointEstimate {
+interface OraclePointEstimate {
   readonly packId: string
   readonly rule: string
   readonly split: OracleSplit
@@ -53,47 +56,40 @@ export interface OraclePointEstimate {
   readonly tnr: number
 }
 
-export interface OracleWitnessedPair {
+interface OracleWitnessedPair {
   readonly packId: string
   readonly ruleA: string
   readonly ruleB: string
   readonly taskIds: ReadonlyArray<string>
 }
 
-export interface OracleUnwitnessedPair {
-  readonly packId: string
-  readonly ruleA: string
-  readonly ruleB: string
-  readonly pairLabelId: string
-}
+type JudgeValidityTag = 'validated' | 'unvalidated' | 'refused' | 'not-applicable'
 
-export type JudgeValidityTag = 'validated' | 'unvalidated' | 'refused' | 'not-applicable'
-
-export interface OracleJudgeValidity {
+interface OracleJudgeValidity {
   readonly tag: JudgeValidityTag
   readonly tpr: number | undefined
   readonly tnr: number | undefined
   readonly reason: string | undefined
 }
 
-export type OracleCorrectedRate =
+type OracleCorrectedRate =
   | Readonly<{ readonly tag: 'reported'; readonly rate: number }>
   | Readonly<{ readonly tag: 'not-applicable'; readonly reason: string }>
 
-export type RunOutcome = 'clean' | 'witnessed-contradiction' | 'refused'
+type RunOutcome = 'clean' | 'witnessed-contradiction' | 'refused'
 
-export interface OracleRunOutcome {
+interface OracleRunOutcome {
   readonly outcome: RunOutcome
   readonly exitCode: 0 | 1 | 2
   readonly reason: string | undefined
 }
 
-export interface OracleSelectorQuestion {
+interface OracleSelectorQuestion {
   readonly taskId: string
   readonly packId: string
 }
 
-export interface OracleJudgeQuestion {
+interface OracleJudgeQuestion {
   readonly packId: string
   readonly taskId: string
   readonly ruleA: string
@@ -107,10 +103,6 @@ export interface OracleQuestions {
 
 const splits: ReadonlyArray<OracleSplit> = ['dev', 'test']
 
-const ascendingOf = (left: string, right: string): number => Number(left > right) - Number(left < right)
-
-const keyOf = (...parts: ReadonlyArray<string>): string => parts.join('\u0000')
-
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
 const floorOf = (options: OracleOptions): OracleEvidenceFloor => options.evidenceFloor ?? defaultEvidenceFloor
@@ -121,9 +113,6 @@ const judgePresent = (options: OracleOptions): boolean => options.judgeModelPres
 
 const heldStemsOf = (world: World, packId: string): ReadonlySet<string> =>
   new Set((world.packs.find((pack) => pack.id === packId)?.rules ?? []).map((rule) => rule.stem))
-
-const distinctSorted = (values: ReadonlyArray<string>): ReadonlyArray<string> =>
-  [...new Set(values)].toSorted(ascendingOf)
 
 interface OracleRefusal {
   readonly detail: string
@@ -359,21 +348,6 @@ export const oracleWitnessedPairs = (world: World): ReadonlyArray<OracleWitnesse
     )
   })
 
-export const oracleUnwitnessedPairs = (world: World): ReadonlyArray<OracleUnwitnessedPair> => {
-  const witnessed = new Set(
-    oracleWitnessedPairs(world).map((pair) => keyOf(pair.packId, pair.ruleA, pair.ruleB)),
-  )
-  return world.pairLabels
-    .filter((label) => !witnessed.has(keyOf(label.packId, label.ruleA, label.ruleB)))
-    .map((label) => ({ packId: label.packId, ruleA: label.ruleA, ruleB: label.ruleB, pairLabelId: label.id }))
-    .toSorted((left, right) =>
-      ascendingOf(
-        keyOf(left.packId, left.ruleA, left.ruleB, left.pairLabelId),
-        keyOf(right.packId, right.ruleA, right.ruleB, right.pairLabelId),
-      )
-    )
-}
-
 const judgeReplyOf = (
   world: World,
   packId: string,
@@ -542,11 +516,6 @@ const judgeQuestionsImpl = (world: World, options: OracleOptions): ReadonlyArray
     return previous === undefined || judgeComparator(previous, question) !== 0
   })
 }
-
-export const oracleJudgeQuestions: {
-  (options: OracleOptions): (world: World) => ReadonlyArray<OracleJudgeQuestion>
-  (world: World, options: OracleOptions): ReadonlyArray<OracleJudgeQuestion>
-} = dual(2, judgeQuestionsImpl)
 
 const questionsImpl = (world: World, options: OracleOptions): OracleQuestions => {
   if (admissionRefusal(world) !== undefined) return { selector: [], judge: [] }

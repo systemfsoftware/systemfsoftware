@@ -1,14 +1,11 @@
 import { PackEval } from '@systemfsoftware/pack-eval'
-import { Effect, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
+import { Console, Effect, HashMap, Layer, Option, Ref, Result, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { dual } from 'effect/Function'
 import * as Path from 'effect/Path'
-import {
-  type World,
-  type WorldJudgeReply,
-  type WorldRuleFile,
-  type WorldSelectorReply,
-} from './pack-eval-world.fixture.js'
+import { writeDatasetFilesOf } from './pack-eval-dataset.fixture.js'
+import { ruleTextOf, type World, type WorldJudgeReply, type WorldSelectorReply } from './pack-eval-world.fixture.js'
+import { recordingConsoleOf } from './recording-console.fixture.js'
 
 /**
  * Runs the real `EvaluatePacks` cell for a world with no disk and no network.
@@ -24,7 +21,7 @@ import {
  *
  * R9/R20 are observed from the cell: the exit code and the report written into
  * the in-memory filesystem, plus the selector and judge questions the doubles
- * recorded.
+ * recorded and the card the run wrote to its recording console.
  */
 
 export interface SelectorQuestion {
@@ -45,9 +42,10 @@ export interface InMemoryRun {
   readonly refusal: PackEval.DatasetFileRefusal | undefined
   readonly selectorQuestions: ReadonlyArray<SelectorQuestion>
   readonly judgeQuestions: ReadonlyArray<JudgeQuestion>
+  readonly card: string
 }
 
-export interface InMemoryOptions {
+interface InMemoryOptions {
   readonly seed?: number | undefined
   readonly iterations?: number | undefined
   readonly confidence?: number | undefined
@@ -64,14 +62,14 @@ const defaultJudgeMinimum = 0.8
 
 const baseDir = '/world'
 
-export interface WorldLayout {
+interface WorldLayout {
   readonly base: string
   readonly datasetDir: string
   readonly reportPath: string
   readonly packDirs: ReadonlyArray<string>
 }
 
-export const layoutOf = (world: World): WorldLayout => {
+const layoutOf = (world: World): WorldLayout => {
   const packDirs = world.packs.map((pack) => `${baseDir}/packs/${pack.id}`)
   return {
     base: baseDir,
@@ -80,20 +78,6 @@ export const layoutOf = (world: World): WorldLayout => {
     packDirs,
   }
 }
-
-const ruleTextOf = (rule: WorldRuleFile): string =>
-  rule.malformed === true
-    ? 'not frontmatter at all\n'
-    : [
-      '---',
-      `title: ${rule.title}`,
-      `applies_when: [${rule.appliesWhen.join(', ')}]`,
-      `tags: [${rule.tags.join(', ')}]`,
-      '---',
-      '',
-      rule.body,
-      '',
-    ].join('\n')
 
 const selectorReplyOf = (
   world: World,
@@ -116,72 +100,6 @@ const judgeReplyOf = (
     entry.question.ruleB === ruleB
   )
 
-const instructionOf = (world: World): PackEval.SelectorInstruction | undefined => {
-  const instruction = world.instruction
-  return instruction === undefined
-    ? undefined
-    : new PackEval.SelectorInstruction({
-      text: instruction.text,
-      provenance: new PackEval.SelectorProvenance({
-        consumer: instruction.consumer,
-        pluginVersion: instruction.pluginVersion,
-        sourcePath: instruction.sourcePath,
-      }),
-    })
-}
-
-const judgePromptOf = (world: World): PackEval.JudgePrompt | undefined => {
-  const prompt = world.judgePrompt
-  return prompt === undefined
-    ? undefined
-    : new PackEval.JudgePrompt({
-      criterion: prompt.criterion,
-      passDefinition: prompt.passDefinition,
-      failDefinition: prompt.failDefinition,
-      fewShotPairIds: prompt.fewShotPairIds,
-    })
-}
-
-const taskSetOf = (world: World): PackEval.TaskSet =>
-  new PackEval.TaskSet({
-    version: 1,
-    tasks: world.tasks.map((task) =>
-      new PackEval.Task({ id: task.id, text: task.text, split: task.split, dimensions: task.dimensions })
-    ),
-  })
-
-const routingLabelsOf = (world: World): PackEval.RoutingLabels =>
-  new PackEval.RoutingLabels({
-    version: 1,
-    entries: world.routingLabels.map((entry) =>
-      new PackEval.RoutingLabelEntry({
-        taskId: entry.taskId,
-        packId: entry.packId,
-        governing: entry.governing,
-        deferred: entry.deferred,
-      })
-    ),
-  })
-
-const pairLabelsOf = (world: World): PackEval.PairLabels =>
-  new PackEval.PairLabels({
-    version: 1,
-    entries: world.pairLabels.map((label) =>
-      new PackEval.PairLabel({
-        id: label.id,
-        taskId: label.taskId,
-        packId: label.packId,
-        ruleA: label.ruleA,
-        ruleB: label.ruleB,
-        split: label.split,
-        verdict: label.verdict,
-        origin: label.origin,
-        notes: label.notes,
-        ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
-      })
-    ),
-  })
-
 const writeWorld = (world: World, layout: WorldLayout) =>
   Effect.gen(function*() {
     const fileSystem = yield* FileSystem.FileSystem
@@ -201,37 +119,7 @@ const writeWorld = (world: World, layout: WorldLayout) =>
       { discard: true },
     )
 
-    const instruction = instructionOf(world)
-    if (instruction !== undefined) {
-      yield* PackEval.DatasetFiles.writeJson(
-        paths.join(layout.datasetDir, 'selector-instruction.json'),
-        PackEval.SelectorInstruction,
-        instruction,
-      )
-    }
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(layout.datasetDir, 'tasks.json'),
-      PackEval.TaskSet,
-      taskSetOf(world),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(layout.datasetDir, 'routing-labels.json'),
-      PackEval.RoutingLabels,
-      routingLabelsOf(world),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(layout.datasetDir, 'pair-labels.json'),
-      PackEval.PairLabels,
-      pairLabelsOf(world),
-    )
-    const judgePrompt = judgePromptOf(world)
-    if (judgePrompt !== undefined) {
-      yield* PackEval.DatasetFiles.writeJson(
-        paths.join(layout.datasetDir, 'judge-prompt.json'),
-        PackEval.JudgePrompt,
-        judgePrompt,
-      )
-    }
+    yield* writeDatasetFilesOf({ world, datasetDir: layout.datasetDir })
   })
 
 const loadedStemsJson = Schema.fromJsonString(PackEval.LoadedStems)
@@ -367,9 +255,11 @@ const runInMemoryImpl = (world: World, options?: InMemoryOptions): Effect.Effect
     const ioLayer = Layer.merge(fileSystem, Path.layer)
     const selectorQuestions = yield* Ref.make<ReadonlyArray<SelectorQuestion>>([])
     const judgeQuestions = yield* Ref.make<ReadonlyArray<JudgeQuestion>>([])
+    const lines: Array<string> = []
     const serviceLayer = Layer.mergeAll(
       Layer.succeed(PackEval.RuleSelector, selectorShape(world, selectorQuestions)),
       Layer.succeed(PackEval.ContradictionJudge, judgeShape(world, judgeQuestions)),
+      Layer.succeed(Console.Console, recordingConsoleOf(lines)),
     )
     const layer = Layer.mergeAll(ioLayer, serviceLayer)
 
@@ -385,6 +275,7 @@ const runInMemoryImpl = (world: World, options?: InMemoryOptions): Effect.Effect
       refusal: Result.isFailure(outcome) ? outcome.failure : undefined,
       selectorQuestions: yield* Ref.get(selectorQuestions),
       judgeQuestions: yield* Ref.get(judgeQuestions),
+      card: lines.join('\n'),
     } satisfies InMemoryRun
   })
 

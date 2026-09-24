@@ -64,8 +64,8 @@ export const refusalKinds: ReadonlyArray<RefusalKind> = [
 export type WorldTaskSplit = 'dev' | 'test'
 export type WorldPairSplit = 'train' | 'dev' | 'test'
 export type WorldVerdict = 'Pass' | 'Fail'
-export type WorldPairOrigin = 'observed' | 'planted'
-export type WorldProviderRole = 'selector' | 'judge' | 'generator'
+type WorldPairOrigin = 'observed' | 'planted'
+type WorldProviderRole = 'selector' | 'judge' | 'generator'
 
 /** A rule file as the pack directory holds it. */
 export interface WorldRuleFile {
@@ -139,7 +139,7 @@ export interface WorldDimension {
 }
 
 /** The discovery dimensions file: the dimensions the owner wrote, or raw text. */
-export type WorldDimensions =
+type WorldDimensions =
   | Readonly<{
     readonly kind: 'described'
     readonly application: string
@@ -148,14 +148,14 @@ export type WorldDimensions =
   }>
   | Readonly<{ readonly kind: 'raw'; readonly text: string }>
 
-export interface WorldCandidate {
+interface WorldCandidate {
   readonly id: string
   readonly text: string
   readonly dimensions: WorldTuple
 }
 
 /** A recorded selection run, as the work directory holds it. */
-export interface WorldTrace {
+interface WorldTrace {
   readonly taskId: string
   readonly packId: string
   readonly loadedStems: ReadonlyArray<string>
@@ -166,12 +166,12 @@ export interface WorldTrace {
 }
 
 /** A file inside the fingerprint checkout, at a path relative to its base. */
-export interface WorldCheckoutFile {
+interface WorldCheckoutFile {
   readonly path: string
   readonly content: string
 }
 
-export interface WorldCheckout {
+interface WorldCheckout {
   readonly codeFiles: ReadonlyArray<WorldCheckoutFile>
   readonly lockfileText: string
   /** Files written beside the inputs; the fingerprint never digests them. */
@@ -181,11 +181,6 @@ export interface WorldCheckout {
 export interface WorldProviderRefusal {
   readonly status: number
   readonly message: string
-}
-
-export interface WorldSelectorQuestion {
-  readonly taskId: string
-  readonly packId: string
 }
 
 export type WorldSelectorReply =
@@ -229,7 +224,7 @@ export type WorldJudgeReply =
 
 export type WorldGeneratorTaskReply = Readonly<{ readonly tuple: WorldTuple; readonly text: string }>
 
-export type WorldGeneratorReply =
+type WorldGeneratorReply =
   | Readonly<{
     readonly kind: 'proposed'
     readonly proposedTuples: ReadonlyArray<WorldTuple>
@@ -238,7 +233,7 @@ export type WorldGeneratorReply =
   | Readonly<{ readonly kind: 'refused'; readonly refusal: WorldProviderRefusal }>
 
 /** The scripted answers, one list per provider role. */
-export interface WorldAnswers {
+interface WorldAnswers {
   readonly selector: ReadonlyArray<WorldSelectorReply>
   readonly judge: ReadonlyArray<WorldJudgeReply>
   readonly generator: WorldGeneratorReply
@@ -262,14 +257,29 @@ export interface World {
 /** The typed fields a builder or a check may override on a world. */
 export type WorldOverrides = Readonly<Partial<World>>
 
-const ascendingOf = (left: string, right: string): number => Number(left > right) - Number(left < right)
+const ascendingOfImpl = (left: string, right: string): number => Number(left > right) - Number(left < right)
+
+/** Ascending string order, for `Array.prototype.toSorted`. */
+export const ascendingOf: {
+  (right: string): (left: string) => number
+  (left: string, right: string): number
+} = dual(2, ascendingOfImpl)
+
+/**
+ * The key-join the suite compares keys with: the separator is the escape
+ * `'\u0000'`, never a literal NUL byte, so no key can be split by a world
+ * string that holds a NUL.
+ */
+export const keyOf = (...parts: ReadonlyArray<string>): string => parts.join('\u0000')
+
+/** Distinct strings, ascending. */
+export const distinctSorted = (values: ReadonlyArray<string>): ReadonlyArray<string> =>
+  [...new Set(values)].toSorted(ascendingOf)
 
 const headOf = <T>(values: ReadonlyArray<T>, fallback: T): T => values.find(() => true) ?? fallback
 
-const distinctOf = (values: ReadonlyArray<string>): ReadonlyArray<string> => [...new Set(values)]
-
 export const stemPairsOf = (pack: WorldPack): ReadonlyArray<readonly [string, string]> => {
-  const stems = distinctOf(pack.rules.map((rule) => rule.stem)).toSorted(ascendingOf)
+  const stems = distinctSorted(pack.rules.map((rule) => rule.stem))
   return stems.flatMap((ruleA, index) => stems.slice(index + 1).map((ruleB) => [ruleA, ruleB] as const))
 }
 
@@ -284,7 +294,7 @@ const governsBothOf = (world: World, packId: string, taskId: string, ruleA: stri
   return governed.includes(ruleA) && governed.includes(ruleB)
 }
 
-export interface WorldWitnessedPair {
+interface WorldWitnessedPair {
   readonly packId: string
   readonly ruleA: string
   readonly ruleB: string
@@ -306,23 +316,14 @@ export const witnessedPairsOf = (world: World): ReadonlyArray<WorldWitnessedPair
     })
   )
 
-/** The share of (task, pack) cells the routing labels cover, from 0 to 1. */
-export const routingLabelDensityOf = (world: World): number => {
-  const cells = world.tasks.length * world.packs.length
-  if (cells === 0) return 0
-  const covered = new Set(world.routingLabels.map((entry) => `${entry.taskId}\u0000${entry.packId}`)).size
-  return covered / cells
-}
-
 /** The world's own strings a provider request may carry (KTD7). */
-export const matchableStringsOf = (world: World): ReadonlyArray<string> => [
+const matchableStringsOf = (world: World): ReadonlyArray<string> => [
   ...world.tasks.map((task) => task.text),
   ...world.packs.map((pack) => pack.id),
   ...world.packs.flatMap((pack) => pack.rules.map((rule) => rule.stem)),
   ...world.pairLabels.flatMap((label) => (label.plantedBody === undefined ? [] : [label.plantedBody])),
 ]
 
-/** Every matchable string is distinct and none contains another. */
 export const hasDistinctMatchableStrings = (world: World): boolean => {
   const strings = matchableStringsOf(world)
   if (new Set(strings).size !== strings.length) return false
@@ -330,6 +331,20 @@ export const hasDistinctMatchableStrings = (world: World): boolean => {
     strings.every((other, otherIndex) => index === otherIndex || other.includes(value) === false)
   )
 }
+
+export const ruleTextOf = (rule: WorldRuleFile): string =>
+  rule.malformed === true
+    ? 'not frontmatter at all\n'
+    : [
+      '---',
+      `title: ${rule.title}`,
+      `applies_when: [${rule.appliesWhen.join(', ')}]`,
+      `tags: [${rule.tags.join(', ')}]`,
+      '---',
+      '',
+      rule.body,
+      '',
+    ].join('\n')
 
 const emptyCheckout: WorldCheckout = { codeFiles: [], lockfileText: '', outsideFiles: [] }
 
@@ -348,7 +363,7 @@ export const plannerModel = 'acme/planner-large'
 export const servedPlannerModel = 'acme/planner-large@acme'
 export const servedJudgeModel = 'acme/judge-large@acme'
 
-export const instructionDigest = 'fixture-instruction-digest'
+const instructionDigest = 'fixture-instruction-digest'
 
 const greenhousePack: WorldPack = {
   id: 'greenhouse',
@@ -742,7 +757,7 @@ const discoveryGenerator: WorldGeneratorReply = {
   ],
 }
 
-export interface DiscoveryWorldOptions {
+interface DiscoveryWorldOptions {
   readonly dimensions?: WorldDimensions | undefined
   readonly generator?: WorldGeneratorReply | undefined
 }
@@ -817,7 +832,7 @@ export interface FingerprintMutation {
   readonly outsideFile?: boolean | undefined
 }
 
-export interface FingerprintWorldOptions {
+interface FingerprintWorldOptions {
   readonly mutation?: FingerprintMutation | undefined
 }
 
@@ -1076,12 +1091,12 @@ export const tuneJudgeWorld = (overrides?: WorldOverrides): World =>
 // ---------------------------------------------------------------------------
 
 const labelNamedStems = (world: World): ReadonlyArray<string> =>
-  distinctOf(world.routingLabels.flatMap((entry) => [...entry.governing, ...entry.deferred]))
+  distinctSorted(world.routingLabels.flatMap((entry) => [...entry.governing, ...entry.deferred]))
 
 const pairNamedStems = (world: World): ReadonlyArray<string> =>
-  distinctOf(world.pairLabels.flatMap((label) => [label.ruleA, label.ruleB]))
+  distinctSorted(world.pairLabels.flatMap((label) => [label.ruleA, label.ruleB]))
 
-export interface RenameRuleOptions {
+interface RenameRuleOptions {
   readonly stem?: string | undefined
   readonly renamedTo?: string | undefined
 }
@@ -1120,7 +1135,7 @@ export const withRenamedRule: {
   (world: World, options: RenameRuleOptions): World
 } = dual(2, renamedRuleImpl)
 
-export interface MalformedRuleOptions {
+interface MalformedRuleOptions {
   readonly stem?: string | undefined
 }
 
@@ -1145,7 +1160,7 @@ export const withMalformedRule: {
   (world: World, options: MalformedRuleOptions): World
 } = dual(2, malformedRuleImpl)
 
-export interface MissingRuleLabelOptions {
+interface MissingRuleLabelOptions {
   readonly stem?: string | undefined
 }
 
@@ -1215,7 +1230,7 @@ export const withUnwitnessedPair = (world: World): World =>
 export const withoutJudgePrompt = (world: World): World =>
   worldWith(world, { intended: 'missing-judge-prompt', judgePrompt: undefined })
 
-export interface ProviderRefusalTarget {
+interface ProviderRefusalTarget {
   readonly role?: WorldProviderRole | undefined
   readonly status?: number | undefined
   readonly message?: string | undefined

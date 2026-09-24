@@ -9,23 +9,25 @@ import {
   type QuestionKey,
   type ScriptedAnswer,
 } from './openrouter-loopback.fixture.js'
+import { writeDatasetFilesOf } from './pack-eval-dataset.fixture.js'
+import { defaultEvidenceFloor } from './pack-eval-oracle.fixture.js'
 import {
+  ruleTextOf,
   type World,
   type WorldJudgeReply,
   type WorldProviderRefusal,
-  type WorldRuleFile,
   type WorldSelectorReply,
 } from './pack-eval-world.fixture.js'
 
-export const materializedSelectorModel = 'acme/planner-large'
-export const materializedJudgeModel = 'acme/judge-large'
-export const materializedJudgeMinimum = 0.8
-export const materializedProvider = 'openrouter'
+const materializedSelectorModel = 'acme/planner-large'
+const materializedJudgeModel = 'acme/judge-large'
+const materializedJudgeMinimum = 0.8
+const materializedProvider = 'openrouter'
 export const materializedSeed = 7
 export const materializedIterations = 200
-export const materializedConfidence = 0.95
+const materializedConfidence = 0.95
 
-export interface MaterializedPack {
+interface MaterializedPack {
   readonly id: string
   readonly dir: string
 }
@@ -58,20 +60,6 @@ const refusalReplyOf = (refusal: WorldProviderRefusal): LoopbackReply => ({
 
 const loadedStemsJson = Schema.fromJsonString(PackEval.LoadedStems)
 const judgeReplyJson = Schema.fromJsonString(PackEval.JudgeReply)
-
-const ruleTextOf = (rule: WorldRuleFile): string =>
-  rule.malformed === true
-    ? 'not frontmatter at all\n'
-    : [
-      '---',
-      `title: ${rule.title}`,
-      `applies_when: [${rule.appliesWhen.join(', ')}]`,
-      `tags: [${rule.tags.join(', ')}]`,
-      '---',
-      '',
-      rule.body,
-      '',
-    ].join('\n')
 
 const nonEmptyTupleOf = <T>(values: ReadonlyArray<T>): readonly [T, ...T[]] | undefined => {
   const first = values[0]
@@ -144,38 +132,6 @@ const scriptedAnswersOf = (
         : Effect.succeed(refusedJudgeAnswerOf(world, reply))
     ),
   ])
-
-const writeInstruction = (paths: Path.Path, datasetDir: string, world: World) => {
-  const instruction = world.instruction
-  if (instruction === undefined) return Effect.void
-  return PackEval.DatasetFiles.writeJson(
-    paths.join(datasetDir, 'selector-instruction.json'),
-    PackEval.SelectorInstruction,
-    new PackEval.SelectorInstruction({
-      text: instruction.text,
-      provenance: new PackEval.SelectorProvenance({
-        consumer: instruction.consumer,
-        pluginVersion: instruction.pluginVersion,
-        sourcePath: instruction.sourcePath,
-      }),
-    }),
-  )
-}
-
-const writeJudgePrompt = (paths: Path.Path, datasetDir: string, world: World) => {
-  const prompt = world.judgePrompt
-  if (prompt === undefined) return Effect.void
-  return PackEval.DatasetFiles.writeJson(
-    paths.join(datasetDir, 'judge-prompt.json'),
-    PackEval.JudgePrompt,
-    new PackEval.JudgePrompt({
-      criterion: prompt.criterion,
-      passDefinition: prompt.passDefinition,
-      failDefinition: prompt.failDefinition,
-      fewShotPairIds: prompt.fewShotPairIds,
-    }),
-  )
-}
 
 const taskDimensionsOf = (world: World): PackEval.TaskDimensions | undefined => {
   const described = world.dimensions
@@ -278,59 +234,7 @@ export const materialize = (world: World) =>
 
     const packs = yield* writeRules(world, fileSystem, paths, base)
 
-    yield* writeInstruction(paths, datasetDir, world)
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'tasks.json'),
-      PackEval.TaskSet,
-      new PackEval.TaskSet({
-        version: 1,
-        tasks: world.tasks.map((task) =>
-          new PackEval.Task({
-            id: task.id,
-            text: task.text,
-            split: task.split,
-            dimensions: task.dimensions,
-          })
-        ),
-      }),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'routing-labels.json'),
-      PackEval.RoutingLabels,
-      new PackEval.RoutingLabels({
-        version: 1,
-        entries: world.routingLabels.map((entry) =>
-          new PackEval.RoutingLabelEntry({
-            taskId: entry.taskId,
-            packId: entry.packId,
-            governing: entry.governing,
-            deferred: entry.deferred,
-          })
-        ),
-      }),
-    )
-    yield* PackEval.DatasetFiles.writeJson(
-      paths.join(datasetDir, 'pair-labels.json'),
-      PackEval.PairLabels,
-      new PackEval.PairLabels({
-        version: 1,
-        entries: world.pairLabels.map((label) =>
-          new PackEval.PairLabel({
-            id: label.id,
-            taskId: label.taskId,
-            packId: label.packId,
-            ruleA: label.ruleA,
-            ruleB: label.ruleB,
-            split: label.split,
-            verdict: label.verdict,
-            origin: label.origin,
-            notes: label.notes,
-            ...(label.plantedBody === undefined ? {} : { plantedBody: label.plantedBody }),
-          })
-        ),
-      }),
-    )
-    yield* writeJudgePrompt(paths, datasetDir, world)
+    yield* writeDatasetFilesOf({ world, datasetDir })
     yield* writeDimensions(fileSystem, paths, datasetDir, world)
     yield* writeCandidates(paths, workDir, world)
     yield* writeTraces(paths, workDir, world)
@@ -354,7 +258,10 @@ export const materialize = (world: World) =>
         seed: materializedSeed,
         iterations: materializedIterations,
         confidence: materializedConfidence,
-        evidenceFloor: new PackEval.EvidenceFloor({ positives: 1, negatives: 1 }),
+        evidenceFloor: new PackEval.EvidenceFloor({
+          positives: defaultEvidenceFloor.positives,
+          negatives: defaultEvidenceFloor.negatives,
+        }),
         judgeModel: materializedJudgeModel,
         judgeMinimum: materializedJudgeMinimum,
       } satisfies PackEval.EvaluatePacks.EvaluatePacksRequest,

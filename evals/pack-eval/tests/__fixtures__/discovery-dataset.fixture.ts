@@ -58,7 +58,7 @@ const taskReply = (text: string): Effect.Effect<LoopbackReply, Schema.SchemaErro
   Effect.map(Schema.encodeEffect(generatedTaskJson)({ text }), completionOf)
 
 /** The replies the world's generator asks for, in the order it asks them. */
-export const generatorRepliesOf = (
+const generatorRepliesOf = (
   world: World,
 ): Effect.Effect<ReadonlyArray<LoopbackReply>, Schema.SchemaError> =>
   Effect.all([
@@ -151,11 +151,5 @@ export const fileTextOf = (options: { readonly path: string }) =>
     return yield* fileSystem.readFileString(options.path)
   })
 
-export const pathExists = (options: { readonly segments: ReadonlyArray<string> }) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.exists(paths.join(...options.segments))
-  })
 export const packIdOf = (world: World): string =>
   world.packs.length === 1 && world.packs[0] !== undefined ? world.packs[0].id : 'missing-pack'

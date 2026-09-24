@@ -23,7 +23,15 @@ import {
   oracleRunOutcome,
 } from './__fixtures__/pack-eval-oracle.fixture.js'
 import { worldArbitrary } from './__fixtures__/pack-eval-world-arbitrary.fixture.js'
-import { stemPairsOf, witnessedPairsOf, type World } from './__fixtures__/pack-eval-world.fixture.js'
+import {
+  ascendingOf,
+  distinctSorted,
+  hasDistinctMatchableStrings,
+  keyOf,
+  stemPairsOf,
+  witnessedPairsOf,
+  type World,
+} from './__fixtures__/pack-eval-world.fixture.js'
 
 /**
  * Decision-level proof of the evaluate command against the reference oracle.
@@ -39,13 +47,6 @@ import { stemPairsOf, witnessedPairsOf, type World } from './__fixtures__/pack-e
  * with an explicit `runBudget` and `interruptAfterTimeLimit` sized so the
  * whole file stays near ten seconds.
  */
-
-const ascendingOf = (left: string, right: string): number => Number(left > right) - Number(left < right)
-
-const keyOf = (...parts: ReadonlyArray<string>): string => parts.join('\u0000')
-
-const distinctSortedOf = (values: ReadonlyArray<string>): ReadonlyArray<string> =>
-  [...new Set(values)].toSorted(ascendingOf)
 
 const sameKeysOf = (left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index])
@@ -63,15 +64,15 @@ const pairKeyOfJudgeKey = (key: string): string => {
 const askedKeysOf = (
   run: InMemoryRun,
 ): { readonly selector: ReadonlyArray<string>; readonly judge: ReadonlyArray<string> } => ({
-  selector: distinctSortedOf(run.selectorQuestions.map(selectorKeyOf)),
-  judge: distinctSortedOf(run.judgeQuestions.map(judgeKeyOf)),
+  selector: distinctSorted(run.selectorQuestions.map(selectorKeyOf)),
+  judge: distinctSorted(run.judgeQuestions.map(judgeKeyOf)),
 })
 
 const unwitnessedPairKeysOf = (world: World): ReadonlyArray<string> => {
   const witnessed = new Set(
     witnessedPairsOf(world).map((pair) => keyOf(pair.packId, pair.ruleA, pair.ruleB)),
   )
-  return distinctSortedOf(
+  return distinctSorted(
     world.packs.flatMap((pack) =>
       stemPairsOf(pack)
         .filter(([ruleA, ruleB]) => witnessed.has(keyOf(pack.id, ruleA, ruleB)) === false)
@@ -98,10 +99,10 @@ interface OracleQuestionView {
 const oracleQuestionViewOf = (world: World): OracleQuestionView => {
   const questions = oracleQuestions(world, {})
   return {
-    selectorKeys: distinctSortedOf(
+    selectorKeys: distinctSorted(
       questions.selector.map((question) => keyOf(question.taskId, question.packId)),
     ),
-    judgeKeys: distinctSortedOf(
+    judgeKeys: distinctSorted(
       questions.judge.map((question) => keyOf(question.packId, question.taskId, question.ruleA, question.ruleB)),
     ),
     unwitnessedPairKeys: unwitnessedPairKeysOf(world),
@@ -203,7 +204,7 @@ const productUnwitnessedOf = (run: InMemoryRun): ReadonlyArray<string> =>
     Match.when(undefined, () => []),
     Match.tag('ContradictionNotEvaluated', () => []),
     Match.tag('ContradictionJudged', (judged) =>
-      distinctSortedOf(
+      distinctSorted(
         judged.unwitnessedPairs.map((pair) => keyOf(pair.packId, pair.ruleA, pair.ruleB)),
       )),
     Match.exhaustive,
@@ -457,11 +458,18 @@ Metamorphic.on((world: World) => Effect.map(runInMemory(world, {}), canonicalOf)
 // ---------------------------------------------------------------------------
 
 Differential.compare({
-  reference: (world: World) => Effect.succeed(world.intended),
+  reference: (world: World) =>
+    Effect.succeed({
+      intended: world.intended,
+      distinctMatchableStrings: hasDistinctMatchableStrings(world),
+    }),
   candidate: (world: World) => Effect.map(runInMemory(world, {}), (run) => run.exitCode),
 })
   .on(worldArbitrary, { runBudget: 40, interruptAfterTimeLimit: 4000 })
-  .assert((intended, exitCode) => intended === 'admissible' ? exitCode === 0 || exitCode === 1 : exitCode === 2)
+  .assert((generated, exitCode) =>
+    generated.distinctMatchableStrings &&
+    (generated.intended === 'admissible' ? exitCode === 0 || exitCode === 1 : exitCode === 2)
+  )
 
 // ---------------------------------------------------------------------------
 // Anchors (AE2): the oracle reproduces each hand-worked value, even when the
@@ -469,7 +477,15 @@ Differential.compare({
 // ---------------------------------------------------------------------------
 
 Differential.compare({
-  reference: () => Effect.succeed({ tp: 2, fn: 1, fp: 1, tn: 2, tpr: 2 / 3, tnr: 2 / 3 }),
+  reference: () =>
+    Effect.succeed({
+      tp: scoredRuleAnchor.tp,
+      fn: scoredRuleAnchor.fn,
+      fp: scoredRuleAnchor.fp,
+      tn: scoredRuleAnchor.tn,
+      tpr: scoredRuleAnchor.tpr,
+      tnr: scoredRuleAnchor.tnr,
+    }),
   candidate: () => {
     const counts = oracleRoutingCounts(scoredRuleAnchor.world).find((row) =>
       row.packId === scoredRuleAnchor.packId && row.rule === scoredRuleAnchor.rule &&
@@ -496,7 +512,14 @@ Differential.compare({
   )
 
 Differential.compare({
-  reference: () => Effect.succeed({ tp: 1, fn: 1, fp: 0, tn: 2, verdictTag: 'insufficient-evidence' as const }),
+  reference: () =>
+    Effect.succeed({
+      tp: insufficientEvidenceAnchor.tp,
+      fn: insufficientEvidenceAnchor.fn,
+      fp: insufficientEvidenceAnchor.fp,
+      tn: insufficientEvidenceAnchor.tn,
+      verdictTag: insufficientEvidenceAnchor.verdictTag,
+    }),
   candidate: () => {
     const counts = oracleRoutingCounts(insufficientEvidenceAnchor.world).find((row) =>
       row.packId === insufficientEvidenceAnchor.packId && row.rule === insufficientEvidenceAnchor.rule &&
@@ -522,7 +545,13 @@ Differential.compare({
   )
 
 Differential.compare({
-  reference: () => Effect.succeed({ tpr: 7 / 8, tnr: 1, correctedRate: 1 - 4 / 7, exitCode: 1 as const }),
+  reference: () =>
+    Effect.succeed({
+      tpr: validatedJudgeAnchor.tpr,
+      tnr: validatedJudgeAnchor.tnr,
+      correctedRate: validatedJudgeAnchor.correctedRate,
+      exitCode: validatedJudgeAnchor.exitCode,
+    }),
   candidate: () => {
     const validity = oracleJudgeValidity(validatedJudgeAnchor.world, {})
     const corrected = oracleCorrectedRate(validatedJudgeAnchor.world, {})

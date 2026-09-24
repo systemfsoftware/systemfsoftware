@@ -19,7 +19,7 @@ import type { World, WorldRuleFile } from './pack-eval-world.fixture.js'
 export const reviewPackId = 'greenhouse'
 
 /** One review reply as text, before the route's own schema decodes it. */
-export interface TextReply {
+interface TextReply {
   readonly status: number
   readonly body: string
 }
@@ -200,13 +200,6 @@ export const taskSetOf = (locations: ReviewLocations) =>
   Effect.gen(function*() {
     const paths = yield* Path.Path
     return yield* PackEval.DatasetFiles.readJson(paths.join(locations.datasetDir, 'tasks.json'), PackEval.TaskSet)
-  })
-
-export const routingLabelsTextOf = (locations: ReviewLocations) =>
-  Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const paths = yield* Path.Path
-    return yield* fileSystem.readFileString(paths.join(locations.datasetDir, 'routing-labels.json'))
   })
 
 export const pairLabelsTextOf = (locations: ReviewLocations) =>

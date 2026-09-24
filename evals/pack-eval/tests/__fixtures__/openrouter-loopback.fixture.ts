@@ -21,7 +21,7 @@ export interface RecordedRequest {
   readonly body: Schema.Json
 }
 
-export type RequestRole = 'selector' | 'judge' | 'generator'
+type RequestRole = 'selector' | 'judge' | 'generator'
 
 export interface QuestionKey {
   readonly role: RequestRole
@@ -33,7 +33,7 @@ export interface ScriptedAnswer {
   readonly reply: LoopbackReply
 }
 
-export type RequestKeyOutcome = 'matched' | 'unmatched' | 'ambiguous' | 'ordered'
+type RequestKeyOutcome = 'matched' | 'unmatched' | 'ambiguous' | 'ordered'
 
 export interface RequestKeyRecord {
   readonly index: number

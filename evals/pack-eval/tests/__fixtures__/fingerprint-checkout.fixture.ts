@@ -141,7 +141,7 @@ const writeDataset = (world: World, fileSystem: FileSystem.FileSystem, paths: Pa
     }
   })
 
-export interface FingerprintCheckoutInput {
+interface FingerprintCheckoutInput {
   readonly world: World
   readonly baseDir: string
 }
@@ -178,7 +178,7 @@ export const fingerprintCheckoutOf = (input: FingerprintCheckoutInput) =>
     return { packDir, datasetDir, codeRoot, lockfilePath } satisfies FingerprintCheckout
   })
 
-export interface FingerprintRequestInput {
+interface FingerprintRequestInput {
   readonly checkout: FingerprintCheckout
   readonly parameters?: FingerprintParameters | undefined
 }

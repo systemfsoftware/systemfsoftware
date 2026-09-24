@@ -12,6 +12,7 @@ import {
   type WorldPairSplit,
   type WorldVerdict,
 } from './pack-eval-world.fixture.js'
+import { recordingConsoleOf } from './recording-console.fixture.js'
 
 /**
  * The tune-judge area's interpreter: a world with one scripted dev pair per
@@ -28,7 +29,7 @@ export type DevPairScript = Readonly<{
   readonly critique: string
 }>
 
-export interface TuneJudgeRun {
+interface TuneJudgeRun {
   readonly world: World
   readonly provider: OpenRouterLoopbackShape
   readonly packDir: string
@@ -37,7 +38,7 @@ export interface TuneJudgeRun {
   readonly lines: Array<string>
 }
 
-export interface TuneJudgeDisagreement {
+interface TuneJudgeDisagreement {
   readonly id: string
   readonly taskId: string
   readonly labelVerdict: WorldVerdict
@@ -45,7 +46,7 @@ export interface TuneJudgeDisagreement {
   readonly critique: string
 }
 
-export interface ExpectedTuning {
+interface ExpectedTuning {
   readonly devCount: number
   readonly tpr: PackEval.TuneJudge.TuneJudgeRate
   readonly tnr: PackEval.TuneJudge.TuneJudgeRate
@@ -117,32 +118,6 @@ const scriptedWorldOf = (scripts: ReadonlyArray<DevPairScript>): World => {
     },
   })
 }
-
-const recordingConsoleOf = (lines: Array<string>): Console.Console => ({
-  assert: () => undefined,
-  clear: () => undefined,
-  count: () => undefined,
-  countReset: () => undefined,
-  debug: () => undefined,
-  dir: () => undefined,
-  dirxml: () => undefined,
-  error(...args: ReadonlyArray<string>) {
-    lines.push(args.join(' '))
-  },
-  group: () => undefined,
-  groupCollapsed: () => undefined,
-  groupEnd: () => undefined,
-  info: () => undefined,
-  log(...args: ReadonlyArray<string>) {
-    lines.push(args.join(' '))
-  },
-  table: () => undefined,
-  time: () => undefined,
-  timeEnd: () => undefined,
-  timeLog: () => undefined,
-  trace: () => undefined,
-  warn: () => undefined,
-})
 
 export const tuneJudgeStackOf = (run: TuneJudgeRun) =>
   Layer.provideMerge(

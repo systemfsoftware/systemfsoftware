@@ -4,7 +4,6 @@ import {
   greenhouseJudgePrompt,
   type RefusalKind,
   refusalKinds,
-  routingLabelDensityOf,
   servedJudgeModel,
   servedPlannerModel,
   stemPairsOf,
@@ -14,7 +13,6 @@ import {
   withProviderRefusal,
   withRenamedRule,
   withUnwitnessedPair,
-  witnessedPairsOf,
   type World,
   type WorldJudgePrompt,
   type WorldJudgeQuestion,
@@ -410,45 +408,3 @@ const buildWorld = (draft: DraftWorld): World => {
 }
 /** The world generator: admissible worlds and every refusal kind, by construction. */
 export const worldArbitrary: fc.Arbitrary<World> = blueprintArbitrary.map(draftWorldOf).map(buildWorld)
-
-/** The frozen seed behind every deterministic sample, so R3's report repeats. */
-export const worldSampleSeed = 20_260_924
-
-/** Draw `count` worlds, always the same ones for the same count. */
-export const sampleWorlds = (count: number): ReadonlyArray<World> =>
-  fc.sample(worldArbitrary, { numRuns: count, seed: worldSampleSeed })
-
-/** How the drawn population spreads across refusal kinds, label sparsity, and pair counts. */
-export interface WorldDistribution {
-  readonly total: number
-  readonly byRefusalKind: Readonly<Record<RefusalKind, number>>
-  readonly minLabelDensity: number
-  readonly worldsUnderOneFifthLabelDensity: number
-  readonly packsWithAtMostOneWitnessedPair: number
-  readonly maxWitnessedPairsPerPack: number
-}
-
-/** The R3 distribution report over a drawn population. */
-export const worldDistributionOf = (worlds: ReadonlyArray<World>): WorldDistribution => {
-  const ofKind = (kind: RefusalKind): number => worlds.filter((world) => world.intended === kind).length
-  const densities = worlds.map(routingLabelDensityOf)
-  const witnessedPerPack = worlds.flatMap((world) =>
-    world.packs.map((pack) => witnessedPairsOf(world).filter((pair) => pair.packId === pack.id).length)
-  )
-  return {
-    total: worlds.length,
-    byRefusalKind: {
-      admissible: ofKind('admissible'),
-      'renamed-rule': ofKind('renamed-rule'),
-      'malformed-rule': ofKind('malformed-rule'),
-      'missing-rule-label': ofKind('missing-rule-label'),
-      'provider-refusal': ofKind('provider-refusal'),
-      'missing-judge-prompt': ofKind('missing-judge-prompt'),
-      'unwitnessed-pair': ofKind('unwitnessed-pair'),
-    },
-    minLabelDensity: densities.reduce((lowest, density) => Math.min(lowest, density), 1),
-    worldsUnderOneFifthLabelDensity: densities.filter((density) => density < 0.2).length,
-    packsWithAtMostOneWitnessedPair: witnessedPerPack.filter((count) => count <= 1).length,
-    maxWitnessedPairsPerPack: witnessedPerPack.reduce((highest, count) => Math.max(highest, count), 0),
-  }
-}

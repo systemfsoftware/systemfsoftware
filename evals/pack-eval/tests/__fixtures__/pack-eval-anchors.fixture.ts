@@ -286,9 +286,7 @@ export const insufficientEvidenceAnchor: InsufficientEvidenceAnchor = {
     'only other-rule on tasks 2, 3, and 4. For anchor-rule: governing and loaded on task 1 (TP 1), governing',
     'and not loaded on task 2 (FN 1), does-not-govern and loaded on no task (FP 0), does-not-govern and not',
     'loaded on tasks 3 and 4 (TN 2). The split holds 2 positives and 2 negatives, below the per-class floor of',
-    '3, so insufficient-evidence and no TPR or TNR is reported. The counts are unchanged from the old value',
-    '(tp 1, fn 1, fp 0, tn 2) because the old world never loaded the rule on a deferred negative; only the',
-    'verdict reading changes, from a single-threshold check to the per-class floor.',
+    '3, so insufficient-evidence and no TPR or TNR is reported.',
   ].join(' '),
 }
 
@@ -340,10 +338,3 @@ export const bootstrapIntervalAnchor: BootstrapIntervalAnchor = {
     'the corrected rate 3/7.',
   ].join(' '),
 }
-
-export const anchorWorlds: ReadonlyArray<{ readonly name: string; readonly world: World }> = [
-  { name: scoredRuleAnchor.name, world: scoredRuleAnchor.world },
-  { name: insufficientEvidenceAnchor.name, world: insufficientEvidenceAnchor.world },
-  { name: validatedJudgeAnchor.name, world: validatedJudgeAnchor.world },
-  { name: bootstrapIntervalAnchor.name, world: bootstrapIntervalAnchor.world },
-]

@@ -44,35 +44,12 @@ import {
   type World,
   type WorldJudgeReply,
 } from './__fixtures__/pack-eval-world.fixture.js'
+import { recordingConsoleOf } from './__fixtures__/recording-console.fixture.js'
 
 const Feature = makeFeature({ it, layer })
 
 const stackOf = (materialized: MaterializedWorld, lines: Array<string>) => {
-  const recordingConsole: Console.Console = {
-    assert: () => undefined,
-    clear: () => undefined,
-    count: () => undefined,
-    countReset: () => undefined,
-    debug: () => undefined,
-    dir: () => undefined,
-    dirxml: () => undefined,
-    error(...args: ReadonlyArray<string>) {
-      lines.push(args.join(' '))
-    },
-    group: () => undefined,
-    groupCollapsed: () => undefined,
-    groupEnd: () => undefined,
-    info: () => undefined,
-    log(...args: ReadonlyArray<string>) {
-      lines.push(args.join(' '))
-    },
-    table: () => undefined,
-    time: () => undefined,
-    timeEnd: () => undefined,
-    timeLog: () => undefined,
-    trace: () => undefined,
-    warn: () => undefined,
-  }
+  const recordingConsole = recordingConsoleOf(lines)
   const selectorModel = materialized.request.selectorModel
   const judgeModel = materialized.request.judgeModel ?? selectorModel
   return Layer.provideMerge(
@@ -106,10 +83,6 @@ const evaluatedOnce = (materialized: MaterializedWorld, row: OutlineRow) =>
       ...materialized.request,
       seed: row.seed,
       iterations: row.iterations,
-      evidenceFloor: new PackEval.EvidenceFloor({
-        positives: defaultEvidenceFloor.positives,
-        negatives: defaultEvidenceFloor.negatives,
-      }),
     }).pipe(Effect.provide(stackOf(materialized, lines)))
     const report = yield* PackEval.DatasetFiles.readJson(materialized.reportPath, PackEval.EvalReport)
     const keys = yield* materialized.provider.requestKeys
@@ -422,7 +395,7 @@ Feature('Evaluating a pack against its owner labels')
   .withScenarioLayer(openRouterLoopback)
   .body(({ scenarioOutline }) => {
     scenarioOutline(
-      'Evaluating a pack holding <name> routes each task as the owner labelled',
+      'Evaluating a pack holding <name> follows the evaluation method',
       routingRows,
       (row) =>
         Gherkin.Do.pipe(
