@@ -254,7 +254,14 @@ const awaitedResources = <A, E>(state: Drive<A, E>): ReadonlyArray<string> => ne
 const waitsRemain = (resources: ReadonlyArray<string>): boolean =>
   resources.some((resource) => waitKindOf([resource]) === 'File' || waitKindOf([resource]) === 'Socket')
 
-const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> => drive(state)
+const loweredBaseline = (
+  before: ReadonlyMap<string, number>,
+  now: ReadonlyMap<string, number>,
+): ReadonlyMap<string, number> =>
+  new Map([...before].map(([name, count]) => [name, Math.min(count, now.get(name) ?? 0)]))
+
+const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
+  drive({ ...state, before: loweredBaseline(state.before, resourceCounts()) })
 
 const waitedOutcome = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => revivedAfterHost(state, 0)
 
