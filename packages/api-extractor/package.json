@@ -1,0 +1,118 @@
+{
+  "name": "@systemfsoftware/api-extractor",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/api-extractor"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/api-extractor#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "An API surface gate as a package: read an api-extractor.json, emit a byte-compatible *.api.md report and a valid .d.ts rollup, and print nothing on success under --quiet.",
+  "keywords": [
+    "api-extractor",
+    "api-report",
+    "dts-rollup",
+    "declaration-bundling",
+    "tsdoc",
+    "typescript",
+    "effect",
+    "effect-ts"
+  ],
+  "type": "module",
+  "bin": {
+    "api-extractor": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown -l warn && node dist/cli.mjs run --local --quiet",
+    "api:check": "tsdown -l warn && node dist/cli.mjs run --local --quiet",
+    "api:update": "node dist/cli.mjs run --local",
+    "attw": "attw --pack .",
+    "clean": "rimraf dist",
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "prepack": "pnpm build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --incremental"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@microsoft/tsdoc": "~0.17.0",
+    "@microsoft/tsdoc-config": "~0.18.2",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "diff": "^8.0.2",
+    "effect": "catalog:",
+    "minimatch": "^10.2.3",
+    "semver": "^7.7.4",
+    "source-map": "^0.6.1",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
+    "@systemfsoftware/differential-spec": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-memfs": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./cli": {
+        "types": "./dist/cli.d.ts",
+        "default": "./dist/cli.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./cli": {
+      "@systemfsoftware/source": "./src/cli.ts",
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "inlinedDependencies": {
+    "@jridgewell/sourcemap-codec": "1.6.0",
+    "chai": "6.2.2",
+    "expect-type": "1.4.0",
+    "magic-string": "1.4.1",
+    "tinybench": "6.1.4",
+    "vite": "8.2.1",
+    "vitest": "5.0.1"
+  }
+}

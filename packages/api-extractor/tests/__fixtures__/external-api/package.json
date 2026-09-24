@@ -1,0 +1,6 @@
+{
+  "name": "fixture-external-api",
+  "version": "1.0.0",
+  "private": true,
+  "types": "lib/index.d.ts"
+}
