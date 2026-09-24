@@ -2,7 +2,7 @@ import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Deferred, Duration, Effect, Fiber, Result } from 'effect'
+import { Deferred, Duration, Effect, Fiber, Layer, Result } from 'effect'
 import { expect } from 'vitest'
 import {
   mkBlockingStatefulLockPrimitive,
@@ -13,6 +13,7 @@ import {
 const Feature = makeFeature({ it })
 
 Feature('Lock Primitive Contract')
+  .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
       'Acquire free lock',
