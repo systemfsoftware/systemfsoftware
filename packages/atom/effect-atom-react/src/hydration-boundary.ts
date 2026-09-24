@@ -10,7 +10,7 @@
 'use client'
 import { Atom } from '@systemfsoftware/effect-atom'
 import * as React from 'react'
-import { useRegistry } from './RegistryContext.js'
+import { useRegistry } from './registry-context.js'
 
 /**
  * Props for a boundary that applies dehydrated Atom values to the nearest
@@ -120,21 +120,10 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
 }) => {
   const registry = useRegistry()
 
-  // This useMemo is for performance reasons only, everything inside it must
-  // be safe to run in every render and code here should be read as "in render".
-  //
-  // This code needs to happen during the render phase, because after initial
-  // SSR, hydration needs to happen _before_ children render. Also, if hydrating
-  // during a transition, we want to hydrate as much as is safe in render so
-  // we can prerender as much as possible.
-  //
-  // For any Atom values that already exist in the registry, we want to hold back on
-  // hydrating until _after_ the render phase. The reason for this is that during
-  // transitions, we don't want the existing Atom values and subscribers to update to
-  // the new data on the current page, only _after_ the transition is committed.
-  // If the transition is aborted, we will have hydrated any _new_ Atom values, but
-  // we throw away the fresh data for any existing ones to avoid unexpectedly
-  // updating the UI.
+  // Hydration must happen during render: after SSR, children need the values
+  // before their first client render, and during a transition we want to
+  // prerender as much as is safe. Existing-atom values wait until after commit
+  // so an aborted transition cannot update the current page's atoms.
   const hydrationQueue: Array<Atom.Hydration.DehydratedAtomValue> | undefined = React.useMemo(
     () => queueHydration(registry, state),
     [registry, state],

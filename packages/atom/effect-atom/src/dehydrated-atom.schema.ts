@@ -10,7 +10,7 @@ export const DehydratedAtomValue = S.Struct({
   '~effect/reactivity/DehydratedAtom': S.Literal(true),
   key: S.String,
   value: S.Unknown,
-  dehydratedAt: S.Finite,
+  dehydratedAt: S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0))),
 })
 /**
  * @since 4.0.0

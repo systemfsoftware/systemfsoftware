@@ -2,12 +2,7 @@ import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import {
-  RegistryContext,
-  useAtomInitialValues,
-  useAtomSubscribe,
-  useAtomValue,
-} from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
@@ -25,14 +20,14 @@ Feature('Seeding and listening to shared values')
           Effect.sync(() => {
             const balance = Atom.make(0)
             function Page() {
-              useAtomInitialValues([[balance, 7]])
-              useAtomInitialValues([[balance, 9]])
-              const value = useAtomValue(balance)
+              AtomReact.useAtomInitialValues([[balance, 7]])
+              AtomReact.useAtomInitialValues([[balance, 9]])
+              const value = AtomReact.useAtomValue(balance)
               return React.createElement('div', { 'data-testid': 'seeded-balance' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
                 React.createElement(Page),
               ),
@@ -57,20 +52,20 @@ Feature('Seeding and listening to shared values')
             Effect.sync(() => {
               const balance = Atom.make(0)
               function Page({ id, seed }: { readonly id: string; readonly seed: number }) {
-                useAtomInitialValues([[balance, seed]])
-                const value = useAtomValue(balance)
+                AtomReact.useAtomInitialValues([[balance, seed]])
+                const value = AtomReact.useAtomValue(balance)
                 return React.createElement('div', { 'data-testid': id }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
                   React.createElement(Page, { id: 'first-balance', seed: 3 }),
                 ),
               )
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
                   React.createElement(Page, { id: 'second-balance', seed: 8 }),
                 ),
@@ -100,11 +95,15 @@ Feature('Seeding and listening to shared values')
             const heard: number[] = []
             const registry = Atom.Registry.make()
             function Listener() {
-              useAtomSubscribe(volume, (v) => heard.push(v))
+              AtomReact.useAtomSubscribe(volume, (v) => heard.push(v))
               return null
             }
             render(
-              React.createElement(RegistryContext.Provider, { value: registry }, React.createElement(Listener)),
+              React.createElement(
+                AtomReact.RegistryContext.Provider,
+                { value: registry },
+                React.createElement(Listener),
+              ),
             )
             return { volume, heard, registry }
           })),

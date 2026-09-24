@@ -67,10 +67,16 @@ export function useRegistry(): Atom.Registry.Registry {
   return registry
 }
 
-type AnyAtom<Val = unknown> = Atom.Atom<Val>
-type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
+export type AnyAtom<Val = unknown> = Atom.Atom<Val>
 
-type RegistryProviderOptions = {
+export type AnyInitialValue<Val = unknown> = readonly [AnyAtom<Val>, Val]
+
+/**
+ * Options accepted by {@link RegistryProvider}.
+ *
+ * @since 4.0.0
+ */
+export type RegistryProviderOptions = {
   readonly children?: React.ReactNode | undefined
   readonly initialValues?: Iterable<AnyInitialValue> | undefined
   readonly scheduleTask?: ((f: () => void) => () => void) | undefined
@@ -130,10 +136,6 @@ function assignDisposeTimer(ref: React.RefObject<RegistryRef | null>): void {
   if (current === null) {
     return
   }
-  // The dispose is deferred so a remount - StrictMode's double invoke, or fast
-  // refresh - reclaims the same registry instead of losing it. The delay runs
-  // on the registry's configured `scheduleTimer`, so the remount cancels the
-  // scheduled dispose instead of reaching for the platform timer globals.
   current.cancelDispose = Atom.Registry.scheduleTimer(current.registry, () => {
     disposeRegistryRef(ref)
   }, 500)

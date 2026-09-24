@@ -1,5 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
-import { RegistryProvider, useAtomInitialValues, useAtomValue, useRegistry } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
@@ -21,10 +21,10 @@ Feature('Keeping a shared registry alive')
           Effect.sync(() => {
             const rating = Atom.make(0)
             function Widget() {
-              const value = useAtomValue(rating)
+              const value = AtomReact.useAtomValue(rating)
               return React.createElement('div', { 'data-testid': 'provided-rating' }, value)
             }
-            render(React.createElement(RegistryProvider, null, React.createElement(Widget)))
+            render(React.createElement(AtomReact.RegistryProvider, null, React.createElement(Widget)))
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.succeed(true)),
@@ -45,7 +45,7 @@ Feature('Keeping a shared registry alive')
             Effect.sync(() => {
               const rating = Atom.make(0)
               function Widget() {
-                const value = useAtomValue(rating)
+                const value = AtomReact.useAtomValue(rating)
                 return React.createElement('div', { 'data-testid': 'unprovided-value' }, value)
               }
               render(
@@ -86,8 +86,8 @@ Feature('Keeping a shared registry alive')
             Effect.sync(() => {
               const rating = Atom.make(0)
               function Widget({ id, starting }: { readonly id: string; readonly starting: number }) {
-                useAtomInitialValues([[rating, starting]])
-                const value = useAtomValue(rating)
+                AtomReact.useAtomInitialValues([[rating, starting]])
+                const value = AtomReact.useAtomValue(rating)
                 return React.createElement('div', { 'data-testid': id }, value)
               }
               render(
@@ -95,12 +95,12 @@ Feature('Keeping a shared registry alive')
                   React.Fragment,
                   null,
                   React.createElement(
-                    RegistryProvider,
+                    AtomReact.RegistryProvider,
                     null,
                     React.createElement(Widget, { id: 'left-rating', starting: 2 }),
                   ),
                   React.createElement(
-                    RegistryProvider,
+                    AtomReact.RegistryProvider,
                     null,
                     React.createElement(Widget, { id: 'right-rating', starting: 6 }),
                   ),
@@ -133,17 +133,17 @@ Feature('Keeping a shared registry alive')
               throw new Error('tick called before the page rendered')
             }
             function Page() {
-              seenRegistries.push(useRegistry())
+              seenRegistries.push(AtomReact.useRegistry())
               const [n, setN] = React.useState(0)
               tick = () => setN((x) => x + 1)
-              const value = useAtomValue(count)
+              const value = AtomReact.useAtomValue(count)
               return React.createElement('div', { 'data-testid': 'stable-count' }, n, ':', value)
             }
             render(
               React.createElement(
                 React.StrictMode,
                 null,
-                React.createElement(RegistryProvider, null, React.createElement(Page)),
+                React.createElement(AtomReact.RegistryProvider, null, React.createElement(Page)),
               ),
             )
             return { tick: () => tick, seenRegistries }

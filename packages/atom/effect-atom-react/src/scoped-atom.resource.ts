@@ -8,31 +8,17 @@
  */
 'use client'
 
-import type { Atom } from '@systemfsoftware/effect-atom'
 import * as React from 'react'
+import { type AnyAtom } from './registry-context.js'
 
 /**
- * Literal type used as the `ScopedAtom` type identifier.
- *
- * **Details**
- *
- * Used as the computed property key and marker value stored on `ScopedAtom`
- * objects.
+ * Type identifier for ScopedAtom, stored as the computed property key and
+ * marker value on `ScopedAtom` objects.
  *
  * @since 4.0.0
  */
 export type TypeId = '~@effect/atom-react/ScopedAtom'
 
-/**
- * Type identifier for ScopedAtom.
- *
- * **Details**
- *
- * Used as the computed property key and marker value stored on `ScopedAtom`
- * objects.
- *
- * @since 4.0.0
- */
 export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
 
 /**
@@ -40,9 +26,9 @@ export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
  *
  * **Example** (Providing and reading a scoped atom)
  *
- * ```ts import.meta.vitest
- * import { make, useAtomValue } from "@effect/atom-react"
- * import { Atom } from "effect/unstable/reactivity"
+ * ```ts
+ * import { Atom } from "@systemfsoftware/effect-atom"
+ * import { make, useAtomValue } from "@systemfsoftware/effect-atom-react"
  * import * as React from "react"
  * import { renderToStaticMarkup } from "react-dom/server"
  *
@@ -63,8 +49,6 @@ export const TypeId: TypeId = '~@effect/atom-react/ScopedAtom'
  *
  * @since 4.0.0
  */
-type AnyAtom<Val = unknown> = Atom.Atom<Val>
-
 export interface ScopedAtom<A extends AnyAtom, Input = never> {
   readonly [TypeId]: TypeId
   use(): A
@@ -120,9 +104,9 @@ function createScopedAtom<A extends AnyAtom, Input>(
  *
  * **Example** (Creating a scoped atom with input)
  *
- * ```ts import.meta.vitest
- * import { make, useAtomValue } from "@effect/atom-react"
- * import { Atom } from "effect/unstable/reactivity"
+ * ```ts
+ * import { Atom } from "@systemfsoftware/effect-atom"
+ * import { make, useAtomValue } from "@systemfsoftware/effect-atom-react"
  * import * as React from "react"
  * import { renderToStaticMarkup } from "react-dom/server"
  *

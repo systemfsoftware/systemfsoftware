@@ -1,5 +1,5 @@
 import { Atom } from '@systemfsoftware/effect-atom'
-import { RegistryContext, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
@@ -34,7 +34,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
           (s) =>
             Effect.sync(() => {
               function Comp({ id }: { readonly id: string }) {
-                const result = useAtomSuspense(s.ctx.atom)
+                const result = AtomReact.useAtomSuspense(s.ctx.atom)
                 let value = 0
                 if (Atom.AsyncResult.isSuccess(result)) {
                   value = result.value
@@ -44,7 +44,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
 
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: s.ctx.first },
                   React.createElement(
                     Suspense,
@@ -55,7 +55,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
               )
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: s.ctx.second },
                   React.createElement(
                     Suspense,

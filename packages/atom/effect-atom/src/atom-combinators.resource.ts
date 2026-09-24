@@ -708,8 +708,8 @@ export const setLazy: {
  *
  * **Example** (Comparing values structurally)
  *
- * ```ts import.meta.vitest
- * import { Atom } from "effect/unstable/reactivity"
+ * ```ts
+ * import { Atom } from "@systemfsoftware/effect-atom"
  *
  * const point = Atom.make({ x: 0, y: 0 }).pipe(
  *   Atom.withEquality<{ x: number; y: number }>((a, b) => a.x === b.x && a.y === b.y)

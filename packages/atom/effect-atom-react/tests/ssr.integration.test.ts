@@ -10,7 +10,7 @@
  * @since 4.0.0
  */
 import { Atom } from '@systemfsoftware/effect-atom'
-import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Latch from 'effect/Latch'
@@ -34,13 +34,13 @@ Feature('Server-side rendering of React atom hooks')
             const counterAtom = Atom.make(getCount)
 
             function TestComponent() {
-              const count = useAtomValue(counterAtom)
+              const count = AtomReact.useAtomValue(counterAtom)
               return React.createElement('div', null, count)
             }
 
             const ssrHtml = renderToString(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
                 React.createElement(TestComponent),
               ),
@@ -65,7 +65,7 @@ Feature('Server-side rendering of React atom hooks')
             const registry = Atom.Registry.make()
 
             function TestComponent() {
-              const result = useAtomValue(userDataAtom)
+              const result = AtomReact.useAtomValue(userDataAtom)
               return React.createElement(
                 'div',
                 null,
@@ -79,7 +79,7 @@ Feature('Server-side rendering of React atom hooks')
 
             const ssrHtml = renderToString(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: registry },
                 React.createElement(TestComponent),
               ),
@@ -136,12 +136,12 @@ Feature('Server-side rendering of React atom hooks')
               const dehydratedState = Atom.Hydration.dehydrate(serverRegistry, { encodeInitialAs: 'value-only' })
 
               function Basic() {
-                const value = useAtomValue(atomBasic)
+                const value = AtomReact.useAtomValue(atomBasic)
                 return React.createElement('div', { 'data-testid': 'value' }, value)
               }
 
               function Result1() {
-                const value = useAtomValue(atomResult1)
+                const value = AtomReact.useAtomValue(atomResult1)
                 return Atom.AsyncResult.match(value, {
                   onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-1' }, success.value),
                   onFailure: () => React.createElement('div', { 'data-testid': 'error-1' }, 'Error'),
@@ -150,7 +150,7 @@ Feature('Server-side rendering of React atom hooks')
               }
 
               function Result2() {
-                const value = useAtomValue(atomResult2)
+                const value = AtomReact.useAtomValue(atomResult2)
                 return Atom.AsyncResult.match(value, {
                   onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-2' }, success.value),
                   onFailure: () => React.createElement('div', { 'data-testid': 'error-2' }, 'Error'),
@@ -159,7 +159,7 @@ Feature('Server-side rendering of React atom hooks')
               }
 
               function Result3() {
-                const value = useAtomValue(atomResult3)
+                const value = AtomReact.useAtomValue(atomResult3)
                 return Atom.AsyncResult.match(value, {
                   onSuccess: (success) => React.createElement('div', { 'data-testid': 'value-3' }, success.value),
                   onFailure: () => React.createElement('div', { 'data-testid': 'error-3' }, 'Error'),
@@ -169,10 +169,10 @@ Feature('Server-side rendering of React atom hooks')
 
               const ssrHtml = renderToString(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
                   React.createElement(
-                    HydrationBoundary,
+                    AtomReact.HydrationBoundary,
                     { state: dehydratedState },
                     React.createElement(Basic),
                     React.createElement(Result1),
@@ -228,7 +228,7 @@ Feature('Server-side rendering of React atom hooks')
             })
 
             function TestComponent() {
-              const value = useAtomValue(atom)
+              const value = AtomReact.useAtomValue(atom)
               return React.createElement(
                 'div',
                 null,
@@ -243,10 +243,10 @@ Feature('Server-side rendering of React atom hooks')
             const hydrationRegistry = Atom.Registry.make()
             const ssrHtml = renderToString(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: hydrationRegistry },
                 React.createElement(
-                  HydrationBoundary,
+                  AtomReact.HydrationBoundary,
                   { state: dehydratedState },
                   React.createElement(TestComponent),
                 ),

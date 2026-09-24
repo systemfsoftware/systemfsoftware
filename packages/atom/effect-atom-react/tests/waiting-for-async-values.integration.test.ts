@@ -2,7 +2,7 @@ import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import { RegistryContext, useAtomRefresh, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -28,7 +28,7 @@ Feature('Waiting for asynchronous values')
               const source = Deferred.makeUnsafe<number>()
               const loaded = Atom.make(source.pipe(Deferred.await))
               function Widget() {
-                const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
+                const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
                 return React.createElement(
                   'div',
                   { 'data-testid': 'loaded-value' },
@@ -37,7 +37,7 @@ Feature('Waiting for asynchronous values')
               }
               return renderSuspending(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
                   React.createElement(
                     Suspense,
@@ -87,8 +87,8 @@ Feature('Waiting for asynchronous values')
                 throw new Error('refresh called before the widget rendered')
               }
               function Widget() {
-                refresh = useAtomRefresh(loaded)
-                const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
+                refresh = AtomReact.useAtomRefresh(loaded)
+                const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
                 return React.createElement(
                   'div',
                   { 'data-testid': 'refreshed-value' },
@@ -97,7 +97,7 @@ Feature('Waiting for asynchronous values')
               }
               return renderSuspending(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: Atom.Registry.make() },
                   React.createElement(
                     Suspense,
@@ -152,12 +152,12 @@ Feature('Waiting for asynchronous values')
           Effect.sync(() => {
             const failing = Atom.make(Unavailable.make({}).pipe(Effect.fail))
             function Widget() {
-              useAtomSuspense(failing)
+              AtomReact.useAtomSuspense(failing)
               return React.createElement('div', { 'data-testid': 'unexpected-widget' }, 'unexpected')
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
                 React.createElement(
                   ErrorBoundary,

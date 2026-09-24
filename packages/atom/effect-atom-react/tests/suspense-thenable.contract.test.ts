@@ -3,7 +3,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { act, render, screen } from '@testing-library/react'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 import '@vitest/browser/matchers'
-import { RegistryProvider, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -31,7 +31,7 @@ Feature('Suspending a screen until its value is ready')
               const source = Deferred.makeUnsafe<number>()
               const loaded = Atom.make(source.pipe(Deferred.await))
               function Screen() {
-                const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
+                const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
                 return React.createElement(
                   'div',
                   { 'data-testid': 'arrived-value' },
@@ -40,7 +40,7 @@ Feature('Suspending a screen until its value is ready')
               }
               return renderSuspending(
                 React.createElement(
-                  RegistryProvider,
+                  AtomReact.RegistryProvider,
                   null,
                   React.createElement(Suspense, { fallback: waitingNote() }, React.createElement(Screen)),
                 ),
@@ -77,12 +77,12 @@ Feature('Suspending a screen until its value is ready')
             const source = Deferred.makeUnsafe<number>()
             const loaded = Atom.make(source.pipe(Deferred.await))
             function Screen({ id }: { readonly id: string }) {
-              const result = useAtomSuspense(loaded, { suspendOnWaiting: true })
+              const result = AtomReact.useAtomSuspense(loaded, { suspendOnWaiting: true })
               return React.createElement('div', { 'data-testid': `${id}-value` }, Atom.AsyncResult.getOrThrow(result))
             }
             return renderSuspending(
               React.createElement(
-                RegistryProvider,
+                AtomReact.RegistryProvider,
                 null,
                 React.createElement(
                   Suspense,
@@ -119,12 +119,12 @@ Feature('Suspending a screen until its value is ready')
           Effect.sync(() => {
             const broken = Atom.make(Effect.fail('unavailable'))
             function Screen() {
-              useAtomSuspense(broken)
+              AtomReact.useAtomSuspense(broken)
               return React.createElement('div', { 'data-testid': 'never-screen' }, 'unexpected')
             }
             render(
               React.createElement(
-                RegistryProvider,
+                AtomReact.RegistryProvider,
                 null,
                 React.createElement(
                   ErrorBoundary,

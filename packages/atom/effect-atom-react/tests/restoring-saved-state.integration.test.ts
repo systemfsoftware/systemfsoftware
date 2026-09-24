@@ -2,7 +2,7 @@ import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
@@ -26,14 +26,14 @@ Feature('Restoring saved page state')
             Atom.Registry.set(savedPage, temperature, 23)
             const saved = Atom.Hydration.dehydrate(savedPage)
             function Page() {
-              const value = useAtomValue(temperature)
+              const value = AtomReact.useAtomValue(temperature)
               return React.createElement('div', { 'data-testid': 'fresh-temperature' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
+                AtomReact.RegistryContext.Provider,
                 { value: Atom.Registry.make() },
-                React.createElement(HydrationBoundary, { state: saved }, React.createElement(Page)),
+                React.createElement(AtomReact.HydrationBoundary, { state: saved }, React.createElement(Page)),
               ),
             )
             return {}
@@ -58,14 +58,14 @@ Feature('Restoring saved page state')
               const registry = Atom.Registry.make()
               Atom.Registry.set(registry, room, 4)
               function Page() {
-                const value = useAtomValue(room)
+                const value = AtomReact.useAtomValue(room)
                 return React.createElement('div', { 'data-testid': 'plain-room' }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: registry },
-                  React.createElement(HydrationBoundary, null, React.createElement(Page)),
+                  React.createElement(AtomReact.HydrationBoundary, null, React.createElement(Page)),
                 ),
               )
               return {}
