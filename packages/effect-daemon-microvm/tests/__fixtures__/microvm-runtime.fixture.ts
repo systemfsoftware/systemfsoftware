@@ -24,7 +24,7 @@ const eventFor = (line: string): Option.Option<ExecEvent> =>
   Match.value(line).pipe(
     Match.when(
       MicroVMMedium.ChildStepLines.BecomeReady,
-      () => Option.some<ExecEvent>({ kind: 'stdout', data: encoder.encode(READY_TOKEN) }),
+      () => Option.some<ExecEvent>({ kind: 'stdout', data: encoder.encode(`${READY_TOKEN}\n`) }),
     ),
     Match.when(MicroVMMedium.ChildStepLines.ExitNormal, () => Option.some<ExecEvent>({ kind: 'exited', code: 0 })),
     Match.when(MicroVMMedium.ChildStepLines.ExitAbnormal, () =>

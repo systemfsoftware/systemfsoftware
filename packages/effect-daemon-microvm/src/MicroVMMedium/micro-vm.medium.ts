@@ -104,11 +104,8 @@ const stdinOf = (session: ExecHandle): Effect.Effect<ExecSink> =>
 const pumpStdin = (session: ExecHandle, bytes: Stream.Stream<Uint8Array>): Effect.Effect<void> =>
   Effect.flatMap(stdinOf(session), (stdin) => feedStdin(stdin, bytes))
 
-const tailAfterOf = (soFar: string, chunk: string, token: string): string => {
-  const joined = `${soFar}${chunk}`
-  const extra = joined.length - token.length
-  return extra > 0 ? joined.slice(extra) : joined
-}
+const splitTokenCarryOf = (joined: string, token: string): string =>
+  joined.slice(Math.max(0, joined.length - token.length + 1))
 
 const noteOutput = (
   ready: Deferred.Deferred<void>,
@@ -117,8 +114,11 @@ const noteOutput = (
   chunk: string,
 ): Effect.Effect<void> =>
   Effect.flatMap(
-    Ref.updateAndGet(tail, (soFar) => tailAfterOf(soFar, chunk, token)),
-    (seen) => seen.includes(token) ? Effect.asVoid(Deferred.succeed(ready, void 0)) : Effect.void,
+    Ref.modify(tail, (soFar) => {
+      const joined = `${soFar}${chunk}`
+      return [joined.includes(token), splitTokenCarryOf(joined, token)] as const
+    }),
+    (seen) => seen ? Effect.asVoid(Deferred.succeed(ready, void 0)) : Effect.void,
   )
 
 const exitCodeOf = (session: ExecHandle): Effect.Effect<number> =>
