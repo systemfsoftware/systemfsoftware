@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Duration, Effect, Fiber, Match } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import {
   DynamicLogStream,
   dynamicScenarioEnvironment,
@@ -61,7 +61,7 @@ Feature('Observing guest log output for readiness')
             }),
         ),
         Then('the check reports the service is ready')(({ verdict }) => {
-          expect(reportedReady(verdict)).toBe(true)
+          expect(verdict).toSatisfy(reportedReady)
         }),
       ),
     )
@@ -83,7 +83,7 @@ Feature('Observing guest log output for readiness')
           () => awaitOver(Readiness.Wait.forLog('Ready for traffic: https://0.0.0.0:8080/v1')),
         ),
         Then('the check reports the service is ready')(({ verdict }) => {
-          expect(reportedReady(verdict)).toBe(true)
+          expect(verdict).toSatisfy(reportedReady)
         }),
       ),
     )
@@ -110,7 +110,7 @@ Feature('Observing guest log output for readiness')
             }),
         ),
         Then('the check gives up reporting the service is not ready')(({ verdict }) => {
-          expect(reportedReady(verdict)).toBe(false)
+          expect(verdict).not.toSatisfy(reportedReady)
         }),
       ),
     )
@@ -128,7 +128,7 @@ Feature('Observing guest log output for readiness')
           () => awaitOver(Readiness.Wait.forLog('listening')).pipe(Effect.flip),
         ),
         Then('the check reports the broken stream as the reason')(({ outcome }) => {
-          expect(reportedLogFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(reportedLogFailure)
         }),
       ),
     )

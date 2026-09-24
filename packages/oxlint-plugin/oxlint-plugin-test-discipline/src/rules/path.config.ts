@@ -1,5 +1,7 @@
 export const TEST_BASENAME = /\.(?:test|spec)\.[cm]?tsx?$/
 
+export const TYPE_TEST_BASENAME = /\.tst\.[cm]?tsx?$/
+
 export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
 
 /**
@@ -53,6 +55,12 @@ export const CONFORMANCE_PACKAGE = '@systemfsoftware/conformance-spec' as const
 export const TRACE_SPEC_PACKAGE = '@systemfsoftware/trace-spec' as const
 
 export const FOREIGN_RUNNERS: ReadonlySet<string> = new Set(['vitest', '@effect/vitest'])
+
+export const RAW_VITEST_PACKAGES: Record<string, true> = {
+  'effect-spec-runtime': true,
+  'vitest': true,
+  'vitest-conformance': true,
+}
 
 export const RUNNER_NAMES: ReadonlySet<string> = new Set(['it', 'test', 'describe'])
 

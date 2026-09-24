@@ -13,7 +13,7 @@ import { CONFORMANCE_SETUP, conformanceCoverage } from './conformance-coverage.j
  */
 const withConformanceSetup = (test) => {
   const setupFiles = test?.setupFiles === undefined ? [] : [test.setupFiles].flat()
-  return { ...test, globals: true, setupFiles: [...setupFiles, CONFORMANCE_SETUP] }
+  return { ...test, setupFiles: [...setupFiles, CONFORMANCE_SETUP] }
 }
 
 /**
@@ -66,6 +66,14 @@ export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process
 
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 
+// One tier table decides how many draws every property gets: a Stryker worker wants fast mutant runs,
+// CI wants the thorough tier, and a local run sits between them. The fork merges this over its own
+// `runs: 100` unless a property sets its own.
+const propertyRuns = process.env['STRYKER_MUTATOR_WORKER'] !== undefined ? 30 : isCI ? 1000 : 100
+
+// The fork reads these under `inject`; the key is its published `ProvidedContext` key.
+const propertyCheckDefaults = { runs: propertyRuns }
+
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
  * Both pipelines need the condition, and Vite replaces its defaults when they are set.
@@ -81,14 +89,21 @@ export const sourceResolveConditions = {
  */
 export const sharedConfig = {
   ...sourceResolveConditions,
+  // Effect v3's `effect/TestClock` path, which models keep writing, resolves to
+  // the fork's compat module; on its virtual time `adjust` lets that much time pass.
+  resolve: {
+    ...sourceResolveConditions.resolve,
+    alias: { 'effect/TestClock': '@effect/vitest/TestClock' },
+  },
   test: {
-    globals: true,
+    globals: false,
     environment: 'node',
     includeSource: ['src/**/*.{js,ts}'],
     exclude: ['**/.stryker-tmp/**', '**/node_modules/**', '**/.repo/**'],
     passWithNoTests: true,
     testTimeout: sharedTestTimeout,
     silent: isAgent ? 'passed-only' : false,
+    provide: { '@systemfsoftware/vitest:property-check': propertyCheckDefaults },
     ...(isAgent ? { bail: 1 } : {}),
     coverage: {
       enabled: isCI || process.env['COVERAGE'] === 'true',

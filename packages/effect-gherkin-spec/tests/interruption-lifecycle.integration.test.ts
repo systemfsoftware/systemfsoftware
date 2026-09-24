@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import {
   And,
   checkSoftFailures,
@@ -10,7 +11,6 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Exit, Fiber, Layer, Ref } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
@@ -36,7 +36,7 @@ Feature('Step lifecycle finalizers and fiber supervision')
 
         const exit = yield* Effect.scoped(Effect.exit(pipeline))
 
-        expect(Exit.isFailure(exit)).toBe(true)
+        expect(exit).toSatisfy(Exit.isFailure)
 
         const history = yield* Ref.get(finalizerLog)
         expect(history).toEqual([
@@ -110,7 +110,7 @@ Feature('Step lifecycle finalizers and fiber supervision')
 
         const exit = yield* Effect.scoped(Effect.exit(checkSoftFailures(pipeline.pipe(Effect.asVoid))))
 
-        expect(Exit.isFailure(exit)).toBe(true)
+        expect(exit).toSatisfy(Exit.isFailure)
 
         const log = yield* Ref.get(lifecycleEvents)
         expect(log).toEqual([

@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { ConfigProvider, Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 import { fiberPatternOf } from './__fixtures__/kernelFixtures.js'
 import {
   allThreeClaimed,
@@ -142,7 +142,7 @@ Feature('Searching schedules until a concurrency fault shows')
           (s) => Effect.promise(() => Kernel.search(s.target, { preemptions: 1 })),
         ),
         Then('the search finishes within its stated bound')((s) => {
-          expect(isOverBudget(s.outcome)).toBe(false)
+          expect(s.outcome).not.toSatisfy(isOverBudget)
         }),
         And('the bound reports pruning is off and names the queue')((s) => {
           const bound = outcomeBound(s.outcome)
@@ -203,7 +203,7 @@ Feature('Searching schedules until a concurrency fault shows')
             ),
         ),
         Then('one pause never lets all three believe they won')((s) => {
-          expect(isOverBudget(s.searches.onePause)).toBe(false)
+          expect(s.searches.onePause).not.toSatisfy(isOverBudget)
           expect(s.searches.onePause.failures).toEqual([])
         }),
         And('two pauses catch a run where all three believed they won')((s) => {
@@ -319,7 +319,7 @@ Feature('Searching schedules until a concurrency fault shows')
             Effect.promise(() => Kernel.search(s.target, { preemptions: 2, maxSchedules: 1, isFailure: raceDetected })),
         ),
         Then('the search reports it ran out before covering its bound')((s) => {
-          expect(isOverBudget(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(isOverBudget)
         }),
       ),
     )

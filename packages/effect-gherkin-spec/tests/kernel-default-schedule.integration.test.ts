@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { KernelCase, TaskRef } from '@systemfsoftware/effect-spec-runtime'
 import { Clock, Duration, Effect, Fiber, Ref } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { Shelf, shelfLayer } from './__fixtures__/clerk-shelf.fixture.js'
 
 const Feature = makeFeature({ it })

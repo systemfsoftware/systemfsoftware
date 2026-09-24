@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -9,7 +10,6 @@ import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
@@ -239,7 +239,7 @@ Feature('OneForOne Strategy')
           })),
         Then('outer supervisor ready is open')((s) =>
           Effect.sync(() => {
-            expect(s.health.open).toBe(true)
+            expect(s.health.open).toEqual(true)
           })
         ),
         And('inner child ticked at least once')((s) =>

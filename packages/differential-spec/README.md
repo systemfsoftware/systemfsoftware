@@ -49,11 +49,12 @@ Metamorphic.on({ name: 'keeping positives keeps one entry per positive amount', 
 
 Both builders take `.on(arbitrary, options)` with:
 
-| Option      | Meaning                                           |
-| ----------- | ------------------------------------------------- |
-| `runBudget` | Number of generated inputs to run (default `100`) |
+| Option      | Meaning                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `runBudget` | Number of generated inputs to run (default `100`)                                                |
+| `hostBound` | `{ timeout, reason }` for a target that touches the host, which the kernel cannot bound in steps |
 
-A check has no wall-clock limit. Each generated input runs on the simulation kernel, which bounds every run in steps.
+A check has no wall-clock limit. Each generated input runs on the simulation kernel, which bounds every run in steps. A target that touches the host — a real file, socket, or timer — does work the kernel cannot bound that way, so such a check declares `hostBound` instead: the wall-clock bound it needs, and the host work that bound exists for.
 
 ## Notes
 

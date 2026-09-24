@@ -8,6 +8,7 @@
  *
  * @since 4.0.0
  */
+import { expect, vi } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -17,7 +18,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
-import { expect, vi } from 'vitest'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
 
@@ -83,6 +84,7 @@ function AddressTracker({ atom }: { readonly atom: Atom.Atom<string> }) {
 Feature('Keeping on-screen values in step with the browser page')
   .live('renders real components in Chromium and reacts to page focus and search params')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario, scenarioOutline }) => {
     scenarioOutline(
       'A value that follows page focus <outcome> when the page turns <toward>',

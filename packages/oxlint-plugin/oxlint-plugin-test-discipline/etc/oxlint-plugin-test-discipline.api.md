@@ -33,6 +33,8 @@ const _default: {
         'behaviour-one-feature-per-file': Rule;
         'no-pseudo-gherkin-unit-tests': Rule;
         'tests-dir-helpers-in-fixtures': Rule;
+        'expect-boolean-predicate': Rule;
+        'vitest-from-effect-vitest': Rule;
         'no-io-module-in-source-test': Rule;
         'tests-import-public-api': Rule;
         'differential-test-requires-harness': Rule;
@@ -40,7 +42,6 @@ const _default: {
         'model-fixture-imports-subject': Rule;
         'ban-raw-span-name-emit': Rule;
         'trace-test-requires-taxonomy': Rule;
-        'no-effect-in-sync-prop': Rule;
     };
     configs: {
         recommended: {

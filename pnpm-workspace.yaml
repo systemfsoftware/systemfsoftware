@@ -16,7 +16,7 @@ catalog:
   "@effect/platform-node": 4.0.0-rc.117
   "@effect/platform-node-shared": 4.0.0-rc.117
   effect: 4.0.0-rc.117
-  "@effect/vitest": 4.0.0-rc.117
+  "@effect/vitest": "workspace:@systemfsoftware/vitest@*"
   "@effect/sql-pg": 4.0.0-rc.117
   "@effect/sql-pglite": 4.0.0-rc.117
   "@effect/tsgo": ^0.45.0
@@ -80,7 +80,7 @@ catalogMode: prefer
 catalogs:
   peers:
     effect: 4.0.0-rc.117
-    "@effect/vitest": 4.0.0-rc.117
+    "@effect/vitest": "workspace:@systemfsoftware/vitest@*"
   oxlint:
     oxlint: ~1.82.0
     "@oxlint/plugins": ~1.82.0

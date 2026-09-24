@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect } from 'effect'
-import { expect } from 'vitest'
 import { ReporterSpyContext, SpyLayer } from './__fixtures__/ReporterSpy.js'
 
 const Feature = makeFeature({ it })

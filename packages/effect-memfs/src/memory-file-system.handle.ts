@@ -378,6 +378,19 @@ export const watcher = (self: MemoryFileSystem): WatcherShape => ({
 // The port
 // ---------------------------------------------------------------------------
 
+/**
+ * A mutation runs inside the caller's step. `memfs`'s promise API applies a mutation on a
+ * host microtask (`wrapAsync`'s `Promise.resolve().then`) rather than on the stack that asked
+ * for it, and the kernel drains host microtasks between steps — so a watcher the mutation
+ * notifies would receive the change outside the schedule the kernel controls, and the queue
+ * that carries the notification would never execute under a check. The synchronous twin
+ * applies the same change and throws the same error the rejected promise carries, so the step
+ * that asked for the mutation is the step that runs it and notifies the watcher. Reads keep
+ * the promise API: nothing observes them.
+ */
+const mutated = <A>(method: string, apply: () => A): Effect.Effect<A, Error.PlatformError> =>
+  Effect.try({ try: apply, catch: failureOf(method) })
+
 export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
   const nfs = MemoryFileSystem.slot(self).driver
 
@@ -387,17 +400,16 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
       catch: failureOf('access'),
     })
 
-  const chmod: FileSystem.FileSystem['chmod'] = (path, mode) =>
-    Effect.tryPromise({ try: () => nfs.promises.chmod(path, mode), catch: failureOf('chmod') })
+  const chmod: FileSystem.FileSystem['chmod'] = (path, mode) => mutated('chmod', () => nfs.chmodSync(path, mode))
 
   const chown: FileSystem.FileSystem['chown'] = (path, uid, gid) =>
-    Effect.tryPromise({ try: () => nfs.promises.chown(path, uid, gid), catch: failureOf('chown') })
+    mutated('chown', () => nfs.chownSync(path, uid, gid))
 
   const copy: FileSystem.FileSystem['copy'] = (fromPath, toPath, options) =>
-    Effect.tryPromise({ try: () => nfs.promises.cp(fromPath, toPath, copyArgsOf(options)), catch: failureOf('copy') })
+    mutated('copy', () => nfs.cpSync(fromPath, toPath, copyArgsOf(options)))
 
   const copyFile: FileSystem.FileSystem['copyFile'] = (fromPath, toPath) =>
-    Effect.tryPromise({ try: () => nfs.promises.copyFile(fromPath, toPath), catch: failureOf('copyFile') })
+    mutated('copyFile', () => nfs.copyFileSync(fromPath, toPath))
 
   const glob: FileSystem.FileSystem['glob'] = (pattern, options) =>
     Effect.tryPromise({
@@ -406,34 +418,23 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
     }).pipe(Effect.map((matches) => matches.map(entryPathOf)))
 
   const link: FileSystem.FileSystem['link'] = (existingPath, newPath) =>
-    Effect.tryPromise({ try: () => nfs.promises.link(existingPath, newPath), catch: failureOf('link') })
+    mutated('link', () => nfs.linkSync(existingPath, newPath))
 
   const makeDirectory: FileSystem.FileSystem['makeDirectory'] = (path, options) =>
     occupiedByNonDirectory(nfs, path)
       ? Effect.fail(failureOf('makeDirectory')({ code: 'EEXIST' }))
-      : Effect.tryPromise({
-        try: () => nfs.promises.mkdir(path, makeDirectoryArgsOf(options)),
-        catch: failureOf('makeDirectory'),
-      })
+      : mutated('makeDirectory', () => nfs.mkdirSync(path, makeDirectoryArgsOf(options)))
 
   const removeWith = (method: string): FileSystem.FileSystem['remove'] => (path, options) =>
-    Effect.tryPromise({ try: () => nfs.promises.rm(path, removeArgsOf(options)), catch: failureOf(method) })
+    mutated(method, () => nfs.rmSync(path, removeArgsOf(options)))
 
   const remove = removeWith('remove')
 
   const makeTempDirectory: FileSystem.FileSystem['makeTempDirectory'] = (options) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.mkdir(tempParentOf(options), { recursive: true }),
-      catch: failureOf('makeTempDirectory'),
-    }).pipe(
-      Effect.flatMap(() =>
-        Effect.tryPromise({
-          try: () => nfs.promises.mkdtemp(tempDirectoryOf(options)),
-          catch: failureOf('makeTempDirectory'),
-        })
-      ),
-      Effect.map(entryPathOf),
-    )
+    Effect.andThen(
+      mutated('makeTempDirectory', () => nfs.mkdirSync(tempParentOf(options), { recursive: true })),
+      mutated('makeTempDirectory', () => nfs.mkdtempSync(tempDirectoryOf(options))),
+    ).pipe(Effect.map(entryPathOf))
 
   const makeTempDirectoryScoped: FileSystem.FileSystem['makeTempDirectoryScoped'] = (options) =>
     Effect.acquireRelease(
@@ -444,17 +445,10 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
   const makeTempFile: FileSystem.FileSystem['makeTempFile'] = (options) =>
     Effect.flatMap(Random.next, (entropy) => {
       const filePath = tempFileOf(entropy.toString(36).slice(2, 10), options)
-      return Effect.tryPromise({
-        try: () => nfs.promises.mkdir(tempParentOf(options), { recursive: true }),
-        catch: failureOf('makeTempFile'),
-      }).pipe(
-        Effect.flatMap(() =>
-          Effect.tryPromise({
-            try: () => nfs.promises.writeFile(filePath, '').then(() => filePath),
-            catch: failureOf('makeTempFile'),
-          })
-        ),
-      )
+      return Effect.andThen(
+        mutated('makeTempFile', () => nfs.mkdirSync(tempParentOf(options), { recursive: true })),
+        mutated('makeTempFile', () => nfs.writeFileSync(filePath, '')),
+      ).pipe(Effect.as(filePath))
     })
 
   const makeTempFileScoped: FileSystem.FileSystem['makeTempFileScoped'] = (options) =>
@@ -511,25 +505,19 @@ export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
     )
 
   const rename: FileSystem.FileSystem['rename'] = (oldPath, newPath) =>
-    Effect.tryPromise({ try: () => nfs.promises.rename(oldPath, newPath), catch: failureOf('rename') })
+    mutated('rename', () => nfs.renameSync(oldPath, newPath))
 
   const symlink: FileSystem.FileSystem['symlink'] = (target, path) =>
-    Effect.tryPromise({ try: () => nfs.promises.symlink(target, path), catch: failureOf('symlink') })
+    mutated('symlink', () => nfs.symlinkSync(target, path))
 
   const truncate: FileSystem.FileSystem['truncate'] = (path, length) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.truncate(path, truncateLengthOf(length)),
-      catch: failureOf('truncate'),
-    })
+    mutated('truncate', () => nfs.truncateSync(path, truncateLengthOf(length)))
 
   const utimes: FileSystem.FileSystem['utimes'] = (path, atime, mtime) =>
-    Effect.tryPromise({ try: () => nfs.promises.utimes(path, atime, mtime), catch: failureOf('utimes') })
+    mutated('utimes', () => nfs.utimesSync(path, atime, mtime))
 
   const writeFile: FileSystem.FileSystem['writeFile'] = (path, data, options) =>
-    Effect.tryPromise({
-      try: () => nfs.promises.writeFile(path, data, writeFileArgsOf(options)),
-      catch: failureOf('writeFile'),
-    })
+    mutated('writeFile', () => nfs.writeFileSync(path, data, writeFileArgsOf(options)))
 
   const watch: FileSystem.FileSystem['watch'] = (path, options) => Stream.unwrap(startWatch(self, path, options))
 

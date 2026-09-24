@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
@@ -8,7 +9,6 @@ import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Fiber, Layer, Match, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 import { advanceUntil } from './__fixtures__/TestUtils.js'
 
@@ -111,7 +111,7 @@ Feature('Lock acquisition retry on contention')
           ),
           Then('the daemon performs work after the resource frees')((s) =>
             Effect.sync(() => {
-              expect(s.readyOpen).toBe(true)
+              expect(s.readyOpen).toEqual(true)
             })
           ),
           And('work eventually runs')((s) =>
@@ -208,7 +208,7 @@ Feature('Lock acquisition retry on contention')
           ),
           Then('the daemon performs work after the resource frees')((s) =>
             Effect.sync(() => {
-              expect(s.readyOpen).toBe(true)
+              expect(s.readyOpen).toEqual(true)
             })
           ),
           And('work eventually runs')((s) =>

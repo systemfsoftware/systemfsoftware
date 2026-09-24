@@ -1,3 +1,4 @@
+import { recordAssertion } from '@effect/vitest'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Cause, Effect, Exit, Fiber, Function } from 'effect'
 import * as fc from 'fast-check'
@@ -11,6 +12,12 @@ import { formatDisparity, renderExit, renderUnknown } from './DisparityReporter.
  */
 export interface DualExecutionSupervisorOptions {
   readonly runBudget?: number
+  readonly hostBound?: HostBound
+}
+
+export interface HostBound {
+  readonly timeout: number
+  readonly reason: string
 }
 
 type Exits<OutputA, OutputB, E> = readonly [Exit.Exit<OutputA, E>, Exit.Exit<OutputB, E>]
@@ -352,7 +359,7 @@ const failureReportOf = <Input, Described, OutputA, OutputB, E>(
   return counterexampleReport(comparison, details, input, seed)
 }
 
-const isReported = <Input>(details: fc.RunDetails<[Input, number]>): boolean => details.failed
+const isReported = <Input>(details: fc.RunDetails<[Input, number]>): boolean => details.failed || details.interrupted
 
 const checked = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,
@@ -368,7 +375,7 @@ const checked = <Input, Described, OutputA, OutputB, E>(
 }
 
 const fromOutcome = (failure: DisparityError | undefined): Effect.Effect<void, DisparityError> =>
-  failure === undefined ? Effect.void : Effect.fail(failure)
+  failure === undefined ? Effect.sync(recordAssertion) : Effect.fail(failure)
 
 const supervised = <Input, Described, OutputA, OutputB, E>(
   comparison: Comparison<Input, Described, OutputA, OutputB, E>,

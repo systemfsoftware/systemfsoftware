@@ -7,6 +7,5 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-    setupFiles: ['vitest-setup.ts'],
   },
 })

@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
@@ -7,7 +8,6 @@ import { Supervision } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Duration, Effect, Fiber, Layer, Match, Option, Ref, Schedule } from 'effect'
-import { expect } from 'vitest'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 import { advanceUntil } from './__fixtures__/TestUtils.js'
 

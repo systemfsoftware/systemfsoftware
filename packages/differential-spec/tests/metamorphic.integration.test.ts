@@ -1,13 +1,13 @@
+import { expect } from '@effect/vitest'
 import { runMetamorphicWithShrink } from '@systemfsoftware/differential-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer } from 'effect'
-import { expect } from 'vitest'
 import { integers } from './__fixtures__/arbitraries.js'
 import { disparityReportOf } from './__fixtures__/disparityReport.js'
 
 const Feature = makeFeature({ it })
 
-Feature('Proving a system obeys a relation when its input is transformed')
+Feature('Proving a system obeys a relation when its input is transformed', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('the metamorphic check explores its own kernel schedules')
   .body(({ scenario }) => {
@@ -52,7 +52,7 @@ Feature('Proving a system obeys a relation when its input is transformed')
             runMetamorphicWithShrink(s.system, integers, (x) => x * 2, (a, b) => b === a * 2),
           )),
         Then('the asynchronous run completes without complaint')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )

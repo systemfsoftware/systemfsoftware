@@ -131,14 +131,14 @@ const caseTools = <Provided, ScenarioRequired>(
     const salt = saltOf()
     propIt.effect.prop(
       name,
-      [arbitrary],
-      (values, context) =>
+      { of: [arbitrary], subject: contract.stimulus },
+      (subject, values) =>
         Prop.predicate<Input, Output, E, Provided | Harness, ScenarioRequired>(
           name,
           contract,
           scenario,
           shared,
-        )(values[0], context).pipe(Random.withSeed(salt)),
+        )(subject, values[0]).pipe(Random.withSeed(salt)),
     )
   }
   return { Case }

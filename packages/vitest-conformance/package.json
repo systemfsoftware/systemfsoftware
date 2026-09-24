@@ -1,0 +1,25 @@
+{
+  "name": "@systemfsoftware/vitest-conformance",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "Private conformance suite for @systemfsoftware/vitest: nested Vitest runs over probe fixtures, asserted through the JSON report they produce.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "devDependencies": {
+    "@effect/vitest": "workspace:@systemfsoftware/vitest@*",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "vitest": "catalog:"
+  }
+}

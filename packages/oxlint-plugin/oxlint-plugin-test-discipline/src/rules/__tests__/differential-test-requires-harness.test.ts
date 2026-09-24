@@ -84,7 +84,7 @@ ruleTester.run('differential-test-requires-harness', differentialTestRequiresHar
       name: 'Should_Allow_PlainTest_When_PropertyFile',
       code: `
         import { it } from '@effect/vitest'
-        it.prop('works', [arb], ([x]) => x === x)
+        it.prop('works', { of: [arb], subject: (x) => x, runs: 100 }, (s, [v]) => v === v)
       `,
       filename: '/repo/pkg/src/a.workflow.property.test.ts',
     },

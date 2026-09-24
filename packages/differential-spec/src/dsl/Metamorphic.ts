@@ -1,8 +1,9 @@
 import { it } from '@effect/vitest'
-import type { Effect } from 'effect'
+import { Effect } from 'effect'
 import * as fc from 'fast-check'
 import type { DualExecutionSupervisorOptions } from '../core/DualExecutionSupervisor.js'
 import { runMetamorphicWithShrink } from '../core/DualExecutionSupervisor.js'
+import { announceHostBound, checkOptions } from './Registration.js'
 
 export interface MetamorphicBuilder<Input, Output> {
   readonly relation: (options: {
@@ -23,7 +24,15 @@ export const on = <Input, Output, E>(
 ): MetamorphicBuilder<Input, Output> => ({
   relation: ({ transformInput, assertOutput }) => ({
     on: (arb, options) => {
-      it.effect(target.name, () => runMetamorphicWithShrink(target.system, arb, transformInput, assertOutput, options))
+      it.effect(
+        target.name,
+        (ctx) =>
+          Effect.andThen(
+            announceHostBound(options)(ctx),
+            runMetamorphicWithShrink(target.system, arb, transformInput, assertOutput, options),
+          ),
+        checkOptions(options),
+      )
     },
   }),
 })

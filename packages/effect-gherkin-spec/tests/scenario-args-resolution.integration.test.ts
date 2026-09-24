@@ -6,10 +6,10 @@
  * each case — the kind of failure a downstream consumer would only see if a
  * step body or options object was supplied where it should not have been.
  */
+import { expect } from '@effect/vitest'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { resolveScenarioArgs, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 

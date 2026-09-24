@@ -206,9 +206,19 @@ if (import.meta.vitest !== void 0) {
   const soleAttribute = (attrs: Attributes, key: string, value: Span.AttributeValue): boolean =>
     Object.keys(attrs).length === 1 && attrs[key] === value
 
-  const decodesDeclaredOnly = (extras: ReadonlyArray<Extra>, orderId: string): boolean => {
-    const decoded = decodeAttrs(PlaceOrder, declaredRecord(extras, orderId))
-    return Result.isSuccess(decoded) && soleAttribute(decoded.success, ORDER_ATTR, orderId)
+  const attrsOf = (decoded: Result.Result<TraceGraph, ContractDecodeError>, spanId: string): Attributes | undefined => {
+    const node = findsSpan(decoded, spanId)
+    return node === undefined ? undefined : node.attrs
+  }
+
+  const decodedSoleAttribute = (
+    decoded: Result.Result<TraceGraph, ContractDecodeError>,
+    spanId: string,
+    key: string,
+    value: Span.AttributeValue,
+  ): boolean => {
+    const attrs = attrsOf(decoded, spanId)
+    return attrs !== undefined && soleAttribute(attrs, key, value)
   }
 
   const namesRefusal = (error: ContractDecodeError, attribute: string): boolean =>
@@ -220,11 +230,6 @@ if (import.meta.vitest !== void 0) {
   const namesSpan = (error: ContractDecodeError, spanId: string, name: string): boolean =>
     error.spanId === spanId && error.spanName === name
 
-  const failsNamingAttribute = (extras: ReadonlyArray<Extra>): boolean => {
-    const decoded = decode(TRACE_ID, [missingRecord(extras)], DeclaredOnlyTaxonomy)
-    return Result.isFailure(decoded) && namesRefusal(decoded.failure, ORDER_ATTR)
-  }
-
   const distinctKeyCount = (extras: ReadonlyArray<Extra>): number => new Set(extras.map((entry) => entry.key)).size
 
   const recordedAsObserved = (node: GraphNode, keyCount: number): boolean =>
@@ -235,24 +240,16 @@ if (import.meta.vitest !== void 0) {
       ? decoded.success.nodes.find((candidate) => candidate.spanId === spanId)
       : undefined
 
-  const keepsUndecodedNode = (extras: ReadonlyArray<Extra>): boolean => {
-    const node = findsSpan(decode(TRACE_ID, [noiseRecord(extras)], BothTaxonomy), NOISE_SPAN_ID)
-    return node !== undefined && recordedAsObserved(node, distinctKeyCount(extras))
-  }
+  const placedTraceOf = (extras: ReadonlyArray<Extra>): ReadonlyArray<SpanRecord> => [
+    recordOf(ORDER_SPAN, ROOT_SPAN_ID, null, { [ORDER_ATTR]: ORDER_SPAN_ID }),
+    recordOf(NOISE_SPAN, CHILD_SPAN_ID, ROOT_SPAN_ID, pairsOf(extras)),
+  ]
 
-  const placedNodesOf = (extras: ReadonlyArray<Extra>): {
+  const placedNodesOf = (decoded: Result.Result<TraceGraph, ContractDecodeError>): {
     readonly children: ReadonlyArray<GraphNode>
     readonly descendants: ReadonlyArray<GraphNode>
-  } => {
-    const decoded = decode(
-      TRACE_ID,
-      [
-        recordOf(ORDER_SPAN, ROOT_SPAN_ID, null, { [ORDER_ATTR]: ORDER_SPAN_ID }),
-        recordOf(NOISE_SPAN, CHILD_SPAN_ID, ROOT_SPAN_ID, pairsOf(extras)),
-      ],
-      BothTaxonomy,
-    )
-    return Result.match(decoded, {
+  } =>
+    Result.match(decoded, {
       onFailure: () => ({ children: [], descendants: [] }),
       onSuccess: (graph) => {
         const root = graph.nodes.find((node) => node.spanId === ROOT_SPAN_ID)
@@ -261,23 +258,50 @@ if (import.meta.vitest !== void 0) {
           : { children: children(graph, root), descendants: descendants(graph, root) }
       },
     })
-  }
 
-  const childrenAreDescendants = (extras: ReadonlyArray<Extra>): boolean => {
-    const placed = placedNodesOf(extras)
+  const childrenAreDescendants = (placed: {
+    readonly children: ReadonlyArray<GraphNode>
+    readonly descendants: ReadonlyArray<GraphNode>
+  }): boolean => {
     const descendantIds = new Set(placed.descendants.map((node) => node.spanId))
     return placed.children.length > 0 && placed.children.every((node) => descendantIds.has(node.spanId))
   }
 
   it.prop(
     '∀r_DecodeAttrs_=DeclaredOnly',
-    [Extras, Schema.String],
-    ([extras, orderId]) => decodesDeclaredOnly(extras, orderId),
+    { of: [Extras, Schema.String], subject: decode },
+    (decoder, [extras, orderId]) =>
+      decodedSoleAttribute(
+        decoder(TRACE_ID, [declaredRecord(extras, orderId)], DeclaredOnlyTaxonomy),
+        ORDER_SPAN_ID,
+        ORDER_ATTR,
+        orderId,
+      ),
   )
 
-  it.prop('∀r_MissingAttrs_→ContractDecodeError', [Extras], ([extras]) => failsNamingAttribute(extras))
+  it.prop(
+    '∀r_MissingAttrs_→ContractDecodeError',
+    { of: [Extras], subject: decode },
+    (decoder, [extras]) =>
+      Result.match(decoder(TRACE_ID, [missingRecord(extras)], DeclaredOnlyTaxonomy), {
+        onFailure: (error) => namesRefusal(error, ORDER_ATTR),
+        onSuccess: () => false,
+      }),
+  )
 
-  it.prop('∀r_UndeclaredSpan_∈Nodes', [Extras], ([extras]) => keepsUndecodedNode(extras))
+  it.prop(
+    '∀r_UndeclaredSpan_∈Nodes',
+    { of: [Extras], subject: decode },
+    (decoder, [extras]) => {
+      const node = findsSpan(decoder(TRACE_ID, [noiseRecord(extras)], BothTaxonomy), NOISE_SPAN_ID)
+      return node !== undefined && recordedAsObserved(node, distinctKeyCount(extras))
+    },
+  )
 
-  it.prop('∀r_Children_⊆Descendants', [Extras], ([extras]) => childrenAreDescendants(extras))
+  it.prop(
+    '∀r_Children_⊆Descendants',
+    { of: [Extras], subject: decode },
+    (decoder, [extras]) =>
+      decoder(TRACE_ID, placedTraceOf(extras), BothTaxonomy).pipe(placedNodesOf, childrenAreDescendants),
+  )
 }

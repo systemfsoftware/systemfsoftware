@@ -74,26 +74,32 @@ const isNoneOf = (route: Route, membership: ReadonlyArray<string>): boolean =>
     Match.orElse(() => false),
   )
 
-const verdictOf = (command: SelectRoute): Route =>
-  Result.match(selectRoute(command), {
+type Select = typeof selectRoute
+
+const verdictOf = (select: Select, command: SelectRoute): Route =>
+  Result.match(select(command), {
     onFailure: (impossible) => impossible,
     onSuccess: (route) => route,
   })
 
 it.prop(
   '∀c_WeakLeader_=Uncertain',
-  [
-    Schema.String,
-    Schema.String,
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.1, maximum: 0.4 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.5, maximum: 0.7 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.1 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.05, maximum: 0.4 }))),
-  ],
-  ([leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
+  {
+    of: [
+      Schema.String,
+      Schema.String,
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.1, maximum: 0.4 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.5, maximum: 0.7 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.1 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.05, maximum: 0.4 }))),
+    ],
+    subject: selectRoute,
+  },
+  (subject, [leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
     const leader = { id: leaderId, probability: leaderProbability }
     const runnerUp = { id: runnerUpId, probability: leaderProbability - gap }
     const route = verdictOf(
+      subject,
       commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), minProbability, minMargin),
     )
     return isUncertainOf(route, 'no procedure reached', [leader, runnerUp])
@@ -102,18 +108,22 @@ it.prop(
 
 it.prop(
   '∀c_ThinMargin_=Uncertain',
-  [
-    Schema.String,
-    Schema.String,
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.75, maximum: 0.95 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.5, maximum: 0.7 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.1 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.2, maximum: 0.4 }))),
-  ],
-  ([leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
+  {
+    of: [
+      Schema.String,
+      Schema.String,
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.75, maximum: 0.95 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.5, maximum: 0.7 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.1 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.2, maximum: 0.4 }))),
+    ],
+    subject: selectRoute,
+  },
+  (subject, [leaderId, runnerUpId, leaderProbability, minProbability, gap, minMargin]) => {
     const leader = { id: leaderId, probability: leaderProbability }
     const runnerUp = { id: runnerUpId, probability: leaderProbability - gap }
     const route = verdictOf(
+      subject,
       commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), minProbability, minMargin),
     )
     return isUncertainOf(route, `${leaderId} led ${runnerUpId} by only `, [leader, runnerUp])
@@ -122,29 +132,41 @@ it.prop(
 
 it.prop(
   '∀c_ConfidentLeader_=MatchedByModel',
-  [
-    Schema.String,
-    Schema.String,
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.8, maximum: 1 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.5 }))),
-    Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.5 }))),
-  ],
-  ([leaderId, runnerUpId, leaderProbability, minProbability, runnerUpProbability]) => {
+  {
+    of: [
+      Schema.String,
+      Schema.String,
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0.8, maximum: 1 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.5 }))),
+      Schema.Finite.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: 0.5 }))),
+    ],
+    subject: selectRoute,
+  },
+  (subject, [leaderId, runnerUpId, leaderProbability, minProbability, runnerUpProbability]) => {
     const leader = { id: leaderId, probability: leaderProbability }
     const runnerUp = { id: runnerUpId, probability: runnerUpProbability }
     const route = verdictOf(
+      subject,
       commandOf(new ManyEligible({ leader, runnerUp, ranked: [leader, runnerUp] }), minProbability, 0.15),
     )
     return isModelMatchOf(route, leader, runnerUp, leaderProbability - runnerUpProbability)
   },
 )
 
-it.prop('∀c_SingleEligible_=MatchedByElimination', [RouteCandidate], ([candidate]) => {
-  const route = verdictOf(commandOf(new OneEligible({ candidate }), 0.7, 0.15))
-  return isEliminationMatchOf(route, candidate.id)
-})
+it.prop(
+  '∀c_SingleEligible_=MatchedByElimination',
+  { of: [RouteCandidate], subject: selectRoute },
+  (subject, [candidate]) => {
+    const route = verdictOf(subject, commandOf(new OneEligible({ candidate }), 0.7, 0.15))
+    return isEliminationMatchOf(route, candidate.id)
+  },
+)
 
-it.prop('∀c_NoEligible_=None', [Schema.Array(Schema.String)], ([membership]) => {
-  const route = verdictOf(commandOf(new NoEligible({ membership }), 0.7, 0.15))
-  return isNoneOf(route, membership)
-})
+it.prop(
+  '∀c_NoEligible_=None',
+  { of: [Schema.Array(Schema.String)], subject: selectRoute },
+  (subject, [membership]) => {
+    const route = verdictOf(subject, commandOf(new NoEligible({ membership }), 0.7, 0.15))
+    return isNoneOf(route, membership)
+  },
+)

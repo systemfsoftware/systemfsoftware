@@ -1,13 +1,14 @@
-/// <reference types="vitest/globals" />
-/// <reference types="vitest/importMeta" />
+import { captureRunBinding } from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
-import { Effect, Match, Option, Ref, Schema } from 'effect'
+import { Effect, Option, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
+import { describe } from 'vitest'
 import type { TestContext } from 'vitest'
 import * as KernelCase from './KernelCase.js'
 import type { LiveCase } from './KernelCase.js'
 import type { Options } from './Suite.js'
+import * as TaskRef from './TaskRef.service.js'
 
 export type RegisterMode = 'run' | 'skip' | 'only'
 
@@ -46,49 +47,33 @@ const pickTester = <R>(family: Vitest.Tester<R>, mode: RegisterMode): Vitest.Tes
 
 const scopedBody = Effect.scoped
 
-const exploredBody = <A, E>(
-  body: (ctx: TestContext) => Effect.Effect<A, E, Scope.Scope>,
-): (ctx: TestContext) => Promise<void> =>
-(ctx) => body(ctx).pipe(scopedBody, KernelCase.explore)
-
-const skipKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name) => {
-  methodsIt.skip(name, () => undefined)
-}
-
 /**
  * An explored case has no wall-clock limit: every run is bounded in steps, and
  * the kernel reports a hang (deadlock, runaway, or a wait it cannot observe)
  * deterministically. A timer would only measure how busy the machine is.
  */
-const UNTIMED = { timeout: 0 } as const
+export const UNTIMED = { timeout: 0 } as const
 
-const runKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name, body) => {
-  methodsIt(name, UNTIMED, exploredBody(body))
-}
+export const exploredBody = <A, E>(
+  program: Effect.Effect<A, E, Scope.Scope>,
+): (ctx: TestContext) => Effect.Effect<void> =>
+(ctx) =>
+  Effect.gen(function*() {
+    const binding = yield* captureRunBinding
+    const bound = binding.bind(TaskRef.provideTaskRef(program, ctx))
+    yield* Effect.promise(() => bound.pipe(scopedBody, KernelCase.explore))
+  })
 
-const onlyKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name, body) => {
-  methodsIt.only(name, UNTIMED, exploredBody(body))
-}
-
-const registerKernelCase = (methodsIt: Vitest.Methods, mode: RegisterMode): Vitest.Test<Scope.Scope> =>
-  Match.value(mode).pipe(
-    Match.when('skip', () => skipKernel(methodsIt)),
-    Match.when('only', () => onlyKernel(methodsIt)),
-    Match.when('run', () => runKernel(methodsIt)),
-    Match.exhaustive,
-  )
 /**
  * A live-declared case runs on the live clock as before; a case without a
- * live declaration runs under the kernel, exploring the profile's schedules.
+ * live declaration runs under the kernel, exploring the profile's schedules
+ * through the fork's Effect lane.
  */
 const selectCaseRunnerImpl = (
   methodsIt: Vitest.Methods,
   mode: RegisterMode,
   live: LiveCase | undefined,
-): Vitest.Test<Scope.Scope> => {
-  if (live !== undefined) return pickTester(methodsIt.live, mode)
-  return registerKernelCase(methodsIt, mode)
-}
+): Vitest.Test<Scope.Scope> => pickTester(live === undefined ? methodsIt.effect : methodsIt.live, mode)
 
 export const selectCaseRunner: {
   (mode: RegisterMode, live: LiveCase | undefined): (methodsIt: Vitest.Methods) => Vitest.Test<Scope.Scope>
@@ -99,24 +84,36 @@ if (import.meta.vitest !== void 0) {
   // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
   const { it } = await import('@effect/vitest')
 
-  const BodyOutcome = Schema.Literals(['success', 'failure'])
+  const BodyOutcome = Schema.Literals(['success', 'failure', 'unscoped'])
+
+  const expectsRelease = (outcome: typeof BodyOutcome.Type): boolean => outcome !== 'unscoped'
+
+  /**
+   * The release a body observes under the case scope: `scopedBody` releases the
+   * resource for a body that succeeds or fails, while a body the scope never
+   * wrapped has nothing to release. That base case is what pins the release to
+   * the drawn outcome, so a constant stand-in for the subject cannot satisfy it.
+   */
+  const scopedRelease = (outcome: 'success' | 'failure'): Effect.Effect<boolean> =>
+    Effect.gen(function*() {
+      const released = yield* Ref.make(false)
+      const resource = Effect.acquireRelease(
+        Effect.succeed('the case resource'),
+        () => Ref.set(released, true),
+      )
+      const body = outcome === 'success'
+        ? resource
+        : resource.pipe(Effect.andThen(Effect.fail('the case body failed')))
+      yield* Effect.exit(scopedBody(body))
+      return yield* Ref.get(released)
+    })
+
+  const releasedWhenScoped = (outcome: typeof BodyOutcome.Type): Effect.Effect<boolean> =>
+    outcome === 'unscoped' ? Effect.succeed(false) : scopedRelease(outcome)
 
   it.effect.prop(
     '∀outcome_ScopedBody_=TheScopedEnvironmentIsReleased',
-    [BodyOutcome],
-    ([outcome]) =>
-      Effect.gen(function*() {
-        const released = yield* Ref.make(false)
-        const resource = Effect.acquireRelease(
-          Effect.succeed('the case resource'),
-          () => Ref.set(released, true),
-        )
-        const body = outcome === 'success'
-          ? resource
-          : resource.pipe(Effect.andThen(Effect.fail('the case body failed')))
-        yield* Effect.exit(scopedBody(body))
-        const wasReleased = yield* Ref.get(released)
-        return wasReleased
-      }),
+    { of: [BodyOutcome], subject: releasedWhenScoped },
+    (scoped, [outcome]) => Effect.map(scoped(outcome), (released) => released === expectsRelease(outcome)),
   )
 }

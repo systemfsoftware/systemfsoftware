@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Deferred, Effect, Equal, Exit, Fiber, Layer } from 'effect'
-import { expect } from 'vitest'
 import { answeredOperation, failReportOf, operationsOfRun, passReportOf } from './__fixtures__/checkReports.js'
 import type { LockOperation } from './__fixtures__/checkReports.js'
 import { LockCommand, lockModel, LockState, stepLock, tryAcquire } from './__fixtures__/lock.model.js'
@@ -88,7 +88,7 @@ const recordedWithInterruption = Effect.gen(function*() {
   return yield* recording.operations
 })
 
-Feature('Proving concurrent callers against a pure model')
+Feature('Proving concurrent callers against a pure model', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario, scenarioOutline }) => {

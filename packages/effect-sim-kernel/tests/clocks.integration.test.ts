@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Clock, Duration, Effect, Exit, Fiber, Layer, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { alwaysLast, completedValueOf, deadlockOf, escapeOf } from './__fixtures__/kernelFixtures.js'
 
 const Feature = makeFeature({ it })

@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { type Cause, Effect, Fiber, Option, Queue, type Scope, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Error from 'effect/PlatformError'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 

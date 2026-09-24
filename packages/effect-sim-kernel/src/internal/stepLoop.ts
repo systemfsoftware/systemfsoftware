@@ -23,6 +23,8 @@ import { makeKernel } from './kernel.js'
 import type { Task } from './kernel.js'
 import type { Choice, ChoiceOption, Decision, FiberTarget, Kernel, StepInput, StepRecord } from './kernel.js'
 import { currentKernel } from './runMark.js'
+import { acquireRun } from './runQueue.js'
+import type { ReleaseRun } from './runQueue.js'
 
 /**
  * The discriminant tags of the run outcome; the variants inherit them because
@@ -427,14 +429,14 @@ const isProgram = (candidate: KernelField): boolean => !isRunOptions(candidate)
  * reach is the kernel's virtual root clock; R37: at quiescence the kernel
  * settles its test clocks, then advances the root clock). Driven by the
  * decision path or chooser in `options`, it returns the exit, the decisions
- * taken, and a per-step record of which fiber ran. A second run started while
- * one is active fails immediately instead of sharing the global hooks.
+ * taken, and a per-step record of which fiber ran. A run started while one is
+ * active queues behind it, so two runs never share the global hooks.
  */
-const runKernelImpl = <A, E>(
+const lockedRun = <A, E>(
   program: Effect.Effect<A, E>,
-  options: RunOptions = {},
+  options: RunOptions,
+  release: ReleaseRun,
 ): Promise<RunResult<A, E>> => {
-  rejectAwaitedExploration(options)
   const kernel = makeKernel({ exploring: options.explore !== 'body' })
   const recorder = installEscapeRecorder((escape) => {
     kernel.escapes.push(escape)
@@ -455,7 +457,29 @@ const runKernelImpl = <A, E>(
   }).finally(() => {
     recorder.restore()
     kernel.release()
+    release()
   })
+}
+
+const queuedRun = <A, E>(
+  program: Effect.Effect<A, E>,
+  options: RunOptions,
+  release: ReleaseRun,
+): Promise<RunResult<A, E>> => {
+  try {
+    return lockedRun(program, options, release)
+  } catch (error) {
+    release()
+    return Promise.reject(error)
+  }
+}
+
+const runKernelImpl = <A, E>(
+  program: Effect.Effect<A, E>,
+  options: RunOptions = {},
+): Promise<RunResult<A, E>> => {
+  rejectAwaitedExploration(options)
+  return acquireRun().then((release) => queuedRun(program, options, release))
 }
 /** @internal */
 export const runKernel: {

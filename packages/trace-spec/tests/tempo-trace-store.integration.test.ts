@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { Graph } from '@systemfsoftware/trace-spec'
 import { TempoTraceStore } from '@systemfsoftware/trace-spec'
@@ -6,7 +7,6 @@ import * as HttpClient from 'effect/unstable/http/HttpClient'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
-import { expect } from 'vitest'
 import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 import {
   expectedSpanRecords,

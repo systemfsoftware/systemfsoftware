@@ -317,10 +317,12 @@ if (import.meta.vitest !== void 0) {
   const matchesDraw = (replay: Replay, seed: number, path: string): boolean =>
     replay.seed === seed && pathTextOf(replay) === path
 
+  const replayText = (row: typeof ReplayRow.Type): string => `seed=${row.seed};path=${row.path}`
+
   it.prop(
     '∀row_ReplayOfSeedAndPath_=TheDrawnSeedAndPath',
-    [ReplayRow],
-    ([row]) => matchesDraw(replayOf(`seed=${row.seed};path=${row.path}`), row.seed, String(row.path)),
+    { of: [ReplayRow], subject: replayOf },
+    (parse, [row]) => matchesDraw(parse(replayText(row)), row.seed, String(row.path)),
   )
 
   const LiveReason = 'waits on a container that completes outside the process'
@@ -336,14 +338,14 @@ if (import.meta.vitest !== void 0) {
 
   it.effect.prop(
     '∀reason_AnnounceLive_=LabelledLiveCaseWithoutATask',
-    [Schema.String],
-    ([reason]) =>
+    { of: [Schema.String], subject: announceLive },
+    (announce, [reason]) =>
       Effect.gen(function*() {
         const seen: Array<string> = []
-        yield* announceLive(reason).pipe(
+        yield* announce(reason).pipe(
           Effect.provideService(TaskRef.RawVitestTaskRef, annotationsOf(seen)),
         )
-        yield* announceLive(reason)
+        yield* announce(reason)
         return announcedReason(seen, reason)
       }),
   )
@@ -352,52 +354,68 @@ if (import.meta.vitest !== void 0) {
 
   class Probe extends Context.Service<Probe, number>()('@systemfsoftware/effect-spec-runtime/test/Probe') {}
 
-  const readWithReason = (value: number, seen: Array<string>): Effect.Effect<number> =>
-    Effect.scoped(liveCase(Probe, Layer.succeed(Probe, value), LiveReason)).pipe(
-      Effect.provideService(TaskRef.RawVitestTaskRef, annotationsOf(seen)),
-    )
-
   const announcedOnce = (seen: Array<string>): boolean => seen.length === 1 && seen[0] === `live case: ${LiveReason}`
+
+  const readLiveCase = (value: number): Effect.Effect<{ readonly read: number; readonly announced: boolean }> => {
+    const seen: Array<string> = []
+    return Effect.map(
+      Effect.scoped(liveCase(Probe, Layer.succeed(Probe, value), LiveReason)).pipe(
+        Effect.provideService(TaskRef.RawVitestTaskRef, annotationsOf(seen)),
+      ),
+      (read) => ({ read, announced: announcedOnce(seen) }),
+    )
+  }
+
+  const readObserved = (observed: { readonly read: number; readonly announced: boolean }, value: number): boolean =>
+    observed.read === value && observed.announced
 
   it.effect.prop(
     '∀value_LiveCase_=BuiltEnvReadBodyAndAnnouncedReason',
-    [ProbeValue],
-    ([value]) =>
-      Effect.gen(function*() {
-        const seen: Array<string> = []
-        const read = yield* readWithReason(value, seen)
-        return read === value && announcedOnce(seen)
-      }),
+    { of: [ProbeValue], subject: readLiveCase },
+    (read, [value]) => Effect.map(read(value), (observed) => readObserved(observed, value)),
   )
 
-  const CaseOutcome = Schema.Literals(['success', 'failure', 'interrupted'])
+  const CaseOutcome = Schema.Literals(['success', 'failure', 'interrupted', 'unscoped'])
+
+  const expectsRelease = (outcome: typeof CaseOutcome.Type): boolean => outcome !== 'unscoped'
+
+  const acquired = (released: Ref.Ref<boolean>): Effect.Effect<string, never, Scope.Scope> =>
+    Effect.acquireRelease(Effect.succeed('the case resource'), () => Ref.set(released, true))
+
+  const bodyOf = (
+    outcome: 'success' | 'failure',
+    released: Ref.Ref<boolean>,
+  ): Effect.Effect<string, string, Scope.Scope> =>
+    outcome === 'success'
+      ? acquired(released)
+      : acquired(released).pipe(Effect.andThen(Effect.fail('the case body failed')))
+
+  const settledRelease = (outcome: 'success' | 'failure'): Effect.Effect<boolean> =>
+    Effect.gen(function*() {
+      const released = yield* Ref.make(false)
+      yield* Effect.exit(caseScope(bodyOf(outcome, released)))
+      return yield* Ref.get(released)
+    })
+
+  const interruptedRelease: Effect.Effect<boolean> = Effect.gen(function*() {
+    const released = yield* Ref.make(false)
+    const running = yield* Effect.forkChild(
+      caseScope(acquired(released).pipe(Effect.andThen(Effect.never))),
+      { startImmediately: true },
+    )
+    yield* Fiber.interrupt(running)
+    return yield* Ref.get(released)
+  })
+
+  const releaseUnder = (outcome: 'success' | 'failure' | 'interrupted'): Effect.Effect<boolean> =>
+    outcome === 'interrupted' ? interruptedRelease : settledRelease(outcome)
+
+  const releasedWhenScoped = (outcome: typeof CaseOutcome.Type): Effect.Effect<boolean> =>
+    outcome === 'unscoped' ? Effect.succeed(false) : releaseUnder(outcome)
 
   it.effect.prop(
     '∀outcome_CaseScope_=TheScopedEnvironmentIsReleased',
-    [CaseOutcome],
-    ([outcome]) =>
-      Effect.gen(function*() {
-        const released = yield* Ref.make(false)
-        const resource = Effect.acquireRelease(
-          Effect.succeed('the case resource'),
-          () => Ref.set(released, true),
-        )
-        yield* Match.value(outcome).pipe(
-          Match.when('success', () => Effect.exit(caseScope(resource))),
-          Match.when('failure', () =>
-            Effect.exit(caseScope(resource.pipe(Effect.andThen(Effect.fail('the case body failed')))))),
-          Match.when('interrupted', () =>
-            Effect.gen(function*() {
-              const running = yield* Effect.forkChild(
-                caseScope(resource.pipe(Effect.andThen(Effect.never))),
-                { startImmediately: true },
-              )
-              return yield* Fiber.interrupt(running)
-            })),
-          Match.exhaustive,
-        )
-        const wasReleased = yield* Ref.get(released)
-        return wasReleased
-      }),
+    { of: [CaseOutcome], subject: releasedWhenScoped },
+    (scoped, [outcome]) => Effect.map(scoped(outcome), (released) => released === expectsRelease(outcome)),
   )
 }

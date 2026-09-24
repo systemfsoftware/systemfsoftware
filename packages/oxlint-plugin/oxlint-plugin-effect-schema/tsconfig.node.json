@@ -9,7 +9,6 @@
   "include": [
     "stryker.config.ts",
     "tsdown.config.ts",
-    "vitest-setup.ts",
     "vitest.config.ts"
   ]
 }

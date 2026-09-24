@@ -4,10 +4,10 @@
  * One Feature drives withLayer + live + withScope together so the
  * layered live path is exercised as a consumer would call it.
  */
+import { expect } from '@effect/vitest'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Context, Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
@@ -37,7 +37,7 @@ Feature('Feature builder — live clock with a shared layer')
       Gherkin.Do.pipe(
         Given('the current time')('now', () => Clock.currentTimeMillis),
         Then('the time is a finite number')((s) => {
-          expect(Number.isFinite(s.now)).toBe(true)
+          expect(s.now).toSatisfy(Number.isFinite)
         }),
       ),
     )

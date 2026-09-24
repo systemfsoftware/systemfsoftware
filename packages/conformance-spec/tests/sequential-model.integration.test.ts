@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
 import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'
 import {
@@ -43,7 +43,7 @@ const removeOnlyCheck = (implementation: Layer.Layer<Collections>, sequences: nu
     ...sequenceRunsOf(sequences, operations, 0),
   })
 
-Feature('Keeping a run of commands in step with a pure model')
+Feature('Keeping a run of commands in step with a pure model', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
@@ -65,8 +65,9 @@ Feature('Keeping a run of commands in step with a pure model')
         }),
         And('the rejected step is the insertion at the end that lost the element')((s) => {
           const failed = failReportOf(s.checked)
-          expect(collectionOracle.endIndexInsertion(failed.failure.operations, failed.failure.judgement.step)).toBe(
-            true,
+          const operations = failed.failure.operations
+          expect(operations).toSatisfy((drawn: typeof operations) =>
+            collectionOracle.endIndexInsertion(drawn, failed.failure.judgement.step)
           )
         }),
         And('the report names the step where the model diverged')((s) => {

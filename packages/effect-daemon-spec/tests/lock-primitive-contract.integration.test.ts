@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Fiber, Layer, Result } from 'effect'
-import { expect } from 'vitest'
 import {
   mkBlockingStatefulLockPrimitive,
   mkFailingLockPrimitive,
@@ -34,12 +34,12 @@ Feature('Lock Primitive Contract')
         ),
         Then('the return value is true')((s) =>
           Effect.sync(() => {
-            expect(s.results.first).toBe(true)
+            expect(s.results.first).toEqual(true)
           })
         ),
         And('acquiring the same key again from the same scope also returns true')((s) =>
           Effect.sync(() => {
-            expect(s.results.second).toBe(true)
+            expect(s.results.second).toEqual(true)
           })
         ),
       ),
@@ -77,7 +77,7 @@ Feature('Lock Primitive Contract')
         ),
         Then('the return value is false')((s) =>
           Effect.sync(() => {
-            expect(s.acquired).toBe(false)
+            expect(s.acquired).toEqual(false)
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
@@ -108,7 +108,7 @@ Feature('Lock Primitive Contract')
         ),
         Then('the acquisition succeeds')((s) =>
           Effect.sync(() => {
-            expect(s.acquired).toBe(true)
+            expect(s.acquired).toEqual(true)
           })
         ),
       ),
@@ -139,7 +139,7 @@ Feature('Lock Primitive Contract')
         ),
         Then('the acquisition succeeds')((s) =>
           Effect.sync(() => {
-            expect(s.acquired).toBe(true)
+            expect(s.acquired).toEqual(true)
           })
         ),
       ),
@@ -169,7 +169,7 @@ Feature('Lock Primitive Contract')
           ).pipe(
             Effect.flatMap((acquired) =>
               Effect.sync(() => {
-                expect(acquired).toBe(true)
+                expect(acquired).toEqual(true)
               })
             ),
           )
@@ -204,8 +204,8 @@ Feature('Lock Primitive Contract')
         ),
         Then('both acquire return true')((s) =>
           Effect.sync(() => {
-            expect(s.a).toBe(true)
-            expect(s.b).toBe(true)
+            expect(s.a).toEqual(true)
+            expect(s.b).toEqual(true)
           })
         ),
       ),

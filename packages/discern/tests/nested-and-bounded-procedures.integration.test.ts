@@ -1,9 +1,9 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, MutableRef, Option } from 'effect'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { expect } from 'vitest'
 import {
   type AnswerFor,
   answering,

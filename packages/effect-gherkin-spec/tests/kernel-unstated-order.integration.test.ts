@@ -1,8 +1,8 @@
+import { afterAll, expect, vi } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { KernelCase } from '@systemfsoftware/effect-spec-runtime'
 import { Effect, Fiber } from 'effect'
-import { afterAll, expect, vi } from 'vitest'
 import type { SavedBasket } from './__fixtures__/clerk-shelf.fixture.js'
 import { Shelf, shelfLayer } from './__fixtures__/clerk-shelf.fixture.js'
 

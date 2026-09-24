@@ -5,6 +5,7 @@
  * generates that package's law suite and reads the emitted body: which
  * schemas earned a law pair and which module each law binds.
  */
+import { afterAll, expect } from '@effect/vitest'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
@@ -14,7 +15,6 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 import { createServer } from 'vite'
-import { afterAll, expect } from 'vitest'
 
 import { RECURSION_BUDGET_RUNTIME_SPECIFIER } from '@systemfsoftware/effect-schema-recursion-budget'
 import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
@@ -315,7 +315,7 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
           /import \{ \w+ as \w+ \} from "[^"]*recursion-budget-runtime\.[a-z]+";/,
         )
         expect(s.driven.runtime).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
-        expect(s.driven.runtime === null ? false : existsSync(s.driven.runtime)).toBe(true)
+        expect(s.driven.runtime).toSatisfy((runtime: string | null) => runtime !== null && existsSync(runtime))
       }),
       And('the transformed module runs and exports its schema for the consumer')((s) => {
         expect(s.driven.exportedSchemas).toContain('RecursiveExpr')

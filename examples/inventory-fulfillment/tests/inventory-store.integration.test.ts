@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Inventory } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Option } from 'effect'
-import { expect } from 'vitest'
 import {
   acrossInventoryStores,
   CENTRAL_WAREHOUSE,
@@ -87,7 +87,7 @@ const EVERY_LOT_IN_ORDER = [
   'lot-teapot-north',
 ]
 
-Feature('The stock catalogue reads the same in memory and in Postgres')
+Feature('The stock catalogue reads the same in memory and in Postgres', { timeout: 120_000 })
   .withScenarioLayer(inventoryStoreWorld)
   .live('the Postgres side runs through in-process PGlite, whose file reads the simulation kernel cannot observe')
   .body(({ scenario }) => {
@@ -99,7 +99,7 @@ Feature('The stock catalogue reads the same in memory and in Postgres')
           expect(s.readings.memory.first).toEqual(s.readings.memory.second)
           expect(s.readings.postgres.first).toEqual(s.readings.memory.first)
           expect(s.readings.memory.first.lots.map((lot) => lot.lotId)).toEqual(['lot-kettle-a', 'lot-kettle-b'])
-          expect(s.readings.memory.first.nextCursor).not.toBeNull()
+          expect(s.readings.memory.first.nextCursor).toBeTypeOf('string')
         }),
       ),
     )

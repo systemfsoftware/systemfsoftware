@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 import { completedValueOf } from './__fixtures__/kernelFixtures.js'
 import {
   briefWork,

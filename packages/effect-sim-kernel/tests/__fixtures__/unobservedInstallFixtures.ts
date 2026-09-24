@@ -1,15 +1,5 @@
 import { Effect, Latch, PubSub, Semaphore } from 'effect'
 
-export class DriftedSemaphore {
-  waiters: Array<() => void> = []
-  lends = 0
-  permits: number
-
-  constructor(permits: number) {
-    this.permits = permits
-  }
-}
-
 export const semaphoreProgram: Effect.Effect<void> = Effect.gen(function*() {
   const gate = yield* Semaphore.make(1)
   yield* Semaphore.take(gate, 1)

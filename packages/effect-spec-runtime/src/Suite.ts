@@ -1,4 +1,3 @@
-/// <reference types="vitest/globals" />
 /// <reference types="vitest/importMeta" />
 import type { Vitest } from '@effect/vitest'
 import { Effect, Layer } from 'effect'
@@ -43,6 +42,19 @@ const caseEffectOf = <B, E, R, RIn extends Scope.Scope>(
   return KernelCase.caseProgram(body, env)
 }
 
+const registerCase = <B, E>(
+  register: Vitest.Test<Scope.Scope>,
+  name: string,
+  program: Effect.Effect<B, E, Scope.Scope>,
+  live: LiveCase | undefined,
+): void => {
+  if (live === undefined) {
+    register(name, Register.exploredBody(program), Register.UNTIMED)
+    return
+  }
+  register(name, (ctx) => TaskRef.provideTaskRef(program, ctx))
+}
+
 const registrarFor = <B, E, R, RIn extends Scope.Scope>(
   methodsIt: Vitest.Methods,
   config: Config,
@@ -50,9 +62,11 @@ const registrarFor = <B, E, R, RIn extends Scope.Scope>(
 ): RegisterFn<B, E, R | RIn | Scope.Scope> =>
 (name, body, mode, caseLive) => {
   const live = caseLive ?? config.live
-  Register.selectCaseRunner(methodsIt, mode, live)(
+  registerCase(
+    Register.selectCaseRunner(methodsIt, mode, live),
     name,
-    (ctx) => TaskRef.provideTaskRef(caseEffectOf(body, env, live), ctx),
+    caseEffectOf(body, env, live),
+    live,
   )
 }
 

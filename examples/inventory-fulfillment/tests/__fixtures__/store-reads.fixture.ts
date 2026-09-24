@@ -1,14 +1,14 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Fulfillment, Inventory, Reservation } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Layer, Option } from 'effect'
-import { CENTRAL_WAREHOUSE, NORTH_WAREHOUSE, inventorySeed, walkStock } from './inventory-store.fixture.js'
-import { FIRST_ORDER, SECOND_ORDER, UNKNOWN_ORDER, reservationLogSeed } from './reservation-log.fixture.js'
+import { CENTRAL_WAREHOUSE, inventorySeed, NORTH_WAREHOUSE, walkStock } from './inventory-store.fixture.js'
+import { FIRST_ORDER, reservationLogSeed, SECOND_ORDER, UNKNOWN_ORDER } from './reservation-log.fixture.js'
 import {
   InventoryReadCommand,
   inventoryReadModel,
   type LoggedOrder,
-  ReservationReadCommand,
   type ReservationAnswer,
+  ReservationReadCommand,
   reservationReadModel,
 } from './store-reads.model.js'
 
@@ -46,16 +46,19 @@ const orderIdOf = (order: LoggedOrder): string =>
 export const lookupReservation = (
   command: ReservationReadCommand,
 ): Effect.Effect<ReservationAnswer, Fulfillment.Decision.StoreUnavailable, Reservation.Log.ReservationLog> =>
-  Effect.flatMap(Reservation.Log.ReservationLog, (log) =>
-    Effect.map(log.findReservation(orderIdOf(command.order)), (found) =>
-      Option.match(found, {
-        onNone: (): ReservationAnswer => ({ found: false, customerId: '', lotIds: [] }),
-        onSome: (record): ReservationAnswer => ({
-          found: true,
-          customerId: record.customerId,
-          lotIds: record.allocations.map((allocation) => allocation.lotId),
-        }),
-      })))
+  Effect.flatMap(
+    Reservation.Log.ReservationLog,
+    (log) =>
+      Effect.map(log.findReservation(orderIdOf(command.order)), (found) =>
+        Option.match(found, {
+          onNone: (): ReservationAnswer => ({ found: false, customerId: '', lotIds: [] }),
+          onSome: (record): ReservationAnswer => ({
+            found: true,
+            customerId: record.customerId,
+            lotIds: record.allocations.map((allocation) => allocation.lotId),
+          }),
+        })),
+  )
 
 export const reservationReadLayer: Layer.Layer<Reservation.Log.ReservationLog> = Reservation.Memory.layer(
   reservationLogSeed(),

@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
 import { Cause, Effect, Exit, Option, Ref, Result, Schema as S } from 'effect'
-import { expect } from 'vitest'
 import {
   acrossStores,
   armSeamAlways,
@@ -315,7 +315,7 @@ const endedUnit = 'a SettlementUnit was used after its unit of work ended'
 
 const markerOf = (defects: ReadonlyArray<Error>): ReadonlyArray<string> => defects.map((defect) => defect.message)
 
-Feature('Settlement stores keep their promises in memory and in Postgres')
+Feature('Settlement stores keep their promises in memory and in Postgres', { timeout: 120_000 })
   .withScenarioLayer(settlementStoreWorld)
   .live('the settlement stores run their transactions through PGlite, whose engine the simulation kernel cannot drive')
   .body(({ scenario }) => {
@@ -463,9 +463,9 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
           () => Effect.provide(exhaustedBudgetFails, Settlement.Drizzle.layer(exhaustedBudget)),
         ),
         Then('the order fails as unavailable naming the serialization failure, having written nothing')((s) => {
-          expect(Result.isFailure(s.outcome.settled)).toBe(true)
+          expect(s.outcome.settled).toSatisfy(Result.isFailure)
           const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : undefined
-          expect(S.is(StoreUnavailable)(failure)).toBe(true)
+          expect(failure).toSatisfy(S.is(StoreUnavailable))
           const states = failure === undefined
             ? []
             : Settlement.Drizzle.sqlStatesOf(failure)
@@ -486,9 +486,9 @@ Feature('Settlement stores keep their promises in memory and in Postgres')
           () => Effect.provide(checkedWrite, Settlement.Drizzle.layer(exhaustedBudget)),
         ),
         Then('the unit fails as unavailable on its first attempt and the stock is untouched')((s) => {
-          expect(Result.isFailure(s.outcome.settled)).toBe(true)
+          expect(s.outcome.settled).toSatisfy(Result.isFailure)
           const failure = Result.isFailure(s.outcome.settled) ? s.outcome.settled.failure : undefined
-          expect(S.is(StoreUnavailable)(failure)).toBe(true)
+          expect(failure).toSatisfy(S.is(StoreUnavailable))
           expect(s.outcome.tries).toBe(1)
           expect(s.outcome.outstandingBalance).toBe(0)
         }),

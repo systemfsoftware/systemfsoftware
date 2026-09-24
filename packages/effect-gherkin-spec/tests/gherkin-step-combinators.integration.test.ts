@@ -6,6 +6,7 @@
  * Then/And/But tap the scope without binding, all failures surface as
  * `StepError`, and the pipeline can be pre-seeded via `Gherkin.startWith`.
  */
+import { expect } from '@effect/vitest'
 import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import {
   And,
@@ -22,7 +23,6 @@ import {
 import { Chunk, Effect, Fiber, Layer, Result } from 'effect'
 import { Schema } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
 const Feature = makeFeature({ it })
@@ -151,7 +151,7 @@ Feature('Gherkin step combinators')
           Then('the error carries the matching keyword name')((s) => {
             Result.match(s.result, {
               onFailure: (err) => {
-                expect(Schema.is(StepError)(err)).toBe(true)
+                expect(err).toSatisfy(Schema.is(StepError))
                 if (Schema.is(StepError)(err)) {
                   expect(err.keyword).toBe(row.keyword)
                 }
@@ -537,7 +537,7 @@ Feature('Gherkin step combinators')
           Effect.result,
         )
 
-        expect(Result.isFailure(result)).toBe(true)
+        expect(result).toSatisfy(Result.isFailure)
         expect(annotations).toHaveLength(2)
         expect(annotations[0]?.message).toMatch(/^\[GIVEN\] an initial order submission - passed \(\d+ms\)$/)
         expect(annotations[1]?.message).toMatch(/^\[THEN\] the inventory reservation confirms - failed \(\d+ms\)$/)
@@ -567,7 +567,7 @@ Feature('Gherkin step combinators')
         )
 
         const result = yield* checkSoftFailures(pipeline.pipe(Effect.asVoid)).pipe(Effect.result)
-        expect(Result.isFailure(result)).toBe(true)
+        expect(result).toSatisfy(Result.isFailure)
         expect(annotations[0]?.message).toMatch(/^\[GIVEN\] a provisioned server instance - passed \(\d+ms\)$/)
         expect(annotations[1]?.message).toBe('[THEN] the health check responds with healthy - soft-failed')
         expect(annotations[1]?.type).toBe('error')

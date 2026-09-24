@@ -1,5 +1,5 @@
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Effect, Exit } from 'effect'
+import { Exit } from 'effect'
 
 /** A value read from code this file does not own, narrowed by predicates. */
 type Field<A = unknown> = A
@@ -112,7 +112,8 @@ const nextDeviation = (
 
 export const deviateOnceAt = (
   take: (choice: Kernel.Choice) => Kernel.ChoiceOption | undefined,
-): (choice: Kernel.Choice) => Kernel.Decision | undefined => {
+): () => (choice: Kernel.Choice) => Kernel.Decision | undefined =>
+() => {
   let deviated = false
   return (choice: Kernel.Choice): Kernel.Decision | undefined => {
     if (deviated) return undefined
@@ -122,7 +123,7 @@ export const deviateOnceAt = (
   }
 }
 
-/** Deviates at the first step where another fiber's task competes with the default. */
+/** A chooser that deviates at the first step where another fiber's task competes with the default. */
 export const deviateAtFirstChoice = deviateOnceAt(competingOption)
 
 /** Takes the last pending task at every explored step. */
@@ -146,13 +147,3 @@ export const fiberPatternOf = (steps: ReadonlyArray<Kernel.StepRecord>): Readonl
 export const stepsWithoutFiberIds = (
   steps: ReadonlyArray<Kernel.StepRecord>,
 ): ReadonlyArray<Omit<Kernel.StepRecord, 'fiberId'>> => steps.map(({ fiberId: _fiberId, ...rest }) => rest)
-
-/** Attempts to start a run while another is live, and reports the thrown error. */
-export const attemptConcurrentRun = (program: Effect.Effect<void>): Error | undefined => {
-  try {
-    void Kernel.run(program).catch(() => undefined)
-    return undefined
-  } catch (error) {
-    return error instanceof Error ? error : new Error('a non-error was thrown', { cause: error })
-  }
-}

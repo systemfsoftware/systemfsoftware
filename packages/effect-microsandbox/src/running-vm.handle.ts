@@ -129,29 +129,44 @@ if (import.meta.vitest !== void 0) {
   // defined when vitest transforms this file, so a static import would land in the bundle.
   const { it } = await import('@effect/vitest')
   const { Schema } = await import('effect')
+  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
   const { GuestPort } = await import('./MicroVMSpec.schema.js')
 
-  const uniqueGuests = Schema.Array(GuestPort).pipe(Schema.check(Schema.isUnique()))
-
-  it.prop('∀bg_PortLookup_≡Declared', [uniqueGuests, GuestPort], ([guests, guest]) => {
-    const drawn = guests.map((guestPort, index) => ({ guest: guestPort, host: '127.0.0.1', hostPort: 49152 + index }))
-    return Option.match(hostPortOf(drawn, guest), {
-      onNone: () => !drawn.some((binding) => binding.guest === guest),
-      onSome: (hostPort) => drawn.some((binding) => binding.guest === guest && binding.hostPort === hostPort),
-    })
-  })
+  const declaredGuests = Schema.NonEmptyArray(GuestPort).pipe(Schema.check(Schema.isUnique()))
+  const bindings = Arbitrary.map(
+    Arbitrary.schema(declaredGuests),
+    (guests) => guests.map((guest, index) => ({ guest, host: '127.0.0.1', hostPort: 49152 + index })),
+  )
+  const holdsAll = (clauses: ReadonlyArray<boolean>): boolean => clauses.every((clause) => clause)
 
   it.prop(
-    '∀p_PrefixSlash_≡Idempotent',
-    [Schema.String],
-    ([path]) => prefixSlash(prefixSlash(path)) === prefixSlash(path),
+    '∀bg_PortLookup_≡Declared',
+    { of: [bindings, GuestPort], subject: hostPortOf },
+    (subject, [drawn, guest]) =>
+      holdsAll([
+        drawn.every((binding) => Option.contains(subject(drawn, binding.guest), binding.hostPort)),
+        Option.match(subject(drawn, guest), {
+          onNone: () => !drawn.some((binding) => binding.guest === guest),
+          onSome: (hostPort) => drawn.some((binding) => binding.guest === guest && binding.hostPort === hostPort),
+        }),
+      ]),
   )
 
-  it.prop('∀p_PrefixSlash_∈Slashed', [Schema.String], ([path]) => prefixSlash(path).startsWith('/'))
+  it.prop(
+    '∀p_PrefixSlash_≡Slashed',
+    { of: [Schema.String], subject: prefixSlash },
+    (subject, [path]) => subject(path) === (path.startsWith('/') ? path : `/${path}`),
+  )
+
+  it.prop(
+    '∀p_PrefixSlash_=Idempotent',
+    { of: [Schema.String], subject: prefixSlash },
+    (subject, [path]) => subject(subject(path)) === subject(path),
+  )
 
   it.prop(
     '∀p_Normalize_≡Prefix',
-    [Schema.String],
-    ([path]) => normalizePath(path) === prefixSlash(path) && normalizePath(undefined) === '',
+    { of: [Schema.String], subject: normalizePath },
+    (subject, [path]) => subject(path) === prefixSlash(path) && subject(undefined) === '',
   )
 }

@@ -1,10 +1,10 @@
+import { expect } from '@effect/vitest'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
-import { expect } from 'vitest'
 
 import { publishDecisions } from './__fixtures__/publish-decisions.workflow.js'
 
@@ -77,7 +77,7 @@ Feature('Publishing a list of events in order')
           () => Effect.exit(publishCell(true).run({ count: 4 })),
         ),
         Then('the batch stops with the journal\u2019s refusal')((s) => {
-          expect(Exit.isFailure(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isFailure)
         }),
         And('no event after the refused one reaches the journal')(() =>
           Effect.flatMap(JournalService, (journal) =>

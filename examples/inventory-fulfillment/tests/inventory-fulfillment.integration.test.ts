@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
 import { DateTime, Effect, Encoding, Result, Schema as S } from 'effect'
-import { expect } from 'vitest'
 import {
   AllocatedSplit,
   AllocatedWithOverdraft,
@@ -485,7 +485,7 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
           (s) =>
             Effect.gen(function*() {
               const server = yield* TestServer
-              expect(S.is(StoreUnavailable)(s.outcome.failure)).toBe(true)
+              expect(s.outcome.failure).toSatisfy(S.is(StoreUnavailable))
               expect((yield* server.inspect.stock(s.catalog.lot)).quantityOnHand).toBe(5)
               expect(yield* server.inspect.reservations(s.outcome.orderId)).toHaveLength(0)
               expect(yield* server.inspect.auditTags(s.outcome.orderId)).toHaveLength(0)
@@ -697,7 +697,7 @@ Feature('Inventory fulfillment across the warehouse network', { timeout: 120_000
           })),
         Then('the first page holds four lots and offers a way to continue')((s) => {
           expect(lotIdsOf(s.pages.first)).toHaveLength(4)
-          expect(s.pages.first.nextCursor).not.toBeNull()
+          expect(s.pages.first.nextCursor).toBeTypeOf('string')
         }),
         And('the next page holds the one remaining lot and closes the listing')((s) => {
           const firstIds = lotIdsOf(s.pages.first)

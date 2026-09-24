@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment } from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract } from '@systemfsoftware/trace-spec'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 import {
   allocateContract,
   disparityOf,
@@ -12,7 +12,7 @@ import {
 
 const Feature = makeFeature({ it })
 
-Feature('Refusing an order whose trace breaks the written contract')
+Feature('Refusing an order whose trace breaks the written contract', { timeout: 120_000 })
   .withScenarioLayer(settlementLayers)
   .live('the order runs through in-process PGlite, whose file reads the simulation kernel cannot observe')
   .body(({ scenario }) => {

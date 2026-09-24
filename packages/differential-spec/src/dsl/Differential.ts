@@ -1,8 +1,9 @@
 import { it } from '@effect/vitest'
-import type { Effect } from 'effect'
+import { Effect } from 'effect'
 import * as fc from 'fast-check'
 import type { DualExecutionSupervisorOptions } from '../core/DualExecutionSupervisor.js'
 import { runDifferentialWithShrink } from '../core/DualExecutionSupervisor.js'
+import { announceHostBound, checkOptions } from './Registration.js'
 
 export interface DifferentialBuilder<Input, OutputA, OutputB> {
   readonly on: (arb: fc.Arbitrary<Input>, options?: DualExecutionSupervisorOptions) => {
@@ -23,7 +24,12 @@ export const compare = <Input, OutputA, OutputB, E>(
     assert: (oracle) => {
       it.effect(
         comparison.name,
-        () => runDifferentialWithShrink(comparison.reference, comparison.candidate, arb, oracle, options),
+        (ctx) =>
+          Effect.andThen(
+            announceHostBound(options)(ctx),
+            runDifferentialWithShrink(comparison.reference, comparison.candidate, arb, oracle, options),
+          ),
+        checkOptions(options),
       )
     },
   }),

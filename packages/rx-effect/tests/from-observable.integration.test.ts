@@ -14,15 +14,14 @@
  *     enough values, including the boundary where the consumer takes a single
  *     element out of a long stream.
  */
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result, Stream } from 'effect'
 import { UnknownError } from 'effect/Cause'
-import { expect } from 'vitest'
-
-import { Observable, ReplaySubject } from 'rxjs'
 
 import { fromObservable } from '@systemfsoftware/rx-effect'
+import { Observable, ReplaySubject } from 'rxjs'
 
 const Feature = makeFeature({ it })
 

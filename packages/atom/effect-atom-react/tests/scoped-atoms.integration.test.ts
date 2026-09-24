@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
@@ -7,13 +8,14 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
-import { expect } from 'vitest'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 
 const Feature = makeFeature({ it })
 
 Feature('Scoped atoms that belong to one part of the page')
   .live('renders real components in Chromium and waits on browser timers')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A scoped counter is created for its subtree and updates through its setter',

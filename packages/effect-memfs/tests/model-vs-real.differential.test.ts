@@ -18,5 +18,11 @@ Differential.compare({
     Effect.succeed(modelResponses({ permissionsBypassed, commands })),
   candidate: (commands: ReadonlyArray<FileCommand>) => realResponses(runnable(commands)),
 })
-  .on(fileCommandLists, { runBudget: 500 })
+  .on(fileCommandLists, {
+    runBudget: 500,
+    hostBound: {
+      timeout: 30_000,
+      reason: 'the real side runs every generated command against a temporary directory on the host filesystem',
+    },
+  })
   .assert(sameAnswers)

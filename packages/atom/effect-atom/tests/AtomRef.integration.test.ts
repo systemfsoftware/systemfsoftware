@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Equal, Layer } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 

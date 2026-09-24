@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Match, Schema } from 'effect'
 import type * as AiError from 'effect/unstable/ai/AiError'
-import { expect } from 'vitest'
 import {
   type AnswerFor,
   answering,

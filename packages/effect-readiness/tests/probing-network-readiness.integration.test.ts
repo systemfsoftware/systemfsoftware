@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Effect, Match } from 'effect'
-import { expect } from 'vitest'
 import { GuestService } from './__fixtures__/guest-service.fixture.js'
 import { scenarioEnvironment } from './__fixtures__/readiness-environment.fixture.js'
 
@@ -47,7 +47,7 @@ Feature('Probing guest network services for readiness')
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
         Then('the check reports the service is ready')(({ verdict }) => {
-          expect(reportedReady(verdict)).toBe(true)
+          expect(verdict).toSatisfy(reportedReady)
         }),
       ),
     )
@@ -69,7 +69,7 @@ Feature('Probing guest network services for readiness')
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
         Then('the check gives up without reporting the service ready')(({ verdict }) => {
-          expect(reportedReady(verdict)).toBe(false)
+          expect(verdict).not.toSatisfy(reportedReady)
         }),
       ),
     )
@@ -83,7 +83,7 @@ Feature('Probing guest network services for readiness')
           ({ target }) => awaitOver(target, Readiness.Wait.forTcp(GUEST_PORT)),
         ),
         Then('the check gives up without opening any host connection')(({ verdict }) => {
-          expect(reportedReady(verdict)).toBe(false)
+          expect(verdict).not.toSatisfy(reportedReady)
         }),
       ),
     )
@@ -112,7 +112,7 @@ Feature('Probing guest network services for readiness')
             ({ target }) => awaitOver(target, Readiness.Wait.forHttp('/health', GUEST_PORT)),
           ),
           Then('the check reports readiness matching <ready>')(({ verdict }) => {
-            expect(reportedReady(verdict)).toBe(row.ready)
+            expect(reportedReady(verdict)).toEqual(row.ready)
           }),
         ),
     )

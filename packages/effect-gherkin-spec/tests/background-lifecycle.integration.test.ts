@@ -1,6 +1,6 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref } from 'effect'
-import { expect } from 'vitest'
 
 interface SessionStoreService {
   readonly accessCount: Effect.Effect<number>

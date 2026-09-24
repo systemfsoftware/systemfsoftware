@@ -63,7 +63,7 @@ A real-timer wait still fails (`Escape`) under `'await'` — timers go through t
 
 ## One kernel at a time
 
-The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed for the lifetime of one run and restored at its release. A second `Kernel.run` started while one is active throws immediately instead of sharing the hooks — one kernel owns the process at a time, so a scenario that drives its own run declares that it does and never nests one run inside another.
+The global hooks (Effect's `Scheduler`, the fiber resume methods, `Ref`/`Deferred` field observation) are installed for the lifetime of one run and restored at its release. A second `Kernel.run` started while one is active queues behind it, in arrival order, instead of sharing the hooks — one kernel owns the process at a time, so two runs never interleave and a scenario never sees another run's decisions. `Kernel.search`, `Kernel.shrink` and `Kernel.pick` reach the kernel through the same queue, one run at a time.
 
 ## Exploration boundary
 

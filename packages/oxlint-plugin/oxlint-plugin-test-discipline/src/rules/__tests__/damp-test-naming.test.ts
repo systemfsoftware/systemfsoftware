@@ -25,6 +25,11 @@ ruleTester.run('damp-test-naming', dampTestNaming, {
       `,
     },
     {
+      name: 'Should_Ignore_When_TypeTestNamesCasesInProse',
+      code: `test('exports the integration API unchanged', () => {})`,
+      filename: '/repo/packages/vitest/test-types/surface.tst.ts',
+    },
+    {
       name: 'Should_Pass_When_BehaviorAndConditionHaveNumbers',
       code: `it('Should_ParseJson123_When_InputValid456', () => {})`,
     },
@@ -116,19 +121,21 @@ ruleTester.run('damp-test-naming', dampTestNaming, {
     },
     {
       name: 'Should_Ignore_When_ItProp_EvenWithInvalidName',
-      code: `it.prop('foo', [Schema.String], ([s]) => s.length > 0)`,
+      code: `it.prop('foo', { of: [Schema.String], subject: (s) => s, runs: 100 }, (s, [v]) => v.length > 0)`,
     },
     {
       name: 'Should_Ignore_When_ItEffectProp_EvenWithInvalidName',
-      code: `it.effect.prop('bar', [Schema.Number], ([n]) => n > 0)`,
+      code: `it.effect.prop('bar', { of: [Schema.Number], subject: (n) => n, runs: 100 }, (s, [v]) => v > 0)`,
     },
     {
       name: 'Should_Ignore_When_ItPropOnly_Called',
-      code: `it.prop.only('Should_Throw_When_Invalid', [Schema.String], ([s]) => s.length > 0)`,
+      code:
+        `it.prop.only('Should_Throw_When_Invalid', { of: [Schema.String], subject: (s) => s, runs: 100 }, (s, [v]) => v.length > 0)`,
     },
     {
       name: 'Should_Ignore_When_ItEffectPropOnly_Called',
-      code: `it.effect.prop.only('Should_Reject_When_ExceedsWindow', [Schema.Number], ([n]) => n > 0)`,
+      code:
+        `it.effect.prop.only('Should_Reject_When_ExceedsWindow', { of: [Schema.Number], subject: (n) => n, runs: 100 }, (s, [v]) => v > 0)`,
     },
     {
       // Reaches the `if (node.callee.property.type !== 'Identifier')` guard

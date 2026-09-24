@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Array as Arr, Effect, Match, Option, Result, Schema } from 'effect'
-import { expect } from 'vitest'
 import { answering, CountingModel, probabilityEverywhere, withProvider } from './__fixtures__/counting-model.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -110,7 +110,7 @@ Feature('Inspecting a policy before trusting it')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.CompiledPlan)(s.payload)),
         ),
         Then('the unknown plan format is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -131,7 +131,7 @@ Feature('Inspecting a policy before trusting it')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Trace)(s.payload)),
         ),
         Then('the unknown trace format is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -152,7 +152,7 @@ Feature('Inspecting a policy before trusting it')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Trace)(s.payload)),
         ),
         Then('the unknown branch is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -169,7 +169,7 @@ Feature('Inspecting a policy before trusting it')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.CaseTrace)(s.payload)),
         ),
         Then('the unknown outcome is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -189,7 +189,7 @@ Feature('Inspecting a policy before trusting it')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.DecisionInspection)(s.payload)),
         ),
         Then('the unknown kind of question is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -208,8 +208,8 @@ Feature('Inspecting a policy before trusting it')
             unreadable: Schema.decodeUnknownResult(Discern.PatternMatched)(s.unreadable),
           })),
         Then('both verdicts are refused')(({ outcomes }) => {
-          expect(Result.isFailure(outcomes.unresolved)).toBe(true)
-          expect(Result.isFailure(outcomes.unreadable)).toBe(true)
+          expect(outcomes.unresolved).toSatisfy(Result.isFailure)
+          expect(outcomes.unreadable).toSatisfy(Result.isFailure)
         }),
       ),
     )

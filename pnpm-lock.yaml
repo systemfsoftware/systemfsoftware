@@ -180,8 +180,8 @@ catalogs:
       specifier: ^0.45.0
       version: 0.45.0
     '@effect/vitest':
-      specifier: 4.0.0-rc.117
-      version: 4.0.0-rc.117
+      specifier: workspace:@systemfsoftware/vitest@*
+      version: workspace:@systemfsoftware/vitest@*
     '@electric-sql/pglite':
       specifier: 0.5.8
       version: 0.5.8
@@ -437,7 +437,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../../packages/vitest
       '@systemfsoftware/conformance-spec':
         specifier: workspace:^
         version: link:../../packages/conformance-spec
@@ -506,7 +506,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -615,7 +615,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -716,6 +716,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -760,7 +763,7 @@ importers:
     dependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@systemfsoftware/effect-sim-kernel':
         specifier: workspace:^
         version: link:../effect-sim-kernel
@@ -816,7 +819,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -882,7 +885,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -940,7 +943,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: ^7.59.1
         version: 7.59.1(@types/node@26.6.2)
@@ -1028,7 +1031,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1083,7 +1086,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1159,7 +1162,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1247,7 +1250,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1375,7 +1378,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1423,7 +1426,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1478,7 +1481,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1540,6 +1543,9 @@ importers:
         specifier: 'catalog:'
         version: 0.150.0
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1588,6 +1594,9 @@ importers:
 
   packages/effect-sim-kernel:
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1636,7 +1645,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1684,7 +1693,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -1763,7 +1772,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -2404,7 +2413,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.59.1(@types/node@26.6.2)
@@ -2629,7 +2638,7 @@ importers:
         version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -2677,7 +2686,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+        version: link:../vitest
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
@@ -2720,6 +2729,78 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+
+  packages/vitest:
+    devDependencies:
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.2.0
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../toolchain/tsdown-config
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea)
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.23.0(oxc-resolver@11.24.2)(tsx@4.23.13)(typescript@7.0.2)(unrun@0.2.39)
+      tstyche:
+        specifier: 'catalog:'
+        version: 7.2.5(typescript@7.0.2)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+
+  packages/vitest-conformance:
+    devDependencies:
+      '@effect/vitest':
+        specifier: workspace:@systemfsoftware/vitest@*
+        version: link:../vitest
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../effect-gherkin-spec
+      '@systemfsoftware/oxlint-config-recommended':
+        specifier: workspace:^
+        version: link:../oxlint-presets/oxlint-config-recommended
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../toolchain/tsconfig
+      '@systemfsoftware/vitest':
+        specifier: workspace:^
+        version: link:../vitest
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea)
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.82.0(oxlint-tsgolint@7.0.2001)
       vitest:
         specifier: 'catalog:'
         version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
@@ -3231,12 +3312,6 @@ packages:
   '@effect/tsgo@0.45.0':
     resolution: {integrity: sha512-gPG0ixVHgtYBUe5DbKX9vzHlhqd9+ZEfs4m/XWy0808av0A2XqMzaG3F5rnPBN7EUJRPlo9TluIi8WHx/pBV+A==}
     hasBin: true
-
-  '@effect/vitest@4.0.0-rc.117':
-    resolution: {integrity: sha512-jJg9M7T3OhTcvoD9Zi28S5+0H+axlSHAYjXM8TYeLJy/FVlPe0B/Vc3ZfaqUF0rwkfQ6ziyCdjiBS46+182H1Q==}
-    peerDependencies:
-      effect: ^4.0.0-rc.117
-      vitest: '>=5.0.0 <6.0.0'
 
   '@electric-sql/pglite-age@0.0.9':
     resolution: {integrity: sha512-IdNy5P5nxwKVeSPLjDLXkp/eYffH5roympM7fTG+g9ehzBrDnQ9TT2tfCJ2vRVcOSPQBp4oURzfRE19cs/x8ZA==}
@@ -8274,11 +8349,6 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.45.0
       '@effect/tsgo-win32-arm64': 0.45.0
       '@effect/tsgo-win32-x64': 0.45.0
-
-  '@effect/vitest@4.0.0-rc.117(effect@4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)':
-    dependencies:
-      effect: 4.0.0-rc.117(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea)
-      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(@vitest/browser-playwright@5.0.1)(@vitest/coverage-istanbul@5.0.1)(@vitest/coverage-v8@5.0.1)(@vitest/ui@5.0.1)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   '@electric-sql/pglite-age@0.0.9(@electric-sql/pglite@0.5.8)':
     dependencies:

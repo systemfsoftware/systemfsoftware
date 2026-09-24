@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
@@ -9,7 +10,7 @@ import * as Layer from 'effect/Layer'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
-import { expect } from 'vitest'
+import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
 import { Unavailable } from './__fixtures__/Unavailable.schema.js'
 
@@ -18,6 +19,7 @@ const Feature = makeFeature({ it })
 Feature('Waiting for asynchronous values')
   .live('renders real components in Chromium and waits on React commits in the browser')
   .withLayer(Layer.empty)
+  .withScenarioLayer(renderCleanupLayer)
   .body(({ scenario }) => {
     scenario(
       'A reader who waits through loading sees the value once it arrives',

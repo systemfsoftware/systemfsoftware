@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Fulfillment, Reservation } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect } from 'effect'
-import { expect } from 'vitest'
 import {
   acrossLogs,
   findOf,
@@ -57,7 +57,7 @@ const askedInBothOrders: Effect.Effect<
     return { forward, backward }
   }))
 
-Feature('The reservation log keeps its word in memory and in Postgres')
+Feature('The reservation log keeps its word in memory and in Postgres', { timeout: 120_000 })
   .withScenarioLayer(reservationLogWorld)
   .live('the Postgres side runs through in-process PGlite, whose file reads the simulation kernel cannot observe')
   .body(({ scenario }) => {

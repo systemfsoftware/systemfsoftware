@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { runDifferentialWithShrink } from '@systemfsoftware/differential-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit, Layer } from 'effect'
-import { expect } from 'vitest'
 import { integers } from './__fixtures__/arbitraries.js'
 import { CandidateDefect } from './__fixtures__/CandidateDefect.schema.js'
 import {
@@ -16,7 +16,7 @@ const Feature = makeFeature({ it })
 
 const sameOutcome = (a: number, b: number): boolean => a === b
 
-Feature('Proving two implementations agree under generated schedules')
+Feature('Proving two implementations agree under generated schedules', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('the supervisor explores its own generated schedules')
   .body(({ scenario }) => {
@@ -61,7 +61,7 @@ Feature('Proving two implementations agree under generated schedules')
             runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, sameOutcome),
           )),
         Then('the comparison holds for every generated amount')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )
@@ -105,7 +105,7 @@ Feature('Proving two implementations agree under generated schedules')
             runDifferentialWithShrink(s.implementations.reference, s.implementations.candidate, integers, sameOutcome),
           )),
         Then('the comparison holds for every generated starting count')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )
@@ -125,7 +125,7 @@ Feature('Proving two implementations agree under generated schedules')
             runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
           )),
         Then('the asynchronous run completes without complaint')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )
@@ -179,7 +179,7 @@ Feature('Proving two implementations agree under generated schedules')
             runDifferentialWithShrink(s.targets.reference, s.targets.candidate, integers, (a, b) => a === b),
           )),
         Then('the deferred run completes without complaint')((s) => {
-          expect(Exit.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Exit.isSuccess)
         }),
       ),
     )

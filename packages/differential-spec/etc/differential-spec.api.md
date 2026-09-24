@@ -37,11 +37,21 @@ export interface DisparityRecord<Input = unknown> {
 // @public
 export interface DualExecutionSupervisorOptions {
     // (undocumented)
+    readonly hostBound?: HostBound;
+    // (undocumented)
     readonly runBudget?: number;
 }
 
 // @public (undocumented)
 export const formatDisparity: (record: DisparityRecord) => string;
+
+// @public (undocumented)
+export interface HostBound {
+    // (undocumented)
+    readonly reason: string;
+    // (undocumented)
+    readonly timeout: number;
+}
 
 // @public (undocumented)
 export namespace Metamorphic {

@@ -1,10 +1,10 @@
+import { expect } from '@effect/vitest'
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
-import { expect } from 'vitest'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
 
@@ -285,7 +285,7 @@ Feature('Answering orders when the primary gateway wavers')
           expect(s.answers.refusing).toStrictEqual(Exit.fail('expected-rejection'))
           expect(s.answers.borrowed).toBe('borrowed-value')
           expect([s.answers.lazyFirst, s.answers.lazySecond]).toStrictEqual(['built:1', 'built:2'])
-          expect(Exit.hasDies(s.answers.broken)).toBe(true)
+          expect(s.answers.broken).toSatisfy(Exit.hasDies)
           expect(s.answers.passThrough).toStrictEqual({ id: 'dummy' })
         }),
       ),

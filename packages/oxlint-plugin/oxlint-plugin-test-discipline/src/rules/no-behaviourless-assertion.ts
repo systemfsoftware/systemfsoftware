@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { BEHAVIOUR_NODES, EXPECT, meta, SKIP_WALK_KEYS, TEST_FILE } from './no-behaviourless-assertion.config.js'
+import { expectCallOf } from './expect-call.js'
+import { BEHAVIOUR_NODES, meta, SKIP_WALK_KEYS, TEST_FILE } from './no-behaviourless-assertion.config.js'
 
 export type Options = []
 export type MessageIds = 'behaviourlessAssertion' | 'gherkinEmptyCallback'
@@ -52,16 +53,6 @@ const dependsOnBehaviour = (node: unknown, imported: ReadonlySet<string>): boole
     if (dependsOnBehaviour(value, imported)) return true
   }
   return false
-}
-
-const expectCallOf = (node: ESTree.CallExpression): ESTree.CallExpression | undefined => {
-  if (node.callee.type !== 'MemberExpression') return undefined
-  let target: ESTree.Node = node.callee.object
-  while (target.type === 'MemberExpression') target = target.object
-  if (target.type !== 'CallExpression') return undefined
-  const callee = target.callee
-  if (!('name' in callee && callee.name === EXPECT)) return undefined
-  return target
 }
 
 const importedNames = (program: ESTree.Program): Set<string> => {

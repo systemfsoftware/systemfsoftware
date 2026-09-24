@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { healthStateGauge } from '@systemfsoftware/effect-daemon-spec'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
@@ -7,7 +8,6 @@ import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Duration, Effect, Latch, Metric, Ref, Result, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
 const Feature = makeFeature({ it })
@@ -235,7 +235,7 @@ Feature('Health Latch Lifecycle')
           })),
         Then('healthy gauge is zero and latch is closed')((s) =>
           Effect.sync(() => {
-            expect(s.out.healthyClosed).toBe(true)
+            expect(s.out.healthyClosed).toEqual(true)
             expect(s.out.st.value).toBe(0)
           })
         ),

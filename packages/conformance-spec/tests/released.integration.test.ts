@@ -1,15 +1,15 @@
 import { NodeFileSystem } from '@effect/platform-node'
+import { expect } from '@effect/vitest'
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, FileSystem, Layer, Path } from 'effect'
-import { expect } from 'vitest'
 
 import { failReportOf, passReportOf } from './__fixtures__/checkReports.js'
 import { releasingLock, successPathLock, tempFileReport } from './__fixtures__/Resources.js'
 
 const Feature = makeFeature({ it })
 
-Feature('Proving an interrupted program leaves nothing held')
+Feature('Proving an interrupted program leaves nothing held', { timeout: 0 })
   .withLayer(Layer.empty)
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {

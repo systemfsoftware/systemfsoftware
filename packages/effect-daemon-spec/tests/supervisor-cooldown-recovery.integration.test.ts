@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
@@ -9,7 +10,6 @@ import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Ref, Schedule } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
@@ -89,7 +89,7 @@ Feature('Supervisor cooldown recovery')
         ),
         Then('the supervisor healthy latch is open again')((s) =>
           Effect.sync(() => {
-            expect(s.result.healthyFinal).toBe(true)
+            expect(s.result.healthyFinal).toEqual(true)
           })
         ),
         And('the reporter recorded one exhaustion before recovery')((s) =>
@@ -102,7 +102,7 @@ Feature('Supervisor cooldown recovery')
         And('the child ran again after the cooldown boundary')((s) =>
           Effect.sync(() => {
             expect(s.result.runsAfter).toBeGreaterThanOrEqual(1)
-            expect(s.result.unhealthyMid).toBe(true)
+            expect(s.result.unhealthyMid).toEqual(true)
           })
         ),
       ),
@@ -186,7 +186,7 @@ Feature('Supervisor cooldown recovery')
         ),
         Then('the supervisor healthy latch is open again')((s) =>
           Effect.sync(() => {
-            expect(s.result.healthyFinal).toBe(true)
+            expect(s.result.healthyFinal).toEqual(true)
           })
         ),
         And('the reporter recorded one exhaustion before recovery')((s) =>
@@ -199,7 +199,7 @@ Feature('Supervisor cooldown recovery')
         And('a child ran again after the cooldown boundary')((s) =>
           Effect.sync(() => {
             expect(s.result.runsAfter).toBeGreaterThanOrEqual(1)
-            expect(s.result.unhealthyMid).toBe(true)
+            expect(s.result.unhealthyMid).toEqual(true)
           })
         ),
       ),

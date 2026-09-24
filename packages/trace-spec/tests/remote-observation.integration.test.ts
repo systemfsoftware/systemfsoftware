@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Graph, Observation, RemoteObservation } from '@systemfsoftware/trace-spec'
 import { Array as Arr, Cause, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Result, Schema } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
@@ -134,7 +134,7 @@ Feature('Reading a finished trace back from a remote store')
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.late.script, s.late.options)),
         Then('the reader answers with both spans, never the checkout span alone')((s) => {
-          expect(Result.isSuccess(s.reading.outcome)).toBe(true)
+          expect(s.reading.outcome).toSatisfy(Result.isSuccess)
           expect(spanIdsOf(Result.getOrThrow(s.reading.outcome))).toStrictEqual([CHECKOUT_SPAN_ID, PAYMENT_SPAN_ID])
         }),
       ),
@@ -153,7 +153,7 @@ Feature('Reading a finished trace back from a remote store')
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.barren.script, s.barren.options)),
         Then('the reader reports the trace as absent and names the trace it was asked for')((s) => {
-          expect(reportsAbsence(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(reportsAbsence)
           expect(namedTrace(s.reading)).toBe(TRACE_ID)
         }),
       ),
@@ -191,7 +191,7 @@ Feature('Reading a finished trace back from a remote store')
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.growing.script, s.growing.options)),
         Then('the reader reports the trace as unfinished, counting every span the store served')((s) => {
-          expect(reportsUnfinished(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(reportsUnfinished)
           expect(countedSpans(s.reading)).toBe(5)
         }),
       ),
@@ -210,7 +210,7 @@ Feature('Reading a finished trace back from a remote store')
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.stalled.script, s.stalled.options)),
         Then('the reader reports the trace as unfinished with the one span it saw, after asking twice')((s) => {
-          expect(reportsUnfinished(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(reportsUnfinished)
           expect(countedSpans(s.reading)).toBe(1)
           expect(s.reading.served).toBe(2)
         }),
@@ -230,7 +230,7 @@ Feature('Reading a finished trace back from a remote store')
         ),
         When('the finished trace is read back')('reading', (s) => readBack(s.sparse.script, s.sparse.options)),
         Then('the reader reports the trace as unfinished, counting every span the store served')((s) => {
-          expect(reportsUnfinished(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(reportsUnfinished)
           expect(countedSpans(s.reading)).toBe(4)
         }),
       ),
@@ -250,7 +250,7 @@ Feature('Reading a finished trace back from a remote store')
         When('the finished trace is read back')('reading', (s) => readBack(s.spaced.script, s.spaced.options)),
         Then('the reader asks the store once and reports the trace as unfinished')((s) => {
           expect(s.reading.served).toBe(1)
-          expect(reportsUnfinished(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(reportsUnfinished)
         }),
       ),
     )
@@ -268,7 +268,10 @@ Feature('Reading a finished trace back from a remote store')
         ),
         When('the reader is built with each of them')('builds', (s) => Effect.forEach(s.impatient, buildWith)),
         Then('every one of them is refused before the store is asked')((s) => {
-          expect(s.builds.every((outcome) => constructionRefused(outcome))).toBe(true)
+          expect(s.builds).toSatisfy(
+            (builds: ReadonlyArray<Exit.Exit<ReadonlyArray<Graph.SpanRecord>, Observation.ObservationFailure>>) =>
+              builds.every(constructionRefused),
+          )
         }),
       ),
     )

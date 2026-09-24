@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { BoundedIntensity } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
@@ -10,7 +11,6 @@ import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Layer, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 import { SimulatedFailure } from './__fixtures__/SimulatedFailure.schema.js'
@@ -94,7 +94,7 @@ Feature('Daemon supervisor boundaries')
           )),
         Then('the worker child is removed after the tick timeout fires')((s) =>
           Effect.sync(() => {
-            expect(s.removed).toBe(true)
+            expect(s.removed).toEqual(true)
           })
         ),
       ),
@@ -126,7 +126,7 @@ Feature('Daemon supervisor boundaries')
           )),
         Then('the worker child is removed after the tick timeout fires')((s) =>
           Effect.sync(() => {
-            expect(s.removed).toBe(true)
+            expect(s.removed).toEqual(true)
           })
         ),
       ),

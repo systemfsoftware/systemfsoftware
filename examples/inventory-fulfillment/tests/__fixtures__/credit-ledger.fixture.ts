@@ -1,7 +1,7 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Fulfillment, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
 import { Context, DateTime, Duration, Effect, Layer, Option, Ref, Result, Schema as S } from 'effect'
-import { LedgerCommand, type LedgerState, creditLedgerModel } from './credit-ledger.model.js'
+import { creditLedgerModel, LedgerCommand, type LedgerState } from './credit-ledger.model.js'
 
 const LEDGER_CUSTOMERS = ['ada', 'bo'] as const
 
@@ -52,8 +52,10 @@ const seededLedger = Effect.gen(function*() {
   )
 })
 
-const nextOrderId: Effect.Effect<string, never, OrderCounter> = Effect.flatMap(OrderCounter, (counter) =>
-  Effect.map(Ref.updateAndGet(counter, (seen) => seen + 1), (seen) => `ledger-order-${seen}`))
+const nextOrderId: Effect.Effect<string, never, OrderCounter> = Effect.flatMap(
+  OrderCounter,
+  (counter) => Effect.map(Ref.updateAndGet(counter, (seen) => seen + 1), (seen) => `ledger-order-${seen}`),
+)
 
 const planOf = (orderId: string, command: LedgerCommand): Settlement.Unit.OrderPlan => ({
   orderId,
@@ -128,4 +130,3 @@ export const ledgerSequenceSpec: Conformance.SequentialSpecification<
   sequences: 20,
   operations: 4,
 }
-

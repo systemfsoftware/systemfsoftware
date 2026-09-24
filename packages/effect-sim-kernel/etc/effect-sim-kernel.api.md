@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Kernel {
-    export { AnyFiber, BlockedFailure, Bound, Budget, Choice, ChoiceOption, DeadlockFailure, Decision, Escape, EscapeFailure, FiberTarget, Interruption, OverBudgetOutcome, PctFailure, PctOptions, PctOutcome, PickOptions, ProfileName, Pruning, RunCompleted, RunFailed, RunFailure, RunHistory, RunOptions, RunResult, RunawayFailure, SearchFailure, SearchOptions, SearchOutcome, SearchReport, ShrinkOptions, ShrinkOutcome, StepRecord, SuspendedFiber, TestClock_d_exports as TestClock, TimerName, UnobservedPrimitive, WaitKind, beginExploration, currentPreemptionsFor, currentProfile, currentSeedsFor, localPreemptions, localSeeds, runOutcomeTags as outcomeTags, pct, pctDepth, perChangeSeeds, pick, preemptionsFor, pruned, run, search, searchTags, seedsFor, shrink, shrinkCommands, unpruned };
+    export { AnyFiber, BlockedFailure, Bound, Budget, Choice, ChoiceOption, DeadlockFailure, Decision, Escape, EscapeFailure, FiberTarget, Interruption, OverBudgetOutcome, PctFailure, PctOptions, PctOutcome, PickOptions, ProfileName, Pruning, RunCompleted, RunFailed, RunFailure, RunHistory, RunOptions, RunResult, RunawayFailure, SearchFailure, SearchOptions, SearchOutcome, SearchReport, ShrinkOptions, ShrinkOutcome, StepRecord, SuspendedFiber, TestClock_d_exports as TestClock, TimerName, UnobservedPrimitive, WaitKind, beginExploration, currentPreemptionsFor, currentProfile, currentSeedsFor, isStepping, localPreemptions, localSeeds, runOutcomeTags as outcomeTags, pct, pctDepth, perChangeSeeds, pick, preemptionsFor, pruned, run, search, searchTags, seedsFor, shrink, shrinkCommands, unpruned };
 }
 
 // (No @packageDocumentation comment for this package)

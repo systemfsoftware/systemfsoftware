@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect, Equal, Hash, Layer, Option, Predicate, Result as EffectResult, Schema } from 'effect'
-import { expect } from 'vitest'
 import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.schema.js'
 
 type SampleResult = Schema.Schema.Type<typeof resultSchema>
@@ -170,8 +170,8 @@ Feature('Keeping the last good answer on screen when a retry fails')
             }),
         ),
         Then('the refresh reports a failure, but the previous answer is still remembered')((s) => {
-          expect(Atom.AsyncResult.isFailure(s.reading)).toBe(true)
-          expect(Atom.AsyncResult.isFailure(s.reading) && Option.isSome(s.reading.previousSuccess)).toBe(true)
+          expect(s.reading).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(s.reading).toMatchObject({ _tag: 'Failure', previousSuccess: { _tag: 'Some' } })
         }),
       ),
     )
@@ -190,7 +190,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
           (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.atom)),
         ),
         Then('the failure carries no previous answer')((s) => {
-          expect(Atom.AsyncResult.isFailure(s.reading) && Option.isNone(s.reading.previousSuccess)).toBe(true)
+          expect(s.reading).toMatchObject({ _tag: 'Failure', previousSuccess: { _tag: 'None' } })
         }),
       ),
     )
@@ -1227,7 +1227,7 @@ Feature('Keeping the last good answer on screen when a retry fails')
         ),
         When('the outcome is inspected')('reading', (s) => Effect.sync(() => s.outcome)),
         Then('it is a success carrying exactly that object')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.reading)).toBe(true)
+          expect(s.reading).toSatisfy(Atom.AsyncResult.isSuccess)
           expect(s.reading.value).toEqual({})
         }),
       ),
@@ -1241,8 +1241,8 @@ Feature('Keeping the last good answer on screen when a retry fails')
         ),
         When('the outcome is inspected')('reading', (s) => Effect.sync(() => s.outcome)),
         Then('it reports a failure whose error is exactly that object')((s) => {
-          expect(Atom.AsyncResult.isFailure(s.reading)).toBe(true)
-          expect(Equal.equals(Atom.AsyncResult.error(s.reading), Option.some({}))).toBe(true)
+          expect(s.reading).toSatisfy(Atom.AsyncResult.isFailure)
+          expect(Atom.AsyncResult.error(s.reading)).toEqual(Option.some({}))
         }),
       ),
     )

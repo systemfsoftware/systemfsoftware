@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
-import { expect } from 'vitest'
 
 import { concat, matcher, orElse, when } from './__fixtures__/matcher.blueprint.js'
 import { above, ask, is, isQuestion, labels, numbers } from './__fixtures__/question.blueprint.js'

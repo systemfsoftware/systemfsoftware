@@ -37,7 +37,7 @@ const passRuns = <C, R>(report: Conformance.Report<C, R>): number =>
     }),
   )
 
-Feature('Booting a microVM leaves nothing behind when the boot is stopped')
+Feature('Booting a microVM leaves nothing behind when the boot is stopped', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario }) => {
     scenario(

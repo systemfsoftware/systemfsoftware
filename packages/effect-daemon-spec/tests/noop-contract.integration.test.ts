@@ -1,10 +1,10 @@
+import { expect } from '@effect/vitest'
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
 import { LeaderLock, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
 import { it } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer } from 'effect'
-import { expect } from 'vitest'
 
 const withLock = <A, E, R>(
   self: Effect.Effect<A, E, R>,

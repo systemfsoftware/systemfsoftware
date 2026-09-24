@@ -8,7 +8,7 @@ import { Context } from 'effect';
 import { Duration } from 'effect';
 import * as Effect$1 from 'effect/Effect';
 import { Effect } from 'effect';
-import { it as it_2 } from '@effect/vitest';
+import { it } from '@effect/vitest';
 import * as Layer$1 from 'effect/Layer';
 import { Layer } from 'effect';
 import { layer } from '@effect/vitest';
@@ -158,7 +158,7 @@ export type InitialStage = {
     readonly [StageTypeId]: 'initial';
 };
 
-export { it_2 as it }
+export { it }
 
 export { layer }
 

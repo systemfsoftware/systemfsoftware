@@ -1,7 +1,7 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
 import { Effect, Layer } from 'effect'
-import { expect } from 'vitest'
 
 import { fileReadProgram, hostTimerProgram, makeHostFiles, removeHostFiles } from './__fixtures__/externalFixtures.js'
 import { blockedFailureOf, completedRunOf, completedValueOf, escapeOf } from './__fixtures__/kernelFixtures.js'
@@ -10,6 +10,9 @@ import { answeringService, askAfterConnecting } from './__fixtures__/socketFixtu
 const Feature = makeFeature({ it })
 
 const realReport = Effect.acquireRelease(makeHostFiles, removeHostFiles)
+
+const everyStepInDefaultOrder = (steps: ReadonlyArray<Kernel.StepRecord>): boolean =>
+  steps.every((step) => step.deviation === false)
 
 const refusalOf = <A>(run: () => Promise<A>): Effect.Effect<string> =>
   Effect.tryPromise({
@@ -47,7 +50,7 @@ Feature('Waiting on the host outside the controlled schedule')
           expect(completedValueOf(s.run)).toBe(s.files.expected)
         }),
         And('every step keeps the default order')((s) => {
-          expect(completedRunOf(s.run).steps.every((step) => step.deviation === false)).toBe(true)
+          expect(completedRunOf(s.run).steps).toSatisfy(everyStepInDefaultOrder)
         }),
       ),
     )

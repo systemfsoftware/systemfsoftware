@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { Duration, Effect, Fiber, Match } from 'effect'
 import { TestClock } from 'effect/testing'
-import { expect } from 'vitest'
 import { type DialMode, ProbeHarness, probeHarness } from './__fixtures__/probe-harness.fixture.js'
 
 const Feature = makeFeature({ it })
@@ -37,7 +37,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
           () => Effect.zipWith(awaitOver, dialCount, (verdict, attempts) => ({ verdict, attempts })),
         ),
         Then('the check reports the service is ready')(({ outcome }) => {
-          expect(reportedReady(outcome.verdict)).toBe(true)
+          expect(outcome.verdict).toSatisfy(reportedReady)
         }),
         And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBe(1)
@@ -58,7 +58,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
             return { verdict, attempts: yield* dialCount }
           })),
         Then('the check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(reportedReady(outcome.verdict)).toBe(false)
+          expect(outcome.verdict).not.toSatisfy(reportedReady)
         }),
         And('the mapped port saw more than one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBeGreaterThan(1)
@@ -79,7 +79,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
             return { verdict, attempts: yield* dialCount }
           })),
         Then('the check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(reportedReady(outcome.verdict)).toBe(false)
+          expect(outcome.verdict).not.toSatisfy(reportedReady)
         }),
         And('the mapped port saw exactly one connection attempt')(({ outcome }) => {
           expect(outcome.attempts).toBe(1)
@@ -104,7 +104,7 @@ Feature('Waiting for a guest service to answer before the check gives up')
             }),
         ),
         Then('the shortened check gives up reporting the service is not ready')(({ outcome }) => {
-          expect(reportedReady(outcome.verdict)).toBe(false)
+          expect(outcome.verdict).not.toSatisfy(reportedReady)
         }),
         And('the shortened check retried the connection before giving up')(({ outcome }) => {
           expect(outcome.attempts).toBeGreaterThan(1)

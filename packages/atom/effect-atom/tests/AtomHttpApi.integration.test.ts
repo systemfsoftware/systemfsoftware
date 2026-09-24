@@ -1,10 +1,10 @@
+import { expect } from '@effect/vitest'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
@@ -29,6 +29,10 @@ const waitForSettled = <A, E, W>(
     )
     return Effect.sync(unsubscribe)
   })
+
+/** Whether a reading has not settled: nothing has arrived yet, or a refresh is still in flight. */
+const isLoading = <A, E>(reading: Atom.AsyncResult.Result<A, E>): boolean =>
+  Atom.AsyncResult.isInitial(reading) || Atom.AsyncResult.isWaiting(reading)
 
 /**
  * A test double that answers every request through the same preprocess and
@@ -145,8 +149,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             })),
         ),
         Then('both parts agree the profile is still loading, not a stale or broken value')((s) => {
-          expect(s.result.firstReading.waiting || Atom.AsyncResult.isInitial(s.result.firstReading)).toBe(true)
-          expect(s.result.secondReading.waiting || Atom.AsyncResult.isInitial(s.result.secondReading)).toBe(true)
+          expect(s.result.firstReading).toSatisfy(isLoading)
+          expect(s.result.secondReading).toSatisfy(isLoading)
         }),
       ),
     )
@@ -182,7 +186,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the created record is reported')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
           if (Atom.AsyncResult.isSuccess(s.outcome)) {
             expect(s.outcome.value).toEqual({ id: 1, name: 'grace' })
           }
@@ -221,7 +225,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as failed')((s) => {
-          expect(Atom.AsyncResult.isFailure(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
         }),
       ),
     )
@@ -252,7 +256,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return outcome
           })),
         Then('the profile is reported from the derived client')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
           expect(s.ctx.callsMade()).toBe(1)
         }),
       ),
@@ -308,8 +312,8 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return { first, second, calls }
           })),
         Then('the submission ran and the watched profile was fetched again')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.readings.first)).toBe(true)
-          expect(Atom.AsyncResult.isSuccess(s.readings.second)).toBe(true)
+          expect(s.readings.first).toSatisfy(Atom.AsyncResult.isSuccess)
+          expect(s.readings.second).toSatisfy(Atom.AsyncResult.isSuccess)
           expect(s.readings.calls).toBe(3)
         }),
       ),
@@ -346,7 +350,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the raw response is reported')((s) => {
-          expect(Atom.AsyncResult.isSuccess(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isSuccess)
           if (Atom.AsyncResult.isSuccess(s.outcome)) {
             expect(s.outcome.value).toMatchObject({ status: 200 })
           }
@@ -405,7 +409,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) => {
             expect(s.ctx.idleTTL).toBe(60_000)
             expect(s.ctx.keepAlive).toBe(true)
-            expect(Atom.AsyncResult.isSuccess(s.result.secondReading)).toBe(true)
+            expect(s.result.secondReading).toSatisfy(Atom.AsyncResult.isSuccess)
           },
         ),
       ),
@@ -445,7 +449,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a defect rather than a normal failure')((s) => {
-          expect(Atom.AsyncResult.isFailure(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
           expect(Atom.AsyncResult.error(s.outcome)).toEqual(Option.none())
         }),
       ),
@@ -485,7 +489,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
             return Atom.Registry.get(s.ctx.registry, s.ctx.create)
           })),
         Then('the submission is reported as a normal failure with the described error')((s) => {
-          expect(Atom.AsyncResult.isFailure(s.outcome)).toBe(true)
+          expect(s.outcome).toSatisfy(Atom.AsyncResult.isFailure)
           expect(Atom.AsyncResult.error(s.outcome)).toEqual(Option.some({ message: 'nope' }))
         }),
       ),
@@ -548,7 +552,7 @@ Feature('Reusing a fetched profile after the page reloads, without asking the se
           (s) => {
             expect(Atom.AsyncResult.getOrThrow(s.readings.firstGreeting)).toBe('first')
             expect(Atom.AsyncResult.getOrThrow(s.readings.secondGreeting)).toBe('second')
-            expect(Atom.AsyncResult.isSuccess(s.readings.profile)).toBe(true)
+            expect(s.readings.profile).toSatisfy(Atom.AsyncResult.isSuccess)
           },
         ),
       ),

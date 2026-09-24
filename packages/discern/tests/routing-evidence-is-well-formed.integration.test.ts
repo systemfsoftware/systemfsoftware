@@ -1,8 +1,8 @@
+import { expect } from '@effect/vitest'
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result, Schema } from 'effect'
 import { Layer } from 'effect'
-import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
@@ -22,7 +22,7 @@ Feature('Keeping routing evidence well formed')
           When('the candidate is read back')('outcome', (s) =>
             Effect.succeed(Schema.decodeResult(Discern.Procedure.RouteCandidate)(s.payload))),
           Then('the impossible probability is refused')(({ outcome }) => {
-            expect(Result.isFailure(outcome)).toBe(true)
+            expect(outcome).toSatisfy(Result.isFailure)
           }),
         ),
     )
@@ -36,7 +36,7 @@ Feature('Keeping routing evidence well formed')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.RouteCandidate)(s.payload)),
         ),
         Then('the probability-less candidate is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -53,7 +53,7 @@ Feature('Keeping routing evidence well formed')
           (s) => Effect.succeed(Schema.decodeResult(Discern.Procedure.RouteCandidate)(s.payload)),
         ),
         Then('the endless probability is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -70,7 +70,7 @@ Feature('Keeping routing evidence well formed')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.RoutingUncertainError)(s.payload)),
         ),
         Then('the ranking-less refusal is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )
@@ -87,7 +87,7 @@ Feature('Keeping routing evidence well formed')
           (s) => Effect.succeed(Schema.decodeUnknownResult(Discern.Procedure.DepthExceededError)(s.payload)),
         ),
         Then('the ceiling-less refusal is refused')(({ outcome }) => {
-          expect(Result.isFailure(outcome)).toBe(true)
+          expect(outcome).toSatisfy(Result.isFailure)
         }),
       ),
     )

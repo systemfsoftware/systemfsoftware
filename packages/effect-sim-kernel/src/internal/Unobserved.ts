@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 /**
  * Unobserved shared-primitive detection (R35, AE12). The kernel observes `Ref`
  * and `Deferred` only, so a run that touches `Queue`, `PubSub`, `Semaphore`,
@@ -15,7 +16,7 @@
  * before it is sealed: an Effect that renames or reshapes them fails the run
  * loudly instead of silently leaving races unsearched.
  */
-import { Context, Effect, Latch, Option, PubSub, Queue, Scope, Semaphore } from 'effect'
+import { Context, Effect, Latch, Option, PubSub, Queue, Schema, Scope, Semaphore } from 'effect'
 
 import type { UnobservedPrimitive } from '../Kernel/Bound.js'
 import { currentKernel, FIBER_PROTOTYPE } from './runMark.js'
@@ -246,4 +247,31 @@ export const installUnobserved = (): void => {
   installMethods(Latch.makeUnsafe(false), latchMethods, 'Latch')
   installMethods(pubSubBacking(), pubSubMethods, 'PubSub')
   wrapSetContext()
+}
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
+  const { it } = await import('@effect/vitest')
+
+  const driftedInstance = (): object => {
+    const instance: object = {}
+    Object.setPrototypeOf(instance, {})
+    return instance
+  }
+
+  const complaintFor = (method: string): Effect.Effect<string> =>
+    Effect.try({
+      try: () => {
+        installMethods(driftedInstance(), [method], 'Semaphore')
+        return 'the drifted primitive went unnoticed'
+      },
+      catch: (error) => (error instanceof Error ? error.message : 'a non-error was thrown'),
+    }).pipe(Effect.catch((message: string) => Effect.succeed(message)))
+
+  it.effect.prop(
+    '∀m_InstallMethods_=ComplainsNamingTheDriftedMethod',
+    { of: [Schema.Literals(['take', 'release', 'withPermits'])], subject: complaintFor },
+    (complaint, [method]) =>
+      Effect.map(complaint(method), (message) => message.includes(`Semaphore has no '${method}' method`)),
+  )
 }

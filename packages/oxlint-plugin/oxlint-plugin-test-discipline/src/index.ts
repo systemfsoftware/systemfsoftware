@@ -5,12 +5,12 @@ import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gh
 import { conformanceTestRequiresHarness } from './rules/conformance-test-requires-harness.js'
 import { dampTestNaming } from './rules/damp-test-naming.js'
 import { differentialTestRequiresHarness } from './rules/differential-test-requires-harness.js'
+import { expectBooleanPredicate } from './rules/expect-boolean-predicate.js'
 import { inSourceTestPropOnly } from './rules/in-source-test-prop-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { modelFixtureImportsSubject } from './rules/model-fixture-imports-subject.js'
 import { noAssertInProperty } from './rules/no-assert-in-property.js'
 import { noBehaviourlessAssertion } from './rules/no-behaviourless-assertion.js'
-import { noEffectInSyncProp } from './rules/no-effect-in-sync-prop.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noNestedQuantification } from './rules/no-nested-quantification.js'
 import { noPseudoGherkinUnitTests } from './rules/no-pseudo-gherkin-unit-tests.js'
@@ -27,6 +27,7 @@ import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
 import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures.js'
 import { testsImportPublicApi } from './rules/tests-import-public-api.js'
 import { traceTestRequiresTaxonomy } from './rules/trace-test-requires-taxonomy.js'
+import { vitestFromEffectVitest } from './rules/vitest-from-effect-vitest.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-discipline'
 
@@ -53,6 +54,8 @@ const recommendedRules = {
   [rule('behaviour-exercises-use-case')]: 'error',
   [rule('behaviour-one-feature-per-file')]: 'error',
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
+  [rule('expect-boolean-predicate')]: 'error',
+  [rule('vitest-from-effect-vitest')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
   [rule('differential-test-requires-harness')]: 'error',
@@ -61,7 +64,6 @@ const recommendedRules = {
   [rule('no-pseudo-gherkin-unit-tests')]: 'error',
   [rule('ban-raw-span-name-emit')]: 'error',
   [rule('trace-test-requires-taxonomy')]: 'error',
-  [rule('no-effect-in-sync-prop')]: 'error',
 } as const
 
 export default {
@@ -90,6 +92,8 @@ export default {
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
     'no-pseudo-gherkin-unit-tests': noPseudoGherkinUnitTests,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
+    'expect-boolean-predicate': expectBooleanPredicate,
+    'vitest-from-effect-vitest': vitestFromEffectVitest,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,
     'differential-test-requires-harness': differentialTestRequiresHarness,
@@ -97,7 +101,6 @@ export default {
     'model-fixture-imports-subject': modelFixtureImportsSubject,
     'ban-raw-span-name-emit': banRawSpanNameEmit,
     'trace-test-requires-taxonomy': traceTestRequiresTaxonomy,
-    'no-effect-in-sync-prop': noEffectInSyncProp,
   },
   configs: {
     recommended: {

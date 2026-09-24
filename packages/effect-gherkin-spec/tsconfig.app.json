@@ -12,9 +12,6 @@
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.app.tsbuildinfo",
     "customConditions": [
       "@systemfsoftware/source"
-    ],
-    "types": [
-      "vitest/globals"
     ]
   },
   "include": [

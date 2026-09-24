@@ -1,10 +1,9 @@
+import { expect } from '@effect/vitest'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Deferred, Effect, Exit, Fiber, Layer } from 'effect'
-import { expect } from 'vitest'
+import { Deferred, Effect, Exit, Fiber, Layer, Ref } from 'effect'
 import {
   alwaysLast,
-  attemptConcurrentRun,
   callHostTimeout,
   callOnNextMicrotask,
   completedRunOf,
@@ -96,10 +95,23 @@ const setupProgram = Effect.gen(function*() {
   return yield* Effect.never
 })
 
-interface ConcurrentAttempt {
-  readonly rejected: Error | undefined
-  readonly stalledResult: Kernel.RunResult<never, never>
-}
+const depthProgram = (
+  live: Ref.Ref<number>,
+  peak: Ref.Ref<number>,
+): Effect.Effect<string> =>
+  Effect.gen(function*() {
+    const inside = yield* Ref.updateAndGet(live, (running) => running + 1)
+    yield* Ref.update(peak, (highest) => Math.max(highest, inside))
+    yield* Effect.yieldNow
+    yield* Ref.update(live, (running) => running - 1)
+    return `finished at depth ${inside}`
+  })
+
+const someStepOfferedAChoice = (steps: ReadonlyArray<Kernel.StepRecord>): boolean =>
+  steps.some((step) => step.options > 1)
+
+const everyWorkerHasFrames = (workers: ReadonlyArray<Kernel.SuspendedFiber>): boolean =>
+  workers.every((worker) => worker.frames.length > 0)
 
 const replayTwice = (
   program: typeof raceProgram,
@@ -128,7 +140,7 @@ Feature('Running one program again under a chosen schedule')
           (s) =>
             Effect.promise(() =>
               Kernel.run(s.contest).then((defaultRun) =>
-                Kernel.run(s.contest, { choose: deviateAtFirstChoice }).then((wokenFirst) => ({
+                Kernel.run(s.contest, { choose: deviateAtFirstChoice() }).then((wokenFirst) => ({
                   defaultRun,
                   wokenFirst,
                 }))
@@ -179,7 +191,7 @@ Feature('Running one program again under a chosen schedule')
           expect(completedValueOf(s.run)).toEqual(['woken by in-process work'])
         }),
         And('at least one step offered more than one choice')((s) => {
-          expect(completedRunOf(s.run).steps.some((step) => step.options > 1)).toBe(true)
+          expect(completedRunOf(s.run).steps).toSatisfy(someStepOfferedAChoice)
         }),
       ),
     )
@@ -200,7 +212,7 @@ Feature('Running one program again under a chosen schedule')
         }),
         And('every stuck worker is listed once with the frames it stopped in')((s) => {
           const suspended = deadlockOf(s.run).suspended
-          expect(suspended.every((worker) => worker.frames.length > 0)).toBe(true)
+          expect(suspended).toSatisfy(everyWorkerHasFrames)
           expect(new Set(suspended.map((worker) => worker.id)).size).toBe(suspended.length)
         }),
       ),
@@ -252,7 +264,7 @@ Feature('Running one program again under a chosen schedule')
           expect(s.receipts).toEqual(['cleanup ran'])
         }),
         And('the run exits with the interruption')((s) => {
-          expect(Exit.hasInterrupts(completedRunOf(s.run).exit)).toBe(true)
+          expect(completedRunOf(s.run).exit).toSatisfy(Exit.hasInterrupts)
         }),
       ),
     )
@@ -275,27 +287,66 @@ Feature('Running one program again under a chosen schedule')
     )
 
     scenario(
-      'A second run is refused while another run owns the schedule',
+      'A run that starts beside a live one waits for it instead of being refused',
       Gherkin.Do.pipe(
-        Given('no run owns the schedule')(
+        Given('a program that can never finish')(
           'program',
           () => Effect.succeed(Effect.never),
         ),
-        When('one run stalls and a second run starts beside it')(
-          'attempt',
-          (s): Effect.Effect<ConcurrentAttempt, never, never> =>
+        When('that program starts, and a run that finishes starts beside it')(
+          'runs',
+          (s): Effect.Effect<
+            {
+              readonly stalled: Kernel.RunResult<never, never>
+              readonly queued: Kernel.RunResult<string, never>
+            },
+            never,
+            never
+          > =>
             Effect.gen(function*() {
               const stalled = Kernel.run(s.program)
-              const rejected = attemptConcurrentRun(Effect.void)
-              const stalledResult = yield* Effect.promise(() => stalled)
-              return { rejected, stalledResult }
+              const queued = Kernel.run(Effect.succeed('the waiting run finished'))
+              return {
+                stalled: yield* Effect.promise(() => stalled),
+                queued: yield* Effect.promise(() => queued),
+              }
             }),
         ),
-        Then('the second run is refused immediately')((s) => {
-          expect(s.attempt.rejected?.message).toContain('already active')
+        Then('the program that can never finish reports its own stall')((s) => {
+          expect(deadlockOf(s.runs.stalled).suspended.length).toBeGreaterThan(0)
         }),
-        And('the first run still reports its own stall')((s) => {
-          expect(deadlockOf(s.attempt.stalledResult).suspended.length).toBeGreaterThan(0)
+        And('the run that waited completes with its own answer')((s) => {
+          expect(completedValueOf(s.runs.queued)).toBe('the waiting run finished')
+        }),
+      ),
+    )
+
+    scenario(
+      'Two runs that start together never overlap and each keeps its own schedule',
+      Gherkin.Do.pipe(
+        Given('a program that reports the depth it was running at, and counters that track it')(
+          'counters',
+          () => Effect.all({ live: Ref.make(0), peak: Ref.make(0) }),
+        ),
+        When('the program runs alone, and then two runs start together')(
+          'runs',
+          (s) =>
+            Effect.gen(function*() {
+              const program = depthProgram(s.counters.live, s.counters.peak)
+              const alone = yield* Effect.promise(() => Kernel.run(program))
+              const together = yield* Effect.promise(() => Promise.all([Kernel.run(program), Kernel.run(program)]))
+              return { alone, together, deepest: yield* Ref.get(s.counters.peak) }
+            }),
+        ),
+        Then('no two runs were ever inside the program at once')((s) => {
+          expect(s.runs.deepest).toBe(1)
+        }),
+        And('each run that started together returns what the run alone returned')((s) => {
+          const [first, second] = s.runs.together
+          expect(completedValueOf(first)).toBe(completedValueOf(s.runs.alone))
+          expect(completedValueOf(second)).toBe(completedValueOf(s.runs.alone))
+          expect(first.decisions).toEqual(s.runs.alone.decisions)
+          expect(second.decisions).toEqual(s.runs.alone.decisions)
         }),
       ),
     )

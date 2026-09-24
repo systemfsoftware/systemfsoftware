@@ -1,3 +1,4 @@
+import { expect } from '@effect/vitest'
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
@@ -5,7 +6,6 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import { expect } from 'vitest'
 
 import { admitDecodedCommand } from './__fixtures__/admit-decoded-command.workflow.js'
 

@@ -46,11 +46,11 @@ The mechanism is visible in `packages/effect-schema-law/src/RuleOfSchemas.ts`. `
 
 ```ts
 // packages/effect-schema-law/src/RuleOfSchemas.ts
-it.prop(`∀x_${name}Enc_=x`, [schema], ([value]) => encodeStable(value), options)
-it.prop(`∀x_${name}_=x`, [schema], ([value]) => roundTrips(value), options)
+it.prop(`∀x_${name}Enc_=x`, { of: [schema], subject: encodeStable, runs: 100 }, (subject, [value]) => subject(value))
+it.prop(`∀x_${name}_=x`, { of: [schema], subject: roundTrips, runs: 100 }, (subject, [value]) => subject(value))
 ```
 
-The `[schema]` argument is fast-check drawing from `Schema.Arbitrary`, which the schema's own `S.annotations({ arbitrary })` supplies. Rejection is the one thing that arbitrary is engineered never to produce.
+The `of: [schema]` generator is fast-check drawing from `Schema.Arbitrary`, which the schema's own `S.annotations({ arbitrary })` supplies. Rejection is the one thing that arbitrary is engineered never to produce.
 
 ### The circularity has two flavors, and the second is easy to miss
 
@@ -77,7 +77,7 @@ No shared regex here, so nothing looks duplicated in review — but `fc.hexaStri
 
 **Read the generator off the domain contract, not off the regex.** A generator derived from the pattern literal can only produce inputs the pattern accepts. A rejection property needs inputs the _contract_ forbids, with the contract stated independently of the literal being mutated.
 
-Before — the only laws that existed, per schema (generated, tautological): the `[schema]` draw above.
+Before — the only laws that existed, per schema (generated, tautological): the `of: [schema]` draw above.
 
 After — a rejection property with a contract-derived generator:
 
@@ -87,8 +87,8 @@ const decode = S.decodeUnknownEither(PrefixedHex)
 
 it.prop(
   '∀b_PrefixedHexPrefix_⊥',
-  [fc.stringMatching(/^[0-9a-f]+$/)], // bare hex body, no 0x
-  ([body]) => Either.isLeft(decode(body)), // must be refused
+  { of: [fc.stringMatching(/^[0-9a-f]+$/)], subject: decode, runs: 100 }, // bare hex body, no 0x
+  (subject, [body]) => Either.isLeft(subject(body)), // must be refused
 )
 ```
 
@@ -143,14 +143,22 @@ The schema requires `0x` and refuses uppercase (`prefixed-hex.schema.ts:7`) — 
 // packages/hex-schema/src/prefixed-hex.schema.property.test.ts:7-25
 const hexBody = fc.stringMatching(/^[0-9a-f]*$/)
 
-it.prop('∀b_PrefixedHexPrefix_⊥', [fc.stringMatching(/^[0-9a-f]+$/)], ([body]) => Either.isLeft(decode(body)))
+it.prop(
+  '∀b_PrefixedHexPrefix_⊥',
+  { of: [fc.stringMatching(/^[0-9a-f]+$/)], subject: decode, runs: 100 },
+  (subject, [body]) => Either.isLeft(subject(body)),
+)
 
-it.prop('∀b_PrefixedHexCase_⊥', [fc.stringMatching(/^[A-F]+$/)], ([upper]) => Either.isLeft(decode(`0x${upper}`)))
+it.prop(
+  '∀b_PrefixedHexCase_⊥',
+  { of: [fc.stringMatching(/^[A-F]+$/)], subject: decode, runs: 100 },
+  (subject, [upper]) => Either.isLeft(subject(`0x${upper}`)),
+)
 
 it.prop(
   '∀b_PrefixedHexAlphabet_⊥',
-  [fc.tuple(hexBody, fc.constantFrom('g', 'z', '!', ' ', '-'), hexBody)],
-  ([[head, outsider, tail]]) => Either.isLeft(decode(`0x${head}${outsider}${tail}`)),
+  { of: [fc.tuple(hexBody, fc.constantFrom('g', 'z', '!', ' ', '-'), hexBody)], subject: decode, runs: 100 },
+  (subject, [[head, outsider, tail]]) => Either.isLeft(subject(`0x${head}${outsider}${tail}`)),
 )
 ```
 
@@ -167,8 +175,8 @@ const nibble = fc.stringMatching(/^[0-9a-f]$/)
 
 it.prop(
   '∀b_ByteAlignment_⊥',
-  [fc.tuple(bytePairs, nibble)],
-  ([[pairs, odd]]) => Either.isLeft(decode(`0x${pairs}${odd}`)),
+  { of: [fc.tuple(bytePairs, nibble)], subject: decode, runs: 100 },
+  (subject, [[pairs, odd]]) => Either.isLeft(subject(`0x${pairs}${odd}`)),
 )
 ```
 
@@ -184,8 +192,8 @@ const decodeColonHex = S.decodeUnknownEither(ColonHex)
 
 it.prop(
   '∀g_ColonHexTripleGroup_⊥',
-  [fc.stringMatching(/^[0-9A-Fa-f]{3}$/)],
-  ([group]) => Either.isLeft(decodeColonHex(group)),
+  { of: [fc.stringMatching(/^[0-9A-Fa-f]{3}$/)], subject: decodeColonHex, runs: 100 },
+  (subject, [group]) => Either.isLeft(subject(group)),
 )
 ```
 
@@ -200,8 +208,8 @@ const hexPart = fc.stringMatching(/^[0-9a-fA-F]*$/)
 
 it.prop(
   '∀s_HexStringAlphabet_⊥',
-  [fc.tuple(hexPart, fc.constantFrom('g', 'z', '!', ' ', '-'), hexPart)],
-  ([[head, outsider, tail]]) => Either.isLeft(decodeHexString(`${head}${outsider}${tail}`)),
+  { of: [fc.tuple(hexPart, fc.constantFrom('g', 'z', '!', ' ', '-'), hexPart)], subject: decodeHexString, runs: 100 },
+  (subject, [[head, outsider, tail]]) => Either.isLeft(subject(`${head}${outsider}${tail}`)),
 )
 ```
 

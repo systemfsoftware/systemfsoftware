@@ -42,6 +42,7 @@
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config-recommended": "workspace:^",

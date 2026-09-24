@@ -22,6 +22,8 @@ type PlaceOrderResult = Result.Result<
   InsufficientStock | CreditLimitExceeded
 >
 
+type PlaceOrder = typeof placeOrder
+
 const explodedComponentsOf = (
   command: PlaceOrderCommand,
 ): readonly { readonly sku: string; readonly quantity: number }[] =>
@@ -171,8 +173,8 @@ const refusalExplained = (command: PlaceOrderCommand, error: InsufficientStock |
 
 const emptyComponents = (command: PlaceOrderCommand): boolean => explodedComponentsOf(command).length === 0
 const stockLedgerHolds = (command: PlaceOrderCommand): boolean => creditPredictedOf(command) === 'held'
-const overdraftWithinPrivilege = (command: PlaceOrderCommand): boolean =>
-  Result.match(placeOrder(command), {
+const overdraftWithinPrivilege = (subject: PlaceOrder, command: PlaceOrderCommand): boolean =>
+  Result.match(subject(command), {
     onFailure: (error) => refusalExplained(command, error),
     onSuccess: (decision) =>
       Match.value(decision).pipe(
@@ -191,62 +193,82 @@ const overdraftWithinPrivilege = (command: PlaceOrderCommand): boolean =>
 describe('placeOrder — composed pipeline', () => {
   it.prop(
     '∀c_CreditOutcome_=Tier',
-    [PlaceOrderCommand],
-    ([command]) => agreesWithTierContract(command, placeOrder(command)),
+    { of: [PlaceOrderCommand], subject: placeOrder },
+    (subject, [command]) => agreesWithTierContract(command, subject(command)),
   )
 
-  it.prop('∀c_Overdraft_≤Privilege', [PlaceOrderCommand], ([command]) => overdraftWithinPrivilege(command))
+  it.prop(
+    '∀c_Overdraft_≤Privilege',
+    { of: [PlaceOrderCommand], subject: placeOrder },
+    (subject, [command]) => overdraftWithinPrivilege(subject, command),
+  )
 
-  it.prop('∀c_AllocateStock_≤Stock', [PlaceOrderCommand], ([command]) =>
-    Result.match(placeOrder(command), {
-      onFailure: (error) => refusalExplained(command, error),
-      onSuccess: (decision) =>
-        Match.value(decision).pipe(
-          Match.tag('OrderHeld', () => stockLedgerHolds(command)),
-          Match.tag(
-            'OrderAllocated',
-            (allocated) => allocatedMatchesLive(command, allocated.reservations) || emptyComponents(command),
+  it.prop(
+    '∀c_AllocateStock_≤Stock',
+    { of: [PlaceOrderCommand], subject: placeOrder },
+    (subject, [command]) =>
+      Result.match(subject(command), {
+        onFailure: (error) => refusalExplained(command, error),
+        onSuccess: (decision) =>
+          Match.value(decision).pipe(
+            Match.tag('OrderHeld', () => stockLedgerHolds(command)),
+            Match.tag(
+              'OrderAllocated',
+              (allocated) => allocatedMatchesLive(command, allocated.reservations) || emptyComponents(command),
+            ),
+            Match.tag(
+              'OrderAllocatedWithOverdraft',
+              (allocated) => allocatedMatchesLive(command, allocated.reservations) || emptyComponents(command),
+            ),
+            Match.tag(
+              'OrderBackordered',
+              (backordered) => allocatedMatchesLive(command, backordered.reservations) || emptyComponents(command),
+            ),
+            Match.exhaustive,
           ),
-          Match.tag(
-            'OrderAllocatedWithOverdraft',
-            (allocated) => allocatedMatchesLive(command, allocated.reservations) || emptyComponents(command),
-          ),
-          Match.tag(
-            'OrderBackordered',
-            (backordered) => allocatedMatchesLive(command, backordered.reservations) || emptyComponents(command),
-          ),
-          Match.exhaustive,
-        ),
-    }))
-  it.prop('∀c_AllocatedBackordered_=Requested', [PlaceOrderCommand], ([command]) =>
-    Result.match(placeOrder(command), {
-      onFailure: (error) => refusalExplained(command, error),
-      onSuccess: (decision) =>
-        Match.value(decision).pipe(
-          Match.tag('OrderHeld', () => creditPredictedOf(command) === 'held'),
-          Match.tag('OrderAllocated', (allocated) => matchesDemanded(command, allocated.reservations, [])),
-          Match.tag('OrderAllocatedWithOverdraft', (allocated) => matchesDemanded(command, allocated.reservations, [])),
-          Match.tag(
-            'OrderBackordered',
-            (backordered) => matchesDemanded(command, backordered.reservations, backordered.backordered),
-          ),
-          Match.exhaustive,
-        ),
-    }))
+      }),
+  )
 
-  it.prop('∀c_Allocation_⊆Live', [PlaceOrderCommand], ([command]) =>
-    Result.match(placeOrder(command), {
-      onFailure: (error) => refusalExplained(command, error),
-      onSuccess: (decision) =>
-        Match.value(decision).pipe(
-          Match.tag('OrderHeld', () => true),
-          Match.tag('OrderAllocated', (allocated) => everyReservationLive(command, allocated.reservations)),
-          Match.tag(
-            'OrderAllocatedWithOverdraft',
-            (allocated) => everyReservationLive(command, allocated.reservations),
+  it.prop(
+    '∀c_AllocatedBackordered_=Requested',
+    { of: [PlaceOrderCommand], subject: placeOrder },
+    (subject, [command]) =>
+      Result.match(subject(command), {
+        onFailure: (error) => refusalExplained(command, error),
+        onSuccess: (decision) =>
+          Match.value(decision).pipe(
+            Match.tag('OrderHeld', () => creditPredictedOf(command) === 'held'),
+            Match.tag('OrderAllocated', (allocated) => matchesDemanded(command, allocated.reservations, [])),
+            Match.tag(
+              'OrderAllocatedWithOverdraft',
+              (allocated) => matchesDemanded(command, allocated.reservations, []),
+            ),
+            Match.tag(
+              'OrderBackordered',
+              (backordered) => matchesDemanded(command, backordered.reservations, backordered.backordered),
+            ),
+            Match.exhaustive,
           ),
-          Match.tag('OrderBackordered', (backordered) => everyReservationLive(command, backordered.reservations)),
-          Match.exhaustive,
-        ),
-    }))
+      }),
+  )
+
+  it.prop(
+    '∀c_Allocation_⊆Live',
+    { of: [PlaceOrderCommand], subject: placeOrder },
+    (subject, [command]) =>
+      Result.match(subject(command), {
+        onFailure: (error) => refusalExplained(command, error),
+        onSuccess: (decision) =>
+          Match.value(decision).pipe(
+            Match.tag('OrderHeld', () => true),
+            Match.tag('OrderAllocated', (allocated) => everyReservationLive(command, allocated.reservations)),
+            Match.tag(
+              'OrderAllocatedWithOverdraft',
+              (allocated) => everyReservationLive(command, allocated.reservations),
+            ),
+            Match.tag('OrderBackordered', (backordered) => everyReservationLive(command, backordered.reservations)),
+            Match.exhaustive,
+          ),
+      }),
+  )
 })
