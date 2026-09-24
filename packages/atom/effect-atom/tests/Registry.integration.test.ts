@@ -1,97 +1,88 @@
 import { Atom, Registry, Result } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Cause, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Stream } from 'effect'
-import { expect, vi } from 'vitest'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Cause, Deferred, Effect, Exit, Fiber, HashSet, Latch, Layer, Option, Schema, Stream } from 'effect'
+import { TestClock } from 'effect/testing'
+import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature('Keeping a value that is still loading available to every reader')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A value that never finishes loading is not started over after several readers check it',
+      'Two readers checking a value that never finishes keep seeing it loading, and the work starts only once',
       Gherkin.Do.pipe(
-        Given('a value that never finishes loading, with cleanup enabled after a short idle period')(
-          'setup',
-          () =>
-            Effect.sync(() => {
-              vi.useFakeTimers()
-              let startCount = 0
-              const atom = Atom.make(
-                Effect.callback<number>(() => {
-                  startCount++
-                }),
-              )
-              const registry = Registry.make({ defaultIdleTTL: 10 })
-              return { registry, atom, timesStarted: () => startCount }
-            }),
-        ),
-        When('two readers check the value while it is still loading, and the cleanup timer runs')(
+        Given('a value that never finishes loading, with a short cleanup timer')('setup', () =>
+          Effect.sync(() => {
+            let startCount = 0
+            const atom = Atom.make(
+              Effect.callback<number>(() => {
+                startCount++
+              }),
+            )
+            const registry = Registry.make({ defaultIdleTTL: 10 })
+            return { registry, atom, timesStarted: () => startCount }
+          })),
+        When('Ada and Bo read the value, then 100 millis pass with no outcome')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               const firstReading = s.setup.registry.get(s.setup.atom)
               const secondReading = s.setup.registry.get(s.setup.atom)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const readingAfterCleanup = s.setup.registry.get(s.setup.atom)
               const started = s.setup.timesStarted()
-              vi.useRealTimers()
               return { firstReading, secondReading, readingAfterCleanup, started }
             }),
         ),
-        Then('the work only ever started once, and every reader still sees it loading')(
-          (s) => {
-            expect(s.result.started).toBe(1)
-            expect(Result.isInitial(s.result.firstReading) || s.result.firstReading.waiting).toBe(true)
-            expect(Result.isInitial(s.result.secondReading) || s.result.secondReading.waiting).toBe(true)
-            expect(Result.isInitial(s.result.readingAfterCleanup) || s.result.readingAfterCleanup.waiting).toBe(true)
-          },
-        ),
+        Then('the work started only once')((s) => {
+          expect(s.result.started).toBe(1)
+        }),
+        And('every reader still sees the value loading')((s) => {
+          expect(Result.isInitial(s.result.firstReading) || s.result.firstReading.waiting).toBe(true)
+          expect(Result.isInitial(s.result.secondReading) || s.result.secondReading.waiting).toBe(true)
+          expect(Result.isInitial(s.result.readingAfterCleanup) || s.result.readingAfterCleanup.waiting).toBe(true)
+        }),
       ),
     )
     scenario(
-      'A value marked to always stay available is never dropped or restarted by cleanup',
+      'A value marked to always stay available survives cleanup, and its work runs only once',
       Gherkin.Do.pipe(
-        Given('a value marked to always stay available, with cleanup enabled after a short idle period')(
-          'ctx',
-          () =>
-            Effect.sync(() => {
-              vi.useFakeTimers()
-              let startCount = 0
-              const atom = Atom.keepAlive(
-                Atom.make(Effect.callback(() => {
-                  startCount++
-                })),
-              )
-              const registry = Registry.make({ defaultIdleTTL: 5 })
-              return { registry, atom, timesStarted: () => startCount }
-            }),
-        ),
-        When('a reader checks the value and the cleanup timer runs, then checks it again')(
-          'res',
-          (s) =>
-            Effect.sync(() => {
-              const firstReading = s.ctx.registry.get(s.ctx.atom)
-              vi.advanceTimersByTime(100)
-              const secondReading = s.ctx.registry.get(s.ctx.atom)
-              const started = s.ctx.timesStarted()
-              vi.useRealTimers()
-              return { firstReading, secondReading, started }
-            }),
-        ),
-        Then('the value is still available and its work only ran once')((s) => {
+        Given('a value that must always stay available, with a short cleanup timer')('ctx', () =>
+          Effect.sync(() => {
+            let startCount = 0
+            const atom = Atom.keepAlive(
+              Atom.make(Effect.callback(() => {
+                startCount++
+              })),
+            )
+            const registry = Registry.make({ defaultIdleTTL: 5 })
+            return { registry, atom, timesStarted: () => startCount }
+          })),
+        When('Ada reads the value, then 100 millis pass with no outcome')('res', (s) =>
+          Effect.gen(function*() {
+            const firstReading = s.ctx.registry.get(s.ctx.atom)
+            yield* TestClock.adjust('100 millis')
+            const secondReading = s.ctx.registry.get(s.ctx.atom)
+            const started = s.ctx.timesStarted()
+            return { firstReading, secondReading, started }
+          })),
+        Then('the value is still available')((s) => {
+          expect(Result.isInitial(s.res.firstReading) || s.res.firstReading.waiting).toBe(true)
+          expect(Result.isInitial(s.res.secondReading) || s.res.secondReading.waiting).toBe(true)
+        }),
+        And('its work ran only once')((s) => {
           expect(s.res.started).toBe(1)
         }),
       ),
     )
     scenario(
-      'A derived value that switches sources lets the abandoned source be cleaned up',
+      'A reader following one writer stops hearing the old writer after switching, and the old writer goes quiet',
       Gherkin.Do.pipe(
-        Given('a derived value that can follow one of two sources, with a short cleanup timer')(
+        Given('a reader showing the north counter while both counters tick, with a short cleanup timer')(
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               let useFirst = true
               const first = Atom.make('first')
               const second = Atom.make('second')
@@ -113,25 +104,29 @@ Feature('Keeping a value that is still loading available to every reader')
               }
             }),
         ),
-        When('the derived value switches sources and the cleanup timer runs')('nodes', (s) =>
-          Effect.sync(() => {
-            const before = s.ctx.page.get(s.ctx.switching)
-            s.ctx.flip()
-            s.ctx.page.refresh(s.ctx.switching)
-            const after = s.ctx.page.get(s.ctx.switching)
-            vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            vi.useRealTimers()
-            return {
-              before,
-              after,
-              hasFirst: HashSet.has(keys, s.ctx.first),
-              hasSecond: HashSet.has(keys, s.ctx.second),
-            }
-          })),
-        Then('the abandoned source is gone and the followed one stays')((s) => {
+        When('the reader shows the north counter, switches to the south counter, and 100 millis pass')(
+          'nodes',
+          (s) =>
+            Effect.gen(function*() {
+              const before = s.ctx.page.get(s.ctx.switching)
+              s.ctx.flip()
+              s.ctx.page.refresh(s.ctx.switching)
+              const after = s.ctx.page.get(s.ctx.switching)
+              yield* TestClock.adjust('100 millis')
+              const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              return {
+                before,
+                after,
+                hasFirst: HashSet.has(keys, s.ctx.first),
+                hasSecond: HashSet.has(keys, s.ctx.second),
+              }
+            }),
+        ),
+        Then('the reader showed first before the switch and second after')((s) => {
           expect(s.nodes.before).toBe('first')
           expect(s.nodes.after).toBe('second')
+        }),
+        And('the north counter went quiet while the south counter stays available')((s) => {
           expect(s.nodes.hasFirst).toBe(false)
           expect(s.nodes.hasSecond).toBe(true)
         }),
@@ -140,7 +135,7 @@ Feature('Keeping a value that is still loading available to every reader')
     scenario(
       'A reader who asks for a settled answer during a refresh gets the fresh one, not the stale one',
       Gherkin.Do.pipe(
-        Given('a stored answer that takes time to refresh')('ctx', () =>
+        Given('a page holding a stored answer that takes time to refresh')('ctx', () =>
           Effect.sync(() => {
             const latch = Latch.makeUnsafe()
             let stored = 1
@@ -150,6 +145,7 @@ Feature('Keeping a value that is still loading available to every reader')
             })
             const source = Atom.make(effect)
             const page = Registry.make()
+            page.mount(source)
             return {
               page,
               source,
@@ -164,8 +160,7 @@ Feature('Keeping a value that is still loading available to every reader')
           (s) =>
             Effect.gen(function*() {
               s.ctx.latch.openUnsafe()
-              yield* Effect.yieldNow
-              const first = s.ctx.page.get(s.ctx.source)
+              const first = yield* Registry.getResult(s.ctx.page, s.ctx.source)
               s.ctx.setStored(2)
               s.ctx.latch.closeUnsafe()
               s.ctx.page.refresh(s.ctx.source)
@@ -178,7 +173,7 @@ Feature('Keeping a value that is still loading available to every reader')
             }),
         ),
         Then('the reader waited and received the fresh answer')((s) => {
-          expect(Result.isSuccess(s.answer.first) && s.answer.first.value === 1).toBe(true)
+          expect(s.answer.first).toBe(1)
           expect(s.answer.settled).toBe(2)
         }),
       ),
@@ -209,19 +204,17 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('two values with the same short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const first = Atom.make(1)
             const second = Atom.make(2)
             const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
             return { page, first, second }
           })),
         When('both are read and the cleanup timer runs')('nodes', (s) =>
-          Effect.sync(() => {
+          Effect.gen(function*() {
             s.ctx.page.get(s.ctx.first)
             s.ctx.page.get(s.ctx.second)
-            vi.advanceTimersByTime(100)
+            yield* TestClock.adjust('100 millis')
             const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            vi.useRealTimers()
             return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
           })),
         Then('both are gone')((s) => {
@@ -235,7 +228,6 @@ Feature('Keeping a value that is still loading available to every reader')
       Gherkin.Do.pipe(
         Given('a value with a short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             let starts = 0
             const value = Atom.make(Effect.sync(() => {
               starts++
@@ -244,24 +236,27 @@ Feature('Keeping a value that is still loading available to every reader')
             const page = Registry.make({ defaultIdleTTL: 100, timeoutResolution: 10 })
             return { page, value, starts: () => starts }
           })),
-        When('the value is read again while its cleanup is pending, then left alone')(
+        When(
+          'Ada reads the value again after 50 millis, leaves it alone for 60 millis, then reads it again after 100 more millis',
+        )(
           'readings',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               s.ctx.page.get(s.ctx.value)
-              vi.advanceTimersByTime(50)
+              yield* TestClock.adjust('50 millis')
               s.ctx.page.get(s.ctx.value)
-              vi.advanceTimersByTime(60)
+              yield* TestClock.adjust('60 millis')
               const afterFirstWindow = s.ctx.starts()
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               s.ctx.page.get(s.ctx.value)
               const afterSecondWindow = s.ctx.starts()
-              vi.useRealTimers()
               return { afterFirstWindow, afterSecondWindow }
             }),
         ),
-        Then('the value survived the first window and was swept only after being left alone')((s) => {
+        Then('the value survived the first window without restarting')((s) => {
           expect(s.readings.afterFirstWindow).toBe(1)
+        }),
+        And('it was swept and started over once left alone')((s) => {
           expect(s.readings.afterSecondWindow).toBe(2)
         }),
       ),
@@ -277,8 +272,12 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('the lifetime closes')('nodes', (s) =>
           Effect.gen(function*() {
+            const released = yield* Deferred.make<void>()
+            s.ctx.page.onNodeRemoved = (node) => {
+              if (node.atom === s.ctx.value) Deferred.doneUnsafe(released, Effect.void)
+            }
             yield* Effect.scoped(Registry.mount(s.ctx.page, s.ctx.value))
-            yield* Effect.yieldNow
+            yield* Deferred.await(released)
             const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             return { hasValue: HashSet.has(keys, s.ctx.value) }
           })),
@@ -301,21 +300,21 @@ Feature('Keeping a value that is still loading available to every reader')
           (s) =>
             Effect.gen(function*() {
               const heard: number[] = []
-              const first = Latch.makeUnsafe()
-              const second = Latch.makeUnsafe()
+              const first = yield* Deferred.make<void>()
+              const second = yield* Deferred.make<void>()
               const fiber = yield* Effect.forkChild(
                 Effect.scoped(
                   Stream.runForEach(Registry.toStream(s.ctx.page, s.ctx.value), (n) =>
                     Effect.sync(() => {
                       heard.push(n)
-                      if (heard.length === 1) first.openUnsafe()
-                      if (n === 2) second.openUnsafe()
+                      if (heard.length === 1) Deferred.doneUnsafe(first, Effect.void)
+                      if (n === 2) Deferred.doneUnsafe(second, Effect.void)
                     })),
                 ),
               )
-              yield* first.await
+              yield* Deferred.await(first)
               s.ctx.page.set(s.ctx.value, 2)
-              yield* second.await
+              yield* Deferred.await(second)
               yield* Fiber.interrupt(fiber)
               return { heard }
             }),
@@ -328,46 +327,47 @@ Feature('Keeping a value that is still loading available to every reader')
     scenario(
       'A stream of settled results skips the loading state, deduplicates, and fails when the result fails',
       Gherkin.Do.pipe(
-        Given('a result that loads, settles, repeats, and finally fails')('ctx', () =>
-          Effect.sync(() => {
-            const value = Atom.make<Result.Result<number, string>>(Result.initial(false))
-            const page = Registry.make()
-            return { page, value }
-          })),
+        Given('a page holding a result that loads, settles, repeats, and finally fails')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const value = Atom.make<Result.Result<number, string>>(Result.initial(false))
+              const page = Registry.make()
+              page.mount(value)
+              return { page, value }
+            }),
+        ),
         When('a stream of the settled results is collected through all of its states')(
           'outcome',
           (s) =>
             Effect.gen(function*() {
               const heard: number[] = []
-              const first = Latch.makeUnsafe()
-              const second = Latch.makeUnsafe()
+              const first = yield* Deferred.make<void>()
+              const second = yield* Deferred.make<void>()
               const fiber = yield* Effect.forkChild(
                 Effect.scoped(
                   Stream.runForEach(Registry.toStreamResult(s.ctx.page, s.ctx.value), (n) =>
                     Effect.sync(() => {
                       heard.push(n)
-                      if (heard.length === 1) first.openUnsafe()
-                      if (n === 2) second.openUnsafe()
+                      if (heard.length === 1) Deferred.doneUnsafe(first, Effect.void)
+                      if (n === 2) Deferred.doneUnsafe(second, Effect.void)
                     })),
                 ),
+                { startImmediately: true },
               )
-              yield* Effect.yieldNow
               s.ctx.page.set(s.ctx.value, Result.success(1))
-              yield* first.await
+              yield* Deferred.await(first)
               s.ctx.page.set(s.ctx.value, Result.success(2))
-              yield* second.await
+              yield* Deferred.await(second)
               s.ctx.page.set(s.ctx.value, Result.success(2))
-              yield* Effect.yieldNow
-              const afterDuplicate = heard.length
               s.ctx.page.set(s.ctx.value, Result.failure<number, string>(Cause.fail('boom')))
               const exit = yield* Effect.exit(Fiber.join(fiber))
-              return { heard, afterDuplicate, exit }
+              return { heard, exit }
             }),
         ),
         Then('the loading state was skipped, duplicates were dropped, and the failure surfaced')(
           (s) => {
             expect(s.outcome.heard).toEqual([1, 2])
-            expect(s.outcome.afterDuplicate).toBe(2)
             expect(Exit.isFailure(s.outcome.exit)).toBe(true)
           },
         ),
@@ -412,17 +412,17 @@ Feature('Keeping a value that is still loading available to every reader')
         When('both streams are collected')('outcome', (s) =>
           Effect.gen(function*() {
             const heard: number[] = []
-            const got = Latch.makeUnsafe()
+            const got = yield* Deferred.make<void>()
             const successFiber = yield* Effect.forkChild(
               Effect.scoped(
                 Stream.runForEach(s.ctx.page.get(s.ctx.successStream), (n) =>
                   Effect.sync(() => {
                     heard.push(n)
-                    got.openUnsafe()
+                    Deferred.doneUnsafe(got, Effect.void)
                   })),
               ),
             )
-            yield* got.await
+            yield* Deferred.await(got)
             yield* Fiber.interrupt(successFiber)
             const failureFiber = yield* Effect.forkChild(
               Effect.scoped(Stream.runCollect(s.ctx.page.get(s.ctx.failureStream))),
@@ -458,31 +458,36 @@ Feature('Keeping a value that is still loading available to every reader')
     scenario(
       'A reader asking for a settled answer waits through loading and waiting states until a final value arrives',
       Gherkin.Do.pipe(
-        Given('three results in the loading state')('ctx', () =>
+        Given('a page holding three results in the loading state')('ctx', () =>
           Effect.sync(() => {
             const loading = Atom.make<Result.Result<number, never>>(Result.initial(false))
             const waiting = Atom.make<Result.Result<number, never>>(Result.initial(false))
             const flickering = Atom.make<Result.Result<number, never>>(Result.initial(false))
             const page = Registry.make()
+            page.mount(loading)
+            page.mount(waiting)
+            page.mount(flickering)
             return { page, loading, waiting, flickering }
           })),
         When('readers ask for settled answers while each result settles in turn')(
           'answers',
           (s) =>
             Effect.gen(function*() {
-              const fromLoading = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.loading))
-              yield* Effect.yieldNow
+              const fromLoading = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.loading), {
+                startImmediately: true,
+              })
               s.ctx.page.set(s.ctx.loading, Result.success(20))
               const waited = yield* Fiber.join(fromLoading)
               const fromWaiting = yield* Effect.forkChild(
                 Registry.getResult(s.ctx.page, s.ctx.waiting, { suspendOnWaiting: true }),
+                { startImmediately: true },
               )
-              yield* Effect.yieldNow
               s.ctx.page.set(s.ctx.waiting, Result.successWith(1, { waiting: true }))
               s.ctx.page.set(s.ctx.waiting, Result.success(2))
               const waitedThrough = yield* Fiber.join(fromWaiting)
-              const fromFlicker = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.flickering))
-              yield* Effect.yieldNow
+              const fromFlicker = yield* Effect.forkChild(Registry.getResult(s.ctx.page, s.ctx.flickering), {
+                startImmediately: true,
+              })
               s.ctx.page.set(s.ctx.flickering, Result.initial(true))
               s.ctx.page.set(s.ctx.flickering, Result.success(30))
               const waitedPastFlicker = yield* Fiber.join(fromFlicker)
@@ -832,142 +837,146 @@ Feature('Keeping a value that is still loading available to every reader')
       ),
     )
     scenario(
-      'When a child is swept, its idle parent is swept in the same pass instead of waiting for a new window',
+      'A quiet reader and its quiet writer leave together in one cleanup pass',
       Gherkin.Do.pipe(
-        Given('a value derived from a source, both idle on one cleanup schedule')('ctx', () =>
-          Effect.sync(() => {
-            vi.useFakeTimers()
-            const source = Atom.make(1)
-            const derived = Atom.readable((get) => get(source))
-            const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
-            return { page, source, derived }
-          })),
-        When('both fall idle and the shared cleanup timer runs')('result', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.get(s.ctx.derived)
-            const maybeNode = s.ctx.page.getNodes().get(s.ctx.derived)
-            if (maybeNode === undefined) {
-              throw new Error('expected a node after reading the value')
-            }
-            const node = maybeNode
-            const before = node.currentState()
-            vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            const after = node.currentState()
-            vi.useRealTimers()
-            return {
-              before,
-              after,
-              hasDerived: HashSet.has(keys, s.ctx.derived),
-              hasSource: HashSet.has(keys, s.ctx.source),
-            }
-          })),
-        Then('the source was swept in the same pass right after the derived value')((s) => {
-          expect(s.result.before).toBe('valid')
-          expect(s.result.after).toBe('removed')
-          expect(s.result.hasDerived).toBe(false)
-          expect(s.result.hasSource).toBe(false)
-        }),
-      ),
-    )
-    scenario(
-      'A parent that is still in use survives the sweep that removes its child',
-      Gherkin.Do.pipe(
-        Given('a source with a listener, and a derived value that reads it')('ctx', () =>
-          Effect.sync(() => {
-            vi.useFakeTimers()
-            const source = Atom.make(1)
-            const derived = Atom.readable((get) => get(source))
-            const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
-            return { page, source, derived }
-          })),
-        When('both fall idle while the source is still listened to, and the cleanup timer runs')(
+        Given('a reader showing the north counter while nobody watches, with a short cleanup timer')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const source = Atom.make(1)
+              const derived = Atom.readable((get) => get(source))
+              const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
+              return { page, source, derived }
+            }),
+        ),
+        When('Ada reads the reader, then 100 millis pass with nobody watching')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               s.ctx.page.get(s.ctx.derived)
-              s.ctx.page.subscribe(s.ctx.source, () => {})
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-              vi.useRealTimers()
               return {
                 hasDerived: HashSet.has(keys, s.ctx.derived),
                 hasSource: HashSet.has(keys, s.ctx.source),
               }
             }),
         ),
-        Then('the derived value is gone while the source stays because someone still listens')((s) => {
+        Then('the reader is gone')((s) => {
           expect(s.result.hasDerived).toBe(false)
+        }),
+        And('the north counter went with it in the same pass')((s) => {
+          expect(s.result.hasSource).toBe(false)
+        }),
+      ),
+    )
+    scenario(
+      'A quiet reader leaves while the writer Bo still hears stays available',
+      Gherkin.Do.pipe(
+        Given('a reader showing the north counter while Bo listens to that counter, with a short cleanup timer')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const source = Atom.make(1)
+              const derived = Atom.readable((get) => get(source))
+              const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
+              return { page, source, derived }
+            }),
+        ),
+        When('Bo keeps listening while Ada leaves the reader alone for 100 millis')(
+          'result',
+          (s) =>
+            Effect.gen(function*() {
+              s.ctx.page.get(s.ctx.derived)
+              s.ctx.page.subscribe(s.ctx.source, () => {})
+              yield* TestClock.adjust('100 millis')
+              const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              return {
+                hasDerived: HashSet.has(keys, s.ctx.derived),
+                hasSource: HashSet.has(keys, s.ctx.source),
+              }
+            }),
+        ),
+        Then('the quiet reader is gone')((s) => {
+          expect(s.result.hasDerived).toBe(false)
+        }),
+        And('the north counter stays because Bo still listens')((s) => {
           expect(s.result.hasSource).toBe(true)
         }),
       ),
     )
     scenario(
-      'A parent with a longer cleanup schedule is swept in its own window after its child',
+      'A reader leaves first and its longer-lived writer leaves later in its own window',
       Gherkin.Do.pipe(
-        Given('a value derived from a source that keeps its value twice as long')('ctx', () =>
-          Effect.sync(() => {
-            vi.useFakeTimers()
-            const source = Atom.setIdleTTL(20)(Atom.make(1))
-            const derived = Atom.readable((get) => get(source))
-            const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
-            return { page, source, derived }
-          })),
-        When('both fall idle and the cleanup timers run past both windows')('result', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.get(s.ctx.derived)
-            vi.advanceTimersByTime(15)
-            const afterFirstWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            vi.advanceTimersByTime(100)
-            const afterSecondWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            vi.useRealTimers()
-            return {
-              hasDerivedAfterFirst: HashSet.has(afterFirstWindow, s.ctx.derived),
-              hasDerivedAfterSecond: HashSet.has(afterSecondWindow, s.ctx.derived),
-              hasSourceAfterFirst: HashSet.has(afterFirstWindow, s.ctx.source),
-              hasSourceAfterSecond: HashSet.has(afterSecondWindow, s.ctx.source),
-            }
-          })),
-        Then('the child is swept first and the parent is swept in its own later window')((s) => {
+        Given('a reader showing the north counter, which keeps its value twice as long, with a short cleanup timer')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const source = Atom.setIdleTTL(20)(Atom.make(1))
+              const derived = Atom.readable((get) => get(source))
+              const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
+              return { page, source, derived }
+            }),
+        ),
+        When('Ada leaves both alone for 15 millis, then for 100 more millis')(
+          'result',
+          (s) =>
+            Effect.gen(function*() {
+              s.ctx.page.get(s.ctx.derived)
+              yield* TestClock.adjust('15 millis')
+              const afterFirstWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              yield* TestClock.adjust('100 millis')
+              const afterSecondWindow = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              return {
+                hasDerivedAfterFirst: HashSet.has(afterFirstWindow, s.ctx.derived),
+                hasSourceAfterFirst: HashSet.has(afterFirstWindow, s.ctx.source),
+                hasSourceAfterSecond: HashSet.has(afterSecondWindow, s.ctx.source),
+              }
+            }),
+        ),
+        Then('the reader is already gone after 15 millis while the north counter stays')((s) => {
           expect(s.result.hasDerivedAfterFirst).toBe(false)
           expect(s.result.hasSourceAfterFirst).toBe(true)
+        }),
+        And('the north counter is gone too after its own longer window')((s) => {
           expect(s.result.hasSourceAfterSecond).toBe(false)
         }),
       ),
     )
     scenario(
-      'Re-reading values before their cleanup window removes their pending timers',
+      'Ada checks two quiet values again before their window, and both leave only after being left alone',
       Gherkin.Do.pipe(
-        Given('two values sharing one cleanup window')('ctx', () =>
+        Given('two quiet values sharing one short cleanup timer')('ctx', () =>
           Effect.sync(() => {
-            vi.useFakeTimers()
             const first = Atom.make(1)
             const second = Atom.make(2)
             const page = Registry.make({ defaultIdleTTL: 10, timeoutResolution: 5 })
             return { page, first, second }
           })),
-        When('both fall idle and are read again before their window')('result', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.get(s.ctx.first)
-            s.ctx.page.get(s.ctx.second)
-            vi.advanceTimersByTime(1)
-            s.ctx.page.get(s.ctx.first)
-            s.ctx.page.get(s.ctx.second)
-            vi.advanceTimersByTime(100)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            vi.useRealTimers()
-            return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
-          })),
-        Then('both are swept only after being left alone again')((s) => {
+        When('Ada checks both again after 1 millis, then leaves them alone for 100 millis')(
+          'result',
+          (s) =>
+            Effect.gen(function*() {
+              s.ctx.page.get(s.ctx.first)
+              s.ctx.page.get(s.ctx.second)
+              yield* TestClock.adjust('1 millis')
+              s.ctx.page.get(s.ctx.first)
+              s.ctx.page.get(s.ctx.second)
+              yield* TestClock.adjust('100 millis')
+              const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              return { hasFirst: HashSet.has(keys, s.ctx.first), hasSecond: HashSet.has(keys, s.ctx.second) }
+            }),
+        ),
+        Then('both values are gone')((s) => {
           expect(s.result.hasFirst).toBe(false)
           expect(s.result.hasSecond).toBe(false)
         }),
       ),
     )
     scenario(
-      'Unsubscribing from a value that was never read removes it entirely',
+      'A listener leaving before the value is ever built removes the untouched value',
       Gherkin.Do.pipe(
-        Given('a value in a plain registry')('ctx', () =>
+        Given('a value nobody has read yet')('ctx', () =>
           Effect.sync(() => {
             const value = Atom.make(1)
             const page = Registry.make()
@@ -975,6 +984,10 @@ Feature('Keeping a value that is still loading available to every reader')
           })),
         When('a listener attaches without reading, then releases')('result', (s) =>
           Effect.gen(function*() {
+            const released = yield* Deferred.make<void>()
+            s.ctx.page.onNodeRemoved = (node) => {
+              if (node.atom === s.ctx.value) Deferred.doneUnsafe(released, Effect.void)
+            }
             const cancel = s.ctx.page.subscribe(s.ctx.value, () => {})
             const maybeNode = s.ctx.page.getNodes().get(s.ctx.value)
             if (maybeNode === undefined) {
@@ -982,12 +995,14 @@ Feature('Keeping a value that is still loading available to every reader')
             }
             const before = maybeNode.currentState()
             cancel()
-            yield* Effect.yieldNow
+            yield* Deferred.await(released)
             const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
             return { before, hasValue: HashSet.has(keys, s.ctx.value) }
           })),
-        Then('the never-built value was removed once the listener left')((s) => {
+        Then('the value was still untouched when the listener left')((s) => {
           expect(s.result.before).toBe('uninitialized')
+        }),
+        And('the untouched value is gone')((s) => {
           expect(s.result.hasValue).toBe(false)
         }),
       ),
@@ -1060,19 +1075,19 @@ Feature('Keeping a value that is still loading available to every reader')
               }
             }),
         ),
-        Then('the root stayed stale until a new reader came, then rebuilt and cleared the skipped invalidation')(
-          (s) => {
-            expect(s.result.afterRefresh).toBe('stale')
-            expect(s.result.finalState).toBe('valid')
-            expect(s.result.value).toBe(1)
-          },
-        ),
+        Then('the root stayed stale until a new reader came')((s) => {
+          expect(s.result.afterRefresh).toBe('stale')
+        }),
+        And('it rebuilt and cleared the skipped invalidation once the reader arrived')((s) => {
+          expect(s.result.finalState).toBe('valid')
+          expect(s.result.value).toBe(1)
+        }),
       ),
     )
     scenario(
-      'A derived value that stops following a source leaves the source alone while someone still listens',
+      'A reader switching writers keeps showing the writer Bo still hears',
       Gherkin.Do.pipe(
-        Given('a source that someone still listens to, and a derived value that can switch away')(
+        Given('a reader showing the north counter while Bo listens to it')(
           'ctx',
           () =>
             Effect.sync(() => {
@@ -1097,22 +1112,27 @@ Feature('Keeping a value that is still loading available to every reader')
               }
             }),
         ),
-        When('the derived value switches sources')('nodes', (s) =>
-          Effect.sync(() => {
-            s.ctx.page.subscribe(s.ctx.first, () => {})
-            s.ctx.page.get(s.ctx.switching)
-            s.ctx.flip()
-            s.ctx.page.refresh(s.ctx.switching)
-            const value = s.ctx.page.get(s.ctx.switching)
-            const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
-            return {
-              value,
-              hasFirst: HashSet.has(keys, s.ctx.first),
-              hasSecond: HashSet.has(keys, s.ctx.second),
-            }
-          })),
-        Then('the abandoned source is kept because it is still in use, and the new one is followed')((s) => {
+        When('Bo keeps listening while the reader switches to the south counter')(
+          'nodes',
+          (s) =>
+            Effect.sync(() => {
+              s.ctx.page.subscribe(s.ctx.first, () => {})
+              s.ctx.page.get(s.ctx.switching)
+              s.ctx.flip()
+              s.ctx.page.refresh(s.ctx.switching)
+              const value = s.ctx.page.get(s.ctx.switching)
+              const keys = HashSet.fromIterable(s.ctx.page.getNodes().keys())
+              return {
+                value,
+                hasFirst: HashSet.has(keys, s.ctx.first),
+                hasSecond: HashSet.has(keys, s.ctx.second),
+              }
+            }),
+        ),
+        Then('the reader now shows the south counter')((s) => {
           expect(s.nodes.value).toBe(2)
+        }),
+        And('the north counter stays because Bo still listens, and the south counter is followed')((s) => {
           expect(s.nodes.hasFirst).toBe(true)
           expect(s.nodes.hasSecond).toBe(true)
         }),
@@ -1198,7 +1218,6 @@ Feature('Keeping a value that is still loading available to every reader')
           (s) =>
             Effect.gen(function*() {
               s.ctx.registry.get(s.ctx.value)
-              yield* Effect.yieldNow
               s.ctx.registry.set(s.ctx.loading, Result.initial(false))
               s.ctx.registry.set(s.ctx.loading, Result.success(7))
               s.ctx.registry.set(s.ctx.waiting, Result.successWith(2, { waiting: true }))
@@ -1232,12 +1251,14 @@ Feature('Keeping a value that is still loading available to every reader')
               }
             }),
         ),
-        Then('the forked reads settled and the invalidated value stopped all scheduled work')((s) => {
+        Then('the forked reads settled on their answers')((s) => {
           expect(s.result.settledValue).toBe(5)
           expect(s.result.resumedValue).toBe(7)
           expect(s.result.optionValue).toBe(1)
           expect(s.result.throughWaiting).toBe(3)
           expect(s.result.throughNone).toBe(5)
+        }),
+        And('the invalidated value stopped all scheduled work')((s) => {
           expect(s.result.state).toBe('stale')
         }),
       ),

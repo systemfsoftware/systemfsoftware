@@ -1,21 +1,21 @@
 import { Atom, Hydration, Registry, Result } from '@systemfsoftware/effect-atom'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Layer, Schema } from 'effect'
-import { expect, vi } from 'vitest'
+import { TestClock } from 'effect/testing'
+import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 Feature("Saving a page's values so a reloaded page starts with them already filled in")
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A saved value is still there after the page reloads and its cleanup timer runs',
+      'Ada reloads a saved page and sees her saved count before and after the cleanup timer runs',
       Gherkin.Do.pipe(
-        Given('a page with a saved value, and cleanup enabled after a short idle period')(
+        Given('a count saved as 42, with a short cleanup timer')(
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(42)
               const savedValue = base.pipe(
                 Atom.serializable({
@@ -31,31 +31,31 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { reloadedPage, savedValue }
             }),
         ),
-        When('the value is read on the reloaded page, then read again after the cleanup timer runs')(
+        When('Ada reads the count on the reloaded page, then 100 millis pass')(
           'result',
           (s) =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
               const firstReading = s.ctx.reloadedPage.get(s.ctx.savedValue)
-              vi.advanceTimersByTime(100)
+              yield* TestClock.adjust('100 millis')
               const secondReading = s.ctx.reloadedPage.get(s.ctx.savedValue)
-              vi.useRealTimers()
               return { firstReading, secondReading }
             }),
         ),
-        Then('the reloaded page shows the saved value both times')((s) => {
+        Then('the reloaded page shows 42 on the first read')((s) => {
           expect(s.result.firstReading).toBe(42)
+        }),
+        And('it still shows 42 after the cleanup timer runs')((s) => {
           expect(s.result.secondReading).toBe(42)
         }),
       ),
     )
     scenario(
-      'A value that had already finished loading is restored as finished, not restarted, after reload',
+      'Ada reloads a page whose fetch already finished and sees the finished answer, not a restart',
       Gherkin.Do.pipe(
-        Given('a page with a value that already finished loading, and a short cleanup timer')(
+        Given('a fetch that finished with 123, saved with a short cleanup timer')(
           'ctx',
           () =>
             Effect.sync(() => {
-              vi.useFakeTimers()
               const base = Atom.make(Effect.succeed(123))
               const savedValue = base.pipe(
                 Atom.serializable({
@@ -71,25 +71,24 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { reloadedPage, savedValue }
             }),
         ),
-        When('the value is read on the reloaded page after the cleanup timer runs')(
+        When('Ada waits 100 millis, then reads the value on the reloaded page')(
           'reading',
           (s) =>
-            Effect.sync(() => {
-              vi.advanceTimersByTime(100)
+            Effect.gen(function*() {
+              yield* TestClock.adjust('100 millis')
               const reading = s.ctx.reloadedPage.get(s.ctx.savedValue)
-              vi.useRealTimers()
               return reading
             }),
         ),
-        Then('the reloaded page shows the value as already finished, with the saved answer')((s) => {
+        Then('the reloaded page shows the fetch already finished with 123')((s) => {
           expect(Result.isSuccess(s.reading) && s.reading.value === 123).toBe(true)
         }),
       ),
     )
     scenario(
-      'A value that is still loading when the page is saved automatically fills in once it finishes, even after the page already reloaded',
+      'A value still fetching when Ada saves the page fills in on the reloaded page once the fetch finishes',
       Gherkin.Do.pipe(
-        Given('a page saved while a value is still loading, reloaded before that value finishes')(
+        Given('a page Ada saved while its fetch of 42 was still running, already reloaded')(
           'ctx',
           () =>
             Effect.gen(function*() {
@@ -108,7 +107,7 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { reloadedPage, stillLoading, source, applied }
             }),
         ),
-        When('the reloaded page is read before and after the value finishes loading')(
+        When('Ada checks the reloaded page before and after the fetch finishes with 42')(
           'reading',
           (s) =>
             Effect.gen(function*() {
@@ -119,16 +118,18 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { beforeItFinishes, afterItFinishes }
             }),
         ),
-        Then('the reloaded page starts out loading, then fills in with the finished answer on its own')((s) => {
+        Then('the reloaded page starts out still fetching')((s) => {
           expect(Result.isInitial(s.reading.beforeItFinishes)).toBe(true)
+        }),
+        And('it fills in with 42 on its own once the fetch finishes')((s) => {
           expect(Result.isSuccess(s.reading.afterItFinishes) && s.reading.afterItFinishes.value === 42).toBe(true)
         }),
       ),
     )
     scenario(
-      'A value still loading when the page is saved is left out of the default saved state',
+      'A value still fetching when Ada saves the page is left out of the default saved state',
       Gherkin.Do.pipe(
-        Given('a page with a still-loading saved value, saved in the default way')('ctx', () =>
+        Given('a page holding a saved value that is still fetching')('ctx', () =>
           Effect.gen(function*() {
             const source = yield* Deferred.make<number>()
             const stillLoading = Atom.make(Deferred.await(source)).pipe(
@@ -141,16 +142,16 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
             page.get(stillLoading)
             return { page, stillLoading }
           })),
-        When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
-        Then('the still-loading value is not included')((s) => {
+        When('Ada saves the page the default way')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
+        Then('the still-fetching value is not in the saved state')((s) => {
           expect(s.saved).toHaveLength(0)
         }),
       ),
     )
     scenario(
-      'A still-loading value that is asked to reload while the page is saved still fills in automatically once it finishes',
+      'A value still fetching when Ada saves the page fills in on the reloaded page after she asks for it again',
       Gherkin.Do.pipe(
-        Given('a page with a still-loading value, saved so a reloaded page receives it once it finishes')(
+        Given('a page Ada saved while its fetch of 42 was still running, already reloaded and showing the value')(
           'ctx',
           () =>
             Effect.sync(() => {
@@ -170,13 +171,12 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               savedPage.get(stillLoading)
               const saved = Hydration.dehydrate(savedPage, { encodeInitialAs: 'deferred' })
               const reloadedPage = Registry.make()
+              reloadedPage.mount(stillLoading)
               const applied = Hydration.hydrate(reloadedPage, saved)
               return { savedPage, reloadedPage, stillLoading, gate, applied }
             }),
         ),
-        When(
-          'the still-loading value is asked to reload again, then it finishes, and the reloaded page is read before and after',
-        )(
+        When('Ada asks for the value again and the fetch finishes with 42')(
           'reading',
           (s) =>
             Effect.gen(function*() {
@@ -188,31 +188,36 @@ Feature("Saving a page's values so a reloaded page starts with them already fill
               return { beforeItFinishes, afterItFinishes }
             }),
         ),
-        Then('the reloaded page starts out loading and then fills in with the finished answer on its own')((s) => {
+        Then('the reloaded page starts out still fetching')((s) => {
           expect(Result.isInitial(s.reading.beforeItFinishes)).toBe(true)
+        }),
+        And('it fills in with 42 on its own once the fetch finishes')((s) => {
           expect(Result.isSuccess(s.reading.afterItFinishes) && s.reading.afterItFinishes.value === 42).toBe(true)
         }),
       ),
     )
     scenario(
-      'A value that is not marked for saving is left out of the saved state',
+      'A value Ada never marked for saving is left out of the saved state',
       Gherkin.Do.pipe(
-        Given('a page holding both a saved value and a plain value')('ctx', () =>
-          Effect.sync(() => {
-            const savedValue = Atom.make(42).pipe(
-              Atom.serializable({
-                key: 'k-plain',
-                schema: Schema.Finite,
-              }),
-            )
-            const plainValue = Atom.make('not saved')
-            const page = Registry.make()
-            page.get(savedValue)
-            page.get(plainValue)
-            return { page }
-          })),
-        When('the page is saved')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
-        Then('only the saved value is included')((s) => {
+        Given('an open page showing a count saved as 42 and a nickname nobody marked for saving')(
+          'ctx',
+          () =>
+            Effect.sync(() => {
+              const savedValue = Atom.make(42).pipe(
+                Atom.serializable({
+                  key: 'k-plain',
+                  schema: Schema.Finite,
+                }),
+              )
+              const plainValue = Atom.make('not saved')
+              const page = Registry.make()
+              page.mount(savedValue)
+              page.mount(plainValue)
+              return { page }
+            }),
+        ),
+        When('Ada saves the page')('saved', (s) => Effect.sync(() => Hydration.dehydrate(s.ctx.page))),
+        Then('only the count is in the saved state')((s) => {
           expect(s.saved).toHaveLength(1)
           const [entry] = s.saved
           if (entry === undefined) throw new Error('expected one saved value')

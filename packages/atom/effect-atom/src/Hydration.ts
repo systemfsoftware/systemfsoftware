@@ -10,7 +10,6 @@
  *
  * @since 4.0.0
  */
-import * as Clock from 'effect/Clock'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import type * as Fiber from 'effect/Fiber'
@@ -95,7 +94,7 @@ export const dehydrate: {
   ): DehydratedAtomValue[] => {
     const encodeInitialResultMode = encodeInitialMode(options)
     const arr: DehydratedAtomValue[] = []
-    const now = Effect.runSync(Clock.currentTimeMillis)
+    const now = registry.now()
     registry.getNodes().forEach((node, key) => {
       dehydrateNode(registry, node, key, encodeInitialResultMode, now, arr)
     })

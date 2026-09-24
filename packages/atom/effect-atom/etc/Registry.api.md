@@ -182,6 +182,8 @@ export class RegistryImpl extends Pipeable$1.Class implements Registry {
     // (undocumented)
     readonly scheduleTimer: (f: () => void, delayMillis: number) => () => void;
     // (undocumented)
+    readonly seededValues: Map<string | Atom<unknown>, unknown>;
+    // (undocumented)
     set<R, W>(atom: Writable<R, W>, value: W): void;
     // (undocumented)
     setInitialValue<A>(atom: Atom<A>, value: A): void;
@@ -225,8 +227,8 @@ export const TypeId: TypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/Atom-DknB4GDT.d.ts:349:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
-// dist/Atom-DknB4GDT.d.ts:349:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-C9Uxp8AO.d.ts:349:3 - (ae-forgotten-export) The symbol "Atom" needs to be exported by the entry point Registry.d.ts
+// dist/Atom-C9Uxp8AO.d.ts:349:3 - (ae-forgotten-export) The symbol "Result" needs to be exported by the entry point Registry.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -3494,8 +3494,8 @@ export const withRefresh: {
   <A>(self: Atom<A>, duration: Duration.Input): Atom<A> => {
     const millis = Duration.toMillis(Duration.fromInputUnsafe(duration))
     return transform(self, function(get) {
-      const fiber = Effect.runFork(Effect.sleep(millis).pipe(Effect.andThen(Effect.sync(() => get.refresh(self)))))
-      get.addFinalizer(() => fiber.interruptUnsafe())
+      const cancel = get.registry.scheduleTimer(() => get.refresh(self), millis)
+      get.addFinalizer(cancel)
       return get(self)
     }, { initialValueTarget: self })
   },
