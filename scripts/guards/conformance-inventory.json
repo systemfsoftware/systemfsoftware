@@ -12,8 +12,8 @@
     {
       "name": "example-inventory-fulfillment",
       "primitives": ["ref", "scoped", "semaphore"],
-      "checks": ["sequential"],
-      "note": "Workspace example, not a published package; its in-memory gate and postgres runtime are model-checked, so sequential is the check that fits. Currently red: no *.conformance.test.ts yet."
+      "checks": ["linearizable"],
+      "note": "Workspace example, not a published package; its in-memory CustomerGate (one Semaphore per customer, created on first use under a Ref-guarded map) is judged linearizable against a pure model of one customer's orders served one at a time."
     },
     {
       "name": "effect-atom",
@@ -50,11 +50,11 @@
       "name": "effect-cell-types",
       "primitives": ["ref"],
       "checks": ["released"],
-      "note": "U19: the sandwich interrupted at each step records a settled result class. Currently red: no *.conformance.test.ts yet."
+      "note": "U19: the sandwich interrupted at each step records a settled result class."
     },
     {
       "name": "effect-daemon-spec",
-      "primitives": ["fork", "ref", "scoped"],
+      "primitives": ["deferred", "fork", "ref", "scoped"],
       "checks": ["linearizable", "released"],
       "note": "U14: LeaderLockFromPrimitive linearizable plus release over the reference LockPrimitive; the lock model ships at ./testing for any LockPrimitive. Currently red until U14 lands tests/lock.conformance.test.ts."
     },
@@ -62,7 +62,7 @@
       "name": "effect-memfs",
       "primitives": ["fork", "queue", "ref", "scoped"],
       "checks": ["linearizable", "sequential", "released"],
-      "note": "U16: model-vs-real differential, memfs-vs-model sequences, concurrent calls linearizable, watch-setup release. Currently red until U16 lands tests/memfs.conformance.test.ts."
+      "note": "U16: model-vs-real differential, memfs-vs-model sequences, concurrent calls linearizable, watch-setup release."
     },
     {
       "name": "effect-microsandbox",
@@ -75,7 +75,7 @@
       "name": "effect-readiness",
       "primitives": ["scoped"],
       "checks": ["released"],
-      "note": "U17: NodeHostProber dial/exchange interrupted at each step with the loopback server counting open connections. Currently red until U17 lands tests/probe-release.conformance.test.ts."
+      "note": "U17: NodeHostProber dial/exchange interrupted at each step with the loopback server counting open connections."
     },
     {
       "name": "effect-sim-kernel",
@@ -109,19 +109,19 @@
       "name": "rx-effect",
       "primitives": ["queue", "scoped"],
       "checks": ["released"],
-      "note": "U19: fromObservable interrupted at each step leaves no subscription open. Currently red: no *.conformance.test.ts yet."
+      "note": "U19: fromObservable interrupted at each step leaves no subscription open."
     },
     {
       "name": "storybook-gherkin",
       "primitives": ["fork", "deferred"],
       "checks": ["released"],
-      "note": "U19: step dispatch interrupted at each step leaves the case Deferred settled and the browser suite live under its R15 reason. Currently red: no *.conformance.test.ts yet."
+      "note": "U19: step dispatch interrupted at each step leaves the case Deferred settled and the browser suite live under its R15 reason."
     },
     {
       "name": "trace-spec",
       "primitives": ["ref", "scoped"],
       "checks": ["sequential"],
-      "note": "R16 moves trace-spec cases onto the kernel; the remote-observation state machine is sequential-model checked. Currently red: no *.conformance.test.ts yet."
+      "note": "R16 moves trace-spec cases onto the kernel; the remote-observation state machine is sequential-model checked."
     }
   ]
 }
