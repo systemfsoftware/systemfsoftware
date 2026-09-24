@@ -9,14 +9,14 @@ export { Absent, LogEntries, ProbeEvidence } from '../ProbeEvidence.schema.js'
 export { ProbeTarget } from '../ProbeTarget.schema.js'
 export {
   isTarget,
-  type ProbeTargetResource,
+  type ProbeTargetBlueprint,
   target,
   type TargetOptions,
   TypeId,
   Wait,
   withPoll,
   withTimeout,
-} from '../readiness.resource.js'
+} from '../readiness.blueprint.js'
 export { LogSourceError, ProbeInputInvalid } from '../ReadinessError.schema.js'
 export type { ProbePlan } from '../resolve-probe.workflow.js'
 export { TimedOut } from '../verdict.schema.js'

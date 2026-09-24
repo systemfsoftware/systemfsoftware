@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Readiness {
-    export { Absent, Condition, Connected, DialEvidence, HostProber, HttpCondition, HttpEvidence, LogCondition, LogEntries, LogSource, LogSourceError, NodeHostProber_d_exports as NodeHostProber, PortBinding, PortNumber, ProbeEvidence, ProbeInputInvalid, ProbePlan, ProbeTarget, ProbeTargetResource, Refused, Responded, Satisfied, TargetOptions, TcpCondition, TimedOut, TypeId, Wait, isTarget, target, withPoll, withTimeout };
+    export { Absent, Condition, Connected, DialEvidence, HostProber, HttpCondition, HttpEvidence, LogCondition, LogEntries, LogSource, LogSourceError, NodeHostProber_d_exports as NodeHostProber, PortBinding, PortNumber, ProbeEvidence, ProbeInputInvalid, ProbePlan, ProbeTarget, ProbeTargetBlueprint, Refused, Responded, Satisfied, TargetOptions, TcpCondition, TimedOut, TypeId, Wait, isTarget, target, withPoll, withTimeout };
 }
 
 // (No @packageDocumentation comment for this package)

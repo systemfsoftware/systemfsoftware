@@ -1,4 +1,4 @@
-import { Resource } from '@systemfsoftware/effect-cell-types'
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Effect, Predicate, Schedule } from 'effect'
 import { dual } from 'effect/Function'
 import { probeConditionCell } from './await-condition.cell.js'
@@ -44,30 +44,29 @@ const probe = (
     }),
   )
 
-const ProbeTargets = Resource.make<ProbeTarget>()({
-  typeId: TypeId,
-  combinators: {
+const ProbeTargets = Blueprint.make<ProbeTarget>()(TypeId).steps({
+  steps: {
     withTimeout: (spec, timeoutMs: number): ProbeTarget => ({ ...spec, timeoutMs }),
     withPoll: (spec, pollMs: number): ProbeTarget => ({ ...spec, pollMs }),
   },
-  projections: {
+  targets: {
     awaitCondition: (spec) => (condition: Condition) => probe(spec, condition),
   },
 })
 
-export type ProbeTargetResource = Resource.Of<typeof ProbeTargets>
+export type ProbeTargetBlueprint = Blueprint.Of<typeof ProbeTargets>
 
 export const isTarget = ProbeTargets.is
 
-export const withTimeout = ProbeTargets.combinators.withTimeout
+export const withTimeout = ProbeTargets.operations.withTimeout
 
-export const withPoll = ProbeTargets.combinators.withPoll
+export const withPoll = ProbeTargets.operations.withPoll
 
 export const target: {
-  (options?: TargetOptions): (bindings: ReadonlyArray<PortBinding>) => ProbeTargetResource
-  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTargetResource
+  (options?: TargetOptions): (bindings: ReadonlyArray<PortBinding>) => ProbeTargetBlueprint
+  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTargetBlueprint
 } = dual(
   (args) => Array.isArray(args[0]),
-  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTargetResource =>
+  (bindings: ReadonlyArray<PortBinding>, options?: TargetOptions): ProbeTargetBlueprint =>
     ProbeTargets.of({ ...DEFAULTS, ...options, bindings }),
 )

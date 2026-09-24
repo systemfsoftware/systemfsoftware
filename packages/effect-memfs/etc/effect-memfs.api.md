@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace MemoryFileSystem {
-    export { Contents, CursorRefusal, MemoryFileSystemError, MemoryFileSystemResource, MemoryFileSystemSpec, ShapeRefusal, TypeId, effect, isMemoryFileSystemResource, layer, make, withContents, withCwd };
+    export { Contents, CursorRefusal, MemoryFileSystemBlueprint, MemoryFileSystemError, MemoryFileSystemSpec, ShapeRefusal, TypeId, effect, isMemoryFileSystemBlueprint, layer, make, withContents, withCwd };
 }
 
 // (No @packageDocumentation comment for this package)

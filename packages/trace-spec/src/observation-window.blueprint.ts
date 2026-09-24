@@ -1,6 +1,6 @@
 import * as OtelTracer from '@effect/opentelemetry/OtelTracer'
 import * as OtelResource from '@effect/opentelemetry/Resource'
-import { Resource } from '@systemfsoftware/effect-cell-types'
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import { Effect, Layer } from 'effect'
 import type * as Scope from 'effect/Scope'
 import * as Handle from './observation-window.handle.js'
@@ -16,7 +16,7 @@ export {
   TypeId as ObservationWindowTypeId,
 } from './observation-window.handle.js'
 
-export const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindowResource')
+export const TypeId = Symbol.for('~systemfsoftware/trace-spec/ObservationWindowBlueprint')
 export type TypeId = typeof TypeId
 
 const scoped = (spec: ObservationWindowSpec): Effect.Effect<Handle.ObservationWindow, never, Scope.Scope> =>
@@ -28,13 +28,12 @@ const layer = (spec: ObservationWindowSpec): Layer.Layer<Observation | OtelTrace
     Layer.provideMerge(Layer.effectContext(Effect.map(scoped(spec), Handle.context))),
   )
 
-const ObservationWindows = Resource.make<ObservationWindowSpec>()({
-  typeId: TypeId,
-  combinators: {},
-  projections: { scoped, layer },
+const ObservationWindows = Blueprint.make<ObservationWindowSpec>()(TypeId).steps({
+  steps: {},
+  targets: { scoped, layer },
 })
 
-export type ObservationWindowResource = Resource.Of<typeof ObservationWindows>
+export type ObservationWindowBlueprint = Blueprint.Of<typeof ObservationWindows>
 
-export const make = (serviceName: string): ObservationWindowResource =>
+export const make = (serviceName: string): ObservationWindowBlueprint =>
   ObservationWindows.of(new ObservationWindowSpec({ serviceName }))

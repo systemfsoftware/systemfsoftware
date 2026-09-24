@@ -16,7 +16,7 @@ const bindingOf = (hostPort: number): Readiness.PortBinding => ({
   hostPort,
 })
 
-const targetOf = (bindings: ReadonlyArray<Readiness.PortBinding>): Readiness.ProbeTargetResource =>
+const targetOf = (bindings: ReadonlyArray<Readiness.PortBinding>): Readiness.ProbeTargetBlueprint =>
   Readiness.target(bindings, TIGHT_WAIT)
 
 const targetOfMappedGuest = Effect.gen(function*() {
@@ -24,7 +24,7 @@ const targetOfMappedGuest = Effect.gen(function*() {
   return targetOf([bindingOf(guest.hostPort)])
 })
 
-const awaitOver = (target: Readiness.ProbeTargetResource, condition: Readiness.Condition) =>
+const awaitOver = (target: Readiness.ProbeTargetBlueprint, condition: Readiness.Condition) =>
   target.awaitCondition(condition)
 
 Feature('Preventing socket descriptor leaks across repeated checks')

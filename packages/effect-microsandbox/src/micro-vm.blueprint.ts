@@ -1,4 +1,4 @@
-import { Cell, Resource } from '@systemfsoftware/effect-cell-types'
+import { Blueprint, Cell } from '@systemfsoftware/effect-cell-types'
 import { Readiness } from '@systemfsoftware/effect-readiness'
 import { type Context, Effect, Exit, Layer, Match, Schema } from 'effect'
 import * as Crypto from 'effect/Crypto'
@@ -188,23 +188,21 @@ const withWaitStrategySpec = (spec: MicroVMSpec, waitStrategy: WaitStrategy): Mi
     Match.tag('Job', (j) => j),
     Match.exhaustive,
   )
-const Services = Resource.make<MicroVMSpec>()({
-  typeId: TypeId,
-  combinators: {
+const Services = Blueprint.make<MicroVMSpec>()(TypeId).steps({
+  steps: {
     withEnv: withEnvSpec,
     withExposedPorts: withExposedPortsSpec,
     withMount: withMountSpec,
     withMemoryLimit: withMemoryLimitSpec,
     withWaitStrategy: withWaitStrategySpec,
   },
-  projections: { scoped: scopedOf, layer: layerOf },
+  targets: { scoped: scopedOf, layer: layerOf },
 })
 
 const runJob = bootMicroVM.pipe(Cell.andThen(awaitJobCompletion))
 
-const Jobs = Resource.make<JobSpec>()({
-  typeId: TypeId,
-  combinators: {
+const Jobs = Blueprint.make<JobSpec>()(TypeId).steps({
+  steps: {
     withEnv: (spec: JobSpec, env: Record<string, string>): JobSpec => reviseJob(spec, { env: { ...spec.env, ...env } }),
     withExposedPorts: (spec: JobSpec, _ports: ReadonlyArray<number>): JobSpec => spec,
     withHostAccess: (spec: JobSpec, enabled: boolean): JobSpec => reviseJob(spec, { hostAccess: enabled }),
@@ -213,48 +211,48 @@ const Jobs = Resource.make<JobSpec>()({
     withWaitStrategy: (spec: JobSpec, _strategy: WaitStrategy): JobSpec => spec,
     withWorkdir: (spec: JobSpec, path: string): JobSpec => reviseJob(spec, { workdir: path }),
   },
-  projections: { scoped: scopedOf, layer: layerOf, run: (spec: JobSpec) => runJob.run(spec) },
+  targets: { scoped: scopedOf, layer: layerOf, run: (spec: JobSpec) => runJob.run(spec) },
 })
 
-export type MicroVMResource = Resource.Of<typeof Services>
-export type JobResource = Resource.Of<typeof Jobs>
+export type MicroVMBlueprint = Blueprint.Of<typeof Services>
+export type JobBlueprint = Blueprint.Of<typeof Jobs>
 
-export const withEnv = Services.combinators.withEnv
+export const withEnv = Services.operations.withEnv
 
-export const withExposedPorts = Services.combinators.withExposedPorts
+export const withExposedPorts = Services.operations.withExposedPorts
 
-export const withMount = Services.combinators.withMount
+export const withMount = Services.operations.withMount
 
-export const withMemoryLimit = Services.combinators.withMemoryLimit
+export const withMemoryLimit = Services.operations.withMemoryLimit
 
-export const withWaitStrategy = Services.combinators.withWaitStrategy
+export const withWaitStrategy = Services.operations.withWaitStrategy
 
-export const withHostAccess = Jobs.combinators.withHostAccess
+export const withHostAccess = Jobs.operations.withHostAccess
 
-export const withWorkdir = Jobs.combinators.withWorkdir
+export const withWorkdir = Jobs.operations.withWorkdir
 
 export const service: {
-  (ports?: ReadonlyArray<number>): (image: string) => MicroVMResource
-  (image: string, ports?: ReadonlyArray<number>): MicroVMResource
+  (ports?: ReadonlyArray<number>): (image: string) => MicroVMBlueprint
+  (image: string, ports?: ReadonlyArray<number>): MicroVMBlueprint
 } = dual(
   (args) => typeof args[0] === 'string',
-  (image: string, ports: ReadonlyArray<number> = []): MicroVMResource =>
+  (image: string, ports: ReadonlyArray<number> = []): MicroVMBlueprint =>
     Services.of(new ServiceSpec({ image, ports, env: {}, mounts: [] })),
 )
 
 export const job: {
-  (cmd: readonly [string, ...Array<string>]): (image: string) => JobResource
-  (image: string, cmd: readonly [string, ...Array<string>]): JobResource
+  (cmd: readonly [string, ...Array<string>]): (image: string) => JobBlueprint
+  (image: string, cmd: readonly [string, ...Array<string>]): JobBlueprint
 } = dual(
   2,
-  (image: string, cmd: readonly [string, ...Array<string>]): JobResource =>
+  (image: string, cmd: readonly [string, ...Array<string>]): JobBlueprint =>
     Jobs.of(new JobSpec({ image, cmd, env: {}, mounts: [] })),
 )
 
-export const make = (image: string): MicroVMResource => service(image, [])
+export const make = (image: string): MicroVMBlueprint => service(image, [])
 export const spec = make
 
-const applyAll = (self: MicroVMResource): MicroVMResource =>
+const applyAll = (self: MicroVMBlueprint): MicroVMBlueprint =>
   self.pipe(
     withWaitStrategy(Wait.forPort(8080)),
     withMemoryLimit(512),
@@ -263,9 +261,9 @@ const applyAll = (self: MicroVMResource): MicroVMResource =>
     withEnv({ K: 'V' }),
   )
 
-const applyEnv = (self: MicroVMResource, env: Record<string, string>): MicroVMResource => withEnv(self, env)
-const applyMemory = (self: MicroVMResource, mb: number): MicroVMResource => withMemoryLimit(self, mb)
-const applyPorts = (self: MicroVMResource, ports: ReadonlyArray<number>): MicroVMResource =>
+const applyEnv = (self: MicroVMBlueprint, env: Record<string, string>): MicroVMBlueprint => withEnv(self, env)
+const applyMemory = (self: MicroVMBlueprint, mb: number): MicroVMBlueprint => withMemoryLimit(self, mb)
+const applyPorts = (self: MicroVMBlueprint, ports: ReadonlyArray<number>): MicroVMBlueprint =>
   withExposedPorts(self, ports)
 
 if (import.meta.vitest !== void 0) {
