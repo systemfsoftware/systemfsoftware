@@ -1,5 +1,5 @@
 import { Schema as S } from 'effect'
-import { LotAllocation, SkuId } from '../inventory/inventory.schema.js'
+import { LotAllocation, Quantity, QuantityOnHand, SkuId } from '../inventory/inventory.schema.js'
 import { Money } from './credit.schema.js'
 import { OrderLine } from './order.schema.js'
 
@@ -46,7 +46,7 @@ export class CreditHold extends S.TaggedClass<CreditHold>()('CreditHold', {
 
 export class ConflictRollback extends S.TaggedClass<ConflictRollback>()('ConflictRollback', {
   orderId: S.String,
-  attempts: S.Int,
+  attempts: Quantity,
 }) {
   readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
 }
@@ -65,8 +65,8 @@ export type FulfillmentDecision = S.Schema.Type<typeof FulfillmentDecision>
 
 export class InsufficientStock extends S.TaggedError<InsufficientStock>()('InsufficientStock', {
   sku: SkuId,
-  requested: S.Int,
-  available: S.Int,
+  requested: Quantity,
+  available: QuantityOnHand,
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
 }
@@ -107,7 +107,12 @@ export class CreditAccountNotFound extends S.TaggedError<CreditAccountNotFound>(
 }
 
 export class AuthServiceUnavailable extends S.TaggedError<AuthServiceUnavailable>()('AuthServiceUnavailable', {
-  reason: S.String,
+  cause: S.Defect(),
+}) {
+  readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
+}
+export class StoreUnavailable extends S.TaggedError<StoreUnavailable>()('StoreUnavailable', {
+  cause: S.Defect(),
 }) {
   readonly [FulfillmentErrorTypeId] = FulfillmentErrorTypeId
 }

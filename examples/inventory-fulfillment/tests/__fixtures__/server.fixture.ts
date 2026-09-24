@@ -2,31 +2,14 @@ import { NodeCrypto, NodeHttpClient } from '@effect/platform-node'
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
 import type { PGlite } from '@electric-sql/pglite'
 import {
-  auditEvents,
-  AuthService,
-  type Client,
-  DrizzleSession,
+  Auth,
   Fulfillment,
-  HttpLive,
-  httpServerLayer,
+  Http,
   Inventory,
-  makeAuth,
-  makeRpcClient,
-  ReservationLog,
-  reservations,
-  ReservationView,
-  SettlementStore,
-  stockLots,
-  StockView,
-  SubmitOrderRequest,
-  user,
-  warehouses,
-} from '@systemfsoftware/example-inventory-fulfillment'
-import type {
-  Client as RpcClientHandle,
-  DrizzleDatabase,
-  SettlementCommand,
-  SettlementStoreService,
+  Persistence,
+  Reservation,
+  Rpc,
+  Settlement,
 } from '@systemfsoftware/example-inventory-fulfillment'
 import { drizzle } from 'drizzle-orm/pglite'
 import { sql } from 'drizzle-orm/sql'
@@ -49,6 +32,7 @@ import {
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
 import { RpcSerialization } from 'effect/unstable/rpc'
+import { RpcWireFailure } from './rpc-wire.schema.js'
 
 const {
   AllocatedSplit,
@@ -62,17 +46,42 @@ const {
   InsufficientStock,
   Unauthorized,
 } = Fulfillment.Decision
+
+const SettlementStore = Settlement.Store.SettlementStore
+type SettlementStore = Settlement.Store.SettlementStore
+const AuthService = Auth.Service.AuthService
+type AuthService = Auth.Service.AuthService
+const DrizzleSession = Persistence.DrizzleSession.DrizzleSession
+type DrizzleSession = Persistence.DrizzleSession.DrizzleSession
+const FulfillmentConfig = Fulfillment.Config.FulfillmentConfig
+const makeRpcClient = Rpc.Client.make
+const HttpLive = Http.Server.HttpLive
+const httpServerLayer = Http.Server.httpServerLayer
+const makeAuthService = Auth.Live.makeAuthService
+const auditEvents = Persistence.Tables.auditEvents
+const reservations = Persistence.Tables.reservations
+const stockLots = Persistence.Tables.stockLots
+const user = Persistence.Tables.user
+const warehouses = Persistence.Tables.warehouses
+const ReservationView = Rpc.Schema.ReservationView
+type ReservationView = Rpc.Schema.ReservationView
+const StockView = Rpc.Schema.StockView
+type StockView = Rpc.Schema.StockView
+const SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
+type SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
+type Client = Rpc.Client.Client
+type DrizzleDatabase = Persistence.DrizzleSession.DrizzleDatabase
+type SettlementCommand = Settlement.Store.SettlementCommand
+type SettlementStoreService = Settlement.Store.SettlementStoreService
 type FulfillmentDecision = Fulfillment.Decision.FulfillmentDecision
 type FulfillmentError = Fulfillment.Decision.FulfillmentError
-const FulfillmentConfig = Fulfillment.FulfillmentConfig
-const InventoryStore = Inventory.InventoryStore
 
 const pgTestLayer = Layer.mergeAll(
-  InventoryStore.Live,
-  SettlementStore.Live,
-  ReservationLog.Live,
+  Inventory.Drizzle.layer,
+  Settlement.Drizzle.layer,
+  Reservation.Drizzle.layer,
 ).pipe(
-  Layer.provideMerge(DrizzleSession.Test),
+  Layer.provideMerge(Persistence.DrizzleSession.layerTest),
   Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
 )
 
@@ -205,7 +214,7 @@ const authLayer: Layer.Layer<AuthService, never, Pglite.PgliteClient> = Layer.ef
     const uuid1 = yield* crypto.randomUUIDv4
     const uuid2 = yield* crypto.randomUUIDv4
     const promiseDb = drizzle({ client: raw.pglite as PGlite })
-    return makeAuth(promiseDb, `${uuid1}${uuid2}`)
+    return makeAuthService(promiseDb, `${uuid1}${uuid2}`)
   }),
 ).pipe(Layer.provide(NodeCrypto.layer), Layer.orDie)
 
@@ -268,7 +277,12 @@ export interface TestServerService {
   readonly baseUrl: string
   readonly signUp: (email: string, password: string, name: string) => Effect.Effect<Session>
   readonly signIn: (email: string, password: string) => Effect.Effect<Session>
-  readonly client: (cookie?: string) => Effect.Effect<RpcClientHandle, never, Scope.Scope>
+  readonly client: (cookie?: string) => Effect.Effect<Client, never, Scope.Scope>
+  readonly postRpc: (
+    tag: string,
+    payload: Record<string, string | number>,
+    cookie?: string,
+  ) => Effect.Effect<readonly RpcWireFailure[]>
   readonly seam: ConflictSeamService
   readonly seed: SeedService
   readonly inspect: InspectService
@@ -375,11 +389,33 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
       return { userId, cookie }
     })
 
-  const client = (cookie?: string): Effect.Effect<RpcClientHandle, never, Scope.Scope> =>
+  const client = (cookie?: string): Effect.Effect<Client, never, Scope.Scope> =>
     makeRpcClient({ baseUrl, cookie }).pipe(
       Effect.provide(RpcSerialization.layerJson),
       Effect.provideService(HttpClient.HttpClient, http),
     )
+
+  const postRpc = (
+    tag: string,
+    payload: Record<string, string | number>,
+    cookie?: string,
+  ): Effect.Effect<readonly RpcWireFailure[]> =>
+    Effect.gen(function*() {
+      const request = HttpClientRequest.post(`${baseUrl}/rpc`).pipe(
+        HttpClientRequest.bodyJsonUnsafe({
+          _tag: 'Request',
+          id: 'raw-wire-request',
+          tag,
+          payload,
+          headers: [] as const,
+        }),
+      )
+      const response = yield* execute(
+        cookie === undefined ? request : HttpClientRequest.setHeader(request, 'cookie', cookie),
+      )
+      const json = yield* response.json.pipe(Effect.orDie)
+      return yield* S.decodeUnknownEffect(S.Array(RpcWireFailure))(json).pipe(Effect.orDie)
+    })
 
   return {
     baseUrl,
@@ -387,6 +423,7 @@ const buildService = (context: Context.Context<BuildContext>): TestServerService
     signUp: (email, password, name) => authenticate('/api/auth/sign-up/email', { email, password, name }),
     signIn: (email, password) => authenticate('/api/auth/sign-in/email', { email, password }),
     client,
+    postRpc,
     seed: seedServiceOf(db),
     inspect: inspectServiceOf(db),
   }
@@ -455,7 +492,10 @@ const inspectServiceOf = (db: DrizzleDatabase): InspectService => ({
 })
 
 type SettlementDecision = Fulfillment.Decision.CoreFulfillmentDecision | Fulfillment.Decision.FulfillmentRefusal
-type SettlementFailure = Fulfillment.Decision.OptimisticConflict | Fulfillment.Decision.CreditAccountNotFound
+type SettlementFailure =
+  | Fulfillment.Decision.OptimisticConflict
+  | Fulfillment.Decision.CreditAccountNotFound
+  | Fulfillment.Decision.StoreUnavailable
 
 const conflicted: SettlementOutcome = { _tag: 'Conflicted' }
 
@@ -490,7 +530,7 @@ const buildCellHarness = (
         lines: input.lines,
       }).pipe(Effect.orDie)
       const fraudRisk = yield* S.decodeEffect(Fulfillment.Credit.FraudRiskScore)(0).pipe(Effect.orDie)
-      return yield* Fulfillment.fulfillmentCell.run({ order, kits: [], fraudRisk })
+      return yield* Fulfillment.Cell.fulfillmentCell.run({ order, kits: [], fraudRisk })
     }).pipe(
       Effect.provideService(SettlementStore, store),
       Effect.result,

@@ -1,10 +1,4 @@
-import { Fulfillment, Inventory, SettlementStore } from '@systemfsoftware/example-inventory-fulfillment'
-import type {
-  CreditObservation,
-  SettlementCommand,
-  SettlementStoreSeed,
-  StockObservation,
-} from '@systemfsoftware/example-inventory-fulfillment'
+import { Fulfillment, Inventory, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
 import { Contract, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Context, DateTime, Effect, FileSystem, Layer, Option, Result, Schema as S } from 'effect'
 import type { DateTime as DateTimeUtc } from 'effect'
@@ -41,7 +35,7 @@ export const settlementRequest: {
   }),
 )
 
-export const settlementSeed = (): SettlementStoreSeed => ({
+export const settlementSeed = (): Settlement.Store.SettlementStoreSeed => ({
   warehouses: [{ warehouseId: WAREHOUSE, region: 'north' }],
   lots: [
     { lotId: 'lot-1', sku: SKU, warehouseId: WAREHOUSE, quantityOnHand: STOCKED_QUANTITY, version: 1 },
@@ -73,10 +67,10 @@ const money = (value: number): Fulfillment.Credit.Money =>
  * conflicts for real — no double is asked to return a conflict.
  */
 const competingSettlementOf = (
-  credit: CreditObservation,
-  stock: StockObservation,
+  credit: Settlement.Store.CreditObservation,
+  stock: Settlement.Store.StockObservation,
   now: DateTimeUtc.Utc,
-): SettlementCommand => ({
+): Settlement.Store.SettlementCommand => ({
   orderId: 'competing-order',
   customerId: CONTENDED_CUSTOMER,
   events: [
@@ -105,20 +99,23 @@ const competingSettlementOf = (
   charge: Option.some({ amount: money(1), proof: credit.proof }),
 })
 
-const contestedSettlementStore: Layer.Layer<SettlementStore> = SettlementStore.memory(settlementSeed()).pipe(
+const contestedSettlementStore: Layer.Layer<Settlement.Store.SettlementStore> = Settlement.Memory.layer(
+  settlementSeed(),
+).pipe(
   Layer.flatMap((context) => {
-    const store = Context.get(context, SettlementStore)
+    const store = Context.get(context, Settlement.Store.SettlementStore)
     return Layer.effect(
-      SettlementStore,
+      Settlement.Store.SettlementStore,
       Effect.gen(function*() {
         const credit = yield* Effect.orDie(store.readCredit(CONTENDED_CUSTOMER))
-        const stock = yield* store.readAllStock
+        const stock = yield* Effect.orDie(store.readAllStock)
         const now = yield* DateTime.now
         const competing = competingSettlementOf(credit, stock, now)
         return {
           readCredit: store.readCredit,
           readAllStock: store.readAllStock,
-          settle: (command: SettlementCommand) => Effect.flatMap(store.settle(competing), () => store.settle(command)),
+          settle: (command: Settlement.Store.SettlementCommand) =>
+            Effect.flatMap(store.settle(competing), () => store.settle(command)),
         }
       }),
     )
@@ -146,36 +143,36 @@ const observationLayers = Layer.mergeAll(
 )
 
 export const settlementLayers: Layer.Layer<
-  SettlementStore | Observation.Observation | FileSystem.FileSystem
-> = Layer.mergeAll(SettlementStore.memory(settlementSeed()), observationLayers)
+  Settlement.Store.SettlementStore | Observation.Observation | FileSystem.FileSystem
+> = Layer.mergeAll(Settlement.Memory.layer(settlementSeed()), observationLayers)
 
 export const contestedSettlementLayers: Layer.Layer<
-  SettlementStore | Observation.Observation | FileSystem.FileSystem
+  Settlement.Store.SettlementStore | Observation.Observation | FileSystem.FileSystem
 > = Layer.mergeAll(contestedSettlementStore, observationLayers)
 
 export const settlement = Stimulus.make({
-  name: Fulfillment.FulfillmentSettle.id,
-  run: ({ input }: { readonly input: SettlementRequest }) => Effect.result(Fulfillment.fulfillmentCell.run(input)),
+  name: Fulfillment.Taxonomy.FulfillmentSettle.id,
+  run: ({ input }: { readonly input: SettlementRequest }) => Effect.result(Fulfillment.Cell.fulfillmentCell.run(input)),
 })
 
-export const allocateContract = Contract.of(Fulfillment.fulfillmentTaxonomy)
+export const allocateContract = Contract.of(Fulfillment.Taxonomy.fulfillmentTaxonomy)
   .stimulate(settlement)
   .holds(
     Rel.all(
-      Rel.exists(Fulfillment.FulfillmentSettle),
-      Rel.exists(Fulfillment.ReservationCommit),
-      Rel.exists(Fulfillment.CreditCharge),
-      Rel.fromTaxonomy(Fulfillment.fulfillmentTaxonomy, { path: 'allocate' }),
+      Rel.exists(Fulfillment.Taxonomy.FulfillmentSettle),
+      Rel.exists(Fulfillment.Taxonomy.ReservationCommit),
+      Rel.exists(Fulfillment.Taxonomy.CreditCharge),
+      Rel.fromTaxonomy(Fulfillment.Taxonomy.fulfillmentTaxonomy, { path: 'allocate' }),
     ),
   )
 
-export const creditHoldContract = Contract.of(Fulfillment.fulfillmentTaxonomy)
+export const creditHoldContract = Contract.of(Fulfillment.Taxonomy.fulfillmentTaxonomy)
   .stimulate(settlement)
   .holds(
     Rel.all(
-      Rel.exists(Fulfillment.FulfillmentSettle),
-      Rel.absent(Fulfillment.CreditCharge),
-      Rel.fromTaxonomy(Fulfillment.fulfillmentTaxonomy, { path: 'hold' }),
+      Rel.exists(Fulfillment.Taxonomy.FulfillmentSettle),
+      Rel.absent(Fulfillment.Taxonomy.CreditCharge),
+      Rel.fromTaxonomy(Fulfillment.Taxonomy.fulfillmentTaxonomy, { path: 'hold' }),
     ),
   )
 

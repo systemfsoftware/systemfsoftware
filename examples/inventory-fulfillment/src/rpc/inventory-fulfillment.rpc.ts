@@ -9,15 +9,16 @@ import {
   FulfillmentDecision,
   type FulfillmentDecision as FulfillmentDecisionType,
   InsufficientStock,
+  StoreUnavailable,
 } from '../fulfillment/decision.schema.js'
 import { AuditPayload } from '../fulfillment/event.schema.js'
 import { fulfillmentCell } from '../fulfillment/fulfillment.cell.js'
-import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
+import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.service.js'
 import { Order } from '../fulfillment/order.schema.js'
-import { InventoryStore } from '../inventory/InventoryStore.js'
-import { AuthContext } from '../ports/AuthContext.js'
-import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.js'
-import { AuthMiddleware } from './auth.middleware.js'
+import { InventoryStore } from '../inventory/InventoryStore.service.js'
+import { AuthContext } from '../ports/AuthContext.service.js'
+import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.service.js'
+import { AuthMiddleware } from './AuthMiddleware.service.js'
 import {
   GetReservationRequest,
   ListStockRequest,
@@ -34,18 +35,26 @@ import {
 export const SubmitOrder = Rpc.make('submitOrder', {
   payload: SubmitOrderRequest,
   success: FulfillmentDecision,
-  error: S.Union([InsufficientStock, CreditLimitExceeded, DuplicateOrder, Forbidden, CreditAccountNotFound]),
+  error: S.Union([
+    InsufficientStock,
+    CreditLimitExceeded,
+    DuplicateOrder,
+    Forbidden,
+    CreditAccountNotFound,
+    StoreUnavailable,
+  ]),
 }).middleware(AuthMiddleware)
 
 export const GetReservation = Rpc.make('getReservation', {
   payload: GetReservationRequest,
   success: ReservationView,
-  error: Forbidden,
+  error: S.Union([Forbidden, StoreUnavailable]),
 }).middleware(AuthMiddleware)
 
 export const ListStock = Rpc.make('listStock', {
   payload: ListStockRequest,
   success: StockView,
+  error: StoreUnavailable,
 }).middleware(AuthMiddleware)
 
 export const FulfillmentRpcs = RpcGroup.make(SubmitOrder, GetReservation, ListStock)
@@ -158,17 +167,13 @@ const getReservation = (request: GetReservationRequest) =>
   })
 
 const defaultStockPageSize = 50
-const maxStockPageSize = 100
-
-const pageSizeOf = (limit: number | undefined): number =>
-  Math.max(1, Math.min(limit ?? defaultStockPageSize, maxStockPageSize))
 
 const listStock = (request: ListStockRequest) =>
   Effect.gen(function*() {
     const store = yield* InventoryStore
     const page = yield* store.readStockPage({
       cursor: Option.fromUndefinedOr(request.cursor),
-      limit: pageSizeOf(request.limit),
+      limit: request.limit ?? defaultStockPageSize,
       warehouseId: Option.fromUndefinedOr(request.warehouseId),
     })
     return new StockView({ partitions: page.partitions, nextCursor: Option.getOrNull(page.nextCursor) })

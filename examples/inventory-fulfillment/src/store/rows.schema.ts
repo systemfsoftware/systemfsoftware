@@ -4,6 +4,8 @@ import { AuditPayload } from '../fulfillment/event.schema.js'
 import {
   LotAllocation,
   LotId,
+  Quantity,
+  QuantityOnHand,
   SkuId,
   StockLot,
   Version,
@@ -15,7 +17,7 @@ const StockLotRow = S.Struct({
   lotId: LotId,
   sku: SkuId,
   warehouseId: WarehouseId,
-  quantityOnHand: S.Int.pipe(S.check(S.isGreaterThanOrEqualTo(0))),
+  quantityOnHand: QuantityOnHand,
   version: Version,
   expiresAt: S.OptionFromNullOr(S.DateTimeUtcFromDate),
 })
@@ -30,7 +32,7 @@ const ReservationRow = S.Struct({
   warehouseId: WarehouseId,
   lotId: LotId,
   sku: SkuId,
-  quantity: S.Int.pipe(S.check(S.isGreaterThan(0))),
+  quantity: Quantity,
 })
 
 const CreditAccountRow = S.Struct({

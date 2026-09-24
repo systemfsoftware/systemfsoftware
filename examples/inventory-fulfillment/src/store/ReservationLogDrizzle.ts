@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
-import { DateTime, Effect, Option } from 'effect'
+import { DateTime, Effect, Layer, Option } from 'effect'
 import type { SchemaError } from 'effect/Schema'
+import { StoreUnavailable } from '../fulfillment/decision.schema.js'
 import type { AuditPayload } from '../fulfillment/event.schema.js'
-import type { ReservationRecord } from '../ports/ReservationLog.js'
+import { ReservationLog, type ReservationRecord } from '../ports/ReservationLog.service.js'
 import { decodeLotAllocation } from './decode.js'
 import { type DrizzleDatabase, DrizzleSession } from './DrizzleSession.js'
 import { auditEvents, reservations } from './schema.tables.js'
@@ -40,7 +41,7 @@ const findReservation = (db: DrizzleDatabase, orderId: string) =>
       .from(reservations)
       .where(eq(reservations.orderId, orderId))
     return yield* reservationRecord(rows)
-  })
+  }).pipe(Effect.mapError((cause) => new StoreUnavailable({ cause })))
 
 const appendRollback = (db: DrizzleDatabase, audit: AuditPayload) =>
   db
@@ -53,12 +54,15 @@ const appendRollback = (db: DrizzleDatabase, audit: AuditPayload) =>
       occurredAt: DateTime.toDate(audit.occurredAt),
     })
     .onConflictDoNothing()
-    .pipe(Effect.asVoid, Effect.orDie)
+    .pipe(Effect.asVoid, Effect.mapError((cause) => new StoreUnavailable({ cause })))
 
-export const make = Effect.gen(function*() {
-  const db = yield* DrizzleSession
-  return {
-    findReservation: (orderId: string) => findReservation(db, orderId).pipe(Effect.orDie),
-    appendRollback: (audit: AuditPayload) => appendRollback(db, audit),
-  }
-})
+export const layer: Layer.Layer<ReservationLog, never, DrizzleSession> = Layer.effect(
+  ReservationLog,
+  Effect.gen(function*() {
+    const db = yield* DrizzleSession
+    return {
+      findReservation: (orderId: string) => findReservation(db, orderId),
+      appendRollback: (audit: AuditPayload) => appendRollback(db, audit),
+    }
+  }),
+)

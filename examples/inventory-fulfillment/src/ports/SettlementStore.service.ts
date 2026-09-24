@@ -1,13 +1,9 @@
-import type { EffectDrizzleQueryError } from 'drizzle-orm/effect-core'
-import { Context, type Effect, Layer, type Option } from 'effect'
-import type { SchemaError } from 'effect/Schema'
+import { Context, type Effect, type Option } from 'effect'
 import type { CreditAccount, CustomerTier, Money } from '../fulfillment/credit.schema.js'
-import { CreditAccountNotFound } from '../fulfillment/decision.schema.js'
+import { CreditAccountNotFound, StoreUnavailable } from '../fulfillment/decision.schema.js'
 import type { AuditPayload, InventoryReservationEvents } from '../fulfillment/event.schema.js'
 import type { WarehouseStockPartition } from '../inventory/inventory.schema.js'
 import type { CreditProof, StockProof } from '../store/SettlementProof.js'
-import { make as makeDrizzle } from '../store/SettlementStoreDrizzle.js'
-import { make as makeMemory } from '../store/SettlementStoreMemory.js'
 
 export interface CreditObservation {
   readonly account: CreditAccount
@@ -45,9 +41,9 @@ export type SettlementOutcome = 'Committed' | 'Conflict'
 export interface SettlementStoreService {
   readonly readCredit: (
     customerId: string,
-  ) => Effect.Effect<CreditObservation, CreditAccountNotFound | SchemaError | EffectDrizzleQueryError>
-  readonly readAllStock: Effect.Effect<StockObservation>
-  readonly settle: (command: SettlementCommand) => Effect.Effect<SettlementOutcome>
+  ) => Effect.Effect<CreditObservation, CreditAccountNotFound | StoreUnavailable>
+  readonly readAllStock: Effect.Effect<StockObservation, StoreUnavailable>
+  readonly settle: (command: SettlementCommand) => Effect.Effect<SettlementOutcome, StoreUnavailable>
 }
 
 export interface SettlementStoreSeed {
@@ -70,10 +66,6 @@ export interface SettlementStoreSeed {
 
 export class SettlementStore extends Context.Service<SettlementStore, SettlementStoreService>()(
   '@systemfsoftware/example-inventory-fulfillment/ports/SettlementStore',
-) {
-  static readonly Live = Layer.effect(this, makeDrizzle)
-  static readonly memory = (seed: SettlementStoreSeed): Layer.Layer<SettlementStore> =>
-    Layer.effect(this, makeMemory(seed))
-}
+) {}
 
 export type { CreditProof, StockProof } from '../store/SettlementProof.js'

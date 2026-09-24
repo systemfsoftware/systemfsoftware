@@ -1,9 +1,7 @@
-import type { EffectDrizzleQueryError } from 'drizzle-orm/effect-core'
 import { Effect, Option } from 'effect'
-import type { SchemaError } from 'effect/Schema'
 import { describe, expect, it } from 'tstyche'
 import type { CreditAccount, CustomerTier, Money } from '../src/fulfillment/credit.schema.js'
-import { CreditAccountNotFound } from '../src/fulfillment/decision.schema.js'
+import { CreditAccountNotFound, StoreUnavailable } from '../src/fulfillment/decision.schema.js'
 import type { AuditPayload, InventoryReservationEvents } from '../src/fulfillment/event.schema.js'
 import type { WarehouseStockPartition } from '../src/inventory/inventory.schema.js'
 import type {
@@ -13,7 +11,7 @@ import type {
   SettlementStoreService,
   StockObservation,
   StockProof,
-} from '../src/ports/SettlementStore.js'
+} from '../src/ports/SettlementStore.service.js'
 
 declare const store: SettlementStoreService
 declare const customerId: string
@@ -27,14 +25,14 @@ declare const stockProof: StockProof
 describe('SettlementStore.readCredit', () => {
   it('returns the account, the tier and a proof of the read', () => {
     expect(store.readCredit(customerId)).type.toBe<
-      Effect.Effect<CreditObservation, CreditAccountNotFound | SchemaError | EffectDrizzleQueryError>
+      Effect.Effect<CreditObservation, CreditAccountNotFound | StoreUnavailable>
     >()
   })
 })
 
 describe('SettlementStore.readAllStock', () => {
   it('returns the partitions and a proof of the read', () => {
-    expect(store.readAllStock).type.toBe<Effect.Effect<StockObservation>>()
+    expect(store.readAllStock).type.toBe<Effect.Effect<StockObservation, StoreUnavailable>>()
   })
 })
 
@@ -47,7 +45,7 @@ describe('SettlementStore.settle', () => {
       audit,
       stock: stockProof,
       charge: Option.some({ amount, proof: creditProof }),
-    })).type.toBe<Effect.Effect<SettlementOutcome>>()
+    })).type.toBe<Effect.Effect<SettlementOutcome, StoreUnavailable>>()
   })
 
   it('settles a command carrying both store proofs', () => {
@@ -119,7 +117,7 @@ describe('SettlementStore.settle', () => {
       })
     })
     expect(settled).type.toBe<
-      Effect.Effect<SettlementOutcome, CreditAccountNotFound | SchemaError | EffectDrizzleQueryError>
+      Effect.Effect<SettlementOutcome, CreditAccountNotFound | StoreUnavailable>
     >()
   })
 })
@@ -129,7 +127,7 @@ describe('settlement observation shapes', () => {
     expect(store.readCredit(customerId)).type.toBe<
       Effect.Effect<
         { readonly account: CreditAccount; readonly tier: CustomerTier; readonly proof: CreditProof },
-        CreditAccountNotFound | SchemaError | EffectDrizzleQueryError
+        CreditAccountNotFound | StoreUnavailable
       >
     >()
   })
@@ -139,7 +137,7 @@ describe('settlement observation shapes', () => {
       Effect.Effect<{
         readonly partitions: readonly WarehouseStockPartition[]
         readonly proof: StockProof
-      }>
+      }, StoreUnavailable>
     >()
   })
 })

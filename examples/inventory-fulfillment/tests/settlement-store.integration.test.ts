@@ -1,11 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { SettlementStore } from '@systemfsoftware/example-inventory-fulfillment'
-import type {
-  Fulfillment,
-  Inventory,
-  SettlementOutcome,
-  SettlementStoreService,
-} from '@systemfsoftware/example-inventory-fulfillment'
+import { Settlement } from '@systemfsoftware/example-inventory-fulfillment'
+import type { Fulfillment, Inventory } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Equal } from 'effect'
 import { expect } from 'vitest'
 import {
@@ -23,6 +18,12 @@ import {
   settlementCommandWithoutCharge,
   settlementStoreWorld,
 } from './__fixtures__/settlement-store.fixture.js'
+
+const SettlementStore = Settlement.Store.SettlementStore
+type SettlementStore = Settlement.Store.SettlementStore
+type SettlementOutcome = Settlement.Store.SettlementOutcome
+type SettlementStoreService = Settlement.Store.SettlementStoreService
+type StoreUnavailable = Fulfillment.Decision.StoreUnavailable
 interface OrderInput {
   readonly orderId: string
   readonly customerId: string
@@ -52,7 +53,10 @@ const SECOND_ORDER: OrderInput = {
   charge: 8,
 }
 
-const settleOrder = (store: SettlementStoreService, input: OrderInput): Effect.Effect<SettlementOutcome> =>
+const settleOrder = (
+  store: SettlementStoreService,
+  input: OrderInput,
+): Effect.Effect<SettlementOutcome, StoreUnavailable> =>
   Effect.gen(function*() {
     const credit = yield* readCreditOf(store, input.customerId)
     const stock = yield* store.readAllStock
@@ -63,7 +67,10 @@ const settleOrder = (store: SettlementStoreService, input: OrderInput): Effect.E
     }))
   })
 
-const settleWithoutCharge = (store: SettlementStoreService, input: OrderInput): Effect.Effect<SettlementOutcome> =>
+const settleWithoutCharge = (
+  store: SettlementStoreService,
+  input: OrderInput,
+): Effect.Effect<SettlementOutcome, StoreUnavailable> =>
   Effect.gen(function*() {
     const credit = yield* readCreditOf(store, input.customerId)
     const stock = yield* store.readAllStock
@@ -98,7 +105,7 @@ interface RepeatedReadResult {
   readonly secondCredit: Fulfillment.Credit.CreditAccount
 }
 
-const fullState = (store: SettlementStoreService): Effect.Effect<FullState> =>
+const fullState = (store: SettlementStoreService): Effect.Effect<FullState, StoreUnavailable> =>
   Effect.gen(function*() {
     const one = yield* readCreditOf(store, FIRST_CUSTOMER)
     const two = yield* readCreditOf(store, SECOND_CUSTOMER)
@@ -120,7 +127,7 @@ const readSeesTheWrite: Effect.Effect<
     readonly lotQuantity: number
     readonly lotVersion: number
   },
-  never,
+  StoreUnavailable,
   SettlementStore
 > = Effect.flatMap(SettlementStore, (store) =>
   Effect.gen(function*() {
@@ -135,7 +142,7 @@ const readSeesTheWrite: Effect.Effect<
     }
   }))
 
-const repeatedRead: Effect.Effect<RepeatedReadResult, never, SettlementStore> = Effect.flatMap(
+const repeatedRead: Effect.Effect<RepeatedReadResult, StoreUnavailable, SettlementStore> = Effect.flatMap(
   SettlementStore,
   (store) =>
     Effect.gen(function*() {
@@ -152,7 +159,10 @@ const repeatedRead: Effect.Effect<RepeatedReadResult, never, SettlementStore> = 
     }),
 )
 
-const committedFinalState = (first: OrderInput, second: OrderInput): Effect.Effect<FullState, never, SettlementStore> =>
+const committedFinalState = (
+  first: OrderInput,
+  second: OrderInput,
+): Effect.Effect<FullState, StoreUnavailable, SettlementStore> =>
   Effect.flatMap(SettlementStore, (store) =>
     Effect.gen(function*() {
       yield* settleOrder(store, first)
@@ -160,7 +170,7 @@ const committedFinalState = (first: OrderInput, second: OrderInput): Effect.Effe
       return yield* fullState(store)
     }))
 
-const settledWithoutCharge: Effect.Effect<SettlementLaw, never, SettlementStore> = Effect.flatMap(
+const settledWithoutCharge: Effect.Effect<SettlementLaw, StoreUnavailable, SettlementStore> = Effect.flatMap(
   SettlementStore,
   (store) =>
     Effect.gen(function*() {
@@ -179,7 +189,7 @@ const settledWithoutCharge: Effect.Effect<SettlementLaw, never, SettlementStore>
 )
 
 const UNCLAIMED_LOT = 'lot-vanished'
-const claimedOutsideTheProof: Effect.Effect<SettlementLaw, never, SettlementStore> = Effect.flatMap(
+const claimedOutsideTheProof: Effect.Effect<SettlementLaw, StoreUnavailable, SettlementStore> = Effect.flatMap(
   SettlementStore,
   (store) =>
     Effect.gen(function*() {
@@ -205,25 +215,30 @@ const claimedOutsideTheProof: Effect.Effect<SettlementLaw, never, SettlementStor
 
 const sameProofSettlesTwice: Effect.Effect<
   readonly [SettlementOutcome, SettlementOutcome],
-  never,
+  StoreUnavailable,
   SettlementStore
 > = Effect.flatMap(SettlementStore, (store) =>
   Effect.gen(function*() {
-    const credit = yield* readCreditOf(store, FIRST_CUSTOMER)
-    const stock = yield* store.readAllStock
-    const both = (orderId: string) =>
-      store.settle(settlementCommandOf({
-        ...FIRST_ORDER,
-        orderId,
-        creditProof: credit.proof,
-        stockProof: stock.proof,
-      }))
-    const first = yield* both('order-first')
-    const second = yield* both('order-second')
+    const firstRead = yield* readCreditOf(store, FIRST_CUSTOMER)
+    const firstStock = yield* store.readAllStock
+    const secondRead = yield* readCreditOf(store, FIRST_CUSTOMER)
+    const secondStock = yield* store.readAllStock
+    const first = yield* store.settle(settlementCommandOf({
+      ...FIRST_ORDER,
+      orderId: 'order-first',
+      creditProof: firstRead.proof,
+      stockProof: firstStock.proof,
+    }))
+    const second = yield* store.settle(settlementCommandOf({
+      ...FIRST_ORDER,
+      orderId: 'order-second',
+      creditProof: secondRead.proof,
+      stockProof: secondStock.proof,
+    }))
     return [first, second] as const
   }))
 
-const anotherCustomersProof: Effect.Effect<SettlementOutcome, never, SettlementStore> = Effect.flatMap(
+const anotherCustomersProof: Effect.Effect<SettlementOutcome, StoreUnavailable, SettlementStore> = Effect.flatMap(
   SettlementStore,
   (store) =>
     Effect.gen(function*() {
@@ -239,7 +254,7 @@ const anotherCustomersProof: Effect.Effect<SettlementOutcome, never, SettlementS
     }),
 )
 
-const staleStockProof: Effect.Effect<SettlementOutcome, never, SettlementStore> = Effect.flatMap(
+const staleStockProof: Effect.Effect<SettlementOutcome, StoreUnavailable, SettlementStore> = Effect.flatMap(
   SettlementStore,
   (store) =>
     Effect.gen(function*() {

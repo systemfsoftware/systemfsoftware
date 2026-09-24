@@ -8,7 +8,15 @@ import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { ComponentDemand } from '../fulfillment/explode-bundle.workflow.js'
-import { LotId, SkuId, Version, WarehouseId, WarehouseStockPartition } from './inventory.schema.js'
+import {
+  LotId,
+  Quantity,
+  QuantityOnHand,
+  SkuId,
+  Version,
+  WarehouseId,
+  WarehouseStockPartition,
+} from './inventory.schema.js'
 import type { StockLot } from './inventory.schema.js'
 
 const AllocationDecisionTypeId: unique symbol = Symbol.for(
@@ -21,19 +29,17 @@ const AllocationErrorTypeId: unique symbol = Symbol.for(
 )
 type AllocationErrorTypeId = typeof AllocationErrorTypeId
 
-const ReservationQuantity = S.Int.pipe(S.check(S.isGreaterThan(0)))
-
 export class LotReservation extends S.Class<LotReservation>('LotReservation')({
   warehouseId: WarehouseId,
   lotId: LotId,
   sku: SkuId,
-  quantity: ReservationQuantity,
+  quantity: Quantity,
   version: Version,
 }) {}
 
 export class UnfulfilledDemand extends S.Class<UnfulfilledDemand>('UnfulfilledDemand')({
   sku: SkuId,
-  quantity: ReservationQuantity,
+  quantity: Quantity,
 }) {}
 
 export class StockAllocated extends S.TaggedClass<StockAllocated>()('StockAllocated', {
@@ -53,8 +59,8 @@ export class StockBackordered extends S.TaggedClass<StockBackordered>()('StockBa
 
 export class InsufficientStock extends S.TaggedError<InsufficientStock>()('InsufficientStock', {
   sku: SkuId,
-  requested: S.Int,
-  available: S.Int,
+  requested: Quantity,
+  available: QuantityOnHand,
 }) {
   readonly [AllocationErrorTypeId] = AllocationErrorTypeId
 }

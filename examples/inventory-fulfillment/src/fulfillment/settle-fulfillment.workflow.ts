@@ -10,13 +10,12 @@ import {
   UnfulfilledDemand,
 } from '../inventory/allocate-stock.workflow.js'
 import { CreditGranted, CreditHold, CreditLimitExceeded } from './check-credit.workflow.js'
+import { Amount } from './credit.schema.js'
 
 const FulfillmentDecisionTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/example-inventory-fulfillment/SettleFulfillmentDecision',
 )
 type FulfillmentDecisionTypeId = typeof FulfillmentDecisionTypeId
-
-const FulfillmentAmount = S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0)))
 
 export class OrderAllocated extends S.TaggedClass<OrderAllocated>()('OrderAllocated', {
   orderId: S.String,
@@ -30,7 +29,7 @@ export class OrderAllocatedWithOverdraft extends S.TaggedClass<OrderAllocatedWit
   {
     orderId: S.String,
     reservations: S.Array(LotReservation),
-    overdraftAmount: FulfillmentAmount,
+    overdraftAmount: Amount,
   },
 ) {
   readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
@@ -46,8 +45,8 @@ export class OrderBackordered extends S.TaggedClass<OrderBackordered>()('OrderBa
 
 export class OrderHeld extends S.TaggedClass<OrderHeld>()('OrderHeld', {
   orderId: S.String,
-  shortfall: FulfillmentAmount,
-  requiredDownpayment: FulfillmentAmount,
+  shortfall: Amount,
+  requiredDownpayment: Amount,
 }) {
   readonly [FulfillmentDecisionTypeId] = FulfillmentDecisionTypeId
 }

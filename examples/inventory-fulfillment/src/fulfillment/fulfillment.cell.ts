@@ -9,7 +9,7 @@ import {
   type SettlementCommand,
   SettlementStore,
   type StockProof,
-} from '../ports/SettlementStore.js'
+} from '../ports/SettlementStore.service.js'
 import { checkCredit, type CreditCheckCommand } from './check-credit.workflow.js'
 import { type CreditAccount, type CustomerTier, type FraudRiskScore, Money } from './credit.schema.js'
 import {
@@ -17,6 +17,7 @@ import {
   type CreditAccountNotFound,
   FulfillmentRefusal,
   OptimisticConflict,
+  StoreUnavailable,
 } from './decision.schema.js'
 import { AuditPayload, BackorderRecorded, type InventoryReservationEvents, StockReserved } from './event.schema.js'
 import { type ComponentDemand, explodeBundle, type ExplodeBundleCommand } from './explode-bundle.workflow.js'
@@ -142,13 +143,13 @@ const wireRefusalOf = (error: SettleErrorEncoded): Effect.Effect<FulfillmentRefu
 
 const readContext = (
   request: FulfillmentRequest,
-): Effect.Effect<RawContext, CreditAccountNotFound, SettlementStore> =>
+): Effect.Effect<RawContext, CreditAccountNotFound | StoreUnavailable, SettlementStore> =>
   Effect.gen(function*() {
     const store = yield* SettlementStore
     const [stock, credit, now] = yield* Effect.all(
       [store.readAllStock, store.readCredit(request.order.customerId), DateTime.now],
       { concurrency: 'unbounded' },
-    ).pipe(Effect.catchTag(['SchemaError', 'EffectDrizzleQueryError'], (error) => Effect.die(error)))
+    )
     return {
       order: request.order,
       customerTier: credit.tier,
@@ -168,7 +169,7 @@ const rejectedRead = (cell: string) => (rejected: Sandwich.CommandRejected): Eff
 
 const readExplode = (
   request: FulfillmentRequest,
-): Effect.Effect<ExplodeRead, CreditAccountNotFound, SettlementStore> =>
+): Effect.Effect<ExplodeRead, CreditAccountNotFound | StoreUnavailable, SettlementStore> =>
   Effect.map(readContext(request), (context) => ({ lines: context.order.lines, kits: context.kits, context }))
 
 const carryComponents = (

@@ -31,7 +31,9 @@ Feature('Refusing a settlement whose trace breaks the written contract')
         ),
         Then('the refusal names the charge that never arrived and where the trace was written')((s) => {
           const refusal = disparityOf(s.refusal)
-          expect(refusal.breaks.map((entry) => entry.conjunct)).toContain(`exists(${Fulfillment.CreditCharge.id})`)
+          expect(refusal.breaks.map((entry) => entry.conjunct)).toContain(
+            `exists(${Fulfillment.Taxonomy.CreditCharge.id})`,
+          )
           expect(refusal.dumpPath).toContain('artifacts/traces/')
         }),
       ),

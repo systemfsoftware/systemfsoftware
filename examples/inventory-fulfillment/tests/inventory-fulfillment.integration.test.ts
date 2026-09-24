@@ -1,5 +1,6 @@
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { DateTime, Effect, Match, Result, Schema as S } from 'effect'
+import { Inventory } from '@systemfsoftware/example-inventory-fulfillment'
+import { DateTime, Effect, Encoding, Match, Result, Schema as S } from 'effect'
 import { expect } from 'vitest'
 import {
   AllocatedSplit,
@@ -107,8 +108,11 @@ const lotIdsOf = (view: StockView): readonly string[] =>
 interface StockPageRequest {
   readonly warehouseId: string
   readonly limit: number
-  readonly cursor?: string | undefined
+  readonly cursor?: Inventory.Schema.StockPosition | undefined
 }
+
+const positionOf = (token: string): Inventory.Schema.StockPosition =>
+  Result.getOrThrow(S.decodeResult(Inventory.Schema.StockCursor)(token))
 
 const listStockPage = (session: Session, request: StockPageRequest) =>
   Effect.gen(function*() {
@@ -366,34 +370,43 @@ Feature('Inventory fulfillment across the warehouse network')
             yield* provisionStock(warehouse, 'central', [{ id: lot, sku, warehouseId: warehouse, quantity: 1 }])
             return { sku, lot }
           })),
-        When('both customers submit an order for that unit at the same time')('tags', (s) =>
-          Effect.gen(function*() {
-            const server = yield* TestServer
-            const firstClient = yield* server.client(s.customers.first.cookie)
-            const secondClient = yield* server.client(s.customers.second.cookie)
-            const firstPayload = yield* submitRequest({
-              orderId: uniqueId('order'),
-              lines: [{ sku: s.catalog.sku, quantity: 1 }],
-            })
-            const secondPayload = yield* submitRequest({
-              orderId: uniqueId('order'),
-              lines: [{ sku: s.catalog.sku, quantity: 1 }],
-            })
-            const results = yield* Effect.all(
-              [
-                Effect.result(firstClient.submitOrder(firstPayload)),
-                Effect.result(secondClient.submitOrder(secondPayload)),
-              ],
-              { concurrency: 'unbounded' },
-            )
-            return yield* Effect.forEach(results, (result) =>
-              Result.match(result, {
-                onFailure: (error) =>
-                  S.decodeUnknownEffect(InsufficientStock)(error).pipe(Effect.as('InsufficientStock')),
-                onSuccess: (decision) =>
-                  S.decodeUnknownEffect(AllocatedSplit)(decision).pipe(Effect.as('AllocatedSplit')),
-              }))
-          })),
+        When('the first order reads the last unit, the second commits it, then the first settles')(
+          'tags',
+          (s) =>
+            Effect.gen(function*() {
+              const server = yield* TestServer
+              const firstClient = yield* server.client(s.customers.first.cookie)
+              const secondClient = yield* server.client(s.customers.second.cookie)
+              const firstPayload = yield* submitRequest({
+                orderId: uniqueId('order'),
+                lines: [{ sku: s.catalog.sku, quantity: 1 }],
+              })
+              const secondPayload = yield* submitRequest({
+                orderId: uniqueId('order'),
+                lines: [{ sku: s.catalog.sku, quantity: 1 }],
+              })
+              yield* server.seam.holdOnce
+              const [contested, sibling] = yield* Effect.all(
+                [
+                  Effect.result(firstClient.submitOrder(firstPayload)),
+                  Effect.gen(function*() {
+                    yield* server.seam.held
+                    const settled = yield* Effect.result(secondClient.submitOrder(secondPayload))
+                    yield* server.seam.release
+                    return settled
+                  }),
+                ],
+                { concurrency: 'unbounded' },
+              )
+              return yield* Effect.forEach([contested, sibling], (result) =>
+                Result.match(result, {
+                  onFailure: (error) =>
+                    S.decodeUnknownEffect(InsufficientStock)(error).pipe(Effect.as('InsufficientStock')),
+                  onSuccess: (decision) =>
+                    S.decodeUnknownEffect(AllocatedSplit)(decision).pipe(Effect.as('AllocatedSplit')),
+                }))
+            }),
+        ),
         Then('exactly one order is fulfilled and stock never goes negative')(
           (s) =>
             Effect.gen(function*() {
@@ -622,7 +635,7 @@ Feature('Inventory fulfillment across the warehouse network')
             const second = yield* listStockPage(s.customer, {
               warehouseId: s.catalog.warehouse,
               limit: 4,
-              cursor: first.nextCursor ?? undefined,
+              cursor: first.nextCursor === null ? undefined : positionOf(first.nextCursor),
             })
             return { first, second }
           })),
@@ -637,6 +650,62 @@ Feature('Inventory fulfillment across the warehouse network')
           expect([...secondIds, ...firstIds].sort()).toEqual([...s.catalog.lots].sort())
           expect(s.pages.second.nextCursor).toBeNull()
         }),
+      ),
+    )
+
+    scenario(
+      'A stock page key nobody issued is refused while the real listing still closes',
+      Gherkin.Do.pipe(
+        Given('a customer with an authenticated session')('customer', () => registerCustomer('Page Key Refusal')),
+        Given('a warehouse stocking five lots of a single item')('catalog', () =>
+          Effect.gen(function*() {
+            const sku = uniqueId('sku')
+            const warehouse = uniqueId('warehouse')
+            yield* provisionStock(
+              warehouse,
+              'central',
+              [uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot'), uniqueId('lot')].map((id) => ({
+                id,
+                sku,
+                warehouseId: warehouse,
+                quantity: 1,
+              })),
+            )
+            return { warehouse }
+          })),
+        When('they ask for the next page with a page key nobody issued')('refusal', (s) =>
+          Effect.gen(function*() {
+            const server = yield* TestServer
+            return yield* server.postRpc(
+              'listStock',
+              {
+                warehouseId: s.catalog.warehouse,
+                limit: 4,
+                cursor: Encoding.encodeBase64('no-separator'),
+              },
+              s.customer.cookie,
+            )
+          })),
+        Then('the refusal names the page key and never blames the store')((s) => {
+          expect(s.refusal).toHaveLength(1)
+          const defect = s.refusal[0]?.exit.cause[0]?.defect ?? ''
+          expect(defect).toContain('JSON string')
+          expect(defect).toContain('cursor')
+          expect(defect).not.toContain('StoreUnavailable')
+        }),
+        And('the listing itself still pages through every lot and closes')((s) =>
+          Effect.gen(function*() {
+            const first = yield* listStockPage(s.customer, { warehouseId: s.catalog.warehouse, limit: 4 })
+            const second = yield* listStockPage(s.customer, {
+              warehouseId: s.catalog.warehouse,
+              limit: 4,
+              cursor: first.nextCursor === null ? undefined : positionOf(first.nextCursor),
+            })
+            expect(lotIdsOf(first)).toHaveLength(4)
+            expect(lotIdsOf(second)).toHaveLength(1)
+            expect(second.nextCursor).toBeNull()
+          })
+        ),
       ),
     )
 
@@ -657,7 +726,7 @@ Feature('Inventory fulfillment across the warehouse network')
             ])
             return { sku }
           })),
-        When('the customer submits two eighty unit orders at the same moment')(
+        When('the first order reads the account, the second commits against it, then the first settles')(
           'outcomes',
           (s) =>
             Effect.gen(function*() {
@@ -672,11 +741,20 @@ Feature('Inventory fulfillment across the warehouse network')
                 orderId: uniqueId('order'),
                 lines: [{ sku: s.catalog.sku, quantity: 80 }],
               })
-              const decisions = yield* Effect.all(
-                [firstClient.submitOrder(firstPayload), secondClient.submitOrder(secondPayload)],
+              yield* server.seam.holdOnce
+              const [contested, sibling] = yield* Effect.all(
+                [
+                  firstClient.submitOrder(firstPayload),
+                  Effect.gen(function*() {
+                    yield* server.seam.held
+                    const settled = yield* secondClient.submitOrder(secondPayload)
+                    yield* server.seam.release
+                    return settled
+                  }),
+                ],
                 { concurrency: 'unbounded' },
               )
-              return yield* Effect.forEach(decisions, classifyCreditOutcome)
+              return yield* Effect.forEach([contested, sibling], classifyCreditOutcome)
             }),
         ),
         Then('exactly one order is allocated and the other is held for the shortfall')((s) => {

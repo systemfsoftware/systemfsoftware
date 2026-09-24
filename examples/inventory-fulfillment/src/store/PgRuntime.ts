@@ -1,11 +1,14 @@
 import { layer as pgClientLayer } from '@effect/sql-pg/PgClient'
 import { Config, Context, Duration, Effect, Layer, Redacted } from 'effect'
 import { Pool } from 'pg'
-import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.js'
-import { InventoryStore } from '../inventory/InventoryStore.js'
-import { ReservationLog } from '../ports/ReservationLog.js'
-import { SettlementStore } from '../ports/SettlementStore.js'
-import { DrizzleSession } from './DrizzleSession.js'
+import { FulfillmentConfig } from '../fulfillment/FulfillmentConfig.service.js'
+import { InventoryStore } from '../inventory/InventoryStore.service.js'
+import { ReservationLog } from '../ports/ReservationLog.service.js'
+import { SettlementStore } from '../ports/SettlementStore.service.js'
+import { DrizzleSession, layer as drizzleSessionLayer } from './DrizzleSession.js'
+import { layer as inventoryStoreLayer } from './InventoryStoreDrizzle.js'
+import { layer as reservationLogLayer } from './ReservationLogDrizzle.js'
+import { layer as settlementStoreLayer } from './SettlementStoreDrizzle.js'
 
 const requiredEnv = Effect.all({
   databaseUrl: Config.String('DATABASE_URL'),
@@ -19,11 +22,7 @@ export interface PgRuntimeService {
 
 export class PgRuntime extends Context.Service<PgRuntime, PgRuntimeService>()(
   '@systemfsoftware/example-inventory-fulfillment/store/PgRuntime',
-) {
-  static Live: Layer.Layer<
-    DrizzleSession | InventoryStore | SettlementStore | ReservationLog | PgRuntime | FulfillmentConfig
-  >
-}
+) {}
 
 export const rawClient: Layer.Layer<PgRuntime> = Layer.effect(
   PgRuntime,
@@ -45,14 +44,16 @@ const clientLayer = Layer.unwrap(
 )
 
 const ports = Layer.mergeAll(
-  InventoryStore.Live,
-  SettlementStore.Live,
-  ReservationLog.Live,
+  inventoryStoreLayer,
+  settlementStoreLayer,
+  reservationLogLayer,
   Layer.succeed(FulfillmentConfig, { maxRetries: 8, retryInterval: Duration.millis(50) }),
 )
 
-PgRuntime.Live = ports.pipe(
-  Layer.provideMerge(DrizzleSession.Live.pipe(Layer.provide(clientLayer))),
+export const PgRuntimeLive: Layer.Layer<
+  DrizzleSession | InventoryStore | SettlementStore | ReservationLog | PgRuntime | FulfillmentConfig
+> = ports.pipe(
+  Layer.provideMerge(drizzleSessionLayer.pipe(Layer.provide(clientLayer))),
   Layer.provideMerge(rawClient),
   Layer.orDie,
 )

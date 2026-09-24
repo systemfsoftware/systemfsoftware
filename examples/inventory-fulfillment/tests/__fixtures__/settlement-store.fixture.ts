@@ -1,25 +1,5 @@
 import * as Pglite from '@effect/sql-pglite/PgliteClient'
-import {
-  auditEvents,
-  DrizzleSession,
-  Fulfillment,
-  Inventory,
-  reservations,
-  SettlementStore,
-  stockLots,
-  user,
-  warehouses,
-} from '@systemfsoftware/example-inventory-fulfillment'
-import type {
-  CreditObservation,
-  CreditProof,
-  SettlementCharge,
-  SettlementCommand,
-  SettlementStoreSeed,
-  SettlementStoreService,
-  StockObservation,
-  StockProof,
-} from '@systemfsoftware/example-inventory-fulfillment'
+import { Fulfillment, Inventory, Persistence, Settlement } from '@systemfsoftware/example-inventory-fulfillment'
 import { DateTime, Effect, Layer, Option, Result, Schema as S } from 'effect'
 import { dual } from 'effect/Function'
 
@@ -30,7 +10,7 @@ export const SECOND_LOT = 'lot-kettle'
 export const FIRST_SKU = 'sku-teapot'
 export const SECOND_SKU = 'sku-kettle'
 
-export const settlementSeed = (): SettlementStoreSeed => ({
+export const settlementSeed = (): Settlement.Store.SettlementStoreSeed => ({
   warehouses: [{ warehouseId: 'warehouse-central', region: 'central' }],
   lots: [
     { lotId: FIRST_LOT, sku: FIRST_SKU, warehouseId: 'warehouse-central', quantityOnHand: 10, version: 1 },
@@ -54,15 +34,16 @@ export const settlementSeed = (): SettlementStoreSeed => ({
   ],
 })
 
-export const settlementStoreWorld: Layer.Layer<DrizzleSession> = DrizzleSession.Test.pipe(
-  Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)),
-)
+export const settlementStoreWorld: Layer.Layer<Persistence.DrizzleSession.DrizzleSession> = Persistence.DrizzleSession
+  .layerTest
+  .pipe(Layer.provideMerge(Pglite.layer().pipe(Layer.orDie)))
 
 const seedPostgres = Effect.gen(function*() {
-  const db = yield* DrizzleSession
+  const db = yield* Persistence.DrizzleSession.DrizzleSession
   const at = DateTime.toDate(DateTime.makeUnsafe('2026-01-01T00:00:00.000Z'))
-  yield* db.insert(warehouses).values({ id: 'warehouse-central', region: 'central' }).onConflictDoNothing()
-  yield* db.insert(stockLots).values([
+  yield* db.insert(Persistence.Tables.warehouses).values({ id: 'warehouse-central', region: 'central' })
+    .onConflictDoNothing()
+  yield* db.insert(Persistence.Tables.stockLots).values([
     {
       id: FIRST_LOT,
       sku: FIRST_SKU,
@@ -80,7 +61,7 @@ const seedPostgres = Effect.gen(function*() {
       expiresAt: null,
     },
   ]).onConflictDoNothing()
-  yield* db.insert(user).values([
+  yield* db.insert(Persistence.Tables.user).values([
     {
       id: FIRST_CUSTOMER,
       name: 'Customer One',
@@ -108,41 +89,55 @@ const seedPostgres = Effect.gen(function*() {
   ]).onConflictDoNothing()
 })
 const resetPostgres = Effect.gen(function*() {
-  const db = yield* DrizzleSession
+  const db = yield* Persistence.DrizzleSession.DrizzleSession
   yield* Effect.orDie(seedPostgres)
-  yield* db.delete(auditEvents).pipe(Effect.orDie, Effect.asVoid)
-  yield* db.delete(reservations).pipe(Effect.orDie, Effect.asVoid)
-  yield* db.update(stockLots).set({ quantityOnHand: 10, version: 1 }).pipe(Effect.orDie, Effect.asVoid)
-  yield* db.update(user).set({ outstandingBalance: 0, creditVersion: 1 }).pipe(Effect.orDie, Effect.asVoid)
+  yield* db.delete(Persistence.Tables.auditEvents).pipe(Effect.orDie, Effect.asVoid)
+  yield* db.delete(Persistence.Tables.reservations).pipe(Effect.orDie, Effect.asVoid)
+  yield* db.update(Persistence.Tables.stockLots).set({ quantityOnHand: 10, version: 1 }).pipe(
+    Effect.orDie,
+    Effect.asVoid,
+  )
+  yield* db.update(Persistence.Tables.user).set({ outstandingBalance: 0, creditVersion: 1 }).pipe(
+    Effect.orDie,
+    Effect.asVoid,
+  )
 })
 
 /** Runs one law against both adapters and reports what each of them answered. */
 export const acrossStores = <A, E>(
-  law: Effect.Effect<A, E, SettlementStore>,
-): Effect.Effect<{ readonly memory: A; readonly postgres: A }, E, DrizzleSession> =>
+  law: Effect.Effect<A, E, Settlement.Store.SettlementStore>,
+): Effect.Effect<{ readonly memory: A; readonly postgres: A }, E, Persistence.DrizzleSession.DrizzleSession> =>
   Effect.gen(function*() {
-    const memory = yield* Effect.provide(law, SettlementStore.memory(settlementSeed()))
+    const memory = yield* Effect.provide(law, Settlement.Memory.layer(settlementSeed()))
     yield* resetPostgres
-    const postgres = yield* Effect.provide(law, SettlementStore.Live)
+    const postgres = yield* Effect.provide(law, Settlement.Drizzle.layer)
     return { memory, postgres }
   })
 
 export const readCreditOf: {
-  (customerId: string): (store: SettlementStoreService) => Effect.Effect<CreditObservation>
-  (store: SettlementStoreService, customerId: string): Effect.Effect<CreditObservation>
-} = dual(2, (store: SettlementStoreService, customerId: string) => Effect.orDie(store.readCredit(customerId)))
+  (customerId: string): (
+    store: Settlement.Store.SettlementStoreService,
+  ) => Effect.Effect<Settlement.Store.CreditObservation>
+  (
+    store: Settlement.Store.SettlementStoreService,
+    customerId: string,
+  ): Effect.Effect<Settlement.Store.CreditObservation>
+} = dual(
+  2,
+  (store: Settlement.Store.SettlementStoreService, customerId: string) => Effect.orDie(store.readCredit(customerId)),
+)
 
 export const lotVersionOf: {
-  (lotId: string): (stock: StockObservation) => number
-  (stock: StockObservation, lotId: string): number
-} = dual(2, (stock: StockObservation, lotId: string) => lotStateOf(stock, lotId).version)
+  (lotId: string): (stock: Settlement.Store.StockObservation) => number
+  (stock: Settlement.Store.StockObservation, lotId: string): number
+} = dual(2, (stock: Settlement.Store.StockObservation, lotId: string) => lotStateOf(stock, lotId).version)
 
 export const lotQuantityOf: {
-  (lotId: string): (stock: StockObservation) => number
-  (stock: StockObservation, lotId: string): number
-} = dual(2, (stock: StockObservation, lotId: string) => lotStateOf(stock, lotId).quantityOnHand)
+  (lotId: string): (stock: Settlement.Store.StockObservation) => number
+  (stock: Settlement.Store.StockObservation, lotId: string): number
+} = dual(2, (stock: Settlement.Store.StockObservation, lotId: string) => lotStateOf(stock, lotId).quantityOnHand)
 
-const lotStateOf = (stock: StockObservation, lotId: string) => {
+const lotStateOf = (stock: Settlement.Store.StockObservation, lotId: string) => {
   const lot = Option.fromUndefinedOr(
     stock.partitions.flatMap((partition) => partition.lots).find((lot) => lot.lotId === lotId),
   )
@@ -158,8 +153,8 @@ export interface SettlementAttempt {
   readonly sku: string
   readonly lotId: string
   readonly quantity: number
-  readonly creditProof: CreditProof
-  readonly stockProof: StockProof
+  readonly creditProof: Settlement.Store.CreditProof
+  readonly stockProof: Settlement.Store.StockProof
 }
 
 export interface ChargedSettlementAttempt extends SettlementAttempt {
@@ -173,8 +168,8 @@ const moneyOf = (value: number): Fulfillment.Credit.Money =>
 
 const chargeableCommandOf = (
   attempt: SettlementAttempt,
-  charge: Option.Option<SettlementCharge>,
-): SettlementCommand => ({
+  charge: Option.Option<Settlement.Store.SettlementCharge>,
+): Settlement.Store.SettlementCommand => ({
   orderId: attempt.orderId,
   customerId: attempt.customerId,
   events: [
@@ -203,8 +198,8 @@ const chargeableCommandOf = (
   charge,
 })
 
-export const settlementCommandOf = (attempt: ChargedSettlementAttempt): SettlementCommand =>
+export const settlementCommandOf = (attempt: ChargedSettlementAttempt): Settlement.Store.SettlementCommand =>
   chargeableCommandOf(attempt, Option.some({ amount: moneyOf(attempt.charge), proof: attempt.creditProof }))
 
-export const settlementCommandWithoutCharge = (attempt: SettlementAttempt): SettlementCommand =>
+export const settlementCommandWithoutCharge = (attempt: SettlementAttempt): Settlement.Store.SettlementCommand =>
   chargeableCommandOf(attempt, Option.none())

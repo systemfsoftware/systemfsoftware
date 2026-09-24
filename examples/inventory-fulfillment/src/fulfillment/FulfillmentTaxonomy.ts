@@ -1,5 +1,7 @@
 import { Span, Taxonomy } from '@systemfsoftware/trace-taxonomy'
 import { Schema as S } from 'effect'
+import { QuantityOnHand } from '../inventory/inventory.schema.js'
+import { Amount } from './credit.schema.js'
 
 export const FulfillmentSettle = Span.declare({
   id: 'inventory.fulfillment.settle',
@@ -13,7 +15,7 @@ export const ReservationCommit = Span.declare({
   attrs: S.Struct({
     'app.customer.id': S.String,
     'app.order.id': S.String,
-    'app.reservation.event.count': S.Finite,
+    'app.reservation.event.count': QuantityOnHand,
   }),
 })
 
@@ -21,7 +23,7 @@ export const CreditCharge = Span.declare({
   id: 'inventory.fulfillment.credit.charge',
   name: 'inventory.fulfillment.credit.charge',
   attrs: S.Struct({
-    'app.charge.amount': S.Finite,
+    'app.charge.amount': Amount,
     'app.customer.id': S.String,
   }),
 })

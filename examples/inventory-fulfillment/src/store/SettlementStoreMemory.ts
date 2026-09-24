@@ -1,13 +1,14 @@
-import { Array as Arr, Effect, HashMap, Option, Record as Record_, Ref } from 'effect'
+import { Array as Arr, Effect, HashMap, Layer, Option, Record as Record_, Ref } from 'effect'
 import type { CustomerTier } from '../fulfillment/credit.schema.js'
-import { CreditAccountNotFound } from '../fulfillment/decision.schema.js'
-import type {
-  SettlementCharge,
-  SettlementCommand,
-  SettlementOutcome,
-  SettlementStoreSeed,
-  SettlementStoreService,
-} from '../ports/SettlementStore.js'
+import { CreditAccountNotFound, StoreUnavailable } from '../fulfillment/decision.schema.js'
+import {
+  type SettlementCharge,
+  type SettlementCommand,
+  type SettlementOutcome,
+  SettlementStore,
+  type SettlementStoreSeed,
+  type SettlementStoreService,
+} from '../ports/SettlementStore.service.js'
 import { decodeCreditAccount, decodeCustomerTier, decodeWarehouseStockPartition } from './decode.js'
 import { type ClaimedLot, claimedLots, creditObservation, mintCreditProof, mintStockProof } from './SettlementProof.js'
 
@@ -75,7 +76,7 @@ const readCredit = (state: Ref.Ref<MemoryState>, customerId: string) =>
           return { account, tier, proof: mintCreditProof({ customerId, version: customer.version }) }
         }),
     })
-  })
+  }).pipe(Effect.catchTag('SchemaError', (cause) => Effect.fail(new StoreUnavailable({ cause }))))
 
 const readAllStock = (state: Ref.Ref<MemoryState>) =>
   Effect.gen(function*() {
@@ -101,7 +102,7 @@ const readAllStock = (state: Ref.Ref<MemoryState>) =>
       partitions,
       proof: mintStockProof(Record_.fromIterableWith(entries, ([lotId, lot]) => [lotId, lot.version])),
     }
-  })
+  }).pipe(Effect.mapError((cause) => new StoreUnavailable({ cause })))
 
 const matchesCharge = (customer: CustomerState, customerId: string, charge: SettlementCharge): boolean => {
   const observed = creditObservation(charge.proof)
@@ -172,12 +173,15 @@ const settle = (state: Ref.Ref<MemoryState>, command: SettlementCommand): Effect
         )),
   })
 
-export const make = (seed: SettlementStoreSeed): Effect.Effect<SettlementStoreService> =>
+const make = (seed: SettlementStoreSeed): Effect.Effect<SettlementStoreService> =>
   Effect.gen(function*() {
     const state = yield* Ref.make(initialStateOf(seed))
     return {
       readCredit: (customerId: string) => readCredit(state, customerId),
-      readAllStock: readAllStock(state).pipe(Effect.orDie),
+      readAllStock: readAllStock(state),
       settle: (command: SettlementCommand) => settle(state, command),
     }
   })
+
+export const layer = (seed: SettlementStoreSeed): Layer.Layer<SettlementStore> =>
+  Layer.effect(SettlementStore, make(seed))

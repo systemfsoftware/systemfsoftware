@@ -3,7 +3,7 @@ import * as Match from 'effect/Match'
 import * as Num from 'effect/Number'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { CreditAccount, CustomerTier } from './credit.schema.js'
+import { Amount, CreditAccount, CustomerTier } from './credit.schema.js'
 
 const CreditDecisionTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/example-inventory-fulfillment/CreditCheckDecision',
@@ -15,27 +15,25 @@ const CreditErrorTypeId: unique symbol = Symbol.for(
 )
 type CreditErrorTypeId = typeof CreditErrorTypeId
 
-const CreditAmount = S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0)))
-
 export class CreditGranted extends S.TaggedClass<CreditGranted>()('CreditGranted', {
   orderId: S.String,
-  overdraftAmount: CreditAmount,
+  overdraftAmount: Amount,
 }) {
   readonly [CreditDecisionTypeId] = CreditDecisionTypeId
 }
 
 export class CreditHold extends S.TaggedClass<CreditHold>()('CreditHold', {
   orderId: S.String,
-  shortfall: CreditAmount,
-  requiredDownpayment: CreditAmount,
+  shortfall: Amount,
+  requiredDownpayment: Amount,
 }) {
   readonly [CreditDecisionTypeId] = CreditDecisionTypeId
 }
 
 export class CreditLimitExceeded extends S.TaggedError<CreditLimitExceeded>()('CreditLimitExceeded', {
   customerId: S.String,
-  requested: CreditAmount,
-  available: CreditAmount,
+  requested: Amount,
+  available: Amount,
 }) {
   readonly [CreditErrorTypeId] = CreditErrorTypeId
 }
@@ -44,7 +42,7 @@ export class CreditCheckCommand extends S.Class<CreditCheckCommand>('CreditCheck
   orderId: S.String,
   tier: CustomerTier,
   account: CreditAccount,
-  requiredAmount: CreditAmount,
+  requiredAmount: Amount,
 }) {
   static readonly [Workflow.InstrumentationBrand] = {
     orderId: 'app.order.id',
