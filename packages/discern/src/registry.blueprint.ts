@@ -27,7 +27,7 @@ import { dual, identity } from 'effect/Function'
 import type * as Schema from 'effect/Schema'
 import type * as AiError from 'effect/unstable/ai/AiError'
 import type * as DecisionModel from 'effect/unstable/ai/DecisionModel'
-import { ask, type ClassifyDecision, on } from './decision.blueprint.js'
+import { ask, type ClassifyDecision, openClassifyOn } from './decision.blueprint.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import {
   invokeProcedure,
@@ -433,7 +433,7 @@ const buildRegistry = <
     if (found !== undefined) {
       return found
     }
-    const built = on(routeInput).classify({
+    const built = openClassifyOn(routeInput)({
       ...idFieldOf(settings.id, candidates.length === ids.length),
       instructions,
       criteria: criteriaOf(members, candidates),
