@@ -126,11 +126,14 @@ const orphanContext = <Missing>(): Context.Context<Missing> => Context.makeUnsaf
 const withOrphanRequirements = <RShared, RFreshReq>(
   layerDef: Layer.Layer<RShared>,
 ): Layer.Layer<RShared | RFreshReq> =>
-  Layer.unwrap(
-    Effect.map(Layer.build(layerDef), (built) =>
+  layerDef.pipe(
+    Layer.build,
+    Effect.map((built) =>
       Layer.succeedContext(
         built.pipe(Context.merge(orphanContext<RFreshReq>()), Context.merge(Context.empty())),
-      )),
+      )
+    ),
+    Layer.unwrap,
   )
 
 export const makeFeature = (deps: EffectVitestBindings): FeatureFn => {
