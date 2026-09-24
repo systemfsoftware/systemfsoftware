@@ -2,6 +2,12 @@ name: Checks (reusable)
 
 on:
   workflow_call:
+    inputs:
+      profile:
+        description: Conformance profile the test jobs run at; `local` for a pull request, `per-change` for the merge queue, main, and the release gate
+        required: false
+        type: string
+        default: per-change
 
 permissions:
   contents: read
@@ -24,9 +30,10 @@ jobs:
       - name: Latest timing record, main's first
         env:
           GH_TOKEN: ${{ github.token }}
+          RECORD: test-timings-${{ inputs.profile }}
         run: |
           mkdir -p .timings/previous
-          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=test-timings&per_page=100" \
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$RECORD&per_page=100" \
             --jq '[.artifacts[] | select(.expired | not)] | (map(select(.workflow_run.head_branch == "main"))[0] // .[0]).id // empty') || id=
           if [ -n "$id" ] && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > .timings/previous.zip; then
             unzip -o -q .timings/previous.zip -d .timings/previous || true
@@ -85,6 +92,9 @@ jobs:
       CI: "true"
     steps:
       - uses: actions/checkout@v7
+      - name: Select the conformance profile
+        if: inputs.profile == 'local'
+        run: echo 'CONFORMANCE_PROFILE=local' >> "$GITHUB_ENV"
       - uses: ./.github/actions/install-deps
       - uses: denoland/setup-deno@v2
       - name: Turbo cache
@@ -173,6 +183,9 @@ jobs:
       CI: "true"
     steps:
       - uses: actions/checkout@v7
+      - name: Select the conformance profile
+        if: inputs.profile == 'local'
+        run: echo 'CONFORMANCE_PROFILE=local' >> "$GITHUB_ENV"
       - uses: ./.github/actions/install-deps
       - name: Turbo cache
         uses: actions/cache/restore@v6
@@ -218,7 +231,7 @@ jobs:
         run: $TIMINGS merge --previous .timings/previous/test-timings.json --parts .timings/parts --out .timings/test-timings.json --sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@v7
         with:
-          name: test-timings
+          name: test-timings-${{ inputs.profile }}
           path: .timings/test-timings.json
           retention-days: 30
 
