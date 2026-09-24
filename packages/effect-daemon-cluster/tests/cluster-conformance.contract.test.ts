@@ -1,0 +1,47 @@
+import { ClusterMedium } from '@systemfsoftware/effect-daemon-cluster'
+import { Conformance } from '@systemfsoftware/effect-daemon-conformance'
+import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Match } from 'effect'
+import { expect } from 'vitest'
+import { ClusterOracle, warmUpCluster } from './__fixtures__/cluster-oracle.js'
+
+const Feature = makeFeature({ it, layer })
+
+const describeResult = (result: Conformance.ScenarioResult): string =>
+  Match.value(result).pipe(
+    Match.tag('ScenarioCompared', (compared) =>
+      Match.value(compared.comparison).pipe(
+        Match.tag('TracesConform', (conform) => `${conform.scenario}:TracesConform`),
+        Match.orElse((diverge) => `${diverge.scenario}:TracesDiverge@${diverge.index}`),
+      )),
+    Match.tag('ScenarioStalled', (stalled) => `${stalled.scenario}:ScenarioStalled`),
+    Match.exhaustive,
+  )
+
+Feature('Supervising cluster children')
+  .withScenarioLayer(ClusterOracle)
+  .liveClock()
+  .body(({ scenario }) => {
+    scenario(
+      'Every scripted child lifecycle matches the fiber reference',
+      Gherkin.Do.pipe(
+        Given('a cluster runner that has taken ownership of its shards')('warm', () => warmUpCluster),
+        When('the conformance catalogue is proven against the fiber reference')(
+          'report',
+          () => Conformance.prove(ClusterMedium.conformanceDriver),
+        ),
+        Then('every lifecycle compares as conforming')((s) => {
+          expect(s.report.results.map(describeResult)).toEqual([
+            'ready-then-exit-normal:TracesConform',
+            'ready-then-exit-abnormal:TracesConform',
+            'never-become-ready:TracesConform',
+            'ignores-graceful-stop:TracesConform',
+            'one-for-all-group-stop:TracesConform',
+          ])
+        }),
+        And('the medium is held only to the inferred reporting and eventual group stop it declares')((s) => {
+          expect(s.report.declaration).toEqual(ClusterMedium.declaration)
+        }),
+      ),
+    )
+  })
