@@ -728,7 +728,7 @@ function makeWithReactivity(
         get.refresh(atom)
       }))
       get.subscribe(atom, (value) => get.setSelf(value))
-      return atom.read(get)
+      return get.once(atom)
     }
     return { ...atom, read }
   }

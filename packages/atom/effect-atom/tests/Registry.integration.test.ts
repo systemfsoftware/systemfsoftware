@@ -1005,7 +1005,7 @@ Feature('Keeping a value that is still loading available to every reader')
       ),
     )
     scenario(
-      'Unsubscribing from a value that was never read removes it entirely',
+      'A listener builds the value it watches, and leaving removes it',
       Gherkin.Do.pipe(
         Given('a value in a plain registry')('ctx', () =>
           Effect.sync(() => {
@@ -1018,7 +1018,7 @@ Feature('Keeping a value that is still loading available to every reader')
             const cancel = Atom.Registry.subscribe(s.ctx.page, s.ctx.value, () => {})
             const maybeNode = Atom.Registry.getNodes(s.ctx.page).get(s.ctx.value)
             if (maybeNode === undefined) {
-              throw new Error('expected a node after the value was touched')
+              throw new Error('expected a node after the listener attached')
             }
             const before = maybeNode.currentState()
             cancel()
@@ -1026,8 +1026,8 @@ Feature('Keeping a value that is still loading available to every reader')
             const keys = HashSet.fromIterable(Atom.Registry.getNodes(s.ctx.page).keys())
             return { before, hasValue: HashSet.has(keys, s.ctx.value) }
           })),
-        Then('the never-built value was removed once the listener left')((s) => {
-          expect(s.result.before).toBe('uninitialized')
+        Then('the listener built the value, and it was removed once the listener left')((s) => {
+          expect(s.result.before).toBe('valid')
           expect(s.result.hasValue).toBe(false)
         }),
       ),

@@ -12,11 +12,11 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Consumers of `@systemfsoftware/effect-atom` and `@systemfsoftware/effect-atom-react` get a reactive toolkit that holds no process-global state, refuses malformed hydration payloads visibly, and follows the same `compound-packs` design law as every conformant sibling, with existing runtime behaviour intact.
-- **Means:** Repair the verified violations in the current topology first, then decompose both packages into role-named modules behind one namespace barrel each, then add the schema-law, refusal, and type-surface layers (KD4, KTD1-KTD9).
+- **Objective:** Consumers of `@systemfsoftware/effect-atom` and `@systemfsoftware/effect-atom-react` get a reactive toolkit that holds no process-global state, refuses malformed hydration payloads visibly, tells each listener about every change it watches exactly once after the write that caused it, and follows the same `compound-packs` design law as every conformant sibling.
+- **Means:** Repair the verified violations in the current topology first, then decompose both packages into role-named modules behind one namespace barrel each, then add the schema-law, refusal, and type-surface layers (KD4, KTD1-KTD9). Then fix propagation against a model spec this repo owns and measure the engine with CI mutation testing (KD9, KD10, KTD13, KTD17).
 - **Product Authority:** The two declared Compound Packs (`cell-architecture`, `boundary-testing`), the root `AGENTS.md` standing laws (use of `@systemfsoftware/effect-schema-vite`), and the precedent established by `docs/plans/2026-09-23-1600-refactor-discern-cell-architecture-plan.md`. This plan governs `packages/atom/effect-atom` and `packages/atom/effect-atom-react` together; other packages are not active scope.
 - **Execution profile:** `ce-work` via `lfg`, one branch, one pull request; units land in U-ID dependency order as atomic commits.
-- **Stop conditions:** Stop and report when an existing integration scenario can only pass by changing observable behaviour that no R-ID sanctions, or when a unit would need a TypeId literal changed (R3).
+- **Stop conditions:** Stop and report when an existing integration scenario can only pass by changing observable behaviour that no R-ID sanctions, when a unit would need a TypeId literal changed (R3), or when the engine-only mutate glob cannot finish inside the CI Mutation budget (report the measured time).
 - **Open Blockers:** None.
 
 ---
@@ -33,6 +33,8 @@ The packages currently pass every mechanical gate (`oxlint --config oxlint.confi
 
 Specifically: `Hydration.ts` and `Hooks.ts` maintain module-scope `WeakMap` registries that survive across test runs and split under dual-bundle installs; `HostTimer.ts` holds a module-level mutable clock reference; `Registry.ts` models a multi-instance runtime handle as a singleton `Context.Service`; the hydration rehydration seam is an untyped `{ encode, decode }` pair that silently swallows decode errors with a bare `catch { return }`; the react package exports a flat surface with no namespace barrel and masks a mis-typed Suspense throw helper with a `@ts-expect-error`; and neither package ships `src/schema-laws.test.ts`, `test-types/*.tst.ts`, or `*.refusal.test.ts`. Without these, the package remains unconformant under doctrine despite passing local linters.
 
+The specification is also thin. The model-based differential spec alone covered 27.6% of `src/` lines and 15.2% of branches; it knew only plain synchronous numbers, and it passed an engine change that broke three existing scenarios. Nothing measures test strength: atom was excluded from mutation testing (AT4), and `atom-browser.resource.ts` sat at 32.8% line coverage because the core package has no browser project.
+
 ### Key Decisions
 
 - KD1. Break the public surface freely. (session-settled: user-directed — chosen over preserving the published surface: doctrine wins over fork drop-in compatibility; behaviour is preserved through the existing 15 integration suites while exported names and topology may move). Governs R1, R2, R4, R5, R7, R15, R16.
@@ -42,6 +44,9 @@ Specifically: `Hydration.ts` and `Hooks.ts` maintain module-scope `WeakMap` regi
 - KD5. Scope covers both packages in one unified artifact. A shared Registry handle contract binds core and react; neither can conform meaningfully without the other. Governs R1 through R12.
 - KD6. Rules without subject matter in atom are explicitly inapplicable. Atom contains no Sandwich chains, Workflow deciders, or Context.Service ports; those six rules are documented as N/A rather than forced into reactive primitives. Governs R13.
 - KD7. The Registry handle is separated from its environment binding. The Registry interface is a hot runtime handle with TypeId and Pipeable; Context.Service binding is provided on demand via a parameterised constructor rather than an ambient singleton. Governs R4, R5, R15.
+- KD8. A listener on a derived value nobody has read hears that value's later changes. (session-settled: user-directed — chosen over documenting it as intended laziness: the user confirmed the silent subscriber is a bug). Governs R17.
+- KD9. The registry is checked against a model this repo owns, never against upstream `effect/unstable/reactivity`. (session-settled: user-directed — chosen over an upstream differential: upstream shares the fork's bugs, and REPO-O1 gives it no authority). Governs R20, R21.
+- KD10. Test strength is measured by mutation score and by what the spec alone exercises, not by suite-wide line coverage. (session-settled: user-approved — chosen over accepting 91% suite line coverage: the spec alone covered 27.6% of lines and passed three regressions). Governs R20, R22, R23.
 
 ### Destructive Review Record
 
@@ -67,17 +72,41 @@ Three structural assumptions surfaced before convergence:
 - **Added:** Paired negative refusal suites (`*.refusal.test.ts`), `src/schema-laws.test.ts` via `@systemfsoftware/effect-schema-vite`, TSTyche type-surface laws (`test-types/*.tst.ts`), and an executable contract test for React Suspense thenable throwing (`pin-dependency-semantics.md`).
 - **Removed:** Module-level `WeakMap` registries in `Hydration.ts` and `Hooks.ts`, module `let hostClock` in `HostTimer.ts`, and static unconditional `layer: Layer.Layer<AtomRegistry>` in `Registry.ts`.
 
+**Second cycle (propagation and verification extension):**
+
+1. **Assumption 1:** The propagation fixes, the model widening, CI mutation enrollment, and the core browser project ship in the same pull request as the conformance work.
+2. **Assumption 2:** Synchronous effect atoms in the model are enough to specify R19, one effect run per invalidation.
+3. **Assumption 3:** An engine-only mutate glob, run against the full core suite, finishes inside the 30-minute CI Mutation budget.
+
+**Selected Lens:** Scope Challenge (rotated from Substitution).
+**Rationale:** The extension joins independent objectives: correct propagation, a stronger specification, and measurement infrastructure.
+
+**Three Failures Under Scope Challenge:**
+
+1. _Measurement stops at a number:_ Success Criterion 9 only records the first mutation score, so "measure" and "strengthen" were split without an owner for the second half. The test-layer mutation gate requires every survivor to be killed or named equivalent.
+2. _R19 has two owners that cover different cases:_ U16 cited R19, but the defect that broke R19 came through async RPC effects and reactivity keys, which the synchronous model cannot express.
+3. _Browser proof and engine proof are unrelated work:_ U18 shares no file or dependency with U15-U17, so it was sequenced as if it belonged to the spec track.
+
+**Convergence Delta:**
+
+- **Kept:** one pull request (a split would stack on an unmerged #505 and add a second plan under REPO-D2), the engine-only mutate glob (KTD17), and synchronous effects in the model.
+- **Replaced:** Success Criterion 9's record-only wording, replaced by kill-or-name for every survivor. U16's R19 claim now covers synchronous effects only, and KTD14's scenarios own the async cases.
+- **Added:** U21, which dispositions surviving mutants from the first CI report.
+- **Removed:** nothing.
+
 ### Test Layer Placement & Admission Matrix
 
 Admitted per `skill://test-layer-selection`. No isolated unit tests for internal helpers or private glue modules are permitted.
 
-| Target File / Suffix                  | Admitted Test Kind                | Permitted Location                                   | Why / Invariant                                                                                                                           |
-| :------------------------------------ | :-------------------------------- | :--------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| `*.schema.ts` (Hydration, Result)     | Schema codec laws + Refusal tests | `src/schema-laws.test.ts`, `tests/*.refusal.test.ts` | `ruleOfSchemas`: bidirectional round-trip stability + explicit negative parse failure verification (`refusals-beside-generated-laws.md`). |
-| `*.handle.ts` (`Registry`, `AtomRef`) | In-process integration tests      | `tests/*.integration.test.ts`                        | Sociable execution verifying state isolation across concurrent registries; zero mocks on internal glue (`no-mocks-on-internal-glue.md`).  |
-| `*.resource.ts` (`Atom` constructors) | Law & property tests              | `tests/*.property.test.ts`                           | PBT verifying atom identity, dependency tracking, and combinator composition over arbitrary values.                                       |
-| Technology Boundary (React Suspense)  | Contract test                     | `tests/suspense-thenable.contract.test.ts`           | Pins React thenable-throwing protocol semantics without relying on unverified prose comments (`pin-dependency-semantics.md`).             |
-| Type Surface (`Atom`, `Registry`)     | TSTyche type laws                 | `test-types/*.tst.ts`                                | Pins exact type inference, variance constraints, and type-level rejection of invalid atom compositions.                                   |
+| Target File / Suffix                                        | Admitted Test Kind                | Permitted Location                                   | Why / Invariant                                                                                                                           |
+| :---------------------------------------------------------- | :-------------------------------- | :--------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| `*.schema.ts` (Hydration, Result)                           | Schema codec laws + Refusal tests | `src/schema-laws.test.ts`, `tests/*.refusal.test.ts` | `ruleOfSchemas`: bidirectional round-trip stability + explicit negative parse failure verification (`refusals-beside-generated-laws.md`). |
+| `*.handle.ts` (`Registry`, `AtomRef`)                       | In-process integration tests      | `tests/*.integration.test.ts`                        | Sociable execution verifying state isolation across concurrent registries; zero mocks on internal glue (`no-mocks-on-internal-glue.md`).  |
+| `*.resource.ts` (`Atom` constructors)                       | Law & property tests              | `tests/*.property.test.ts`                           | PBT verifying atom identity, dependency tracking, and combinator composition over arbitrary values.                                       |
+| Technology Boundary (React Suspense)                        | Contract test                     | `tests/suspense-thenable.contract.test.ts`           | Pins React thenable-throwing protocol semantics without relying on unverified prose comments (`pin-dependency-semantics.md`).             |
+| Type Surface (`Atom`, `Registry`)                           | TSTyche type laws                 | `test-types/*.tst.ts`                                | Pins exact type inference, variance constraints, and type-level rejection of invalid atom compositions.                                   |
+| Registry propagation (`atom-node.ts`, `registry-engine.ts`) | Model differential + metamorphic  | `tests/*.differential.test.ts`                       | The model is the specification; generated programs check the registry against it (KD9).                                                   |
+| Browser resources (`atom-browser.resource.ts`)              | Browser integration               | core `tests/browser/*.integration.test.ts`           | Real Chromium events; acceptance and refusal paired (`real-system-oracles.md`).                                                           |
 
 ### Requirements
 
@@ -151,6 +180,16 @@ Admitted per `skill://test-layer-selection`. No isolated unit tests for internal
 - R14. Ship a changeset under `REPO-R2`.
   - Both packages' build hashes change; author a `.changeset/` intent declaring the breaking public surface modifications and consumer-observable improvements.
 
+#### Propagation Correctness and Specification Depth
+
+- R17. A listener hears every change to the value it watches, including a derived value nobody had read when the listener attached. Governed by KD8.
+- R18. A listener hears a value only after the write or outermost batch that caused it finishes, never a value from partway through propagation, and not at all when a batch leaves the value where it started.
+- R19. One invalidation re-runs an effect atom's effect at most once.
+- R20. An executable model states what a subscriber hears and what a read returns, and a differential spec checks the registry against it over generated programs. The programs cover plain and derived values, synchronous effect atoms and their run counts, `immediate` subscribe, `mount`, `modify`, `refresh`, nested batches, writes from inside listeners, idle-TTL eviction, and `dispose`. Governed by KD9, KD10.
+- R21. The registry satisfies two relations with no reference at all: splitting a batch into separate writes changes no read, and batching never adds a notification. Governed by KD9.
+- R22. The core propagation engine is enrolled in CI's advisory Mutation workflow, so every PR that changes it reports a mutation score. Governed by KD10.
+- R23. `atom-browser.resource.ts` behaviour (window focus signal, refresh on focus, search parameters) is proven in a real browser from the core package, with acceptance and refusal paired. Governed by KD10. (pack: boundary-testing, real-system-oracles.md)
+
 ### Key Flows
 
 - F1. Registry Lifecycle and State Isolation
@@ -219,11 +258,15 @@ Admitted per `skill://test-layer-selection`. No isolated unit tests for internal
 - Adding `@systemfsoftware/effect-schema-vite` schema laws, refusal suites, and TSTyche type-surface tests.
 - Mapping all existing integration scenarios into a disposition table.
 - Shipping a `.changeset/` entry for the breaking release.
+- Fixing the propagation defects the model spec found (R17-R19) and widening the spec to the whole registry operation set (R20, R21).
+- CI mutation enrollment for the core propagation engine, amending AT4 (R22).
+- A core browser project proving the browser resources (R23).
 
 #### Deferred for Later
 
 - Creating new Oxlint rules in `@systemfsoftware/oxlint-plugin-cell-architecture` to mechanically enforce these review-gated patterns across other packages.
-- Enrolling `packages/atom` in local or CI Stryker mutation gates (governed by AGENTS.md AT4).
+- Enrolling the React package, or core modules beyond the propagation engine, in CI mutation. Local mutation runs stay forbidden (REPO-D3).
+- Hydration, serializable atoms, and async (non-synchronous) effects in the propagation model.
 - Retiring or pruning little-used public surfaces (e.g. `AtomHttpApi`, `AtomRpc`) — the fork's full breadth is retained.
 
 #### Outside This Product's Identity
@@ -241,12 +284,16 @@ Admitted per `skill://test-layer-selection`. No isolated unit tests for internal
 5. `pnpm dts:check` and `pnpm api:check` pass in both packages with updated API reports.
 6. A `.changeset/` file is present declaring the major breaking release.
 7. Architectural review confirms no module-level mutable binding, mutable collection, or live registry instance exists in either package's `src/`.
+8. The differential specs alone cover at least 90% of branches in `src/atom-node.ts` and at least 70% in `src/registry-engine.ts` (52.4% and 28.6% before). Branches still uncovered are listed with a reason in the pull request.
+9. The CI Mutation run reports a score for the enrolled engine files, and every mutant the first run leaves alive is killed or named equivalent in the pull request (U21).
+10. `src/atom-browser.resource.ts` reaches at least 90% line coverage in the core browser project.
+11. Every failure count an agent reports comes from a run with bail disabled.
 
 ---
 
 ## Planning Contract
 
-**Product Contract preservation:** changed: R1 (site list extended from five to eight after research found `Atom.ts:2551`, `AtomRef.ts:155`, `Browser.ts:319`, and `RegistryContext.ts:50`), R4 bullet 2 (`Registry.layer(tag, options?)` signature), R5 (premise refuted: neither `AtomHttpApi.ts` nor `AtomRpc.ts` references `AtomRegistry`; re-scoped to their fallback onto the module-level `Atom.runtime`), R7 (now cites R16), R12 and KD1 (file count corrected from 17 to 15); added R15 and R16 for handle-protocol and single-barrel obligations the brainstorm's list missed. The objective of full applicable-rule conformance is unchanged.
+**Product Contract preservation:** changed: R1 (site list extended from five to eight after research found `Atom.ts:2551`, `AtomRef.ts:155`, `Browser.ts:319`, and `RegistryContext.ts:50`), R4 bullet 2 (`Registry.layer(tag, options?)` signature), R5 (premise refuted: neither `AtomHttpApi.ts` nor `AtomRpc.ts` references `AtomRegistry`; re-scoped to their fallback onto the module-level `Atom.runtime`), R7 (now cites R16), R12 and KD1 (file count corrected from 17 to 15); added R15 and R16 for handle-protocol and single-barrel obligations the brainstorm's list missed. It also adds KD8-KD10 and R17-R23, and moved core-engine CI mutation enrollment from Deferred to In Scope, which amends AT4. The objective of full applicable-rule conformance is unchanged.
 
 ### Key Technical Decisions
 
@@ -260,6 +307,15 @@ Admitted per `skill://test-layer-selection`. No isolated unit tests for internal
 - KTD8. **Modules take a role suffix when one of the six roles fits; others are named for their concern.** Atom definitions and combinators are `*.resource.ts` (cold definitions a registry evaluates); `Registry` and refs are `*.handle.ts`; data contracts and codecs are `*.schema.ts`; `Registry.Current` is `*.service.ts`. React components and hooks, and the internal node engine, match no role and take concern names, which `service-and-layer-boundaries.md` §1 permits for implementation modules. Each package ships one entry (`.` → `src/mod.ts`) with one barrel (`Atom`, `AtomReact`); nested namespaces (`Atom.Registry`, `Atom.AsyncResult`, `Atom.Hydration`, `Atom.Ref`, `Atom.HttpApi`, `Atom.Rpc`) replace today's seven subpath entries. Covers R7, R16. (pack: cell-architecture, single-namespace-barrel.md; pack: cell-architecture, service-and-layer-boundaries.md)
 - KTD9. **Verification layers copy the conformant siblings.** Both `vitest.config.ts` files add `inlineSchemaTests()` and include `src/**/*.test.ts`, mirroring `packages/effect-microsandbox/vitest.config.ts`; refusal suites are `effect-gherkin-spec` `scenarioOutline` tables in `tests/*.refusal.test.ts`, following `packages/effect-memfs/tests/learn-why-a-request-was-turned-down.integration.test.ts`; TSTyche uses `tstyche.json` with `rejectAnyType` and `rejectNeverType` plus a `test:types` script, mirroring `packages/trace-spec`. Root `gate:tasks` already runs `test:types`. Covers R8, R9, R10.
 - KTD10. **The twelve `throw` sites stay defects.** They guard dual-dispatch misuse (`Atom.ts:1228-1263`, `AtomHttpApi.ts:85-142`, `AtomRpc.ts:95,412`), a disposed registry (`Registry.ts:679`), and builder exhaustiveness (`Result.ts` builder), all programmer errors with no domain refusal to type; `four-channel-contracts.md` has no cell here to apply to (R13). Only the serializable `getOrThrow` pair changes (KTD5).
+- KTD11. **Subscribing computes the node before the listener attaches.** An uninitialized node ignores invalidation, and its first computation would otherwise reach the listener as a change. Covers R17; inherits KD8.
+- KTD12. **The model lives in the test fixture as a pure step function.** `tests/__fixtures__/registry-program.fixture.ts` reduces a program to the lines a subscriber hears and a read returns; the observed side runs the same program on a fresh registry. Cross-subscriber order within one write is normalized away, while each subscriber's own sequence and its position between reads stay exact. Covers R20; inherits KD9.
+- KTD13. **Propagation is push-pull.** A change marks direct children stale and further descendants `checking`. Reading a `checking` node first brings its parents up to date and rebuilds only if one of them changed. Listeners fire after the outermost write or batch finishes, and a batch notifies only nodes whose value ends different from its value before the batch (`BatchState.valueBeforeBatch`, compared with the atom's own equality). alien-signals uses the same shape: `Dirty` and `Pending` flags, with `checkDirty` on read ([`src/system.ts`](https://github.com/stackblitz/alien-signals/blob/master/src/system.ts)). Covers R18.
+- KTD14. **The two reactivity-key scenarios are the spec for R19.** `AtomRpc` and `AtomHttpApi` keep asserting three server calls (read, submit, one refetch); the engine changes, not the scenarios. Covers R19.
+- KTD15. **The never-read unsubscribe scenario keeps its removal assertion and drops its `uninitialized` pin.** KTD11 makes the node computed at subscribe, so `uninitialized` pinned the defect KD8 removes. Covers R17, R12.
+- KTD16. **Model time uses Vitest fake timers driven by an `Advance` program step, not Effect's TestClock.** Differential targets run on the live runtime (`docs/solutions/developer-experience/differential-targets-run-on-the-live-clock.md`), and registry idle timers go through the host timer that fake timers control, as `tests/Registry.integration.test.ts` already relies on. Covers R20.
+- KTD17. **Mutation enrollment covers the propagation engine only.** `packages/atom/effect-atom/stryker.config.ts` mirrors `packages/effect-daemon-spec/stryker.config.ts` with a mutate glob of `src/atom-node.ts` and `src/registry-engine.ts`: the files the model specifies, sized for the 30-minute per-package budget in `.github/workflows/mutation.yml`. The workflow step is `continue-on-error`, so the first run is a baseline, not a gate. The config is an Evaluator surface and lands in its own commit. `src/internal/node-lifetime.ts` stays excluded (AT4). Covers R22. (`docs/solutions/architecture-patterns/constraint-reaches-only-via-window-or-gate.md`: the glob is a window, so a renamed engine file must be re-added.)
+- KTD18. **The core package gains a browser Vitest project** mirroring `packages/atom/effect-atom-react/vitest.config.ts` (playwright provider, headless Chromium), scoped to `tests/browser/**`; the node project excludes that directory. AT6 extends to it. Covers R23. (pack: boundary-testing, real-system-oracles.md)
+- KTD19. **Agents report failure counts from `--bail=0` runs; no config changes.** The shared base sets `bail: 1` only when `AGENT` is set (`packages/toolchain/vitest-config/lib/base.js`), and CI never bails. A red agent run is re-run with `--bail=0` before any count is reported. Covers Success Criterion 11.
 
 ### High-Level Technical Design
 
@@ -313,9 +369,28 @@ sequenceDiagram
   S-->>T: source settles and Deferred completes the target
 ```
 
+Node states after U15. A change reaches direct children as `stale` and deeper descendants as `checking`; a read settles `checking` by pulling parents first (KTD13).
+
+```mermaid
+stateDiagram-v2
+  [*] --> uninitialized
+  uninitialized --> valid: first read or subscribe (KTD11)
+  valid --> stale: a parent changed
+  valid --> checking: an ancestor changed
+  checking --> valid: parents unchanged on read
+  checking --> stale: a parent changed on read
+  stale --> valid: rebuild on read
+  valid --> removed: no listeners, idle
+  stale --> removed: no listeners, idle
+  checking --> removed: no listeners, idle
+  removed --> [*]
+```
+
 ### Test Layer Admission
 
 Every test this plan adds passes `skill://test-layer-selection`: behaviour of the registry, hooks, and hydration is proven through public surfaces in in-process integration suites; schemas get generated laws plus refusal tables; the React Suspense dependency gets one contract test; types get TSTyche pins. No test targets `internal/` modules or private helpers, and no process is spawned. The Product Contract matrix row for `*.resource.ts` property tests is admitted but not required: this plan adds none, because no R-ID owns a combinator law that the retained integration scenarios do not already pin.
+
+The U15-U21 additions pass the same gate. The differential and metamorphic specs run in-process through `Atom.Registry`. The core browser project runs real Chromium under Vitest's playwright provider, as AT6 already admits. No test targets engine internals, and none spawns a process.
 
 ### Assumptions
 
@@ -323,31 +398,42 @@ Every test this plan adds passes `skill://test-layer-selection`: behaviour of th
 - `AtomReact.useAtomValue`-style member access satisfies the React hooks lint rules in `oxlint-config-recommended`; if not, the barrel keeps hook names and the finding is recorded in the PR.
 - The search-param coordinator keyed per registry is acceptable: two registries on one page batch their own URL writes.
 - Removing the React default registry is acceptable breakage under KD1; every existing React test already renders under a provider or will be given one (U3).
+- The reactivity-key refetch excess (4 calls instead of 3) is an engine defect introduced by the working-tree propagation changes, not a scenario error; its root cause is found during U15.
+- Synchronous effect atoms represent effect atoms well enough for R20. R19's async cases are owned by the two reactivity-key scenarios (KTD14).
 
 ### Sequencing
 
 Phase 1 repairs the current topology (U1-U8) so each behaviour change lands in a file reviewers already know. Phase 2 moves code without changing behaviour (U9, U10). Phase 3 adds verification layers against the final names (U11-U14). U7 lands before the other repairs that touch registry call sites, so hooks and hydration change call shape once.
 
+Phase 4 (U15-U20) follows the landed conformance work. U15 lands the propagation fixes with the spec that found them. U16 and U17 widen the spec in order. U18 is independent of the spec track and can land at any point. U19 lands after U17 so the first mutation run measures the finished spec, and it ships in its own commit. U21 acts on that run's survivors. U20 records the result.
+
 ---
 
 ## Implementation Units
 
-| U-ID | Title                                           | Key files                                                                                 | Depends on |
-| ---- | ----------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------- |
-| U1   | Registry owns its clock and timer               | `src/Registry.ts`, `src/internal/HostTimer.ts`                                            | none       |
-| U7   | Registry handle protocol and `Registry.Current` | `src/Registry.ts`, `src/Atom.ts`, react `src/Hooks.ts`                                    | U1         |
-| U2   | Registry-local storage for React hook state     | `src/Registry.ts`, react `src/Hooks.ts`                                                   | U7         |
-| U3   | Explicit registry provision in React            | react `src/RegistryContext.ts`                                                            | U7         |
-| U4   | Suspense throw fix and thenable contract test   | react `src/Hooks.ts`                                                                      | U2         |
-| U5   | Typed hydration boundary                        | `src/Hydration.ts`, `src/Registry.ts`, `src/Atom.ts`                                      | U7         |
-| U6   | Remove remaining module singletons              | `src/Atom.ts`, `src/AtomRef.ts`, `src/Browser.ts`, `src/AtomHttpApi.ts`, `src/AtomRpc.ts` | U2         |
-| U8   | AtomRef handle protocol                         | `src/AtomRef.ts`, react `src/Hooks.ts`                                                    | U6         |
-| U9   | Core decomposition and `Atom` barrel            | all core `src/`, `tsdown.config.ts`, `package.json`, api-extractor configs                | U1-U8      |
-| U10  | React decomposition and `AtomReact` barrel      | all react `src/`, packaging configs                                                       | U9         |
-| U11  | Schema laws                                     | both `vitest.config.ts`, `src/schema-laws.test.ts`                                        | U9, U10    |
-| U12  | Refusal and boundary suites                     | `tests/*.refusal.test.ts`, react tests                                                    | U11        |
-| U13  | TSTyche type-surface pins                       | `test-types/`, `tstyche.json`                                                             | U9, U10    |
-| U14  | Disposition record, changeset, leaf docs        | `packages/atom/AGENTS.md`, READMEs, `.changeset/`                                         | U12, U13   |
+| U-ID | Title                                                   | Key files                                                                                 | Depends on   |
+| ---- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
+| U1   | Registry owns its clock and timer                       | `src/Registry.ts`, `src/internal/HostTimer.ts`                                            | none         |
+| U7   | Registry handle protocol and `Registry.Current`         | `src/Registry.ts`, `src/Atom.ts`, react `src/Hooks.ts`                                    | U1           |
+| U2   | Registry-local storage for React hook state             | `src/Registry.ts`, react `src/Hooks.ts`                                                   | U7           |
+| U3   | Explicit registry provision in React                    | react `src/RegistryContext.ts`                                                            | U7           |
+| U4   | Suspense throw fix and thenable contract test           | react `src/Hooks.ts`                                                                      | U2           |
+| U5   | Typed hydration boundary                                | `src/Hydration.ts`, `src/Registry.ts`, `src/Atom.ts`                                      | U7           |
+| U6   | Remove remaining module singletons                      | `src/Atom.ts`, `src/AtomRef.ts`, `src/Browser.ts`, `src/AtomHttpApi.ts`, `src/AtomRpc.ts` | U2           |
+| U8   | AtomRef handle protocol                                 | `src/AtomRef.ts`, react `src/Hooks.ts`                                                    | U6           |
+| U9   | Core decomposition and `Atom` barrel                    | all core `src/`, `tsdown.config.ts`, `package.json`, api-extractor configs                | U1-U8        |
+| U10  | React decomposition and `AtomReact` barrel              | all react `src/`, packaging configs                                                       | U9           |
+| U11  | Schema laws                                             | both `vitest.config.ts`, `src/schema-laws.test.ts`                                        | U9, U10      |
+| U12  | Refusal and boundary suites                             | `tests/*.refusal.test.ts`, react tests                                                    | U11          |
+| U13  | TSTyche type-surface pins                               | `test-types/`, `tstyche.json`                                                             | U9, U10      |
+| U14  | Disposition record, changeset, leaf docs                | `packages/atom/AGENTS.md`, READMEs, `.changeset/`                                         | U12, U13     |
+| U15  | Propagation fixes and scenario disposition              | core `src/atom-node.ts`, `src/registry-engine.ts`, `tests/Registry.integration.test.ts`   | none         |
+| U16  | Model: effect atoms, mount, immediate, modify, dispose  | core `tests/__fixtures__/registry-program.fixture.ts`                                     | U15          |
+| U17  | Model: time, nested batches, listener writes, relations | core fixture, `tests/registry-batching.differential.test.ts`                              | U16          |
+| U18  | Core browser project for browser resources              | core `vitest.config.ts`, `tests/browser/`                                                 | none         |
+| U19  | CI mutation enrollment for the engine                   | core `stryker.config.ts`, `package.json`, `packages/atom/AGENTS.md`                       | U17          |
+| U20  | Changeset, doctrine, and pull request record            | `.changeset/curvy-poets-hide.md`, `packages/atom/AGENTS.md`                               | U15-U19, U21 |
+| U21  | Surviving-mutant disposition                            | core fixture and specs as survivors dictate                                               | U19          |
 
 All paths below are repo-relative; `core` means `packages/atom/effect-atom` and `react` means `packages/atom/effect-atom-react`.
 
@@ -580,21 +666,156 @@ All paths below are repo-relative; `core` means `packages/atom/effect-atom` and 
    **Test expectation:** none -- documentation and release metadata.
    **Verification:** The changeset guard passes; README examples name only exports that exist.
 
+### U15. Propagation fixes and scenario disposition
+
+**Goal:** The registry tells each listener about every change it watches, once, after the causing write finishes, and re-runs an effect at most once per invalidation.
+**Requirements:** R17, R18, R19; KTD11, KTD13, KTD14, KTD15.
+**Dependencies:** none.
+**Files:** `packages/atom/effect-atom/src/atom-node.ts`, `packages/atom/effect-atom/src/registry-engine.ts`, `packages/atom/effect-atom/tests/Registry.integration.test.ts`, `packages/atom/effect-atom/tests/registry-model.differential.test.ts`, `packages/atom/effect-atom/tests/__fixtures__/registry-program.fixture.ts`, `packages/atom/effect-atom/package.json`, `pnpm-lock.yaml`.
+**Approach:**
+
+1. Keep the working-tree changes: subscribe computes first (KTD11), the `checking` state with pull-on-read, and batch net-change notification (KTD13).
+2. Find why the two reactivity-key scenarios now see four server calls and fix the engine; the scenarios stay unchanged (KTD14).
+3. Rewrite the never-read unsubscribe scenario per KTD15.
+
+**Execution note:** The failing runs already exist; re-run each with `--bail=0` before and after its fix (KTD19).
+**Patterns to follow:** existing Gherkin scenario shape in `tests/Registry.integration.test.ts`.
+**Test scenarios:**
+
+- A listener on a derived value that was never read hears the next change of its source.
+- Two listeners on values derived from one source each hear one notification per write, and neither hears a value computed from a mix of old and new inputs.
+- A batch that moves a counter away and back notifies nobody; a batch that ends at a new value notifies once.
+- A reactivity-key submission refetches the watched query once: the `AtomRpc` and `AtomHttpApi` scenarios see three calls.
+- Subscribing without reading, then unsubscribing, leaves no node for the value.
+
+**Verification:** The core suite passes under `--bail=0`, and the model spec passes at its 500-program budget.
+
+### U16. Model: effect atoms, mount, immediate, modify, dispose
+
+**Goal:** The spec's programs exercise every registry operation except time and nesting.
+**Requirements:** R19 (synchronous effects), R20; KTD12.
+**Dependencies:** U15.
+**Files:** `packages/atom/effect-atom/tests/__fixtures__/registry-program.fixture.ts`, `packages/atom/effect-atom/tests/registry-model.differential.test.ts`.
+**Approach:**
+
+1. Add a synchronous effect atom derived from the counter whose read increments a run count that the log reports; its value is an `AsyncResult` success.
+2. Add program steps: `immediate` subscribe, mount and unmount, `modify` (logging its return value), and `dispose`, after which every step logs the model's disposed outcome.
+3. Keep the model a pure step function; the observed side stays imperative inside `Effect.sync`, never mutable bindings inside `Effect.gen`.
+
+**Test scenarios:** The spec is one property. Its program arbitrary must generate each family below, and the model must state the outcome:
+
+- An `immediate` subscribe logs the current value before any write.
+- A mounted value with no listener stays computed across writes; after unmount, the next read recomputes it.
+- `modify` on the counter logs its return value, and the next read shows the new counter.
+- An effect atom read twice with no change between runs once, and runs once more after its source changes and it is read again.
+- After `dispose`, a read, a write, and a subscribe each produce the disposed outcome, and no listener hears anything.
+
+**Verification:** The spec passes at 500 programs, and the spec-only coverage run shows effect, mount, modify, and dispose branches exercised.
+
+### U17. Model: time, nested batches, listener writes, relations
+
+**Goal:** The spec covers idle eviction, nested batches, and writes made from listeners, and two reference-free relations hold.
+**Requirements:** R20, R21; KTD16.
+**Dependencies:** U16.
+**Files:** `packages/atom/effect-atom/tests/__fixtures__/registry-program.fixture.ts`, `packages/atom/effect-atom/tests/registry-model.differential.test.ts`, `packages/atom/effect-atom/tests/registry-batching.differential.test.ts`.
+**Approach:**
+
+1. Build the observed registry with `defaultIdleTTL` and `timeoutResolution`; add an `Advance` step that moves fake timers (KTD16).
+2. Let a batch step contain a nested batch; add a mirror writable that one listener sets to what it hears.
+3. Author R21's two relations with the harness's `Metamorphic` builder over the same program arbitrary.
+
+**Patterns to follow:** `packages/differential-spec/tests/metamorphic.differential.test.ts`.
+**Test scenarios:**
+
+- A value with no listener, idle past its TTL, re-runs on its next read; the same read inside the TTL does not.
+- A `keepAlive` value never re-runs because of idle time.
+- Notifications from a nested batch arrive only after the outermost batch ends.
+- A listener that copies what it hears into the mirror leaves the mirror equal to the last value heard, and the mirror's own listener hears each copy once.
+- Splitting every batch into separate writes leaves every read line unchanged.
+- A program with batches never has more heard lines than the same program unbatched.
+
+**Verification:** Both specs pass, and Success Criterion 8 holds or the pull request lists each uncovered branch with its reason.
+
+### U18. Core browser project for browser resources
+
+**Goal:** `atom-browser.resource.ts` is proven in real Chromium from the core package.
+**Requirements:** R23; KTD18.
+**Dependencies:** none.
+**Files:** `packages/atom/effect-atom/vitest.config.ts`, `packages/atom/effect-atom/package.json`, `packages/atom/effect-atom/tsconfig.test.json`, `packages/atom/effect-atom/tests/browser/window-focus-and-search-params.integration.test.ts`, `packages/atom/AGENTS.md`.
+**Approach:** Add the browser project and its dev dependencies as the React package declares them. Drive visibility and URL changes with real DOM events, as the React suite does, without hooks.
+**Patterns to follow:** `packages/atom/effect-atom-react/vitest.config.ts`, `packages/atom/effect-atom-react/tests/window-focus-and-search-params.integration.test.ts`.
+**Test scenarios:**
+
+- `windowFocusSignal` increments when visibility becomes `visible` and not when it becomes `hidden`.
+- An atom wrapped with `refreshOnWindowFocus` re-runs once per return to `visible`, and after its last listener leaves, its `visibilitychange` listener is removed.
+- `makeRefreshOnSignal` with a custom signal atom refreshes on each signal change.
+- `searchParam` reads the current URL value, and writing it updates `location.search` without a reload.
+- Two writes in one tick produce one URL update.
+- A `popstate` carrying a new value updates the atom.
+- `searchParam` with a schema decodes a valid value, and a malformed value reads as the decode-failure outcome instead of throwing.
+- Two registries on one page keep separate search-parameter coordinators.
+
+**Verification:** The core browser project passes, and Success Criterion 10 holds.
+
+### U19. CI mutation enrollment for the engine
+
+**Goal:** CI's Mutation workflow discovers the core package and mutates the propagation engine.
+**Requirements:** R22; KTD17.
+**Dependencies:** U17.
+**Files:** `packages/atom/effect-atom/stryker.config.ts`, `packages/atom/effect-atom/package.json`, `packages/atom/effect-atom/tsconfig.node.json`, `packages/atom/AGENTS.md`.
+**Approach:**
+
+1. Mirror `packages/effect-daemon-spec/stryker.config.ts` (runner, checker, ignorers, test-contribution plugin) with KTD17's mutate glob, and add the `mutation` script and dev dependencies that package declares.
+2. Rewrite AT4: the core engine is enrolled through `stryker.config.ts`; `node-lifetime.ts` is never mutated; the React package is not enrolled.
+3. Land it in its own commit (Evaluator surface).
+
+**Execution note:** Never start Stryker locally (REPO-D3); confirm enrollment with the discovery script's output.
+**Test expectation:** none -- evaluator configuration; the CI Mutation run is the proof.
+**Verification:** On the pull request, the Mutation workflow's discovery lists `packages/atom/effect-atom`, and its run uploads a report inside the 30-minute budget.
+
+### U21. Surviving-mutant disposition
+
+**Goal:** Every mutant the first CI Mutation run leaves alive is killed or named equivalent.
+**Requirements:** R22, Success Criterion 9; KD10.
+**Dependencies:** U19 and its first CI Mutation report.
+**Files:** `packages/atom/effect-atom/tests/__fixtures__/registry-program.fixture.ts`, `packages/atom/effect-atom/tests/*.differential.test.ts`, and any integration file a survivor points to.
+**Approach:**
+
+1. Read the survivors from the CI report artifact.
+2. Kill each with the program family or scenario that observes it, or record why it is equivalent.
+3. When survivors exceed one pass, record the remainder as pull request residuals, each with file, line, and operator.
+
+**Execution note:** Never start Stryker locally (REPO-D3); the next CI run confirms the kills.
+**Test scenarios:** Set by the survivor list. Each added program family or scenario names the mutant it kills (file, line, operator) in the pull request.
+**Verification:** The next CI Mutation report shows every first-run survivor killed, or the pull request lists it as equivalent or residual.
+
+### U20. Changeset, doctrine, and pull request record
+
+**Goal:** The release note and the pull request state what changed for consumers and how strong the spec now is.
+**Requirements:** R14, R12; Success Criteria 8-10.
+**Dependencies:** U15-U19, U21.
+**Files:** `.changeset/curvy-poets-hide.md`, `packages/atom/AGENTS.md`.
+**Approach:** Add the consumer-observable propagation changes (R17-R19) to the changeset body. The pull request body records the KTD15 scenario rewrite, the spec-only coverage figures, and the first mutation score.
+**Test expectation:** none -- release metadata and documentation.
+**Verification:** The changeset guard passes, and the leaf `AGENTS.md` Verification block names the browser project.
+
 ---
 
 ## Verification Contract
 
-| Gate         | Command                                                                                                      | Applies to   |
-| ------------ | ------------------------------------------------------------------------------------------------------------ | ------------ |
-| Types        | `pnpm --filter @systemfsoftware/effect-atom typecheck` and the same for `@systemfsoftware/effect-atom-react` | every unit   |
-| Lint         | `pnpm --filter <pkg> lint` and `pnpm --filter <pkg> lint:tsgo`                                               | every unit   |
-| Behaviour    | `pnpm --filter <pkg> test` (React needs `pnpm exec playwright install chromium`, AT6)                        | every unit   |
-| Type surface | `pnpm --filter <pkg> test:types`                                                                             | U13 onward   |
-| Packaging    | `pnpm --filter <pkg> build` (runs `dts:check` and `api:check`) and `pnpm --filter <pkg> attw`                | U9, U10, U14 |
-| Repository   | `pnpm check:local`                                                                                           | final        |
-| CI           | `gh pr checks --watch --fail-fast`                                                                           | final        |
+| Gate         | Command                                                                                                          | Applies to      |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- | --------------- |
+| Types        | `pnpm --filter @systemfsoftware/effect-atom typecheck` and the same for `@systemfsoftware/effect-atom-react`     | every unit      |
+| Lint         | `pnpm --filter <pkg> lint` and `pnpm --filter <pkg> lint:tsgo`                                                   | every unit      |
+| Behaviour    | `pnpm --filter <pkg> test` (React needs `pnpm exec playwright install chromium`, AT6)                            | every unit      |
+| Type surface | `pnpm --filter <pkg> test:types`                                                                                 | U13 onward      |
+| Packaging    | `pnpm --filter <pkg> build` (runs `dts:check` and `api:check`) and `pnpm --filter <pkg> attw`                    | U9, U10, U14    |
+| Repository   | `pnpm check:local`                                                                                               | final           |
+| CI           | `gh pr checks --watch --fail-fast`                                                                               | final           |
+| Spec depth   | Coverage of the differential specs alone (`vitest run tests/*.differential.test.ts` with coverage over `src/**`) | U16, U17, U20   |
+| Mutation     | CI Mutation workflow (advisory), report attached to the pull request                                             | U19, U21, final |
 
-Mutation runs stay out of scope (REPO-D3, AT4).
+Local mutation runs stay forbidden (REPO-D3); U19's score comes from the CI Mutation workflow. An agent re-runs any red suite with `--bail=0` before reporting a failure count (KTD19).
 
 ---
 
@@ -606,3 +827,4 @@ Mutation runs stay out of scope (REPO-D3, AT4).
 - Every TypeId literal is byte-identical to its value before this work.
 - No abandoned-attempt code, commented-out blocks, or unused modules remain in the diff.
 - The pull request body carries the scenario disposition exceptions (U14) and any residual review findings.
+- R17-R23 are implemented, Success Criteria 8-11 hold or each gap is listed with its reason in the pull request, U19 landed in its own commit, and every first-run surviving mutant is killed, named equivalent, or listed as a residual.

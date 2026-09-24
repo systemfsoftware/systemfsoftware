@@ -14,6 +14,7 @@ import type { Registry } from './registry.handle.js'
 
 type AnyNode<A = unknown> = NodeImpl<A>
 type AnyLifetime<A = unknown> = Lifetime<A>
+type AnyValue<A = unknown> = A
 
 const notifyListener = (listener: () => void): void => {
   listener()
@@ -23,21 +24,25 @@ const NodeFlags: {
   readonly alive: 1
   readonly initialized: 2
   readonly waitingForValue: 4
+  readonly checking: 8
 } = {
-  alive: 1, // 1 << 0
-  initialized: 2, // 1 << 1,
-  waitingForValue: 4, // 1 << 2
+  alive: 1,
+  initialized: 2,
+  waitingForValue: 4,
+  checking: 8,
 }
-type NodeFlags = 1 | 2 | 4
+type NodeFlags = 1 | 2 | 4 | 8
 
 const NodeState: {
   readonly uninitialized: number
   readonly stale: number
+  readonly checking: number
   readonly valid: number
   readonly removed: 0
 } = {
   uninitialized: NodeFlags.alive | NodeFlags.waitingForValue,
   stale: NodeFlags.alive | NodeFlags.initialized | NodeFlags.waitingForValue,
+  checking: NodeFlags.alive | NodeFlags.initialized | NodeFlags.checking,
   valid: NodeFlags.alive | NodeFlags.initialized,
   removed: 0,
 }
@@ -74,6 +79,7 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
       case NodeState.uninitialized:
         return 'uninitialized'
       case NodeState.stale:
+      case NodeState.checking:
         return 'stale'
       case NodeState.valid:
         return 'valid'
@@ -88,6 +94,7 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
 
   _value!: A
   value(): A {
+    settleIfChecking(this)
     rebuildIfWaiting(this)
     return this._value
   }
@@ -126,8 +133,7 @@ export class NodeImpl<A = unknown> extends Pipeable.Class {
   }
 
   invalidate(): void {
-    markInvalidatedDuringBuild(this)
-    staleIfValid(this)
+    markStale(this)
     continueInvalidate(this)
   }
 
@@ -207,6 +213,25 @@ function rebuildIfWaiting<A>(node: NodeImpl<A>): void {
   }
 }
 
+function settleIfChecking<A>(node: NodeImpl<A>): void {
+  if (node.state === NodeState.checking) {
+    settleChecking(node)
+  }
+}
+
+function settleChecking<A>(node: NodeImpl<A>): void {
+  for (const parent of node.parents) {
+    parent.value()
+  }
+  validIfStillChecking(node)
+}
+
+function validIfStillChecking<A>(node: NodeImpl<A>): void {
+  if (node.state === NodeState.checking) {
+    node.state = NodeState.valid
+  }
+}
+
 function rebuildNodeValue<A>(node: NodeImpl<A>): void {
   node.lifetime = makeLifetime(node)
   node.building = true
@@ -277,6 +302,22 @@ function notifyNodeOrBatch<A>(node: NodeImpl<A>): void {
   node.notify()
 }
 
+function notifyChangeOrBatch<A>(node: NodeImpl<A>, previous: A): void {
+  const batch = node.registry.batch
+  if (batch.phase === BatchPhase.collect) {
+    rememberValueBeforeBatch(batch, node, previous)
+    batch.notify.add(node)
+    return
+  }
+  node.notify()
+}
+
+function rememberValueBeforeBatch<A>(batch: BatchState, node: NodeImpl<A>, previous: A): void {
+  if (batch.notify.has(node) === false) {
+    batch.valueBeforeBatch.set(node, previous)
+  }
+}
+
 function replaceInitializedValue<A>(node: NodeImpl<A>, value: A): void {
   node.state = NodeState.valid
   replaceIfChanged(node, value)
@@ -290,9 +331,10 @@ function replaceIfChanged<A>(node: NodeImpl<A>, value: A): void {
 }
 
 function commitChangedValue<A>(node: NodeImpl<A>, value: A): void {
+  const previous = node._value
   node._value = value
   invalidateAfterValueChange(node)
-  notifyListenersIfPresent(node)
+  notifyListenersIfPresent(node, previous)
 }
 
 function invalidateAfterValueChange<A>(node: NodeImpl<A>): void {
@@ -303,9 +345,9 @@ function invalidateAfterValueChange<A>(node: NodeImpl<A>): void {
   node.invalidateChildren()
 }
 
-function notifyListenersIfPresent<A>(node: NodeImpl<A>): void {
+function notifyListenersIfPresent<A>(node: NodeImpl<A>, previous: A): void {
   if (node.listeners.size > 0) {
-    notifyNodeOrBatch(node)
+    notifyChangeOrBatch(node, previous)
   }
 }
 
@@ -350,6 +392,12 @@ function clearSkipInvalidation(parent: AnyNode): void {
   }
 }
 
+function markStale<A>(node: NodeImpl<A>): void {
+  markInvalidatedDuringBuild(node)
+  staleIfCurrent(node)
+  markDescendantsChecking(node)
+}
+
 function markInvalidatedDuringBuild<A>(node: NodeImpl<A>): void {
   if (isBuildingInCollect(node)) {
     node.invalidatedDuringBuild = true
@@ -363,10 +411,27 @@ function isBuildingInCollect<A>(node: NodeImpl<A>): boolean {
   return node.registry.batch.phase === BatchPhase.collect
 }
 
-function staleIfValid<A>(node: NodeImpl<A>): void {
-  if (node.state === NodeState.valid) {
+function staleIfCurrent<A>(node: NodeImpl<A>): void {
+  if (isCurrent(node)) {
     node.state = NodeState.stale
     node.disposeLifetime()
+  }
+}
+
+function isCurrent<A>(node: NodeImpl<A>): boolean {
+  return node.state === NodeState.valid || node.state === NodeState.checking
+}
+
+function markDescendantsChecking<A>(node: NodeImpl<A>): void {
+  for (const child of node.children) {
+    checkingIfValid(child)
+  }
+}
+
+function checkingIfValid(node: AnyNode): void {
+  if (node.state === NodeState.valid) {
+    node.state = NodeState.checking
+    markDescendantsChecking(node)
   }
 }
 function continueInvalidate<A>(node: NodeImpl<A>): void {
@@ -404,8 +469,13 @@ function isIdleWithoutActiveChildren<A>(node: NodeImpl<A>): boolean {
 function invalidateChildSet<A>(node: NodeImpl<A>): void {
   const children = node.children
   node.children = new Set()
-  for (const child of children) {
-    child.invalidate()
+  children.forEach(markStale)
+  children.forEach(continueInvalidateIfWaiting)
+}
+
+function continueInvalidateIfWaiting(node: AnyNode): void {
+  if ((node.state & NodeFlags.waitingForValue) !== 0) {
+    continueInvalidate(node)
   }
 }
 
@@ -1004,6 +1074,7 @@ export interface BatchState {
   depth: number
   readonly stale: Set<AnyNode>
   readonly notify: Set<AnyNode>
+  readonly valueBeforeBatch: Map<AnyNode, AnyValue>
 }
 
 /** */
@@ -1012,6 +1083,7 @@ export const makeBatchState = (): BatchState => ({
   depth: 0,
   stale: new Set(),
   notify: new Set(),
+  valueBeforeBatch: new Map(),
 })
 
 /**
@@ -1062,9 +1134,21 @@ function rebuildStaleNodes(batch: BatchState): void {
 function notifyBatchedNodes(batch: BatchState): void {
   batch.phase = BatchPhase.commit
   for (const node of batch.notify) {
-    node.notify()
+    notifyIfChangedByBatch(batch, node)
   }
   batch.notify.clear()
+  batch.valueBeforeBatch.clear()
+}
+
+function notifyIfChangedByBatch(batch: BatchState, node: AnyNode): void {
+  if (endsWhereItStarted(batch, node)) {
+    return
+  }
+  node.notify()
+}
+
+function endsWhereItStarted(batch: BatchState, node: AnyNode): boolean {
+  return batch.valueBeforeBatch.has(node) && node.atom.equals(batch.valueBeforeBatch.get(node), node._value)
 }
 function batchRebuildNode(node: AnyNode) {
   restaleIfInvalidatedDuringBuild(node)

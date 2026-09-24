@@ -195,23 +195,19 @@ function applySerializableValue(
 }
 
 function notifyIfImmediate<A>(
-  node: NodeImpl<A>,
+  current: A,
   f: (_: A) => void,
   options: { readonly immediate?: boolean } | undefined,
 ): void {
   if (options === undefined) {
     return
   }
-  notifyIfImmediateFlag(node, f, options.immediate)
+  notifyIfImmediateFlag(current, f, options.immediate)
 }
 
-function notifyIfImmediateFlag<A>(
-  node: NodeImpl<A>,
-  f: (_: A) => void,
-  immediate: boolean | undefined,
-): void {
+function notifyIfImmediateFlag<A>(current: A, f: (_: A) => void, immediate: boolean | undefined): void {
   if (immediate === true) {
-    f(node.value())
+    f(current)
   }
 }
 
@@ -575,7 +571,7 @@ export class RegistryImpl extends Pipeable.Class {
 
   subscribe<A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: { readonly immediate?: boolean }): () => void {
     const node = this.ensureNode(atom)
-    notifyIfImmediate(node, f, options)
+    notifyIfImmediate(node.value(), f, options)
     const remove = node.subscribe(function() {
       f(node._value)
     })
