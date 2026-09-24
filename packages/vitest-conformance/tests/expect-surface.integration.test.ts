@@ -84,7 +84,7 @@ Feature('Fork expect surface')
         Then('each is refused for the check the runner did not judge')((s, expect) =>
           refusedSuiteCheck(expect, s.report, 'expect/yielded.test.ts', [
             [
-              'yielded checks Should_RefuseTheUnyieldedCheck_When_ACheckIsWrittenButNotYielded',
+              'yielded checks Should_RefuseTheUnyieldedCheck_When_CheckIsWrittenButNotYielded',
               refusal.unyielded,
             ],
             ['yielded checks Should_RefuseTheBody_When_ItYieldsNoCheck', refusal.noCheck],
@@ -105,7 +105,7 @@ Feature('Fork expect surface')
         When('the suite runs those tests')('report', (s) => runFixtures(s.fixtures)),
         Then('the second look and the per-row looks are refused, and the clock-separated one passes')((s, expect) => {
           const second = 'one check per observed state Should_RefuseTheSecondCheck_When_TwoChecksObserveOneState'
-          const separated = 'one check per observed state Should_AcceptTheSecondCheck_When_AStepSeparatesTheStates'
+          const separated = 'one check per observed state Should_AcceptTheSecondCheck_When_StepSeparatesStates'
           const loop =
             'one check per observed state Should_RefuseTheCheckInALoop_When_EachItemOfTheSameStateChecksItself'
           return expect({
@@ -253,7 +253,7 @@ Feature('Fork expect surface')
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('the test fails with the check diff')((s, expect) =>
           refusedSuiteCheck(expect, s.report, 'expect/forked-fiber.test.ts', [
-            ['a check in a forked fiber Should_FailTheTest_When_AChildFiberCheckFails', 'expected 1 to deeply equal 2'],
+            ['a check in a forked fiber Should_FailTheTest_When_ChildFiberCheckFails', 'expected 1 to deeply equal 2'],
           ])
         ),
       ),
@@ -287,7 +287,7 @@ Feature('Fork expect surface')
         When('the suite runs that test')('report', (s) => runFixtures(s.fixtures)),
         Then('it is refused with the generator to write instead')((s, expect) =>
           refusedSuiteCheck(expect, s.report, 'expect/sync-body.test.ts', [
-            ['Should_RefuseTheSyncBody_When_ABodyIsNotAGenerator', refusal.syncBody],
+            ['Should_RefuseTheSyncBody_When_BodyIsNotAGenerator', refusal.syncBody],
           ])
         ),
       ),

@@ -15,7 +15,7 @@ describe('one check per observed state', () => {
     yield* expect(pending.status).toEqual('Pending')
   })
 
-  it('Should_AcceptTheSecondCheck_When_AStepSeparatesTheStates', function*({ expect }) {
+  it('Should_AcceptTheSecondCheck_When_StepSeparatesStates', function*({ expect }) {
     yield* expect(pending.id).toEqual(1)
     yield* TestClock.adjust('3 seconds')
     yield* expect(pending.status).toEqual('Pending')
