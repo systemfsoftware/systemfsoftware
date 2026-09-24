@@ -246,6 +246,63 @@ Feature('Growing and shrinking a running supervision tree')
         }),
       ),
     )
+
+    scenario(
+      'A request made after the supervisor has stopped is still answered',
+      Gherkin.Do.pipe(
+        Given('a supervisor that takes new children up to a ceiling of two, which has since shut down')(
+          'tree',
+          () =>
+            Effect.gen(function*() {
+              const tree = yield* dynamicSupervisor('stopped-tree', 2)
+              yield* Supervisor.shutdown(tree.supervisor)
+              return tree
+            }),
+        ),
+        When('a new child is asked for and a child is asked to stop')('answers', ({ tree }) =>
+          Effect.gen(function*() {
+            const start = yield* Supervisor.startChild(tree.supervisor, neverChild)
+            const stop = yield* Supervisor.stopChild(tree.supervisor, 'd0', 0)
+            return { start, stop }
+          })),
+        Then('the new child is turned away')(({ answers }) => {
+          expect(answers.start).toEqual({ outcome: 'refused' })
+        }),
+        And('the stop finds no such child')(({ answers }) => {
+          expect(answers.stop).toEqual({ outcome: 'missed' })
+        }),
+      ),
+    )
+
+    scenario(
+      'A stop naming an incarnation that cannot exist is answered at once',
+      Gherkin.Do.pipe(
+        Given('a supervisor that takes new children up to a ceiling of two, running one it allocated')(
+          'tree',
+          () =>
+            Effect.gen(function*() {
+              const tree = yield* dynamicSupervisor('impossible-stop-tree', 2)
+              const answer = yield* Supervisor.startChild(tree.supervisor, neverChild)
+              return { ...tree, answer }
+            }),
+        ),
+        When('a stop names an incarnation of that child that could never have been started')(
+          'answers',
+          ({ tree }) =>
+            Effect.gen(function*() {
+              const answer = yield* Supervisor.stopChild(tree.supervisor, childIdOfStart(tree.answer), -1)
+              const remaining = yield* runningChildIds(tree.supervisor)
+              return { answer, remaining }
+            }),
+        ),
+        Then('the stop finds no such child')(({ answers }) => {
+          expect(answers.answer).toEqual({ outcome: 'missed' })
+        }),
+        And('the running child stays in the tree')(({ answers }) => {
+          expect(answers.remaining).toEqual(['d0'])
+        }),
+      ),
+    )
   })
 
 Feature('Reports from a child the supervisor has already replaced')

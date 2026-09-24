@@ -151,10 +151,8 @@ type CommandBuckets = {
 
 const commandsIn = (buckets: CommandBuckets): SupervisorCommands => ({ ...noCommands, ...buckets })
 
-const reasonTagOf = (reason: TerminationReason): 'Normal' | 'Shutdown' | 'Abnormal' => reason._tag
-
 const restartsOn = (restartType: RestartType, reason: TerminationReason): boolean =>
-  Match.value(reasonTagOf(reason)).pipe(
+  Match.value(reason._tag).pipe(
     Match.when('Abnormal', () => restartType !== 'temporary'),
     Match.when('Normal', () => restartType === 'permanent'),
     Match.when('Shutdown', () => restartType === 'permanent'),
@@ -348,6 +346,9 @@ const replyAcceptedOf = (requestId: RequestId, start: ChildStart): ReplyStartAcc
 const replyRefusedOf = (requestId: RequestId): ReplyStartRefused => ({ _tag: 'ReplyStartRefused', requestId })
 
 const replyStoppedOf = (requestId: RequestId): ReplyStopped => ({ _tag: 'ReplyStopped', requestId })
+
+const refusedStartOf = (requestId: RequestId): SupervisionDecision =>
+  new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) })
 
 const holdOf = (core: SupervisorCore): SupervisionDecision => new Continue({ core, commands: noCommands })
 
@@ -932,17 +933,15 @@ const allocatedDecisionOf = (
   })
 }
 
-const ceilingAllows = (core: SupervisorCore, ceiling: number): boolean => runningDynamicCount(core) >= ceiling
+const ceilingReached = (core: SupervisorCore, ceiling: number): boolean => runningDynamicCount(core) >= ceiling
 
 const dynamicStartOf = (core: SupervisorCore, requestId: RequestId, at: EventTime): SupervisionDecision =>
   Match.value(dynamicKindOf(core.policy)).pipe(
-    Match.tag('None', () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) })),
+    Match.tag('None', () => refusedStartOf(requestId)),
     Match.tag('Some', (dynamic) =>
-      Match.value(ceilingAllows(core, dynamic.value.ceiling)).pipe(
-        Match.when(true, () =>
-          new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) })),
-        Match.when(false, () =>
-          allocatedDecisionOf(core, dynamicInstanceOf(core), requestId, at)),
+      Match.value(ceilingReached(core, dynamic.value.ceiling)).pipe(
+        Match.when(true, () => refusedStartOf(requestId)),
+        Match.when(false, () => allocatedDecisionOf(core, dynamicInstanceOf(core), requestId, at)),
         Match.exhaustive,
       )),
     Match.exhaustive,
@@ -1104,15 +1103,15 @@ const onDynamicStartRequested = (state: SupervisorState, requestId: RequestId, a
     Match.tag('Running', ({ core }) => dynamicStartOf(core, requestId, at)),
     Match.tag(
       'Restarting',
-      () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) }),
+      () => refusedStartOf(requestId),
     ),
     Match.tag(
       'CoolingDown',
-      () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) }),
+      () => refusedStartOf(requestId),
     ),
     Match.tag(
       'ShuttingDown',
-      () => new RefuseDynamicStart({ commands: commandsIn({ replies: [replyRefusedOf(requestId)] }) }),
+      () => refusedStartOf(requestId),
     ),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
@@ -1126,9 +1125,9 @@ const onDynamicStopRequested = (
 ): SupervisionDecision =>
   Match.value(state).pipe(
     Match.tag('Running', ({ core }) => dynamicStopOf(core, requestId, childId, generation)),
-    Match.tag('Restarting', ({ core }) => holdOf(core)),
-    Match.tag('CoolingDown', ({ core }) => holdOf(core)),
-    Match.tag('ShuttingDown', ({ core }) => holdOf(core)),
+    Match.tag('Restarting', () => new Stale({})),
+    Match.tag('CoolingDown', () => new Stale({})),
+    Match.tag('ShuttingDown', () => new Stale({})),
     Match.tag('Terminated', () => new Stale({})),
     Match.exhaustive,
   )

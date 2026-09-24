@@ -201,10 +201,18 @@ const awaitReply = (
   Effect.flatMap(Deferred.make<DynamicOutcome>(), (waiter) =>
     Effect.andThen(
       Ref.update(self[RepliesId], (known) => HashMap.set(known, requestId, waiter)),
-      Effect.andThen(
-        Effect.flatMap(Clock.currentTimeMillis, (now) => Queue.offer(self[MailboxId], eventOf(now))),
-        Deferred.await(waiter),
-      ),
+      Effect.flatMap(Clock.currentTimeMillis, (now) => {
+        const event = eventOf(now)
+        return Effect.andThen(
+          Queue.offer(self[MailboxId], event),
+          Effect.raceFirst(
+            Deferred.await(waiter),
+            Effect.andThen(awaitTerminated(self), resolveWaiting(self[RepliesId], requestId, staleOf(event))).pipe(
+              Effect.andThen(Deferred.await(waiter)),
+            ),
+          ),
+        )
+      }),
     ))
 
 /**
@@ -244,18 +252,16 @@ export const stopChild: {
 
 const resolveWaiting = (
   replies: Ref.Ref<HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>>,
-  pending: HashMap.HashMap<string, Deferred.Deferred<DynamicOutcome>>,
   requestId: string,
   outcome: DynamicOutcome,
 ): Effect.Effect<void> =>
-  Option.match(HashMap.get(pending, requestId), {
-    onNone: () => Effect.void,
-    onSome: (waiter: Deferred.Deferred<DynamicOutcome>) =>
-      Effect.andThen(
-        Ref.set(replies, HashMap.remove(pending, requestId)),
-        Deferred.succeed(waiter, outcome),
-      ),
-  })
+  Effect.flatMap(
+    Ref.modify(replies, (pending) => [HashMap.get(pending, requestId), HashMap.remove(pending, requestId)] as const),
+    Option.match({
+      onNone: () => Effect.void,
+      onSome: (waiter: Deferred.Deferred<DynamicOutcome>) => Effect.asVoid(Deferred.succeed(waiter, outcome)),
+    }),
+  )
 
 const staleOf = (event: SupervisionEvent): DynamicOutcome =>
   Match.value(event).pipe(

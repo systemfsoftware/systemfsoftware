@@ -17,8 +17,6 @@ import type { SupervisionEvent, TimerKind } from '../kernel/SupervisionEvent.sch
 import type { ChildId, Generation } from '../kernel/SupervisionLimits.schema.js'
 import { ReplyStartAccepted } from '../kernel/SupervisorCommand.schema.js'
 import type {
-  ArmChildTimer,
-  ArmSupervisorTimer,
   StartChild,
   StopChild,
   SupervisorArm,
@@ -235,32 +233,15 @@ const executeStop = (
     yield* stampedNow(acquired.handle, stoppedEventOf(command.childId, command.generation))
   })
 
-const executeChildArm = (
+const armTimer = (
   acquired: AcquiredSupervisor,
-  command: ArmChildTimer,
+  deadline: number,
+  event: SupervisionEvent,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.flatMap(Clock.currentTimeMillis, (now) =>
     Effect.asVoid(
       Effect.forkIn(
-        Effect.andThen(
-          Effect.sleep(Duration.millis(Math.max(0, command.deadline - now))),
-          stampedNow(acquired.handle, timerEventOf(command.kind, command.childId, command.generation)),
-        ),
-        ownerScopeOf(acquired.handle),
-      ),
-    ))
-
-const executeSupervisorArm = (
-  acquired: AcquiredSupervisor,
-  command: ArmSupervisorTimer,
-): Effect.Effect<void, never, Scope.Scope> =>
-  Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    Effect.asVoid(
-      Effect.forkIn(
-        Effect.andThen(
-          Effect.sleep(Duration.millis(Math.max(0, command.deadline - now))),
-          stampedNow(acquired.handle, supervisorTimerEventOf(command.kind)),
-        ),
+        Effect.andThen(Effect.sleep(Duration.millis(Math.max(0, deadline - now))), stampedNow(acquired.handle, event)),
         ownerScopeOf(acquired.handle),
       ),
     ))
@@ -270,8 +251,10 @@ const executeArm = (
   arm: SupervisorArm,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Match.value(arm).pipe(
-    Match.tag('ArmChildTimer', (timer) => executeChildArm(acquired, timer)),
-    Match.tag('ArmSupervisorTimer', (timer) => executeSupervisorArm(acquired, timer)),
+    Match.tag('ArmChildTimer', (timer) =>
+      armTimer(acquired, timer.deadline, timerEventOf(timer.kind, timer.childId, timer.generation))),
+    Match.tag('ArmSupervisorTimer', (timer) =>
+      armTimer(acquired, timer.deadline, supervisorTimerEventOf(timer.kind))),
     Match.exhaustive,
   )
 
@@ -291,15 +274,7 @@ const executeReply = (
   acquired: AcquiredSupervisor,
   reply: SupervisorReply,
 ): Effect.Effect<void, never, never> =>
-  Effect.flatMap(Ref.get(repliesOf(acquired.handle)), (pending) =>
-    Option.match(HashMap.get(pending, reply.requestId), {
-      onNone: () => Effect.void,
-      onSome: (waiter) =>
-        Effect.andThen(
-          Ref.set(repliesOf(acquired.handle), HashMap.remove(pending, reply.requestId)),
-          Deferred.succeed(waiter, outcomeOf(reply)),
-        ),
-    }))
+  Ops.resolveWaiting(repliesOf(acquired.handle), reply.requestId, outcomeOf(reply))
 
 const executeTerminate = (
   acquired: AcquiredSupervisor,
@@ -384,12 +359,6 @@ const requestIdOf = (event: SupervisionEvent): string | undefined =>
     Match.orElse(() => undefined),
   )
 
-const staleOutcomeOf = (event: SupervisionEvent): DynamicOutcome =>
-  Match.value(event).pipe(
-    Match.when({ _tag: 'DynamicStartRequested' }, () => ({ outcome: 'refused' } as const)),
-    Match.orElse(() => ({ outcome: 'missed' } as const)),
-  )
-
 const answerStale = (
   acquired: AcquiredSupervisor,
   event: SupervisionEvent,
@@ -397,8 +366,5 @@ const answerStale = (
   const requestId = requestIdOf(event)
   return requestId === undefined
     ? Effect.void
-    : Effect.flatMap(
-      Ref.get(repliesOf(acquired.handle)),
-      (pending) => Ops.resolveWaiting(repliesOf(acquired.handle), pending, requestId, staleOutcomeOf(event)),
-    )
+    : Ops.resolveWaiting(repliesOf(acquired.handle), requestId, Ops.staleOf(event))
 }

@@ -2,8 +2,11 @@ import { it } from '@effect/vitest'
 import { Array as Arr, Match, Number as Num, Option, Result, Schema } from 'effect'
 import { evolveSupervisor, SupervisionEvolution } from '../kernel/evolve-supervisor.workflow.js'
 import {
+  CoolingDown,
   interpretSupervisionEvent,
+  Restarting,
   Running,
+  ShuttingDown,
   type SupervisionDecision,
   SupervisionStep,
   type SupervisorState,
@@ -729,6 +732,24 @@ it.prop(
     const policy = policyWith({ strategy: 'one_for_one', childDeclarations: [declaredChild('c0', 'permanent', false)] })
     const state = runningOf(coreWith(policy, [childOf('c0', generation, 'ready')], []))
     const decision = decidedOf(stepOf(state, childTimerEvent('start_deadline', 'c0', generation, at)))
+
+    return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(state, decision) === state
+  },
+)
+
+it.prop(
+  '∀p_DynamicStopOutsideRunning_=Stale',
+  [Schema.Literals(['Restarting', 'CoolingDown', 'ShuttingDown']), Generation, EventTime],
+  ([phase, generation, at]) => {
+    const policy = policyWith({ strategy: 'one_for_one', childDeclarations: [declaredChild('c0', 'permanent', false)] })
+    const core = coreWith(policy, [childOf('c0', generation, 'ready')], [])
+    const state: SupervisorState = Match.value(phase).pipe(
+      Match.when('Restarting', () => new Restarting({ core, pending: [] })),
+      Match.when('CoolingDown', () => new CoolingDown({ core, millis: PERIOD_MILLIS })),
+      Match.when('ShuttingDown', () => new ShuttingDown({ core, reason: { _tag: 'Shutdown' } })),
+      Match.exhaustive,
+    )
+    const decision = decidedOf(stepOf(state, dynamicStopEvent('r0', 'c0', generation, at)))
 
     return isStaleDecision(decision) && hasNoCommands(decision) && evolvedOf(state, decision) === state
   },

@@ -24,7 +24,7 @@ const readStep = (
 ): Effect.Effect<SupervisionStep, never, never> =>
   Effect.map(
     Effect.zip(Clock.currentTimeMillis, Ref.get(stateOf(runtime.acquired.handle))),
-    ([now, state]) => new SupervisionStep({ state, event: { ...event, at: now } }),
+    ([now, state]) => new SupervisionStep({ state, event: { ...event, at: now } }, { disableChecks: true }),
   )
 const persistedOf = (
   previous: SupervisorState,
@@ -106,7 +106,11 @@ export const supervisorStepFor = (runtime: StepRuntime) =>
           persistStep(runtime, command.event, command.state, decision),
           runBucketsOf(runtime, decision.commands),
         ),
-      CommandRejected: (_rejected, command) => persistCommandRejection(runtime, command.event),
+      CommandRejected: (_rejected, command) =>
+        Effect.andThen(
+          persistCommandRejection(runtime, command.event),
+          Commands.answerStale(runtime.acquired, command.event),
+        ),
     })
 const persistCommandRejection = (
   runtime: StepRuntime,
