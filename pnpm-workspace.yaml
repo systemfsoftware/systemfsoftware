@@ -15,6 +15,7 @@ catalog:
   "@systemfsoftware/arethetypeswrong-cli": ^4.2.0
   "@effect/platform-node": 4.0.0-rc.117
   "@effect/platform-node-shared": 4.0.0-rc.117
+  "@effect/ai-openrouter": 4.0.0-rc.117
   effect: 4.0.0-rc.117
   "@effect/vitest": 4.0.0-rc.117
   "@effect/sql-pg": 4.0.0-rc.117
@@ -70,6 +71,7 @@ catalog:
   "@vitest/browser": ^5
   "@vitest/browser-playwright": ^5
   playwright: ^1
+  yaml: ^2.9.1
 catalogMode: prefer
 catalogs:
   peers:
@@ -105,3 +107,4 @@ packages:
   - packages/toolchain/*
   - omp/plugins/*
   - examples/*
+  - evals/*

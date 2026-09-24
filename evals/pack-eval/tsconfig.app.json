@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": [
+    "@systemfsoftware/tsconfig/bundler/dom/library-monorepo",
+    "@systemfsoftware/tsconfig/effect"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "types": [
+      "node"
+    ],
+    "isolatedModules": true,
+    "customConditions": [
+      "@systemfsoftware/source"
+    ],
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.app.tsbuildinfo",
+    "outDir": "node_modules/.cache/tsc/app"
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/main.ts",
+    "src/drivers/**",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts"
+  ]
+}

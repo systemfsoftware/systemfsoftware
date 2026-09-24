@@ -27,6 +27,7 @@ research
 .claude/settings.local.json
 # Eval scratch — constitution-disclosure arm outputs, graders, results
 .eval/
+.pack-eval/
 # Cell-taxonomy corpus — internal, never published
 docs/cell-taxonomy/
 # Generated per-worktree MCP config (codegraph host socket) — machine-specific
