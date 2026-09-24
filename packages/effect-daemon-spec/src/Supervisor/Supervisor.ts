@@ -66,6 +66,7 @@ interface SpecParts<R> {
   readonly autoShutdown: AutoShutdown
   readonly coolDownMillis: number | undefined
   readonly backoff: BackoffSchedule
+  readonly livenessTickMillis: number
   readonly declarations: ReadonlyArray<ChildDeclaration>
   readonly bindings: ReadonlyArray<Binding<R>>
   readonly dynamic: DynamicKind
@@ -104,7 +105,7 @@ const policyOfParts = <R>(parts: SpecParts<R>): SupervisionPolicy =>
       : { _tag: 'CoolDownAfter', millis: parts.coolDownMillis },
     backoff: parts.backoff,
     dynamic: parts.dynamic,
-    livenessTickMillis: LIVENESS_TICK_MILLIS,
+    livenessTickMillis: parts.livenessTickMillis,
     childDeclarations: parts.declarations,
   })
 
@@ -169,6 +170,7 @@ const partsOf = <R>(self: SupervisorSpec<R>): SpecParts<R> => ({
   autoShutdown: self.autoShutdown,
   coolDownMillis: self.coolDownMillis,
   backoff: self.backoff,
+  livenessTickMillis: self.livenessTickMillis,
   declarations: self.declarations,
   bindings: self.bindings,
   dynamic: self.dynamic,
@@ -183,11 +185,11 @@ export const make = (name: string): SupervisorSpec<never> =>
     autoShutdown: 'never',
     coolDownMillis: undefined,
     backoff: { baseMillis: 0, multiplier: 1, capMillis: 0 },
+    livenessTickMillis: LIVENESS_TICK_MILLIS,
     declarations: [],
     bindings: [],
     dynamic: { _tag: 'NoDynamicChildren' },
   })
-
 export const strategy: {
   (strategy: RestartStrategy): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
   <R>(self: SupervisorSpec<R>, strategy: RestartStrategy): SupervisorSpec<R>
@@ -231,6 +233,15 @@ export const backoff: {
   2,
   <R>(self: SupervisorSpec<R>, schedule: BackoffSchedule): SupervisorSpec<R> =>
     specOf<R>({ ...partsOf(self), backoff: schedule }),
+)
+
+export const livenessTick: {
+  (millis: number): <R>(self: SupervisorSpec<R>) => SupervisorSpec<R>
+  <R>(self: SupervisorSpec<R>, millis: number): SupervisorSpec<R>
+} = dual(
+  2,
+  <R>(self: SupervisorSpec<R>, millis: number): SupervisorSpec<R> =>
+    specOf<R>({ ...partsOf(self), livenessTickMillis: millis }),
 )
 
 export interface DynamicOptions extends Omit<ChildOptions, 'significant'> {

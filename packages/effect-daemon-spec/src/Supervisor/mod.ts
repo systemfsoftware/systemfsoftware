@@ -33,6 +33,7 @@ export {
   dynamic,
   intensity,
   isSupervisorSpec,
+  livenessTick,
   make,
   SpecTypeId,
   strategy,

@@ -86,7 +86,7 @@ export const conformanceDriver = (
 > => ({
   name: 'microvm',
   declaration,
-  scenario: { millis: 60_000, startTimeoutMillis: 3_000 },
+  scenario: { millis: 60_000, startTimeoutMillis: 15_000, livenessTickMillis: 60_000 },
   port,
   launch: (_childId, _script) =>
     Effect.map(

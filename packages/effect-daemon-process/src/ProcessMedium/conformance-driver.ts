@@ -114,6 +114,7 @@ export const conformanceDriver = (
 > => ({
   name: 'process',
   declaration,
+  scenario: { millis: 30_000, startTimeoutMillis: 3_000, livenessTickMillis: 30_000 },
   port,
   launch: () => launchOf(options),
 })

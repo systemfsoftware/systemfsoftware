@@ -28,6 +28,8 @@ export type MediumPortOf<Program, StartError, R> = Context.Service<
 export interface ScenarioBudget {
   readonly millis: number
   readonly startTimeoutMillis: number
+  /** The liveness tick the scenarios run with; a medium slower than the kernel's default tick must widen it. */
+  readonly livenessTickMillis?: number | undefined
 }
 
 /**

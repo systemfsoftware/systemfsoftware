@@ -1,5 +1,18 @@
 import { Supervisor } from '@systemfsoftware/effect-daemon-spec'
-import { Array as Arr, Deferred, Duration, Effect, HashMap, Layer, Match, Option, Ref, Scope, Stream } from 'effect'
+import {
+  Array as Arr,
+  Deferred,
+  Duration,
+  Effect,
+  Function,
+  HashMap,
+  Layer,
+  Match,
+  Option,
+  Ref,
+  Scope,
+  Stream,
+} from 'effect'
 import type { ChildStep } from './ChildScript.schema.js'
 import type { TraceComparison } from './compare-traces.workflow.js'
 import { compare } from './compare.js'
@@ -102,11 +115,35 @@ const readyEventOf = (childId: string, generation: number) => (entry: Supervisor
     Match.orElse(() => false),
   )
 
+const incarnationObservedIn = (childId: string, generation: number) => (entry: Supervisor.TraceEntry): boolean =>
+  Match.value(entry.event).pipe(
+    Match.tag('ChildStarted', (started) => holds([started.childId === childId, started.generation === generation])),
+    Match.tag('ChildTerminated', (ended) => holds([ended.childId === childId, ended.generation === generation])),
+    Match.tag('ChildStopped', (stopped) => holds([stopped.childId === childId, stopped.generation === generation])),
+    Match.orElse(() => false),
+  )
+
 const incarnationEndedIn = (childId: string, generation: number) => (trace: Trace): boolean =>
   Arr.some(trace, endingEventOf(childId, generation)) || terminatedDecisionIn(trace)
 
 const readinessSeenIn = (childId: string, generation: number) => (trace: Trace): boolean =>
   Arr.some(trace, readyEventOf(childId, generation))
+
+/**
+ * Every incarnation the kernel has ordered started has been observed as started,
+ * terminated or stopped — and at least one decision has been recorded, so the
+ * wait cannot pass vacuously before the boot decision's own starts appear. The
+ * harness waits for this before addressing a control step, because a step
+ * delivered while an ordered start is still in flight lets its event — a
+ * readiness, on a slow medium — overtake the start event of an unrelated child,
+ * an ordering no medium controls.
+ */
+const orderedStartsObservedIn = (trace: Trace): boolean =>
+  trace.length > 0 &&
+  Arr.every(
+    Arr.filter(orderedChildrenIn(trace), (ordered) => ordered.kind === 'StartChild'),
+    (start) => Arr.some(trace, incarnationObservedIn(start.childId, start.generation)),
+  )
 
 const stepSettledIn = (childId: string, generation: number, step: ChildStep['_tag']) => (trace: Trace): boolean =>
   Match.value(step).pipe(
@@ -176,10 +213,15 @@ const supervisorOf = <Program, StartError, R>(
   driver: ConformanceDriver<Program, StartError, R>,
   scenario: Scenario,
   launched: HashMap.HashMap<string, LaunchedChild<Program>>,
+  livenessTickMillis: Option.Option<number>,
 ): Supervisor.SupervisorSpec<PortShape<Program, StartError, Scope.Scope | R> | R> =>
   Supervisor.make(scenario.name).pipe(
     Supervisor.strategy(scenario.strategy),
     Supervisor.intensity(scenario.intensity, scenario.periodMillis),
+    Option.match(livenessTickMillis, {
+      onSome: (millis) => Supervisor.livenessTick(millis),
+      onNone: () => Function.identity,
+    }),
     Supervisor.children(
       Arr.map(
         scenario.children,
@@ -235,6 +277,7 @@ const advanceEffectOf = <Program>(
   childId: string,
 ): Effect.Effect<void> =>
   Effect.gen(function*() {
+    yield* awaitPredicate(seen, orderedStartsObservedIn)
     const generation = yield* Effect.map(Ref.get(seen.trace), latestOrderedGenerationIn(childId))
     const index = yield* currentCursorOf(cursors, childId)
     yield* Ref.update(cursors, (known) => HashMap.set(known, childId, index + 1))
@@ -277,14 +320,14 @@ const driveControlOf = <Program>(
       { discard: true },
     )
   })
-
 const runScenarioOf = <Program, StartError, R>(
   driver: ConformanceDriver<Program, StartError, R>,
   scenario: Scenario,
+  livenessTickMillis: Option.Option<number>,
 ): Effect.Effect<ConformanceTrace, never, PortShape<Program, StartError, Scope.Scope | R> | R> =>
   Effect.scoped(Effect.gen(function*() {
     const launched = yield* launchAllOf(driver, scenario)
-    const handle = yield* supervisorOf(driver, scenario, launched).scoped
+    const handle = yield* supervisorOf(driver, scenario, launched, livenessTickMillis).scoped
     const seen = yield* followedTraceOf(handle)
     yield* driveControlOf(scenario, launched, handle, seen)
     yield* awaitPredicate(seen, terminatedDecisionIn)
@@ -292,8 +335,10 @@ const runScenarioOf = <Program, StartError, R>(
     return { scenario: scenario.name, medium: driver.name, steps: observedStepsOf(entries) }
   }))
 
-const runReferenceOf = (scenario: Scenario): Effect.Effect<ConformanceTrace, never, FiberShape> =>
-  runScenarioOf(FiberReference, scenario)
+const runReferenceOf = (
+  scenario: Scenario,
+  livenessTickMillis: Option.Option<number>,
+): Effect.Effect<ConformanceTrace, never, FiberShape> => runScenarioOf(FiberReference, scenario, livenessTickMillis)
 
 const SCENARIO_MILLIS = Duration.seconds(5)
 
@@ -351,10 +396,11 @@ const proveScenarioOf = <Program, StartError, R>(
   const budget = Option.fromNullishOr(driver.scenario)
   const adopted = adoptedScenarioOf(scenario, budget)
   const bound = boundOf(budget)
+  const tick = Option.flatMap(budget, (declared) => Option.fromNullishOr(declared.livenessTickMillis))
   return Effect.map(
     Effect.zip(
-      Effect.timeoutOption(runReferenceOf(adopted), bound),
-      Effect.timeoutOption(runScenarioOf(driver, adopted), bound),
+      Effect.timeoutOption(runReferenceOf(adopted, tick), bound),
+      Effect.timeoutOption(runScenarioOf(driver, adopted, tick), bound),
     ),
     ([reference, candidate]) => outcomeOf(adopted, driver.name, reference, candidate, driver.declaration),
   )
