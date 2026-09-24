@@ -1,4 +1,4 @@
-import { Resource } from '@systemfsoftware/effect-cell-types'
+import { Blueprint } from '@systemfsoftware/effect-cell-types'
 import type * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -28,9 +28,8 @@ const scoped = (spec: ContainerSpec): Effect.Effect<RunningContainer> =>
 const layer = (spec: ContainerSpec) => <Id>(key: Context.Key<Id, RunningContainer>): Layer.Layer<Id> =>
   Layer.effect(key)(scoped(spec))
 
-const Services = Resource.make<ContainerSpec>()({
-  typeId: TypeId,
-  combinators: {
+const Services = Blueprint.make<ContainerSpec>()(TypeId).steps({
+  steps: {
     withPort: (spec, port: number): ContainerSpec =>
       Match.value(spec).pipe(
         Match.tag('Service', (service) => new ServiceSpec({ image: service.image, ports: [...service.ports, port] })),
@@ -38,24 +37,23 @@ const Services = Resource.make<ContainerSpec>()({
         Match.exhaustive,
       ),
   },
-  projections: { scoped, layer },
+  targets: { scoped, layer },
 })
 
-const Jobs = Resource.make<JobSpec>()({
-  typeId: TypeId,
-  combinators: {
+const Jobs = Blueprint.make<JobSpec>()(TypeId).steps({
+  steps: {
     withPort: (spec, _port: number): JobSpec => spec,
     withWorkdir: (spec, workdir: string): JobSpec => new JobSpec({ image: spec.image, ports: spec.ports, workdir }),
   },
-  projections: {
+  targets: {
     scoped,
     layer,
     run: (spec): Effect.Effect<string> => Effect.as(scoped(spec), spec.workdir),
   },
 })
 
-export type Container = Resource.Of<typeof Services>
-export type Job = Resource.Of<typeof Jobs>
+export type Container = Blueprint.Of<typeof Services>
+export type Job = Blueprint.Of<typeof Jobs>
 
 export const isContainer = Services.is
 
@@ -63,6 +61,6 @@ export const make = (image: string): Container => Services.of(new ServiceSpec({ 
 
 export const job = (image: string): Job => Jobs.of(new JobSpec({ image, ports: [], workdir: '/' }))
 
-export const withPort = Services.combinators.withPort
+export const withPort = Services.operations.withPort
 
-export const withWorkdir = Jobs.combinators.withWorkdir
+export const withWorkdir = Jobs.operations.withWorkdir

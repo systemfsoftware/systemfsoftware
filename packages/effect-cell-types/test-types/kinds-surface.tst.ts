@@ -15,7 +15,9 @@ import {
   make,
   withPort,
   withWorkdir,
-} from '../tests/__fixtures__/container.resource.js'
+} from '../tests/__fixtures__/container.blueprint.js'
+import { concat, type Matcher, matcher, orElse, type Policy, when } from '../tests/__fixtures__/matcher.blueprint.js'
+import { above, ask, type Check, is, labels, numbers, type Unsure } from '../tests/__fixtures__/question.blueprint.js'
 import {
   exec,
   isRunningContainer,
@@ -33,7 +35,7 @@ declare const Plain: Handle.Definition<typeof PlainId, { readonly count: number 
 declare const Slotted: Handle.Definition<typeof PlainId, { readonly count: number }, RawDriver>
 declare const key: Context.Key<'Redis', RunningContainer>
 
-describe('Resource', () => {
+describe('Blueprint', () => {
   it('Should_AgreeAcrossMethodAndDual_When_ACombinatorIsApplied', () => {
     expect(make('redis:7').withPort(6379)).type.toBe<Container>()
     expect(withPort(make('redis:7'), 6379)).type.toBe<Container>()
@@ -52,7 +54,7 @@ describe('Resource', () => {
     expect(job('alpine').withWorkdir('/srv').spec).type.toBe<JobSpec>()
   })
 
-  it('Should_ExposeProjectionsAsProperties_When_TheResourceIsConfigured', () => {
+  it('Should_ExposeTargetsAsProperties_When_TheBlueprintIsConfigured', () => {
     expect(make('redis:7').scoped).type.toBe<Effect.Effect<RunningContainer, never, never>>()
     expect(make('redis:7').layer(key)).type.toBe<Layer.Layer<'Redis', never, never>>()
     expect(job('alpine').run).type.toBe<Effect.Effect<string, never, never>>()
@@ -73,13 +75,108 @@ describe('Resource', () => {
     expect(pipe(job('alpine'), withPort(80))).type.toBe<Job>()
   })
 
-  it('Should_StandInForItsBaseResource_When_AVariantSharesTheBrand', () => {
+  it('Should_StandInForItsBaseBlueprint_When_AVariantSharesTheBrand', () => {
     expect<Job>().type.toBeAssignableTo<Container>()
     expect<Container>().type.not.toBeAssignableTo<Job>()
   })
 
-  it('Should_NarrowToTheResource_When_TheGuardHolds', () => {
+  it('Should_NarrowToTheBlueprint_When_TheGuardHolds', () => {
     expect(isContainer).type.toBe<(u: Top) => u is Container>()
+  })
+})
+
+interface Change {
+  readonly title: string
+}
+
+const impact = labels<Change>()('impact', ['breaking', 'minor'], () => 'minor')
+const risk = labels<Change>()('risk', ['high', 'low'], () => 'low')
+const size = numbers<Change>()('size', (change) => change.title.length)
+
+describe('Blueprint over a type index', () => {
+  it('Should_AgreeAcrossMethodAndBothDuals_When_AnOperationCompilesToAnotherType', () => {
+    expect(impact.is('breaking')).type.toBe<Check<Change>>()
+    expect(is(impact, 'breaking')).type.toBe<Check<Change>>()
+    expect(pipe(impact, is('breaking'))).type.toBe<Check<Change>>()
+  })
+
+  it('Should_RefuseALabelTheQuestionDoesNotHave_When_CalledInAnyForm', () => {
+    expect(impact.is).type.not.toBeCallableWith('critical')
+    expect(is).type.not.toBeCallableWith(impact, 'critical')
+    expect(pipe).type.not.toBeCallableWith(impact, is('critical'))
+  })
+
+  it('Should_OfferAnOperationOnlyWhereTheIndexAdmitsIt_When_ItIsScaleSpecific', () => {
+    expect(size).type.toHaveProperty('above')
+    expect(impact).type.not.toHaveProperty('above')
+    expect(pipe(size, above(3))).type.toBe<Check<Change>>()
+    expect(pipe).type.not.toBeCallableWith(impact, above(3))
+    expect(above).type.not.toBeCallableWith(impact, 3)
+  })
+
+  it('Should_ReadATargetTypedByTheIndex_When_ItIsAProperty', () => {
+    expect(impact.labels).type.toBe<ReadonlyArray<'breaking' | 'minor'>>()
+  })
+
+  it('Should_DropTheErrorChannel_When_AFallbackIsGiven', () => {
+    const change: Change = { title: 'x' }
+    expect(impact.ask(change)).type.toBe<Effect.Effect<'breaking' | 'minor', Unsure>>()
+    expect(ask(impact, change, { onUnsure: () => 'escalate' as const })).type.toBe<
+      Effect.Effect<'breaking' | 'minor' | 'escalate'>
+    >()
+    expect(pipe(impact, ask(change, { onUnsure: () => 'escalate' as const }))).type.toBe<
+      Effect.Effect<'breaking' | 'minor' | 'escalate'>
+    >()
+  })
+
+  it('Should_WidenTheOutput_When_EachCaseIsAddedInAnyForm', () => {
+    const byMethod = matcher<Change>().when(impact.is('breaking'), () => 'block' as const).when(
+      risk.is('high'),
+      () => 42,
+    )
+    expect(byMethod).type.toBe<Matcher<Change, 'block' | number>>()
+    expect(when(when(matcher<Change>(), impact.is('breaking'), () => 'block' as const), risk.is('high'), () => 42))
+      .type.toBe<Matcher<Change, 'block' | number>>()
+    expect(
+      pipe(matcher<Change>(), when(impact.is('breaking'), () => 'block' as const), when(risk.is('high'), () => 42)),
+    ).type.toBe<Matcher<Change, 'block' | number>>()
+  })
+
+  it('Should_TypeTheHandlerInput_When_TheCaseIsAddedInAnyForm', () => {
+    expect(matcher<Change>().when(impact.is('breaking'), (change) => change.title)).type.toBe<Matcher<Change, string>>()
+    expect(when(matcher<Change>(), impact.is('breaking'), (change) => change.title)).type.toBe<
+      Matcher<Change, string>
+    >()
+    expect(pipe(matcher<Change>(), when(impact.is('breaking'), (change) => change.title))).type.toBe<
+      Matcher<Change, string>
+    >()
+  })
+
+  it('Should_RefuseACheckOverAnotherInput_When_TheCaseIsAdded', () => {
+    expect(matcher<number>().when).type.not.toBeCallableWith(impact.is('breaking'), () => 1)
+    expect(when).type.not.toBeCallableWith(matcher<number>(), impact.is('breaking'), () => 1)
+    expect(pipe).type.not.toBeCallableWith(matcher<number>(), when(impact.is('breaking'), () => 1))
+  })
+
+  it('Should_JoinTheOutputs_When_TwoMatchersAreConcatenated', () => {
+    const block = matcher<Change>().when(impact.is('breaking'), () => 'block' as const)
+    const score = matcher<Change>().when(risk.is('high'), () => 42)
+    expect(block.concat(score)).type.toBe<Matcher<Change, 'block' | number>>()
+    expect(concat(block, score)).type.toBe<Matcher<Change, 'block' | number>>()
+    expect(pipe(block, concat(score))).type.toBe<Matcher<Change, 'block' | number>>()
+  })
+
+  it('Should_CompileToACallablePolicy_When_AFallbackFinishesIt', () => {
+    const cases = matcher<Change>().when(impact.is('breaking'), () => 'block' as const)
+    expect(cases.orElse(() => true)).type.toBe<Policy<Change, 'block' | boolean>>()
+    expect(orElse(cases, () => true)).type.toBe<Policy<Change, 'block' | boolean>>()
+    expect(pipe(cases, orElse(() => true))).type.toBe<Policy<Change, 'block' | boolean>>()
+    expect(pipe(cases, orElse((change: Change) => change.title))).type.toBe<Policy<Change, string>>()
+  })
+
+  it('Should_NotConfuseTwoKinds_When_AnOperationIsGivenTheWrongBlueprint', () => {
+    expect(when).type.not.toBeCallableWith(impact, impact.is('breaking'), () => 1)
+    expect(is).type.not.toBeCallableWith(matcher<Change>(), 'breaking')
   })
 })
 

@@ -5,18 +5,18 @@
 ```ts
 
 // @public (undocumented)
+export namespace Blueprint {
+    export { Applied, Blueprint, Carrying, DataFirst, Definition$1 as Definition, Derived, Dual, DualOut, Either, Get, Implementation, Implementations, IndexId, IndexOf, LastFirstOf, LastRestOf, Of$1 as Of, Operation, OutOf, ParamsOf, RestOf, Step, Target, TargetOf, make$2 as make };
+}
+
+// @public (undocumented)
 export namespace Cell {
     export { Cell, CellTypeId, Do, Kind$1 as Kind, Run, TypeLambda$1 as TypeLambda, andThen, bind, bindTo, collect, collectAll, fail, flatMap, fromEffect, gate, id, let_ as let, map, mapError, mapInput, match, orElse, provideContext, succeed, suspend, tap, zip, zipWith };
 }
 
 // @public (undocumented)
 export namespace Handle {
-    export { Definition$1 as Definition, Handle, Of$1 as Of, make$2 as make };
-}
-
-// @public (undocumented)
-export namespace Resource {
-    export { ArgumentsOf, Combinator, Definition, Dual, Of, Projection, Resource, make$1 as make };
+    export { Definition, Handle, Of, make$1 as make };
 }
 
 // @public (undocumented)
