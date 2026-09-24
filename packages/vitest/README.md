@@ -245,7 +245,7 @@ export const runPipeline = (expect: Expect) =>
   })
 ```
 
-`captureRunBinding` — from `@effect/vitest/integration` — is the test's run binding. Capture it inside the test, then `bind` the effect before handing it to a runtime of your own — its own scheduler, a worker, a simulation kernel — so its checks count as that test's assertions. `bind` provides what a check reads off the test's own fiber (the ledger, and the running task context) and the bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know the ledger:
+`captureRunBinding` — from `@effect/vitest/integration` — is the test's run binding. Capture it inside the test, then `bind` the effect before handing it to a runtime of your own — its own scheduler, a worker, a simulation kernel — so its checks count as that test's assertions. `bind` provides what a check reads off the test's own fiber (the ledger, and the running task context) and the bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know the ledger. Every run of a bound effect opens its own observed state, so a runtime that re-runs it — a kernel's baseline and its seeded replays — checks each run once; two checks inside one run are still refused:
 
 ```ts
 import { captureRunBinding } from '@effect/vitest/integration'

@@ -26,6 +26,10 @@ export const step = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E,
  * test's own fiber — the ledger — so the checks the other runtime runs count as this test's assertions, and the
  * bound effect no longer requires `Asserted`, which is what lets it cross into a runtime that cannot know it.
  *
+ * A runtime of its own re-runs the bound effect — a kernel explores a baseline and then its seeded replays — and
+ * every run is a fresh execution of the system, so `bind` opens a new observed state before each one. One check
+ * per run, and two checks inside one run are still refused.
+ *
  * @since 4.0.0
  */
 export interface RunBinding {
@@ -41,9 +45,14 @@ const boundContext = <A, E, R>(
     onSome: (value) => Effect.provideService(self, VitestTestContext, value),
   })
 
+const openedRun = <A, E, R>(
+  self: Effect.Effect<A, E, R | Asserted>,
+  asserted: AssertedShape,
+): Effect.Effect<A, E, R | Asserted> => Effect.andThen(Effect.sync(() => asserted.step()), self)
+
 const bindingOf = (asserted: AssertedShape, ctx: V.TestContext | null | undefined): RunBinding => ({
   bind: <A, E, R>(self: Effect.Effect<A, E, R | Asserted>): Effect.Effect<A, E, R> =>
-    boundContext(Effect.provideService(self, Asserted, asserted), ctx),
+    boundContext(Effect.provideService(openedRun(self, asserted), Asserted, asserted), ctx),
 })
 
 /**
