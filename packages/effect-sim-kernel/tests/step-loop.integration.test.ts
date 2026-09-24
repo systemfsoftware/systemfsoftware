@@ -15,6 +15,7 @@ import {
   fiberPatternOf,
   stepsWithoutFiberIds,
 } from './__fixtures__/kernelFixtures.js'
+import { stepsLeavingTheSourceOpen } from './__fixtures__/openSourceFixtures.js'
 
 const Feature = makeFeature({ it })
 
@@ -252,6 +253,23 @@ Feature('Running one program again under a chosen schedule')
         }),
         And('the run exits with the interruption')((s) => {
           expect(Exit.hasInterrupts(completedRunOf(s.run).exit)).toBe(true)
+        }),
+      ),
+    )
+
+    scenario(
+      'A reader stopped at any step of its run still lets go of the source it opened',
+      Gherkin.Do.pipe(
+        Given('a source that stays open until its reader lets go, and a reader that takes one value from it')(
+          'check',
+          () => Effect.succeed(stepsLeavingTheSourceOpen),
+        ),
+        When('the reader is stopped after each step, one run for every step')(
+          'leftOpen',
+          (s) => Effect.promise(s.check),
+        ),
+        Then('no run leaves the source open')((s) => {
+          expect(s.leftOpen).toEqual([])
         }),
       ),
     )

@@ -11,7 +11,7 @@
  * package (R17). They are pinned to `effect` 4.0.0-rc.116 and fail loudly when a
  * field or method moves.
  */
-import { Deferred, Effect, Ref, Scheduler } from 'effect'
+import { Deferred, Effect, Match, Ref, Scheduler } from 'effect'
 
 import { makeRunClocks } from './clocks.js'
 import type { RunClocks } from './clocks.js'
@@ -353,15 +353,37 @@ const dispatchEvaluate = (
   return dispatchObserved(fiber, kernel, original, args)
 }
 
+const interruptAgain = (fiber: AnyFiber, args: ReadonlyArray<Field>) => (): void => {
+  Reflect.apply(Reflect.get(fiber, 'interruptUnsafe'), fiber, args)
+}
+
+const dispatchInterrupt = (
+  fiber: AnyFiber,
+  kernel: Kernel,
+  original: MethodFunction,
+  args: ReadonlyArray<Field>,
+): Field => {
+  // Effect resumes a fiber inline, up to its next suspension, so another
+  // fiber's interrupt only ever meets that later state. The kernel queues the
+  // resumed run as a step instead: an interrupt arriving before that step runs
+  // is applied right after it, against the state the run leaves behind, and
+  // never as a second run of the same fiber.
+  if (kernel.afterQueuedResume(fiber, interruptAgain(fiber, args))) return undefined
+  return dispatchObserved(fiber, kernel, original, args)
+}
+
 const dispatchFiberCall = (
   fiber: AnyFiber,
   method: string,
   original: MethodFunction,
   args: ReadonlyArray<Field>,
   kernel: Kernel,
-): Field => (method === 'evaluate'
-  ? dispatchEvaluate(fiber, kernel, original, args)
-  : dispatchObserved(fiber, kernel, original, args))
+): Field =>
+  Match.value(method).pipe(
+    Match.when('evaluate', () => dispatchEvaluate(fiber, kernel, original, args)),
+    Match.when('interruptUnsafe', () => dispatchInterrupt(fiber, kernel, original, args)),
+    Match.orElse(() => dispatchObserved(fiber, kernel, original, args)),
+  )
 
 // ---------------------------------------------------------------------------
 // The kernel
@@ -395,6 +417,8 @@ export interface Kernel {
   effectDefault(): Decision
   step(input: StepInput): void
   resumeExternally(fiber: AnyFiber, run: () => void): void
+  /** Runs `after` right after `fiber`'s queued resume; false when none is queued. */
+  afterQueuedResume(fiber: AnyFiber, after: () => void): boolean
   observeShared(target: object): void
   observeGlobalWork(): void
   /** Records a primitive the run reached without observing it (pruning seam). */
@@ -593,6 +617,22 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
     if (exploring) decisions.push(input.choice)
   }
 
+  const queuedResumeOf = (fiber: AnyFiber) => (task: Task): boolean => task.external && task.owner === fiber
+
+  const afterQueuedResume = (fiber: AnyFiber, after: () => void): boolean => {
+    const index = pending.findIndex(queuedResumeOf(fiber))
+    const task = pending[index]
+    if (task === undefined) return false
+    pending[index] = {
+      ...task,
+      run: () => {
+        task.run()
+        after()
+      },
+    }
+    return true
+  }
+
   const takeTask = (choice: Decision): Task | undefined => {
     const task = taskAt(choice)
     if (task === undefined) return undefined
@@ -663,6 +703,7 @@ export const makeKernel = (options: MakeKernelOptions): Kernel => {
       pending.push({ owner: fiber, run, external: true, forced: false, step: stepCount })
       scheduledInStep++
     },
+    afterQueuedResume,
     observeShared: (target: object): void => {
       if (phase === 'step') touches.add(target)
     },
