@@ -254,8 +254,7 @@ const awaitedResources = <A, E>(state: Drive<A, E>): ReadonlyArray<string> => ne
 const waitsRemain = (resources: ReadonlyArray<string>): boolean =>
   resources.some((resource) => waitKindOf([resource]) === 'File' || waitKindOf([resource]) === 'Socket')
 
-const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> =>
-  drive({ ...state, before: resourceCounts() })
+const revivedDrive = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E>> => drive(state)
 
 const waitedOutcome = <A, E>(state: Drive<A, E>): Promise<RunResult<A, E> | undefined> => revivedAfterHost(state, 0)
 

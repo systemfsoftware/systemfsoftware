@@ -5,6 +5,7 @@ import { expect } from 'vitest'
 
 import { fileReadProgram, hostTimerProgram, makeHostFiles, removeHostFiles } from './__fixtures__/externalFixtures.js'
 import { blockedFailureOf, completedRunOf, completedValueOf, escapeOf } from './__fixtures__/kernelFixtures.js'
+import { answeringService, askAfterConnecting } from './__fixtures__/socketFixtures.js'
 
 const Feature = makeFeature({ it })
 
@@ -47,6 +48,23 @@ Feature('Waiting on the host outside the controlled schedule')
         }),
         And('every step keeps the default order')((s) => {
           expect(completedRunOf(s.run).steps.every((step) => step.deviation === false)).toBe(true)
+        }),
+      ),
+    )
+
+    scenario(
+      'A program that connects to a host service and then waits for its answer gets the answer',
+      Gherkin.Do.pipe(
+        Given('a service on the host that answers "pong" once it is asked')(
+          'service',
+          () => Effect.acquireRelease(answeringService, (service) => service.close),
+        ),
+        When('a program connects, then asks and waits on the same connection, with host waits allowed')(
+          'run',
+          (s) => Effect.promise(() => Kernel.run(askAfterConnecting(s.service.port), { external: 'await' })),
+        ),
+        Then('the program gets "pong" back')((s) => {
+          expect(completedValueOf(s.run)).toBe('pong')
         }),
       ),
     )
