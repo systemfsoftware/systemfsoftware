@@ -60,7 +60,7 @@ The Q1 prototype (`01-callback-yielded-expect/`) measured the alternative with g
 
 **Body and `expect`**
 
-- R1. The fork exports no `expect`, `assert`, or `@effect/vitest/utils` helpers, and its `vitest` re-export omits them. A test's only `expect` is the `{ expect }` its body receives.
+- R1. The fork exports no `expect`, `assert`, or `@effect/vitest/utils` helpers, and its `vitest` re-export omits them. A test's only `expect` is the `{ expect }` its body receives. Any assertion made outside a check from that `expect` fails the test with "✗ an expect imported from vitest ran; take it from the test callback: it(name, function* ({ expect }) { ... })". That covers a raw `vitest` `expect`, `expect.soft`, and chai `assert`. A test registered with `vitest`'s own `it`/`test` fails with "✗ this test was registered with vitest's it; import it from @effect/vitest". Both hold in every test file of the repo, whatever it imports.
 - R2. A test body is a generator the runner drives. It yields services, Effects and checks directly. A sync function, an `async` function, and a function returning an Effect are each refused with the rewrite at compile time and at run time.
 - R3. Every matcher returns a check: an Effect that needs `Asserted`, a service only the runner provides. A check written but not yielded fails the build (`floatingEffect`) and is refused at run time as "written but never yielded".
 - R4. A body that yields no check is refused on the test name at compile time. At run time the no-assertion gate counts only yielded checks.
@@ -111,6 +111,10 @@ The Q1 prototype (`01-callback-yielded-expect/`) measured the alternative with g
 - AE6. Covers R1.
   - **Given** `import { expect } from "@effect/vitest"`.
   - **Then** it is a compile error naming the callback parameter. There is no lint rule involved.
+  - **Given** a fork test that yields one real check and also calls `import { expect } from "vitest"`'s `expect(1).toEqual(1)`.
+  - **Then** the test fails with the raw-expect refusal.
+  - **Given** a test registered with `import { it } from "vitest"`.
+  - **Then** it fails with the registration refusal.
 
 ### Success Criteria
 
@@ -156,7 +160,12 @@ The Q1 prototype (`01-callback-yielded-expect/`) measured the alternative with g
   - R6 (soft within a step) is replaced by R5/R8 here, and R10 (`owned`/`recordAssertion`) by R10 here.
   - R16/R17 (lint) are withdrawn by KTD6.
   - Everything else in that plan stands.
-- KTD8. **A raw `vitest` `expect` is refused at run time if the runner can see it.** Vitest's per-test `assertionCalls` counts calls on the task's own `expect`. If a raw import increments the same counter, the runner compares it with the ledger's count and refuses the difference ("an expect imported from vitest ran; take it from the test callback"). If U1's probe shows the counters are separate, the gap is recorded in the README and the solution doc. It stays small: such a test must still yield one real check to pass R4.
+- KTD8. **The library brands both assertions and tests, and a setup-file guard refuses anything else.** The `Asserted` brand alone only proves a test yielded at least one fork check. It cannot see a raw `vitest` `expect` beside that check. U1 measured on vitest 5.0.1 that raw `expect` keeps its own state object: a raw call moved the task's `assertionCalls` 0→0, so counting cannot catch it.
+  - Every Vitest assertion (raw `expect`, `expect.soft`, `expect.poll`, chai `assert`, and the task's `ctx.expect`) runs on the one shared `chai.Assertion` prototype.
+  - The guard wraps that prototype's methods and properties once and throws the R1 refusal unless a synchronous flag is set. Only the fork's check sets that flag, for the duration of its matcher call.
+  - The fork's `it` marks each task it registers in `task.meta`. The guard's `beforeEach` refuses any task without that mark.
+  - The guard ships as the `@effect/vitest/guard` entry (a `tsdown.config.ts` entry, REPO-S4). The shared `packages/toolchain/vitest-config` `sharedConfig` lists it in `setupFiles`, so every package gets it without any import. This setup-file hook is internal plumbing; the user-facing `beforeEach` refusal (R9) is unchanged.
+  - Governs R1.
 - KTD9. **The gate lands first.** U1's conformance probes and tstyche refusals are committed red before U2-U4 (Evaluator surface class, `AGENTS.md`).
 - KTD10. **A merge keeps every fact.** A piecewise group becomes one `toMatchObject`/`toEqual` over a record containing every value the old checks named. A presence or length check becomes the value it implied. Where the value is unknowable at authoring time, `expect.schemaMatching(Schema)` or `expect.arrayContaining` stands in, with the reason in the check. Governs R12.
 
@@ -172,15 +181,16 @@ This ran in pipeline mode, so these scoping bets were not confirmed and take the
 
 Every proposed test went through the admission gate, which refuses by default. All admitted tests run in-process through a published surface: `run-fixtures.ts` drives `startVitest` from `vitest/node`, and tstyche reads types. None spawns a process.
 
-| Proposed test                                                   | Verdict | Why                                                                                                |
-| --------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
-| AE1-AE6, one-state/loop/`it.each`/forked-fiber fixtures         | admit   | Each defends an observable contract of the runner a plausible bug would break.                     |
-| One runtime fixture per refusal class; tstyche per refused name | admit   | The message text is the contract. Names are separate type declarations but share one runtime path. |
-| Every kept matcher passes and fails                             | refuse  | That re-tests Vitest's matchers, which is forwarding. One ledger-judgment fixture replaces it.     |
-| A new second-run `LeakedState` fixture                          | refuse  | The #512 `runner/leak.test.ts` already defends it and migrates mechanically.                       |
-| `Then.soft`/`Then.poll` behaviour                               | refuse  | The feature is deleted (R10).                                                                      |
-| Differential and trace verdicts count as the one check          | admit   | This is the gate interplay the new integration introduces.                                         |
-| RuleTester suites for deleted rules                             | refuse  | They are deleted with the rules.                                                                   |
+| Proposed test                                                                          | Verdict | Why                                                                                                |
+| -------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| AE1-AE6, one-state/loop/`it.each`/forked-fiber fixtures                                | admit   | Each defends an observable contract of the runner a plausible bug would break.                     |
+| One runtime fixture per refusal class; tstyche per refused name                        | admit   | The message text is the contract. Names are separate type declarations but share one runtime path. |
+| Every kept matcher passes and fails                                                    | refuse  | That re-tests Vitest's matchers, which is forwarding. One ledger-judgment fixture replaces it.     |
+| A new second-run `LeakedState` fixture                                                 | refuse  | The #512 `runner/leak.test.ts` already defends it and migrates mechanically.                       |
+| `Then.soft`/`Then.poll` behaviour                                                      | refuse  | The feature is deleted (R10).                                                                      |
+| A raw `vitest` `expect` beside a real check, and a raw `vitest` `it`, are each refused | admit   | This is the brand's escape route; each is a plausible bypass the guard must close.                 |
+| Differential and trace verdicts count as the one check                                 | admit   | This is the gate interplay the new integration introduces.                                         |
+| RuleTester suites for deleted rules                                                    | refuse  | They are deleted with the rules.                                                                   |
 
 ### Destructive Review
 
@@ -262,13 +272,14 @@ flowchart TB
 
 ### Risks
 
-| Risk                                                                                                  | Mitigation                                                                                                                                                                                                               |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The one-check rule fires inside library pipelines, where several steps run within one yielded Effect. | KTD5's step marker. U5's AE5 probe pins it.                                                                                                                                                                              |
-| A merge silently drops a fact.                                                                        | KTD10, plus U9's reviewer pass comparing asserted facts per site; stop condition in the capsule.                                                                                                                         |
-| The browser-mode suite needs a node API in the driver.                                                | The driver is plain iterator + Effect code (KTD1). U3 runs `effect-atom-react`'s browser project before U8.                                                                                                              |
-| The step marker becomes an escape hatch for authors.                                                  | It lives on `/integration`, needs `Asserted`, and only opens a state; it counts nothing. U10 greps migrated test files for `/integration` imports; any hit is rewritten or the marker gets a lint refusal in test files. |
-| Losing soft multi-failure reporting hides a second failure.                                           | One structural check prints a diff of every wrong field (prototype finding).                                                                                                                                             |
+| Risk                                                                                                                                              | Mitigation                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The one-check rule fires inside library pipelines, where several steps run within one yielded Effect.                                             | KTD5's step marker. U5's AE5 probe pins it.                                                                                                                                                                                 |
+| A merge silently drops a fact.                                                                                                                    | KTD10, plus U9's reviewer pass comparing asserted facts per site; stop condition in the capsule.                                                                                                                            |
+| The guard refuses assertions made by a runner that is not the fork (Storybook's `storybook/test` play functions in `packages/storybook-gherkin`). | U4 runs `storybook-gherkin`'s browser suite. If Storybook's `expect` shares the `chai` instance and its project inherits `sharedConfig`, that project leaves the guard out of its `setupFiles`, because it is out of scope. |
+| The browser-mode suite needs a node API in the driver.                                                                                            | The driver is plain iterator + Effect code (KTD1). U3 runs `effect-atom-react`'s browser project before U8.                                                                                                                 |
+| The step marker becomes an escape hatch for authors.                                                                                              | It lives on `/integration`, needs `Asserted`, and only opens a state; it counts nothing. U10 greps migrated test files for `/integration` imports; any hit is rewritten or the marker gets a lint refusal in test files.    |
+| Losing soft multi-failure reporting hides a second failure.                                                                                       | One structural check prints a diff of every wrong field (prototype finding).                                                                                                                                                |
 
 ---
 
@@ -284,7 +295,7 @@ flowchart TB
 - **Approach:**
   - Port the prototype's `probe/a-{good,slop,vocab-good,vocab-slop}.test.ts` and `probe/habit-forms.test.ts` as fixtures run by `support/run-fixtures.ts`. Every fixture, old or new, is written in the new surface, so none needs migrating after U4.
   - The integration test asserts each fixture's outcome and message. Each refusal's compile half goes in tstyche.
-  - `raw-vitest-expect` measures whether a raw `vitest` `expect` moves the task's `assertionCalls` (KTD8). Its result decides U3's branch.
+  - Measured before writing fixtures: raw `vitest` `expect` has separate state from `ctx.expect`, so KTD8 enforces through the chai guard, not through counters.
 - **Test scenarios** (each admitted by the test-layer gate below):
   - AE1-AE4 and AE6 as fixtures.
   - One fixture per refusal class: by name, missing the specific argument, and boolean actual. Each fails with its text. tstyche pins every refused name's compile half, since each is a separate declaration.
@@ -292,6 +303,7 @@ flowchart TB
   - A check in `Effect.forEach` over two items is refused.
   - `it.each` with two rows judges each row once.
   - A forked fiber's failed check fails the test.
+  - AE6's raw-expect and raw-`it` cases: each fails with its refusal under the guard setup file.
 - **Verification:** the fixtures fail against the #512 fork, each for the stated reason, recorded for the PR body.
 
 ### Phase: Fork
@@ -315,7 +327,8 @@ flowchart TB
 - **Files:** `packages/vitest/src/internal/runner.ts` (lanes, `makeMethods`, `layer` blocks, `each`, second run), new `packages/vitest/src/internal/driver.ts`, `packages/vitest/src/mod.ts` (types `Test`, `Methods`, `Gate`).
 - **Approach:**
   - Build the driver per KTD1 as the body builder for `it`, `it.live`, `it.each`, `it.only/skip/skipIf/runIf/fails`, and the `layer`/`it.layer`/`describeWrapped` blocks. It uses only the public `Effect.gen` iterator contract, never `effect/internal`.
-  - After the body, the gate compares written, judged and zero, then applies KTD8 by U1's result.
+  - After the body, the gate compares written, judged and zero.
+  - Build the KTD8 guard in `packages/vitest/src/internal/guard.ts`: the chai prototype wrapper, the authorized-call flag set by U2's check, the `task.meta` mark set at registration, and the `beforeEach` registration refusal.
   - `it.effect`/`it.scoped`/`it.scopedLive` become callables that refuse, and `it.effect.prop` keeps working. `beforeEach`/`afterEach` refusals stay.
   - Keep virtual time, fresh layers, shuffle, the second run and `LeakedState` as they are.
 - **Execution note:** run `packages/atom/effect-atom-react`'s browser project on a minimal generator test before U4.
@@ -328,7 +341,8 @@ flowchart TB
 - **Files:**
   - `packages/vitest/src/mod.ts`.
   - Delete `packages/vitest/src/{utils.ts,Refusals.ts}` if nothing public remains in them, plus `src/internal/{expect.ts,binding.ts,owned.ts,step-boundary.ts}` and `AfterFailedExpect` in `errors.schema.ts`.
-  - New `packages/vitest/src/integration.ts`.
+  - New `packages/vitest/src/integration.ts` and `packages/vitest/src/guard.ts` (the setup-file entry).
+  - `packages/toolchain/vitest-config/lib/base.js` (`sharedConfig.test.setupFiles` gains `@effect/vitest/guard`), and every package config that replaces rather than extends `setupFiles`.
   - `packages/vitest/tsdown.config.ts`, `packages/vitest/README.md`, `packages/vitest/test-types/*`.
 - **Approach:**
   - Replace `export * from "vitest"` with an explicit list that omits `expect` and `assert`.
@@ -441,7 +455,7 @@ flowchart TB
 
 ## Definition of Done
 
-- R1-R13 hold, and AE1-AE6 pass as conformance fixtures or tstyche assertions.
+- R1-R13 hold, the KTD8 guard is active in every package's test config, and AE1-AE6 pass as conformance fixtures or tstyche assertions.
 - U1's probes were observed red on the #512 fork, and green after U4, with the evidence in the PR body.
 - No refused form remains outside the refusal probes, and every U10 difference is classified in the PR body.
 - `pnpm check:local` exits 0 after the last edit, the PR is open, and its checks are green.
