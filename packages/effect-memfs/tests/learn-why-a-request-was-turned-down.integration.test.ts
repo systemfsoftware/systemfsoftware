@@ -1,11 +1,11 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as Error from 'effect/PlatformError'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text)
 const filesystem = Effect.service(FileSystem.FileSystem)

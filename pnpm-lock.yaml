@@ -423,6 +423,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.116(effect@4.0.0-rc.116(patch_hash=93faee9928405e464537808b3261eec4ed921025dea1c16d80eb50c5394e73ea))(vitest@5.0.1)
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../../packages/conformance-spec
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../packages/effect-gherkin-spec
@@ -737,6 +740,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../conformance-spec
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:*
         version: link:../effect-gherkin-spec
@@ -932,6 +938,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../conformance-spec
       '@systemfsoftware/differential-spec':
         specifier: workspace:^
         version: link:../differential-spec
@@ -1090,6 +1099,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../conformance-spec
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
@@ -2244,9 +2256,15 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.2.0
+      '@systemfsoftware/conformance-spec':
+        specifier: workspace:^
+        version: link:../conformance-spec
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../effect-gherkin-spec
+      '@systemfsoftware/effect-sim-kernel':
+        specifier: workspace:^
+        version: link:../effect-sim-kernel
       '@systemfsoftware/oxlint-config-recommended':
         specifier: workspace:^
         version: link:../oxlint-presets/oxlint-config-recommended

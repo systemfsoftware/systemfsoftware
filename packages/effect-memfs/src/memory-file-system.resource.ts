@@ -1,8 +1,9 @@
-import { Effect, Layer } from 'effect'
+import { Context, Effect, Layer } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Handle from './memory-file-system.handle.js'
 import { type Contents, MemoryFileSystemSpec } from './MemoryFileSystemSpec.schema.js'
+import { Watcher } from './watcher.service.js'
 
 export { type Contents, MemoryFileSystemSpec }
 
@@ -15,14 +16,17 @@ export interface MemoryFileSystemResource extends Pipeable {
   withContents(contents: Contents): MemoryFileSystemResource
   withCwd(cwd: string): MemoryFileSystemResource
   readonly effect: Effect.Effect<FileSystem.FileSystem>
-  readonly layer: Layer.Layer<FileSystem.FileSystem>
+  readonly layer: Layer.Layer<FileSystem.FileSystem | Watcher>
 }
 
 export const effect = (spec: MemoryFileSystemSpec): Effect.Effect<FileSystem.FileSystem> =>
-  Effect.sync(() => Handle.fileSystem(Handle.make(spec)))
+  Effect.map(Handle.make(spec), Handle.fileSystem)
 
-export const layer = (spec: MemoryFileSystemSpec): Layer.Layer<FileSystem.FileSystem> =>
-  Layer.effect(FileSystem.FileSystem, effect(spec))
+const servicesOf = (handle: Handle.MemoryFileSystem): Context.Context<FileSystem.FileSystem | Watcher> =>
+  Context.make(FileSystem.FileSystem, Handle.fileSystem(handle)).pipe(Context.add(Watcher, Handle.watcher(handle)))
+
+export const layer = (spec: MemoryFileSystemSpec): Layer.Layer<FileSystem.FileSystem | Watcher> =>
+  Layer.effectContext(Effect.map(Handle.make(spec), servicesOf))
 
 const makeProto = (spec: MemoryFileSystemSpec): MemoryFileSystemResource => ({
   [TypeId]: TypeId,

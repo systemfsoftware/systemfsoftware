@@ -1,22 +1,30 @@
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { type Cause, Effect, Queue, type Scope, Stream } from 'effect'
+import { type Cause, Effect, Fiber, Option, Queue, type Scope, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Error from 'effect/PlatformError'
 import { expect } from 'vitest'
 
-const Feature = makeFeature({ it, layer })
+const Feature = makeFeature({ it })
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text)
 const filesystem = Effect.service(FileSystem.FileSystem)
 
-const subscribed = <A, E>(
-  stream: Stream.Stream<A, E>,
-): Effect.Effect<Queue.Dequeue<A, E | Cause.Done>, never, Scope.Scope> =>
-  Effect.flatMap(
-    Stream.toQueue(stream, { capacity: 'unbounded' }),
-    (queue) => Effect.as(Effect.repeat(Effect.yieldNow, { times: 8 }), queue),
+type Reports = Queue.Dequeue<FileSystem.WatchEvent, Error.PlatformError | Cause.Done>
+
+const watching = (
+  target: string,
+  recursive: boolean,
+): Effect.Effect<Reports, never, MemoryFileSystem.Watcher | Scope.Scope> =>
+  Effect.service(MemoryFileSystem.Watcher).pipe(
+    Effect.flatMap((watcher) => watcher.start(target, { recursive })),
+    Effect.flatMap((events) => Stream.toQueue(events, { capacity: 'unbounded' })),
   )
+
+const openWatches = Effect.flatMap(Effect.service(MemoryFileSystem.Watcher), (watcher) => watcher.openWatches)
+
+const untilListedAsWatched = (target: string) =>
+  Effect.flatMap(Effect.service(MemoryFileSystem.Watcher), (watcher) => watcher.awaitOpen(target))
 
 type Change = {
   readonly change: string
@@ -77,52 +85,104 @@ Feature('Being told when a watched folder or letter changes')
       watchedChanges,
       (row) =>
         Gherkin.Do.pipe(
-          Given('an inbox and the top of the store each holding a kept letter')('fs', () =>
-            Effect.tap(filesystem, (fs) =>
+          Given(`the inbox and the top of the store each hold a kept letter, and ${row.watched} is being watched`)(
+            'reports',
+            () =>
               Effect.gen(function*() {
+                const fs = yield* filesystem
                 yield* fs.makeDirectory('/inbox', { recursive: true })
                 yield* fs.writeFile('/inbox/kept.txt', encode('first'))
                 yield* fs.writeFile('/kept.txt', encode('first'))
-              }))),
-          When('the letter is changed while it is watched')('event', (s) =>
-            Effect.scoped(Effect.gen(function*() {
-              const reports = yield* subscribed(s.fs.watch(row.target, { recursive: row.recursive }))
-              yield* row.act(s.fs, row.folder)
-              return yield* Queue.take(reports)
-            }))),
-          Then('the watcher is told which letter changed and how')((s) => {
-            expect(s.event).toEqual({ _tag: row.reported, path: row.path })
-          }),
+                return yield* watching(row.target, row.recursive)
+              }),
+          ),
+          When(`a letter is ${row.change}`)(() => Effect.flatMap(filesystem, (fs) => row.act(fs, row.folder))),
+          Then('the watcher is told which letter changed and how')((s) =>
+            Effect.map(Queue.take(s.reports), (event) => {
+              expect(event).toEqual({ _tag: row.reported, path: row.path })
+            })
+          ),
         ),
     )
 
     scenario(
       'A watch that has finished is never told about later changes',
       Gherkin.Do.pipe(
-        Given('an inbox folder that was watched only until the first letter arrived')(
-          'fs',
+        Given('an inbox whose first watcher stopped before a second letter arrived, and a new watcher on it')(
+          'reports',
           () =>
-            Effect.tap(filesystem, (fs) =>
-              Effect.gen(function*() {
-                yield* fs.makeDirectory('/inbox', { recursive: true })
-                yield* Effect.scoped(Effect.gen(function*() {
-                  const reports = yield* subscribed(fs.watch('/inbox'))
-                  yield* fs.writeFile('/inbox/first.txt', encode('1'))
-                  return yield* Queue.take(reports)
-                }))
-              })),
+            Effect.gen(function*() {
+              const fs = yield* filesystem
+              yield* fs.makeDirectory('/inbox', { recursive: true })
+              yield* Effect.scoped(Effect.gen(function*() {
+                const reports = yield* watching('/inbox', false)
+                yield* fs.writeFile('/inbox/first.txt', encode('1'))
+                return yield* Queue.take(reports)
+              }))
+              yield* fs.writeFile('/inbox/second.txt', encode('2'))
+              return yield* watching('/inbox', false)
+            }),
         ),
-        When('a second letter arrives and someone starts watching again')('event', (s) =>
-          Effect.gen(function*() {
-            yield* s.fs.writeFile('/inbox/second.txt', encode('2'))
-            return yield* Effect.scoped(Effect.gen(function*() {
-              const reports = yield* subscribed(s.fs.watch('/inbox'))
-              yield* s.fs.writeFile('/inbox/third.txt', encode('3'))
-              return yield* Queue.take(reports)
-            }))
-          })),
-        Then('the new watcher hears only about the letter that arrived while it was watching')((s) => {
-          expect(s.event).toEqual({ _tag: 'Create', path: 'third.txt' })
+        When('a third letter arrives')(() =>
+          Effect.flatMap(filesystem, (fs) => fs.writeFile('/inbox/third.txt', encode('3')))
+        ),
+        Then('the new watcher hears only about the third letter')((s) =>
+          Effect.map(Queue.take(s.reports), (event) => {
+            expect(event).toEqual({ _tag: 'Create', path: 'third.txt' })
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Code that watches through the plain filesystem hears a letter written once its watch is listed as open',
+      Gherkin.Do.pipe(
+        Given('an inbox that a helper watches through the plain filesystem, and the store lists the inbox as watched')(
+          'helper',
+          () =>
+            Effect.gen(function*() {
+              const fs = yield* filesystem
+              yield* fs.makeDirectory('/inbox', { recursive: true })
+              const helper = yield* Effect.forkScoped(Stream.runHead(fs.watch('/inbox')))
+              yield* untilListedAsWatched('/inbox')
+              return helper
+            }),
+        ),
+        When('a letter arrives in the inbox')(
+          'heard',
+          (s) =>
+            Effect.flatMap(filesystem, (fs) => fs.writeFile('/inbox/letter.txt', encode('1'))).pipe(
+              Effect.andThen(Fiber.join(s.helper)),
+            ),
+        ),
+        Then('the helper hears about the new letter')((s) => {
+          expect(s.heard).toEqual(Option.some({ _tag: 'Create', path: 'letter.txt' }))
+        }),
+        And('the store lists no open watch once the helper has stopped')(() =>
+          Effect.map(openWatches, (paths) => {
+            expect(paths).toEqual([])
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Only a watch that is still running is listed as open',
+      Gherkin.Do.pipe(
+        Given("Ada is watching the inbox, and Bo's watch on the archive has already stopped")(
+          'adasWatch',
+          () =>
+            Effect.gen(function*() {
+              const fs = yield* filesystem
+              yield* fs.makeDirectory('/inbox', { recursive: true })
+              yield* fs.makeDirectory('/archive', { recursive: true })
+              yield* Effect.scoped(watching('/archive', false))
+              return yield* watching('/inbox', false)
+            }),
+        ),
+        When('someone asks which watches are open')('open', () => openWatches),
+        Then('only the inbox is listed')((s) => {
+          expect(s.open).toEqual(['/inbox'])
         }),
       ),
     )
