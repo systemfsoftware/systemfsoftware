@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { Kernel } from '@systemfsoftware/effect-sim-kernel'
-import { Cause, Config, Context, Effect, Exit, Layer, Match, Option, Schema } from 'effect'
+import { Cause, Config, Context, Effect, Exit, Fiber, Layer, Match, Option, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import * as TaskRef from './TaskRef.service.js'
@@ -30,6 +30,13 @@ const exploredCase = <B, E, R, RIn extends Scope.Scope>(
   })
 
 /**
+ * Closes the case's scope when the program settles: every resource the case
+ * acquired — its layers and its body — is released whether the body succeeds,
+ * fails, or is interrupted.
+ */
+const caseScope = Effect.scoped
+
+/**
  * Marks where the harness's own setup ends and the explored body begins:
  * the case's layers build before it (fresh in every run, under the
  * zero-preemption schedule), the scenario body runs after it.
@@ -47,7 +54,7 @@ export const caseProgram: {
   <B, E, R, RIn extends Scope.Scope>(
     body: Effect.Effect<B, E, R | RIn | Scope.Scope>,
     env: Layer.Layer<R, never, RIn>,
-  ): Effect.Effect<B, E> => Effect.provide(exploredCase(body, env), Kernel.TestClock.layer).pipe(Effect.scoped),
+  ): Effect.Effect<B, E> => caseScope(Effect.provide(exploredCase(body, env), Kernel.TestClock.layer)),
 )
 
 /** Announces a live case with its reason, which is how the run report lists it. */
@@ -327,7 +334,7 @@ if (import.meta.vitest !== void 0) {
   const announcedReason = (seen: Array<string>, reason: string): boolean =>
     seen.length === 1 && seen[0] === `live case: ${reason}`
 
-  it.prop(
+  it.effect.prop(
     '∀reason_AnnounceLive_=LabelledLiveCaseWithoutATask',
     [Schema.String],
     ([reason]) =>
@@ -352,7 +359,7 @@ if (import.meta.vitest !== void 0) {
 
   const announcedOnce = (seen: Array<string>): boolean => seen.length === 1 && seen[0] === `live case: ${LiveReason}`
 
-  it.prop(
+  it.effect.prop(
     '∀value_LiveCase_=BuiltEnvReadBodyAndAnnouncedReason',
     [ProbeValue],
     ([value]) =>
@@ -360,6 +367,37 @@ if (import.meta.vitest !== void 0) {
         const seen: Array<string> = []
         const read = yield* readWithReason(value, seen)
         return read === value && announcedOnce(seen)
+      }),
+  )
+
+  const CaseOutcome = Schema.Literals(['success', 'failure', 'interrupted'])
+
+  it.effect.prop(
+    '∀outcome_CaseScope_=TheScopedEnvironmentIsReleased',
+    [CaseOutcome],
+    ([outcome]) =>
+      Effect.gen(function*() {
+        const released = yield* Ref.make(false)
+        const resource = Effect.acquireRelease(
+          Effect.succeed('the case resource'),
+          () => Ref.set(released, true),
+        )
+        yield* Match.value(outcome).pipe(
+          Match.when('success', () => Effect.exit(caseScope(resource))),
+          Match.when('failure', () =>
+            Effect.exit(caseScope(resource.pipe(Effect.andThen(Effect.fail('the case body failed')))))),
+          Match.when('interrupted', () =>
+            Effect.gen(function*() {
+              const running = yield* Effect.forkChild(
+                caseScope(resource.pipe(Effect.andThen(Effect.never))),
+                { startImmediately: true },
+              )
+              return yield* Fiber.interrupt(running)
+            })),
+          Match.exhaustive,
+        )
+        const wasReleased = yield* Ref.get(released)
+        return wasReleased
       }),
   )
 }

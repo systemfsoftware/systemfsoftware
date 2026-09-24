@@ -1,7 +1,7 @@
 /// <reference types="vitest/globals" />
 /// <reference types="vitest/importMeta" />
 import type { Vitest } from '@effect/vitest'
-import { Effect, Match, Option } from 'effect'
+import { Effect, Match, Option, Ref, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import type { TestContext } from 'vitest'
@@ -44,10 +44,12 @@ export const invokeDescribe: {
 const pickTester = <R>(family: Vitest.Tester<R>, mode: RegisterMode): Vitest.Test<R> =>
   ({ skip: family.skip, only: family.only, run: family })[mode]
 
+const scopedBody = Effect.scoped
+
 const exploredBody = <A, E>(
   body: (ctx: TestContext) => Effect.Effect<A, E, Scope.Scope>,
 ): (ctx: TestContext) => Promise<void> =>
-(ctx) => KernelCase.explore(Effect.scoped(body(ctx)))
+(ctx) => body(ctx).pipe(scopedBody, KernelCase.explore)
 
 const skipKernel = (methodsIt: Vitest.Methods): Vitest.Test<Scope.Scope> => (name) => {
   methodsIt.skip(name, () => undefined)
@@ -92,3 +94,29 @@ export const selectCaseRunner: {
   (mode: RegisterMode, live: LiveCase | undefined): (methodsIt: Vitest.Methods) => Vitest.Test<Scope.Scope>
   (methodsIt: Vitest.Methods, mode: RegisterMode, live: LiveCase | undefined): Vitest.Test<Scope.Scope>
 } = dual(3, selectCaseRunnerImpl)
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
+  const { it } = await import('@effect/vitest')
+
+  const BodyOutcome = Schema.Literals(['success', 'failure'])
+
+  it.effect.prop(
+    '∀outcome_ScopedBody_=TheScopedEnvironmentIsReleased',
+    [BodyOutcome],
+    ([outcome]) =>
+      Effect.gen(function*() {
+        const released = yield* Ref.make(false)
+        const resource = Effect.acquireRelease(
+          Effect.succeed('the case resource'),
+          () => Ref.set(released, true),
+        )
+        const body = outcome === 'success'
+          ? resource
+          : resource.pipe(Effect.andThen(Effect.fail('the case body failed')))
+        yield* Effect.exit(scopedBody(body))
+        const wasReleased = yield* Ref.get(released)
+        return wasReleased
+      }),
+  )
+}

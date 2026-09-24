@@ -98,7 +98,7 @@ if (import.meta.vitest !== void 0) {
   // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
   const { it } = await import('@effect/vitest')
 
-  it.prop(
+  it.effect.prop(
     '∀id_HexId_∘Base64RoundTrip',
     [Schema.BigInt, Schema.BigInt],
     ([spanIdValue, traceIdValue]) =>

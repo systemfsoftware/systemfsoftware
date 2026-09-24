@@ -983,10 +983,10 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
-        When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
-          Effect.sync(() => {
-            return Atom.Registry.get(s.ctx.page, s.ctx.feed)
-          })),
+        When('the feed is read after its batch has had a chance to arrive')(
+          'result',
+          (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.feed)),
+        ),
         Then('the feed reports that there was nothing to show')((s) => {
           expect(Atom.AsyncResult.isFailure(s.result)).toBe(true)
         }),
@@ -1002,10 +1002,10 @@ Feature('Deriving values from other values on a page')
             Atom.Registry.subscribe(page, feed, () => {}, { immediate: true })
             return { page, feed }
           })),
-        When('the feed is read after its batch has had a chance to arrive')('result', (s) =>
-          Effect.sync(() => {
-            return Atom.Registry.get(s.ctx.page, s.ctx.feed)
-          })),
+        When('the feed is read after its batch has had a chance to arrive')(
+          'result',
+          (s) => Effect.sync(() => Atom.Registry.get(s.ctx.page, s.ctx.feed)),
+        ),
         Then('the feed reports the failure')((s) => {
           expect(Atom.AsyncResult.isFailure(s.result)).toBe(true)
         }),

@@ -1,6 +1,6 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { Data, Effect, Match, Schema } from 'effect'
+import { Data, Effect, Exit, Match, Schema } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import type * as PlatformError from 'effect/PlatformError'
 import type { FileCommand, FileResponse, Refusal } from './file-system.model.js'
@@ -54,6 +54,24 @@ export const noWatchLeftOpen: Effect.Effect<void, WatchLeftOpen, MemoryFileSyste
       (paths) => paths.length === 0 ? Effect.void : Effect.fail(new WatchLeftOpen({ paths })),
     ),
 )
+
+export class ScratchLeft extends Data.TaggedError('ScratchLeft')<{
+  readonly path: string
+  readonly entries: ReadonlyArray<string>
+}> {}
+
+const entriesUnder = (path: string): Effect.Effect<ReadonlyArray<string>, never, FileSystem.FileSystem> =>
+  Effect.flatMap(Effect.service(FileSystem.FileSystem), (fs) =>
+    Effect.map(
+      Effect.exit(fs.readDirectory(path)),
+      (read) => Exit.match(read, { onFailure: () => [], onSuccess: (entries) => entries }),
+    ))
+
+export const noScratchLeft = (path: string): Effect.Effect<void, ScratchLeft, FileSystem.FileSystem> =>
+  Effect.flatMap(
+    entriesUnder(path),
+    (entries) => entries.length === 0 ? Effect.void : Effect.fail(new ScratchLeft({ path, entries })),
+  )
 
 export class CheckRejected extends Data.TaggedError('CheckRejected')<{ readonly report: string }> {}
 

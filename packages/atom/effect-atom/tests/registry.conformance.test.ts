@@ -1,9 +1,11 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Atom } from '@systemfsoftware/effect-atom'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Clock, Context, Effect, Fiber, Layer, Match, Option, Scheduler, Scope } from 'effect'
+import { Clock, Context, Effect, Exit, Fiber, Layer, Match, Option, Ref, Scheduler, Scope, Stream } from 'effect'
 
 import {
+  ContextStreamCommand,
+  contextStreamModel,
   DerivedCommand,
   derivedModel,
   doubled,
@@ -11,6 +13,8 @@ import {
   lifetimeModel,
   RegistryCommand,
   registryModel,
+  StreamCommand,
+  streamModel,
   SubscriptionCommand,
   subscriptionModel,
 } from './__fixtures__/registry.model.js'
@@ -305,6 +309,244 @@ const passHistories = <C, R>(report: Conformance.Report<C, R>): number =>
     }),
   )
 
+interface StreamHandle {
+  readonly registry: Atom.Registry.Registry
+  readonly value: Atom.Writable<number>
+}
+
+class Streams extends Context.Service<Streams, StreamHandle>()(
+  '@systemfsoftware/effect-atom/tests/registry.conformance.test/Streams',
+) {}
+
+const freshStream = (ports: KernelPorts): StreamHandle => ({
+  registry: Atom.Registry.make(ports),
+  value: Atom.keepAlive(Atom.make(1)),
+})
+
+const streamLayer: Layer.Layer<Streams> = Layer.unwrap(
+  Effect.map(
+    portsFromRun,
+    (ports) =>
+      Layer.effectContext(scopedRegistry(Streams, Effect.sync(() => Context.make(Streams, freshStream(ports))))),
+  ),
+)
+
+const readCurrent = (handle: StreamHandle): Effect.Effect<ReadonlyArray<number>> =>
+  Effect.scoped(
+    Stream.runCollect(Atom.Registry.toStream(handle.registry, handle.value).pipe(Stream.take(1))),
+  )
+
+const runStreamCommand = (
+  command: StreamCommand,
+): Effect.Effect<ReadonlyArray<number> | undefined, never, Streams> =>
+  Effect.flatMap(Streams, (handle) =>
+    Match.value(command).pipe(
+      Match.tagsExhaustive({
+        SetSource: (set) =>
+          Effect.as(Effect.sync(() => Atom.Registry.set(handle.registry, handle.value, set.value)), undefined),
+        ReadCurrent: () => readCurrent(handle),
+      }),
+    ))
+
+const streamCheck = (
+  subject: Layer.Layer<Streams>,
+  spec: { readonly sequences: number; readonly operations: number },
+) =>
+  Conformance.sequential(subject, {
+    commands: StreamCommand,
+    model: streamModel,
+    run: runStreamCommand,
+    sequences: spec.sequences,
+    operations: spec.operations,
+  })
+
+interface ContextStreamHandle {
+  readonly registry: Atom.Registry.Registry
+  readonly result: Atom.Writable<Atom.AsyncResult.Result<number, never>>
+  readonly stream: Atom.Atom<Stream.Stream<number, never>>
+}
+
+class ContextStreams extends Context.Service<ContextStreams, ContextStreamHandle>()(
+  '@systemfsoftware/effect-atom/tests/registry.conformance.test/ContextStreams',
+) {}
+
+const freshContextStream = (ports: KernelPorts): ContextStreamHandle => {
+  const result = Atom.keepAlive(Atom.make<Atom.AsyncResult.Result<number, never>>(Atom.AsyncResult.success(3)))
+  const stream = Atom.keepAlive(
+    Atom.readable((get) => {
+      get(result)
+      return get.streamResult(result)
+    }),
+  )
+  return { registry: Atom.Registry.make(ports), result, stream }
+}
+
+const contextStreamLayer: Layer.Layer<ContextStreams> = Layer.unwrap(
+  Effect.map(
+    portsFromRun,
+    (ports) =>
+      Layer.effectContext(
+        scopedRegistry(ContextStreams, Effect.sync(() => Context.make(ContextStreams, freshContextStream(ports)))),
+      ),
+  ),
+)
+
+const readSettled = (handle: ContextStreamHandle): Effect.Effect<ReadonlyArray<number>> =>
+  Effect.scoped(Stream.runCollect(Atom.Registry.get(handle.registry, handle.stream).pipe(Stream.take(1))))
+
+const runContextStreamCommand = (
+  command: ContextStreamCommand,
+): Effect.Effect<ReadonlyArray<number> | undefined, never, ContextStreams> =>
+  Effect.flatMap(ContextStreams, (handle) =>
+    Match.value(command).pipe(
+      Match.tagsExhaustive({
+        Settle: (settle) =>
+          Effect.as(
+            Effect.sync(() =>
+              Atom.Registry.set(handle.registry, handle.result, Atom.AsyncResult.success(settle.value))
+            ),
+            undefined,
+          ),
+        ReadSettled: () => readSettled(handle),
+      }),
+    ))
+
+const contextStreamCheck = (
+  subject: Layer.Layer<ContextStreams>,
+  spec: { readonly sequences: number; readonly operations: number },
+) =>
+  Conformance.sequential(subject, {
+    commands: ContextStreamCommand,
+    model: contextStreamModel,
+    run: runContextStreamCommand,
+    sequences: spec.sequences,
+    operations: spec.operations,
+  })
+
+const listenersOn = <A>(registry: Atom.Registry.Registry, atom: Atom.Atom<A>): number =>
+  Atom.Registry.getNodes(registry).get(atom)?.listeners.size ?? 0
+
+const stillSubscribed = <A>(
+  captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>,
+  atom: Atom.Atom<A>,
+  what: string,
+): Effect.Effect<void> =>
+  Effect.flatMap(Ref.get(captured), (held) =>
+    Option.match(held, {
+      onNone: () => Effect.void,
+      onSome: (registry) =>
+        listenersOn(registry, atom) > 0
+          ? Effect.die(new Error(`a reader is still subscribed to ${what} after letting go`))
+          : Effect.void,
+    }))
+
+const streamedOnce = (
+  captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>,
+  value: Atom.Atom<number>,
+): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const registry = Atom.Registry.make()
+    yield* Ref.set(captured, Option.some(registry))
+    yield* Effect.scoped(Stream.runDrain(Atom.Registry.toStream(registry, value).pipe(Stream.take(1))))
+  })
+
+const mountedOnce = (
+  captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>,
+  value: Atom.Atom<number>,
+): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const registry = Atom.Registry.make()
+    yield* Ref.set(captured, Option.some(registry))
+    yield* Effect.scoped(Atom.Registry.mount(registry, value))
+  })
+
+class Provided extends Context.Service<Provided, Atom.Registry.Registry>()(
+  '@systemfsoftware/effect-atom/tests/registry.conformance.test/Provided',
+) {}
+
+const providedOnce = (captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>): Effect.Effect<void> =>
+  Effect.provide(
+    Effect.gen(function*() {
+      const registry = yield* Provided
+      yield* Ref.set(captured, Option.some(registry))
+    }),
+    Atom.Registry.layer(Provided),
+  )
+
+const registryDisposed = (captured: Ref.Ref<Option.Option<Atom.Registry.Registry>>): Effect.Effect<void> =>
+  Effect.flatMap(Ref.get(captured), (held) =>
+    Option.match(held, {
+      onNone: () => Effect.void,
+      onSome: (registry) =>
+        Effect.flatMap(
+          Effect.exit(Effect.try(() => Atom.Registry.get(registry, Atom.make(0)))),
+          (exit) =>
+            Exit.isFailure(exit)
+              ? Effect.void
+              : Effect.die(new Error('a provided registry still answers after its scope closed')),
+        ),
+    }))
+
+const runningRun = (
+  live: Ref.Ref<number>,
+  started: Ref.Ref<number>,
+  input: number,
+): Effect.Effect<number, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.andThen(
+      Ref.update(started, (count) => count + 1),
+      Ref.update(live, (count) => count + 1),
+    ),
+    () => Ref.update(live, (count) => count - 1),
+  ).pipe(Effect.andThen(Effect.never), Effect.as(input))
+
+interface RunHandle {
+  readonly live: Ref.Ref<number>
+  readonly started: Ref.Ref<number>
+}
+
+const freshRun = (): RunHandle => ({ live: Ref.makeUnsafe(0), started: Ref.makeUnsafe(0) })
+
+const forkedRuns = (handle: RunHandle): Effect.Effect<void, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => Atom.Registry.make()),
+    (registry) => Effect.sync(() => Atom.Registry.dispose(registry)),
+  ).pipe(
+    Effect.flatMap((registry) =>
+      Effect.gen(function*() {
+        const task = Atom.fn((input: number) => runningRun(handle.live, handle.started, input), { concurrent: true })
+        const release = Atom.Registry.subscribe(registry, task, () => {}, { immediate: true })
+        yield* Effect.sync(() => {
+          Atom.Registry.set(registry, task, 1)
+          Atom.Registry.set(registry, task, 2)
+          Atom.Registry.set(registry, task, 3)
+        })
+        yield* Effect.yieldNow
+        yield* Effect.sync(() => release())
+      })
+    ),
+  )
+
+const runsReleasedTogether = (handle: RunHandle): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const started = yield* Ref.get(handle.started)
+    if (started < 1) {
+      return yield* Effect.die(new Error('no run ever started, so the release proves nothing'))
+    }
+    const live = yield* Ref.get(handle.live)
+    if (live !== 0) {
+      return yield* Effect.die(new Error(`expected no run left running, but ${live} still ran`))
+    }
+  })
+
+const passReleases = (report: Conformance.Report<never, never>): number =>
+  Match.value(report).pipe(
+    Match.tag('Pass', (passed) => passed.histories),
+    Match.orElse(() => {
+      throw new Error(`expected the check to pass, but it read: ${Conformance.render(report)}`)
+    }),
+  )
+
 Feature('A registry that keeps readers, writers, listeners, and idle entries consistent', { timeout: 0 })
   .live('each scenario drives the simulation kernel itself, and a conformance check cannot run inside a kernel run')
   .body(({ scenario, scenarioOutline }) => {
@@ -386,6 +628,124 @@ Feature('A registry that keeps readers, writers, listeners, and idle entries con
         And('a held entry is never gone')((s) => {
           passHistories(s.report)
         }),
+      ),
+    )
+
+    scenario(
+      'A reader that follows a value as a stream starts at the value the registry currently holds',
+      Gherkin.Do.pipe(
+        Given('a value starting at 1 that a registry holds')(
+          'subject',
+          () => Effect.succeed(streamLayer),
+        ),
+        When('fifty rounds of setting the value and reading it as a stream are replayed')(
+          'report',
+          (s) => streamCheck(s.subject, { sequences: 50, operations: 10 }),
+        ),
+        Then('every read starts at the value the registry currently holds')((s) => {
+          passHistories(s.report)
+        }),
+      ),
+    )
+
+    scenario(
+      'A reader that follows a settled result as a stream hears it right away',
+      Gherkin.Do.pipe(
+        Given('a settled result a registry exposes as a stream')(
+          'subject',
+          () => Effect.succeed(contextStreamLayer),
+        ),
+        When('fifty rounds of settling the result and reading the stream are replayed')(
+          'report',
+          (s) => contextStreamCheck(s.subject, { sequences: 50, operations: 8 }),
+        ),
+        Then('the reader hears the settled value each time')((s) => {
+          passHistories(s.report)
+        }),
+      ),
+    )
+
+    scenario(
+      'A reader that follows a value as a stream stops listening once it lets go',
+      Gherkin.Do.pipe(
+        Given('a value a registry can stream')('held', () =>
+          Effect.map(
+            Ref.make(Option.none<Atom.Registry.Registry>()),
+            (captured) => ({ captured, value: Atom.keepAlive(Atom.make(1)) }),
+          )),
+        When('a stream of the value is read and the reader lets go, stopped at each step')(
+          'checked',
+          (s) =>
+            Conformance.released(streamedOnce(s.held.captured, s.held.value), {
+              probe: stillSubscribed(s.held.captured, s.held.value, 'a streamed value'),
+            }),
+        ),
+        Then('nobody is left subscribed to the value')((s) => {
+          passReleases(s.checked)
+        }),
+      ),
+    )
+
+    scenario(
+      'A value held open for a scope stops being held once the scope closes',
+      Gherkin.Do.pipe(
+        Given('a value a registry holds')('held', () =>
+          Effect.map(
+            Ref.make(Option.none<Atom.Registry.Registry>()),
+            (captured) => ({ captured, value: Atom.keepAlive(Atom.make(1)) }),
+          )),
+        When('the value is held open for a scope that is closed at each step')(
+          'checked',
+          (s) =>
+            Conformance.released(mountedOnce(s.held.captured, s.held.value), {
+              probe: stillSubscribed(s.held.captured, s.held.value, 'a held value'),
+            }),
+        ),
+        Then('nobody is left subscribed to the value')((s) => {
+          passReleases(s.checked)
+        }),
+      ),
+    )
+
+    scenario(
+      'A registry provided for a name is thrown away once its scope closes',
+      Gherkin.Do.pipe(
+        Given('somewhere to remember a provided registry')(
+          'provided',
+          () => Effect.map(Ref.make(Option.none<Atom.Registry.Registry>()), (captured) => ({ captured })),
+        ),
+        When('a registry is provided for a name and its scope is closed at each step')(
+          'checked',
+          (s) =>
+            Conformance.released(providedOnce(s.provided.captured), {
+              probe: registryDisposed(s.provided.captured),
+            }),
+        ),
+        Then('the provided registry no longer answers')((s) => {
+          passReleases(s.checked)
+        }),
+      ),
+    )
+
+    scenario(
+      'A computation still running when its owner lets go is left with nothing running',
+      Gherkin.Do.pipe(
+        Given('counters for runs that are running and runs that have started')('runs', () => Effect.sync(freshRun)),
+        When('the computation is asked to run three times at once and then let go, stopped at each step')(
+          'checked',
+          (s) => Conformance.released(forkedRuns(s.runs), { probe: runsReleasedTogether(s.runs) }),
+        ),
+        Then('nothing is left running once the owner lets go')((s) => {
+          passReleases(s.checked)
+        }),
+        And('at least one run started, so the release proves something')((s) =>
+          Effect.gen(function*() {
+            const started = yield* Ref.get(s.runs.started)
+            if (started < 1) {
+              return yield* Effect.die(new Error('no run ever started, so the release proves nothing'))
+            }
+          })
+        ),
       ),
     )
   })

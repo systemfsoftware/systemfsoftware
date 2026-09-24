@@ -174,3 +174,84 @@ export const lifetimeModel = {
   precondition: lifetimeMayRun,
   step: lifetimeStepped,
 }
+
+export const StreamCommand = Schema.Union([
+  Schema.TaggedStruct('SetSource', { value: Schema.Literals([0, 1, 2, 3]) }),
+  Schema.TaggedStruct('ReadCurrent', {}),
+])
+
+export type StreamCommand = Schema.Schema.Type<typeof StreamCommand>
+
+export const StreamState = Schema.Struct({ source: Schema.Finite })
+
+export type StreamState = Schema.Schema.Type<typeof StreamState>
+
+export const initialStreamState: StreamState = { source: 1 }
+
+const streamMayRun = (state: StreamState, command: StreamCommand): boolean =>
+  Match.value(command).pipe(
+    Match.tag('SetSource', () => true),
+    Match.tag('ReadCurrent', () => true),
+    Match.exhaustive,
+  )
+
+const streamStepped = (
+  state: StreamState,
+  command: StreamCommand,
+): readonly [StreamState, ReadonlyArray<number> | undefined] =>
+  Match.value(command).pipe(
+    Match.tag(
+      'SetSource',
+      (set): readonly [StreamState, ReadonlyArray<number> | undefined] => [{ source: set.value }, undefined],
+    ),
+    Match.tag(
+      'ReadCurrent',
+      (): readonly [StreamState, ReadonlyArray<number> | undefined] => [state, [state.source]],
+    ),
+    Match.exhaustive,
+  )
+
+export const streamModel = {
+  state: StreamState,
+  initial: initialStreamState,
+  precondition: streamMayRun,
+  step: streamStepped,
+}
+
+export const ContextStreamCommand = Schema.Union([
+  Schema.TaggedStruct('Settle', { value: Schema.Literals([0, 1, 2, 3]) }),
+  Schema.TaggedStruct('ReadSettled', {}),
+])
+
+export type ContextStreamCommand = Schema.Schema.Type<typeof ContextStreamCommand>
+
+export const ContextStreamState = Schema.Struct({ settled: Schema.Finite })
+
+export type ContextStreamState = Schema.Schema.Type<typeof ContextStreamState>
+
+export const initialContextStreamState: ContextStreamState = { settled: 3 }
+
+const contextStreamStepped = (
+  state: ContextStreamState,
+  command: ContextStreamCommand,
+): readonly [ContextStreamState, ReadonlyArray<number> | undefined] =>
+  Match.value(command).pipe(
+    Match.tag(
+      'Settle',
+      (
+        settle,
+      ): readonly [ContextStreamState, ReadonlyArray<number> | undefined] => [{ settled: settle.value }, undefined],
+    ),
+    Match.tag(
+      'ReadSettled',
+      (): readonly [ContextStreamState, ReadonlyArray<number> | undefined] => [state, [state.settled]],
+    ),
+    Match.exhaustive,
+  )
+
+export const contextStreamModel = {
+  state: ContextStreamState,
+  initial: initialContextStreamState,
+  precondition: (): boolean => true,
+  step: contextStreamStepped,
+}

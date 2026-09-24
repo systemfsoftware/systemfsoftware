@@ -251,12 +251,12 @@ describe('Handle over a type index', () => {
     expect(Cells.make<number>({ key: 'n' }, { current: 1 })).type.toBe<CellHandle<number>>()
   })
 
-  it('Should_RefuseASlotOfAnotherIndex_When_AHandleIsMinted', () => {
+  it('Should_RefuseASlotOfAnotherIndex_When_HandleIsMinted', () => {
     expect(Cells.make<number>).type.toBeCallableWith({ key: 'n' }, { current: 1 })
     expect(Cells.make<number>).type.not.toBeCallableWith({ key: 'n' }, { current: 'one' })
   })
 
-  it('Should_KeepTheIndexCovariant_When_AHandleIsWidened', () => {
+  it('Should_KeepTheIndexCovariant_When_HandleIsWidened', () => {
     expect<CellHandle<1>>().type.toBeAssignableTo<CellHandle<number>>()
     expect<CellHandle<number>>().type.not.toBeAssignableTo<CellHandle<string>>()
   })
