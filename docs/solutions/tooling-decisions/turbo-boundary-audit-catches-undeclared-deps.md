@@ -39,7 +39,7 @@ Issue #297: `@systemfsoftware/stryker-js-platform-node` value-imports `mutation-
 
 - Package compiles and tests green locally, but its manifest never declares a dependency it imports — the hoisting reliance smell.
 - `inlinedDependencies` claims a package the build no longer inlines — stale generated output; rebuild, never hand-edit.
-- A second literal version pin of a catalog-managed family — the duplication drift named in `docs/solutions/test-failures/fixture-pin-duplicates-the-catalogs-decision.md`.
+- A second literal version pin of a catalog-managed family — duplication drift.
 
 ## Related
 
@@ -47,4 +47,3 @@ Issue #297: `@systemfsoftware/stryker-js-platform-node` value-imports `mutation-
 - `docs/solutions/tooling-decisions/pnpm-catalogs-for-monorepo-dependency-management.md` — the catalog convention this fix follows
 - `docs/solutions/tooling-decisions/root-workspace-protocol-hashes-every-task.md` — why the stryker axis uses `catalog:stryker`
 - `docs/solutions/tooling-decisions/tsdown-manages-publishconfig-during-build.md` — sibling tsdown-generated-field learning
-- `docs/solutions/test-failures/fixture-pin-duplicates-the-catalogs-decision.md` — the duplication drift a second pin creates

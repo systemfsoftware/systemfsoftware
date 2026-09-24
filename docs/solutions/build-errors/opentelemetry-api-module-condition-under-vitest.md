@@ -1,5 +1,6 @@
 ---
 title: Bundler-Only Export Condition Breaks an Externalized Dependency Under Vitest
+date: "2026-09-22"
 track: knowledge
 problem_type: build_error
 category: build-errors
