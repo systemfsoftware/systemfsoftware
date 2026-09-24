@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/vitest#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "A fork of @effect/vitest whose defaults make the lazy test a good test: fresh layers, a second run that catches leaked state, virtual time, soft checks that stop at the next step, and properties refuted against a constant impostor.",
+  "description": "A fork of @effect/vitest whose defaults make the lazy test a good test: expect bound to the test's own callback, one check per observed state, fresh layers, a second run that catches leaked state, virtual time, and properties refuted against a constant impostor.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -26,20 +26,20 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
-    "./refusals": {
-      "@systemfsoftware/source": "./src/Refusals.ts",
-      "types": "./dist/refusals.d.ts",
-      "default": "./dist/refusals.mjs"
+    "./guard": {
+      "@systemfsoftware/source": "./src/guard.ts",
+      "types": "./dist/guard.d.ts",
+      "default": "./dist/guard.mjs"
+    },
+    "./integration": {
+      "@systemfsoftware/source": "./src/integration.ts",
+      "types": "./dist/integration.d.ts",
+      "default": "./dist/integration.mjs"
     },
     "./TestClock": {
       "@systemfsoftware/source": "./src/TestClock.ts",
       "types": "./dist/TestClock.d.ts",
       "default": "./dist/TestClock.mjs"
-    },
-    "./utils": {
-      "@systemfsoftware/source": "./src/utils.ts",
-      "types": "./dist/utils.d.ts",
-      "default": "./dist/utils.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -79,17 +79,17 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       },
-      "./refusals": {
-        "types": "./dist/refusals.d.ts",
-        "default": "./dist/refusals.mjs"
+      "./guard": {
+        "types": "./dist/guard.d.ts",
+        "default": "./dist/guard.mjs"
+      },
+      "./integration": {
+        "types": "./dist/integration.d.ts",
+        "default": "./dist/integration.mjs"
       },
       "./TestClock": {
         "types": "./dist/TestClock.d.ts",
         "default": "./dist/TestClock.mjs"
-      },
-      "./utils": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.mjs"
       },
       "./package.json": "./package.json"
     },

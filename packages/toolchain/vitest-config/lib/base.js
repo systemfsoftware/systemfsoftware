@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defineConfig as defineVitestConfig } from 'vitest/config'
 
@@ -74,6 +76,36 @@ const propertyRuns = process.env['STRYKER_MUTATOR_WORKER'] !== undefined ? 30 : 
 // The fork reads these under `inject`; the key is its published `ProvidedContext` key.
 const propertyCheckDefaults = { runs: propertyRuns }
 
+// The fork is declared under this name: `pnpm-workspace.yaml`'s catalog aliases it to this repo's
+// `@systemfsoftware/vitest` package. A package that cannot resolve the fork must not list its setup file.
+const forkDependency = '@effect/vitest'
+
+// A package config is evaluated with the package directory as the working directory (`pnpm --filter <pkg>
+// test`, and turbo's per-package task), so `<cwd>/package.json` is the package this config belongs to.
+/**
+ * @param {string} root
+ */
+const dependenciesOf = (root) => {
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  return {
+    ...manifest.dependencies,
+    ...manifest.devDependencies,
+    ...manifest.peerDependencies,
+    ...manifest.optionalDependencies,
+  }
+}
+
+/**
+ * The setup file that installs the fork's guard (KTD8), or nothing for a package that cannot resolve the fork:
+ * `oxlint-plugin/*`, `oxlint-presets/*`, `toolchain/*` and the fork itself register through Vitest's own `it`,
+ * which the guard refuses. A config that replaces `test.setupFiles` spreads this in.
+ *
+ * @type {ReadonlyArray<string>}
+ */
+export const guardSetupFiles = Object.hasOwn(dependenciesOf(process.cwd()), forkDependency)
+  ? ['@effect/vitest/guard']
+  : []
+
 /**
  * Spread into a `defineConfig` object that does not use `sharedConfig` as a whole.
  * Both pipelines need the condition, and Vite replaces its defaults when they are set.
@@ -98,6 +130,7 @@ export const sharedConfig = {
   test: {
     globals: false,
     environment: 'node',
+    setupFiles: [...guardSetupFiles],
     includeSource: ['src/**/*.{js,ts}'],
     exclude: ['**/.stryker-tmp/**', '**/node_modules/**', '**/.repo/**'],
     passWithNoTests: true,

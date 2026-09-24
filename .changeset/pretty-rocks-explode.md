@@ -1,0 +1,5 @@
+---
+"@systemfsoftware/vitest": minor
+---
+
+Tests take `expect` from the test callback and yield every check: `it(name, function* ({ expect }) { yield* expect(actual).toEqual(expected) })`. `@effect/vitest` no longer exports `expect`, `assert` or the `utils` helpers, and a raw `vitest` `expect` or a test registered with `vitest`'s own `it` fails with a refusal when the `@effect/vitest/guard` setup file is loaded. A second check on one observed state, a check written but never yielded, a body with no check, a sync, async or Effect-returning body, `it.effect`/`it.scoped`, `beforeEach`/`afterEach`, and weak matchers (`toHaveLength`, `toBeDefined`, `toBeTypeOf`, `toHaveProperty`, snapshots, `expect.anything`, `.resolves`/`.rejects`, `expect.soft`/`expect.poll`, argument-less `toThrow`, reasonless `toSatisfy`, `toMatchObject({})`) are refused with the rewrite as the message. Libraries that judge inside a test import `step`, `captureRunBinding` and the `Check`/`Expect`/`Asserted` types from `@effect/vitest/integration`.

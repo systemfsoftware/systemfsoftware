@@ -5,9 +5,9 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const typesOf: Record<string, string> = {
   '.': './dist/index.d.ts',
-  './refusals': './dist/refusals.d.ts',
   './TestClock': './dist/TestClock.d.ts',
-  './utils': './dist/utils.d.ts',
+  './guard': './dist/guard.d.ts',
+  './integration': './dist/integration.d.ts',
 }
 
 const withTypes = (entry: ExportEntry | undefined, types: string): ExportEntry | undefined => {
@@ -31,9 +31,9 @@ export default defineConfig({
   ...quietBuild,
   entry: {
     index: './src/mod.ts',
-    refusals: './src/Refusals.ts',
     TestClock: './src/TestClock.ts',
-    utils: './src/utils.ts',
+    guard: './src/guard.ts',
+    integration: './src/integration.ts',
   },
   format: 'esm',
   dts: true,
