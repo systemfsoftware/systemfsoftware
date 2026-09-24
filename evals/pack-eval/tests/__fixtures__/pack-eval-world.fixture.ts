@@ -566,16 +566,19 @@ const tracesOf = (
       : []
   )
 
+const hasOwn = (overrides: WorldOverrides, key: keyof WorldOverrides): boolean =>
+  Object.prototype.hasOwnProperty.call(overrides, key)
+
 /** Merge typed overrides onto a world, field by field, so nothing is dropped. */
 const worldWith = (base: World, overrides: WorldOverrides): World => ({
-  intended: overrides.intended ?? base.intended,
+  intended: hasOwn(overrides, 'intended') ? overrides.intended ?? base.intended : base.intended,
   packs: overrides.packs ?? base.packs,
-  instruction: overrides.instruction ?? base.instruction,
+  instruction: hasOwn(overrides, 'instruction') ? overrides.instruction : base.instruction,
   tasks: overrides.tasks ?? base.tasks,
   routingLabels: overrides.routingLabels ?? base.routingLabels,
   pairLabels: overrides.pairLabels ?? base.pairLabels,
-  judgePrompt: overrides.judgePrompt ?? base.judgePrompt,
-  dimensions: overrides.dimensions ?? base.dimensions,
+  judgePrompt: hasOwn(overrides, 'judgePrompt') ? overrides.judgePrompt : base.judgePrompt,
+  dimensions: hasOwn(overrides, 'dimensions') ? overrides.dimensions : base.dimensions,
   candidates: overrides.candidates ?? base.candidates,
   traces: overrides.traces ?? base.traces,
   checkout: overrides.checkout ?? base.checkout,
@@ -1209,7 +1212,6 @@ export const withUnwitnessedPair = (world: World): World =>
     pairLabels: [...world.pairLabels, unwitnessedPairLabel(world)],
   })
 
-/** Drop the judge prompt while the pair labels stay, so a judged run refuses. */
 export const withoutJudgePrompt = (world: World): World =>
   worldWith(world, { intended: 'missing-judge-prompt', judgePrompt: undefined })
 

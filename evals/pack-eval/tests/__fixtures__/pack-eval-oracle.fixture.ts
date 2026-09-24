@@ -11,12 +11,17 @@ export type OracleSplit = WorldTaskSplit
 
 export type RuleVerdictTag = 'scored' | 'insufficient-evidence' | 'unlabelled'
 
-export const defaultEvidenceFloor = 3
+export interface OracleEvidenceFloor {
+  readonly positives: number
+  readonly negatives: number
+}
+
+export const defaultEvidenceFloor: OracleEvidenceFloor = { positives: 3, negatives: 3 }
 
 export const defaultJudgeMinimum = 0.8
 
 export interface OracleOptions {
-  readonly evidenceFloor?: number | undefined
+  readonly evidenceFloor?: OracleEvidenceFloor | undefined
   readonly judgeMinimum?: number | undefined
   readonly judgeModelPresent?: boolean | undefined
   readonly confidence?: number | undefined
@@ -108,13 +113,13 @@ const keyOf = (...parts: ReadonlyArray<string>): string => parts.join('\u0000')
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value))
 
-const floorOf = (options: OracleOptions): number => options.evidenceFloor ?? defaultEvidenceFloor
+const floorOf = (options: OracleOptions): OracleEvidenceFloor => options.evidenceFloor ?? defaultEvidenceFloor
 
 const minimumOf = (options: OracleOptions): number => options.judgeMinimum ?? defaultJudgeMinimum
 
 const judgePresent = (options: OracleOptions): boolean => options.judgeModelPresent ?? true
 
-const stemsOfPack = (world: World, packId: string): ReadonlySet<string> =>
+const heldStemsOf = (world: World, packId: string): ReadonlySet<string> =>
   new Set((world.packs.find((pack) => pack.id === packId)?.rules ?? []).map((rule) => rule.stem))
 
 const distinctSorted = (values: ReadonlyArray<string>): ReadonlyArray<string> =>
@@ -133,13 +138,13 @@ const malformedRefusal = (world: World): OracleRefusal | undefined => {
 
 const missingStemRefusal = (world: World): OracleRefusal | undefined => {
   const fromRouting = world.routingLabels.flatMap((entry) => {
-    const stems = stemsOfPack(world, entry.packId)
+    const stems = heldStemsOf(world, entry.packId)
     return [...entry.governing, ...entry.deferred]
       .filter((stem) => !stems.has(stem))
       .map((stem) => `routing label for ${entry.taskId} names ${stem}`)
   })
   const fromPairs = world.pairLabels.flatMap((label) => {
-    const stems = stemsOfPack(world, label.packId)
+    const stems = heldStemsOf(world, label.packId)
     return [label.ruleA, label.ruleB]
       .filter((stem) => !stems.has(stem))
       .map((stem) => `pair label ${label.id} names ${stem}`)
@@ -155,8 +160,45 @@ const missingJudgePromptRefusal = (world: World): OracleRefusal | undefined =>
     ? { detail: 'pair labels are present without a judge prompt' }
     : undefined
 
+// A pair is witnessed only when one routing entry for its task and pack
+// governs both rules (pack-evaluator plan U2 :330, a pair whose task does not
+// label both rules as governing is refused).
+const singleEntryGovernsPair = (
+  world: World,
+  packId: string,
+  taskId: string,
+  ruleA: string,
+  ruleB: string,
+): boolean =>
+  world.routingLabels.some((entry) =>
+    entry.packId === packId && entry.taskId === taskId &&
+    entry.governing.includes(ruleA) && entry.governing.includes(ruleB)
+  )
+
+const unwitnessedPairRefusal = (world: World): OracleRefusal | undefined => {
+  const first = world.pairLabels.find((label) =>
+    singleEntryGovernsPair(world, label.packId, label.taskId, label.ruleA, label.ruleB) === false
+  )
+  return first === undefined
+    ? undefined
+    : { detail: `pair ${first.id} on task ${first.taskId} needs no witness: both ${first.packId} rules must govern it` }
+}
+
+const trainPairIdsOf = (world: World): ReadonlyArray<string> =>
+  world.pairLabels.filter((label) => label.split === 'train').map((label) => label.id)
+
+const leakedFewShotRefusal = (world: World): OracleRefusal | undefined => {
+  const prompt = world.judgePrompt
+  if (prompt === undefined) return undefined
+  const leaked = prompt.fewShotPairIds.filter((id) => trainPairIdsOf(world).includes(id) === false)
+  return leaked.length === 0
+    ? undefined
+    : { detail: `few-shot pair ${distinctSorted(leaked).join(', ')} is not in the train split` }
+}
+
 const admissionRefusal = (world: World): OracleRefusal | undefined =>
-  malformedRefusal(world) ?? missingStemRefusal(world) ?? missingJudgePromptRefusal(world)
+  malformedRefusal(world) ?? missingStemRefusal(world) ?? unwitnessedPairRefusal(world) ??
+    leakedFewShotRefusal(world) ?? missingJudgePromptRefusal(world)
 
 const providerRefusal = (world: World): OracleRefusal | undefined => {
   const selectorRefused = world.answers.selector.some((reply) => reply.kind === 'refused')
@@ -173,9 +215,9 @@ const loadedStemsOf = (world: World, taskId: string, packId: string): ReadonlySe
   return new Set(reply !== undefined && reply.kind === 'selected' ? reply.stems : [])
 }
 
-const routingEntryOf = (world: World, packId: string, taskId: string) =>
-  world.routingLabels.find((entry) => entry.packId === packId && entry.taskId === taskId)
-
+// A deferred stem is an abstention and yields no cell; a pack rule that is
+// neither governing nor deferred on the entry is a does-not-govern negative
+// (pack-evaluator plan U6 :453-454, governs/does-not-govern vs defer).
 interface LabelledCell {
   readonly governing: boolean
   readonly loaded: boolean
@@ -187,19 +229,19 @@ const labelledCellsOf = (
   stem: string,
   split: OracleSplit,
 ): ReadonlyArray<LabelledCell> => {
-  const cellOf = (taskId: string): LabelledCell | undefined => {
-    const entry = routingEntryOf(world, packId, taskId)
-    if (entry === undefined) return undefined
-    const governing = entry.governing.includes(stem)
-    const deferred = entry.deferred.includes(stem)
-    if (!governing && !deferred) return undefined
-    return { governing, loaded: loadedStemsOf(world, taskId, packId).has(stem) }
-  }
-  return world.tasks
-    .filter((task) => task.split === split)
-    .flatMap((task) => {
-      const cell = cellOf(task.id)
-      return cell === undefined ? [] : [cell]
+  const stems = new Set(
+    world.packs.find((pack) => pack.id === packId)?.rules.map((rule) => rule.stem) ?? [],
+  )
+  return world.routingLabels
+    .filter((entry) => entry.packId === packId)
+    .flatMap((entry) => {
+      const task = world.tasks.find((candidate) => candidate.id === entry.taskId)
+      if (task === undefined || task.split !== split) return []
+      if (entry.deferred.includes(stem) || stems.has(stem) === false) return []
+      return [{
+        governing: entry.governing.includes(stem),
+        loaded: loadedStemsOf(world, task.id, packId).has(stem),
+      }]
     })
 }
 
@@ -226,19 +268,33 @@ const countsFor = (world: World, packId: string, stem: string, split: OracleSpli
   }
 }
 
+const ruleCellsOf = (world: World, packId: string, stem: string): number =>
+  world.routingLabels
+    .filter((entry) => entry.packId === packId)
+    .filter((entry) => world.tasks.some((task) => task.id === entry.taskId))
+    .filter(() => heldStemsOf(world, packId).has(stem))
+    .filter((entry) => entry.deferred.includes(stem) === false)
+    .length
+
 const ruleSplitsOf = (world: World): ReadonlyArray<readonly [string, string]> =>
   world.packs.flatMap((pack) =>
-    distinctSorted(pack.rules.map((rule) => rule.stem)).map((stem) => [pack.id, stem] as const)
+    [...new Set(pack.rules.map((rule) => rule.stem))].toSorted().map((stem) => [pack.id, stem] as const)
   )
 
 export const oracleRoutingCounts = (world: World): ReadonlyArray<OracleRuleCounts> =>
   ruleSplitsOf(world).flatMap(([packId, stem]) => splits.map((split) => countsFor(world, packId, stem, split)))
 
-const verdictTagOf = (counts: OracleRuleCounts, floor: number): RuleVerdictTag => {
+const verdictTagOf = (
+  counts: OracleRuleCounts,
+  world: World,
+  floor: OracleEvidenceFloor,
+): RuleVerdictTag => {
+  if (ruleCellsOf(world, counts.packId, counts.rule) === 0) return 'unlabelled'
   const positives = counts.tp + counts.fn
   const negatives = counts.tn + counts.fp
-  if (positives + negatives === 0) return 'unlabelled'
-  return positives < floor || negatives < floor ? 'insufficient-evidence' : 'scored'
+  return positives < Math.max(floor.positives, 1) || negatives < Math.max(floor.negatives, 1)
+    ? 'insufficient-evidence'
+    : 'scored'
 }
 
 const ruleVerdictsImpl = (world: World, options: OracleOptions): ReadonlyArray<OracleRuleVerdict> =>
@@ -246,19 +302,19 @@ const ruleVerdictsImpl = (world: World, options: OracleOptions): ReadonlyArray<O
     packId: counts.packId,
     rule: counts.rule,
     split: counts.split,
-    tag: verdictTagOf(counts, floorOf(options)),
+    tag: verdictTagOf(counts, world, floorOf(options)),
   }))
-
 export const oracleRuleVerdicts: {
   (options: OracleOptions): (world: World) => ReadonlyArray<OracleRuleVerdict>
   (world: World, options: OracleOptions): ReadonlyArray<OracleRuleVerdict>
 } = dual(2, ruleVerdictsImpl)
 
 const pointEstimateOf = (
+  world: World,
   options: OracleOptions,
   counts: OracleRuleCounts,
 ): ReadonlyArray<OraclePointEstimate> => {
-  if (verdictTagOf(counts, floorOf(options)) !== 'scored') return []
+  if (verdictTagOf(counts, world, floorOf(options)) !== 'scored') return []
   const positives = counts.tp + counts.fn
   const negatives = counts.tn + counts.fp
   return [{
@@ -271,19 +327,15 @@ const pointEstimateOf = (
 }
 
 const pointEstimatesImpl = (world: World, options: OracleOptions): ReadonlyArray<OraclePointEstimate> =>
-  oracleRoutingCounts(world).flatMap((counts) => pointEstimateOf(options, counts))
+  oracleRoutingCounts(world).flatMap((counts) => pointEstimateOf(world, options, counts))
 
 export const oraclePointEstimates: {
   (options: OracleOptions): (world: World) => ReadonlyArray<OraclePointEstimate>
   (world: World, options: OracleOptions): ReadonlyArray<OraclePointEstimate>
 } = dual(2, pointEstimatesImpl)
 
-const governsBoth = (world: World, packId: string, taskId: string, ruleA: string, ruleB: string): boolean => {
-  const governed = world.routingLabels
-    .filter((entry) => entry.packId === packId && entry.taskId === taskId)
-    .flatMap((entry) => entry.governing)
-  return governed.includes(ruleA) && governed.includes(ruleB)
-}
+const governsBoth = (world: World, packId: string, taskId: string, ruleA: string, ruleB: string): boolean =>
+  singleEntryGovernsPair(world, packId, taskId, ruleA, ruleB)
 
 const witnessedPairOf = (
   world: World,

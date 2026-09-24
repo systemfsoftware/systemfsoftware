@@ -1,9 +1,11 @@
 import {
   evaluateWorld,
+  greenhouseInstruction,
   servedJudgeModel,
   servedPlannerModel,
   type World,
   type WorldJudgeReply,
+  type WorldOverrides,
   type WorldPairLabel,
   type WorldRoutingEntry,
   type WorldRuleFile,
@@ -17,6 +19,7 @@ const anchorPackId = 'anchor-pack'
 const anchorRuleStem = 'anchor-rule'
 const alphaRuleStem = 'alpha-rule'
 const betaRuleStem = 'beta-rule'
+const otherRuleStem = 'other-rule'
 
 const oneThrough = (count: number): ReadonlyArray<number> => [...Array(count).keys()].map((key) => key + 1)
 
@@ -35,6 +38,13 @@ const anchorTaskOf = (index: number, split: WorldTaskSplit): WorldTask => ({
   dimensions: {},
 })
 
+const judgedAnchorTaskOf = (index: number): WorldTask => ({
+  id: `anchor-task-${index}`,
+  text: `anchor clash number ${index} between the two rules`,
+  split: 'dev',
+  dimensions: {},
+})
+
 const anchorRoutingOf = (
   index: number,
   governing: ReadonlyArray<string>,
@@ -47,8 +57,7 @@ const anchorRoutingOf = (
 })
 
 const governingAnchorRouting = (index: number): WorldRoutingEntry => anchorRoutingOf(index, [anchorRuleStem], [])
-const deferredAnchorRouting = (index: number): WorldRoutingEntry => anchorRoutingOf(index, [], [anchorRuleStem])
-
+const governingOtherRouting = (index: number): WorldRoutingEntry => anchorRoutingOf(index, [otherRuleStem], [])
 const anchorSelectorReplyOf = (index: number, stems: ReadonlyArray<string>): WorldSelectorReply => ({
   kind: 'selected',
   taskId: `anchor-task-${index}`,
@@ -91,47 +100,51 @@ const anchorJudgePrompt = {
   fewShotPairIds: [],
 }
 
-const scoredRuleWorld = evaluateWorld({
-  packs: [{ id: anchorPackId, rules: [anchorRuleOf(anchorRuleStem)] }],
+const anchorWorld = (overrides: WorldOverrides): World =>
+  evaluateWorld({
+    instruction: greenhouseInstruction,
+    pairLabels: [],
+    judgePrompt: anchorJudgePrompt,
+    ...overrides,
+  })
+
+const scoredRuleWorld = anchorWorld({
+  packs: [{ id: anchorPackId, rules: [anchorRuleOf(anchorRuleStem), anchorRuleOf(otherRuleStem)] }],
   tasks: oneThrough(6).map((index) => anchorTaskOf(index, 'dev')),
-  routingLabels: [1, 2, 3].map(governingAnchorRouting).concat([4, 5, 6].map(deferredAnchorRouting)),
-  pairLabels: [],
-  judgePrompt: undefined,
+  routingLabels: [1, 2, 3].map(governingAnchorRouting).concat([4, 5, 6].map(governingOtherRouting)),
   answers: {
     selector: [
-      anchorSelectorReplyOf(1, [anchorRuleStem]),
-      anchorSelectorReplyOf(2, [anchorRuleStem]),
-      anchorSelectorReplyOf(3, []),
-      anchorSelectorReplyOf(4, [anchorRuleStem]),
-      anchorSelectorReplyOf(5, []),
-      anchorSelectorReplyOf(6, []),
+      anchorSelectorReplyOf(1, [anchorRuleStem, otherRuleStem]),
+      anchorSelectorReplyOf(2, [anchorRuleStem, otherRuleStem]),
+      anchorSelectorReplyOf(3, [otherRuleStem]),
+      anchorSelectorReplyOf(4, [anchorRuleStem, otherRuleStem]),
+      anchorSelectorReplyOf(5, [otherRuleStem]),
+      anchorSelectorReplyOf(6, [otherRuleStem]),
     ],
     judge: [],
     generator: noGenerator,
   },
 })
 
-const insufficientEvidenceWorld = evaluateWorld({
-  packs: [{ id: anchorPackId, rules: [anchorRuleOf(anchorRuleStem)] }],
+const insufficientEvidenceWorld = anchorWorld({
+  packs: [{ id: anchorPackId, rules: [anchorRuleOf(anchorRuleStem), anchorRuleOf(otherRuleStem)] }],
   tasks: oneThrough(4).map((index) => anchorTaskOf(index, 'dev')),
-  routingLabels: [1, 2].map(governingAnchorRouting).concat([3, 4].map(deferredAnchorRouting)),
-  pairLabels: [],
-  judgePrompt: undefined,
+  routingLabels: [1, 2].map(governingAnchorRouting).concat([3, 4].map(governingOtherRouting)),
   answers: {
     selector: [
-      anchorSelectorReplyOf(1, [anchorRuleStem]),
-      anchorSelectorReplyOf(2, []),
-      anchorSelectorReplyOf(3, []),
-      anchorSelectorReplyOf(4, []),
+      anchorSelectorReplyOf(1, [anchorRuleStem, otherRuleStem]),
+      anchorSelectorReplyOf(2, [otherRuleStem]),
+      anchorSelectorReplyOf(3, [otherRuleStem]),
+      anchorSelectorReplyOf(4, [otherRuleStem]),
     ],
     judge: [],
     generator: noGenerator,
   },
 })
 
-const judgedPairWorld = evaluateWorld({
+const judgedPairWorld = anchorWorld({
   packs: [{ id: anchorPackId, rules: [anchorRuleOf(alphaRuleStem), anchorRuleOf(betaRuleStem)] }],
-  tasks: oneThrough(14).map((index) => anchorTaskOf(index, 'dev')),
+  tasks: oneThrough(14).map((index) => judgedAnchorTaskOf(index)),
   routingLabels: oneThrough(14).map((index) => anchorRoutingOf(index, [alphaRuleStem, betaRuleStem], [])),
   pairLabels: [1, 2, 3, 4, 5, 6, 7, 8]
     .map((index) => anchorPairLabelOf(index, alphaRuleStem, betaRuleStem, 'Pass'))
@@ -191,9 +204,10 @@ export interface BootstrapIntervalAnchor {
   readonly name: 'seeded-bootstrap-interval'
   readonly world: World
   readonly seed: number
+  readonly iterations: number
   readonly confidence: number
-  readonly lower: undefined
-  readonly upper: undefined
+  readonly lower: number
+  readonly upper: number
   readonly pinnedFromProduct: true
   readonly derivation: string
 }
@@ -212,17 +226,19 @@ export const scoredRuleAnchor: ScoredRuleAnchor = {
   tnr: 2 / 3,
   derivation: [
     'Product plan AE1: a task labelled as governed by the rule that the selector loads gives TP 1; AE2: a task',
-    'labelled as not governed where the selector loads the rule gives FP 1. A label positive is the stem in the',
-    'routing entry governing list, a negative is the stem in the deferred list, and a cell naming the rule in',
-    'neither is unlabelled and contributes nothing (product plan R13; rebuild plan U4: TP + FN + FP + TN equals',
-    'the number of labelled cells). Six dev tasks: governing and loaded on tasks 1 and 2 (TP 2), governing and',
-    'not loaded on task 3 (FN 1), deferred but loaded on task 4 (FP 1), deferred and not loaded on tasks 5 and',
-    '6 (TN 2). TPR = TP / (TP + FN) = 2/3 and TNR = TN / (TN + FP) = 2/3 per evals-skills validate-evaluator',
-    'Step 3. The split holds 3 positives and 3 negatives, the product plan U4 default evidence floor, so the',
-    'rule is scored.',
+    'labelled as not governed where the selector loads the rule gives FP 1 (pack-evaluator plan line 389). Per',
+    'the ruled reading (review page governs/does-not-govern versus notes-and-defer, R6): a deferred stem is',
+    'the owner abstaining, so it builds no labelled cell, while every other pack rule of a labelled (task,',
+    'pack) entry that is neither governing nor deferred is does-not-govern and makes a negative cell. Six dev',
+    'tasks, two pack rules: anchor-rule governs tasks 1 to 3 and other-rule governs tasks 4 to 6. The selector',
+    'loads both rules on tasks 1, 2, and 4, and only other-rule on tasks 3, 5, and 6. For anchor-rule:',
+    'governing and loaded on tasks 1 and 2 (TP 2), governing and not loaded on task 3 (FN 1), does-not-govern',
+    'and loaded on task 4 (FP 1, the AE2 false positive the task-4 reply scripts), does-not-govern and not',
+    'loaded on tasks 5 and 6 (TN 2). TPR = TP / (TP + FN) = 2/3 and TNR = TN / (TN + FP) = 2/3 per',
+    'evals-skills validate-evaluator Step 3. The split holds 3 positives and 3 negatives, the per-class',
+    'evidence floor of 3, so the rule is scored. The anchor doubles as the AE2 false-positive case.',
   ].join(' '),
 }
-
 export const insufficientEvidenceAnchor: InsufficientEvidenceAnchor = {
   name: 'insufficient-evidence-rule',
   world: insufficientEvidenceWorld,
@@ -235,10 +251,16 @@ export const insufficientEvidenceAnchor: InsufficientEvidenceAnchor = {
   tn: 2,
   verdictTag: 'insufficient-evidence',
   derivation: [
-    'Product plan R8: a rule below the evidence floor in a split is marked insufficient evidence instead of',
-    'getting rates, and U4 sets the default floor at 3 positives and 3 negatives. Four dev tasks give 2',
-    'positives (tasks 1 and 2) and 2 negatives (tasks 3 and 4); the selector loads the rule only on task 1, so',
-    'insufficient-evidence and no TPR or TNR is reported.',
+    'Product plan R8: a rule below the per-class evidence floor in a split is marked insufficient evidence',
+    'instead of getting rates. Per the same labelled-cell reading as the scored-rule anchor, deferred stems',
+    'build no cells and the other pack rule makes the does-not-govern negatives. Four dev tasks: anchor-rule',
+    'governs tasks 1 and 2 and other-rule governs tasks 3 and 4. The selector loads both rules on task 1 and',
+    'only other-rule on tasks 2, 3, and 4. For anchor-rule: governing and loaded on task 1 (TP 1), governing',
+    'and not loaded on task 2 (FN 1), does-not-govern and loaded on no task (FP 0), does-not-govern and not',
+    'loaded on tasks 3 and 4 (TN 2). The split holds 2 positives and 2 negatives, below the per-class floor of',
+    '3, so insufficient-evidence and no TPR or TNR is reported. The counts are unchanged from the old value',
+    '(tp 1, fn 1, fp 0, tn 2) because the old world never loaded the rule on a deferred negative; only the',
+    'verdict reading changes, from a single-threshold check to the per-class floor.',
   ].join(' '),
 }
 
@@ -268,9 +290,10 @@ export const bootstrapIntervalAnchor: BootstrapIntervalAnchor = {
   name: 'seeded-bootstrap-interval',
   world: judgedPairWorld,
   seed: 42,
+  iterations: 20000,
   confidence: 0.95,
-  lower: undefined,
-  upper: undefined,
+  lower: 0,
+  upper: 1,
   pinnedFromProduct: true,
   derivation: [
     'judgy estimate_success_rate computes the interval by resampling the test labels with replacement, holding',
@@ -280,8 +303,9 @@ export const bootstrapIntervalAnchor: BootstrapIntervalAnchor = {
     'port uses its own seeded generator whose algorithm the product plan KTD4 leaves to the implementation, and',
     'this oracle reports point estimates only (rebuild plan KTD5 keeps interval checks as relations plus one',
     "pinned anchor). Neither a hand derivation nor an independent recomputation can settle the product's",
-    'bounds, so the expected lower and upper bounds must be pinned from the product by Main and are marked',
-    'pinnedFromProduct; once pinned they must lie in [0, 1] and contain the corrected rate 4/7.',
+    'bounds, so the expected lower and upper bounds are pinned from a product run at the recorded seed (20000',
+    'iterations, confidence 0.95) by the evaluate command-level suite and are marked pinnedFromProduct; once',
+    'pinned, they must lie in [0, 1] and contain the corrected rate 4/7.',
   ].join(' '),
 }
 
