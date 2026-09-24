@@ -1,6 +1,6 @@
+import { Handle } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Queue, Stream } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
-import { type Pipeable, Prototype } from 'effect/Pipeable'
 import * as Error from 'effect/PlatformError'
 import * as Random from 'effect/Random'
 import * as Result from 'effect/Result'
@@ -30,13 +30,11 @@ import * as OpenFile from './open-file.handle.js'
 export const TypeId = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem')
 export type TypeId = typeof TypeId
 
-const DriverId: unique symbol = Symbol.for('~systemfsoftware/memfs/MemoryFileSystem/driver')
+const MemoryFileSystem = Handle.make<{ readonly cwd: string }, memfs.IFs>()(TypeId)
 
-export interface MemoryFileSystem extends Pipeable {
-  readonly [TypeId]: typeof TypeId
-  readonly [DriverId]: memfs.IFs
-  readonly cwd: string
-}
+export type MemoryFileSystem = Handle.Of<typeof MemoryFileSystem>
+
+export const isMemoryFileSystem = MemoryFileSystem.is
 
 const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
   const driver = memfs.createFsFromVolume(memfs.Volume.fromJSON(volumeJSONOf(spec.contents), spec.cwd))
@@ -44,12 +42,8 @@ const mounted = (spec: MemoryFileSystemSpec): memfs.IFs => {
   return driver
 }
 
-export const make = (spec: MemoryFileSystemSpec): MemoryFileSystem => ({
-  [TypeId]: TypeId,
-  [DriverId]: mounted(spec),
-  cwd: spec.cwd,
-  ...Prototype,
-})
+export const make = (spec: MemoryFileSystemSpec): MemoryFileSystem =>
+  MemoryFileSystem.make({ cwd: spec.cwd }, mounted(spec))
 
 // ---------------------------------------------------------------------------
 // What the port asks for, translated into what the driver takes
@@ -269,7 +263,7 @@ const eventOf = (decision: WatchEventDecision): FileSystem.WatchEvent =>
 // ---------------------------------------------------------------------------
 
 export const fileSystem = (self: MemoryFileSystem): FileSystem.FileSystem => {
-  const nfs = self[DriverId]
+  const nfs = MemoryFileSystem.slot(self)
 
   const access: FileSystem.FileSystem['access'] = (path, options) =>
     Effect.tryPromise({
