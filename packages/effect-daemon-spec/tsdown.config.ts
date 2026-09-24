@@ -35,7 +35,6 @@ const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<s
 
 export default defineConfig({
   ...quietBuild,
-  clean: false,
   entry: {
     index: './src/mod.ts',
     'lock-primitive-conformance': './src/testing/LockPrimitiveConformance.ts',

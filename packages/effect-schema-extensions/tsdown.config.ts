@@ -40,6 +40,5 @@ export default defineConfig({
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: { onlyBundle: false },
   tsconfig: './tsconfig.build.json',
-  clean: false,
   define: { 'import.meta.vitest': 'undefined' },
 })
