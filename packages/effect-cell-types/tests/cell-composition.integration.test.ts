@@ -1,6 +1,5 @@
-import { expect } from '@effect/vitest'
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -87,14 +86,16 @@ Feature('Composing admission stages into one pipeline')
           'outcome',
           () => Effect.map(Cell.andThen(admitCell, relayingCell).run({ id: 'abcd' }), (response) => ({ response })),
         ),
-        Then('the relay stage answers last')((s) => {
-          expect(s.outcome.response).toBe('second:admitted:10')
-        }),
-        And('the admission stage kept its record')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual(['admitted:4'])
-            }))
+        Then('the relay stage answers last and the admission stage kept its record')((s, expect) =>
+          Effect.flatMap(
+            Ledger,
+            (ledger) =>
+              Effect.map(ledger.lines, (lines) =>
+                expect({ response: s.outcome.response, lines }).toEqual({
+                  response: 'second:admitted:10',
+                  lines: ['admitted:4'],
+                })),
+          )
         ),
       ),
     )
@@ -106,9 +107,9 @@ Feature('Composing admission stages into one pipeline')
           'outcome',
           () => Effect.exit(Cell.zip(admitCell, admitCell).run({ id: 'abcd' })),
         ),
-        Then('both answers arrive as a pair')((s) => {
+        Then('both answers arrive as a pair')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed(['admitted:4', 'admitted:4'] as const))
-        }),
+        ),
       ),
     )
 
@@ -127,9 +128,9 @@ Feature('Composing admission stages into one pipeline')
               return Effect.exit(unwrapping.run({ order: { id: row.rawId } }))
             },
           ),
-          Then('the door answers the unwrapped order')((s) => {
+          Then('the door answers the unwrapped order')((s, expect) =>
             expect(s.outcome).toStrictEqual(Exit.succeed(row.expected))
-          }),
+          ),
         ),
     )
 
@@ -145,9 +146,9 @@ Feature('Composing admission stages into one pipeline')
             'outcome',
             () => Effect.exit(Cell.gate(carryingBody, bodyCell).run({ id: row.id })),
           ),
-          Then('the protected stage answers only when a body was carried')((s) => {
+          Then('the protected stage answers only when a body was carried')((s, expect) =>
             expect(s.outcome).toStrictEqual(Exit.succeed(row.expected))
-          }),
+          ),
         ),
     )
 
@@ -161,9 +162,9 @@ Feature('Composing admission stages into one pipeline')
             return Effect.map(batch.run([{ id: 'a' }, { id: 'bbbb' }, { id: 'cc' }]), (response) => ({ response }))
           },
         ),
-        Then('the folded answer names every order in turn')((s) => {
+        Then('the folded answer names every order in turn')((s, expect) =>
           expect(s.outcome.response).toBe('refused:too short|admitted:4|refused:too short')
-        }),
+        ),
       ),
     )
   })

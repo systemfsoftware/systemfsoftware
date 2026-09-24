@@ -1,4 +1,3 @@
-import { expect } from '@effect/vitest'
 import { Cell, Sandwich } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
@@ -48,9 +47,9 @@ Feature('Answering orders when the primary gateway wavers')
           'outcome',
           () => Effect.exit(Cell.orElse(primaryCell, fallbackCell).run({ id: 'infra-crash' })),
         ),
-        Then('the fallback gateway answers instead')((s) => {
+        Then('the fallback gateway answers instead')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed('fallback:admitted:11'))
-        }),
+        ),
       ),
     )
 
@@ -61,9 +60,9 @@ Feature('Answering orders when the primary gateway wavers')
           'outcome',
           () => Effect.exit(Cell.orElse(primaryCell, fallbackCell).run({ id: 'valid-order' })),
         ),
-        Then('the primary gateway answers on its own')((s) => {
+        Then('the primary gateway answers on its own')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed('admitted:11'))
-        }),
+        ),
       ),
     )
 
@@ -79,9 +78,9 @@ Feature('Answering orders when the primary gateway wavers')
               }),
             ),
         ),
-        Then('the caller reads the outage report')((s) => {
+        Then('the caller reads the outage report')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.fail('Service outage: Gateway unavailable'))
-        }),
+        ),
       ),
     )
 
@@ -99,10 +98,12 @@ Feature('Answering orders when the primary gateway wavers')
             return Effect.map(observed.run({ id: 'valid-order' }), (answer) => ({ answer, noted }))
           },
         ),
-        Then('the caller receives the answer and the onlooker noted the same one')((s) => {
-          expect(s.outcome.answer).toBe('admitted:11')
-          expect(s.outcome.noted).toBe('admitted:11')
-        }),
+        Then('the caller receives the answer and the onlooker noted the same one')((s, expect) =>
+          expect({ answer: s.outcome.answer, noted: s.outcome.noted }).toEqual({
+            answer: 'admitted:11',
+            noted: 'admitted:11',
+          })
+        ),
       ),
     )
 
@@ -120,9 +121,9 @@ Feature('Answering orders when the primary gateway wavers')
             return Effect.exit(paired.run({ id: 'dual-pass' }))
           },
         ),
-        Then('the verdict carries both answers')((s) => {
+        Then('the verdict carries both answers')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed('admitted:9 & admitted:9'))
-        }),
+        ),
       ),
     )
 
@@ -146,9 +147,9 @@ Feature('Answering orders when the primary gateway wavers')
             return Effect.exit(routed.run({ id: 'root-order' }))
           },
         ),
-        Then('the final answer carries the first stage\u2019s answer')((s) => {
+        Then('the final answer carries the first stage\u2019s answer')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed('chained:admitted:10'))
-        }),
+        ),
       ),
     )
 
@@ -168,10 +169,12 @@ Feature('Answering orders when the primary gateway wavers')
             })
           },
         ),
-        Then('every order gets its plain status')((s) => {
-          expect(s.outcome.broken).toBe('handled-error:Gateway unavailable')
-          expect(s.outcome.healthy).toBe('handled-success:admitted:11')
-        }),
+        Then('every order gets its plain status')((s, expect) =>
+          expect({ broken: s.outcome.broken, healthy: s.outcome.healthy }).toEqual({
+            broken: 'handled-error:Gateway unavailable',
+            healthy: 'handled-success:admitted:11',
+          })
+        ),
       ),
     )
 
@@ -196,9 +199,9 @@ Feature('Answering orders when the primary gateway wavers')
             return Effect.exit(chosen.run({ id: 'dynamic-order' }))
           },
         ),
-        Then('the chosen stage answers with what came before it')((s) => {
+        Then('the chosen stage answers with what came before it')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed('chosen-after:admitted:13'))
-        }),
+        ),
       ),
     )
 
@@ -216,7 +219,7 @@ Feature('Answering orders when the primary gateway wavers')
             return Effect.exit(summary.run({ id: 'enrich-order' }))
           },
         ),
-        Then('the summary holds every answer under its own name')((s) => {
+        Then('the summary holds every answer under its own name')((s, expect) =>
           expect(s.outcome).toStrictEqual(
             Exit.succeed({
               first: 'admitted:12',
@@ -224,7 +227,7 @@ Feature('Answering orders when the primary gateway wavers')
               second: 'fallback:admitted:12<-admitted:12',
             }),
           )
-        }),
+        ),
       ),
     )
 
@@ -235,9 +238,9 @@ Feature('Answering orders when the primary gateway wavers')
           'outcome',
           () => Effect.exit(Cell.bindTo(primaryCell, 'initial').run({ id: 'bindto-order' })),
         ),
-        Then('the filed answer sits under that name')((s) => {
+        Then('the filed answer sits under that name')((s, expect) =>
           expect(s.outcome).toStrictEqual(Exit.succeed({ initial: 'admitted:12' }))
-        }),
+        ),
       ),
     )
 
@@ -280,14 +283,26 @@ Feature('Answering orders when the primary gateway wavers')
             })
           },
         ),
-        Then('each answers as it was built, and the lazy stage is rebuilt on every order')((s) => {
-          expect(s.answers.fixed).toBe('fixed-value')
-          expect(s.answers.refusing).toStrictEqual(Exit.fail('expected-rejection'))
-          expect(s.answers.borrowed).toBe('borrowed-value')
-          expect([s.answers.lazyFirst, s.answers.lazySecond]).toStrictEqual(['built:1', 'built:2'])
-          expect(s.answers.broken).toSatisfy(Exit.hasDies)
-          expect(s.answers.passThrough).toStrictEqual({ id: 'dummy' })
-        }),
+        Then('each answers as it was built, the lazy stage is rebuilt on every order, and the broken one dies')((
+          s,
+          expect,
+        ) =>
+          expect({
+            fixed: s.answers.fixed,
+            refusing: s.answers.refusing,
+            borrowed: s.answers.borrowed,
+            lazy: [s.answers.lazyFirst, s.answers.lazySecond],
+            broken: s.answers.broken,
+            passThrough: s.answers.passThrough,
+          }).toEqual({
+            fixed: 'fixed-value',
+            refusing: Exit.fail('expected-rejection'),
+            borrowed: 'borrowed-value',
+            lazy: ['built:1', 'built:2'],
+            broken: Exit.die(new Error('construction exploded')),
+            passThrough: { id: 'dummy' },
+          })
+        ),
       ),
     )
 
@@ -310,9 +325,9 @@ Feature('Answering orders when the primary gateway wavers')
             return gathered.run([{ id: 'abcd' }, { id: 'infra-crash' }, { id: 'ab' }])
           },
         ),
-        Then('every order has an answer, including the one that broke')((s) => {
+        Then('every order has an answer, including the one that broke')((s, expect) =>
           expect(s.outcome).toStrictEqual(['ok:admitted:4', 'broken:Gateway unavailable', 'ok:refused:too short'])
-        }),
+        ),
       ),
     )
   })

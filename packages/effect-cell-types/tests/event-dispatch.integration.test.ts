@@ -1,10 +1,10 @@
-import { expect } from '@effect/vitest'
 import { Sandwich } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Result from 'effect/Result'
 
 import { publishDecisions } from './__fixtures__/publish-decisions.workflow.js'
 
@@ -55,16 +55,16 @@ Feature('Publishing a list of events in order')
           'outcome',
           () => Effect.exit(publishCell(false).run({ count: 3 })),
         ),
-        Then('the batch is published in full')((s) => {
-          expect(s.outcome).toStrictEqual(
-            Exit.succeed(['recorded', 'recorded', 'recorded'] as const),
+        Then('the batch is published in full and the journal holds the events in production order')((s, expect) =>
+          Effect.flatMap(
+            JournalService,
+            (journal) =>
+              Effect.map(journal.entries, (entries) =>
+                expect({ outcome: s.outcome, entries }).toEqual({
+                  outcome: Exit.succeed(['recorded', 'recorded', 'recorded'] as const),
+                  entries: ['first:0', 'second:event-1', 'first:2'],
+                })),
           )
-        }),
-        And('the journal holds the events in production order')(() =>
-          Effect.flatMap(JournalService, (journal) =>
-            Effect.map(journal.entries, (entries) => {
-              expect(entries).toEqual(['first:0', 'second:event-1', 'first:2'])
-            }))
         ),
       ),
     )
@@ -76,14 +76,16 @@ Feature('Publishing a list of events in order')
           'outcome',
           () => Effect.exit(publishCell(true).run({ count: 4 })),
         ),
-        Then('the batch stops with the journal\u2019s refusal')((s) => {
-          expect(s.outcome).toSatisfy(Exit.isFailure)
-        }),
-        And('no event after the refused one reaches the journal')(() =>
-          Effect.flatMap(JournalService, (journal) =>
-            Effect.map(journal.entries, (entries) => {
-              expect(entries).toEqual(['first:0', 'second:event-1'])
-            }))
+        Then('the batch stops with the journal\u2019s refusal and no later event reaches it')((s, expect) =>
+          Effect.flatMap(
+            JournalService,
+            (journal) =>
+              Effect.map(journal.entries, (entries) =>
+                expect({ error: Exit.findError(s.outcome), entries }).toEqual({
+                  error: Result.succeed({ reason: 'event-1' }),
+                  entries: ['first:0', 'second:event-1'],
+                })),
+          )
         ),
       ),
     )
@@ -95,14 +97,13 @@ Feature('Publishing a list of events in order')
           'outcome',
           () => Effect.exit(publishCell(false).run({ count: 0 })),
         ),
-        Then('nothing is published and the journal stays empty')((s) => {
-          expect(s.outcome).toStrictEqual(Exit.succeed([] as const))
-        }),
-        And('the journal holds no entries')(() =>
-          Effect.flatMap(JournalService, (journal) =>
-            Effect.map(journal.entries, (entries) => {
-              expect(entries).toEqual([])
-            }))
+        Then('nothing is published and the journal stays empty')((s, expect) =>
+          Effect.flatMap(
+            JournalService,
+            (journal) =>
+              Effect.map(journal.entries, (entries) =>
+                expect({ outcome: s.outcome, entries }).toEqual({ outcome: Exit.succeed([] as const), entries: [] })),
+          )
         ),
       ),
     )
