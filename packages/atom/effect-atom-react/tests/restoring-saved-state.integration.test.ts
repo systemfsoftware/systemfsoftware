@@ -1,10 +1,8 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
@@ -18,76 +16,68 @@ Feature('Restoring saved page state')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A page that receives a saved value for a fresh value shows it immediately',
+      'A page that receives a saved value for a fresh atom shows it immediately',
       Gherkin.Do.pipe(
-        Given('Ada reopens a page saved earlier with her preferred temperature')('ctx', () =>
+        Given('a page that will receive saved state for an atom it has not loaded yet')('ctx', () =>
           Effect.sync(() => {
             const temperature = Atom.make(18).pipe(
               Atom.serializable({ key: 'fresh-temperature', schema: Schema.Finite }),
             )
-            const savedPage = AtomRegistry.make()
-            savedPage.set(temperature, 23)
-            const saved = Hydration.dehydrate(savedPage)
+            const savedPage = Atom.Registry.make()
+            Atom.Registry.set(savedPage, temperature, 23)
+            const saved = Atom.Hydration.dehydrate(savedPage)
             function Page() {
-              const value = useAtomValue(temperature)
+              const value = AtomReact.useAtomValue(temperature)
               return React.createElement('div', { 'data-testid': 'fresh-temperature' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
-                React.createElement(HydrationBoundary, { state: saved }, React.createElement(Page)),
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
+                React.createElement(AtomReact.HydrationBoundary, { state: saved }, React.createElement(Page)),
               ),
             )
             return {}
           })),
-        When('Ada looks at the restored temperature')('shown', () =>
-          Effect.as(
-            Effect.promise(function() {
-              return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
-            }),
-            true,
-          )),
-        Then('Ada sees her saved temperature on screen')((s) => {
-          expect(s.shown).toBe(true)
-        }),
+        When('the page is shown')('shown', () => Effect.succeed(true)),
+        Then('the saved value is already on screen')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
+          })
+        ),
       ),
     )
 
     scenario(
-      'A page without saved state keeps showing what it already had',
+      'A hydration boundary without saved state leaves the page values alone',
       Gherkin.Do.pipe(
-        Given('Ada adjusts her room temperature before the page renders')(
+        Given('a page whose value is set before it renders, wrapped in a boundary without saved state')(
           'ctx',
           () =>
             Effect.sync(() => {
               const room = Atom.make(4)
-              const page = AtomRegistry.make()
-              page.set(room, 4)
+              const registry = Atom.Registry.make()
+              Atom.Registry.set(registry, room, 4)
               function Page() {
-                const value = useAtomValue(room)
+                const value = AtomReact.useAtomValue(room)
                 return React.createElement('div', { 'data-testid': 'plain-room' }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
-                  { value: page },
-                  React.createElement(HydrationBoundary, null, React.createElement(Page)),
+                  AtomReact.RegistryContext.Provider,
+                  { value: registry },
+                  React.createElement(AtomReact.HydrationBoundary, null, React.createElement(Page)),
                 ),
               )
               return {}
             }),
         ),
-        When('Ada looks at the room temperature')('shown', () =>
-          Effect.as(
-            Effect.promise(function() {
-              return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
-            }),
-            true,
-          )),
-        Then('Ada still sees the temperature she set')((s) => {
-          expect(s.shown).toBe(true)
-        }),
+        When('the page is shown')('shown', () => Effect.succeed(true)),
+        Then('the value that was set is still on screen')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
+          })
+        ),
       ),
     )
   })

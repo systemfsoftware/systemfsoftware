@@ -1,9 +1,0 @@
-{
-  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
-  "include": [
-    "dist/Hydration.d.ts"
-  ],
-  "compilerOptions": {
-    "customConditions": []
-  }
-}

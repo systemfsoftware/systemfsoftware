@@ -1,9 +1,8 @@
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import { make, RegistryContext, useAtomSet, useAtomUpdate, useAtomValue } from '@systemfsoftware/effect-atom-react'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as React from 'react'
@@ -12,16 +11,16 @@ import { expect } from 'vitest'
 
 const Feature = makeFeature({ it })
 
-Feature('Scoped counters that belong to one part of the page')
+Feature('Scoped atoms that belong to one part of the page')
   .live('renders real components in Chromium and waits on browser timers')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A scoped counter updates through its own setter for its part of the page',
+      'A scoped counter is created for its subtree and updates through its setter',
       Gherkin.Do.pipe(
-        Given('Ada opens a widget with its own counter she can read and update')('ctx', () =>
+        Given('a scoped counter atom with a widget that can read and update it')('ctx', () =>
           Effect.sync(() => {
-            const Counter = make(() => Atom.make(0))
+            const Counter = AtomReact.make(() => Atom.make(0))
             let set: (value: number) => void = () => {
               throw new Error('set called before the widget rendered')
             }
@@ -30,87 +29,81 @@ Feature('Scoped counters that belong to one part of the page')
             }
             function Widget() {
               const atom = Counter.use()
-              const value = useAtomValue(atom)
-              set = useAtomSet(atom)
-              increment = useAtomUpdate(atom)
+              const value = AtomReact.useAtomValue(atom)
+              set = AtomReact.useAtomSet(atom)
+              increment = AtomReact.useAtomUpdate(atom)
               return React.createElement('div', { 'data-testid': 'scoped-counter' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Counter.Provider, null, React.createElement(Widget)),
               ),
             )
             return { set: () => set, increment: () => increment }
           })),
-        When('Ada sets her counter to 5 and then adds one more')(
-          'shown',
+        When('the counter is set to a new value and then increased from the current value')(
+          'done',
           (s) =>
-            Effect.as(
-              Effect.promise(() => {
-                act(() => {
-                  s.ctx.set()(5)
-                })
-                act(() => {
-                  s.ctx.increment()((previous) => previous + 1)
-                })
-                return expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
-              }),
-              true,
-            ),
+            Effect.sync(() => {
+              act(() => {
+                s.ctx.set()(5)
+              })
+              act(() => {
+                s.ctx.increment()((previous) => previous + 1)
+              })
+            }),
         ),
-        Then('Ada sees 6 on her counter')((s) => {
-          expect(s.shown).toBe(true)
-        }),
+        Then('the widget shows the updated counter')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
+          })
+        ),
       ),
     )
 
     scenario(
-      'A scoped greeting starts with the name its part of the page was given',
+      'A scoped atom created with an input starts with that input',
       Gherkin.Do.pipe(
-        Given('Ada opens a greeting made for her by name')('ctx', () =>
+        Given('a scoped atom that takes a name as its input')('ctx', () =>
           Effect.sync(() => {
-            const UserName = make((name: string) => Atom.make(name))
+            const UserName = AtomReact.make((name: string) => Atom.make(name))
             function Greeting() {
               const atom = UserName.use()
-              const value = useAtomValue(atom)
+              const value = AtomReact.useAtomValue(atom)
               return React.createElement('div', { 'data-testid': 'greeting' }, value)
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(UserName.Provider, { value: 'Ada' }, React.createElement(Greeting)),
               ),
             )
             return {}
           })),
-        When('Ada looks at her greeting')('shown', () =>
-          Effect.as(
-            Effect.promise(function() {
-              return expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
-            }),
-            true,
-          )),
-        Then('Ada sees her own name on screen')((s) => {
-          expect(s.shown).toBe(true)
-        }),
+        When('the greeting is shown')('shown', () => Effect.succeed(true)),
+        Then('the input name is on screen')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
+          })
+        ),
       ),
     )
 
     scenario(
-      'A scoped greeting keeps its original name when its part of the page is renamed',
+      'A scoped atom provider that renders again keeps its original atom',
       Gherkin.Do.pipe(
-        Given('Ada opens a page that can switch the greeting to a new name')('ctx', () =>
+        Given('a page that can rename the input of a scoped atom provider')('ctx', () =>
           Effect.sync(() => {
-            const UserName = make((name: string) => Atom.make(name))
+            const UserName = AtomReact.make((name: string) => Atom.make(name))
             let rename: () => void = () => {
               throw new Error('rename called before the greeting rendered')
             }
             function Greeting() {
               const atom = UserName.use()
-              const value = useAtomValue(atom)
+              const value = AtomReact.useAtomValue(atom)
               return React.createElement('div', { 'data-testid': 'kept-name' }, value)
             }
             function Page() {
@@ -120,46 +113,44 @@ Feature('Scoped counters that belong to one part of the page')
             }
             render(
               React.createElement(
-                RegistryContext.Provider,
-                { value: AtomRegistry.make() },
+                AtomReact.RegistryContext.Provider,
+                { value: Atom.Registry.make() },
                 React.createElement(Page),
               ),
             )
             return { rename: () => rename }
           })),
-        When('Ada asks the page for the new name and looks at her greeting')('shown', (s) =>
-          Effect.as(
-            Effect.promise(() => {
-              act(() => {
-                s.ctx.rename()()
-              })
-              return expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
-            }),
-            true,
-          )),
-        Then('Ada still sees her original name on screen')((s) => {
-          expect(s.shown).toBe(true)
-        }),
+        When('the page asks for a new name for the provider')('done', (s) =>
+          Effect.sync(() => {
+            act(() => {
+              s.ctx.rename()()
+            })
+          })),
+        Then('the original atom is still on screen')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
+          })
+        ),
       ),
     )
 
     scenario(
-      'A widget outside its part of the page reports that its data source is missing',
+      'A scoped atom read outside its provider reports that the provider is missing',
       Gherkin.Do.pipe(
-        Given('Ada opens a widget whose counter lives in a part of the page she left')(
+        Given('a widget that reads a scoped atom without its provider, inside an error boundary')(
           'ctx',
           () =>
             Effect.sync(() => {
-              const Counter = make(() => Atom.make(0))
+              const Counter = AtomReact.make(() => Atom.make(0))
               function Widget() {
                 const atom = Counter.use()
-                const value = useAtomValue(atom)
+                const value = AtomReact.useAtomValue(atom)
                 return React.createElement('div', { 'data-testid': 'unscoped-value' }, value)
               }
               render(
                 React.createElement(
-                  RegistryContext.Provider,
-                  { value: AtomRegistry.make() },
+                  AtomReact.RegistryContext.Provider,
+                  { value: Atom.Registry.make() },
                   React.createElement(
                     ErrorBoundary,
                     { fallback: React.createElement('div', { 'data-testid': 'missing-provider' }, 'provider missing') },
@@ -170,16 +161,12 @@ Feature('Scoped counters that belong to one part of the page')
               return {}
             }),
         ),
-        When('Ada looks at the page where her counter should be')('shown', () =>
-          Effect.as(
-            Effect.promise(function() {
-              return expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
-            }),
-            true,
-          )),
-        Then('Ada sees that her counter is missing its part of the page')((s) => {
-          expect(s.shown).toBe(true)
-        }),
+        When('the widget is shown')('shown', () => Effect.succeed(true)),
+        Then('the error boundary reports the missing provider')(() =>
+          Effect.promise(function() {
+            return expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
+          })
+        ),
       ),
     )
   })

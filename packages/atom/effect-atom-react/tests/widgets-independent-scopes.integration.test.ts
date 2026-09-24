@@ -1,7 +1,5 @@
-import { RegistryContext, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
-import * as Atom from '@systemfsoftware/effect-atom/Atom'
-import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
+import { Atom } from '@systemfsoftware/effect-atom'
+import { AtomReact } from '@systemfsoftware/effect-atom-react'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
@@ -12,34 +10,34 @@ import { expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it })
 
-Feature('Keeping two widgets on separate data sources independent of each other')
+Feature('Keeping two on-screen widgets showing values from separate data sources independent of each other')
   .live('renders real components in Chromium and advances the browser timer queue')
   .withLayer(Layer.empty)
   .body(({ scenario }) => {
     scenario(
-      'A widget still loading keeps waiting while the other widget is put away',
+      "A widget still loading is not affected when a different widget's cleanup timer runs",
       Gherkin.Do.pipe(
         Given(
-          'Ada opens two widgets on their own data sources, each showing a value that never finishes loading',
+          'two independent widgets, each backed by a value that never finishes loading, with a short cleanup timer',
         )(
           'ctx',
           () =>
             Effect.sync(() => {
               vi.useFakeTimers()
               const atom = Atom.make<number, never>(Effect.never)
-              const first = AtomRegistry.make({ defaultIdleTTL: 5 })
-              const second = AtomRegistry.make({ defaultIdleTTL: 5 })
+              const first = Atom.Registry.make({ defaultIdleTTL: 5 })
+              const second = Atom.Registry.make({ defaultIdleTTL: 5 })
               return { atom, first, second }
             }),
         ),
-        When('Ada shows both widgets and lets enough time pass for cleanup to run')(
-          'shown',
+        When('both widgets are shown, and time passes long enough for cleanup to run')(
+          'state',
           (s) =>
             Effect.sync(() => {
               function Comp({ id }: { readonly id: string }) {
-                const result = useAtomSuspense(s.ctx.atom)
+                const result = AtomReact.useAtomSuspense(s.ctx.atom)
                 let value = 0
-                if (AsyncResult.isSuccess(result)) {
+                if (Atom.AsyncResult.isSuccess(result)) {
                   value = result.value
                 }
                 return React.createElement('div', { 'data-testid': `${id}-value` }, value)
@@ -47,7 +45,7 @@ Feature('Keeping two widgets on separate data sources independent of each other'
 
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: s.ctx.first },
                   React.createElement(
                     Suspense,
@@ -58,7 +56,7 @@ Feature('Keeping two widgets on separate data sources independent of each other'
               )
               render(
                 React.createElement(
-                  RegistryContext.Provider,
+                  AtomReact.RegistryContext.Provider,
                   { value: s.ctx.second },
                   React.createElement(
                     Suspense,
@@ -77,8 +75,8 @@ Feature('Keeping two widgets on separate data sources independent of each other'
               return { firstLoading, secondLoading }
             }),
         ),
-        Then('Ada still sees at least one widget waiting, never both flipped to the same state')((s) => {
-          expect(s.shown.firstLoading || s.shown.secondLoading).toBe(true)
+        Then('the widgets do not both flip to the same state together')((s) => {
+          expect(s.state.firstLoading || s.state.secondLoading).toBe(true)
         }),
       ),
     )

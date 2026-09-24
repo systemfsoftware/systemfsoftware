@@ -44,6 +44,17 @@ declare const Plain: Handle.Definition<typeof PlainId, { readonly count: number 
 declare const Slotted: Handle.Definition<typeof PlainId, { readonly count: number }, RawDriver>
 declare const key: Context.Key<'Redis', RunningContainer>
 
+interface Cell<A> {
+  readonly current: A
+}
+interface CellSlot extends Handle.Indexed {
+  readonly slot: Cell<this['Index']>
+}
+declare const CellId: unique symbol
+declare const Cells: Handle.Definition<typeof CellId, { readonly key: string }, CellSlot, Top>
+type CellHandle<A> = Handle.Handle<typeof CellId, { readonly key: string }, CellSlot, A>
+declare const numberCell: CellHandle<number>
+
 describe('Blueprint', () => {
   it('Should_AgreeAcrossMethodAndDual_When_CombinatorIsApplied', () => {
     expect(make('redis:7').withPort(6379)).type.toBe<Container>()
@@ -231,6 +242,23 @@ describe('Handle', () => {
 
   it('Should_NarrowToTheHandle_When_TheGuardHolds', () => {
     expect(isRunningContainer).type.toBe<(u: Top) => u is RunningContainer>()
+  })
+})
+
+describe('Handle over a type index', () => {
+  it('Should_ReadTheSlotAtTheHandlesIndex_When_TheSlotIsIndexed', () => {
+    expect(Cells.slot(numberCell)).type.toBe<Cell<number>>()
+    expect(Cells.make<number>({ key: 'n' }, { current: 1 })).type.toBe<CellHandle<number>>()
+  })
+
+  it('Should_RefuseASlotOfAnotherIndex_When_AHandleIsMinted', () => {
+    expect(Cells.make<number>).type.toBeCallableWith({ key: 'n' }, { current: 1 })
+    expect(Cells.make<number>).type.not.toBeCallableWith({ key: 'n' }, { current: 'one' })
+  })
+
+  it('Should_KeepTheIndexCovariant_When_AHandleIsWidened', () => {
+    expect<CellHandle<1>>().type.toBeAssignableTo<CellHandle<number>>()
+    expect<CellHandle<number>>().type.not.toBeAssignableTo<CellHandle<string>>()
   })
 })
 

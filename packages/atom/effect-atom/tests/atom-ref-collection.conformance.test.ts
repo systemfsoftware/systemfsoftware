@@ -1,5 +1,5 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { AtomRef } from '@systemfsoftware/effect-atom'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Match } from 'effect'
 
@@ -19,16 +19,18 @@ class Collections extends Context.Service<Collections, CollectionHandle>()(
   '@systemfsoftware/effect-atom/tests/atom-ref-collection.conformance.test/Collections',
 ) {}
 
-const removedAt = (collection: AtomRef.Collection<number>, index: number): Items => {
-  const ref = collection.value[index]
-  return ref === undefined ? collection.toArray() : collection.remove(ref).toArray()
+const removedAt = (collection: Atom.Ref.Collection<number>, index: number): Items => {
+  const ref = Atom.Ref.get(collection)[index]
+  return ref === undefined
+    ? Atom.Ref.toArray(collection)
+    : Atom.Ref.toArray(Atom.Ref.remove(collection, ref))
 }
 
 const freshHandle = (): CollectionHandle => {
-  const collection = AtomRef.collection<number>([])
+  const collection = Atom.Ref.collection<number>([])
   return {
-    push: (value) => collection.push(value).toArray(),
-    insertAt: (index, value) => collection.insertAt(index, value).toArray(),
+    push: (value) => Atom.Ref.toArray(Atom.Ref.push(collection, value)),
+    insertAt: (index, value) => Atom.Ref.toArray(Atom.Ref.insertAt(collection, index, value)),
     removeAt: (index) => removedAt(collection, index),
   }
 }

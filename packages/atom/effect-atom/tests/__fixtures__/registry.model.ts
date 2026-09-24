@@ -80,7 +80,6 @@ export type SubscriptionCommand = Schema.Schema.Type<typeof SubscriptionCommand>
 export const SubscriptionState = Schema.Struct({
   subscribed: Schema.Boolean,
   source: Schema.Finite,
-  materialized: Schema.Boolean,
   delivered: Schema.Array(Schema.Finite),
 })
 
@@ -89,7 +88,6 @@ export type SubscriptionState = Schema.Schema.Type<typeof SubscriptionState>
 export const initialSubscriptionState: SubscriptionState = {
   subscribed: false,
   source: 0,
-  materialized: false,
   delivered: [],
 }
 
@@ -104,11 +102,11 @@ const deliveredAfterSet = (
   state: SubscriptionState,
   value: number,
 ): readonly [SubscriptionState, ReadonlyArray<number>] => {
-  if (state.materialized && value === state.source) {
+  if (value === state.source) {
     return [state, state.delivered]
   }
   const delivered = [...state.delivered, value]
-  return [{ ...state, source: value, materialized: true, delivered }, delivered]
+  return [{ ...state, source: value, delivered }, delivered]
 }
 
 const subscriptionStepped = (

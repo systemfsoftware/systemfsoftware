@@ -1,5 +1,5 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
-import { Atom, Registry } from '@systemfsoftware/effect-atom'
+import { Atom } from '@systemfsoftware/effect-atom'
 import { And, Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Context, Effect, Fiber, Layer, Match, Option, Scheduler, Scope } from 'effect'
 
@@ -63,7 +63,7 @@ const portsFromRun = Effect.gen(function*() {
 })
 
 interface RegistryGraph {
-  readonly registry: Registry.Registry
+  readonly registry: Atom.Registry.Registry
   readonly source: Atom.Writable<number>
   readonly derived: Atom.Atom<number>
 }
@@ -75,14 +75,17 @@ class Graph
 const freshGraph = (ports: KernelPorts): RegistryGraph => {
   const source = Atom.keepAlive(Atom.make(0))
   const derived = Atom.readable((get) => doubled(get(source)))
-  return { registry: Registry.make(ports), source, derived }
+  return { registry: Atom.Registry.make(ports), source, derived }
 }
 
-const scopedRegistry = <S, H extends { readonly registry: Registry.Registry }>(
+const scopedRegistry = <S, H extends { readonly registry: Atom.Registry.Registry }>(
   keeper: Context.Key<S, H>,
   acquire: Effect.Effect<Context.Context<S>, never, never>,
 ): Effect.Effect<Context.Context<S>, never, Scope.Scope> =>
-  Effect.acquireRelease(acquire, (context) => Effect.sync(() => Context.get(context, keeper).registry.dispose()))
+  Effect.acquireRelease(
+    acquire,
+    (context) => Effect.sync(() => Atom.Registry.dispose(Context.get(context, keeper).registry)),
+  )
 
 const graphLayer: Layer.Layer<Graph> = Layer.unwrap(
   Effect.map(
@@ -96,23 +99,23 @@ const increasedBy = (value: number): [number, number] => [value, value + 1]
 const writtenThrough = (graph: RegistryGraph, command: RegistryCommand): number | undefined =>
   Match.value(command).pipe(
     Match.tagsExhaustive({
-      GetSource: () => graph.registry.get(graph.source),
-      GetDerived: () => graph.registry.get(graph.derived),
+      GetSource: () => Atom.Registry.get(graph.registry, graph.source),
+      GetDerived: () => Atom.Registry.get(graph.registry, graph.derived),
       SetSource: (set) => {
-        graph.registry.set(graph.source, set.value)
+        Atom.Registry.set(graph.registry, graph.source, set.value)
         return undefined
       },
       UpdateSource: (update) => {
-        graph.registry.update(graph.source, (value) => value + update.by)
+        Atom.Registry.update(graph.registry, graph.source, (value) => value + update.by)
         return undefined
       },
-      ModifySource: () => graph.registry.modify(graph.source, increasedBy),
+      ModifySource: () => Atom.Registry.modify(graph.registry, graph.source, increasedBy),
       RefreshDerived: () => {
-        graph.registry.refresh(graph.derived)
+        Atom.Registry.refresh(graph.registry, graph.derived)
         return undefined
       },
       Reset: () => {
-        graph.registry.reset()
+        Atom.Registry.reset(graph.registry)
         return undefined
       },
     }),
@@ -153,7 +156,7 @@ const derivedCheck = (
   })
 
 interface SubscriptionHandle {
-  readonly registry: Registry.Registry
+  readonly registry: Atom.Registry.Registry
   readonly source: Atom.Writable<number>
   readonly delivered: Array<number>
   readonly subscribe: () => ReadonlyArray<number>
@@ -166,20 +169,20 @@ class Subscriptions extends Context.Service<Subscriptions, SubscriptionHandle>()
 
 const freshSubscription = (ports: KernelPorts): SubscriptionHandle => {
   const source = Atom.make(0)
-  const registry = Registry.make(ports)
+  const registry = Atom.Registry.make(ports)
   const delivered: Array<number> = []
   return {
     registry,
     source,
     delivered,
     subscribe: () => {
-      registry.subscribe(source, (value) => {
+      Atom.Registry.subscribe(registry, source, (value) => {
         delivered.push(value)
       })
       return [...delivered]
     },
     setSource: (value) => {
-      registry.set(source, value)
+      Atom.Registry.set(registry, source, value)
       return [...delivered]
     },
   }
@@ -221,7 +224,7 @@ const subscriptionCheck = (
   })
 
 interface LifetimeHandle {
-  readonly registry: Registry.Registry
+  readonly registry: Atom.Registry.Registry
   readonly atom: Atom.Atom<number>
   readonly mount: () => void
   readonly unmount: () => void
@@ -238,20 +241,20 @@ const DEADLINE_MILLIS = 1000
 
 const freshLifetime = (ports: KernelPorts): LifetimeHandle => {
   const atom = Atom.setIdleTTL(IDLE_MILLIS)(Atom.make(0))
-  const registry = Registry.make({ ...ports, timeoutResolution: RESOLUTION_MILLIS })
+  const registry = Atom.Registry.make({ ...ports, timeoutResolution: RESOLUTION_MILLIS })
   let release: (() => void) | undefined = undefined
   return {
     registry,
     atom,
     mount: () => {
-      release = registry.mount(atom)
+      release = Atom.Registry.subscribe(registry, atom, () => {}, { immediate: true })
     },
     unmount: () => {
       if (release !== undefined) {
         release()
       }
     },
-    observe: () => Option.isSome(registry.getRaw(atom)),
+    observe: () => Option.isSome(Atom.Registry.getRaw(registry, atom)),
   }
 }
 
