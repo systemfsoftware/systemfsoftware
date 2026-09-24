@@ -12,4 +12,5 @@ export default defineConfig({
   clean: false,
   outExtensions: () => ({ js: '.mjs' }),
   deps: { onlyBundle: false },
+  copy: [{ from: 'src/drivers/review-page.html', to: 'dist', flatten: true }],
 })

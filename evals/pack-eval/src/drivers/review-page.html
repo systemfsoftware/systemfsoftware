@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pack review</title>
+<style>
+:root { color-scheme: light dark; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  max-width: 72ch;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+header.page { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+#progress { font-variant-numeric: tabular-nums; white-space: nowrap; }
+nav.tabs { display: flex; gap: 0.5rem; margin: 1rem 0; }
+nav.tabs button[aria-selected="true"] { outline: 2px solid currentColor; }
+#prompt {
+  font-size: 1.1rem;
+  border-left: 4px solid #888;
+  padding-left: 0.75rem;
+  margin: 1.5rem 0;
+  white-space: pre-wrap;
+}
+#prompt .text { margin: 0; }
+#meta { color: #666; font-size: 0.9rem; }
+.rule {
+  border: 1px solid #888;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+.rule h2 { font-size: 1rem; margin: 0 0 0.25rem; }
+.rule .stems { font-size: 0.85rem; color: #666; }
+.rule .body { margin-top: 0.5rem; }
+.rule .body h1, .rule .body h2, .rule .body h3 { font-size: 1em; margin: 0.75em 0 0.25em; }
+.rule .body ul, .rule .body ol { padding-left: 1.5rem; margin: 0.25em 0; }
+.rule .body p { margin: 0.25em 0; }
+.rule .body pre {
+  background: rgba(128, 128, 128, 0.12);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+.rule .verdict { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+.rule.verdict-governs { border-left: 6px solid #2e7d32; }
+.rule.verdict-not-governing { border-left: 6px solid #c62828; }
+.rule.verdict-deferred { border-left: 6px solid #ef6c00; }
+.rule details { margin-top: 0.5rem; font-size: 0.9rem; }
+.selector { background: rgba(128, 128, 128, 0.12); border-radius: 0.25rem; padding: 0.25rem 0.5rem; }
+.selector .agree { color: #2e7d32; font-weight: bold; }
+.selector .disagree { color: #c62828; font-weight: bold; }
+textarea#notes { width: 100%; min-height: 4rem; margin-top: 1rem; font: inherit; }
+.controls { display: flex; gap: 0.5rem; margin: 1rem 0; flex-wrap: wrap; }
+button { font: inherit; padding: 0.4rem 1rem; border-radius: 0.375rem; border: 1px solid #888; cursor: pointer; }
+button.accept, button.governs { font-weight: bold; }
+button:disabled { opacity: 0.5; cursor: default; }
+#status { min-height: 1.5em; color: #666; font-size: 0.9rem; }
+#status .saved { color: #2e7d32; }
+#status .failed { color: #c62828; }
+footer.keys { margin-top: 2rem; font-size: 0.85rem; color: #666; }
+footer.keys kbd {
+  border: 1px solid #888;
+  border-radius: 0.25rem;
+  padding: 0 0.375rem;
+  font-family: inherit;
+}
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Pack review</h1>
+  <div id="progress" role="status" aria-live="polite">loading&hellip;</div>
+</header>
+<nav class="tabs" aria-label="Review queues">
+  <button type="button" id="tab-candidates" aria-selected="true">Offers</button>
+  <button type="button" id="tab-labels" aria-selected="false">Labels</button>
+</nav>
+<main id="item"></main>
+<label for="notes">Notes (kept in this browser only; routing labels carry no notes field)</label>
+<textarea id="notes" placeholder="Why this mark, what is uncertain, what to revisit&hellip;"></textarea>
+<div class="controls" id="controls"></div>
+<div id="status" role="status" aria-live="polite"></div>
+<footer class="keys">
+  <p>Offers: <kbd>a</kbd> accept &middot; <kbd>r</kbd> reject &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> move.
+  Labels: <kbd>1</kbd> governs &middot; <kbd>2</kbd> does not govern &middot; <kbd>3</kbd> defer the focused rule &middot;
+  <kbd>u</kbd> undo &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> move between tasks &middot; <kbd>Ctrl</kbd>+<kbd>S</kbd> save.</p>
+</footer>
+<script>
+"use strict";
+/* One item at a time. Every mark is saved to the server as it happens; the
+   page never shows the selector's answer until the task is labelled. */
+const state = {
+  tab: "candidates",
+  offers: [],
+  offerIndex: 0,
+  tasks: [],
+  taskIndex: 0,
+  packsByTask: {},
+  focusedRule: 0,
+  previous: null,
+};
+
+const statusEl = () => document.getElementById("status");
+const itemEl = () => document.getElementById("item");
+const controlsEl = () => document.getElementById("controls");
+const progressEl = () => document.getElementById("progress");
+const notesEl = () => document.getElementById("notes");
+
+function setStatus(text, kind) {
+  const el = statusEl();
+  el.textContent = "";
+  const span = document.createElement("span");
+  if (kind) span.className = kind;
+  span.textContent = text;
+  el.appendChild(span);
+}
+
+async function requestJson(url, options) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text === "" ? null : JSON.parse(text);
+  } catch (parseError) {
+    throw new Error("the server answered with text the page cannot read as JSON");
+  }
+  if (!response.ok) {
+    const detail = body && typeof body.error === "string" ? body.error : ("status " + response.status);
+    throw new Error(detail);
+  }
+  return body;
+}
+
+/* Escape untrusted text first; the structure below is built from the escaped
+   fragments, so pack text can never inject markup. */
+function escapeText(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function inlineMarkdown(escaped) {
+  return escaped
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|\W)_([^_\n]+)_(\W|$)/g, "$1<em>$2</em>$3")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s"<>]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>');
+}
+
+function renderMarkdown(text) {
+  const lines = escapeText(text).split("\n");
+  const out = [];
+  let list = null;
+  const closeList = () => {
+    if (list !== null) {
+      out.push(list === "ol" ? "</ol>" : "</ul>");
+      list = null;
+    }
+  };
+  for (const line of lines) {
+    let match = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (match !== null) {
+      closeList();
+      const level = match[1].length;
+      out.push("<h" + level + ">" + inlineMarkdown(match[2]) + "</h" + level + ">");
+      continue;
+    }
+    match = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (match !== null) {
+      const kind = /^\d+\.$/.test(match[2]) ? "ol" : "ul";
+      if (list !== kind) {
+        closeList();
+        out.push(kind === "ol" ? "<ol>" : "<ul>");
+        list = kind;
+      }
+      out.push("<li>" + inlineMarkdown(match[3]) + "</li>");
+      continue;
+    }
+    if (/^\s*$/.test(line)) {
+      closeList();
+      continue;
+    }
+    closeList();
+    out.push("<p>" + inlineMarkdown(line) + "</p>");
+  }
+  closeList();
+  return out.join("\n");
+}
+
+async function loadQueues() {
+  const [offerList, taskList] = await Promise.all([
+    requestJson("/api/candidates"),
+    requestJson("/api/tasks"),
+  ]);
+  state.offers = offerList.candidates;
+  state.offerIndex = 0;
+  state.tasks = taskList.tasks;
+  state.taskIndex = 0;
+  state.packsByTask = {};
+  state.focusedRule = 0;
+  state.previous = null;
+}
+
+async function taskDetail(taskId) {
+  if (!(taskId in state.packsByTask)) {
+    state.packsByTask[taskId] = await requestJson("/api/tasks/" + encodeURIComponent(taskId));
+  }
+  return state.packsByTask[taskId];
+}
+
+function taskLabelState(detail) {
+  const labelled = detail.packs.length > 0 && detail.packs.every(
+    (pack) => pack.governing.length + pack.deferred.length > 0 || (pack.governing.length === 0 && pack.deferred.length === 0 && pack.traceLoadedStems !== undefined),
+  );
+  return labelled;
+}
+
+async function saveMarks(taskId, packId, marks) {
+  const saved = await requestJson(
+    "/api/tasks/" + encodeURIComponent(taskId) + "/labels?pack=" + encodeURIComponent(packId),
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(marks),
+    },
+  );
+  delete state.packsByTask[taskId];
+  setStatus("saved " + taskId + " / " + packId, "saved");
+  return saved;
+}
+
+function noteKey(taskId, packId) {
+  return "pack-eval-note:" + taskId + ":" + packId;
+}
+
+function readNotes(taskId, packId) {
+  try {
+    return window.localStorage.getItem(noteKey(taskId, packId)) || "";
+  } catch (storageError) {
+    return "";
+  }
+}
+
+function keepNotes(taskId, packId, text) {
+  try {
+    window.localStorage.setItem(noteKey(taskId, packId), text);
+  } catch (storageError) {
+    /* Notes are scratch; losing them never blocks a saved mark. */
+  }
+}
+
+function currentRuleButtons() {
+  return Array.from(itemEl().querySelectorAll("[data-rule]"));
+}
+
+function focusRule(index) {
+  const buttons = currentRuleButtons();
+  if (buttons.length === 0) return;
+  state.focusedRule = (index + buttons.length) % buttons.length;
+  buttons[state.focusedRule].focus();
+}
+
+function verdictClass(marks, stem) {
+  if (marks.governing.includes(stem)) return "verdict-governing";
+  if (marks.deferred.includes(stem)) return "verdict-deferred";
+  if (marks.seen.includes(stem)) return "verdict-not-governing";
+  return "";
+}
+
+function renderOffer(offer, remaining) {
+  const main = itemEl();
+  main.textContent = "";
+  progressEl().textContent = remaining === 0
+    ? "no offers waiting"
+    : "offer " + (state.offerIndex + 1) + " of " + remaining;
+  const prompt = document.createElement("div");
+  prompt.id = "prompt";
+  const text = document.createElement("p");
+  text.className = "text";
+  text.textContent = offer.text;
+  prompt.appendChild(text);
+  const meta = document.createElement("p");
+  meta.id = "meta";
+  meta.textContent = Object.entries(offer.dimensions)
+    .map(([name, value]) => name + ": " + value)
+    .join(" · ");
+  prompt.appendChild(meta);
+  main.appendChild(prompt);
+  notesEl().value = "";
+  notesEl().disabled = true;
+  renderControls([
+    { label: "Accept (a)", className: "accept", action: () => decideOffer(offer.id, true) },
+    { label: "Reject (r)", action: () => decideOffer(offer.id, false) },
+  ]);
+}
+
+async function decideOffer(id, accept) {
+  setStatus(accept ? "accepting…" : "rejecting…");
+  try {
+    await requestJson("/api/candidates/" + encodeURIComponent(id) + (accept ? "/accept" : "/reject"), {
+      method: "POST",
+    });
+    await loadQueues();
+    if (state.offers.length === 0) {
+      setStatus("no offers waiting", "saved");
+    } else {
+      state.offerIndex = Math.min(state.offerIndex, state.offers.length - 1);
+      setStatus(accept ? "accepted " + id : "rejected " + id, "saved");
+    }
+    render();
+  } catch (error) {
+    setStatus(String((error && error.message) || error), "failed");
+  }
+}
+
+function packMarks(pack, remembered) {
+  if (remembered) return remembered;
+  const seen = [];
+  for (const rule of pack.rules) seen.push(rule.stem);
+  return { governing: [...pack.governing], deferred: [...pack.deferred], seen };
+}
+
+function renderRuleCard(pack, rule, marks, traceStems, taskId) {
+  const card = document.createElement("section");
+  card.className = "rule " + verdictClass(marks, rule.stem);
+  card.dataset.rule = rule.stem;
+  card.tabIndex = 0;
+  const heading = document.createElement("h2");
+  heading.textContent = rule.title;
+  card.appendChild(heading);
+  const stems = document.createElement("p");
+  stems.className = "stems";
+  stems.textContent = rule.stem + (rule.appliesWhen.length > 0 ? " · applies when: " + rule.appliesWhen.join("; ") : "");
+  card.appendChild(stems);
+  const body = document.createElement("div");
+  body.className = "body";
+  body.innerHTML = renderMarkdown(rule.body);
+  card.appendChild(body);
+  if (traceStems !== undefined) {
+    const selector = document.createElement("p");
+    selector.className = "selector";
+    const agrees = marks.governing.includes(rule.stem) === traceStems.includes(rule.stem);
+    const verdict = document.createElement("span");
+    verdict.className = agrees ? "agree" : "disagree";
+    verdict.textContent = agrees ? "agrees" : "disagrees";
+    selector.append("Selector loaded: ", traceStems.join(", ") || "nothing", " — ");
+    selector.appendChild(verdict);
+    selector.append(" with your mark.");
+    card.appendChild(selector);
+  }
+  const verdict = document.createElement("div");
+  verdict.className = "verdict";
+  verdict.append(
+    verdictButton(taskId, pack.packId, rule.stem, "governing", "Governs (1)"),
+    verdictButton(taskId, pack.packId, rule.stem, "deferred", "Defer (3)"),
+    verdictButton(taskId, pack.packId, rule.stem, "not-governing", "Does not govern (2)"),
+  );
+  card.appendChild(verdict);
+  return card;
+}
+
+function verdictButton(taskId, packId, stem, kind, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", () => markRule(taskId, packId, stem, kind));
+  return button;
+}
+
+async function markRule(taskId, packId, stem, kind) {
+  const detail = await taskDetail(taskId);
+  const pack = detail.packs.find((entry) => entry.packId === packId);
+  if (!pack) return;
+  state.previous = {
+    taskId,
+    packId,
+    governing: [...pack.governing],
+    deferred: [...pack.deferred],
+  };
+  const governing = pack.governing.filter((name) => name !== stem);
+  const deferred = pack.deferred.filter((name) => name !== stem);
+  if (kind === "governing") governing.push(stem);
+  if (kind === "deferred") deferred.push(stem);
+  try {
+    await saveMarks(taskId, packId, { governing, deferred });
+    await render();
+  } catch (error) {
+    setStatus(String((error && error.message) || error), "failed");
+  }
+}
+
+async function undoMark() {
+  if (!state.previous) {
+    setStatus("nothing to undo");
+    return;
+  }
+  const { taskId, packId, governing, deferred } = state.previous;
+  state.previous = null;
+  try {
+    await saveMarks(taskId, packId, { governing, deferred });
+    await render();
+  } catch (error) {
+    setStatus(String((error && error.message) || error), "failed");
+  }
+}
+
+function renderTask(detail, task) {
+  const main = itemEl();
+  main.textContent = "";
+  const remaining = state.tasks.filter(
+    (entry) => entry.taskId !== task.taskId || !taskLabelState(state.packsByTask[entry.taskId] || { packs: [] }),
+  ).length;
+  progressEl().textContent = "task " + (state.taskIndex + 1) + " of " + state.tasks.length +
+    (remaining > 0 ? " · " + remaining + " remaining" : " · done");
+  const prompt = document.createElement("div");
+  prompt.id = "prompt";
+  const text = document.createElement("p");
+  text.className = "text";
+  text.textContent = detail.text;
+  prompt.appendChild(text);
+  const meta = document.createElement("p");
+  meta.id = "meta";
+  meta.textContent = task.taskId + " · split " + task.split;
+  prompt.appendChild(meta);
+  main.appendChild(prompt);
+  let firstPack = true;
+  for (const pack of detail.packs) {
+    const marks = packMarks(pack, null);
+    const traceStems = pack.traceLoadedStems === undefined ? undefined : [...pack.traceLoadedStems];
+    const packHeading = document.createElement("h2");
+    packHeading.textContent = "Pack " + pack.packId;
+    main.appendChild(packHeading);
+    for (const rule of pack.rules) {
+      main.appendChild(renderRuleCard(pack, rule, marks, traceStems, task.taskId));
+    }
+    if (firstPack) {
+      firstPack = false;
+      notesEl().disabled = false;
+      notesEl().value = readNotes(task.taskId, pack.packId);
+      notesEl().oninput = () => keepNotes(task.taskId, pack.packId, notesEl().value);
+    }
+  }
+  renderControls([
+    { label: "Undo (u)", action: undoMark },
+    { label: "Save (Ctrl+S)", action: () => render() },
+  ]);
+}
+
+function renderControls(buttons) {
+  const controls = controlsEl();
+  controls.textContent = "";
+  for (const spec of buttons) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = spec.label;
+    if (spec.className) button.className = spec.className;
+    button.addEventListener("click", spec.action);
+    controls.appendChild(button);
+  }
+}
+
+async function render() {
+  try {
+    if (state.tab === "candidates") {
+      if (state.offers.length === 0) {
+        itemEl().textContent = "No offers waiting. Switch to Labels to mark routing.";
+        progressEl().textContent = "no offers waiting";
+        renderControls([]);
+        return;
+      }
+      renderOffer(state.offers[state.offerIndex], state.offers.length);
+      return;
+    }
+    if (state.tasks.length === 0) {
+      itemEl().textContent = "No tasks yet. Accept offers first.";
+      progressEl().textContent = "no tasks yet";
+      renderControls([]);
+      return;
+    }
+    const task = state.tasks[state.taskIndex];
+    const detail = await taskDetail(task.taskId);
+    renderTask(detail, task);
+  } catch (error) {
+    setStatus(String((error && error.message) || error), "failed");
+  }
+}
+
+function selectTab(tab) {
+  state.tab = tab;
+  document.getElementById("tab-candidates").setAttribute("aria-selected", tab === "candidates" ? "true" : "false");
+  document.getElementById("tab-labels").setAttribute("aria-selected", tab === "labels" ? "true" : "false");
+  render();
+}
+
+async function moveOffer(step) {
+  if (state.offers.length === 0) return;
+  state.offerIndex = (state.offerIndex + step + state.offers.length) % state.offers.length;
+  render();
+}
+
+async function moveTask(step) {
+  if (state.tasks.length === 0) return;
+  state.taskIndex = (state.taskIndex + step + state.tasks.length) % state.tasks.length;
+  state.focusedRule = 0;
+  state.previous = null;
+  render();
+}
+
+document.getElementById("tab-candidates").addEventListener("click", () => selectTab("candidates"));
+document.getElementById("tab-labels").addEventListener("click", () => selectTab("labels"));
+
+document.addEventListener("keydown", (event) => {
+  const typing = event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    render();
+    return;
+  }
+  if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (state.tab === "candidates") {
+    if (event.key === "a" || event.key === "A") {
+      const offer = state.offers[state.offerIndex];
+      if (offer) decideOffer(offer.id, true);
+    } else if (event.key === "r" || event.key === "R") {
+      const offer = state.offers[state.offerIndex];
+      if (offer) decideOffer(offer.id, false);
+    } else if (event.key === "ArrowRight") {
+      moveOffer(1);
+    } else if (event.key === "ArrowLeft") {
+      moveOffer(-1);
+    }
+    return;
+  }
+  if (event.key === "ArrowRight") {
+    moveTask(1);
+  } else if (event.key === "ArrowLeft") {
+    moveTask(-1);
+  } else if (event.key === "u" || event.key === "U") {
+    undoMark();
+  } else if (event.key === "1" || event.key === "2" || event.key === "3") {
+    const cards = Array.from(itemEl().querySelectorAll("[data-rule]"));
+    const card = cards[state.focusedRule] || cards[0];
+    if (!card) return;
+    state.focusedRule = cards.indexOf(card);
+    const task = state.tasks[state.taskIndex];
+    const rules = Array.from(card.querySelectorAll(".verdict button"));
+    const index = event.key === "1" ? 0 : event.key === "2" ? 2 : 1;
+    const button = rules[index];
+    if (task && button) button.click();
+  } else if (event.key === "ArrowDown") {
+    event.preventDefault();
+    focusRule(state.focusedRule + 1);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    focusRule(state.focusedRule - 1);
+  }
+});
+
+loadQueues().then(render).catch((error) => {
+  progressEl().textContent = "the page could not load";
+  setStatus(String((error && error.message) || error), "failed");
+});
+</script>
+</body>
+</html>
