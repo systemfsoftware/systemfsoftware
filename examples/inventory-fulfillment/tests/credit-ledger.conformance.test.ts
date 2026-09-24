@@ -3,8 +3,9 @@ import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Persistence } from '@systemfsoftware/example-inventory-fulfillment'
 import { Effect, Layer } from 'effect'
-import { passedRuns } from './__fixtures__/conformance-report.fixture.js'
+import { atLeastOne } from './__fixtures__/conformance-bounds.schema.js'
 import {
+  budgetedHistories,
   drizzleLedgerLayer,
   ledgerSequenceSpec,
   ledgerSpec,
@@ -32,9 +33,11 @@ Feature('Charging one customer from two orders at once', { timeout: 120_000 })
           'checked',
           (s) => Conformance.linearizable(s.ledger, ledgerSpec),
         ),
-        Then('every charge shows up in the balance the account answers with')((s) => {
-          passedRuns(s.checked)
-        }),
+        Then('every charge shows up in the balance the account answers with')((s, expect) =>
+          expect({ report: s.checked }).toMatchObject({
+            report: { _tag: 'Pass', histories: expect.schemaMatching(atLeastOne) },
+          })
+        ),
       ),
     )
 
@@ -53,9 +56,11 @@ Feature('Charging one customer from two orders at once', { timeout: 120_000 })
                 Conformance.sequential(drizzleLedgerLayer(session), ledgerSequenceSpec)),
             ),
         ),
-        Then('every charge shows up in the balance the account answers with')((s) => {
-          passedRuns(s.checked)
-        }),
+        Then('every charge shows up in the balance the account answers with')((s, expect) =>
+          expect({ report: s.checked }).toMatchObject({
+            report: { _tag: 'Pass', histories: budgetedHistories },
+          })
+        ),
       ),
     )
   })

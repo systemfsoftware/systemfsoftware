@@ -26,6 +26,8 @@ export const readCatalogue = (
 
 export const inventoryReadLayer: Layer.Layer<Inventory.Store.InventoryStore> = Inventory.Memory.layer(inventorySeed())
 
+export const budgetedHistories = 12
+
 export const inventoryReadSpec: Conformance.SequentialSpecification<
   InventoryReadCommand,
   number,
@@ -36,7 +38,7 @@ export const inventoryReadSpec: Conformance.SequentialSpecification<
   commands: InventoryReadCommand,
   model: inventoryReadModel,
   run: readCatalogue,
-  sequences: 12,
+  sequences: budgetedHistories,
   operations: 3,
 }
 
@@ -74,6 +76,6 @@ export const reservationReadSpec: Conformance.SequentialSpecification<
   commands: ReservationReadCommand,
   model: reservationReadModel,
   run: lookupReservation,
-  sequences: 12,
+  sequences: budgetedHistories,
   operations: 3,
 }
