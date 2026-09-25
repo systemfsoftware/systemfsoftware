@@ -48,37 +48,42 @@ export const StockPageSize = S.Int.pipe(
   S.check(S.isLessThanOrEqualTo(100)),
 )
 
-export class StockLot extends S.Class<StockLot>('StockLot')({
+export const StockLot = S.Struct({
   lotId: LotId,
   sku: SkuId,
   warehouseId: WarehouseId,
   quantityOnHand: QuantityOnHand,
   version: Version,
   expiresAt: S.Option(S.DateTimeUtc),
-}) {}
+})
+export type StockLot = S.Schema.Type<typeof StockLot>
 
-export class WarehouseStockPartition extends S.Class<WarehouseStockPartition>('WarehouseStockPartition')({
+export const WarehouseStockPartition = S.Struct({
   warehouseId: WarehouseId,
   region: S.String,
   lots: S.Array(StockLot),
-}) {}
+})
+export type WarehouseStockPartition = S.Schema.Type<typeof WarehouseStockPartition>
 
-export class KitComponent extends S.Class<KitComponent>('KitComponent')({
+export const KitComponent = S.Struct({
   sku: SkuId,
   quantity: Quantity,
-}) {}
+})
+export type KitComponent = S.Schema.Type<typeof KitComponent>
 
-export class KitDefinition extends S.Class<KitDefinition>('KitDefinition')({
+export const KitDefinition = S.Struct({
   kitSku: SkuId,
   components: S.Array(KitComponent),
-}) {}
+})
+export type KitDefinition = S.Schema.Type<typeof KitDefinition>
 
-export class LotAllocation extends S.Class<LotAllocation>('LotAllocation')({
+export const LotAllocation = S.Struct({
   warehouseId: WarehouseId,
   lotId: LotId,
   sku: SkuId,
   quantity: Quantity,
-}) {}
+})
+export type LotAllocation = S.Schema.Type<typeof LotAllocation>
 
 const identifierSeeds = ['', 'a']
 const positiveIntegerSeeds = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 1]

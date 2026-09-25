@@ -54,7 +54,7 @@ import {
 } from './ProcedureError.schema.js'
 import { region } from './region.service.js'
 import type { RouteOptions } from './Route.schema.js'
-import type { Route, RouteUncertain } from './select-route.workflow.js'
+import type { Route, RouteUncertainOf } from './select-route.workflow.js'
 
 type Top<A = unknown> = A
 
@@ -157,7 +157,7 @@ type SeenOf<X> = DecisionModel.DecisionModel | ServicesOf<X>
 
 type InvokeOptionsOf<X> = {
   readonly routing?: RouteOptions | undefined
-  readonly onUncertain?: (input: RequestOf<X>, route: (typeof RouteUncertain)['Encoded']) => Top
+  readonly onUncertain?: (input: RequestOf<X>, route: RouteUncertainOf<string>) => Top
 }
 
 type InvokeOut<X, Args> = Args extends readonly [Top, {

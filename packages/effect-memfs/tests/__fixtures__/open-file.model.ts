@@ -3,6 +3,10 @@ import { Match, Schema } from 'effect'
 /** A note of five letters, opened for reading and writing, is the subject. */
 export const OpenedNoteText = 'hello'
 
+export class HandleLeftOpen extends Schema.TaggedError<HandleLeftOpen>()('HandleLeftOpen', {
+  reason: Schema.String,
+}) {}
+
 const Written = Schema.Literals(['a', 'bc', 'def'])
 const Size = Schema.Literals([1, 2, 3, 5, 8])
 const Offset = Schema.Literals([-1, 0, 1, 2, 3, 5, 8])

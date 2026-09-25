@@ -3,7 +3,7 @@ import { Contract, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/tra
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, FileSystem, Layer } from 'effect'
 import * as PlatformError from 'effect/PlatformError'
-import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
+import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.fixture.js'
 
 const Feature = makeFeature({ it })
 

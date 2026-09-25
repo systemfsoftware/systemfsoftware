@@ -1,31 +1,43 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer } from 'effect'
-import { answering, CountingModel, withProvider } from './__fixtures__/counting-model.fixture.js'
-import { Request } from './__fixtures__/request.schema.js'
+import { Effect, Layer, Schema } from 'effect'
+import {
+  answering,
+  answersFor,
+  classifyAnswer,
+  CountingModel,
+  withProvider,
+} from './__fixtures__/counting-model.fixture.js'
+import type { AnswerFor } from './__fixtures__/counting-model.fixture.js'
 import { matchedRouteOf, routingTo, uncertainRouteOf } from './__fixtures__/routing-model.fixture.js'
 
 const Feature = makeFeature({ it })
 
 const find = Discern.Procedure.make({
   description: 'Locate code relevant to a behavior, feature or concept',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`found:${request}`),
 })
 
 const review = Discern.Procedure.make({
   description: 'Review a change for correctness and semantic risk',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`reviewed:${request}`),
 })
 
 const testGaps = Discern.Procedure.make({
   description: 'Find behavior that lacks sufficient test coverage',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`gaps:${request}`),
 })
 
-const code = Discern.Procedure.registry(Request, { find, review, ['test-gaps']: testGaps })
+const code = Discern.Procedure.registry(Schema.String, { find, review, ['test-gaps']: testGaps })
+
+const outOfRangeRouting: AnswerFor = (request) =>
+  answersFor({
+    request,
+    answerOf: () => classifyAnswer({ label: 'find', probabilities: { find: 1.5, review: -0.5, 'test-gaps': 0 } }),
+  })
 
 Feature('Owning up when a request cannot be routed confidently')
   .withLayer(Layer.empty)
@@ -143,6 +155,25 @@ Feature('Owning up when a request cannot be routed confidently')
             strictReason: expect.stringMatching(/no procedure reached 0\.7/),
             relaxedWinner: 'find',
           })
+        ),
+      ),
+    )
+
+    scenario(
+      'A routing answer whose probabilities leave the unit interval is treated as no usable answer',
+      { scenarioLayer: answering(outOfRangeRouting) },
+      Gherkin.Do.pipe(
+        Given('a registry of three code procedures')('registry', () => Effect.succeed(code)),
+        When('a request is routed from a distribution outside the unit interval')(
+          'outcome',
+          (s) =>
+            Effect.gen(function*() {
+              const model = yield* CountingModel
+              return yield* Effect.flip(withProvider(s.registry.invoke('x'), model.model))
+            }),
+        ),
+        Then('the malformed distribution is refused instead of crashing the run')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({ _tag: 'AiError', module: 'DecisionModel', method: 'decide' })
         ),
       ),
     )

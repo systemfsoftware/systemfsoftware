@@ -2,40 +2,27 @@ import { Schema as S } from 'effect'
 import { LotAllocation } from '../inventory/inventory.schema.js'
 import { OrderLine } from './order.schema.js'
 
-const InventoryReservationEventsTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/InventoryReservationEvents',
-)
-export type InventoryReservationEventsTypeId = typeof InventoryReservationEventsTypeId
-
-const AuditPayloadTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/AuditPayload',
-)
-export type AuditPayloadTypeId = typeof AuditPayloadTypeId
-
-export class StockReserved extends S.TaggedClass<StockReserved>()('StockReserved', {
+export const StockReserved = S.TaggedStruct('StockReserved', {
   orderId: S.String,
   allocations: S.Array(LotAllocation),
   occurredAt: S.DateTimeUtc,
-}) {
-  readonly [InventoryReservationEventsTypeId] = InventoryReservationEventsTypeId
-}
+})
+export type StockReserved = S.Schema.Type<typeof StockReserved>
 
-export class BackorderRecorded extends S.TaggedClass<BackorderRecorded>()('BackorderRecorded', {
+export const BackorderRecorded = S.TaggedStruct('BackorderRecorded', {
   orderId: S.String,
   backorderedLines: S.Array(OrderLine),
   occurredAt: S.DateTimeUtc,
-}) {
-  readonly [InventoryReservationEventsTypeId] = InventoryReservationEventsTypeId
-}
+})
+export type BackorderRecorded = S.Schema.Type<typeof BackorderRecorded>
 
 export const InventoryReservationEvents = S.Union([StockReserved, BackorderRecorded])
 export type InventoryReservationEvents = S.Schema.Type<typeof InventoryReservationEvents>
 
-export class AuditPayload extends S.Class<AuditPayload>('AuditPayload')({
+export const AuditPayload = S.Struct({
   orderId: S.String,
   actorId: S.String,
   decisionTag: S.String,
   occurredAt: S.DateTimeUtc,
-}) {
-  readonly [AuditPayloadTypeId] = AuditPayloadTypeId
-}
+})
+export type AuditPayload = S.Schema.Type<typeof AuditPayload>

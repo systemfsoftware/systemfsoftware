@@ -7,7 +7,7 @@ import {
   Settle,
   spanRecord,
   TRACE_ID,
-} from '../tests/__fixtures__/fulfillment-trace.schema.js'
+} from '../tests/__fixtures__/fulfillment-trace.fixture.js'
 
 describe('Rel', () => {
   it('Should_BeEvaluationAnsweringVerdictUnion_When_RelationConstructed', () => {

@@ -444,4 +444,31 @@ Feature('Recording what the model said and replaying it later')
         ),
       ),
     )
+
+    scenario(
+      'A recording whose distribution leaves the unit interval is refused on read',
+      Gherkin.Do.pipe(
+        Given('a stored classification answer whose probabilities are outside the unit interval')(
+          'payload',
+          () =>
+            Effect.succeed({
+              decisionId: 'risk',
+              fingerprint: 'df_risk',
+              kind: 'Classify' as const,
+              region: [],
+              answer: { _tag: 'Classify' as const, label: 'safe', probabilities: { safe: 1.5, breaking: -0.5 } },
+            }),
+        ),
+        When('the observation is read back')(
+          'outcome',
+          (s) => Effect.succeed(Schema.decodeResult(Discern.Model.Observation)(s.payload)),
+        ),
+        Then('the out-of-range distribution is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({
+            _tag: 'Failure',
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/answer/) },
+          })
+        ),
+      ),
+    )
   })

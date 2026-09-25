@@ -22,7 +22,7 @@ while IFS= read -r step; do
 done
 `
 
-export const childScriptWorkload = new MicroVMMedium.MicroVMWorkload({
+export const childScriptWorkload = MicroVMMedium.MicroVMWorkload.make({
   image: FIXTURE_IMAGE,
   command: ['sh', '-c', scriptOf(MicroVMMedium.ChildStepLines)],
   readyOnStdout: READY_TOKEN,

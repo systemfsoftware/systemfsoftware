@@ -21,9 +21,9 @@ const WINDOWS_VMCOMPUTE = 'C:\\Windows\\System32\\vmcompute.dll'
 
 const kvmObservationOf = (accessible: boolean, present: boolean): ProbeObservation =>
   Match.value({ accessible, present }).pipe(
-    Match.when({ accessible: true }, () => new KvmAccessible()),
-    Match.when({ present: true }, () => new KvmDenied({ topology: 'kvm exists=true rw=false' })),
-    Match.orElse(() => new KvmAbsent({ topology: 'kvm exists=false' })),
+    Match.when({ accessible: true }, () => KvmAccessible.make({})),
+    Match.when({ present: true }, () => KvmDenied.make({ topology: 'kvm exists=true rw=false' })),
+    Match.orElse(() => KvmAbsent.make({ topology: 'kvm exists=false' })),
   )
 
 const linuxProbe = Effect.gen(function*() {
@@ -43,8 +43,8 @@ const linuxProbe = Effect.gen(function*() {
 const darwinProbe = Effect.gen(function*() {
   const arch = yield* Config.String('ARCH').pipe(Config.withDefault(process.arch))
   return Match.value(arch).pipe(
-    Match.when('arm64', () => new KvmAccessible()),
-    Match.orElse((a) => new HvfUnavailable({ arch: a })),
+    Match.when('arm64', () => KvmAccessible.make({})),
+    Match.orElse((a) => HvfUnavailable.make({ arch: a })),
   )
 }).pipe(Effect.orDie)
 
@@ -54,13 +54,13 @@ const windowsProbe = Effect.gen(function*() {
     Effect.catchTag('PlatformError', () => Effect.succeed(false)),
   )
   if (present) {
-    return new KvmAccessible()
+    return KvmAccessible.make({})
   }
-  return new WHPUnavailable({ topology: 'vmcompute present=false' })
+  return WHPUnavailable.make({ topology: 'vmcompute present=false' })
 })
 
 const unsupportedProbe = (platform: string, arch: string) =>
-  Effect.succeed<ProbeObservation>(new PlatformUnsupported({ platform, arch }))
+  Effect.succeed<ProbeObservation>(PlatformUnsupported.make({ platform, arch }))
 
 const probes: Record<string, Effect.Effect<ProbeObservation, never, FileSystem.FileSystem>> = {
   linux: linuxProbe,

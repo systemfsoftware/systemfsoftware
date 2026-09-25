@@ -1,10 +1,9 @@
 import { Conformance } from '@systemfsoftware/conformance-spec'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Persistence, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
+import { Inventory, Persistence, rawClient } from '@systemfsoftware/example-inventory-fulfillment'
 import { ConfigProvider, Context, Effect, Layer, Ref } from 'effect'
 import type * as Scope from 'effect/Scope'
 import type { Pool } from 'pg'
-import { atLeastOne } from './__fixtures__/conformance-bounds.schema.js'
 
 const Feature = makeFeature({ it })
 
@@ -58,8 +57,8 @@ Feature('Letting go of the database pool when the service stops early', { timeou
               report: s.checked,
               probesThatSawAnOpenPool: Ref.getUnsafe(s.cell).observed,
             }).toMatchObject({
-              report: { _tag: 'Pass', histories: expect.schemaMatching(atLeastOne) },
-              probesThatSawAnOpenPool: expect.schemaMatching(atLeastOne),
+              report: { _tag: 'Pass', histories: expect.schemaMatching(Inventory.Schema.Quantity) },
+              probesThatSawAnOpenPool: expect.schemaMatching(Inventory.Schema.Quantity),
             }),
         ),
       ),

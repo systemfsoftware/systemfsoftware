@@ -12,6 +12,7 @@ import * as DecisionModel from 'effect/unstable/ai/DecisionModel'
 import type { BudgetExhausted } from './admit-budget-charge.workflow.js'
 import { chargeBudgetCall } from './budget-provider.cell.js'
 import type { Budget } from './budget.handle.js'
+import { BudgetLimit } from './Budget.schema.js'
 import { cacheObservations } from './cache-provider.cell.js'
 import { get, isObservationStore, type ObservationStore, set, store } from './observation-store.handle.js'
 import { Observation, Observations, ProviderAnswer } from './Observation.schema.js'
@@ -48,11 +49,12 @@ const replayMissFailure = (refusal: (typeof RecordingMissing)['Encoded']): AiErr
 
 const cacheFailure = (refusal: (typeof RecordingMissing)['Encoded']): AiError.AiError =>
   discernFailure(DiscernMethod.caching, new AiError.InvalidRequestError({ description: refusal.detail }))
-const limitEntryOf = (key: 'maxDecisions' | 'maxCalls', limit: number | undefined): Record<string, number> =>
-  Option.match(Option.fromUndefinedOr(limit), {
-    onNone: () => ({}),
-    onSome: (value) => ({ [key]: value }),
-  })
+const limitEntryOf = (key: 'maxDecisions' | 'maxCalls', limit: BudgetLimit): Record<string, number> =>
+  Match.value(limit).pipe(
+    Match.tag('Unlimited', () => ({})),
+    Match.tag('Limited', (limited) => ({ [key]: limited.count })),
+    Match.exhaustive,
+  )
 
 const budgetMetadataOf = (refusal: (typeof BudgetExhausted)['Encoded']): AiError.ProviderMetadata => ({
   reason: refusal.reason,
@@ -214,7 +216,7 @@ const observationOf = (
   regionPath: ReadonlyArray<string>,
   answer: ProviderAnswer,
 ): Observation =>
-  new Observation({
+  Observation.make({
     decisionId,
     fingerprint: decisionFingerprint(decision),
     kind: decision._tag,
@@ -222,20 +224,32 @@ const observationOf = (
     answer,
   })
 
+const observedAnswerOf = (answer: DecisionModel.ProviderAnswer): Effect.Effect<ProviderAnswer, AiError.AiError> =>
+  Effect.mapError(
+    Effect.fromResult(Schema.decodeResult(ProviderAnswer)(answer)),
+    (issue) =>
+      AiError.make({
+        module: 'Discern',
+        method: 'recording',
+        reason: new AiError.InvalidOutputError({ description: issue.message }),
+      }),
+  )
+
 const recordAnswers = (
   into: ObservationStore,
   decisions: Readonly<Record<string, Decision.Any>>,
   state: Schema.Json,
-  answers: Readonly<Record<string, ProviderAnswer>>,
+  answers: Readonly<Record<string, DecisionModel.ProviderAnswer>>,
   regionPath: ReadonlyArray<string>,
-): Effect.Effect<void> =>
+): Effect.Effect<void, AiError.AiError> =>
   Effect.forEach(
     Object.entries(answers),
     ([id, answer]) => {
       const decision = decisions[id]
       return decision === undefined
         ? Effect.void
-        : set(into, observationAddress(decision, state), observationOf(id, decision, regionPath, answer))
+        : Effect.flatMap(observedAnswerOf(answer), (observed) =>
+          set(into, observationAddress(decision, state), observationOf(id, decision, regionPath, observed)))
     },
     { discard: true },
   )

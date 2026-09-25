@@ -3,7 +3,8 @@ import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-import { CommandRefused, TaggedCmd } from './Command.schema.js'
+import { TaggedCmd } from './accept-tagged-command.workflow.js'
+import { CommandRefused } from './Command.fixture.js'
 
 /**
  * The no-leak proof. A decider may widen its own parameter to a supertype —

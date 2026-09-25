@@ -29,7 +29,7 @@ const skippedOf = (resolve: Resolve, spec: MicroVMSpec): boolean =>
   )
 
 const specWithoutStrategy = (spec: MicroVMSpec, ports: ReadonlyArray<number>): MicroVMSpec =>
-  new ServiceSpec({
+  ServiceSpec.make({
     image: spec.image,
     env: spec.env,
     ports,
@@ -42,7 +42,7 @@ const specWithStrategy = (spec: MicroVMSpec, strategy: WaitStrategy): MicroVMSpe
     Match.tag('Job', () => []),
     Match.exhaustive,
   )
-  return new ServiceSpec({
+  return ServiceSpec.make({
     image: spec.image,
     env: spec.env,
     ports,

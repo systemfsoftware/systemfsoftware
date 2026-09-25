@@ -20,4 +20,4 @@ export { fromRegistry, type Registry, registry, type RouteBy } from '../registry
 export { get, invoke, invokeWithRoute, route } from '../registry.blueprint.js'
 export { RouteCandidate } from '../Route.schema.js'
 export type { RouteOptions } from '../Route.schema.js'
-export type { Route } from '../select-route.workflow.js'
+export type { Route, RouteUncertainOf } from '../select-route.workflow.js'

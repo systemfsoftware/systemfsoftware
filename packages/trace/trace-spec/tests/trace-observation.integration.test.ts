@@ -2,7 +2,7 @@ import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/ef
 import { Graph, Observation, ObservationWindow, Rel, Stimulus } from '@systemfsoftware/trace-spec'
 import { Span } from '@systemfsoftware/trace-taxonomy'
 import { Effect, Layer, Result } from 'effect'
-import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
+import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.fixture.js'
 
 const Feature = makeFeature({ it })
 

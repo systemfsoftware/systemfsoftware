@@ -9,7 +9,6 @@ type ExitReport = Supervisor.Medium.ExitReport
 /** The close code the adapter mints for an orderly end, the only close treated as normal. */
 const CLEAN_CLOSE_CODE = 1000
 
-/** The signal an exit report carries when the failure below it is not a Node error at all. */
 const DEFECT_SIGNAL = 'defect'
 
 /** The signal a close carries when the peer sent no reason with its close code. */
@@ -26,10 +25,13 @@ const defectReportOf = (): ExitReport => exitReportOf(0, DEFECT_SIGNAL)
 const osReportOf = (cause: Socket.SocketOpenError['cause']): ExitReport =>
   Option.match(S.decodeUnknownOption(SocketOsError)(cause), {
     onNone: defectReportOf,
-    onSome: (fields) =>
-      exitReportOf(
-        Option.getOrElse(Option.fromNullishOr(fields.errno), () => 0),
-        Option.getOrElse(Option.fromNullishOr(fields.code), () => DEFECT_SIGNAL),
+    onSome: (osError) =>
+      Match.value(osError).pipe(
+        Match.tag('SocketOsErrnoAndCode', (both) => exitReportOf(both.errno, both.code)),
+        Match.tag('SocketOsErrnoOnly', (numbered) => exitReportOf(numbered.errno, DEFECT_SIGNAL)),
+        Match.tag('SocketOsCodeOnly', (named) => exitReportOf(0, named.code)),
+        Match.tag('SocketOsUnrecognized', () => defectReportOf()),
+        Match.exhaustive,
       ),
   })
 

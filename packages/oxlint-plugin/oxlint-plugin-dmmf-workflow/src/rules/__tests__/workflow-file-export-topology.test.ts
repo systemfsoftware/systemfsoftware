@@ -113,6 +113,16 @@ export const Verdict = S.Union([A, B])
 export const decide = Workflow.make({ command: A, decision: Verdict, error: NoError, decide: (n: number) => n })`,
       filename: WORKFLOW,
     },
+    {
+      name: 'Should_Pass_When_TaggedStructAndTaggedUnionDoNotCountTowardTheOne',
+      code: `${IMPORT}
+export class A extends S.TaggedClass<A>()('A', {}) {}
+export const Granted = S.TaggedStruct('Granted', { amount: S.Int })
+export const Held = S.TaggedStruct('Held', {})
+export const Outcome = S.TaggedUnion({ Granted: { amount: S.Int }, Held: {} })
+export const decide = Workflow.make({ command: A, decision: A, error: NoError, decide: (a) => a })`,
+      filename: WORKFLOW,
+    },
   ],
   invalid: [
     {

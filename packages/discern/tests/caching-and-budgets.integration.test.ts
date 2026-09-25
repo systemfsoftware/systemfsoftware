@@ -174,7 +174,16 @@ Feature('Reusing answers without paying twice')
       'A budget stops the model once the allowance is spent',
       Gherkin.Do.pipe(
         Given('a blocking policy')('policy', () => Effect.succeed(blocking)),
-        Given('an allowance of two decisions')('spend', () => Effect.succeed(Discern.Model.budget({ decisions: 2 }))),
+        Given('an allowance of two decisions')(
+          'spend',
+          () =>
+            Effect.succeed(
+              Discern.Model.budget({
+                decisions: Discern.Model.Limited.make({ count: 2 }),
+                calls: Discern.Model.Unlimited.make({}),
+              }),
+            ),
+        ),
         When('three changes are reviewed under that allowance')('outcomes', (s) =>
           Effect.gen(function*() {
             const model = yield* CountingModel
@@ -212,7 +221,13 @@ Feature('Reusing answers without paying twice')
         Given('a cache over one store')('cache', () => Effect.succeed(Discern.Model.store())),
         Given('an allowance of a single decision')(
           'spend',
-          () => Effect.succeed(Discern.Model.budget({ decisions: 1 })),
+          () =>
+            Effect.succeed(
+              Discern.Model.budget({
+                decisions: Discern.Model.Limited.make({ count: 1 }),
+                calls: Discern.Model.Unlimited.make({}),
+              }),
+            ),
         ),
         When('the same change is reviewed twice through cache and allowance')(
           'verdicts',
@@ -380,20 +395,82 @@ Feature('Reusing answers without paying twice')
     )
 
     scenario(
-      'An allowance that promises endless decisions is refused',
+      'An unlimited allowance admits every charge',
       Gherkin.Do.pipe(
-        Given('an allowance claiming an endless number of decisions')(
+        Given('a blocking policy')('policy', () => Effect.succeed(blocking)),
+        Given('an allowance with no bound in either dimension')(
+          'spend',
+          () =>
+            Effect.succeed(
+              Discern.Model.budget({
+                decisions: Discern.Model.Unlimited.make({}),
+                calls: Discern.Model.Unlimited.make({}),
+              }),
+            ),
+        ),
+        When('three changes are reviewed under that allowance')('outcomes', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            const first = yield* withProvider(s.policy('a'), model.model, [Discern.Model.budgeted(s.spend)])
+            const second = yield* withProvider(s.policy('b'), model.model, [Discern.Model.budgeted(s.spend)])
+            const third = yield* withProvider(s.policy('c'), model.model, [Discern.Model.budgeted(s.spend)])
+            return { first, second, third, spent: yield* Discern.Model.spent(s.spend) }
+          })),
+        Then('all three pass and the spend counts every charge')((s, expect) =>
+          expect(s.outcomes).toMatchObject({
+            first: 'block',
+            second: 'block',
+            third: 'block',
+            spent: { decisions: 3, calls: 3 },
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A bounded allowance of zero refuses the first charge',
+      Gherkin.Do.pipe(
+        Given('a blocking policy')('policy', () => Effect.succeed(blocking)),
+        Given('an allowance that permits no calls')(
+          'spend',
+          () =>
+            Effect.succeed(
+              Discern.Model.budget({
+                decisions: Discern.Model.Unlimited.make({}),
+                calls: Discern.Model.Limited.make({ count: 0 }),
+              }),
+            ),
+        ),
+        When('a change is reviewed under that allowance')('outcome', (s) =>
+          Effect.gen(function*() {
+            const model = yield* CountingModel
+            return yield* Effect.flip(withProvider(s.policy('a'), model.model, [Discern.Model.budgeted(s.spend)]))
+          })),
+        Then('the first charge is refused')(({ outcome }, expect) =>
+          expect(outcome).toMatchObject({ _tag: 'AiError', module: 'Discern', method: 'budgeted' })
+        ),
+      ),
+    )
+
+    scenario(
+      'An allowance whose bound is negative is refused',
+      Gherkin.Do.pipe(
+        Given('an allowance claiming a negative number of decisions')(
           'payload',
-          () => Effect.succeed({ decisions: Number.POSITIVE_INFINITY }),
+          () =>
+            Effect.succeed({
+              decisions: { _tag: 'Limited' as const, count: -1 },
+              calls: { _tag: 'Unlimited' as const },
+            }),
         ),
         When('the allowance is read back')(
           'outcome',
           (s) => Effect.succeed(Schema.decodeResult(Discern.Model.BudgetLimits)(s.payload)),
         ),
-        Then('the endless allowance is refused')(({ outcome }, expect) =>
+        Then('the negative bound is refused')(({ outcome }, expect) =>
           expect(outcome).toMatchObject({
             _tag: 'Failure',
-            failure: { _tag: 'SchemaError', message: expect.stringMatching(/at \["decisions"\]/) },
+            failure: { _tag: 'SchemaError', message: expect.stringMatching(/decisions/) },
           })
         ),
       ),

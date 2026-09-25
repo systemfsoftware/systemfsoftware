@@ -26,28 +26,26 @@ export class VirtualizationRefused extends Schema.TaggedClass<VirtualizationRefu
 export const VirtualizationVerdict = Schema.Union([VirtualizationEligible, VirtualizationRefused])
 export type VirtualizationVerdict = typeof VirtualizationVerdict.Type
 
-export class KvmAccessible extends Schema.TaggedClass<KvmAccessible>()('KvmAccessible', {}) {}
+export const KvmAccessible = Schema.TaggedStruct('KvmAccessible', {})
+export type KvmAccessible = typeof KvmAccessible.Type
 
-export class KvmDenied extends Schema.TaggedClass<KvmDenied>()('KvmDenied', {
-  topology: Schema.String,
-}) {}
+export const KvmDenied = Schema.TaggedStruct('KvmDenied', { topology: Schema.String })
+export type KvmDenied = typeof KvmDenied.Type
 
-export class KvmAbsent extends Schema.TaggedClass<KvmAbsent>()('KvmAbsent', {
-  topology: Schema.String,
-}) {}
+export const KvmAbsent = Schema.TaggedStruct('KvmAbsent', { topology: Schema.String })
+export type KvmAbsent = typeof KvmAbsent.Type
 
-export class HvfUnavailable extends Schema.TaggedClass<HvfUnavailable>()('HvfUnavailable', {
-  arch: Schema.String,
-}) {}
+export const HvfUnavailable = Schema.TaggedStruct('HvfUnavailable', { arch: Schema.String })
+export type HvfUnavailable = typeof HvfUnavailable.Type
 
-export class WHPUnavailable extends Schema.TaggedClass<WHPUnavailable>()('WHPUnavailable', {
-  topology: Schema.String,
-}) {}
+export const WHPUnavailable = Schema.TaggedStruct('WHPUnavailable', { topology: Schema.String })
+export type WHPUnavailable = typeof WHPUnavailable.Type
 
-export class PlatformUnsupported extends Schema.TaggedClass<PlatformUnsupported>()('PlatformUnsupported', {
+export const PlatformUnsupported = Schema.TaggedStruct('PlatformUnsupported', {
   platform: Schema.String,
   arch: Schema.String,
-}) {}
+})
+export type PlatformUnsupported = typeof PlatformUnsupported.Type
 
 export const ProbeObservation = Schema.Union([
   KvmAccessible,

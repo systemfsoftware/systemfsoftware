@@ -3,11 +3,15 @@ import { Discern } from '@systemfsoftware/discern'
 import { Effect, MutableRef, Schema } from 'effect'
 import * as fc from 'fast-check'
 import { answersFor, probabilityAnswer } from './__fixtures__/counting-model.fixture.js'
-import { Facts, type FactSet } from './__fixtures__/facts.schema.js'
 
-const risk = Discern.on(Facts).probability({ id: 'risk', instructions: 'How risky are these facts' })
+type FactSet = Readonly<Record<string, Schema.Json>>
 
-const triage = Discern.type(Facts).pipe(
+const risk = Discern.on(Schema.Record(Schema.String, Schema.Json)).probability({
+  id: 'risk',
+  instructions: 'How risky are these facts',
+})
+
+const triage = Discern.type(Schema.Record(Schema.String, Schema.Json)).pipe(
   Discern.when(risk.above(0.5), () => 'escalate'),
   Discern.orElse(() => 'accept'),
 )

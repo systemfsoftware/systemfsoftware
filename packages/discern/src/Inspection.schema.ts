@@ -1,6 +1,29 @@
 import { Schema } from 'effect'
 import { PatternAst } from './PatternAst.schema.js'
-import { PatternStatus } from './Verdict.schema.js'
+
+const ClassifyInspection = Schema.Struct({
+  id: Schema.String,
+  fingerprint: Schema.String,
+  kind: Schema.Literal('Classify'),
+  instructions: Schema.String,
+  criteria: Schema.Record(Schema.String, Schema.String),
+})
+
+const RateInspection = Schema.Struct({
+  id: Schema.String,
+  fingerprint: Schema.String,
+  kind: Schema.Literal('Rate'),
+  instructions: Schema.String,
+  criteria: Schema.Array(Schema.String),
+})
+
+const ProbabilityInspection = Schema.Struct({
+  id: Schema.String,
+  fingerprint: Schema.String,
+  kind: Schema.Literal('Probability'),
+  instructions: Schema.String,
+  criteria: Schema.Struct({ false: Schema.String, true: Schema.String }),
+})
 
 /**
  * One decision of a compiled plan: the identity an answer is stored under, its content
@@ -8,48 +31,50 @@ import { PatternStatus } from './Verdict.schema.js'
  * the closed set of semantic decision kinds; `criteria` carries the kind's own thresholds or
  * labels when it declares any.
  */
-export class DecisionInspection extends Schema.Class<DecisionInspection>('DecisionInspection')({
-  id: Schema.String,
-  fingerprint: Schema.String,
-  kind: Schema.Literals(['Classify', 'Rate', 'Probability']),
-  instructions: Schema.String,
-  criteria: Schema.optional(Schema.Json),
-}) {}
+export const DecisionInspection = Schema.Union([ClassifyInspection, RateInspection, ProbabilityInspection]).pipe(
+  Schema.toTaggedUnion('kind'),
+)
+export type DecisionInspection = typeof DecisionInspection.Type
 
-/** One case of a compiled plan: its dispatch id and the pattern that decides it. */
-export class CaseInspection extends Schema.Class<CaseInspection>('CaseInspection')({
+export const CaseInspection = Schema.Struct({
   id: Schema.String,
   pattern: PatternAst,
-}) {}
+})
+export type CaseInspection = typeof CaseInspection.Type
 
 /**
  * The serializable semantic execution plan `compile` produces and `inspect` returns
  * (reference `CompiledPlan`, version 1).
  */
-export class CompiledPlan extends Schema.Class<CompiledPlan>('CompiledPlan')({
+export const CompiledPlan = Schema.Struct({
   version: Schema.Literal(1),
   fingerprint: Schema.String,
   decisions: Schema.Array(DecisionInspection),
   cases: Schema.Array(CaseInspection),
   hasUncertainHandler: Schema.Boolean,
-}) {}
+})
+export type CompiledPlan = typeof CompiledPlan.Type
 
 /** How one case resolved during one dispatch, in case order. */
-export class CaseTrace extends Schema.Class<CaseTrace>('CaseTrace')({
-  id: Schema.String,
-  status: PatternStatus,
-  reason: Schema.optional(Schema.String),
-}) {}
+export const CaseTrace = Schema.Union([
+  Schema.Struct({ id: Schema.String, status: Schema.Literal('Match') }),
+  Schema.Struct({ id: Schema.String, status: Schema.Literal('Miss') }),
+  Schema.Struct({ id: Schema.String, status: Schema.Literal('Uncertain'), reason: Schema.String }),
+]).pipe(Schema.toTaggedUnion('status'))
+export type CaseTrace = typeof CaseTrace.Type
 
-export class SelectedCase extends Schema.TaggedClass<SelectedCase>()('Case', {
+export const SelectedCase = Schema.TaggedStruct('Case', {
   id: Schema.String,
-}) {}
+})
+export type SelectedCase = typeof SelectedCase.Type
 
-export class SelectedFallback extends Schema.TaggedClass<SelectedFallback>()('Fallback', {}) {}
+export const SelectedFallback = Schema.TaggedStruct('Fallback', {})
+export type SelectedFallback = typeof SelectedFallback.Type
 
-export class SelectedUncertain extends Schema.TaggedClass<SelectedUncertain>()('Uncertain', {
+export const SelectedUncertain = Schema.TaggedStruct('Uncertain', {
   id: Schema.String,
-}) {}
+})
+export type SelectedUncertain = typeof SelectedUncertain.Type
 
 export const TraceSelection = Schema.Union([SelectedCase, SelectedFallback, SelectedUncertain])
 export type TraceSelection = typeof TraceSelection.Type
@@ -59,10 +84,11 @@ export type TraceSelection = typeof TraceSelection.Type
  * which branch ran (reference `Trace`, version 2). A trace is not what you replay from;
  * replay is driven by content-addressed observations.
  */
-export class Trace extends Schema.Class<Trace>('Trace')({
+export const Trace = Schema.Struct({
   version: Schema.Literal(2),
   planFingerprint: Schema.String,
   answers: Schema.Record(Schema.String, Schema.Json),
   cases: Schema.Array(CaseTrace),
   selected: TraceSelection,
-}) {}
+})
+export type Trace = typeof Trace.Type

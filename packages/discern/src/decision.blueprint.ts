@@ -22,18 +22,23 @@ import { decisionFingerprint, hash } from './decision-model.blueprint.js'
 import { DecisionIdCollisionError } from './DiscernError.schema.js'
 import type { Answers, LeafOptions, NodeCore, Pattern, PatternRefusal } from './pattern.blueprint.js'
 import { distinctFirstById, matched, missed, notPattern, semanticLeaf, uncertain } from './pattern.blueprint.js'
+import { Probability } from './Route.schema.js'
 import type { PatternResult } from './Verdict.schema.js'
 
 /** Any Effect decision kind. */
 export type AnyDecision = Decision.Any
 
 /** The validated answer a decision of kind `D` produces. */
-export type Answer<D extends AnyDecision> = Decision.Answer<D>
+export type Answer<D extends AnyDecision> = D extends Decision.Classify<infer Label>
+  ? Decision.ClassifyAnswer<Label> & { readonly probabilities: Readonly<Record<Label, Probability>> }
+  : D extends Decision.Rate<infer Level>
+    ? Decision.RateAnswer<Level> & { readonly probabilities: Readonly<Record<Level, Probability>> }
+  : Decision.Answer<D>
 
 /** A reader that recovers one node's own typed answer from a batch. */
 export type AnswerReader<D extends AnyDecision> = (answers: Answers) => Option.Option<Answer<D>>
 
-type AnswerGuard<D extends AnyDecision> = (input: Answer<AnyDecision>) => input is Answer<D>
+type AnswerGuard<D extends AnyDecision> = (input: Decision.Answer<AnyDecision>) => input is Answer<D>
 
 type Top<A = unknown> = A
 
@@ -200,13 +205,13 @@ const asAnyDecision = <D extends AnyDecision>(decision: D): Decision.Any => deci
 const answerCheckOf = <D extends AnyDecision>(decision: D): AnswerGuard<D> => {
   const classifyDecode = Schema.decodeUnknownOption(Schema.Struct({
     label: Schema.String,
-    probabilities: Schema.Record(Schema.String, Schema.Finite),
+    probabilities: Schema.Record(Schema.String, Probability),
     confidence: Schema.optional(Schema.Finite),
   }))
   const rateDecode = Schema.decodeUnknownOption(Schema.Struct({
     rating: Schema.Finite,
     label: Schema.String,
-    probabilities: Schema.Record(Schema.String, Schema.Finite),
+    probabilities: Schema.Record(Schema.String, Probability),
     confidence: Schema.optional(Schema.Finite),
   }))
   const probabilityDecode = Schema.decodeUnknownOption(Schema.Struct({ probability: Schema.Finite }))
@@ -406,8 +411,8 @@ const classifyVerdictOf = <L extends string>(
   return Match.value(
     hitMissKindOf(probability >= matchAt && marginSatisfiedOf(answer, labels, label, limits), probability <= missAt),
   ).pipe(
-    Match.when('matched', () => matched(reason)),
-    Match.when('missed', () => missed(reason)),
+    Match.when('matched', () => matched()),
+    Match.when('missed', () => missed()),
     Match.when('uncertain', () => uncertain(`${reason} is between ${missAt} and ${matchAt}`)),
     Match.exhaustive,
   )
@@ -500,7 +505,7 @@ export interface ProbabilityOptions {
  * `Decision.Probability` names both outcomes, and the decision reaches the
  * provider unencoded, so the field must always be present.
  */
-const defaultProbabilityCriteria = { false: 'false', true: 'true' } as const
+export const defaultProbabilityCriteria = { false: 'false', true: 'true' } as const
 
 const probabilityReasonOf = (probability: number): string => `p=${probability.toFixed(3)}`
 
@@ -516,8 +521,8 @@ const aboveVerdictOf = (probability: number, threshold: number, inclusive: boole
   const reason = probabilityReasonOf(probability)
   const hit = inclusive ? probability >= threshold : probability > threshold
   return Match.value(hitMissKindOf(hit, probability <= missAt)).pipe(
-    Match.when('matched', () => matched(reason)),
-    Match.when('missed', () => missed(reason)),
+    Match.when('matched', () => matched()),
+    Match.when('missed', () => missed()),
     Match.when('uncertain', () => uncertain(`${reason} is between ${missAt} and ${threshold}`)),
     Match.exhaustive,
   )
@@ -527,8 +532,8 @@ const belowVerdictOf = (probability: number, threshold: number, inclusive: boole
   const reason = probabilityReasonOf(probability)
   const hit = inclusive ? probability <= threshold : probability < threshold
   return Match.value(hitMissKindOf(hit, probability >= missAt)).pipe(
-    Match.when('matched', () => matched(reason)),
-    Match.when('missed', () => missed(reason)),
+    Match.when('matched', () => matched()),
+    Match.when('missed', () => missed()),
     Match.when('uncertain', () => uncertain(`${reason} is between ${threshold} and ${missAt}`)),
     Match.exhaustive,
   )

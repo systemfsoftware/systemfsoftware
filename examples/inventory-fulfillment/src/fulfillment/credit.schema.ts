@@ -23,12 +23,13 @@ export const FraudRiskScore = S.Int.pipe(
 )
 export type FraudRiskScore = S.Schema.Type<typeof FraudRiskScore>
 
-export class CreditAccount extends S.Class<CreditAccount>('CreditAccount')({
+export const CreditAccount = S.Struct({
   customerId: S.String,
   creditLimit: Money,
   outstandingBalance: Money,
   overdraftPrivilege: Money,
-}) {}
+})
+export type CreditAccount = S.Schema.Type<typeof CreditAccount>
 
 const amountSeeds = [-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0]
 const fraudRiskScoreSeeds = [

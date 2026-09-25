@@ -40,7 +40,7 @@ const probe = (
     Effect.as(new Satisfied({})),
     Effect.timeoutOrElse({
       duration: `${spec.timeoutMs} millis`,
-      orElse: () => Effect.succeed(new TimedOut({})),
+      orElse: () => Effect.succeed(TimedOut.make({})),
     }),
   )
 

@@ -6,7 +6,7 @@ import type { HttpClientError } from 'effect/unstable/http/HttpClientError'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
 import { HttpServerRequest } from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
-import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.schema.js'
+import { Charge, FulfillmentTaxonomy, Settle } from './__fixtures__/fulfillment-trace.fixture.js'
 import { Loopback, loopbackStore } from './__fixtures__/loopback-store.fixture.js'
 
 /**

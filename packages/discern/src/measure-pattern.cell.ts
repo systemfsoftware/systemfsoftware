@@ -111,7 +111,7 @@ const readMeasure = <S extends Schema.Constraint>(
           _tag: 'ScoreEvalRecord' as const,
           expected: measure.expected,
           status,
-          record: new EvalRecord({ input: json, expected: measure.expected, status }),
+          record: EvalRecord.make({ input: json, expected: measure.expected, status }),
         }
       })),
   )
@@ -193,7 +193,7 @@ const metricsOf = (records: ReadonlyArray<EvalRecord>): EvalMetrics => {
   const decided = total - tally.uncertain
   const precision = ratioOf(tally.truePositive, tally.truePositive + tally.falsePositive)
   const recall = ratioOf(tally.truePositive, tally.truePositive + tally.falseNegative)
-  return new EvalMetrics({
+  return EvalMetrics.make({
     total,
     decided,
     uncertain: tally.uncertain,
@@ -251,7 +251,7 @@ export const run: {
   ): Effect.Effect<EvalReport, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
     Effect.map(
       Effect.forEach(examples, (example) => measureOf(measureCaseOf(schema, pattern, example))),
-      (records) => new EvalReport({ metrics: metricsOf(records), records }),
+      (records) => EvalReport.make({ metrics: metricsOf(records), records }),
     ),
 )
 
@@ -318,7 +318,7 @@ const scoreCandidate =
   ): Effect.Effect<SweepResult<V>, MeasureError, DecisionModel.DecisionModel | S['EncodingServices']> =>
     Effect.map(
       Effect.forEach(answeredExamples, (answered) => measureOf(measureSweepCaseOf(candidate, answered))),
-      (records) => ({ value: candidate.value, report: new EvalReport({ metrics: metricsOf(records), records }) }),
+      (records) => ({ value: candidate.value, report: EvalReport.make({ metrics: metricsOf(records), records }) }),
     )
 
 /**

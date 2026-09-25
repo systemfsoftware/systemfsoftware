@@ -100,7 +100,7 @@ const ownedReservation = (record: ReservationRecord, userId: string): Effect.Eff
     record,
     userId,
     Effect.succeed(
-      new ReservationView({
+      ReservationView.make({
         orderId: record.orderId,
         customerId: record.customerId,
         allocations: record.allocations,
@@ -130,7 +130,7 @@ const listStock = (request: ListStockRequest) =>
       limit: request.limit ?? defaultStockPageSize,
       warehouseId: Option.fromUndefinedOr(request.warehouseId),
     })
-    return new StockView({ partitions: page.partitions, nextCursor: Option.getOrNull(page.nextCursor) })
+    return StockView.make({ partitions: page.partitions, nextCursor: Option.getOrNull(page.nextCursor) })
   })
 
 export const handlers = FulfillmentRpcs.toLayer({

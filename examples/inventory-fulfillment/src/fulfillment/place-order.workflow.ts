@@ -21,25 +21,10 @@ import {
 import { Amount, CreditAccount, CustomerTier } from './credit.schema.js'
 import { OrderLine } from './order.schema.js'
 
-const ExplodeDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/ExplodeBundleDecision',
-)
-type ExplodeDecisionTypeId = typeof ExplodeDecisionTypeId
-
-const CreditDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/CreditCheckDecision',
-)
-type CreditDecisionTypeId = typeof CreditDecisionTypeId
-
 const CreditErrorTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/example-inventory-fulfillment/CreditCheckError',
 )
 type CreditErrorTypeId = typeof CreditErrorTypeId
-
-const AllocationDecisionTypeId: unique symbol = Symbol.for(
-  '@systemfsoftware/example-inventory-fulfillment/AllocateStockDecision',
-)
-type AllocationDecisionTypeId = typeof AllocationDecisionTypeId
 
 const AllocationErrorTypeId: unique symbol = Symbol.for(
   '@systemfsoftware/example-inventory-fulfillment/AllocateStockError',
@@ -51,50 +36,49 @@ const FulfillmentDecisionTypeId: unique symbol = Symbol.for(
 )
 type FulfillmentDecisionTypeId = typeof FulfillmentDecisionTypeId
 
-export class ComponentDemand extends S.Class<ComponentDemand>('ComponentDemand')({
+export const ComponentDemand = S.Struct({
   sku: SkuId,
   quantity: Quantity,
-}) {}
+})
+export type ComponentDemand = S.Schema.Type<typeof ComponentDemand>
 
-export class LotReservation extends S.Class<LotReservation>('LotReservation')({
+export const LotReservation = S.Struct({
   warehouseId: WarehouseId,
   lotId: LotId,
   sku: SkuId,
   quantity: Quantity,
   version: Version,
-}) {}
+})
+export type LotReservation = S.Schema.Type<typeof LotReservation>
 
-export class UnfulfilledDemand extends S.Class<UnfulfilledDemand>('UnfulfilledDemand')({
+export const UnfulfilledDemand = S.Struct({
   sku: SkuId,
   quantity: Quantity,
-}) {}
+})
+export type UnfulfilledDemand = S.Schema.Type<typeof UnfulfilledDemand>
 
-export class BundleExploded extends S.TaggedClass<BundleExploded>()('BundleExploded', {
+export const BundleExploded = S.TaggedStruct('BundleExploded', {
   components: S.Array(ComponentDemand),
-}) {
-  readonly [ExplodeDecisionTypeId] = ExplodeDecisionTypeId
-}
+})
+export type BundleExploded = S.Schema.Type<typeof BundleExploded>
 
-export class NothingToExplode extends S.TaggedClass<NothingToExplode>()('NothingToExplode', {
+export const NothingToExplode = S.TaggedStruct('NothingToExplode', {
   components: S.Array(ComponentDemand),
-}) {
-  readonly [ExplodeDecisionTypeId] = ExplodeDecisionTypeId
-}
+})
+export type NothingToExplode = S.Schema.Type<typeof NothingToExplode>
 
-export class CreditGranted extends S.TaggedClass<CreditGranted>()('CreditGranted', {
+export const CreditGranted = S.TaggedStruct('CreditGranted', {
   orderId: S.String,
   overdraftAmount: Amount,
-}) {
-  readonly [CreditDecisionTypeId] = CreditDecisionTypeId
-}
+})
+export type CreditGranted = S.Schema.Type<typeof CreditGranted>
 
-export class CreditHold extends S.TaggedClass<CreditHold>()('CreditHold', {
+export const CreditHold = S.TaggedStruct('CreditHold', {
   orderId: S.String,
   shortfall: Amount,
   requiredDownpayment: Amount,
-}) {
-  readonly [CreditDecisionTypeId] = CreditDecisionTypeId
-}
+})
+export type CreditHold = S.Schema.Type<typeof CreditHold>
 
 export class CreditLimitExceeded extends S.TaggedError<CreditLimitExceeded>()('CreditLimitExceeded', {
   customerId: S.String,
@@ -104,20 +88,18 @@ export class CreditLimitExceeded extends S.TaggedError<CreditLimitExceeded>()('C
   readonly [CreditErrorTypeId] = CreditErrorTypeId
 }
 
-export class StockAllocated extends S.TaggedClass<StockAllocated>()('StockAllocated', {
+export const StockAllocated = S.TaggedStruct('StockAllocated', {
   orderId: S.String,
   reservations: S.Array(LotReservation),
-}) {
-  readonly [AllocationDecisionTypeId] = AllocationDecisionTypeId
-}
+})
+export type StockAllocated = S.Schema.Type<typeof StockAllocated>
 
-export class StockBackordered extends S.TaggedClass<StockBackordered>()('StockBackordered', {
+export const StockBackordered = S.TaggedStruct('StockBackordered', {
   orderId: S.String,
   reservations: S.Array(LotReservation),
   backordered: S.Array(UnfulfilledDemand),
-}) {
-  readonly [AllocationDecisionTypeId] = AllocationDecisionTypeId
-}
+})
+export type StockBackordered = S.Schema.Type<typeof StockBackordered>
 
 export class InsufficientStock extends S.TaggedError<InsufficientStock>()('InsufficientStock', {
   sku: SkuId,
@@ -185,13 +167,13 @@ export class PlaceOrderCommand extends S.Class<PlaceOrderCommand>('PlaceOrderCom
 const scaledDemands = (kit: KitDefinition, factor: number): readonly ComponentDemand[] =>
   Arr.map(
     kit.components,
-    (component) => new ComponentDemand({ sku: component.sku, quantity: component.quantity * factor }),
+    (component) => ComponentDemand.make({ sku: component.sku, quantity: component.quantity * factor }),
   )
 
 const componentsOfLine = (kits: readonly KitDefinition[], line: OrderLine): readonly ComponentDemand[] =>
   Match.value(Arr.findFirst(kits, (kit) => kit.kitSku === line.sku)).pipe(
     Match.tag('Some', (found) => scaledDemands(found.value, line.quantity)),
-    Match.tag('None', () => Arr.of(new ComponentDemand({ sku: line.sku, quantity: line.quantity }))),
+    Match.tag('None', () => Arr.of(ComponentDemand.make({ sku: line.sku, quantity: line.quantity }))),
     Match.exhaustive,
   )
 
@@ -206,8 +188,8 @@ const explodeBundle = (
   kits: readonly KitDefinition[],
 ): BundleExploded | NothingToExplode =>
   Match.value(hasKitLine(lines, kits)).pipe(
-    Match.when(true, () => new BundleExploded({ components: explodedComponents(lines, kits) })),
-    Match.when(false, () => new NothingToExplode({ components: explodedComponents(lines, kits) })),
+    Match.when(true, () => BundleExploded.make({ components: explodedComponents(lines, kits) })),
+    Match.when(false, () => NothingToExplode.make({ components: explodedComponents(lines, kits) })),
     Match.exhaustive,
   )
 
@@ -223,7 +205,7 @@ const vipDecision = (
 ): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> => {
   const shortfall = shortfallOf(requiredAmount, account)
   return Match.value(shortfall <= account.overdraftPrivilege).pipe(
-    Match.when(true, () => Result.succeed(new CreditGranted({ orderId, overdraftAmount: shortfall }))),
+    Match.when(true, () => Result.succeed(CreditGranted.make({ orderId, overdraftAmount: shortfall }))),
     Match.when(false, () =>
       Result.fail(
         new CreditLimitExceeded({
@@ -243,8 +225,8 @@ const standardDecision = (
 ): Result.Result<CreditGranted | CreditHold, CreditLimitExceeded> => {
   const shortfall = shortfallOf(requiredAmount, account)
   return Match.value(shortfall === 0).pipe(
-    Match.when(true, () => Result.succeed(new CreditGranted({ orderId, overdraftAmount: 0 }))),
-    Match.when(false, () => Result.succeed(new CreditHold({ orderId, shortfall, requiredDownpayment: shortfall }))),
+    Match.when(true, () => Result.succeed(CreditGranted.make({ orderId, overdraftAmount: 0 }))),
+    Match.when(false, () => Result.succeed(CreditHold.make({ orderId, shortfall, requiredDownpayment: shortfall }))),
     Match.exhaustive,
   )
 }
@@ -328,7 +310,7 @@ const reservationOf = (lot: StockLot, quantity: number): Option.Option<LotReserv
   Match.value(quantity > 0).pipe(
     Match.when(true, () =>
       Option.some(
-        new LotReservation({
+        LotReservation.make({
           warehouseId: lot.warehouseId,
           lotId: lot.lotId,
           sku: lot.sku,
@@ -358,7 +340,7 @@ const allocateSku = (lots: readonly StockLot[], requested: number): SkuAllocatio
 
 const backorderOf = (demand: SkuDemand): Option.Option<UnfulfilledDemand> =>
   Match.value(demand.requested > 0).pipe(
-    Match.when(true, () => Option.some(new UnfulfilledDemand({ sku: demand.sku, quantity: demand.requested }))),
+    Match.when(true, () => Option.some(UnfulfilledDemand.make({ sku: demand.sku, quantity: demand.requested }))),
     Match.when(false, () => Option.none()),
     Match.exhaustive,
   )
@@ -393,8 +375,8 @@ const allocatedOutcome = (
     Arr.map(outcomes, (outcome) => backorderOf({ sku: outcome.demand.sku, requested: outcome.allocation.backordered })),
   )
   return Match.value(backordered.length === 0).pipe(
-    Match.when(true, () => new StockAllocated({ orderId, reservations })),
-    Match.when(false, () => new StockBackordered({ orderId, reservations, backordered })),
+    Match.when(true, () => StockAllocated.make({ orderId, reservations })),
+    Match.when(false, () => StockBackordered.make({ orderId, reservations, backordered })),
     Match.exhaustive,
   )
 }

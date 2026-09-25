@@ -7,7 +7,7 @@ import { describe, expect, it } from 'tstyche'
 
 const Request = Schema.String
 
-type UncertainRoute = Extract<Discern.Procedure.Route, { readonly _tag: 'RouteUncertain' }>
+type UncertainRoute = Discern.Procedure.RouteUncertainOf
 
 const find = Discern.Procedure.make({
   description: 'Locate relevant code',

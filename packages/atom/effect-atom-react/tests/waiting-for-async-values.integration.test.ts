@@ -12,7 +12,7 @@ import { ErrorBoundary } from 'react-error-boundary'
 import { findWidgetShowing } from './__fixtures__/find-widget.js'
 import { renderCleanupLayer } from './__fixtures__/render-cleanup.js'
 import { renderSuspending } from './__fixtures__/render-suspending.js'
-import { Unavailable } from './__fixtures__/Unavailable.schema.js'
+import { Unavailable } from './__fixtures__/Unavailable.fixture.js'
 
 const Feature = makeFeature({ it })
 

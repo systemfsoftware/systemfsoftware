@@ -36,4 +36,4 @@ const ObservationWindows = Blueprint.make<ObservationWindowSpec>()(TypeId).steps
 export type ObservationWindowBlueprint = Blueprint.Of<typeof ObservationWindows>
 
 export const make = (serviceName: string): ObservationWindowBlueprint =>
-  ObservationWindows.of(new ObservationWindowSpec({ serviceName }))
+  ObservationWindows.of(ObservationWindowSpec.make({ serviceName }))

@@ -1,6 +1,6 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Exit, Layer, Ref } from 'effect'
-import { InsufficientFundsError, OutOfStockError } from './__fixtures__/OrderFulfillment.schema.js'
+import { InsufficientFundsError, OutOfStockError } from './__fixtures__/order-fulfillment.fixture.js'
 
 interface WalletService {
   readonly balance: Effect.Effect<number>

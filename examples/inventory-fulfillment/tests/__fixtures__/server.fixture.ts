@@ -16,8 +16,7 @@ import { eq } from 'drizzle-orm/sql/expressions/conditions'
 import { ConfigProvider, Context, Crypto, DateTime, Deferred, Effect, Layer, Option, Schema as S } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
-import { RpcSerialization } from 'effect/unstable/rpc'
-import { RpcWireFailure } from './rpc-wire.schema.js'
+import { Rpc as RpcWire, RpcSerialization } from 'effect/unstable/rpc'
 import {
   armSeamAlways,
   armSeamOnce,
@@ -57,6 +56,16 @@ const StockView = Rpc.Schema.StockView
 type StockView = Rpc.Schema.StockView
 const SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
 type SubmitOrderRequest = Rpc.Schema.SubmitOrderRequest
+
+const ListStock = Rpc.Rpcs.ListStock
+
+const RpcExitResponse = S.Struct({
+  _tag: S.tag('Exit'),
+  requestId: S.Union([S.String, S.Finite]),
+  exit: S.toEncoded(S.toCodecIso(RpcWire.exitSchema(ListStock))),
+})
+type RpcExitResponse = S.Schema.Type<typeof RpcExitResponse>
+
 type Client = Rpc.Client.Client
 type DrizzleDatabase = Persistence.DrizzleSession.DrizzleDatabase
 type FulfillmentDecision = Fulfillment.Decision.FulfillmentDecision
@@ -163,7 +172,7 @@ export interface TestServerService {
     tag: string,
     payload: Record<string, string | number>,
     cookie?: string,
-  ) => Effect.Effect<readonly RpcWireFailure[]>
+  ) => Effect.Effect<readonly RpcExitResponse[]>
   readonly seam: SerializationSeamService
   readonly seed: SeedService
   readonly inspect: InspectService
@@ -280,7 +289,7 @@ const buildService = (context: Context.Context<BuildContext>, baseUrl: string): 
     tag: string,
     payload: Record<string, string | number>,
     cookie?: string,
-  ): Effect.Effect<readonly RpcWireFailure[]> =>
+  ): Effect.Effect<readonly RpcExitResponse[]> =>
     Effect.gen(function*() {
       const request = HttpClientRequest.post(`${baseUrl}/rpc`).pipe(
         HttpClientRequest.bodyJsonUnsafe({
@@ -295,7 +304,7 @@ const buildService = (context: Context.Context<BuildContext>, baseUrl: string): 
         cookie === undefined ? request : HttpClientRequest.setHeader(request, 'cookie', cookie),
       )
       const json = yield* response.json.pipe(Effect.orDie)
-      return yield* S.decodeUnknownEffect(S.Array(RpcWireFailure))(json).pipe(Effect.orDie)
+      return yield* S.decodeUnknownEffect(S.Array(RpcExitResponse))(json).pipe(Effect.orDie)
     })
 
   return {

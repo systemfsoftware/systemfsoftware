@@ -48,7 +48,10 @@ Feature('Decorating a model you did not build')
         Given('a recording store and an allowance of one call')('mount', () =>
           Effect.succeed({
             store: Discern.Model.store(),
-            spend: Discern.Model.budget({ calls: 1 }),
+            spend: Discern.Model.budget({
+              decisions: Discern.Model.Unlimited.make({}),
+              calls: Discern.Model.Limited.make({ count: 1 }),
+            }),
           })),
         When('the same change is reviewed twice through the decorated model')(
           'verdicts',

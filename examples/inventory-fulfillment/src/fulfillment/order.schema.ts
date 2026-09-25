@@ -1,13 +1,15 @@
 import { Schema as S } from 'effect'
 import { Quantity, SkuId } from '../inventory/inventory.schema.js'
 
-export class OrderLine extends S.Class<OrderLine>('OrderLine')({
+export const OrderLine = S.Struct({
   sku: SkuId,
   quantity: Quantity,
-}) {}
+})
+export type OrderLine = S.Schema.Type<typeof OrderLine>
 
-export class Order extends S.Class<Order>('Order')({
+export const Order = S.Struct({
   orderId: S.String,
   customerId: S.String,
   lines: S.Array(OrderLine),
-}) {}
+})
+export type Order = S.Schema.Type<typeof Order>

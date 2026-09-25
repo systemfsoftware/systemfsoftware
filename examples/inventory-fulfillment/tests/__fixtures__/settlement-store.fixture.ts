@@ -182,13 +182,13 @@ export const planOf = (input: OrderInput): Settlement.Unit.OrderPlan => ({
   customerId: input.customerId,
   charge: input.charge === undefined ? Option.none() : Option.some(moneyOf(input.charge)),
   events: [
-    new Fulfillment.Event.StockReserved({
+    Fulfillment.Event.StockReserved.make({
       orderId: input.orderId,
       allocations: [allocationOf(input)],
       occurredAt: attemptOccurredAt,
     }),
   ],
-  audit: new Fulfillment.Event.AuditPayload({
+  audit: Fulfillment.Event.AuditPayload.make({
     orderId: input.orderId,
     actorId: input.customerId,
     decisionTag: 'AllocatedSplit',

@@ -2,7 +2,7 @@ import { differentialReport, reportCheck } from '@systemfsoftware/differential-s
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { integers } from './__fixtures__/arbitraries.js'
-import { CandidateDefect } from './__fixtures__/CandidateDefect.schema.js'
+import { CandidateDefect } from './__fixtures__/CandidateDefect.fixture.js'
 import {
   atomicBumps,
   atomicBumpsByModify,

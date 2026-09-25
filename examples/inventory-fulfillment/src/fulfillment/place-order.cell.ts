@@ -148,7 +148,7 @@ const stockReservedOf = (decision: FulfillmentDecision, now: DateTime.Utc): Opti
     Match.when(true, () => Option.none<StockReserved>()),
     Match.when(
       false,
-      () => Option.some(new StockReserved({ orderId: decision.orderId, allocations, occurredAt: now })),
+      () => Option.some(StockReserved.make({ orderId: decision.orderId, allocations, occurredAt: now })),
     ),
     Match.exhaustive,
   )
@@ -157,7 +157,7 @@ const stockReservedOf = (decision: FulfillmentDecision, now: DateTime.Utc): Opti
 const backorderRecordedOf = (decision: FulfillmentDecision, now: DateTime.Utc): Option.Option<BackorderRecorded> =>
   Option.map(
     backorderedLinesOf(decision),
-    (lines) => new BackorderRecorded({ orderId: decision.orderId, backorderedLines: lines, occurredAt: now }),
+    (lines) => BackorderRecorded.make({ orderId: decision.orderId, backorderedLines: lines, occurredAt: now }),
   )
 
 const reservationEventsOf = (
@@ -184,7 +184,7 @@ const planOf = (decision: FulfillmentDecision, read: PlaceOrderRead): OrderPlan 
     customerId,
     charge: chargedAmountOf(decision),
     events: reservationEventsOf(decision, now),
-    audit: new AuditPayload({
+    audit: AuditPayload.make({
       orderId: decision.orderId,
       actorId: customerId,
       decisionTag: decision._tag,

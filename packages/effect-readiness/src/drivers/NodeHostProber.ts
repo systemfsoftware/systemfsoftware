@@ -1,7 +1,7 @@
 import * as NodeSocket from '@effect/platform-node/NodeSocket'
-import { Effect, Layer, Option, type Scope } from 'effect'
+import { Effect, Layer, Option, Schema, type Scope } from 'effect'
 import type * as Socket from 'effect/unstable/socket/Socket'
-import type { DialEvidence, HttpEvidence } from '../DialEvidence.schema.js'
+import { type DialEvidence, type HttpEvidence, Responded } from '../DialEvidence.schema.js'
 import { HostProber } from '../host-prober.service.js'
 import type { PortBinding } from '../Port.schema.js'
 
@@ -29,6 +29,12 @@ const dialEvidenceOf = (socket: Socket.Socket): Effect.Effect<DialEvidence, neve
     }),
   )
 
+const respondedOrRefused = (statusLine: string): HttpEvidence =>
+  Option.getOrElse(
+    Schema.decodeOption(Responded)({ _tag: 'Responded', statusLine }),
+    (): HttpEvidence => ({ _tag: 'Refused' }),
+  )
+
 const exchangeEvidenceOf = (socket: Socket.Socket, path: string): Effect.Effect<HttpEvidence, never, Scope.Scope> =>
   Effect.option(
     Effect.gen(function*() {
@@ -42,7 +48,7 @@ const exchangeEvidenceOf = (socket: Socket.Socket, path: string): Effect.Effect<
     Effect.map(
       Option.match({
         onNone: (): HttpEvidence => ({ _tag: 'Refused' }),
-        onSome: (statusLine: string): HttpEvidence => ({ _tag: 'Responded', statusLine }),
+        onSome: (statusLine: string): HttpEvidence => respondedOrRefused(statusLine),
       }),
     ),
   )

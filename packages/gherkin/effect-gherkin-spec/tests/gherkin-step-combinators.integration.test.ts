@@ -12,7 +12,7 @@ import {
 } from '@systemfsoftware/effect-gherkin-spec'
 import { step } from '@systemfsoftware/vitest/integration'
 import { Chunk, Effect, Layer, Result } from 'effect'
-import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
+import { TestDomainError } from './__fixtures__/test-domain-error.fixture.js'
 
 const Feature = makeFeature({ it })
 

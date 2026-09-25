@@ -20,20 +20,13 @@ import {
   PolicyCommandRejected,
   UncertainMatchError,
 } from './DiscernError.schema.js'
-import {
-  CaseTrace,
-  CompiledPlan,
-  SelectedCase,
-  SelectedFallback,
-  SelectedUncertain,
-  Trace,
-} from './Inspection.schema.js'
-import type { TraceSelection } from './Inspection.schema.js'
+import { SelectedCase, SelectedFallback, SelectedUncertain, Trace } from './Inspection.schema.js'
+import type { CaseTrace, CompiledPlan, TraceSelection } from './Inspection.schema.js'
 import type { Answers, NodeCore, Pattern, PatternRefusal, Preview, UncertainContext } from './pattern.blueprint.js'
-import { distinctNodes, evaluate, preview, reasonOf, statusIs, statusOf } from './pattern.blueprint.js'
+import { distinctNodes, evaluate, preview, statusIs, statusOf } from './pattern.blueprint.js'
 import { SelectCase, selectCase } from './select-case.workflow.js'
-import type { CaseVerdict } from './select-case.workflow.js'
-import type { PatternResult } from './Verdict.schema.js'
+import { CaseVerdict } from './select-case.workflow.js'
+import { PatternResult } from './Verdict.schema.js'
 
 /** One ordered case as the policy run consumes it. The builder wraps `run` once at the API edge, so the cell calls an Effect-returning closure with no lift. */
 export interface PolicyCase<Input, Out, Err, Req> {
@@ -121,6 +114,13 @@ interface Evaluated<Input, Out, Err, Req> {
   readonly result: PatternResult
 }
 
+const verdictOf = (caseId: string, result: PatternResult): CaseVerdict =>
+  PatternResult.match(result, {
+    Match: () => CaseVerdict.cases.Match.make({ caseId }),
+    Miss: () => CaseVerdict.cases.Miss.make({ caseId }),
+    Uncertain: (uncertain) => CaseVerdict.cases.Uncertain.make({ caseId, reason: uncertain.reason }),
+  })
+
 const evaluatedOf = <Input, Out, Err, Req>(
   cases: ReadonlyArray<PolicyCase<Input, Out, Err, Req>>,
   input: Input,
@@ -128,11 +128,7 @@ const evaluatedOf = <Input, Out, Err, Req>(
 ): ReadonlyArray<Evaluated<Input, Out, Err, Req>> =>
   Arr.map(cases, (item) => {
     const result = caseResultOf(item, input, answers)
-    return {
-      item,
-      result,
-      verdict: { caseId: item.id, status: statusOf(result), reason: reasonOf(result) },
-    }
+    return { item, result, verdict: verdictOf(item.id, result) }
   })
 
 /** Case outcomes in order, truncated after the first decisive one. */
@@ -223,16 +219,23 @@ const readOf = <Input, S extends Schema.Constraint, Out, Err, Req>(spec: PolicyS
 // Write: dispatch to the selected branch
 // -------------------------------------------------------------------------------------------------
 
+const caseTraceOf = (verdict: CaseVerdict): CaseTrace =>
+  CaseVerdict.match(verdict, {
+    Match: (matched): CaseTrace => ({ id: matched.caseId, status: 'Match' }),
+    Miss: (missed): CaseTrace => ({ id: missed.caseId, status: 'Miss' }),
+    Uncertain: (uncertain): CaseTrace => ({
+      id: uncertain.caseId,
+      status: 'Uncertain',
+      reason: uncertain.reason,
+    }),
+  })
+
 const traceOf = <Input, Out, Err, Req>(read: PolicyRead<Input, Out, Err, Req>, selected: TraceSelection): Trace =>
-  new Trace({
+  Trace.make({
     version: 2,
     planFingerprint: read.plan.fingerprint,
     answers: read.jsonAnswers,
-    cases: Arr.map(
-      read.evaluated,
-      (entry) =>
-        new CaseTrace({ id: entry.verdict.caseId, status: entry.verdict.status, reason: entry.verdict.reason }),
-    ),
+    cases: Arr.map(read.evaluated, (entry) => caseTraceOf(entry.verdict)),
     selected,
   })
 
@@ -298,12 +301,12 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
       CaseSelected: (selected, read) =>
         Effect.map(Option.getOrThrow(decisiveOf(read)).item.run(read.input), (value) => ({
           value,
-          trace: traceOf(read, new SelectedCase({ id: selected.caseId })),
+          trace: traceOf(read, SelectedCase.make({ id: selected.caseId })),
         })),
       FallbackSelected: (_selected, read) =>
         Effect.map(read.fallback(read.input), (value) => ({
           value,
-          trace: traceOf(read, new SelectedFallback({})),
+          trace: traceOf(read, SelectedFallback.make({})),
         })),
       UncertainHandled: (selected, read) =>
         Effect.map(
@@ -311,7 +314,7 @@ export const finishPolicy = <Input, S extends Schema.Constraint, Out, Err, Req>(
             read.input,
             { caseId: selected.caseId, result: Option.getOrThrow(decisiveOf(read)).result },
           ),
-          (value) => ({ value, trace: traceOf(read, new SelectedUncertain({ id: selected.caseId })) }),
+          (value) => ({ value, trace: traceOf(read, SelectedUncertain.make({ id: selected.caseId })) }),
         ),
       UncertainUnhandled: (refusal, _read) =>
         Effect.fail(new UncertainMatchError({ caseId: refusal.caseId, reason: refusal.reason })),

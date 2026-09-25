@@ -1,6 +1,6 @@
 import { Discern } from '@systemfsoftware/discern'
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Equal, Layer } from 'effect'
+import { Effect, Equal, Layer, Schema } from 'effect'
 import {
   type AnswerFor,
   answering,
@@ -9,7 +9,6 @@ import {
   probabilityAnswer,
   withProvider,
 } from './__fixtures__/counting-model.fixture.js'
-import { Request } from './__fixtures__/request.schema.js'
 import {
   matchedRouteOf,
   routingAnswer,
@@ -23,31 +22,31 @@ const Feature = makeFeature({ it })
 const find = Discern.Procedure.make({
   description: 'Locate code relevant to a behavior, feature or concept',
   examples: ['Find where retries are implemented'],
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`found:${request}`),
 })
 
 const review = Discern.Procedure.make({
   description: 'Review a change for correctness and semantic risk',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`reviewed:${request}`),
 })
 
 const testGaps = Discern.Procedure.make({
   description: 'Find behavior that lacks sufficient test coverage',
-  input: Request,
+  input: Schema.String,
   run: (request) => Effect.succeed(`gaps:${request}`),
 })
 
-const code = Discern.Procedure.registry(Request, { find, review, ['test-gaps']: testGaps })
+const code = Discern.Procedure.registry(Schema.String, { find, review, ['test-gaps']: testGaps })
 
 const odd = Discern.Procedure.make({
   description: 'A procedure with an awkward name',
-  input: Request,
+  input: Schema.String,
   run: () => Effect.succeed('odd'),
 })
 
-const oddRegistry = Discern.Procedure.registry(Request, { ['__proto__']: odd, find })
+const oddRegistry = Discern.Procedure.registry(Schema.String, { ['__proto__']: odd, find })
 
 const awkwardPreferences = Object.fromEntries([
   ['__proto__', 0.9],
@@ -66,16 +65,16 @@ const measuredModel: AnswerFor = (request) =>
       }),
   })
 
-const risk = Discern.on(Request).probability({ id: 'risk', instructions: 'Risky' })
+const risk = Discern.on(Schema.String).probability({ id: 'risk', instructions: 'Risky' })
 
 const auditor = Discern.Procedure.make({
   description: 'Audit a change for risk',
-  input: Request,
+  input: Schema.String,
   run: (request) =>
     Effect.map(Discern.ask(risk, request), (answer) => `${answer.probability > 0.8 ? 'risky' : 'safe'}:${request}`),
 })
 
-const auditRegistry = Discern.Procedure.registry(Request, { audit: auditor, find })
+const auditRegistry = Discern.Procedure.registry(Schema.String, { audit: auditor, find })
 
 const auditingModel: AnswerFor = (request) =>
   answersFor({
@@ -84,16 +83,16 @@ const auditingModel: AnswerFor = (request) =>
       id === 'risk' ? probabilityAnswer(0.95) : routingAnswer({ preferences: { audit: 0.9, find: 0.1 }, decision }),
   })
 
-const urgent = Discern.on(Request).probability({ id: 'urgent', instructions: 'Urgent' })
+const urgent = Discern.on(Schema.String).probability({ id: 'urgent', instructions: 'Urgent' })
 
 const triage = Discern.Procedure.make({
   description: 'Decide how soon a request needs attention',
-  input: Request,
+  input: Schema.String,
   run: (request) =>
     Effect.map(Discern.ask(urgent, request), (answer) => `${answer.probability > 0.8 ? 'now' : 'later'}:${request}`),
 })
 
-const triageRegistry = Discern.Procedure.registry(Request, { triage, find })
+const triageRegistry = Discern.Procedure.registry(Schema.String, { triage, find })
 
 const triageModel: AnswerFor = (request) =>
   answersFor({
@@ -105,12 +104,12 @@ const triageModel: AnswerFor = (request) =>
 const onlyFor = (side: string) =>
   Discern.Procedure.make({
     description: `Handle ${side} requests`,
-    input: Request,
+    input: Schema.String,
     eligible: (request) => request === side,
     run: (request) => Effect.succeed(request),
   })
 
-const spelledAlike = Discern.Procedure.registry(Request, {
+const spelledAlike = Discern.Procedure.registry(Schema.String, {
   a: onlyFor('right'),
   ab: onlyFor('left'),
   bc: onlyFor('right'),
@@ -187,7 +186,7 @@ Feature('Routing a request to the procedure that handles it')
           Effect.gen(function*() {
             const model = yield* CountingModel
             return yield* withProvider(
-              Discern.Eval.run(Request, s.question, [
+              Discern.Eval.run(Schema.String, s.question, [
                 { input: 'where is auth', expected: true },
                 { input: 'review this diff', expected: false },
               ]),

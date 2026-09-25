@@ -1,7 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
-import { RouteCandidate } from './Route.schema.js'
+import { Probability, RouteCandidate } from './Route.schema.js'
 
 const RouteDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/discern/RouteDecision')
 type RouteDecisionTypeId = typeof RouteDecisionTypeId
@@ -41,14 +41,18 @@ export class RouteNone extends Schema.TaggedClass<RouteNone>()('RouteNone', {
 export const SelectRouteDecision = Schema.Union([RouteMatched, RouteUncertain, RouteNone])
 export type SelectRouteDecision = typeof SelectRouteDecision.Type
 
+export type RouteUncertainOf<Ids extends string = string> =
+  & Omit<(typeof RouteUncertain)['Encoded'], 'ranked'>
+  & {
+    readonly ranked: ReadonlyArray<RouteCandidate<Ids>>
+  }
+
 export type Route<Ids extends string = string> =
   | (Omit<(typeof RouteMatched)['Encoded'], 'id' | 'ranked'> & {
     readonly id: Ids
     readonly ranked: ReadonlyArray<RouteCandidate<Ids>>
   })
-  | (Omit<(typeof RouteUncertain)['Encoded'], 'ranked'> & {
-    readonly ranked: ReadonlyArray<RouteCandidate<Ids>>
-  })
+  | RouteUncertainOf<Ids>
   | (typeof RouteNone)['Encoded']
 
 export class NoEligible extends Schema.TaggedClass<NoEligible>()('NoEligible', {
@@ -84,13 +88,15 @@ export class SelectRoute extends Schema.TaggedClass<SelectRoute>()('SelectRoute'
 const noEligibleReason = (membership: ReadonlyArray<string>): string =>
   `no procedure is eligible for this input (of ${membership.join(', ')})`
 
+const certainProbability = Probability.make(1)
+
 const eliminationMatch = (candidate: RouteCandidate): RouteMatched =>
   new RouteMatched({
     id: candidate.id,
     probability: 1,
     margin: 1,
     by: 'elimination',
-    ranked: [{ id: candidate.id, probability: 1 }],
+    ranked: [{ id: candidate.id, probability: certainProbability }],
   })
 
 const modelMatch = (outcome: ManyEligible): RouteMatched =>

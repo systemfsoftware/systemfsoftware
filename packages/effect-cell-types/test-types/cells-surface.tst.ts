@@ -8,10 +8,10 @@ import { describe, expect, it } from 'tstyche'
 
 import type * as Result from 'effect/Result'
 import { acceptTaggedCommand } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
+import type { DecisionOne, DecisionTwo, TaggedCmd } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
 import { admitDecodedCommand, Decoded } from '../tests/__fixtures__/admit-decoded-command.workflow.js'
 import { admitWideCommand, WideCommand } from '../tests/__fixtures__/admit-wide-command.workflow.js'
-import { CommandRefused, TaggedCmd } from '../tests/__fixtures__/Command.schema.js'
-import { DecisionOne, DecisionTwo } from '../tests/__fixtures__/Decision.schema.js'
+import type { CommandRefused } from '../tests/__fixtures__/Command.fixture.js'
 import { PublishDecisions, publishDecisions } from '../tests/__fixtures__/publish-decisions.workflow.js'
 
 type Top<A = unknown> = A

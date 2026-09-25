@@ -136,7 +136,10 @@ console.log(replayed) // block: rename User.id to User.key
 
 ```ts
 const cache = Discern.Model.store()
-const spend = Discern.Model.budget({ calls: 10 })
+const spend = Discern.Model.budget({
+  decisions: Discern.Model.Unlimited.make({}),
+  calls: Discern.Model.Limited.make({ count: 10 }),
+})
 const metered = Discern.Model.layer(cautious, [Discern.Model.caching(cache), Discern.Model.budgeted(spend)])
 await Effect.runPromise(review('drop Node 18').pipe(Effect.provide(metered)))
 await Effect.runPromise(review('drop Node 18').pipe(Effect.provide(metered)))
