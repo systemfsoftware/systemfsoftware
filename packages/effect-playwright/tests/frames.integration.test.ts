@@ -1,15 +1,9 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Option } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
 
 Feature('Reaching into the documents a page holds in frames')
   .withLayer(PlaywrightSpawner.layer(chromium))
@@ -18,7 +12,7 @@ Feature('Reaching into the documents a page holds in frames')
     scenario(
       'A named frame exposes its document, metadata, and query surfaces',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('an iframe named test-frame is added and its document settles')(
           'observed',
           ({ page }) =>
@@ -119,7 +113,7 @@ Feature('Reaching into the documents a page holds in frames')
     scenario(
       'A function passed into a frame evaluation runs inside the frame',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the main frame evaluates an exposed function')('tripled', ({ page }) =>
           page.mainFrame().evaluate(
             (triple: (value: number) => number) => triple(14),
@@ -128,6 +122,28 @@ Feature('Reaching into the documents a page holds in frames')
           )),
         Then('the exposed function returns the value it computed there')((state, expect) =>
           expect(state.tripled).toBe(42)
+        ),
+      ),
+    )
+
+    scenario(
+      'A frame is looked up by name, by name filter, and absent by an unknown name',
+      Gherkin.Do.pipe(
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
+        When('the page holds an iframe named test-frame and frames are looked up')(
+          'lookups',
+          ({ page }) =>
+            Effect.gen(function*() {
+              yield* page.setContent('<iframe name="test-frame" id="test-frame"></iframe>')
+              return {
+                byName: Option.isSome(page.frame('test-frame')),
+                byNameFilter: Option.isSome(page.frame({ name: 'test-frame' })),
+                unknown: Option.isNone(page.frame('foo')),
+              }
+            }),
+        ),
+        Then('the named lookups find the frame and the unknown name finds none')((state, expect) =>
+          expect(state.lookups).toEqual({ byName: true, byNameFilter: true, unknown: true })
         ),
       ),
     )

@@ -1,18 +1,13 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, Playwright, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Exit, Fiber, Layer, Ref, Stream } from 'effect'
+import { launchBrowser } from './__fixtures__/browser-page.js'
 import { reserveFreePort } from './__fixtures__/sessions-cdp-port.js'
 import { withTempUserDataDir } from './__fixtures__/sessions-user-data-dir.js'
 
 const Feature = makeFeature({ it })
 
 const SessionsLayer = Layer.mergeAll(Playwright.layer, PlaywrightSpawner.layer(chromium))
-
-const launchBrowser = () =>
-  Effect.gen(function*() {
-    const playwright = yield* Playwright.Playwright
-    return yield* playwright.launchScoped(chromium)
-  })
 
 Feature('Driving browser sessions through Effect services')
   .withLayer(SessionsLayer)
@@ -21,7 +16,7 @@ Feature('Driving browser sessions through Effect services')
     scenario(
       'A launched browser opens a page in its own context',
       Gherkin.Do.pipe(
-        Given('a browser launched for the scenario')('browser', launchBrowser),
+        Given('a browser launched for the scenario')('browser', () => launchBrowser),
         When('a page is opened')('page', (s) => s.browser.newPage()),
         Then('the page exists and the browser lists one context holding it')((s, expect) =>
           expect({
@@ -36,7 +31,7 @@ Feature('Driving browser sessions through Effect services')
     scenario(
       'A new page evaluates an expression against its base URL',
       Gherkin.Do.pipe(
-        Given('a browser launched for the scenario')('browser', launchBrowser),
+        Given('a browser launched for the scenario')('browser', () => launchBrowser),
         When('a page is opened with about:blank as its base URL')(
           'page',
           (s) => s.browser.newPage({ baseURL: 'about:blank' }),
@@ -52,7 +47,7 @@ Feature('Driving browser sessions through Effect services')
     scenario(
       'The raw browser handle reports connection, engine, and version',
       Gherkin.Do.pipe(
-        Given('a browser launched for the scenario')('browser', launchBrowser),
+        Given('a browser launched for the scenario')('browser', () => launchBrowser),
         Then('the handle reports a connected chromium with a version')((s, expect) =>
           s.browser.use((core) => Promise.resolve(core.isConnected())).pipe(
             Effect.map((connected) =>
@@ -70,7 +65,7 @@ Feature('Driving browser sessions through Effect services')
     scenario(
       'Closing the browser disconnects the raw handle',
       Gherkin.Do.pipe(
-        Given('a browser launched for the scenario')('browser', launchBrowser),
+        Given('a browser launched for the scenario')('browser', () => launchBrowser),
         When('the browser is closed')((s) => s.browser.close),
         Then('the raw handle reports it is no longer connected')((s, expect) =>
           expect({ connected: s.browser.isConnected() }).toStrictEqual({ connected: false })
@@ -81,7 +76,7 @@ Feature('Driving browser sessions through Effect services')
     scenario(
       'Creating a context and a page shows up in the browser lists',
       Gherkin.Do.pipe(
-        Given('a browser launched for the scenario')('browser', launchBrowser),
+        Given('a browser launched for the scenario')('browser', () => launchBrowser),
         When('a context is created and a page is opened inside it')('observed', (s) =>
           Effect.gen(function*() {
             const initialContexts = s.browser.contexts().length
@@ -154,7 +149,7 @@ Feature('Driving browser sessions through Effect services')
           'observed',
           () =>
             Effect.gen(function*() {
-              const browser = yield* launchBrowser()
+              const browser = yield* launchBrowser
               const fiber = yield* browser.eventStream('disconnected').pipe(Stream.runCollect, Effect.forkChild)
               yield* browser.close
               const events = Array.from(yield* Fiber.join(fiber))

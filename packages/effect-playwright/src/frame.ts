@@ -8,15 +8,8 @@ import type { ElementHandle, Frame as CoreFrame } from 'playwright-core'
 import type { PlaywrightError } from './errors.schema.js'
 import type { Locator } from './locator.js'
 import type { Page, PageEvaluateFunction } from './page.js'
-import { useHelper } from './utils.js'
+import { assertEvaluateArg, useHelper } from './utils.js'
 import type { Wrappers } from './wrappers.js'
-
-/**
- * Widens an omitted argument to the required slot Playwright's evaluated-function
- * overload asks for: playwright-core types the argument positionally even when the
- * evaluated function takes none.
- */
-function assertEvaluateArg<Arg>(_value: Arg | undefined): asserts _value is Arg {}
 
 /**
  * Effect-friendly operations for a Playwright frame.

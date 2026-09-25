@@ -1,6 +1,7 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Ref } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
 
@@ -14,13 +15,6 @@ type ScriptedWindow = Window & {
 }
 
 type UnaryNumberFunction = (value: number) => Promise<number>
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
 
 const doubling = (value: number) => Promise.resolve(value * 2)
 
@@ -76,7 +70,7 @@ Feature('Running program code inside a page')
     scenario(
       'Page code runs against arguments and returns values to the program',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page adds a destructured tuple argument')(
           'fromTuple',
           ({ page }) => page.evaluate(doubleTupleInPage, [10, 20] as const),
@@ -97,7 +91,7 @@ Feature('Running program code inside a page')
     scenario(
       'Page code calls a function-valued argument the program exposes',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page runs code that calls an exposed doubling function')(
           'doubled',
           ({ page }) => page.evaluate(doubleThroughExposedFunction, doubling, { exposeFunctions: true }),
@@ -111,7 +105,7 @@ Feature('Running program code inside a page')
     scenario(
       'A frame runs code with a function-valued argument the program exposes',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the main frame runs code that calls an exposed tripling function')(
           'tripled',
           ({ page }) => page.mainFrame().evaluate(tripleThroughExposedFunction, tripling, { exposeFunctions: true }),
@@ -125,7 +119,7 @@ Feature('Running program code inside a page')
     scenario(
       'An init script runs before the document scripts on the page',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('an init script that awaits an exposed doubling function is registered')(({ page }) =>
           page.addInitScript<UnaryNumberFunction>(recordExposedDoubleAsMagicValue, doubling, { exposeFunctions: true })
         ),
@@ -183,7 +177,7 @@ Feature('Running program code inside a page')
     scenario(
       'A script tag added after load runs its content in the page',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page navigates to about:blank')(({ page }) => page.goto('about:blank')),
         When('a script tag that sets a global is added')(({ page }) =>
           page.addScriptTag({ content: 'window.magicValue = 42;' })
@@ -200,7 +194,7 @@ Feature('Running program code inside a page')
       Gherkin.Do.pipe(
         Given('a page showing a div')('page', () =>
           Effect.gen(function*() {
-            const page = yield* pageInFreshBrowser()
+            const page = yield* pageInFreshBrowser
             yield* page.setContent('<div id="test-div">Hello</div>')
             return page
           })),
@@ -221,7 +215,7 @@ Feature('Running program code inside a page')
     scenario(
       'An exposed function runs an effect and returns its value to page code',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         Given('a counter the program holds')('counter', () => Ref.make(0)),
         When('the page exposes a function that increments the counter')(({ page, counter }) =>
           page.exposeFunction('myCustomEffect', () => Ref.updateAndGet(counter, (n) => n + 1))
@@ -237,7 +231,7 @@ Feature('Running program code inside a page')
     scenario(
       'An exposed function built with Effect.fn receives page arguments',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         Given('a counter the program holds')('counter', () => Ref.make(0)),
         When('the page exposes an Effect.fn that adds the page argument')(({ page, counter }) =>
           page.exposeFunction(
@@ -261,7 +255,7 @@ Feature('Running program code inside a page')
     scenario(
       'An exposed effect runs each time page code calls it',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         Given('a counter the program holds')('counter', () => Ref.make(0)),
         When('the page exposes an effect that increments the counter')(({ page, counter }) =>
           page.exposeEffect('myCustomEffect', Ref.updateAndGet(counter, (n) => n + 1))

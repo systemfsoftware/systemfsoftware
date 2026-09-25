@@ -1,19 +1,13 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Clock, Effect } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
 
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
-
 const pageShowing = (html: string) =>
   Effect.gen(function*() {
-    const page = yield* pageInFreshBrowser()
+    const page = yield* pageInFreshBrowser
     yield* page.setContent(html)
     return page
   })
@@ -98,7 +92,7 @@ Feature('Waiting for a page to reach an observable state')
     scenario(
       'Waiting for a timeout passes at least the requested time',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page waits a hundred milliseconds')('elapsed', ({ page }) =>
           Effect.gen(function*() {
             const start = yield* Clock.currentTimeMillis
@@ -117,7 +111,7 @@ Feature('Waiting for a page to reach an observable state')
       Gherkin.Do.pipe(
         Given('a page on about:blank')('page', () =>
           Effect.gen(function*() {
-            const page = yield* pageInFreshBrowser()
+            const page = yield* pageInFreshBrowser
             yield* page.goto('about:blank')
             return page
           })),
@@ -141,7 +135,7 @@ Feature('Waiting for a page to reach an observable state')
     scenario(
       'A locator action past the page default timeout fails as a timeout',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a click is attempted on an element that does not exist')('error', ({ page }) =>
           Effect.gen(function*() {
             page.setDefaultTimeout(1)

@@ -1,15 +1,10 @@
 import { Gherkin, Given, it, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { chromium, Playwright } from '@systemfsoftware/effect-playwright'
+import { Playwright } from '@systemfsoftware/effect-playwright'
 import { BrowserUtils } from '@systemfsoftware/effect-playwright/experimental'
 import { Effect, Fiber, Stream } from 'effect'
+import { launchBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
-
-const launchBrowser = () =>
-  Effect.gen(function*() {
-    const playwright = yield* Playwright.Playwright
-    return yield* playwright.launchScoped(chromium)
-  })
 
 Feature('Traversing every page and frame in a browser')
   .withLayer(Playwright.layer)
@@ -20,7 +15,7 @@ Feature('Traversing every page and frame in a browser')
       Gherkin.Do.pipe(
         Given('a browser with two contexts holding three pages')('browser', () =>
           Effect.gen(function*() {
-            const browser = yield* launchBrowser()
+            const browser = yield* launchBrowser
             const first = yield* browser.newContext()
             yield* first.newPage
             yield* first.newPage
@@ -39,7 +34,7 @@ Feature('Traversing every page and frame in a browser')
       Gherkin.Do.pipe(
         Given('a browser with two pages')('browser', () =>
           Effect.gen(function*() {
-            const browser = yield* launchBrowser()
+            const browser = yield* launchBrowser
             yield* browser.newPage()
             yield* browser.newPage()
             return browser
@@ -59,7 +54,7 @@ Feature('Traversing every page and frame in a browser')
           'observed',
           () =>
             Effect.gen(function*() {
-              const browser = yield* launchBrowser()
+              const browser = yield* launchBrowser
               const first = yield* browser.newContext()
               const second = yield* browser.newContext()
               const page1 = yield* first.newPage
@@ -90,7 +85,7 @@ Feature('Traversing every page and frame in a browser')
       Gherkin.Do.pipe(
         Given('a page watched by the frame-navigation stream')('observed', () =>
           Effect.gen(function*() {
-            const browser = yield* launchBrowser()
+            const browser = yield* launchBrowser
             const page = yield* browser.newPage()
             const fiber = yield* BrowserUtils.allFrameNavigatedEventStream(browser).pipe(
               Stream.take(1),

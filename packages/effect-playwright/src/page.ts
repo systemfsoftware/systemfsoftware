@@ -29,7 +29,7 @@ import { makeMouse, type Mouse } from './mouse.js'
 import { patchedEvents } from './playwright-types.js'
 import { makeScreencast, type Screencast } from './screencast.js'
 import { makeTouchscreen, type Touchscreen } from './touchscreen.js'
-import { useHelper } from './utils.js'
+import { assertEvaluateArg, useHelper } from './utils.js'
 import { makeWebStorage, type WebStorage } from './web-storage.js'
 import type { Wrappers } from './wrappers.js'
 
@@ -88,13 +88,6 @@ declare const corePageEvaluate: CorePage['evaluate']
  * {@link Frame.evaluate}.
  */
 export type PageEvaluateFunction<Arg, R> = Parameters<typeof corePageEvaluate<R, Arg>>[0]
-
-/**
- * Widens an omitted argument to the required slot Playwright's evaluated-function
- * overload asks for: playwright-core types the argument positionally even when the
- * evaluated function takes none.
- */
-function assertEvaluateArg<Arg>(_value: Arg | undefined): asserts _value is Arg {}
 
 /**
  * Effect-friendly operations for a Playwright page.

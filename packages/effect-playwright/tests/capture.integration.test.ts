@@ -2,6 +2,7 @@ import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Fiber, Stream } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 import {
   captureArtifactPath,
   captureArtifactSignature,
@@ -16,12 +17,6 @@ const pngSignature = [0x89, 0x50, 0x4e, 0x47]
 const pdfSignature = [0x25, 0x50, 0x44, 0x46]
 const zipSignature = [0x50, 0x4b, 0x03, 0x04]
 const webmSignature = [0x1a, 0x45, 0xdf, 0xa3]
-
-const openPage = Effect.gen(function*() {
-  const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-  const browser = yield* spawner.browser
-  return yield* browser.newPage()
-})
 
 const scratchFor = Effect.gen(function*() {
   const directory = makeCaptureDirectory()
@@ -38,7 +33,7 @@ Feature('Capturing images, downloads and recordings from a live page')
       Gherkin.Do.pipe(
         Given('a page showing a heading')(
           'page',
-          () => openPage.pipe(Effect.tap((page) => page.goto('data:text/html,<h1>Screenshot Test</h1>'))),
+          () => pageInFreshBrowser.pipe(Effect.tap((page) => page.goto('data:text/html,<h1>Screenshot Test</h1>'))),
         ),
         When('the page is captured as a PNG')('capture', (s) => s.page.screenshot({ type: 'png' })),
         Then('the capture is a PNG byte payload')((s, expect) =>
@@ -56,7 +51,7 @@ Feature('Capturing images, downloads and recordings from a live page')
       Gherkin.Do.pipe(
         Given('a page showing a heading')(
           'page',
-          () => openPage.pipe(Effect.tap((page) => page.goto('data:text/html,<h1>PDF Test</h1>'))),
+          () => pageInFreshBrowser.pipe(Effect.tap((page) => page.goto('data:text/html,<h1>PDF Test</h1>'))),
         ),
         When('the page is printed to PDF')('capture', (s) => s.page.pdf()),
         Then('the capture is a PDF byte payload')((s, expect) =>
@@ -73,7 +68,7 @@ Feature('Capturing images, downloads and recordings from a live page')
       'An element capture is a non-empty PNG image',
       Gherkin.Do.pipe(
         Given('a page with a badge element')('page', () =>
-          openPage.pipe(
+          pageInFreshBrowser.pipe(
             Effect.tap((page) =>
               page.goto('data:text/html,<div id="badge" style="width:80px;height:40px;background:red">badge</div>')
             ),
@@ -93,7 +88,7 @@ Feature('Capturing images, downloads and recordings from a live page')
       'A download delivers its bytes through the download stream',
       Gherkin.Do.pipe(
         Given('a page offering a downloadable text file')('page', () =>
-          openPage.pipe(
+          pageInFreshBrowser.pipe(
             Effect.tap((page) =>
               page.evaluate(() => {
                 document.body.innerHTML =
@@ -156,7 +151,7 @@ Feature('Capturing images, downloads and recordings from a live page')
       Gherkin.Do.pipe(
         Given('a page whose screencast records to a temporary video file')('recording', () =>
           Effect.gen(function*() {
-            const page = yield* openPage
+            const page = yield* pageInFreshBrowser
             const artifact = captureArtifactPath(yield* scratchFor)
             const video = artifact('session.webm')
             yield* page.screencast.start({ path: video })

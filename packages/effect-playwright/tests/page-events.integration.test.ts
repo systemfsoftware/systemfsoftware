@@ -1,22 +1,10 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Exit, Fiber, Option, Stream } from 'effect'
+import { browserInFreshBrowser, pageInFreshBrowser } from './__fixtures__/browser-page.js'
+import { firstEvent } from './__fixtures__/event-stream.js'
 
 const Feature = makeFeature({ it })
-
-const freshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    return yield* spawner.browser
-  })
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const browser = yield* freshBrowser()
-    return yield* browser.newPage()
-  })
-
-const firstEvent = <A>(stream: Stream.Stream<A>) => Effect.forkChild(Stream.runHead(stream), { startImmediately: true })
 
 const completedCount = <A, E>(awaited: Option.Option<Exit.Exit<ReadonlyArray<A>, E>>) =>
   Option.flatMap(awaited, (exit) => Exit.isSuccess(exit) ? Option.some(exit.value.length) : Option.none())
@@ -28,7 +16,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'An alert raised while the page loads arrives as a dialog the program answers',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page raises an alert while it loads')('observed', ({ page }) =>
           Effect.gen(function*() {
             const pending = yield* firstEvent(page.eventStream('dialog'))
@@ -52,7 +40,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'Clicking a file input arrives as a file chooser the program can answer',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the file input is clicked')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.evaluate(() => {
@@ -76,7 +64,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'Downloading a data URL arrives as a download whose bytes the program reads',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a link with a data URL download is clicked')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.evaluate(() => {
@@ -116,7 +104,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'Opening a window arrives as a popup that points back at its opener',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page opens a blank window')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.goto('about:blank')
@@ -140,7 +128,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'Spawning a worker arrives as a worker the program can run code in',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page starts a worker from a blob URL')('observed', ({ page }) =>
           Effect.gen(function*() {
             const pending = yield* firstEvent(page.eventStream('worker'))
@@ -162,7 +150,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'A page that has started a worker lists it among its workers',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page has started a worker')('observed', ({ page }) =>
           Effect.gen(function*() {
             const pending = yield* firstEvent(page.eventStream('worker'))
@@ -185,7 +173,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'A console subscription stops once the page it watches closes',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page closes while a console subscription runs')('observed', ({ page }) =>
           Effect.gen(function*() {
             const pending = yield* Effect.forkChild(Stream.runCollect(page.eventStream('console')), {
@@ -205,7 +193,7 @@ Feature('Being told about the things a page does while the program drives it')
     scenario(
       'A console subscription stops once the browser it watches closes',
       Gherkin.Do.pipe(
-        Given('a fresh browser')('browser', freshBrowser),
+        Given('a fresh browser')('browser', () => browserInFreshBrowser),
         Given('a page in that browser')('page', ({ browser }) => browser.newPage()),
         When('the browser closes while a console subscription runs')(
           'observed',

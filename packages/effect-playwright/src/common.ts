@@ -18,7 +18,7 @@ import { wrapError } from './errors.js'
 import type { PlaywrightError } from './errors.schema.js'
 import type { Frame } from './frame.js'
 import type { Page } from './page.js'
-import { useHelper } from './utils.js'
+import { assertEvaluateArg, useHelper } from './utils.js'
 import type { Wrappers } from './wrappers.js'
 
 export interface Request {
@@ -145,7 +145,7 @@ export const buildRequest: {
   const use = useHelper(request)
 
   return Request.of({
-    allHeaders: use(() => request.allHeaders()),
+    allHeaders: use((request) => request.allHeaders()),
     existingResponse: (): Option.Option<Response> =>
       Option.fromNullishOr(request.existingResponse()).pipe(Option.map(wrap.response)),
     failure: () => Option.fromNullishOr(request.failure()),
@@ -153,9 +153,9 @@ export const buildRequest: {
       try: () => wrap.frame(request.frame()),
       catch: wrapError,
     }),
-    headerValue: (name) => use(() => request.headerValue(name)).pipe(Effect.map(Option.fromNullishOr)),
+    headerValue: (name) => use((request) => request.headerValue(name)).pipe(Effect.map(Option.fromNullishOr)),
     headers: () => request.headers(),
-    headersArray: use(() => request.headersArray()),
+    headersArray: use((request) => request.headersArray()),
     isNavigationRequest: () => request.isNavigationRequest(),
     method: () => request.method(),
     postData: () => Option.fromNullishOr(request.postData()),
@@ -169,12 +169,12 @@ export const buildRequest: {
     redirectedTo: (): Option.Option<Request> =>
       Option.fromNullishOr(request.redirectedTo()).pipe(Option.map(wrap.request)),
     resourceType: () => request.resourceType(),
-    response: use(() => request.response()).pipe(
+    response: use((request) => request.response()).pipe(
       Effect.map(Option.fromNullishOr),
       Effect.map(Option.map(wrap.response)),
     ),
     serviceWorker: () => Option.fromNullishOr(request.serviceWorker()).pipe(Option.map(wrap.worker)),
-    sizes: use(() => request.sizes()),
+    sizes: use((request) => request.sizes()),
     timing: () => request.timing(),
     url: () => request.url(),
   })
@@ -233,29 +233,29 @@ export const buildResponse: {
   const use = useHelper(response)
 
   return Response.of({
-    allHeaders: use(() => response.allHeaders()),
-    body: use(() => response.body()),
-    finished: use(() => response.finished()),
+    allHeaders: use((response) => response.allHeaders()),
+    body: use((response) => response.body()),
+    finished: use((response) => response.finished()),
     frame: Effect.try({
       try: () => wrap.frame(response.frame()),
       catch: wrapError,
     }),
     fromServiceWorker: () => response.fromServiceWorker(),
     headers: () => response.headers(),
-    headersArray: use(() => response.headersArray()),
-    headerValue: (name) => use(() => response.headerValue(name)).pipe(Effect.map(Option.fromNullishOr)),
-    headerValues: (name) => use(() => response.headerValues(name)),
-    httpVersion: use(() => response.httpVersion()),
-    json: use(() => response.json()),
+    headersArray: use((response) => response.headersArray()),
+    headerValue: (name) => use((response) => response.headerValue(name)).pipe(Effect.map(Option.fromNullishOr)),
+    headerValues: (name) => use((response) => response.headerValues(name)),
+    httpVersion: use((response) => response.httpVersion()),
+    json: use((response) => response.json()),
     ok: () => response.ok(),
     request: () => wrap.request(response.request()),
-    securityDetails: use(() => response.securityDetails()).pipe(
+    securityDetails: use((response) => response.securityDetails()).pipe(
       Effect.map(Option.fromNullishOr),
     ),
-    serverAddr: use(() => response.serverAddr()).pipe(Effect.map(Option.fromNullishOr)),
+    serverAddr: use((response) => response.serverAddr()).pipe(Effect.map(Option.fromNullishOr)),
     status: () => response.status(),
     statusText: () => response.statusText(),
-    text: use(() => response.text()),
+    text: use((response) => response.text()),
     url: () => response.url(),
   })
 })
@@ -266,12 +266,6 @@ declare const coreWorkerEvaluate: CoreWorker['evaluate']
  * The page function argument accepted by {@link Worker.evaluate}.
  */
 export type WorkerEvaluateFunction<Arg, R> = Parameters<typeof coreWorkerEvaluate<R, Arg>>[0]
-
-/**
- * Widens an omitted argument to the required slot Playwright's evaluated-function
- * overload declares; the runtime accepts the argument being absent.
- */
-function assertEvaluateArg<Arg>(_value: Arg | undefined): asserts _value is Arg {}
 
 export interface Worker {
   evaluate: <R, Arg = void>(
@@ -335,9 +329,9 @@ export const buildDialog: {
   const use = useHelper(dialog)
 
   return Dialog.of({
-    accept: (promptText) => use(() => dialog.accept(promptText)),
+    accept: (promptText) => use((dialog) => dialog.accept(promptText)),
     defaultValue: () => dialog.defaultValue(),
-    dismiss: use(() => dialog.dismiss()),
+    dismiss: use((dialog) => dialog.dismiss()),
     message: () => dialog.message(),
     page: () => Option.fromNullishOr(dialog.page()).pipe(Option.map(wrap.page)),
     type: () => dialog.type(),
@@ -375,7 +369,7 @@ export const buildFileChooser: {
     element: () => fileChooser.element(),
     isMultiple: () => fileChooser.isMultiple(),
     page: () => wrap.page(fileChooser.page()),
-    setFiles: (files, options) => use(() => fileChooser.setFiles(files, options)),
+    setFiles: (files, options) => use((fileChooser) => fileChooser.setFiles(files, options)),
   })
 })
 
@@ -425,17 +419,17 @@ export const buildDownload: {
   const use = useHelper(download)
 
   return Download.of({
-    cancel: use(() => download.cancel()),
-    stream: use(() => download.createReadStream()).pipe(
+    cancel: use((download) => download.cancel()),
+    stream: use((download) => download.createReadStream()).pipe(
       Effect.map((readable: AsyncIterable<string | Uint8Array>) => Stream.fromAsyncIterable(readable, wrapError)),
       Stream.unwrap,
       Stream.map(toUint8Array),
     ),
-    delete: use(() => download.delete()),
-    failure: use(() => download.failure()).pipe(Effect.map(Option.fromNullishOr)),
+    delete: use((download) => download.delete()),
+    failure: use((download) => download.failure()).pipe(Effect.map(Option.fromNullishOr)),
     page: () => wrap.page(download.page()),
-    path: use(() => download.path()).pipe(Effect.map(Option.fromNullishOr)),
-    saveAs: (path) => use(() => download.saveAs(path)),
+    path: use((download) => download.path()).pipe(Effect.map(Option.fromNullishOr)),
+    saveAs: (path) => use((download) => download.saveAs(path)),
     suggestedFilename: () => download.suggestedFilename(),
     url: () => download.url(),
     use,

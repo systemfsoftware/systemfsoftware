@@ -1,22 +1,16 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
 
 const titledDocument = 'data:text/html,<title>Test Page</title>'
 const documentWithHeading = 'data:text/html,<html><head><title>Content</title></head><body><h1>Hello</h1></body></html>'
 
 const pageShowing = (url: string) =>
   Effect.gen(function*() {
-    const page = yield* pageInFreshBrowser()
+    const page = yield* pageInFreshBrowser
     yield* page.goto(url)
     return page
   })
@@ -28,7 +22,7 @@ Feature('A page reports and replaces the document it holds')
     scenario(
       'Setting content replaces the document body',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the document content is replaced')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.setContent('<h1>Hello World</h1>')

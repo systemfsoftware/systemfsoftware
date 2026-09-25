@@ -3,14 +3,9 @@ import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import type { Playwright } from '@systemfsoftware/effect-playwright'
 import { Effect } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
-
-const openPage = Effect.gen(function*() {
-  const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-  const browser = yield* spawner.browser
-  return yield* browser.newPage()
-})
 
 const openTouchPage = Effect.gen(function*() {
   const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
@@ -74,7 +69,7 @@ Feature('Typing, pointing and touching a live page')
       'Typed keys land in the focused input',
       Gherkin.Do.pipe(
         Given('a page with a focused text input')('page', () =>
-          openPage.pipe(
+          pageInFreshBrowser.pipe(
             Effect.tap((page) =>
               page.evaluate(() => {
                 document.body.innerHTML = '<input id="typed-input" />'
@@ -97,7 +92,7 @@ Feature('Typing, pointing and touching a live page')
       Gherkin.Do.pipe(
         Given('a page with a click target at the pointer')(
           'page',
-          () => openPage.pipe(Effect.tap((page) => markClickAtPointer(page))),
+          () => pageInFreshBrowser.pipe(Effect.tap((page) => markClickAtPointer(page))),
         ),
         When('the mouse clicks the target point')((s) => s.page.mouse.click(50, 50)),
         When('the page reports the click it saw')('seen', (s) => pointerSeen(s.page)),

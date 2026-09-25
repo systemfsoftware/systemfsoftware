@@ -1,6 +1,7 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, Playwright, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Option } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
 
@@ -10,16 +11,9 @@ type InteractedWindow = Window & {
   magicValue?: number
 }
 
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
-
 const pageShowing = (html: string) =>
   Effect.gen(function*() {
-    const page = yield* pageInFreshBrowser()
+    const page = yield* pageInFreshBrowser
     yield* page.setContent(html)
     return page
   })
@@ -295,7 +289,7 @@ Feature('Interacting with elements a page holds')
       Gherkin.Do.pipe(
         Given('a page showing a document whose title is Blank')('page', () =>
           Effect.gen(function*() {
-            const page = yield* pageInFreshBrowser()
+            const page = yield* pageInFreshBrowser
             yield* page.goto('data:text/html,<title>Blank</title>')
             return page
           })),

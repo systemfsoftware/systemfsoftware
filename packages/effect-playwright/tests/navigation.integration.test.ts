@@ -1,18 +1,12 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
 
 const firstDocument = 'data:text/html,<h1>Page 1</h1>'
 const secondDocument = 'data:text/html,<h1>Page 2</h1>'
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
 
 Feature('A page navigates, and its location and history stay observable')
   .withLayer(PlaywrightSpawner.layer(chromium))
@@ -21,7 +15,7 @@ Feature('A page navigates, and its location and history stay observable')
     scenario(
       'Navigating to a blank URL reports that location',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page navigates to a blank document')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.goto('about:blank')
@@ -36,7 +30,7 @@ Feature('A page navigates, and its location and history stay observable')
     scenario(
       'A navigation can wait for the document to load',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page navigates waiting for the loaded document')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.goto('about:blank', { waitUntil: 'domcontentloaded' })
@@ -51,7 +45,7 @@ Feature('A page navigates, and its location and history stay observable')
     scenario(
       'Each navigation replaces the reported location',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page visits two different documents in turn')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.goto(firstDocument)
@@ -72,7 +66,7 @@ Feature('A page navigates, and its location and history stay observable')
     scenario(
       'Back and forward walk the history of navigations',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page visits two documents, then goes back and forward')(
           'observed',
           ({ page }) =>
@@ -102,7 +96,7 @@ Feature('A page navigates, and its location and history stay observable')
     scenario(
       'Waiting for a URL observes a history push',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page pushes a hash into its history and waits for that URL')(
           'observed',
           ({ page }) =>

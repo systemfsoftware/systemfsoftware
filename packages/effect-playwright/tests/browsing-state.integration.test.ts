@@ -1,25 +1,14 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Option, Ref } from 'effect'
+import { browserInFreshBrowser, pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
 
-const browserInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    return yield* spawner.browser
-  })
-
 const contextInFreshBrowser = () =>
   Effect.gen(function*() {
-    const browser = yield* browserInFreshBrowser()
+    const browser = yield* browserInFreshBrowser
     return yield* browser.newContext()
-  })
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const browser = yield* browserInFreshBrowser()
-    return yield* browser.newPage()
   })
 
 Feature('A browser context governs cookies, storage, permissions, and credentials for its pages')
@@ -130,7 +119,7 @@ Feature('A browser context governs cookies, storage, permissions, and credential
       Gherkin.Do.pipe(
         When('a page is created from a context in a fresh browser')('observed', () =>
           Effect.gen(function*() {
-            const browser = yield* browserInFreshBrowser()
+            const browser = yield* browserInFreshBrowser
             const context = yield* browser.newContext()
             const page = yield* context.newPage
             return {
@@ -163,7 +152,7 @@ Feature('A browser context governs cookies, storage, permissions, and credential
     scenario(
       'Closing a page flips its closed state',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page is closed')('observed', ({ page }) =>
           Effect.gen(function*() {
             const beforeClose = page.isClosed()
@@ -216,7 +205,7 @@ Feature('A browser context governs cookies, storage, permissions, and credential
       Gherkin.Do.pipe(
         Given('a page on a routed origin')('page', () =>
           Effect.gen(function*() {
-            const page = yield* pageInFreshBrowser()
+            const page = yield* pageInFreshBrowser
             yield* page.use((nativePage) =>
               nativePage.route('http://storage.test/', (route) =>
                 route.fulfill({ body: '<!doctype html><title>Storage</title>' }))

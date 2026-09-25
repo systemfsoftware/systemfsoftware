@@ -1,17 +1,10 @@
 import { Gherkin, Given, it, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Fiber, Option, Stream } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
+import { firstEvent } from './__fixtures__/event-stream.js'
 
 const Feature = makeFeature({ it })
-
-const pageInFreshBrowser = () =>
-  Effect.gen(function*() {
-    const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-    const browser = yield* spawner.browser
-    return yield* browser.newPage()
-  })
-
-const firstEvent = <A>(stream: Stream.Stream<A>) => Effect.forkChild(Stream.runHead(stream), { startImmediately: true })
 
 Feature('Observing the traffic and page output while a program drives a browser')
   .withLayer(PlaywrightSpawner.layer(chromium))
@@ -20,7 +13,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'A routed navigation is observed as a request and a response the program reads',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a routed page is navigated to')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.use((nativePage) =>
@@ -90,7 +83,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'A navigation request without a body reports no post data and no failure',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a page with an empty body is navigated to')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.use((nativePage) =>
@@ -128,7 +121,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'A JSON POST body is exposed as text, bytes, and parsed JSON',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a JSON payload is posted to a routed endpoint')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.use((nativePage) =>
@@ -180,7 +173,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'A request that fails on the way out reports its failure',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a navigation to a blocked host is aborted')('observed', ({ page }) =>
           Effect.gen(function*() {
             yield* page.use((nativePage) =>
@@ -208,7 +201,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'Messages written to the console are collected in order',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a page whose script logs a message and a warning is navigated to')(
           'observed',
           ({ page }) =>
@@ -229,7 +222,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'An uncaught error thrown while the page loads is observed as a page error event',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('a page whose script throws is navigated to')('observed', ({ page }) =>
           Effect.gen(function*() {
             const pending = yield* firstEvent(page.eventStream('pageerror'))
@@ -246,7 +239,7 @@ Feature('Observing the traffic and page output while a program drives a browser'
     scenario(
       'An uncaught page error is kept in the list the page reports',
       Gherkin.Do.pipe(
-        Given('a page in a fresh browser')('page', pageInFreshBrowser),
+        Given('a page in a fresh browser')('page', () => pageInFreshBrowser),
         When('the page has thrown while loading')('observed', ({ page }) =>
           Effect.gen(function*() {
             const pending = yield* firstEvent(page.eventStream('pageerror'))

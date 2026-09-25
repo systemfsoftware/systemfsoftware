@@ -2,16 +2,11 @@ import { it, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { chromium, PlaywrightSpawner } from '@systemfsoftware/effect-playwright'
 import { Effect, Option } from 'effect'
+import { pageInFreshBrowser } from './__fixtures__/browser-page.js'
 
 const Feature = makeFeature({ it })
 
-const openPage = Effect.gen(function*() {
-  const spawner = yield* PlaywrightSpawner.PlaywrightSpawner
-  const browser = yield* spawner.browser
-  return yield* browser.newPage()
-})
-
-const blankPage = () => openPage.pipe(Effect.tap((page) => page.goto('about:blank')))
+const blankPage = () => pageInFreshBrowser.pipe(Effect.tap((page) => page.goto('about:blank')))
 
 Feature('Emulating media and viewport in a live page')
   .withLayer(PlaywrightSpawner.layer(chromium))
