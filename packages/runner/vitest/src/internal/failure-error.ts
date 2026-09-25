@@ -11,6 +11,8 @@
  * @since 4.0.0
  */
 import * as Cause from 'effect/Cause'
+import * as Schema from 'effect/Schema'
+import { FailureRecordRefused } from './errors.schema.js'
 import type { FailureRecord, FailureRecordInput } from './failure-record.js'
 import { renderFailureRecord } from './failure-record.js'
 
@@ -115,6 +117,23 @@ export const failureRecordError = (record: FailureRecord): Error => {
   return marked(withStack(withName(new Error(message), record.name), record, message))
 }
 
+const isRefusalFailure = (value: Opaque): value is FailureRecordRefused => Schema.is(FailureRecordRefused)(value)
+
+/**
+ * The refusal thrown in a record's place (R10, KTD7): fixed prose naming each breach, the original failure as its
+ * `cause`, and the record that failure would have printed beneath it. The record rides in the stack because Vitest's
+ * JSON reporter hands a consumer `stack || message`, where a cause is invisible; the prose never carries record text
+ * and is never read back, so a refusal cannot recurse.
+ */
+const refusalError = (failure: Opaque, record: FailureRecord): Error => {
+  const refusal = new FailureRecordRefused({ breaches: record.breaches, cause: failure })
+  refusal.stack = `${refusal.name}: ${refusal.message}\n${failureRecordError(record).stack ?? ''}`
+  return refusal
+}
+
+const printedError = (failure: Opaque, record: FailureRecord): Error =>
+  record.breaches.length > 0 ? refusalError(failure, record) : failureRecordError(record)
+
 /** Whether a value is the Error one rendered record threw, which a second throw site passes through unchanged.
  *
  * @internal
@@ -123,11 +142,13 @@ export const isFailureRecordError = (value: Opaque): value is Error =>
   isObject(value) && fieldOf(value, RECORD) === true
 
 /**
- * Renders the record and throws the Error Vitest prints for it, carrying the failure's diff fields when it has any.
+ * Renders the record and throws what Vitest prints for it: the record itself when it holds its contract, a
+ * `FailureRecordRefused` when it breaks one, and a refusal passed in unchanged, so refusing cannot recurse (R10).
  *
  * @internal
  */
 export const throwFailureRecord = <E>(input: FailureRecordInput<E>): never => {
-  const error = failureRecordError(renderFailureRecord(input))
-  throw copyDiffFields(error, input.failure)
+  if (isRefusalFailure(input.failure)) throw input.failure
+  const record = renderFailureRecord(input)
+  throw copyDiffFields(printedError(input.failure, record), input.failure)
 }

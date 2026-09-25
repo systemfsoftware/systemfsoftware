@@ -10,7 +10,9 @@
  *   the tag the thrown error should carry, the record text Vitest prints, and the `breaches` it found: `R1` an
  *   empty headline, `R2` no first location, `R6` a replay value on a baseline run or a missing rerun;
  * - `throwFailureRecord({ failure, spans, identity, replay })` — renders that record and throws it, the one throw
- *   site a kernel run and the runner's lanes share (R2, R7, R8);
+ *   site a kernel run and the runner's lanes share (R2, R7, R8). A record that breaks one of those rules is not
+ *   thrown as-is: a `FailureRecordRefused` is thrown in its place, naming each breach in fixed prose, keeping the
+ *   original failure as its `cause` and the record it would have printed in its `stack` (R10, KTD7);
  * - `testIdentityOf()` — the package, test file and scenario of the running Vitest task the rerun line names (R6);
  * - `recordOfRun(program)` and `recordOfProperty({ name, spec, holds })` — the in-process runs a corpus drives a
  *   fixture through, each with its own check ledger and recorder (R11, KTD10);

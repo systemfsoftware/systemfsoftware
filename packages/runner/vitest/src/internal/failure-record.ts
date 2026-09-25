@@ -398,21 +398,35 @@ const cellNameOf = (cell: Tracer.NativeSpan): string => textAttrOf(cell, CELL_NA
 const causeFieldOf = (value: Opaque): object | undefined =>
   isObject(value) ? objectOrUndefined(fieldOf(value, CAUSE_FIELD)) : undefined
 
+/** One layer with whatever its own `cause` adds, depth-limited. */
+const layerWithCauseOf = (
+  value: Opaque,
+  depth: number,
+): ReadonlyArray<Opaque> => [value, ...nestedCauseOf(value, depth - 1)]
+
+/** The layers the reasons of an Effect `Cause` add, each rendered as any other layer. */
+const reasonLayersOf = (cause: Cause.Cause<Opaque>, depth: number): ReadonlyArray<Opaque> =>
+  cause.reasons.flatMap((reason) => layerWithCauseOf(reasonPayloadOf(reason), depth))
+
+const layersOfCause = (cause: object, depth: number): ReadonlyArray<Opaque> =>
+  Cause.isCause(cause) ? reasonLayersOf(cause, depth) : layerWithCauseOf(cause, depth)
+
 const nestedOf = (cause: object | undefined, depth: number): ReadonlyArray<Opaque> =>
-  cause === undefined ? [] : [cause, ...nestedCauseOf(cause, depth - 1)]
+  cause === undefined ? [] : layersOfCause(cause, depth)
 
 const nestedCauseOf = (value: Opaque, depth: number): ReadonlyArray<Opaque> =>
   depth === 0 ? [] : nestedOf(causeFieldOf(value), depth)
 
 const causeChainOf = (value: Opaque): ReadonlyArray<Opaque> => [value, ...nestedCauseOf(value, CAUSE_DEPTH)]
 
-const interruptValueOf = (reason: Cause.Interrupt): Opaque => ({ _tag: 'Interrupt', fiberId: reason.fiberId })
+const interruptTextOf = (reason: Cause.Interrupt): string =>
+  reason.fiberId === undefined ? 'interrupted' : `interrupted by fiber #${reason.fiberId}`
 
 const reasonPayloadOf = (reason: Cause.Reason<Opaque>): Opaque =>
   Match.value(reason).pipe(
     Match.when({ _tag: 'Fail' }, (fail) => fail.error),
     Match.when({ _tag: 'Die' }, (die) => die.defect),
-    Match.when({ _tag: 'Interrupt' }, (interrupt) => interruptValueOf(interrupt)),
+    Match.when({ _tag: 'Interrupt' }, (interrupt) => interruptTextOf(interrupt)),
     Match.exhaustive,
   )
 

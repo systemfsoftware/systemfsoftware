@@ -395,3 +395,45 @@ it('Should_BreachR1_When_NoCauseLayerSurvives', function*({ expect }) {
     breaches: ['R1', 'R2'],
   })
 })
+
+it('Should_WalkTheEffectCause_When_TheCauseFieldHoldsACause', function*({ expect }) {
+  const boom = Object.assign(new Error('boom'), { _tag: 'LogSourceError' })
+  boom.stack = `LogSourceError: boom\n${frameLine('write', HANDLER_SITE)}`
+  const entry = Object.assign(new Error('the supervisor terminated'), {
+    _tag: 'SupervisorTerminated',
+    cause: Cause.die(boom),
+  })
+  entry.stack = `SupervisorTerminated: the supervisor terminated\n${frameLine('stop', HANDLER_SITE)}`
+  const record = yield* recordOf([whenStep(Effect.fail(entry))])
+  yield* expect(record).toEqual({
+    name: 'SupervisorTerminated',
+    record: [
+      'SupervisorTerminated: the supervisor terminated',
+      `  raised at ${HANDLER_TEXT} (write)`,
+      FAILING_STEP_LINE,
+      '',
+      'Cause chain:',
+      '  LogSourceError: boom',
+      '',
+      'Steps and the decisions each caused:',
+      FAILED_STEP_LINE,
+      '',
+      'Rerun only this scenario:',
+      RERUN,
+    ].join('\n'),
+    breaches: [],
+  })
+})
+
+it('Should_RenderTheInterruptLayer_When_TheCauseWasInterrupted', function*({ expect }) {
+  const entry = Object.assign(new Error('the supervisor terminated'), {
+    _tag: 'SupervisorTerminated',
+    cause: Cause.interrupt(7),
+  })
+  entry.stack = `SupervisorTerminated: the supervisor terminated\n${frameLine('stop', HANDLER_SITE)}`
+  const record = yield* recordOf([whenStep(Effect.fail(entry))])
+  yield* expect({
+    interrupted: record.record.includes('interrupted by fiber #7'),
+    effectCause: record.record.includes('~effect/Cause'),
+  }).toEqual({ interrupted: true, effectCause: false })
+})
