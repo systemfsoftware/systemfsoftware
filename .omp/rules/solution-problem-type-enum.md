@@ -2,7 +2,7 @@
 description: "A solution doc's problem_type must be one of the 17 enum values; any other spelling hides the doc from the learnings search that routes on the exact value."
 condition:
   - '(?<!"old_string"\s*:\s*"[^"]*)(?:^|\n|\\n)\+?problem_type:[ \t]*["'']?(?!(?:build_error|test_failure|runtime_error|performance_issue|database_issue|security_issue|ui_bug|integration_issue|logic_error|architecture_pattern|design_pattern|tooling_decision|convention|workflow_issue|developer_experience|documentation_gap|best_practice)["'']?[ \t]*(?:#[^\n]*)?(?:$|\r?\n|\\n))[^\s"''#]'
-scope: "tool:write(**/docs/solutions/**/*.md), tool:edit(**/docs/solutions/**/*.md), tool:ast_edit(**/docs/solutions/**/*.md), tool:write(**/solutions/**/*.md), tool:edit(**/solutions/**/*.md), tool:ast_edit(**/solutions/**/*.md)"
+scope: "tool:write(**/docs/solutions/**/*.md), tool:edit(**/docs/solutions/**/*.md), tool:write(**/solutions/**/*.md), tool:edit(**/solutions/**/*.md)"
 interruptMode: never
 recurrence: recurring
 ---
@@ -15,4 +15,4 @@ Next edit: set `problem_type` to exactly one of `build_error`, `test_failure`, `
 
 Never a violation: a valid value, the key named in prose or in a code span, and an edit's `old_string`.
 
-Re-issue is not a new trigger when the write sets one of the 17 values.
+Re-issue is not a new trigger when the write sets one of the 17 values. Runs under `ttsr.repeatMode: after-gap`, `ttsr.repeatGap: 60`; under the `once` default it stays silent after its first match.
