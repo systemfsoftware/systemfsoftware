@@ -8,12 +8,12 @@ that catches a violation.
 
 ## Engine
 
-| Rule                                                                                                                                                                                                  | Gate                                                                                   |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| The pinned engine is reached through `gritlint_core::engine` only: never `marzano-gritmodule`'s resolver, `find_user_grit_dir` or the standard-library fetch, and never a read of `$HOME` or the cwd. | `cargo test --workspace`: `engine_contract.rs::a_poisoned_home_and_cwd_change_nothing` |
-| No network-bearing engine feature: `embeddings`, `ai_builtins`, `grit_tracing`, `external_functions`, `network_requests`.                                                                             | `pnpm gate:rust`: the `cargo tree -e features` check                                   |
-| Every engine behaviour gritlint relies on has a scenario in `crates/gritlint_core/tests/engine_contract.rs`; a re-pin runs them before it lands.                                                      | `cargo test --workspace`                                                               |
-| The engine pin is one `rev` in `crates/gritlint_core/Cargo.toml` plus `Cargo.lock`; `nix/gritlint.nix` reads it from the lock.                                                                        | `cargo deny check`: `[sources] allow-git` names `biomejs/gritql` only                  |
+| Rule                                                                                                                                                                                                  | Gate                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| The pinned engine is reached through `gritlint_core::engine` only: never `marzano-gritmodule`'s resolver, `find_user_grit_dir` or the standard-library fetch, and never a read of `$HOME` or the cwd. | `cargo test --workspace`: `engine_contract.rs::a_poisoned_home_and_cwd_change_nothing`                                     |
+| No network-bearing engine feature: `embeddings`, `ai_builtins`, `grit_tracing`, `external_functions`, `network_requests`.                                                                             | `pnpm gate:rust`: the `cargo tree -e features` check                                                                       |
+| Every engine behaviour gritlint relies on has a scenario in `crates/gritlint_core/tests/engine_contract.rs`; a re-pin runs them before it lands.                                                      | `cargo test --workspace`                                                                                                   |
+| The engine pin is one `rev` in `crates/gritlint_core/Cargo.toml` plus `Cargo.lock`; `nix/gritlint.nix` reads it from the lock, and a re-pin also updates its `cargoHash`.                             | `cargo deny check`: `[sources] allow-git` names `biomejs/gritql` only; `nix build .#gritlint` fails on a stale `cargoHash` |
 
 ## Core
 

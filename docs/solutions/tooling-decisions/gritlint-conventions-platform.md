@@ -84,7 +84,9 @@ per-platform npm packages behind a launcher with no postinstall step.
   `check-changeset.ts`, `check-project-membership.ts`).
 - Facts that span packages come from the adopter's `gritlint.json` parameters, because GritQL cannot resolve package
   specifiers.
-- Re-pinning the engine is `cargo update` on the `rev`, followed by the engine contract tests.
+- Re-pinning the engine is `cargo update` on the `rev`, then the engine contract tests, then the new `cargoHash` in
+  `gritlint.nix` that `nix build` reports. The vendor tree is a fixed-output hash on purpose: the gritql checkout holds
+  duplicate crate names, and a vendoring step that picks by name alone built different sources on different machines.
 
 ## Related
 
