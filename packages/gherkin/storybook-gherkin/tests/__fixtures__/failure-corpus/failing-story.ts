@@ -16,7 +16,7 @@ const greetingStory = () =>
     Given`the user ${capture('user')} has an account`(() => undefined),
     When`the system greets ${capture('user')}`(() => undefined),
     Then`the greeting mentions ${capture('greeting')}`(() => {
-      throw new StepMishap({ step: STEP, detail: 'the greeting never arrived' })
+      throw StepMishap.make({ step: STEP, detail: 'the greeting never arrived' })
     }),
   )
 
