@@ -2,10 +2,7 @@
   "extends": ["//"],
   "tasks": {
     "typecheck": {
-      "dependsOn": [
-        "^build",
-        "^api:check"
-      ]
+      "dependsOn": ["^build"]
     },
     "test": {
       "inputs": [
@@ -19,10 +16,7 @@
       "outputs": [
         "coverage/**"
       ],
-      "dependsOn": [
-        "^build",
-        "^api:check"
-      ]
+      "dependsOn": ["^build"]
     }
   }
 }
