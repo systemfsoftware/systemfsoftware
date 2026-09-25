@@ -377,7 +377,8 @@ export const sharedConfig = {
     exclude: ['**/.stryker-tmp/**', '**/node_modules/**', '**/.repo/**'],
     passWithNoTests: true,
     testTimeout: sharedTestTimeout,
-    silent: isAgent ? 'passed-only' : false,
+    silent: isAgent || isCI ? 'passed-only' : false,
+    ...(isCI ? { reporters: ['agent', 'github-actions'] } : {}),
     provide: { '@systemfsoftware/vitest:property-check': propertyCheckDefaults },
     ...(isAgent ? { bail: 1 } : {}),
     coverage: {

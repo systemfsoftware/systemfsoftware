@@ -48,7 +48,6 @@ const isTaskContext = (ctx: unknown): ctx is VitestTaskContext => typeof ctx ===
 ## Prevention
 
 - Accept `typeof ctx === 'function'` wherever a Vitest test context is narrowed; a context is a callable with properties, not a plain object.
-- Prove a context-dependent feature through the real runner, not a hand-built context object: `packages/trace-spec/tests/annotation-on-disparity.integration.test.ts` runs a failing fixture through `startVitest` and reads the annotation from a reporter's `onTestCaseAnnotate` hook. A test that passes `{ annotate }` as the context cannot see this failure.
 
 ## Applicability
 

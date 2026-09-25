@@ -1,35 +1,12 @@
-import { TaskRef } from '@systemfsoftware/effect-spec-runtime'
-import { Effect, Layer, Option, Schema } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 import { dual } from 'effect/Function'
 import type * as Scope from 'effect/Scope'
 import * as Contract from './Contract.js'
 import type { Stimulus } from './Stimulus.js'
-import { Break, Hold } from './Verdict.schema.js'
-import type { Verdict } from './Verdict.schema.js'
+import * as TaskAnnounce from './TaskAnnounce.js'
+import { Hold } from './Verdict.schema.js'
 
 const isHold = Schema.is(Hold)
-const isBreak = Schema.is(Break)
-
-const annotate = (message: string): Effect.Effect<void> =>
-  Effect.gen(function*() {
-    const task = yield* TaskRef.RawVitestTaskRef
-    return yield* Option.match(Option.fromNullishOr(task?.annotate), {
-      onNone: () => Effect.void,
-      onSome: (record) => Effect.promise(() => Promise.resolve(record(message, 'info'))),
-    })
-  })
-
-const dumpMessageOf = (verdict: Verdict, dumpPath: string | null): Option.Option<string> =>
-  Option.map(
-    Option.flatMap(Option.liftPredicate(verdict, isBreak), () => Option.fromNullishOr(dumpPath)),
-    (path) => `trace contract failed; observed graph dumped to ${path}`,
-  )
-
-const announce = (verdict: Verdict, dumpPath: string | null): Effect.Effect<void> =>
-  Option.match(dumpMessageOf(verdict, dumpPath), {
-    onNone: () => Effect.void,
-    onSome: (message) => annotate(message),
-  })
 
 /**
  * The contract with its stimulus replaced by the function the property was handed: the impostor gate
@@ -60,7 +37,7 @@ const predicateImpl = <Input, Output, E, Provided, Required>(
   const provided = scenario.pipe(Layer.provideMerge(shared))
   const checked = (subject: Stimulus<Input, Output, E, Provided>, input: Input) =>
     Contract.judge(judgedOver(contract, subject), input, { dumpName: title }).pipe(
-      Effect.tap((judgment) => announce(judgment.verdict, judgment.dumpPath)),
+      Effect.tap(TaskAnnounce.announceDump),
       Effect.map((judgment) => isHold(judgment.verdict) && consumedInput(judgment, input)),
       Effect.provide(Layer.fresh(provided)),
     )
@@ -89,26 +66,3 @@ export const predicate: {
     input: Input,
   ) => Effect.Effect<boolean, Contract.JudgeFailure<E>, Scope.Scope>
 } = dual(4, predicateImpl)
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic import: tsdown defines `import.meta.vitest` as `undefined`, so a static import would enter the published graph.
-  const { it } = await import('@systemfsoftware/vitest')
-
-  it.prop(
-    '∀e_BreakWithDump_∈Messages',
-    { of: [Break, Schema.String], subject: dumpMessageOf },
-    (messageOf, [verdict, path]) => Option.exists(messageOf(verdict, path), (message) => message.includes(path)),
-  )
-
-  it.prop(
-    '∀h_Hold_⊥Messages',
-    { of: [Hold, Schema.String], subject: dumpMessageOf },
-    (messageOf, [verdict, path]) => Option.isNone(messageOf(verdict, path)),
-  )
-
-  it.prop(
-    '∀b_BreakWithoutDump_⊥Messages',
-    { of: [Break], subject: dumpMessageOf },
-    (messageOf, [verdict]) => Option.isNone(messageOf(verdict, null)),
-  )
-}
