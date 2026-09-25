@@ -2,11 +2,10 @@
 
 Rules that keep a workspace package's published name resolving to its own
 `src/` while a workspace tool reads it, and to `dist/` for a registry consumer.
-They replace the four-wire static check
-`scripts/guards/check-dev-conditions.ts` and the `workspace-source-resolution`
-skill: the export map (tsdown), the config that owns each importer (tsconfig
-`customConditions`), the test runner (Vite's two condition keys), and
-api-extractor (which must **not** follow source).
+They check the four places that have to agree: the export map (tsdown), the
+config that owns each importer (tsconfig `customConditions`), the test runner
+(Vite's two condition keys), and api-extractor (which must **not** follow
+source).
 
 | Rule                          | Check                                                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |

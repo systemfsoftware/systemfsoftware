@@ -163,7 +163,7 @@ _Gate:_ `node scripts/tools/pack-all.mjs` verifying clean publishConfig exports.
 
 A workspace package whose source is not consumer-safe: sibling packages cannot compile against it. Its export map carries no `@systemfsoftware/source` condition, so workspace importers resolve its `dist/`. Today these are the toolchain packages without a tsdown config.
 
-_Gate:_ `scripts/guards/check-dev-conditions.ts` checks export-map wiring only for packages that have a `tsdown.config.ts`.
+_Gate:_ `pnpm lint:conventions`: gritlint's `source-resolution/internals-export-map` fails when a package without a `tsdown.config.ts` carries the condition in its export map.
 
 ### Evaluator Surface
 

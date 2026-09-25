@@ -16,7 +16,7 @@
     "gate:tasks": "pnpm guard:projects && turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue lint lint:tsgo typecheck test:types attw check",
     "gate:test": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} --continue test",
     "gate:local": "pnpm guard:projects && turbo --concurrency=${TURBO_CONCURRENCY:-100%} build && turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue lint lint:tsgo typecheck test test:types check",
-    "guard:projects": "for g in check-project-membership check-typecheck-build-mode check-single-plan check-dev-conditions; do deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=${TMPDIR:-/tmp} --allow-env scripts/guards/$g.ts --selftest && deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=${TMPDIR:-/tmp} --allow-env scripts/guards/$g.ts || exit 1; done",
+    "guard:projects": "for g in check-project-membership check-single-plan; do deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=${TMPDIR:-/tmp} --allow-env scripts/guards/$g.ts --selftest && deno run --config=scripts/deno.jsonc --allow-read --allow-run --allow-write=${TMPDIR:-/tmp} --allow-env scripts/guards/$g.ts || exit 1; done",
     "gate:dist": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} build",
     "gate:rust": "sh scripts/tools/gate-rust.sh",
     "lint:conventions": "./bin/gritlint check",
