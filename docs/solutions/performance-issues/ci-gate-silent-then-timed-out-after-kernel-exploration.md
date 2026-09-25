@@ -48,7 +48,7 @@ Two independent causes combined, one making the gate slow and the other making i
 - Each group job builds at full concurrency and then runs its packages' tests one at a time. Vitest already uses every core within a package, and running packages concurrently inside a job made each recorded duration depend on its neighbours. The first routed run, which had no record and ran packages concurrently, measured `effect-daemon-spec` at 1048 s while packed alongside `effect-memfs`. First-fit packing of equal default estimates had filled jobs alphabetically, giving jobs from 57 s to over 17 minutes.
 - Static checks (`pnpm check:static`) run in their own job, separate from tests. `pnpm check:ci` still runs both.
 - CI invokes turbo with `--output-logs=new-only --log-order=stream`. turbo.json keeps `errors-only`, so local runs and agent runs stay quiet.
-- Blacksmith stays reserved for mutation-style workloads. On a public repository standard GitHub-hosted runners are free, so sharding across them costs nothing, while Blacksmith bills every vCPU-minute.
+- No workflow uses Blacksmith. On a public repository standard GitHub-hosted runners are free, so sharding across them costs nothing, while Blacksmith bills every vCPU-minute. Mutation shards the same way (`mutation.yml`).
 
 ## Gotchas found on the way
 

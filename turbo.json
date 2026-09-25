@@ -142,7 +142,8 @@
       "env": [
         "NODE_ENV",
         "CI",
-        "AGENT"
+        "AGENT",
+        "STRYKER_SHARD"
       ],
       "cache": false
     },
