@@ -21,7 +21,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ProvidedContext } from 'vitest'
+import type { ProvidedContext, UserConsoleLog } from 'vitest'
 import { startVitest } from 'vitest/node'
 
 const packageRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -73,7 +73,13 @@ const ReportShape = Schema.Struct({
 /** The nested Vitest report, narrowed to the fields the features assert on. */
 export interface JsonReport extends Schema.Schema.Type<typeof ReportShape> {}
 
-/** A nested run plus what it exposed beyond the report: the seed it shuffled with, and the evidence file. */
+/** One console line the nested run intercepted, as Vitest reported it: `stdout` for an Effect log. */
+export interface ConsoleLine {
+  readonly type: 'stdout' | 'stderr'
+  readonly content: string
+}
+
+/** A nested run plus what it exposed beyond the report: the seed it shuffled with, the evidence file, its console. */
 export interface ProbeRun {
   readonly report: JsonReport
   /** The shuffle seed the run used, or null when the run did not shuffle. */
@@ -83,6 +89,11 @@ export interface ProbeRun {
    * cannot carry: a test's scope finalizer runs after its report entry is written. Empty when nothing wrote.
    */
   readonly evidence: string
+  /**
+   * Every console line the nested run's tests wrote, in the order Vitest reported them. The report carries
+   * outcomes only, so this is the one way to observe what the runner logged before it threw (KTD14).
+   */
+  readonly console: ReadonlyArray<ConsoleLine>
 }
 
 export interface ProbeRunOptions {
@@ -165,6 +176,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
       return yield* new ProbeFailure({ stage: 'prepare', detail: 'probes: name at least one fixture glob' })
     }
     const evidenceFiles = options.globs.map(evidenceFilePath)
+    const consoleLines: Array<ConsoleLine> = []
     const report = yield* Effect.acquireUseRelease(
       Effect.gen(function*() {
         const workdir = yield* Effect.tryPromise({
@@ -189,7 +201,14 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
                 bail: 0,
                 silent: true,
                 setupFiles: guardSetupFiles,
-                reporters: [['json', { outputFile }]],
+                reporters: [
+                  ['json', { outputFile }],
+                  {
+                    onUserConsoleLog: (log: UserConsoleLog): void => {
+                      consoleLines.push({ type: log.type, content: log.content })
+                    },
+                  },
+                ],
                 testTimeout: 60_000,
                 hookTimeout: 60_000,
                 sequence: {
@@ -238,7 +257,7 @@ export const runProbes = (options: ProbeRunOptions): Effect.Effect<ProbeRun, Pro
             ),
           )
           const evidence = evidenceIn(run.evidenceFiles)
-          return { evidence, report: decoded, seed: run.seed }
+          return { console: [...consoleLines], evidence, report: decoded, seed: run.seed }
         }),
       (run, exit) => run.cleanup.pipe(Effect.andThen(exit)),
     )
