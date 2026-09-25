@@ -120,7 +120,7 @@ jobs:
         run: corepack pnpm exec turbo run build --output-logs=errors-only --log-order=stream ${{ matrix.job.filters }}
       - name: Test
         if: matrix.job.shard == null
-        run: corepack pnpm exec turbo run test --only --concurrency=1 --continue --summarize --output-logs=new-only --log-order=stream ${{ matrix.job.filters }}
+        run: corepack pnpm exec turbo run test --only --concurrency=1 --continue --summarize --output-logs=new-only --log-order=stream --log-prefix=none ${{ matrix.job.filters }}
       - name: Test shard
         id: shard
         if: matrix.job.shard != null
@@ -130,8 +130,7 @@ jobs:
         run: |
           start=$SECONDS
           code=0
-          corepack pnpm --filter "$PACKAGE" test --shard="$SHARD" --passWithNoTests \
-            --reporter=default --reporter=github-actions || code=$?
+          corepack pnpm --filter "$PACKAGE" test --shard="$SHARD" --passWithNoTests || code=$?
           echo "seconds=$((SECONDS - start))" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           exit "$code"
