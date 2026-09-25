@@ -12,7 +12,7 @@
  * keeps source of its own: a test-only package has no `src/`, so nothing was
  * missed and it passes with an empty source set.
  */
-import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +21,7 @@ import { parseSync } from 'oxc-parser'
 import { glob } from 'tinyglobby'
 
 import { scanKernelCalls, scanSites } from './conformance-scan.js'
+import { exists, readJson } from './files.js'
 
 /** @typedef {import('./conformance-scan.js').Site} Site */
 /** @typedef {import('./conformance-runtime.js').Tally} Tally */
@@ -60,12 +61,6 @@ const SOURCE_FILE = /\.[cm]?[jt]sx?$/
 const posix = (path) => path.split(sep).join('/')
 
 /**
- * @param {string} path
- * @returns {unknown}
- */
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
-
-/**
  * @param {unknown} value
  * @param {string} key
  * @returns {Record<string, unknown>}
@@ -86,29 +81,25 @@ const nameField = (value) => {
 
 /**
  * @param {string} from
- * @returns {string | undefined}
+ * @returns {Promise<string | undefined>}
  */
-const workspaceRootOf = (from) => {
+const workspaceRootOf = async (from) => {
   let dir = from
   for (;;) {
-    try {
-      readFileSync(join(dir, 'pnpm-workspace.yaml'))
-      return dir
-    } catch {
-      const parent = dirname(dir)
-      if (parent === dir) return undefined
-      dir = parent
-    }
+    if (await exists(join(dir, 'pnpm-workspace.yaml'))) return dir
+    const parent = dirname(dir)
+    if (parent === dir) return undefined
+    dir = parent
   }
 }
 
 /**
  * The workspace's package globs, read from `pnpm-workspace.yaml`'s `packages:` list.
  * @param {string} workspaceRoot
- * @returns {ReadonlyArray<string>}
+ * @returns {Promise<ReadonlyArray<string>>}
  */
-const workspaceGlobs = (workspaceRoot) => {
-  const lines = readFileSync(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8').split('\n')
+const workspaceGlobs = async (workspaceRoot) => {
+  const lines = (await readFile(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8')).split('\n')
   const start = lines.findIndex((line) => /^packages:\s*$/.test(line))
   if (start < 0) return []
   /** @type {Array<string>} */
@@ -156,31 +147,34 @@ const aliasedTarget = (value) => {
  * @returns {Promise<Map<string, { name: string, dir: string, dependencies: ReadonlyArray<string> }>>}
  */
 const workspacePackages = async (workspaceRoot) => {
+  const globs = await workspaceGlobs(workspaceRoot)
   const manifests = await glob(
-    workspaceGlobs(workspaceRoot).map((pattern) => `${pattern.replace(/\/$/, '')}/package.json`),
+    globs.map((pattern) => `${pattern.replace(/\/$/, '')}/package.json`),
     { cwd: workspaceRoot, absolute: true, ignore: ['**/node_modules/**'] },
+  )
+  const manifestsRead = await Promise.all(
+    manifests.map(async (manifest) => ({ dir: dirname(manifest), json: await readJson(manifest) })),
   )
   /** @type {Map<string, { name: string, dir: string, dependencies: ReadonlyArray<string> }>} */
   const out = new Map()
   /** @type {Map<string, string>} */
   const aliases = new Map()
-  for (const manifest of manifests) {
-    const json = readJson(manifest)
-    const name = nameField(json)
+  for (const manifest of manifestsRead) {
+    const name = nameField(manifest.json)
     const declared = {
-      ...recordAt(json, 'dependencies'),
-      ...recordAt(json, 'devDependencies'),
+      ...recordAt(manifest.json, 'dependencies'),
+      ...recordAt(manifest.json, 'devDependencies'),
     }
     const dependencies = Object.keys(declared)
-    for (const [dependency, value] of Object.entries({ ...declared, ...recordAt(json, 'peerDependencies') })) {
+    for (const [dependency, value] of Object.entries({ ...declared, ...recordAt(manifest.json, 'peerDependencies') })) {
       const target = aliasedTarget(value)
       if (target !== undefined) aliases.set(dependency, target)
     }
-    if (name !== '') out.set(name, { name, dir: dirname(manifest), dependencies })
+    if (name !== '') out.set(name, { name, dir: manifest.dir, dependencies })
   }
   // The catalog holds the workspace's alias table too; read it textually so a
   // `catalog:` dependency resolves without a YAML parser.
-  const workspaceManifest = readFileSync(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8')
+  const workspaceManifest = await readFile(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8')
   for (const line of workspaceManifest.split('\n')) {
     const entry = /^\s+['"]?([^'":\s]+)['"]?:\s*['"]?((?:workspace|npm):[^'"\s]+)['"]?\s*(?:#.*)?$/.exec(line)
     if (entry?.[1] === undefined || entry[2] === undefined) continue
@@ -252,11 +246,11 @@ const sourceRootOf = async (vitest) => {
 
 /**
  * @param {string} root
- * @returns {string}
+ * @returns {Promise<string>}
  */
-const packageNameAt = (root) => {
+const packageNameAt = async (root) => {
   try {
-    return nameField(readJson(join(root, 'package.json')))
+    return nameField(await readJson(join(root, 'package.json')))
   } catch {
     return root
   }
@@ -415,6 +409,30 @@ const reportPartial = (run, partial) => {
 }
 
 /**
+ * Every source in the run, read and scanned concurrently, split into the sites it holds and the
+ * files it could not be parsed from.
+ *
+ * @param {RunState} run
+ * @returns {Promise<{ sites: ReadonlyArray<Site>, unreadable: ReadonlyArray<string> }>}
+ */
+const scanSources = async (run) => {
+  const scanned = await Promise.all(
+    [...run.sources].sort().map(async (file) => {
+      const path = posix(relative(run.root, file))
+      try {
+        return { sites: scanSites(parseSync, path, await readFile(file, 'utf8')) }
+      } catch {
+        return { unreadable: path }
+      }
+    }),
+  )
+  return {
+    sites: scanned.flatMap((result) => result.sites ?? []),
+    unreadable: scanned.flatMap((result) => (result.unreadable === undefined ? [] : [result.unreadable])),
+  }
+}
+
+/**
  * @param {RunState} run
  * @returns {Reporter}
  */
@@ -426,18 +444,7 @@ const reporterFor = (run) => ({
       reportPartial(run, partial)
       return
     }
-    /** @type {Array<Site>} */
-    const sites = []
-    /** @type {Array<string>} */
-    const unreadable = []
-    for (const file of [...run.sources].sort()) {
-      const path = posix(relative(run.root, file))
-      try {
-        sites.push(...scanSites(parseSync, path, readFileSync(file, 'utf8')))
-      } catch {
-        unreadable.push(path)
-      }
-    }
+    const { sites, unreadable } = await scanSources(run)
     const result = verdict(run, sites, unreadable, evidenceOf(testModules))
     run.vitest.logger.log(result.text)
     if (result.failed) process.exitCode = 1
@@ -496,8 +503,8 @@ const instrument = (run, code, id) => {
  */
 const runStateOf = async (vitest) => {
   const root = posix(vitest.config.root)
-  const name = packageNameAt(root)
-  const workspaceRoot = workspaceRootOf(root)
+  const name = await packageNameAt(root)
+  const workspaceRoot = await workspaceRootOf(root)
   const packages = workspaceRoot === undefined ? new Map() : await workspacePackages(workspaceRoot)
   const harness = harnessNames(packages)
   /** @type {Map<string, string>} */

@@ -1,19 +1,23 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defineConfig as defineVitestConfig } from 'vitest/config'
 
 import { CONFORMANCE_SETUP, conformanceCoverage } from './conformance-coverage.js'
+import { exists, firstExisting, readJson } from './files.js'
 
 /** @typedef {import('vitest/config').ViteUserConfig} ViteUserConfig */
 /** @typedef {NonNullable<ViteUserConfig['test']>} TestConfig */
 /** @typedef {NonNullable<TestConfig['projects']>} Projects */
-
 /**
- * @param {string} path
- * @returns {unknown}
+ * What one config load reads from disk about its own package: the exemption table entry that decides
+ * where the guard applies, and the guard setup files its projects take.
+ *
+ * @typedef {{
+ *   readonly exemption: { readonly projects: readonly string[] | '*', readonly registrar: string } | undefined,
+ *   readonly guardSetupFiles: ReadonlyArray<string>,
+ * }} PackageFacts
  */
-const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 
 /**
  * @param {unknown} value
@@ -77,13 +81,14 @@ const guardExemptions = {
  * a package that never declared it. Vitest reads a setup-file specifier without the project's resolve
  * conditions, so the fork's `./guard` export is resolved here: its source entry when that file exists,
  * so an unbuilt fork still guards, otherwise its built entry. A package that has not declared the fork,
- * or whose fork has no guard on disk, fails config load instead of running unguarded.
+ * or whose fork has no guard on disk, fails config load instead of running unguarded. Resolving it
+ * reads the file system, so the config a package exports is a promise.
  *
  * @param {string} cwd
  * @param {string} name
- * @returns {string}
+ * @returns {Promise<string>}
  */
-const guardSetupFile = (cwd, name) => {
+const guardSetupFile = async (cwd, name) => {
   if (name === forkPackage) return join(cwd, 'src', 'guard.ts')
   const refuse = (/** @type {string} */ what) =>
     new Error(
@@ -93,47 +98,49 @@ const guardSetupFile = (cwd, name) => {
     )
   const forkDir = join(cwd, 'node_modules', forkPackage)
   const manifestPath = join(forkDir, 'package.json')
-  if (!existsSync(manifestPath)) throw refuse(`has no "${forkPackage}" linked in its own node_modules`)
-  const exportsField = Reflect.get(Object(readJson(manifestPath)), 'exports')
+  if (!(await exists(manifestPath))) throw refuse(`has no "${forkPackage}" linked in its own node_modules`)
+  const exportsField = Reflect.get(Object(await readJson(manifestPath)), 'exports')
   const guardEntry = Reflect.get(Object(exportsField), './guard')
-  const found = [stringField(guardEntry, sourceCondition), stringField(guardEntry, 'default')]
-    .filter((entry) => entry.length > 0)
-    .map((entry) => join(forkDir, entry))
-    .find((file) => existsSync(file))
+  const found = await firstExisting(
+    [stringField(guardEntry, sourceCondition), stringField(guardEntry, 'default')]
+      .filter((entry) => entry.length > 0)
+      .map((entry) => join(forkDir, entry)),
+  )
   if (found === undefined) throw refuse(`links a "${forkPackage}" whose "./guard" export has no file on disk`)
-  return realpathSync(found)
+  return realpath(found)
 }
 
 // A package config is evaluated with the package directory as the working directory (`pnpm --filter <pkg>
 // test`, and turbo's per-package task), so `<cwd>/package.json` is the package this config belongs to.
-const packageName = stringField(readJson(join(process.cwd(), 'package.json')), 'name')
-const packageExemption = guardExemptions[packageName]
-
 /**
- * The setup files that install the fork's guard (KTD8). Empty only for a package the exemption table
- * names in full; a package config that reaches the fork without a guard in this list throws while it
- * loads, naming the package and the dependency that fixes it.
+ * The facts about the package this config belongs to, read from disk once.
  *
- * @type {ReadonlyArray<string>}
+ * @param {string} cwd
+ * @returns {Promise<PackageFacts>}
  */
-export const guardSetupFiles = packageExemption?.projects === '*' ? [] : [guardSetupFile(process.cwd(), packageName)]
+const packageFacts = async (cwd) => {
+  const name = stringField(await readJson(join(cwd, 'package.json')), 'name')
+  const exemption = guardExemptions[name]
+  const guardFiles = exemption?.projects === '*' ? [] : [await guardSetupFile(cwd, name)]
+  return { exemption, guardSetupFiles: guardFiles }
+}
 
 /**
  * A test block with the conformance handoff added on top of its own setup files, each at most once.
- * `guard` true adds `guardSetupFiles`; false removes them, even when the block inherited them by
- * spreading `sharedConfig`, because an exempt project or a root whose projects inherit it with
- * `extends: true` must not carry the guard.
+ * `guard` true adds the package's guard setup files; false leaves them out, which an exempt project —
+ * one whose tests another runner registers — must not carry.
  *
  * @param {TestConfig | undefined} test
  * @param {boolean} guard
+ * @param {PackageFacts} facts
  * @returns {TestConfig}
  */
-const withSetupFiles = (test, guard) => {
+const withSetupFiles = (test, guard, facts) => {
   const own = (test?.setupFiles === undefined ? [] : [test.setupFiles].flat())
-    .filter((file) => guard || !guardSetupFiles.includes(file))
+    .filter((file) => guard || !facts.guardSetupFiles.includes(file))
   return {
     ...test,
-    setupFiles: [...new Set([...own, ...(guard ? guardSetupFiles : []), CONFORMANCE_SETUP])],
+    setupFiles: [...new Set([...own, ...(guard ? facts.guardSetupFiles : []), CONFORMANCE_SETUP])],
   }
 }
 
@@ -141,14 +148,23 @@ const withSetupFiles = (test, guard) => {
  * Whether a project's tests are registered by a runner the guard does not apply to.
  *
  * @param {TestConfig | undefined} test
+ * @param {PackageFacts} facts
  * @returns {boolean}
  */
-const isExemptProject = (test) => {
-  const names = packageExemption?.projects
+const isExemptProject = (test, facts) => {
+  const names = facts.exemption?.projects
   if (names === undefined || names === '*') return false
   const name = test?.name
   return typeof name === 'string' && names.includes(name)
 }
+
+/**
+ * Whether a value is an inline project with a test block.
+ *
+ * @param {unknown} value
+ * @returns {value is { readonly test?: TestConfig }}
+ */
+const isTestProject = (value) => typeof value === 'object' && value !== null && 'test' in value
 
 /**
  * An inline project gets the setup files itself. A project the exemption table names is the one
@@ -156,32 +172,36 @@ const isExemptProject = (test) => {
  * guard.
  *
  * @param {unknown} project
+ * @param {PackageFacts} facts
  * @returns {unknown}
  */
-const projectWithSetup = (project) => {
-  if (typeof project !== 'object' || project === null || !('test' in project)) return project
-  const test = /** @type {TestConfig | undefined} */ (project.test)
-  return { ...project, test: withSetupFiles(test, !isExemptProject(test)) }
+const projectWithSetup = (project, facts) => {
+  if (!isTestProject(project)) return project
+  const test = project.test
+  return { ...project, test: withSetupFiles(test, !isExemptProject(test, facts), facts) }
 }
 
 /**
  * Vitest's `defineConfig` with the conformance coverage gate added to the config's own plugins, and
- * its per-test handoff and the guard added to every block that runs tests: the root when the config
- * has no projects, otherwise each inline project. The root of a config with projects runs no tests of
- * its own, and a project with `extends: true` inherits the root's setup files, so a guard on that root
- * would reach an exempt project.
+ * the per-test handoff and the guard added to every block that runs tests: the root when the config
+ * declares no projects, otherwise each inline project. The root of a config with projects runs no
+ * tests of its own, and a project with `extends: true` inherits the root's setup files, so a guard on
+ * that root would reach an exempt project. The config it builds is a promise, because resolving the
+ * guard reads the file system.
+ *
  * @param {ViteUserConfig} config
- * @returns {ViteUserConfig}
+ * @returns {Promise<ViteUserConfig>}
  */
-export const defineConfig = (config) => {
-  const projects = config.test?.projects
-  const test = withSetupFiles(config.test, projects === undefined)
+export const defineConfig = async (config) => {
+  const facts = await packageFacts(process.cwd())
+  const declared = config.test?.projects
+  const test = withSetupFiles(config.test, declared === undefined, facts)
   return defineVitestConfig({
     ...config,
     plugins: [...(config.plugins ?? []), conformanceCoverage()],
-    test: projects === undefined
+    test: declared === undefined
       ? test
-      : { ...test, projects: /** @type {Projects} */ (projects.map(projectWithSetup)) },
+      : { ...test, projects: /** @type {Projects} */ (declared.map((project) => projectWithSetup(project, facts))) },
   })
 }
 
@@ -228,7 +248,10 @@ export const sharedConfig = {
   test: {
     globals: false,
     environment: 'node',
-    setupFiles: [...guardSetupFiles],
+    // The guard and the conformance handoff are added to every test block that runs tests by
+    // `defineConfig`, which resolves the guard asynchronously; a config that spreads this object
+    // still carries both.
+    setupFiles: [],
     includeSource: ['src/**/*.{js,ts}'],
     exclude: ['**/.stryker-tmp/**', '**/node_modules/**', '**/.repo/**'],
     passWithNoTests: true,
