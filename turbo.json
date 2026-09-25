@@ -125,25 +125,10 @@
       "dependsOn": [
         "^build"
       ],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "stryker.config.ts",
-        "stryker.config.json",
-        "vitest.config.ts",
-        "vitest.setup.ts",
-        "reports/stryker-incremental.json",
-        "$TURBO_ROOT$/packages/toolchain/stryker-config/**",
-        "!**/*.md"
-      ],
-      "outputs": [
-        "reports/mutation/mutation.html",
-        "reports/mutation/mutation.json"
-      ],
       "env": [
         "NODE_ENV",
         "CI",
-        "AGENT",
-        "STRYKER_SHARD"
+        "AGENT"
       ],
       "cache": false
     },

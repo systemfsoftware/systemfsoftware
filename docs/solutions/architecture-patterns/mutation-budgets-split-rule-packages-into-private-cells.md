@@ -31,7 +31,7 @@ The contract that makes this safe is mechanical, two-deep:
 1. The aggregate test asserts the exported rule count and id set against a pre-split literal.
 2. The base-preset test asserts the wired error set equals the union of the leaves' recommended sets re-keyed — both sides read live plugin objects, so neither can drift alone.
 
-Each leaf owns its own Stryker config and `mutation` script. Every Mutation workflow shard runs it through `turbo mutation` and mutates the leaf's slice of files, so no CI wiring names a package. The aggregate owns no rules, so it has no `mutation` script.
+Each leaf owns its own Stryker config and `mutation` script, so the Mutation workflow's timing planner packs it into a job, or shards it, with no CI wiring that names a package. The aggregate owns no rules, so it has no `mutation` script.
 
 Gate the aggregate's packaging invariant on the **built artifact, not the manifest**. Asserting that leaves sit in `devDependencies` tests the declaration, not the outcome — tsdown bundles devDependencies and externalizes dependencies, so the categorization only matters through its effect on the emitted bundle. The honest gate reads the built `dist` bytes and fails when any import or require specifier names a private leaf (the `check-dist-no-private-imports` guard, wired into the aggregate's build after bundling). Red-green proof: green on the real bundle, exit 1 with a planted leak, green again after rebuild.
 
