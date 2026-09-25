@@ -107,3 +107,4 @@ deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-wri
 
 - [Changeset requirement and ledger governance](pnpm-owns-the-changeset-ledger.md)
 - [Release notes and published-surface verification](../conventions/a-release-note-claims-the-published-surface.md)
+- Issue #306 and PR #307 — the case where a publishable dependent, whose sources the diff never touched, first failed this gate.

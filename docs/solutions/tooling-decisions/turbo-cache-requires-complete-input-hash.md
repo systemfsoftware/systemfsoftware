@@ -90,7 +90,7 @@ Three classes of incomplete or volatile keys produce different failure modes, al
 
 **Fix the key before symptoms hide the cause.**
 
-- Fix 1: Remove `AGENT` from the `lint` task's `env` — it makes the hash vary without changing the answer.
+- Fix 1: Remove `AGENT` from the `lint` task's `env` — it makes the hash vary without changing the answer. Its shell branch (`--format=unix --quiet`) changes output presentation only, never the pass/fail verdict, so it is removed rather than pinned; class 2's pinning applies to variables that change the verdict, such as `GITHUB_ACTIONS`.
 - Fix 2: An explicit `inputs` glob for the oxlint-config package swept in `.turbo/` logs and `*.tsbuildinfo` files. Running oxlint-config's own lint rewrote those files, invalidating all 48 dependents. A blacklist approach failed when `coverage/` arrived two days later.
 - Fix 4: Invert to an allowlist — list the consumable surface, not the whole directory.
 - Fix 3: Never chain a failing gate in front of turbo with `&&`. `pnpm format:check && turbo ... lint` never reaches turbo if format fails, so nothing caches.
