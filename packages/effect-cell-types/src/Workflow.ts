@@ -1,5 +1,6 @@
 import type { Result } from 'effect/Result'
 import type * as Schema from 'effect/Schema'
+import { callSite } from './CallSite.js'
 
 const WorkflowTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Workflow')
 type WorkflowTypeId = typeof WorkflowTypeId
@@ -31,9 +32,9 @@ export type DecisionSchema = Schema.Constraint & {
 }
 
 /**
- * The three schemas a workflow declares: the command it receives, the decision it publishes
- * and the error it refuses with. This is what {@link WorkflowBrand} carries and what the
- * sandwich derives its decode and encode steps from.
+ * The three schemas a workflow declares — the command it receives, the decision it publishes
+ * and the error it refuses with — beside the site where `make` was called. This is what
+ * {@link WorkflowBrand} carries and what the sandwich derives its decode and encode steps from.
  */
 export interface WorkflowSchemas<
   Command extends Schema.Constraint = Schema.Constraint,
@@ -43,6 +44,7 @@ export interface WorkflowSchemas<
   readonly command: Command
   readonly decision: Decision
   readonly error: Error
+  readonly decideSite: string
 }
 
 export interface WorkflowBrand<
@@ -203,7 +205,7 @@ export const make = <
 ): MadeWorkflow<Command, Decision, Error> => {
   const { command, decision, error, decide } = options
   assertWorkflow<Command, Decision, Error>(decide)
-  Object.assign(decide, { [WorkflowSchemasKey]: { command, decision, error } })
+  Object.assign(decide, { [WorkflowSchemasKey]: { command, decision, error, decideSite: callSite() } })
   return decide
 }
 
