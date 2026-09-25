@@ -122,6 +122,14 @@ A property relating a system's own output on a seed input to its output on a tra
 
 _Gate:_ expressed through the same harness and supervisor as a Differential Test.
 
+### Failure Record
+
+What a failing spec prints for the agent that has to fix it. It leads with where the error was raised outside the spec libraries, then lists the steps up to the failing one and the cell decisions each step caused, and ends with a rerun command. It carries a replay value only when a generator chose the run. Rendered by the spec runner alone, from the spans the steps and cells ran in.
+
+### Failure Corpus
+
+A spec family's set of fixtures with a known injected defect, rendered in-process through the runner. It proves that each failure record names the defect's file, and that the raising frame comes first when the failure has one.
+
 ---
 
 ## Schema & Property Law
