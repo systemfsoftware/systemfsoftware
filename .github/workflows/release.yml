@@ -55,6 +55,8 @@ jobs:
       - uses: ./.github/actions/install-deps
       - name: Consume pending change intents
         run: corepack pnpm version -r
+      - name: Sync the launcher version into the workspace manifest
+        run: ./scripts/tools/gritlint/sync-version.ts --cargo
       - name: Capture release set
         run: ./scripts/tools/tag-released-packages.ts --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
       - name: Assert release notes
@@ -81,13 +83,190 @@ jobs:
     needs: [plan]
     name: contract · integration tests (pnpm check:contract)
     uses: ./.github/workflows/reusable-contract.yml
-  publish:
+  gritlint-set:
+    name: gritlint · release set and matrix
     if: needs.plan.outputs.phase == 'publish'
+    needs: [plan]
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      in_set: ${{ steps.set.outputs.in_set }}
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+      - uses: ./.github/actions/install-deps
+      - name: "Gate: check-matrix (the release matrix mirrors scripts/tools/gritlint/targets.json)"
+        run: ./scripts/tools/gritlint/check-matrix.ts
+      - name: Capture release set
+        run: ./scripts/tools/tag-released-packages.ts --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
+      - name: Is @systemfsoftware/gritlint owed a release?
+        id: set
+        shell: bash
+        run: |
+          if grep -q '"@systemfsoftware/gritlint"' /tmp/captured.json; then
+            echo "in_set=true" >> "$GITHUB_OUTPUT"
+            echo "gritlint is owed a release: the platform packages are built, packed and published"
+          else
+            echo "in_set=false" >> "$GITHUB_OUTPUT"
+            echo "gritlint is not in this release set: the gritlint jobs are skipped"
+          fi
+
+  gritlint-build:
+    name: gritlint · build ${{ matrix.suffix }}
+    if: needs.gritlint-set.outputs.in_set == 'true'
+    needs: [plan, gritlint-set]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            suffix: linux-x64
+            runner: ubuntu-latest
+            bin: gritlint
+          - target: aarch64-unknown-linux-gnu
+            suffix: linux-arm64
+            runner: ubuntu-24.04-arm
+            bin: gritlint
+          - target: x86_64-apple-darwin
+            suffix: darwin-x64
+            runner: macos-14
+            bin: gritlint
+          - target: aarch64-apple-darwin
+            suffix: darwin-arm64
+            runner: macos-14
+            bin: gritlint
+          - target: x86_64-pc-windows-msvc
+            suffix: win32-x64
+            runner: windows-2022
+            bin: gritlint.exe
+    runs-on: ${{ matrix.runner }}
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust toolchain
+        shell: bash
+        run: rustup show
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
+      - uses: denoland/setup-deno@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Sync the launcher version into the workspace manifest
+        run: ./scripts/tools/gritlint/sync-version.ts --cargo
+      - name: Build the release binary
+        run: cargo build --release -p gritlint
+      - name: "Gate: the lane's binary exists and is not empty"
+        shell: bash
+        run: test -s "target/release/${{ matrix.bin }}"
+      - name: Stage the platform package and record the binary digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256_of() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$1" | cut -d' ' -f1
+            else
+              shasum -a 256 "$1" | cut -d' ' -f1
+            fi
+          }
+          STAGE="$RUNNER_TEMP/platform-${{ matrix.suffix }}"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp "target/release/${{ matrix.bin }}" "$STAGE/${{ matrix.bin }}"
+          SHA="$(sha256_of "$STAGE/${{ matrix.bin }}")"
+          ./scripts/tools/gritlint/generate-platform-manifest.ts \
+            --suffix "${{ matrix.suffix }}" \
+            --binary-sha256 "$SHA" \
+            --out "$STAGE"
+          {
+            echo "STAGE=$STAGE"
+            echo "TARBALLS=$RUNNER_TEMP/tarballs"
+          } >> "$GITHUB_ENV"
+      - name: Pack the platform tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$TARBALLS"
+          mkdir -p "$TARBALLS"
+          (cd "$STAGE" && npm pack --pack-destination "$TARBALLS")
+          test -n "$(find "$TARBALLS" -maxdepth 1 -name '*.tgz' -print -quit)"
+      - name: Upload the platform tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: gritlint-platform-${{ matrix.suffix }}
+          path: ${{ runner.temp }}/tarballs/*.tgz
+          if-no-files-found: error
+
+  gritlint-publish:
+    name: gritlint · publish platform packages · oidc
+    if: needs.gritlint-set.outputs.in_set == 'true'
+    needs: [plan, gritlint-set, gritlint-build]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Node 24 (npm >= 11.5.1 for OIDC trusted publishing)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Download the platform tarballs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: gritlint-platform-*
+          path: tarballs
+          merge-multiple: true
+      - name: "Gate: every built platform row delivered a tarball"
+        shell: bash
+        run: |
+          set -euo pipefail
+          for TARBALL in tarballs/*.tgz; do
+            test -s "$TARBALL"
+            echo "$TARBALL"
+          done
+      - name: Publish the platform packages via OIDC
+        if: vars.GRITLINT_PLATFORM_PUBLISH == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for TARBALL in tarballs/*.tgz; do
+            echo "publishing $TARBALL"
+            npm publish "$TARBALL" --provenance --access public
+          done
+      - name: Platform publish not armed yet
+        if: vars.GRITLINT_PLATFORM_PUBLISH != 'true'
+        shell: bash
+        run: |
+          echo "::notice::GRITLINT_PLATFORM_PUBLISH is not 'true', so the platform packages were packed but not published."
+          echo "The first publish of each platform name is the owner's bootstrap: npm/gritlint/README.md, 'First publish: the owner-only bootstrap'."
+
+  publish:
+    if: >-
+      always() && needs.plan.outputs.phase == 'publish' &&
+      needs.gate.result == 'success' && needs.gate-contract.result == 'success' &&
+      (needs.gritlint-set.outputs.in_set != 'true' || needs.gritlint-publish.result == 'success')
     permissions:
       contents: write
       id-token: write
     name: publish · oidc · tag
-    needs: [plan, gate, gate-contract]
+    needs: [plan, gate, gate-contract, gritlint-set, gritlint-publish]
     runs-on: ubuntu-latest
     env:
       HUSKY: "0"
@@ -114,6 +293,9 @@ jobs:
         run: ./scripts/tools/create-github-releases.ts --assert --captured /tmp/captured.json
       - name: Build
         run: corepack pnpm build
+      - name: Inject the platform pins into the launcher manifest
+        if: needs.gritlint-set.outputs.in_set == 'true'
+        run: ./scripts/tools/gritlint/sync-version.ts --pins
       - name: Publish unpublished versions via OIDC
         run: ./scripts/tools/tag-released-packages.ts --unpublished --captured /tmp/captured.json --publish
       - name: Tag released versions
