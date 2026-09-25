@@ -13,7 +13,7 @@ import {
 } from '@systemfsoftware/example-inventory-fulfillment'
 import { drizzle } from 'drizzle-orm/pglite'
 import { eq } from 'drizzle-orm/sql/expressions/conditions'
-import { ConfigProvider, Context, Crypto, DateTime, Effect, Layer, Option, Schema as S } from 'effect'
+import { ConfigProvider, Context, Crypto, DateTime, Deferred, Effect, Layer, Option, Schema as S } from 'effect'
 import type * as Scope from 'effect/Scope'
 import { Cookies, HttpClient, HttpClientRequest, HttpServer } from 'effect/unstable/http'
 import { RpcSerialization } from 'effect/unstable/rpc'
@@ -44,7 +44,7 @@ const DrizzleSession = Persistence.DrizzleSession.DrizzleSession
 type DrizzleSession = Persistence.DrizzleSession.DrizzleSession
 const makeRpcClient = Rpc.Client.make
 const HttpLive = Http.Server.HttpLive
-const httpServerLayer = Http.Server.httpServerLayer
+const supervisedApplication = Http.Server.supervisedApplication
 const makeAuthService = Auth.Live.makeAuthService
 const auditEvents = Persistence.Tables.auditEvents
 const reservations = Persistence.Tables.reservations
@@ -234,13 +234,11 @@ const userFromSession = <J = unknown>(json: J): string => {
   return id
 }
 
-type BuildContext = HttpServer.HttpServer | HttpClient.HttpClient | DrizzleSession
+type BuildContext = HttpClient.HttpClient | DrizzleSession
 
-const buildService = (context: Context.Context<BuildContext>): TestServerService => {
-  const server = Context.get(context, HttpServer.HttpServer)
+const buildService = (context: Context.Context<BuildContext>, baseUrl: string): TestServerService => {
   const http = Context.get(context, HttpClient.HttpClient)
   const db = Context.get(context, DrizzleSession)
-  const baseUrl = HttpServer.formatAddress(server.address)
 
   const execute = (request: HttpClientRequest.HttpClientRequest) => http.execute(request).pipe(Effect.orDie)
 
@@ -378,18 +376,30 @@ const ephemeralPortConfigLayer = ConfigProvider.layer(
   ConfigProvider.fromUnknown({ PORT: '0' }),
 )
 
-const appLayer = HttpLive.pipe(
-  Layer.provide(authLayer),
-  Layer.provideMerge(wrappedFoundation),
-  Layer.provide(ephemeralPortConfigLayer),
+const rootLayer = Layer.mergeAll(
+  authLayer.pipe(Layer.provideMerge(wrappedFoundation)),
+  NodeHttpClient.layerUndici,
+  ephemeralPortConfigLayer,
 )
 
-const fullLayer = Layer.mergeAll(
-  appLayer,
-  httpServerLayer.pipe(Layer.provide(ephemeralPortConfigLayer)),
-  NodeHttpClient.layerUndici,
-).pipe(Layer.orDie)
+const publishBaseUrl = (baseUrl: Deferred.Deferred<string>): Layer.Layer<never, never, HttpServer.HttpServer> =>
+  Layer.effectDiscard(HttpServer.addressFormattedWith((formatted) => Deferred.succeed(baseUrl, formatted)))
 
-export const TestServerLayer: Layer.Layer<TestServer> = fullLayer.pipe(
-  Layer.flatMap((context) => Layer.succeed(TestServer, buildService(context))),
+export const TestServerLayer: Layer.Layer<TestServer> = Layer.unwrap(
+  Effect.gen(function*() {
+    const baseUrl = yield* Deferred.make<string>()
+    const supervised = publishBaseUrl(baseUrl).pipe(
+      Layer.provideMerge(HttpLive),
+      supervisedApplication('inventory-fulfillment'),
+    )
+    return supervised.layer.pipe(
+      Layer.provideMerge(rootLayer),
+      Layer.flatMap((context) =>
+        Layer.effect(
+          TestServer,
+          Effect.map(Deferred.await(baseUrl), (formatted) => buildService(context, formatted)),
+        )
+      ),
+    )
+  }),
 )

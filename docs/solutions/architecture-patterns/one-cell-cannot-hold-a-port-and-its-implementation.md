@@ -28,7 +28,7 @@ projection tag in every consumer.
 
 ## Why a file-level ban forces a projection
 
-A port is only usable as a **value** — `yield* LeaderLock` needs the tag at runtime. Type-only is
+A port is only usable as a **value** — `yield* ChildProcessSpawner` needs the tag at runtime. Type-only is
 therefore not a weaker form of the same access, it is a different thing: enough to name the
 service's type, never enough to require it. A module forbidden a value edge into the module that
 declares the port has exactly one route left, and it is forced rather than chosen: mint a local tag

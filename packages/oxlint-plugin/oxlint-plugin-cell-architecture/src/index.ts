@@ -9,11 +9,13 @@ import { kindFileDeclaresNoService } from './rules/kind-file-declares-no-service
 import { kindFileHoldsNoModuleState } from './rules/kind-file-holds-no-module-state.js'
 import { kindRecordMintedByKind } from './rules/kind-record-minted-by-kind.js'
 import { kindTypeIdBySymbolFor } from './rules/kind-typeid-by-symbol-for.js'
+import { mediumOwnsNoRecovery } from './rules/medium-owns-no-recovery.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
+import { sandwichShellIsStraightLine } from './rules/sandwich-shell-is-straight-line.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-cell-architecture'
 
@@ -36,6 +38,8 @@ const recommendedRules = {
   [rule('no-context-generic-tag')]: 'error',
   [rule('no-direct-tag-access')]: 'error',
   [rule('no-either-tag-assertions')]: 'error',
+  [rule('sandwich-shell-is-straight-line')]: 'error',
+  [rule('medium-owns-no-recovery')]: 'error',
 } as const
 
 export default {
@@ -59,6 +63,8 @@ export default {
     'no-context-generic-tag': noContextGenericTag,
     'no-direct-tag-access': noDirectTagAccess,
     'no-either-tag-assertions': noEitherTagAssertions,
+    'sandwich-shell-is-straight-line': sandwichShellIsStraightLine,
+    'medium-owns-no-recovery': mediumOwnsNoRecovery,
   },
   configs: {
     recommended: {

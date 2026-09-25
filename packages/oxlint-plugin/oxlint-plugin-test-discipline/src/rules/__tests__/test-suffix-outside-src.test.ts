@@ -31,6 +31,11 @@ ruleTester.run('test-suffix-outside-src', testSuffixOutsideSrc, {
       filename: '/repo/pkg/tests/a.conformance.test.ts',
     },
     {
+      name: 'Should_Allow_ContractTest_When_ContractSuffixIsSanctioned',
+      code: '',
+      filename: '/repo/pkg/tests/a.contract.test.ts',
+    },
+    {
       name: 'Should_Allow_AnyFileInSrc_When_RuleInactiveUnderSrc',
       code: '',
       filename: '/repo/pkg/src/widget.ts',

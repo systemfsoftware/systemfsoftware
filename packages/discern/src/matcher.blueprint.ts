@@ -25,6 +25,7 @@ import {
 import { CaseInspection, CompiledPlan, DecisionInspection } from './Inspection.schema.js'
 import type { HandlerResult, LeafOptions, NodeCore, Pattern, UncertainContext } from './pattern.blueprint.js'
 import { distinctDecisions } from './pattern.blueprint.js'
+import { handlerEffectOf } from './procedure.blueprint.js'
 import { finishPolicy } from './run-policy.cell.js'
 import type { Policy, PolicyCase, PolicySpec, UncertainHandler } from './run-policy.cell.js'
 
@@ -259,7 +260,11 @@ const addCase = <I, S extends Schema.Constraint, Out, Err, Req, Flavor extends M
     flavor: self.flavor,
     schema: self.schema,
     provided: self.provided,
-    cases: [...self.cases, { id: caseIdOf(options, self.cases.length), pattern, run: handler }],
+    cases: [...self.cases, {
+      id: caseIdOf(options, self.cases.length),
+      pattern,
+      run: (input) => handlerEffectOf(handler(input)),
+    }],
     uncertainHandler: self.uncertainHandler,
   })
 
@@ -282,7 +287,7 @@ const withUncertainHandler = <
     schema: self.schema,
     provided: self.provided,
     cases: self.cases,
-    uncertainHandler: handler,
+    uncertainHandler: (input, context) => handlerEffectOf(handler(input, context)),
   })
 
 // -------------------------------------------------------------------------------------------------
@@ -362,7 +367,7 @@ const specOf = <Input, S extends Schema.Constraint, Out, Err, Req, Flavor extend
   schema: self.schema,
   cases: self.cases,
   uncertainHandler: self.uncertainHandler,
-  fallback,
+  fallback: (input) => handlerEffectOf(fallback(input)),
   plan: compile(self),
 })
 

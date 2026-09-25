@@ -28,6 +28,8 @@ const _default: {
         'no-context-generic-tag': Rule;
         'no-direct-tag-access': Rule;
         'no-either-tag-assertions': Rule;
+        'sandwich-shell-is-straight-line': Rule;
+        'medium-owns-no-recovery': Rule;
     };
     configs: {
         recommended: {

@@ -10,6 +10,7 @@ type PlanTypeId = typeof PlanTypeId
 
 export class PlanApproved extends Schema.TaggedClass<PlanApproved>()('PlanApproved', {
   plan: SandboxPlan,
+  guests: Schema.Array(GuestPort),
 }) {
   readonly [PlanTypeId] = PlanTypeId
 }
@@ -48,7 +49,14 @@ const isLoopback = (host: string): boolean => host.startsWith(LOOPBACK_PREFIX)
 const illegalBinding = (bindings: ReadonlyArray<PortBinding>): Option.Option<PortBinding> =>
   Arr.findFirst(bindings, (binding) => !isLoopback(binding.host))
 
-const planOf = (command: PlanSandbox): SandboxPlan =>
+/**
+ * The routed shape of the sandbox: the decide workflow fixes the image, env,
+ * resource limits, mounts, network profiles — and the guest ports the write
+ * phase must allocate bindings for. `PlanApproved` carries no allocated
+ * `PortBinding`s because allocation is shell I/O; the write allocates the
+ * decided guests against loopback and stores them in the plan.
+ */
+const shapeOf = (command: PlanSandbox): SandboxPlan =>
   Match.value(command.spec).pipe(
     Match.tag('Job', (job) => ({
       name: command.name,
@@ -76,6 +84,13 @@ const planOf = (command: PlanSandbox): SandboxPlan =>
     Match.exhaustive,
   )
 
+const guestsOf = (command: PlanSandbox): ReadonlyArray<number> =>
+  Match.value(command.spec).pipe(
+    Match.tag('Service', (service) => service.ports),
+    Match.tag('Job', () => []),
+    Match.exhaustive,
+  )
+
 export const renderSandboxPlan = Workflow.make({
   command: PlanSandbox,
   decision: SandboxPlanDecision,
@@ -86,7 +101,10 @@ export const renderSandboxPlan = Workflow.make({
         Result.succeed(
           PlanRefused.make({ sandboxName: command.name, host: value.host, guestPort: value.guest }),
         )),
-      Match.tag('None', () => Result.succeed(PlanApproved.make({ plan: planOf(command) }))),
+      Match.tag('None', () =>
+        Result.succeed(
+          PlanApproved.make({ plan: shapeOf(command), guests: [...guestsOf(command)] }),
+        )),
       Match.exhaustive,
     ),
 })

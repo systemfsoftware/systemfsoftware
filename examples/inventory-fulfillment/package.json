@@ -29,6 +29,7 @@
     "@electric-sql/pglite": "catalog:",
     "@electric-sql/pglite-socket": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-daemon-spec": "workspace:^",
     "@systemfsoftware/trace-taxonomy": "workspace:^",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",

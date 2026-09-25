@@ -73,6 +73,27 @@ type MeasureRead = (typeof ScoreEvalRecord)['Encoded'] & {
   readonly record: EvalRecord
 }
 
+/**
+ * A measure's refusals refuse it before anything is observed: each one fails
+ * the read with the refusal it names, and the first one written is the one
+ * reported.
+ */
+const refusalGate = (refusals: ReadonlyArray<PatternRefusal>): Effect.Effect<void, InvalidThresholdError> =>
+  Arr.reduce<PatternRefusal, Effect.Effect<void, InvalidThresholdError>>(
+    refusals,
+    Effect.void,
+    (gate, refusal) => Effect.andThen(gate, Effect.fail(new InvalidThresholdError(refusal))),
+  )
+
+/** The example's encoded input, or the refusal naming what could not be encoded. */
+const encodedInputOf = <S extends Schema.Constraint>(
+  measure: MeasureCase<S>,
+): Effect.Effect<Schema.Json, MeasureInputRefused> =>
+  Effect.mapError(
+    Effect.fromResult(measure.inputJson),
+    (issue) => new MeasureInputRefused({ expected: measure.expected, cause: issue }),
+  )
+
 const readMeasure = <S extends Schema.Constraint>(
   measure: MeasureCase<S>,
 ): Effect.Effect<
@@ -80,24 +101,20 @@ const readMeasure = <S extends Schema.Constraint>(
   Exclude<MeasureError, MeasureCommandRejected>,
   DecisionModel.DecisionModel | S['EncodingServices']
 > =>
-  Option.match(Arr.head(measure.refusals), {
-    onSome: (refusal) => Effect.fail(new InvalidThresholdError(refusal)),
-    onNone: () =>
-      Result.match(measure.inputJson, {
-        onFailure: (issue) => Effect.fail(new MeasureInputRefused({ expected: measure.expected, cause: issue })),
-        onSuccess: (json) =>
-          Effect.map(measure.observe(), (answers) => {
-            const result = resolvedOrEvaluated(measure, answers)
-            const status = statusOf(result)
-            return {
-              _tag: 'ScoreEvalRecord',
-              expected: measure.expected,
-              status,
-              record: new EvalRecord({ input: json, expected: measure.expected, status }),
-            }
-          }),
-      }),
-  })
+  Effect.andThen(
+    refusalGate(measure.refusals),
+    Effect.flatMap(encodedInputOf(measure), (json) =>
+      Effect.map(measure.observe(), (answers) => {
+        const result = resolvedOrEvaluated(measure, answers)
+        const status = statusOf(result)
+        return {
+          _tag: 'ScoreEvalRecord' as const,
+          expected: measure.expected,
+          status,
+          record: new EvalRecord({ input: json, expected: measure.expected, status }),
+        }
+      })),
+  )
 
 const recordOf = (_score: (typeof EvalScore)['Encoded'], read: MeasureRead): Effect.Effect<EvalRecord> =>
   Effect.succeed(read.record)

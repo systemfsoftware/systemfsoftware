@@ -24,7 +24,7 @@ const config: StrykerConfig = defineConfig({
     import.meta.resolve('@systemfsoftware/stryker-test-contribution'),
   ],
   mutate: [
-    'src/**/*.workflow.ts',
+    'src/**/*.ts',
     '!src/**/*.test.ts',
     '!src/**/*.property.test.ts',
     '!src/**/*.d.ts',
