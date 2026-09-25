@@ -9,13 +9,14 @@
  */
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Arbitrary from 'effect/unstable/arbitrary/Arbitrary'
 import * as V from 'vitest'
 import { InvalidBudget, NonBooleanVerdict } from '../errors.schema.js'
 import { countHit, CoverageBelowMinimum, type CoverageClass, type CoverageDraw, judgeCoverage } from './coverage.js'
 import { checkDefaultsKey, type ProvidedCheckDefaults, providedCheckDefaults } from './defaults.js'
-import { VacuousProperty } from './error.schema.js'
+import { PropertyRefuted, VacuousProperty } from './error.schema.js'
 import { type Impostor, impostorOf, makeFileLedger, type Opaque, type Refutation, type Subject } from './impostor.js'
 import {
   deterministicHolds,
@@ -29,6 +30,7 @@ import {
   roundTripHolds,
   spreadValues,
 } from './kinds.js'
+import { type PropertyReplayValue, replayOfToken } from './replay.js'
 
 /** @internal */
 export type ArbitraryInput = Schema.Top | Arbitrary.Arbitrary<Schema.Top['Type']>
@@ -340,8 +342,14 @@ const isRefuted = <G extends Gens>(checked: Checked<G>): boolean =>
 const dieViolation = (detail: string): Effect.Effect<never, never, never> =>
   Effect.die(new NonBooleanVerdict({ detail }))
 
-const dieReported = (name: string, report: string): Effect.Effect<never, never, never> =>
-  Effect.die(new Error(`${name}: the property was falsified. ${report}`))
+const dieReported = (
+  name: string,
+  report: string,
+  replay: PropertyReplayValue | undefined,
+): Effect.Effect<never, never, never> => {
+  const detail = `${name}: the property was falsified. ${report}`
+  return Effect.die(new PropertyRefuted(replay === undefined ? { detail } : { detail, replay }))
+}
 
 const dieUncovered = (failure: string): Effect.Effect<never, never, never> =>
   Effect.die(new CoverageBelowMinimum({ message: failure }))
@@ -395,14 +403,27 @@ const finishPassed = <G extends Gens, S extends PropertySubject, E, R>(
     : dieUncovered(`${run.name}: ${failure}`)
 }
 
+const falsifiedOf = <G extends Gens>(
+  result: Arbitrary.CheckResult<Values<G>, Opaque>,
+): Arbitrary.Falsified<Values<G>, Opaque> | undefined => 'replay' in result ? result : undefined
+
+const replayOfChecked = <G extends Gens>(checked: Checked<G>): PropertyReplayValue | undefined =>
+  Option.getOrUndefined(
+    Option.flatMap(
+      Option.fromNullishOr(falsifiedOf(checked.result)),
+      (falsified) => Option.fromNullishOr(replayOfToken(falsified.replay)),
+    ),
+  )
+
 const settleReport = <G extends Gens, S extends PropertySubject, E, R>(
   run: Run<G, S, E, R>,
   budget: Budget,
   coverage: CoverageRecorder<G>,
   gate: boolean,
   report: string | undefined,
+  replay: PropertyReplayValue | undefined,
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> =>
-  report === undefined ? finishPassed(run, budget, coverage, gate) : dieReported(run.name, report)
+  report === undefined ? finishPassed(run, budget, coverage, gate) : dieReported(run.name, report, replay)
 
 const settle = <G extends Gens, S extends PropertySubject, E, R>(
   registration: Registration<G, S, E, R>,
@@ -413,7 +434,7 @@ const settle = <G extends Gens, S extends PropertySubject, E, R>(
 ): Effect.Effect<void, Cause.Cause<NonBooleanVerdict>, R> => {
   const violation = violationOf(registration.name, checked)
   return violation === undefined
-    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked))
+    ? settleReport(run, budget, coverage, registration.gate, reportOf(checked), replayOfChecked(checked))
     : dieViolation(violation)
 }
 

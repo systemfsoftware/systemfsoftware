@@ -120,6 +120,7 @@ const recordOf = <E>(
       spans: recorder.spans,
       identity: identity ?? IDENTITY,
       replay,
+      root: '/repo',
     })
   })
 
@@ -159,6 +160,23 @@ it('Should_RenderTagAndFields_When_TheTaggedErrorHasNoMessage', function*({ expe
     ].join('\n'),
     breaches: [],
   })
+})
+
+it('Should_PrintAbsolutePaths_When_NoWorkspaceRootIsProvided', function*({ expect }) {
+  const recorder = createSpanRecorder()
+  const exit = yield* Effect.exit(
+    Effect.withTracer(whenStep(Effect.fail(raised('log source failed'))), recorder.tracer),
+  )
+  const record = renderFailureRecord({
+    failure: failureOf([exit]),
+    spans: recorder.spans,
+    identity: IDENTITY,
+    replay: undefined,
+  })
+  yield* expect(record.record.split('\n').slice(0, 2)).toEqual([
+    'LogSourceError: log source failed',
+    `  raised at ${HANDLER_SITE.replace(/:\d+$/u, '')} (write)`,
+  ])
 })
 
 it('Should_FallBackToTheInnermostFailedSpanSite_When_TheStackHoldsOnlyLibraryFrames', function*({ expect }) {

@@ -47,7 +47,11 @@ type EntryStructure = Exclude<EntryNoNull, number | boolean | bigint>
  * @internal
  */
 export interface TestIdentity {
-  /** The npm package the test file belongs to, e.g. `@systemfsoftware/effect-readiness`. */
+  /**
+   * The npm package the test file belongs to, e.g. `@systemfsoftware/effect-readiness`. Empty when the run
+   * provided no name: the rerun command then drops its `pnpm --filter` prefix and runs from the package
+   * directory, which is not a breach (R6).
+   */
   readonly package: string
   /** The test file, as the rerun command writes it. */
   readonly file: string
@@ -103,6 +107,16 @@ export interface FailureRecordInput<E = never> {
   readonly identity: TestIdentity
   /** The generator that chose this run, or `undefined` on a run no generator chose. */
   readonly replay: ReplayValue | undefined
+  /**
+   * The seed the kernel's scheduler chose. The kernel knows its own scheduler, so it hands the note over rather
+   * than the renderer guessing it; a run no scheduler chose renders no note (KTD5).
+   */
+  readonly schedule?: { readonly seed: number } | undefined
+  /**
+   * The workspace root the rendered paths are relativized against, provided by the shared config the same way the
+   * package name is. Omitted, paths print absolute.
+   */
+  readonly root?: string | undefined
 }
 
 const STEP_SPAN = 'gherkin.step'
@@ -145,8 +159,6 @@ const LOCATION = /(?:[\w.@-]+\/)*[\w.@-]+\.[cm]?[jt]sx?:\d+/u
 const FRAME_LOCATION = /\s\(?((?:file:\/\/)?[^()\s]+):(\d+):(\d+)\)?$/u
 
 const COLUMN_SUFFIX = /:\d+$/u
-
-const REPO_MARKERS: ReadonlyArray<string> = ['/packages/', '/examples/']
 
 /** The libraries whose own frames never lead the record (KTD6). */
 const LIBRARY_DIRS: ReadonlyArray<string> = [
@@ -245,15 +257,19 @@ const objectSummaryOf = (value: object): string => {
   return tag === undefined ? errorSummaryOf(value) : taggedSummaryOf(tag, value)
 }
 
+const firstLine = (text: string): string => text.split('\n')[0] ?? text
+
+const restLines = (text: string): ReadonlyArray<string> => text.split('\n').slice(1)
+
 const taggedSummaryOf = (tag: string, value: object): string => {
   const message = messageFieldOf(value)
-  return message === undefined ? `${tag}${renderFields(value)}` : `${tag}: ${message}`
+  return message === undefined ? `${tag}${renderFields(value)}` : `${tag}: ${firstLine(message)}`
 }
 
 const errorSummaryOf = (value: object): string => {
   const name = objectNameOf(value)
   const message = messageFieldOf(value)
-  return message === undefined ? `${name}${renderFields(value)}` : `${name}: ${message}`
+  return message === undefined ? `${name}${renderFields(value)}` : `${name}: ${firstLine(message)}`
 }
 
 const objectNameOf = (value: object): string =>
@@ -274,23 +290,9 @@ interface RaisedFrame {
 
 const stripProtocol = (path: string): string => path.startsWith(FILE_PROTOCOL) ? path.slice(FILE_PROTOCOL.length) : path
 
-const repoRelativeAt = (path: string, marker: string, index: number): string => {
-  const at = path.indexOf(marker)
-  return at < 0 ? repoRelativeFrom(path, index + 1) : path.slice(at + 1)
-}
-
-const repoRelativeFrom = (path: string, index: number): string => {
-  const marker = REPO_MARKERS[index]
-  if (marker === undefined) return path
-  return repoRelativeAt(path, marker, index)
-}
-
-const repoRelative = (path: string): string => repoRelativeFrom(path, 0)
-
 const stripColumn = (site: string): string => site.replace(COLUMN_SUFFIX, '')
 
-const knownSiteOf = (site: Opaque): string | undefined =>
-  isText(site) ? stripColumn(repoRelative(stripProtocol(site))) : undefined
+const knownSiteOf = (site: Opaque): string | undefined => isText(site) ? stripColumn(stripProtocol(site)) : undefined
 
 const siteTextOf = (site: Opaque): string => knownSiteOf(site) ?? UNKNOWN_SITE
 
@@ -338,8 +340,7 @@ const framesOf = (value: Opaque): ReadonlyArray<RaisedFrame> =>
 const usableFrameOf = (value: Opaque): RaisedFrame | undefined =>
   framesOf(value).find((frame) => isUserPath(frame.path))
 
-const frameTextOf = (frame: RaisedFrame): string =>
-  `${repoRelative(frame.path)}:${frame.line}${frameNameSuffix(frame.fn)}`
+const frameTextOf = (frame: RaisedFrame): string => `${frame.path}:${frame.line}${frameNameSuffix(frame.fn)}`
 
 const frameNameSuffix = (fn: string | undefined): string => fn === undefined ? '' : ` (${fn})`
 
@@ -542,10 +543,18 @@ const isUnfinishedCell = (span: Tracer.NativeSpan): boolean => and(isCellSpan(sp
 const spanSiteOf = (span: Tracer.NativeSpan): string | undefined =>
   knownSiteOf(attrOf(span, CODE_SITE)) ?? knownSiteOf(attrOf(span, CELL_SITE))
 
-const decideSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined => {
+const cellSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined => {
+  const cell = spans.toReversed().find(isCellSpan)
+  return cell === undefined ? undefined : spanSiteOf(cell)
+}
+
+const unfinishedDecideSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined => {
   const unfinished = spans.toReversed().find(isUnfinishedCell)
   return unfinished === undefined ? undefined : knownSiteOf(attrOf(unfinished, CELL_DECIDE_SITE))
 }
+
+const decideSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined =>
+  unfinishedDecideSiteOf(spans) ?? cellSiteOf(spans)
 
 const failedSiteOf = (spans: ReadonlyArray<Tracer.NativeSpan>): string | undefined => {
   const failed = spans.toReversed().find(isFailedSpan)
@@ -599,12 +608,14 @@ const replayPrefixText = (text: string | undefined): string => text === undefine
 const replayPrefixOf = (replay: ReplayValue | undefined): string =>
   replayPrefixText(replay === undefined ? undefined : replayTextOf(replay))
 
-const isCompleteIdentity = (identity: TestIdentity): boolean =>
-  and(identity.package.length > 0, and(identity.file.length > 0, identity.name.length > 0))
+const isCompleteIdentity = (identity: TestIdentity): boolean => and(identity.file.length > 0, identity.name.length > 0)
+
+const filterPrefixOf = (identity: TestIdentity): string =>
+  identity.package.length === 0 ? '' : `pnpm --filter ${identity.package} exec `
 
 const rerunLineOf = (identity: TestIdentity, replay: ReplayValue | undefined): string | undefined =>
   isCompleteIdentity(identity)
-    ? `  ${replayPrefixOf(replay)}pnpm --filter ${identity.package} exec vitest run ${identity.file} -t ` +
+    ? `  ${replayPrefixOf(replay)}${filterPrefixOf(identity)}vitest run ${identity.file} -t ` +
       quoted(identity.name)
     : undefined
 
@@ -622,10 +633,28 @@ interface RecordParts {
   readonly headline: string
   readonly raisedAt: string | undefined
   readonly failingStep: string
+  readonly detail: ReadonlyArray<string>
   readonly chain: ReadonlyArray<string>
   readonly trail: ReadonlyArray<string>
+  readonly schedule: ReadonlyArray<string>
   readonly rerun: ReadonlyArray<string>
 }
+
+const headMessageOf = (layers: ReadonlyArray<Opaque>): string | undefined => {
+  const entry = layers[0]
+  return isObject(entry) ? messageFieldOf(entry) : undefined
+}
+
+const detailOf = (layers: ReadonlyArray<Opaque>): ReadonlyArray<string> => {
+  const message = headMessageOf(layers)
+  return message === undefined ? [] : restLines(message)
+}
+
+const detailLinesOf = (lines: ReadonlyArray<string>): ReadonlyArray<string> =>
+  lines.length === 0 ? [] : [...lines.map((line) => `  ${line}`), '']
+
+const scheduleLinesOf = (schedule: { readonly seed: number } | undefined): ReadonlyArray<string> =>
+  schedule === undefined ? [] : ['', `schedule: seed ${schedule.seed}`, '']
 
 const recordPartsOf = <E>(input: FailureRecordInput<E>, layers: ReadonlyArray<Opaque>): RecordParts => {
   const chosen = chosenFrameOf(layers)
@@ -633,8 +662,10 @@ const recordPartsOf = <E>(input: FailureRecordInput<E>, layers: ReadonlyArray<Op
     headline: headlineOf(layers),
     raisedAt: raisedAtLineOf(chosen, input.spans),
     failingStep: failingStepLineOf(input.spans),
+    detail: detailOf(layers),
     chain: chainLinesOf(layers, chosen),
     trail: trailLinesOf(input.spans),
+    schedule: scheduleLinesOf(input.schedule),
     rerun: rerunLinesOf(input.identity, input.replay),
   }
 }
@@ -648,9 +679,11 @@ const linesOf = (parts: RecordParts): ReadonlyArray<string> => [
   parts.headline,
   ...maybeLine(parts.raisedAt),
   parts.failingStep,
+  ...detailLinesOf(parts.detail),
   '',
   ...sectionLines('Cause chain:', parts.chain),
   ...sectionLines('Steps and the decisions each caused:', parts.trail),
+  ...parts.schedule,
   ...parts.rerun,
 ]
 
@@ -665,6 +698,11 @@ const breachesOf = <E>(parts: RecordParts, input: FailureRecordInput<E>, record:
   ...breachIf(r6Broken(parts, input), 'R6'),
 ]
 
+const hasRoot = (root: string | undefined): root is string => root !== undefined && root.length > 0
+
+const relativize = (record: string, root: string | undefined): string =>
+  hasRoot(root) ? record.replaceAll(`${root}/`, '') : record
+
 /**
  * Renders the record Vitest prints for one spec failure, and the contract rules it breaks.
  *
@@ -678,7 +716,7 @@ const breachesOf = <E>(parts: RecordParts, input: FailureRecordInput<E>, record:
 export const renderFailureRecord = <E>(input: FailureRecordInput<E>): FailureRecord => {
   const layers = layersOf(input.failure)
   const parts = recordPartsOf(input, layers)
-  const record = linesOf(parts).join('\n').trimEnd()
+  const record = relativize(linesOf(parts).join('\n').trimEnd(), input.root)
   return {
     name: nameOf(layers),
     record,

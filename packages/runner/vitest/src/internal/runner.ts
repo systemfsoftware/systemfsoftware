@@ -25,13 +25,17 @@ import * as Scope from 'effect/Scope'
 import * as TestClock from 'effect/testing/TestClock'
 import * as TestConsole from 'effect/testing/TestConsole'
 import * as V from 'vitest'
+import { testIdentityOf, throwFailureRecord } from '../failure.js'
 import type * as Vitest from '../mod.js'
 import { type Checks, checksFor, type Ledger, makeLedger } from './checks.js'
 import { type Body, drive } from './driver.js'
 import { registerEqualTester } from './equal.js'
 import * as Refusals from './errors.schema.js'
+import { isFailureRecordError } from './failure-error.js'
 import { markTask } from './guard.js'
 import { makeProperty, type PropertyRuntime } from './property/engine.js'
+import { replayOfFailure } from './property/replay.js'
+import { providedRoot } from './provided.js'
 import {
   type HookRefusal,
   isRefusal as isRefusalError,
@@ -44,10 +48,14 @@ import {
   refuseSyncBody,
   unprovidedText,
 } from './refusals.js'
+import { createSpanRecorder, type SpanRecorder } from './span-recorder.js'
 import { VitestTestContext } from './test-context.js'
 import { makeVirtualRuntime, virtualClockLayer, type VirtualRuntime } from './virtual-time.js'
 
 const getCurrentSuite = V.TestRunner.getCurrentSuite
+
+/** A value the runner narrows rather than assumes. */
+type Opaque<A = unknown> = A
 
 /** @internal */
 export const addEqualityTesters = (): void => {
@@ -115,8 +123,9 @@ export const perRun = (): RunEnv => ({ runtime: makeVirtualRuntime(), owned: tru
 
 const propertyEnv: RunEnv = realTime
 
-const logErrors = <E>(cause: Cause.Cause<E>): Effect.Effect<void, never, never> =>
-  Effect.forEach(Cause.prettyErrors(cause), (error) => Effect.logError(error), { discard: true })
+/** The errors a rethrown failure does not name: the first error leads the record, so only the rest are logged. */
+const logOtherErrors = <E>(cause: Cause.Cause<E>): Effect.Effect<void, never, never> =>
+  Effect.forEach(Cause.prettyErrors(cause).slice(1), (error) => Effect.logError(error), { discard: true })
 
 const signalOf = (ctx: V.TestContext | undefined): AbortSignal | undefined => ctx?.signal
 
@@ -168,7 +177,7 @@ const rethrowSquashed = <E>(cause: Cause.Cause<E>): never => {
 }
 
 const failExit = <E>(cause: Cause.Cause<E>): Promise<never> =>
-  logErrors(cause).pipe(Effect.runPromise).then(() => rethrowSquashed(cause))
+  logOtherErrors(cause).pipe(Effect.runPromise).then(() => rethrowSquashed(cause))
 
 const reportExit = <A, E>(exit: Exit.Exit<A, E>): Promise<A | undefined> =>
   Exit.isSuccess(exit) ? Promise.resolve(exit.value) : failExit(exit.cause)
@@ -194,12 +203,51 @@ const trackAbort = <A>(ctx: V.TestContext, promise: Promise<A>): void => {
   if (ctx.signal.aborted) onAbort()
 }
 
-const runTest = (ctx?: V.TestContext, env: RunEnv = realTime) =>
-<A, E>(
+const rethrowRendered = (failure: Opaque): void => {
+  if (isFailureRecordError(failure)) throw failure
+}
+
+const refuseUnprovided = (failure: Opaque): void => {
+  if (isUnprovided(failure)) throw new Refusals.Slop({ detail: unprovidedText })
+}
+
+const throwRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.TestContext): never => {
+  const failure = Cause.squash(cause)
+  rethrowRendered(failure)
+  refuseUnprovided(failure)
+  return throwFailureRecord({
+    failure,
+    spans: recorder.spans,
+    identity: testIdentityOf(ctx.task),
+    replay: replayOfFailure(failure),
+    root: providedRoot(),
+  })
+}
+
+const failRecorded = <E>(cause: Cause.Cause<E>, recorder: SpanRecorder, ctx: V.TestContext): Promise<never> =>
+  logOtherErrors(cause).pipe(Effect.runPromise).then(() => throwRecorded(cause, recorder, ctx))
+
+const reportRecorded = <A, E>(
+  exit: Exit.Exit<A, E>,
+  recorder: SpanRecorder,
+  ctx: V.TestContext,
+): Promise<A | undefined> =>
+  Exit.isSuccess(exit) ? Promise.resolve(exit.value) : failRecorded(exit.cause, recorder, ctx)
+
+/**
+ * One test's run, recorded: its own in-memory tracer collects the spans the record is rendered from, and a failure
+ * leaves as the rendered record instead of a raw Cause (KTD2, R2, R7, R8).
+ */
+const runRecorded = <A, E>(
   effect: Effect.Effect<A, E, never>,
+  ctx: V.TestContext,
+  env: RunEnv,
 ): Promise<A | undefined> => {
-  const promise = runPromise(effect, ctx, env)
-  if (ctx !== undefined) trackAbort(ctx, promise)
+  const recorder = createSpanRecorder()
+  const promise = runExit(effect.pipe(Effect.withTracer(recorder.tracer)), ctx, env).then((exit) =>
+    reportRecorded(exit, recorder, ctx)
+  )
+  trackAbort(ctx, promise)
   return promise
 }
 
@@ -297,7 +345,7 @@ const runLaned = <R>(
   body: LaneBody,
 ): Promise<void> => {
   const ledger = makeLedger(ctx)
-  return runTest(ctx, env)(mapEffect(bindRun(drive(bodyOf(ledger, body), [], ledger), ctx), env))
+  return runRecorded(mapEffect(bindRun(drive(bodyOf(ledger, body), [], ledger), ctx), env), ctx, env)
 }
 
 const outcomeOf = (promise: Promise<void>): Promise<Error | undefined> =>
@@ -351,7 +399,7 @@ const isClean = (ctx: V.TestContext): boolean => presentErrors(ctx.task.result?.
  * env is the bare `propertyEnv`: a `false` verdict is the property's own shrink path, so nothing interrupts it.
  */
 const runProperty = <E>(ctx: V.TestContext, program: () => Effect.Effect<void, E, never>): Promise<void> =>
-  runTest(ctx, propertyEnv)(bindRun(Effect.suspend(program), ctx))
+  runRecorded(bindRun(Effect.suspend(program), ctx), ctx, propertyEnv)
 
 /** The sync lane needs nothing provided, and every property test registers on the file's own `it`. */
 const syncRuntime: PropertyRuntime<never> = {

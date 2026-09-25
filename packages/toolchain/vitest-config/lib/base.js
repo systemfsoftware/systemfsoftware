@@ -1,5 +1,5 @@
 import { glob, realpath } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { defaultClientConditions, defaultServerConditions } from 'vite'
 import { defaultInclude, defineConfig as defineVitestConfig } from 'vitest/config'
 
@@ -37,6 +37,8 @@ const isPrLane = () => process.env['VITEST_LANE'] === 'pr'
  *   readonly guardSetupFiles: ReadonlyArray<string>,
  *   readonly conformanceFiles: boolean,
  *   readonly laneLeavesOut: boolean,
+ *   readonly name: string,
+ *   readonly root: string,
  * }} PackageFacts
  */
 
@@ -144,8 +146,57 @@ const packageFacts = async (cwd) => {
   const exemption = guardExemptions[name]
   const guardFiles = exemption?.projects === '*' ? [] : [await guardSetupFile(cwd, name)]
   const conformanceFiles = await hasConformanceFiles(cwd)
-  return { exemption, guardSetupFiles: guardFiles, conformanceFiles, laneLeavesOut: isPrLane() && conformanceFiles }
+  const root = await workspaceRoot(cwd)
+  return {
+    exemption,
+    guardSetupFiles: guardFiles,
+    conformanceFiles,
+    laneLeavesOut: isPrLane() && conformanceFiles,
+    name,
+    root,
+  }
 }
+
+/**
+ * The workspace root: the nearest ancestor of `cwd` that holds `pnpm-workspace.yaml`, or `cwd` when none does.
+ *
+ * @param {string} cwd
+ * @returns {Promise<string>}
+ */
+const workspaceRoot = async (cwd) => {
+  let dir = cwd
+  while (!(await exists(join(dir, 'pnpm-workspace.yaml')))) {
+    const parent = dirname(dir)
+    if (parent === dir) return cwd
+    dir = parent
+  }
+  return dir
+}
+
+/**
+ * The facts a run's provided context carries for the fork: this package's npm name and the workspace root every
+ * rendered path is relativized against. The runner reads them with Vitest's `inject`, so a rerun line names the
+ * package without the fork ever reading a built-in.
+ *
+ * @param {PackageFacts} facts
+ * @returns {Record<string, string>}
+ */
+const packageProvide = (facts) => {
+  /** @type {Record<string, string>} */
+  const provided = {}
+  if (facts.name.length > 0) provided['@systemfsoftware/vitest:package'] = facts.name
+  if (facts.root.length > 0) provided['@systemfsoftware/vitest:workspace-root'] = facts.root
+  return provided
+}
+
+/**
+ * A test block with the package's own provided values merged over whatever it already provides.
+ *
+ * @param {TestConfig | undefined} test
+ * @param {PackageFacts} facts
+ * @returns {TestConfig}
+ */
+const withProvide = (test, facts) => ({ ...test, provide: { ...test?.provide, ...packageProvide(facts) } })
 
 /**
  * A test block with the package's guard setup files added on top of its own, each at most once.
@@ -200,7 +251,7 @@ const isTestProject = (value) => typeof value === 'object' && value !== null && 
 const projectWithSetup = (project, facts) => {
   if (!isTestProject(project)) return project
   const test = project.test
-  return { ...project, test: withSetupFiles(test, !isExemptProject(test, facts), facts) }
+  return { ...project, test: withProvide(withSetupFiles(test, !isExemptProject(test, facts), facts), facts) }
 }
 
 /**
@@ -313,7 +364,7 @@ const withoutSpecs = (test) => ({ ...test, include: [], includeSource: [] })
 export const defineConfig = async (config) => {
   const facts = await packageFacts(process.cwd())
   const declared = config.test?.projects
-  const base = withSetupFiles(config.test, declared === undefined, facts)
+  const base = withProvide(withSetupFiles(config.test, declared === undefined, facts), facts)
   const projects = declared === undefined
     ? splitProjects(base, facts)
     : laneProjects(declared.map((project) => projectWithSetup(project, facts)), facts)
