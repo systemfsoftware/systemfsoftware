@@ -30,7 +30,7 @@ fi
 git config user.name 'github-actions[bot]'
 git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 git switch --force-create "$BRANCH"
-git add -A -- .changeset pnpm-lock.yaml ':(glob)**/package.json'
+git add -A -- .changeset pnpm-lock.yaml Cargo.toml Cargo.lock ':(glob)**/package.json'
 git commit -m 'chore(release): version packages'
 git push --force origin "$BRANCH"
 

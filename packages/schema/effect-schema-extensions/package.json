@@ -73,6 +73,7 @@
     "effect": "catalog:peers"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/effect-schema-extensions.d.ts",

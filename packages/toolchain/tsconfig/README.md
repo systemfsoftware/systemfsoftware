@@ -48,4 +48,4 @@ Every package's `tsconfig.json` is a reference-only root (`files: []` plus `refe
 - A test project cannot reach `src/` through the `@systemfsoftware/source` condition without claiming it, so it references the app project instead.
 - `tstyche.json` does not name a `tsconfig`: discovery starts at the root, follows its references, and applies the type-test project's options.
 - `tsconfig.build.json` extends `./tsconfig.app.json`; API-report configs extend the base preset directly.
-- `scripts/guards/check-project-membership.ts` fails when a tracked TypeScript file belongs to no project or to two; `scripts/guards/check-typecheck-build-mode.ts` fails when a reference-only root is typechecked without `tsc -b`.
+- `scripts/guards/check-project-membership.ts` fails when a tracked TypeScript file belongs to no project or to two; `pnpm lint:conventions` (gritlint's `typecheck-build-mode` pack) fails when a reference-only root is typechecked without `tsc -b`.

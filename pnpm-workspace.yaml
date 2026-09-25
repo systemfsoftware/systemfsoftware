@@ -111,6 +111,7 @@ packages:
   - packages/sim/*
   - packages/toolchain/*
   - packages/trace/*
+  - npm/*
   - omp/plugins/*
   - examples/*
 patchedDependencies:

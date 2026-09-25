@@ -77,6 +77,48 @@ jobs:
       - name: Static checks
         run: corepack pnpm check:static
 
+  gritlint:
+    name: gritlint (pnpm gate:rust, sandboxed journey, pnpm lint:conventions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - name: Cargo cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Rust gate
+        run: nix develop --command sh scripts/tools/gate-rust.sh
+      - name: Launcher forwards arguments and exit code
+        run: nix develop --command deno task --config npm/gritlint/deno.jsonc test
+      - name: Let bwrap create user namespaces (ubuntu-24.04 AppArmor refuses them by default)
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Sandboxed check fails on a planted violation and passes once fixed
+        run: |
+          bin="$(nix build --no-link --print-out-paths .#gritlint)/bin/gritlint"
+          fixture="$RUNNER_TEMP/gritlint-fixture"
+          mkdir -p "$fixture/packages/app"
+          cd "$fixture"
+          printf '{"packs": {"typecheck-build-mode": {}}}\n' > gritlint.json
+          printf '{"files": [], "references": [{"path": "./tsconfig.app.json"}]}\n' > packages/app/tsconfig.json
+          printf '{"name": "app", "scripts": {"typecheck": "tsc --noEmit"}}\n' > packages/app/package.json
+          status=0
+          "$bin" check || status=$?
+          test "$status" -eq 1 || { echo "a planted violation must exit 1, got $status" >&2; exit 1; }
+          printf '{"name": "app", "scripts": {"typecheck": "tsc -b"}}\n' > packages/app/package.json
+          "$bin" check
+      - name: This repository's conventions
+        run: ./bin/gritlint check
+
   test:
     name: test · ${{ matrix.job.name }}
     needs: plan
@@ -187,7 +229,7 @@ jobs:
 
   check:
     name: the gate (pnpm check:ci)
-    needs: [plan, static, test]
+    needs: [plan, static, gritlint, test]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -196,7 +238,8 @@ jobs:
         env:
           PLAN: ${{ needs.plan.result }}
           STATIC: ${{ needs.static.result }}
+          GRITLINT: ${{ needs.gritlint.result }}
           TEST: ${{ needs.test.result }}
         run: |
-          echo "plan=$PLAN static=$STATIC test=$TEST"
-          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$TEST" = success ]
+          echo "plan=$PLAN static=$STATIC gritlint=$GRITLINT test=$TEST"
+          [ "$PLAN" = success ] && [ "$STATIC" = success ] && [ "$GRITLINT" = success ] && [ "$TEST" = success ]

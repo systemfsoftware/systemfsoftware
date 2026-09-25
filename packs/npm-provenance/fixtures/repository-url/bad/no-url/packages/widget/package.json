@@ -1,0 +1,12 @@
+{
+  "name": "@acme/widget",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "directory": "packages/widget"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

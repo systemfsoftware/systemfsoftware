@@ -85,6 +85,7 @@
     "typescript": ">=7.0.0"
   },
   "publishConfig": {
+    "access": "public",
     "provenance": true,
     "exports": {
       ".": {

@@ -21,6 +21,7 @@
     "vendor/**",
     "repos/**",
     "packages/stryker-js/stryker-js-typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json",
+    "crates/gritlint_core/tests/fixtures/engine/broken/package.json",
     "**/snapshots/*.md"
   ],
   "plugins": [

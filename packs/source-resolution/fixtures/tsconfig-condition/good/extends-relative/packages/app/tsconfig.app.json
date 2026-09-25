@@ -1,0 +1,7 @@
+{
+  "extends": "@systemfsoftware/tsconfig/bundler/no-dom/library-monorepo",
+  "compilerOptions": {
+    "customConditions": ["@systemfsoftware/source"]
+  },
+  "include": ["src"]
+}

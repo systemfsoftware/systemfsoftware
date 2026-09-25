@@ -1,0 +1,18 @@
+cognitive-complexity-threshold = 8
+too-many-arguments-threshold = 5
+
+disallowed-methods = [
+  "std::fs::read",
+  "std::fs::read_to_string",
+  "std::fs::read_dir",
+  "std::fs::write",
+  "std::fs::metadata",
+  "std::fs::canonicalize",
+  "std::env::var",
+  "std::env::var_os",
+  "std::env::current_dir",
+  "std::env::home_dir",
+  "ignore::WalkBuilder::new",
+]
+
+disallowed-types = ["std::fs::File", "ignore::WalkBuilder", "ignore::Walk"]

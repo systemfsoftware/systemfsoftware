@@ -1,0 +1,7 @@
+{
+  "packs": {
+    "npm-provenance": {
+      "repositoryUrl": "`\"git+https://github.com/acme/widgets.git\"`"
+    }
+  }
+}

@@ -30,7 +30,7 @@ const OWN_ORG_EXCLUDE = '@systemfsoftware/*'
 
 const isWorkspaceGlob = (name: string): boolean =>
   name.startsWith('packages/') || name.startsWith('omp/') || name.startsWith('agent-plugins/') ||
-  name.startsWith('examples/')
+  name.startsWith('examples/') || name.startsWith('npm/')
 
 const excludeCandidates = (added: string): readonly string[] => {
   const names: string[] = []

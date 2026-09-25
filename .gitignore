@@ -33,3 +33,7 @@ docs/cell-taxonomy/
 .mcp.json
 # direnv-managed nix dev-shell state — machine-specific
 .direnv/
+# Cargo and nix build outputs
+/target/
+/result
+/result-*

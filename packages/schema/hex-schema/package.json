@@ -66,6 +66,7 @@
     "effect": "catalog:peers"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/hex-schema.d.ts",

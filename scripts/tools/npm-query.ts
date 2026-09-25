@@ -72,9 +72,15 @@ export const queryRegistry = async (name: string, registry: string): Promise<Reg
 
   const distTags = doc['dist-tags']
   if (typeof distTags !== 'object' || distTags === null) return unqueryable
-  const latest = (distTags as Record<string, unknown>)['latest']
-  if (typeof latest !== 'string') return unqueryable
-
   const versions = doc['versions'] as Record<string, { dist?: { attestations?: unknown } }> | undefined
+  const latest = (distTags as Record<string, unknown>)['latest']
+  if (typeof latest !== 'string') {
+    // A name whose only versions went out under another dist-tag - a bootstrap
+    // placeholder - exists without a `latest`. It is published, and nothing
+    // attests it, because there is no `latest` to carry an attestation.
+    const exists = typeof versions === 'object' && versions !== null && Object.keys(versions).length > 0
+    return exists ? { status: 'published', latest: '—', attested: false } : unqueryable
+  }
+
   return { status: 'published', latest, attested: versions?.[latest]?.dist?.attestations != null }
 }

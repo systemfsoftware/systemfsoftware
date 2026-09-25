@@ -1,0 +1,9 @@
+{
+  "name": "@acme/app",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

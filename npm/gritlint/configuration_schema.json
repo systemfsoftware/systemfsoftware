@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GritlintConfig",
+  "description": "Configuration read from gritlint.json at the scan root.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "Path or URL of this schema, for editors.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "packs": {
+      "description": "Bundled packs to enable, each mapped to its parameters. A pack that is not listed never runs.",
+      "type": "object",
+      "properties": {
+        "npm-provenance": {
+          "type": "object",
+          "properties": {
+            "repositoryUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repositoryUrl"
+          ],
+          "additionalProperties": false
+        },
+        "source-resolution": {
+          "type": "object",
+          "properties": {
+            "condition": {
+              "type": "string"
+            },
+            "presets": {
+              "type": "string"
+            },
+            "presetFiles": {
+              "type": "string"
+            },
+            "sharedVitestConfig": {
+              "type": "string"
+            },
+            "sharedVitestConfigFile": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "condition",
+            "presets",
+            "presetFiles",
+            "sharedVitestConfig",
+            "sharedVitestConfigFile"
+          ],
+          "additionalProperties": false
+        },
+        "typecheck-build-mode": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "rules": {
+      "description": "Consumer rule files or directories (.md or .grit), resolved against this file's directory. Their ids are local/<stem>.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "ignore": {
+      "description": "Gitignore-style globs of paths the scan skips.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

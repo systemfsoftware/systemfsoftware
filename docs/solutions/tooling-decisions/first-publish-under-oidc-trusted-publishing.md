@@ -255,7 +255,10 @@ still owed.
 
 - `publish-and-setup-npm-trust` — automates the runbook: publishes every
   unpublished non-private package, then registers the trusted publisher for each
-  one just published (root script alias `publish:unpublished`).
+  one just published (root script alias `publish:unpublished`). It skips a name
+  whose debut a dedicated bootstrap owns: gritlint's six names go through
+  `bootstrap-npm.ts` beside its release scripts, which publishes a placeholder
+  so the first real version still ships from CI.
 - The CI-failure runbook under `.github/` — the `publish` job's step order and
   the OIDC publish invocation.
 - `docs/solutions/runtime-errors/pnpm-internal-range-breaks-recursive-versioning.md`

@@ -2,8 +2,14 @@
 import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
 import { join } from '@std/path'
+import { LAUNCHER_MANIFEST_PATH, type LauncherManifest, readJson } from './gritlint/shared.ts'
 import { queryRegistry, type RegistrySnapshot } from './npm-query.ts'
 import { expectedSlug, publicWorkspacePackages, WORKFLOW_FILE, type WorkspacePackage } from './oidc.ts'
+
+const DEDICATED_DEBUTS: Record<string, string> = {
+  [(await readJson<LauncherManifest>(LAUNCHER_MANIFEST_PATH, 'gritlint launcher manifest')).name]:
+    './scripts/tools/gritlint/bootstrap-npm.ts',
+}
 
 type PackageAction =
   | { readonly kind: 'debut'; readonly name: string; readonly dir: string }
@@ -12,6 +18,7 @@ type PackageAction =
 type PlanResult = {
   readonly owed: readonly PackageAction[]
   readonly unreadable: readonly string[]
+  readonly deferred: readonly string[]
 }
 
 type TrustConfig = {
@@ -38,7 +45,7 @@ const resolveAction = (
   pkg: WorkspacePackage,
   snapshot: RegistrySnapshot,
   forceTrust: boolean,
-): { readonly action?: PackageAction; readonly unreadable?: string } => {
+): { readonly action?: PackageAction; readonly unreadable?: string; readonly deferred?: string } => {
   const dir = pkg.filePath.replace(/\/package\.json$/, '')
 
   if (snapshot.status === 'error') {
@@ -47,6 +54,11 @@ const resolveAction = (
   }
 
   if (snapshot.status === 'unpublished') {
+    const bootstrap = DEDICATED_DEBUTS[pkg.name]
+    if (bootstrap !== undefined) {
+      console.log(`${pkg.name} … unpublished (404) — skipped: its first publish is ${bootstrap}`)
+      return { deferred: pkg.name }
+    }
     console.log(`${pkg.name} … unpublished (404) — debut`)
     return { action: { kind: 'debut', name: pkg.name, dir } }
   }
@@ -77,14 +89,16 @@ const planExecution = async (
 
   const owed: PackageAction[] = []
   const unreadable: string[] = []
+  const deferred: string[] = []
 
   for (let i = 0; i < packages.length; i++) {
     const outcome = resolveAction(packages[i], snapshots[i], forceTrust)
     if (outcome.action) owed.push(outcome.action)
     if (outcome.unreadable) unreadable.push(outcome.unreadable)
+    if (outcome.deferred) deferred.push(outcome.deferred)
   }
 
-  return { owed, unreadable }
+  return { owed, unreadable, deferred }
 }
 
 const runInteractive = async (args: readonly string[], cwd: string): Promise<{ success: boolean; code: number }> => {
@@ -352,13 +366,14 @@ const main = async (): Promise<void> => {
     Deno.exit(1)
   }
 
-  const { owed, unreadable } = await planExecution(targetPackages, registry, jobs, allTrust)
+  const { owed, unreadable, deferred } = await planExecution(targetPackages, registry, jobs, allTrust)
+  if (deferred.length > 0) console.log(`\nnot debuted here (a dedicated bootstrap owns them): ${deferred.join(', ')}`)
 
   if (owed.length === 0) {
     console.log(
       unreadable.length > 0
         ? 'no package has outstanding work, but the registry could not be read for some'
-        : 'every package is published and attested — nothing to do',
+        : 'no package has outstanding work here',
     )
     Deno.exit(unreadable.length > 0 ? 1 : 0)
   }

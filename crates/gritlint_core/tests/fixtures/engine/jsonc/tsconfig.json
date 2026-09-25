@@ -1,0 +1,7 @@
+{
+  // The preset already sets `moduleResolution`.
+  "extends": "@acme/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["vite/client"] /* the client types */
+  }
+}

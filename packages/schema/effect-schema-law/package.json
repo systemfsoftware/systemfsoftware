@@ -70,6 +70,7 @@
     "vitest": "catalog:"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/effect-schema-law.d.ts",

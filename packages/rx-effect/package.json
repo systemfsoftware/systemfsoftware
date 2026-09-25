@@ -70,6 +70,7 @@
     "rxjs": "^7"
   },
   "publishConfig": {
+    "access": "public",
     "exports": {
       ".": {
         "types": "./dist/rx-effect.d.ts",
