@@ -1,0 +1,14 @@
+{
+  "extends": "@systemfsoftware/tsconfig/node",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.node.tsbuildinfo"
+  },
+  "include": [
+    "oxlint.config.ts",
+    "tsdown.config.ts",
+    "vitest.config.ts",
+    "e2e/playwright.config.ts"
+  ]
+}
