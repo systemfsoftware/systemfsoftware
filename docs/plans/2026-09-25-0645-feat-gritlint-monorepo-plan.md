@@ -1,25 +1,26 @@
 ---
-title: GritQL Conventions Platform - Plan
+title: gritlint in the monorepo - Plan
 type: feat
 date: 2026-09-25
-topic: gritql-conventions-platform
+topic: gritlint-monorepo
+supersedes: docs/plans/2026-09-25-0505-feat-gritql-conventions-platform-plan.md
 artifact_contract: ce-unified-plan/v1
 product_contract_source: ce-brainstorm
 execution: code
 ---
 
-# GritQL Conventions Platform - Plan
+# gritlint in the monorepo - Plan
 
 ## Goal Capsule
 
 - **Objective:** Conventions about file structure that are enforced today by hand-written guard scripts and an agent skill become GritQL rules. Any repo, inside the systemfsoftware org or outside it, can install those rules, add its own, and prove each rule catches a violation. The first set is this repo's source-resolution wiring. Once it is enforced, the `workspace-source-resolution` skill and the scripts that encode the same checks are deleted.
 - **Means:** Our own Rust CLI built on the MIT gritql crates, distributed the way `systemfsoftware/comment-checker` is.
-- **Delivery boundary:** R1–R25 and R32–R35 land in the new platform repository. R26–R31 land in this repository after the platform's first release (F1).
-- **Authority:** The repository owner, then this Product Contract. The `AGENTS.md` repo rules override both where they apply, in particular REPO-W8 (decision record) and the Evaluator own-commit discipline.
-- **Open blockers:** None.
-- **Stop condition:** If the first planning spike shows that the pinned gritql engine cannot evaluate a pure-match rule across two JSON files in one package directory, offline, stop and report. R2 is a settled decision; do not substitute single-file rules.
-- **Execution profile:** Deep. U1–U9 build `systemfsoftware/gritlint`, and U10–U13 adopt it here. Rule fixtures and engine contract tests come before the rules they prove.
-- **Finisher:** `lfg`. This repo's work ships as one pull request watched to green. The gritlint repository ships through its own CI.
+- **Delivery boundary:** Everything lands in this repository, in one pull request. The owner overruled a separate platform repository: the npm-plus-crates layout agreed for R32 is this monorepo's root layout.
+- **Authority:** The repository owner, then this Product Contract. The `AGENTS.md` repo rules override both where they apply, in particular REPO-W8 (decision record) and the Evaluator own-commit discipline. REPO-S5 is amended by U1 so that a Rust binary's npm launcher may live at `npm/<name>`.
+- **Open blockers:** None for the pull request. The first npm publish of `@systemfsoftware/gritlint` and its platform packages is an owner-only bootstrap after merge.
+- **Stop condition:** If the pinned gritql engine cannot evaluate a pure-match rule across two JSON files in one package directory, offline, stop and report. R2 is a settled decision; do not substitute single-file rules. (Cleared: U2's contract tests prove the join on rev `4ca2834`.)
+- **Execution profile:** Deep. The code was first built in a scratch checkout and is migrated into this repository's root. Rule fixtures and engine contract tests come before the rules they prove. Decision records are written last, from evidence.
+- **Finisher:** `lfg`. One pull request, watched to green.
 
 ---
 
@@ -27,7 +28,7 @@ execution: code
 
 ### Summary
 
-Build a Rust CLI, in its own repository, that runs GritQL rules across one file or several related files. It ships through a nix flake whose default package is the bubblewrap-sandboxed binary, and through per-platform npm packages with no postinstall step. A `test` command proves every rule fires on a known-bad fixture. The bundled rules replace the source-resolution wiring checks and the typecheck-build-mode guard. This repo is the first adopter.
+Build a Rust CLI in this monorepo that runs GritQL rules across one file or several related files. It ships through this repository's nix flake, whose gritlint package is the bubblewrap-sandboxed binary, and through per-platform npm packages with no postinstall step. A `test` command proves every rule fires on a known-bad fixture. The bundled rules replace the source-resolution wiring checks and the typecheck-build-mode guard, and flag public npm packages that cannot publish through OIDC. This repo is the first adopter.
 
 ### Problem Frame
 
@@ -49,7 +50,10 @@ The engines have shifted as well. Biome now accepts `language json` GritQL plugi
 - **Import coverage is restated over JSON only.** (session-settled: user-approved — chosen over a single rule that mixes TS imports with tsconfig includes, which one GritQL pattern cannot express because a pattern targets one language: `check-project-membership.ts` keeps the TS half.) Governs R19.
 - **`check-typecheck-build-mode` migrates too.** (session-settled: user-approved — chosen over leaving it a Deno guard: it has the same two-JSON-file shape as the source-resolution rules.) Governs R24.
 - **Bundled rules ship as opt-in packs.** (session-settled: user-directed — chosen over default-on rules that fire wherever a tool's config exists: a repo using tsdown without a source condition would otherwise get house-rule findings on first run.) Governs R23.
-- **The repository follows the oxc and biome layout, released through comment-checker's pipeline.** (session-settled: user-approved — chosen over biome's committed per-platform package folders and over a many-crate split: we maintain no parsers, and generated platform packages keep unpublished names out of the lockfile.) Governs R32–R35.
+- **This monorepo takes the oxc and biome root layout.** (session-settled: user-approved — chosen over biome's committed per-platform package folders and over a many-crate split: we maintain no parsers, and generated platform packages keep unpublished names out of the lockfile.) A root Cargo workspace sits beside the pnpm workspace; `packages/` stays where it is. Governs R32–R35.
+- **gritlint lives in this repository.** (session-settled: user-directed — chosen over a separate `systemfsoftware/gritlint` repository: the npm-plus-crates layout was asked for this monorepo.) Governs R13, R14, R26, R32.
+- **Public manifests declare what OIDC publishing needs.** (session-settled: user-directed — chosen over checking only `repository` and `provenance` and leaving `access` to a publish-time flag: a publish run without `--access public` fails to generate provenance.) Governs R36.
+- **The Rust meets the compound-pack standard.** (session-settled: user-directed — chosen over conventional Rust with no enforced core/shell split: the owner rejected the first cut as generic.) Governs R37.
 - **Crates are not published to crates.io.** (session-settled: user-approved — chosen over building on the published `grit-pattern-matcher` with our own language layer and over republishing marzano forks: crates.io rejects crates with git-only dependencies, and npm plus nix already reach every adopter named here.) Governs R3, R32.
 - **The product is named `gritlint`.** (session-settled: user-directed — chosen over `conventions` and `ruleset`: the name says GritQL lint at a glance and matches oxlint and tsgolint.) Governs R13.
 
@@ -78,8 +82,8 @@ The engines have shifted as well. Biome now accepts `language json` GritQL plugi
 
 **Distribution**
 
-- R13. The platform lives in `systemfsoftware/gritlint`. The binary is `gritlint`, and the npm launcher is `@systemfsoftware/gritlint`.
-- R14. A nix flake builds the binary from source. Its default package is the binary wrapped in bubblewrap, with no network and a read-only working directory.
+- R13. The platform lives in this repository. The binary is `gritlint`, and the npm launcher is `@systemfsoftware/gritlint` at `npm/gritlint`.
+- R14. This repository's nix flake builds the binary from source. Its `gritlint` package is the binary wrapped in bubblewrap, with no network and a read-only working directory.
 - R15. Per-platform npm packages behind a launcher deliver the binary with no postinstall step, published through OIDC trusted publishing with provenance, for comment-checker's platform set.
 
 ```mermaid
@@ -108,7 +112,7 @@ flowchart TB
 
 **Adoption in this repo**
 
-- R26. This repo runs the platform from its flake inside the `check:local` and `check:ci` gates.
+- R26. This repo runs the platform from its own flake inside the `check:local` and `check:ci` gates.
 - R27. The enrolling gate is observed red on a planted violation of each bundled rule, then green on the real tree, and that evidence is recorded in the PR.
 - R28. After enrollment, `scripts/guards/check-dev-conditions.ts` and `scripts/guards/check-typecheck-build-mode.ts` are deleted and removed from `guard:projects`.
 - R29. The `workspace-source-resolution` skill is deleted from its source repository.
@@ -117,16 +121,24 @@ flowchart TB
 
 **Repository layout**
 
-- R32. The platform repository is a Cargo workspace with one binary crate under `apps/` and one library crate under `crates/`. Rule packs live as data under `packs/`, each rule beside its fixtures, and are embedded in the binary at build time.
+- R32. The repository root is a Cargo workspace beside the pnpm workspace: one binary crate under `apps/` and one library crate under `crates/`. Rule packs live as data under `packs/`, each rule beside its fixtures, and are embedded in the binary at build time. The launcher lives at `npm/gritlint`.
 - R33. Per-platform npm packages are generated at release from one targets table and are never committed.
 - R34. A JSON schema for the adopter config is generated from the CLI's config types and ships in the npm launcher.
-- R35. One version, set by the release tag, applies to the crates, the launcher, the platform packages and the flake.
+- R35. One version applies to the crates, the launcher and the platform packages: the launcher's version, which this repository's change intents set like any other package's.
+
+**Publishing hygiene**
+
+- R36. A `package.json` with a `name` and no `"private": true` is public, and a public manifest declares `repository.url` equal to the repository it is published from, `publishConfig.access` `"public"` when its name is scoped, and `publishConfig.provenance` `true`. This repository's public manifests declare all three.
+
+**Code standard**
+
+- R37. The Rust code follows the compound packs (`compound-packs/cell-architecture`, `boundary-testing`, `schema-laws`) translated to Rust: read → decode → decide → encode → write per command, pure decide code without loops or `if`, decode into private-field domain types with typed refusals, evidence types for compiled rules and non-empty inputs, and property laws over the pure core. Clippy lints and CI steps enforce each rule.
 
 ### Key Flows
 
 - F1. Adoption in this repo
-  - **Trigger:** The platform's first release is published with the source-resolution pack.
-  - **Steps:** This repo pins the release through its flake and enables the pack (R26). The gate is observed red on planted violations, then green on the tree (R27). The two guards are deleted (R28), then the skill (R29).
+  - **Trigger:** The bundled packs pass their fixtures and scan this tree clean.
+  - **Steps:** This repo builds gritlint from its own flake and enables the packs (R26). The gate is observed red on planted violations, then green on the tree (R27). The two guards are deleted (R28), then the skill (R29).
   - **Outcome:** The skill and both guards are gone, and the rules alone enforce the wiring.
   - **Covered by:** R26, R27, R28, R29
 
@@ -140,6 +152,7 @@ flowchart TB
 - AE6. **Covers R7, R23.** **Given** a repo that enables the source-resolution pack but has no api-extractor config, **when** the run scans it cleanly, **then** it exits 0 and the success line names R21's rule as having evaluated zero files.
 - AE7. **Covers R24.** **Given** a reference-only `tsconfig.json` whose sibling `package.json` runs `tsc --noEmit` for `typecheck`, **when** the run scans it, **then** exactly one finding names that package.
 - AE8. **Covers R23.** **Given** a repo that uses tsdown without a source condition, enables no pack, and passes one consumer rule, **when** the run scans it, **then** only the consumer rule runs and no bundled rule reports a finding.
+- AE9. **Covers R36.** **Given** a scoped `package.json` without `"private": true` whose `publishConfig` lacks `"access": "public"`, **when** the run scans it with the npm-provenance pack enabled, **then** exactly one finding names that manifest.
 
 ### Success Criteria
 
@@ -182,9 +195,9 @@ flowchart TB
 
 ## Planning Contract
 
-**Target repos:** U1–U9 land in the new repository `systemfsoftware/gritlint`, and paths in those units are relative to it. U10–U13 land in this repository.
+**Target repo:** every unit lands in this repository. Paths are relative to its root.
 
-**Product Contract preservation:** Product Contract unchanged. The deferred questions were resolved in place: cross-file scoping is KTD5, and the skill's source location is U13's first step.
+**Product Contract preservation:** Revised from the superseded plan in three places, each by the owner: the platform's repository (R13, R14, R26, R32, R35), the npm-provenance pack (R36), and the code standard (R37). The deferred questions were resolved in place: cross-file scoping is KTD5, and the skill's source location is U13's first step.
 
 ### Key Technical Decisions
 
@@ -194,15 +207,16 @@ flowchart TB
 - KTD4. **Rule ids are namespaced, and collisions are checked before compiling.** A bundled rule's id is `<pack>/<stem>` and a consumer rule's id is `local/<stem>`. The engine silently shadows duplicate pattern names, so gritlint rejects duplicates while it builds the library and never leaves that to the engine (R5).
 - KTD5. **Cross-package facts come from the adopter config. Same-package joins use multifile patterns.** (session-settled: user-approved — chosen over gritlint built-ins that resolve package names: GritQL cannot resolve package specifiers, and one pattern cannot join TypeScript with JSON.) The source-resolution pack's config names the condition, the tsconfig preset specifiers that carry it, and the shared Vitest config modules that wire both keys. Separate rules then check those in-tree preset and shared-config files directly. A sibling join inside one package directory is a `multifile` pattern that compares the directory part of `$filename`. It follows relative `extends` one hop. Governs R19, R20, R21, R23, R24.
 - KTD6. **Configuration is one `gritlint.json` at the scan root.** It holds enabled packs with their parameters, consumer rule paths and ignore globs. Its JSON schema is generated from the Rust config types and committed to `npm/gritlint/configuration_schema.json`, and CI fails when the committed schema drifts from the types. Pack parameters reach a rule as values bound before it compiles. U2 decides between GritQL pattern parameters and a generated prelude of definitions. Governs R23, R34.
-- KTD7. **The scan walks the tree once and batches files by language.** The walk from the scan root honours `.gitignore` and always skips `node_modules` and `.git`. Files are grouped by the engine's extension-to-language map, and each rule runs on the files of its language. A multifile rule receives that whole batch in one evaluation, as the engine requires. A rule's evaluated-file count is the size of the batch it received (R7). Engine parse diagnostics on a target file become exit 2 (R6).
+- KTD7. **The scan walks the tree once and evaluates each rule only over the files it names.** The walk from the scan root honours `.gitignore` and the config's ignore globs, and always skips `node_modules` and `.git`. A multifile rule is evaluated once per directory, over that directory's files whose paths match the rule's `file($name, …)` name patterns, because the engine attributes a successful multifile match to every file in its batch; name-matched files of another language join as name-only participants. One success yields one finding for that directory. A rule's evaluated-file count is the number of files it was evaluated over (R7). Engine parse diagnostics on a file a rule reads become exit 2 (R6).
 - KTD8. **Three test layers.**
   - Rule behaviour is proven only by `gritlint test` over pack fixtures. Each case pairs a known-bad and a known-good input (pack: boundary-testing, real-system-oracles.md).
   - The core is proven by in-process Rust integration tests over temporary directories. They call the library API and never spawn the binary.
   - Exactly two end-to-end journeys run in CI: the nix bubblewrap binary over a fixture repo, and the packed npm launcher installed in a scratch project.
 
   Engine behaviours gritlint relies on are pinned by contract tests against the pinned commit (pack: boundary-testing, pin-dependency-semantics.md). Governs R10, R11.
-- KTD9. **The release pipeline copies comment-checker's.** That means one `scripts/targets.json` table, platform manifests generated at release, `optionalDependencies` injected at publish, and a tag-triggered `release.yml` publishing through OIDC with provenance. The first publish of each new npm name is a one-time local bootstrap, per `docs/solutions/tooling-decisions/first-publish-under-oidc-trusted-publishing.md` in this repo. Governs R15, R33, R35.
-- KTD10. **This repo consumes the gritlint flake's sandboxed package, built from source and pinned by `flake.lock`.** Release-binary fetching through a hashes manifest, the way `nix/comment-checker.nix` works, waits until gritlint has releases. `bin/gritlint` copies `bin/dprint`'s wrapper, so the same command works in `nix develop`, CI and a bare shell with nix. Governs R26.
+- KTD9. **Release rides this repository's pipeline.** The launcher is a pnpm workspace package versioned by change intents. When a release set contains it, `.github/workflows/release.yml` builds the binary on a native-runner matrix from one `scripts/tools/gritlint/targets.json`, publishes the generated platform packages through OIDC with provenance, then lets the existing publish step release the launcher with its exact `optionalDependencies` pins injected at publish. The first publish of each new npm name is a one-time local bootstrap, per `docs/solutions/tooling-decisions/first-publish-under-oidc-trusted-publishing.md`. Governs R15, R33, R35.
+- KTD10. **The flake builds gritlint from this checkout.** `nix/gritlint.nix` builds the root Cargo workspace, and `nix/gritlint-sandbox.nix` wraps it the way `nix/comment-checker-sandbox.nix` wraps comment-checker. `bin/gritlint` copies `bin/dprint`'s wrapper, so the same command works in `nix develop`, CI and a bare shell with nix. Governs R14, R26.
+- KTD11. **The code standard is a gate, not prose.** Each R37 rule maps to a `[workspace.lints.clippy]` lint, a `clippy.toml` restriction, or a CI grep over the decide modules. A leaf `AGENTS.md` beside the crates cites the compound-pack file each rule derives from. Governs R37.
 
 ### High-Level Technical Design
 
@@ -233,26 +247,29 @@ The exit decision the diagram ends in (R6, R7):
 ### Output Structure
 
 ```text
-systemfsoftware/gritlint
-├── Cargo.toml · Cargo.lock · rust-toolchain.toml · deny.toml
-├── package.json · pnpm-workspace.yaml
-├── flake.nix · flake.lock · nix/{package.nix,bwrap.nix}
+systemfsoftware (root)
+├── Cargo.toml · Cargo.lock · rust-toolchain.toml · deny.toml · clippy.toml
+├── package.json · pnpm-workspace.yaml (adds npm/*)
+├── flake.nix · nix/{gritlint.nix,gritlint-sandbox.nix}
+├── bin/gritlint
+├── gritlint.json
 ├── apps/gritlint/src/main.rs
 ├── crates/gritlint_core/{src,tests}/
 ├── packs/
 │   ├── source-resolution/{rules,fixtures}/
-│   └── typecheck-build-mode/{rules,fixtures}/
+│   ├── typecheck-build-mode/{rules,fixtures}/
+│   └── npm-provenance/{rules,fixtures}/
 ├── npm/gritlint/{bin/gritlint,package.json,configuration_schema.json,README.md}
-├── scripts/{targets.json,generate-platform-manifest.ts,sync-version.ts,check-matrix.ts}
-├── .changeset/
-└── .github/workflows/{ci.yml,release.yml}
+├── packages/ (unchanged)
+├── scripts/tools/gritlint/{targets.json,generate-platform-manifest.ts,check-matrix.ts}
+└── .github/workflows/{reusable-checks.yml,release.yml}
 ```
 
 ### Sequencing
 
-U1 → U2 → U3 → U4 → U5 → U6, then U7, U8 and U9 in parallel. U10 can land at any time. U11 needs U6 and U8. U12 needs U11 green, and U13 needs U12.
+U1 → U2 → U3 → U4 → U5 → U6 → U14, with U15 reshaping U2–U5's code under the standard. U7, U8 and U9 follow U4. U11 needs U6, U8 and U14. U12 needs U11 green, U10 follows U11 green, and U13 needs U12.
 
-Four steps need the repository owner: creating `systemfsoftware/gritlint` (U1), the first npm publish (U9), deleting the skill in its source repository, and closing #410 (U13). The npm publish and the skill deletion cannot be undone, so an autonomous executor records them as pending and continues everything that does not depend on them.
+Three steps need the repository owner: the first npm publish (after merge), deleting the skill in its source repository, and closing #410 (U13). The npm publish and the skill deletion cannot be undone, so an autonomous executor records them as pending and continues everything that does not depend on them.
 
 ### Deferred to Implementation
 
@@ -262,46 +279,49 @@ Four steps need the repository owner: creating `systemfsoftware/gritlint` (U1), 
 
 ### Risks
 
-| Risk                                                                                                                | Mitigation                                                                                                                           |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Cargo or nix cannot build the engine's tree-sitter grammars, which live in git submodules of a path-dependency tree | U2 builds both ways before anything else. Fallback: vendor the pinned crates with their submodules into `vendor/` under a `[patch]`. |
-| The JSON grammar rejects comments                                                                                   | Unparseable files exit 2 (R6), never pass silently. Adopters with commented tsconfigs are told plainly, and the README says so.      |
-| Multifile rules evaluate every file of their language in one batch, so they may be slow on large trees              | Only rules that need a join are multifile. Per-rule counts make the cost visible.                                                    |
-| The upstream engine goes quiet or breaks on a re-pin                                                                | The pin is a rev plus a lockfile, and the contract tests fail on any re-pin that changes behaviour gritlint depends on.              |
+| Risk                                                                                                                   | Mitigation                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A valid TypeScript file the pinned tree-sitter grammar cannot parse aborts every rule that parses all TypeScript files | Rules name the files they read, and gritlint evaluates each rule only over name-matched files. An unparseable file a rule does read still exits 2 (R6). |
+| The upstream engine goes quiet or breaks on a re-pin                                                                   | The pin is a rev plus a lockfile, and the contract tests fail on any re-pin that changes behaviour gritlint depends on.                                 |
+| Adding a Cargo workspace to the root slows `check:local`                                                               | The Rust gate runs as its own step with cargo's incremental cache; turbo hashes ignore `target/`.                                                       |
 
 ---
 
 ## Implementation Units
 
-| U-ID | Title                                            | Key files                                                                             | Depends on |
-| ---- | ------------------------------------------------ | ------------------------------------------------------------------------------------- | ---------- |
-| U1   | Scaffold the gritlint workspace                  | `Cargo.toml`, `apps/gritlint`, `crates/gritlint_core`, `.github/workflows/ci.yml`     | none       |
-| U2   | Engine adapter and contract tests                | `crates/gritlint_core/src/engine.rs`, `crates/gritlint_core/tests/engine_contract.rs` | U1         |
-| U3   | Rule loading, packs and config                   | `crates/gritlint_core/src/{rules,packs,config}.rs`                                    | U2         |
-| U4   | Scan run contract                                | `crates/gritlint_core/src/{scan,report}.rs`, `apps/gritlint/src/main.rs`              | U3         |
-| U5   | `gritlint test` fixture runner                   | `crates/gritlint_core/src/fixtures.rs`                                                | U4         |
-| U6   | Source-resolution and typecheck-build-mode packs | `packs/*`                                                                             | U5         |
-| U7   | Config schema generation                         | `npm/gritlint/configuration_schema.json`                                              | U3         |
-| U8   | Nix flake and bubblewrap package                 | `flake.nix`, `nix/*`                                                                  | U4         |
-| U9   | npm launcher and release pipeline                | `npm/gritlint`, `scripts/*`, `.github/workflows/release.yml`                          | U4, U7     |
-| U10  | REPO-W8 decision record                          | `docs/solutions/tooling-decisions/gritlint-conventions-platform.md`                   | none       |
-| U11  | Enroll gritlint as this repo's gate              | `flake.nix`, `bin/gritlint`, `gritlint.json`, `package.json`                          | U6, U8     |
-| U12  | Retire the two guards and their citations        | `scripts/guards/*`, `package.json`, `CONCEPTS.md`                                     | U11        |
-| U13  | Out-of-repo cleanup                              | skill source repo, PR #410                                                            | U12        |
+| U-ID | Title                                            | Key files                                                                                | Depends on  |
+| ---- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- | ----------- |
+| U1   | Root Cargo workspace                             | `Cargo.toml`, `apps/gritlint`, `crates/gritlint_core`, `AGENTS.md` (REPO-S5)             | none        |
+| U2   | Engine adapter and contract tests                | `crates/gritlint_core/src/engine.rs`, `crates/gritlint_core/tests/engine_contract.rs`    | U1          |
+| U3   | Rule loading, packs and config                   | `crates/gritlint_core/src/{rules,packs,config}.rs`                                       | U2          |
+| U4   | Scan run contract                                | `crates/gritlint_core/src/{scan,report}.rs`, `apps/gritlint/src/main.rs`                 | U3          |
+| U5   | `gritlint test` fixture runner                   | `crates/gritlint_core/src/fixtures.rs`                                                   | U4          |
+| U6   | Source-resolution and typecheck-build-mode packs | `packs/*`                                                                                | U5          |
+| U7   | Config schema generation                         | `npm/gritlint/configuration_schema.json`                                                 | U3          |
+| U8   | Nix package and sandbox                          | `flake.nix`, `nix/gritlint*.nix`                                                         | U4          |
+| U9   | npm launcher and release pipeline                | `npm/gritlint`, `scripts/tools/gritlint/*`, `.github/workflows/release.yml`              | U4, U7      |
+| U10  | REPO-W8 decision record                          | `docs/solutions/tooling-decisions/gritlint-conventions-platform.md`                      | U11         |
+| U11  | Enroll gritlint as this repo's gate              | `bin/gritlint`, `gritlint.json`, `package.json`, `.github/workflows/reusable-checks.yml` | U6, U8, U14 |
+| U12  | Retire the two guards and their citations        | `scripts/guards/*`, `package.json`, `CONCEPTS.md`                                        | U11         |
+| U13  | Out-of-repo cleanup                              | skill source repo, PR #410                                                               | U12         |
+| U14  | npm-provenance pack and manifest fix             | `packs/npm-provenance`, public `package.json` files, `.changeset/*`                      | U5          |
+| U15  | Code standard                                    | `crates/**`, `apps/**`, `Cargo.toml`, `clippy.toml`, `crates/AGENTS.md`                  | U5          |
 
-### U1. Scaffold the gritlint workspace
+### U1. Root Cargo workspace
 
-- **Goal:** Create a buildable `systemfsoftware/gritlint` repository with the layout from R32 and a CI that gates format, lints, tests and licences.
+- **Goal:** Make this repository's root a Cargo workspace with the layout from R32, gated by `check:local` and CI.
 - **Requirements:** R13, R32, R35
-- **Dependencies:** none. Creating the GitHub repository is an owner step, and it can be undone.
-- **Files:** `Cargo.toml`, `rust-toolchain.toml`, `deny.toml`, `apps/gritlint/Cargo.toml`, `apps/gritlint/src/main.rs`, `crates/gritlint_core/Cargo.toml`, `crates/gritlint_core/src/lib.rs`, `package.json`, `pnpm-workspace.yaml`, `LICENSE`, `README.md`, `AGENTS.md`, `.github/workflows/ci.yml`, `.changeset/config.json`
+- **Dependencies:** none.
+- **Files:** `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `deny.toml`, `apps/gritlint/Cargo.toml`, `apps/gritlint/src/main.rs`, `crates/gritlint_core/Cargo.toml`, `crates/gritlint_core/src/lib.rs`, `package.json` (a `gate:rust` script inside `check:local`), `pnpm-workspace.yaml` (`npm/*`), `.gitignore` (`target/`), `AGENTS.md` (REPO-S5 amendment and the directory map), `.github/workflows/reusable-checks.yml`
 - **Approach:**
-  1. Copy comment-checker's workspace manifest: shared package fields, `unsafe_code = "deny"`, clippy all and pedantic, and the release profile.
-  2. Give the binary a `--version` flag and the two subcommands `check` and `test`, with bodies filled in by U4 and U5.
-  3. Have `ci.yml` run `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` and `cargo deny check`. In `deny.toml`, allow `github.com/biomejs/gritql` as the one git source.
-- **Patterns to follow:** comment-checker `Cargo.toml` and `.github/workflows/ci.yml`; the root-file set of oxc and biome.
+  1. Workspace manifest as comment-checker's: shared package fields, `unsafe_code = "deny"`, clippy all and pedantic, the release profile.
+  2. The binary has `--version` and the subcommands `check`, `test` and a hidden `schema`.
+  3. `gate:rust` runs `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace`, `cargo run -p gritlint -- test packs` and `cargo deny check`. `deny.toml` allows `github.com/biomejs/gritql` as the one git source.
+  4. Amend REPO-S5: a package lives at `packages/<family>/<name>`, `packages/<name>`, or, for the npm launcher of a Rust binary built in this repository, `npm/<name>`.
+- **Execution note:** The CI change is an Evaluator surface and lands in its own commit.
+- **Patterns to follow:** comment-checker `Cargo.toml`; the root-file set of oxc and biome.
 - **Test expectation:** none, because this is scaffolding. The smoke check is that `gritlint --version` prints the workspace version.
-- **Verification:** CI is green on the first push, and the version comes from `[workspace.package]`.
+- **Verification:** `pnpm gate:rust` exits 0, and `pnpm check:local` runs it.
 
 ### U2. Engine adapter and contract tests
 
@@ -412,45 +432,43 @@ Four steps need the repository owner: creating `systemfsoftware/gritlint` (U1), 
 - **Goal:** Generate the `gritlint.json` schema from the config types and ship it in the launcher.
 - **Requirements:** R34
 - **Dependencies:** U3
-- **Files:** `crates/gritlint_core/src/config.rs`, `apps/gritlint/src/main.rs`, `npm/gritlint/configuration_schema.json`, `.github/workflows/ci.yml`
-- **Approach:** A hidden `gritlint schema` subcommand prints the schema. CI regenerates it and fails on any diff with the committed copy.
-- **Test scenarios:**
-  - The committed schema validates this repo's `gritlint.json` from U11.
-  - A config with an unknown top-level key fails validation.
+- **Files:** `crates/gritlint_core/src/config.rs`, `apps/gritlint/src/main.rs`, `npm/gritlint/configuration_schema.json`, `package.json` (`gate:rust`)
+- **Approach:** A hidden `gritlint schema` subcommand prints the schema with one property per bundled pack and its required parameters. `gate:rust` regenerates it and fails on any diff with the committed copy. The config accepts `$schema` so editors can point at it.
+- **Test expectation:** none beyond the drift gate; the schema is generated.
 - **Verification:** The schema drift check is green, and an editor using the schema completes pack names.
 
-### U8. Nix flake and bubblewrap package
+### U8. Nix package and sandbox
 
-- **Goal:** Build gritlint from source in nix, and make the default package the sandboxed wrapper.
+- **Goal:** Build gritlint from this checkout in nix, and expose the sandboxed wrapper.
 - **Requirements:** R14
 - **Dependencies:** U4
-- **Files:** `flake.nix`, `flake.lock`, `nix/package.nix`, `nix/bwrap.nix`, `.github/workflows/ci.yml`
+- **Files:** `flake.nix`, `nix/gritlint.nix`, `nix/gritlint-sandbox.nix`
 - **Approach:**
-  1. Build with `buildRustPackage` from `Cargo.lock`, pinning the git dependency's output hash.
-  2. Copy the bubblewrap wrapper from comment-checker, including its working-directory guard.
-  3. Expose three packages: `gritlint` (unwrapped), `gritlint-bwrap`, and `default` pointing at the bubblewrap one.
-- **Patterns to follow:** comment-checker `flake.nix`; this repo's `nix/comment-checker-sandbox.nix`.
-- **Test scenarios:** this is end-to-end journey 1 of KTD8. In CI, `nix run .#default -- check` over a fixture repo with one violation exits 1, and over a clean one exits 0, both with the network unshared.
-- **Verification:** `nix build .#default` and `nix flake check` succeed on Linux in CI.
+  1. Build with `buildRustPackage` from the root `Cargo.lock`, deriving the engine rev and `outputHashes` from the lock, and supplying the engine's `resources/node-types` in preBuild.
+  2. Wrap it the way `nix/comment-checker-sandbox.nix` wraps comment-checker, including the working-directory guard.
+  3. Expose `gritlint` (sandboxed) and `gritlint-unwrapped`, and add both to the dev shell.
+- **Patterns to follow:** `nix/comment-checker.nix`, `nix/comment-checker-sandbox.nix`.
+- **Test scenarios:** this is end-to-end journey 1 of KTD8. In CI, `nix run .#gritlint -- check` over a fixture tree with one planted violation exits 1, and exits 0 once fixed, with the network unshared.
+- **Verification:** `nix build .#gritlint` succeeds, and a write from inside the sandbox fails.
 
 ### U9. npm launcher and release pipeline
 
-- **Goal:** Deliver the binary through `@systemfsoftware/gritlint` with no postinstall step, released from tags.
+- **Goal:** Deliver the binary through `@systemfsoftware/gritlint` with no postinstall step, released by this repository's release workflow.
 - **Requirements:** R15, R33, R35
 - **Dependencies:** U4, U7
-- **Files:** `npm/gritlint/package.json`, `npm/gritlint/bin/gritlint`, `npm/gritlint/README.md`, `scripts/targets.json`, `scripts/generate-platform-manifest.ts`, `scripts/sync-version.ts`, `scripts/check-matrix.ts`, `.github/workflows/release.yml`
-- **Approach:** Port comment-checker's pipeline file by file (KTD9). The first publish of `@systemfsoftware/gritlint` and each platform name is the owner's local bootstrap. Until it happens, the release workflow's publish job stays unreached, and the tag gate plus matrix jobs still run on dry-run tags.
-- **Patterns to follow:** comment-checker `scripts/lib/targets.json`, `scripts/lib/sync-root-version.ts`, `scripts/tools/generate-platform-manifest.ts`, `scripts/tools/check-matrix.ts`, `npm/packages/comment-checker/src/platform.ts`, `.github/workflows/release.yml`.
+- **Files:** `npm/gritlint/package.json`, `npm/gritlint/bin/gritlint`, `npm/gritlint/README.md`, `scripts/tools/gritlint/targets.json`, `scripts/tools/gritlint/generate-platform-manifest.ts`, `scripts/tools/gritlint/check-matrix.ts`, `.github/workflows/release.yml`, the version-sync step in `scripts/tools/`
+- **Approach:** Port the launcher and generators from the scratch build (KTD9). Version sync reads the launcher's version into `[workspace.package]` at release. The first publish of `@systemfsoftware/gritlint` and each platform name is the owner's local bootstrap; until it happens the platform publish job is skipped, and its build and pack steps run on every release.
+- **Patterns to follow:** comment-checker `scripts/lib/targets.json`, `scripts/tools/generate-platform-manifest.ts`, `scripts/tools/check-matrix.ts`, `npm/packages/comment-checker/src/platform.ts`; this repository's `release.yml` and `scripts/tools/publish-set.ts`.
 - **Test scenarios:**
-  - `check-matrix` fails when the workflow matrix and `targets.json` disagree in either direction.
-  - End-to-end journey 2 of KTD8: in each release lane, the packed launcher plus that lane's platform tarball, installed in a scratch project, runs `gritlint --version`.
-- **Verification:** A dry-run tag produces every platform tarball and the launcher tarball with an exact-pinned `optionalDependencies` set, and nothing is published.
+  - `check-matrix` exits 1 when the workflow matrix and `targets.json` disagree in either direction; proven by running it, with no test file (it is a gate).
+  - The launcher forwards arguments and the platform binary's exit code, and names the missing platform package.
+- **Verification:** Packing the launcher and one platform package produces tarballs with exact-pinned `optionalDependencies`, and nothing is published.
 
 ### U10. REPO-W8 decision record
 
 - **Goal:** Record why gritlint exists in its current shape and what it replaced, for this repository.
 - **Requirements:** R30
-- **Dependencies:** none
+- **Dependencies:** U11 green. The record states facts the enrolled gate has shown, never before.
 - **Files:** `docs/solutions/tooling-decisions/gritlint-conventions-platform.md`
 - **Approach:** State the choice, then each rejected alternative with the reason it lost: the repackaged grit binary, a Node CLI on `@getgrit/gritql`, biome plugins, keeping the Deno guards, and publishing to crates.io. Cite this plan and #410.
 - **Test expectation:** none, because this is documentation.
@@ -458,16 +476,15 @@ Four steps need the repository owner: creating `systemfsoftware/gritlint` (U1), 
 
 ### U11. Enroll gritlint as this repo's gate
 
-- **Goal:** Run gritlint with both packs in `check:local` and `check:ci`, observed red on planted violations, then green on the tree.
+- **Goal:** Run gritlint with all three packs in `check:local` and `check:ci`, observed red on planted violations, then green on the tree.
 - **Requirements:** R26, R27. Implements F1.
-- **Dependencies:** U6, U8
-- **Files:** `flake.nix`, `flake.lock`, `bin/gritlint`, `gritlint.json`, `package.json`, `.github/AGENTS.md`, `AGENTS.md`
+- **Dependencies:** U6, U8, U14
+- **Files:** `bin/gritlint`, `gritlint.json`, `package.json`, `.github/workflows/reusable-checks.yml`, `.github/AGENTS.md`, `AGENTS.md`
 - **Approach:**
-  1. Add the `gritlint` flake input and expose its package (KTD10).
-  2. Copy `bin/dprint` to `bin/gritlint`.
-  3. Write `gritlint.json`: enable both packs, set the condition `@systemfsoftware/source`, the presets from `packages/toolchain/tsconfig`, and the shared config `@systemfsoftware/vitest-config`.
-  4. Add `lint:conventions` to `package.json` and call it from `gate:tasks` and `gate:local` beside `guard:projects`.
-  5. Add the failure row to `.github/AGENTS.md`.
+  1. Copy `bin/dprint` to `bin/gritlint`, resolving the flake's `gritlint` package.
+  2. Write `gritlint.json`: enable the three packs with this repository's parameters (condition `@systemfsoftware/source`, the presets and preset files from `packages/toolchain/tsconfig`, the shared config `@systemfsoftware/vitest-config`, and `repositoryUrl` `git+https://github.com/systemfsoftware/systemfsoftware.git`), and ignore the vendored and fixture trees.
+  3. Add `lint:conventions` to `package.json` and call it from `gate:tasks` and `gate:local` beside `guard:projects`.
+  4. Add the failure row to `.github/AGENTS.md`.
 - **Execution note:** This is an Evaluator surface. It lands in its own commit. The red run comes from planted violations that are never committed, one per rule, and its output goes in the PR body.
 - **Patterns to follow:** `bin/dprint`, the `comment-checker` entries in `flake.nix`, and the `guard:projects` chain.
 - **Test expectation:** none in this repo's suites. The gate's observed red and green is the evidence (R27).
@@ -492,33 +509,52 @@ Four steps need the repository owner: creating `systemfsoftware/gritlint` (U1), 
 - **Requirements:** R29, R31
 - **Dependencies:** U12
 - **Files:** none in this repository.
-- **Approach:** First find the repository that ships the skill; only installed copies were found locally. Both actions need the owner. An autonomous executor records them as pending in the PR body.
+- **Approach:** First find the repository that ships the skill; only installed copies were found locally. Both actions need the owner unless the session's token can do them. An autonomous executor records whatever remains as pending in the PR body.
 - **Test expectation:** none, because this is repository administration.
 - **Verification:** The skill no longer loads in a fresh session, and #410 is closed with a link to this plan.
+
+### U14. npm-provenance pack and manifest fix
+
+- **Goal:** Flag public manifests that cannot publish through OIDC with provenance, and fix this repository's.
+- **Requirements:** R36. Covers AE9.
+- **Dependencies:** U5
+- **Files:** `packs/npm-provenance/{pack.json,README.md,rules/*.md,fixtures/**}`, every public `package.json`, one `.changeset/*.md` intent (bump `none`)
+- **Approach:** Three rules (`repository-url`, `public-access`, `provenance`), each written as a multifile rule over `package.json`, with the repository URL as the pack's one parameter. Add the missing `publishConfig` keys by text insertion, never a JSON round-trip, because a manifest may carry a duplicate `publishConfig` key (`docs/solutions/tooling-decisions/tsdown-manages-publishconfig-during-build.md`).
+- **Patterns to follow:** `packs/typecheck-build-mode`.
+- **Test scenarios:** each rule's fixtures; every bad case differs from a good case only in the field its rule checks, and a private package is a good case for every rule.
+- **Verification:** `gritlint test packs` is green, and the pack over this tree reports nothing after the manifest fix (it reported 40 `public-access` findings and 1 `provenance` finding before).
+
+### U15. Code standard
+
+- **Goal:** Bring the Rust to R37 and make the compiler and CI enforce it.
+- **Requirements:** R37
+- **Dependencies:** U5
+- **Files:** `crates/gritlint_core/src/**`, `crates/gritlint_core/tests/**`, `apps/gritlint/src/main.rs`, `Cargo.toml` (`[workspace.lints]`), `clippy.toml`, `crates/AGENTS.md`, `package.json` (`gate:rust` grep step)
+- **Approach:** Land the lint gates first so the refactor is driven by red clippy output. Split each command into shell (read, write), decode, decide and encode modules. Replace public fields and stringly ids with private-field newtypes and smart constructors. Make `CompiledRule`, `SelectedFiles` and `ScanPlan` evidence types. Remove `unwrap`, `expect`, indexing and loops from decide code.
+- **Execution note:** Behaviour-preserving: every pack's fixtures, the engine contract tests and the consumer-visible assertions of the scan, rule-loading and fixture-runner tests keep passing.
+- **Test scenarios:** property laws over the pure core, each shown to fail on a planted bug: batching partitions files by directory, output is independent of input order, the exit decision, and `RelPath` decode refusals with constructive generators.
+- **Verification:** every added lint and gate is shown red on a planted violation, then green.
 
 ---
 
 ## Verification Contract
 
-| Gate                      | Command                                                                                  | Repo      | Units    |
-| ------------------------- | ---------------------------------------------------------------------------------------- | --------- | -------- |
-| Format, lints, tests      | `cargo fmt --check`, `cargo clippy --workspace -- -D warnings`, `cargo test --workspace` | gritlint  | U1–U7    |
-| Licences and sources      | `cargo deny check`                                                                       | gritlint  | U1, U2   |
-| Rule contract             | `cargo run -p gritlint -- test packs`                                                    | gritlint  | U5, U6   |
-| Schema drift              | regenerate with `gritlint schema`; the diff must be empty                                | gritlint  | U7       |
-| Nix build and sandbox run | `nix build .#default`, `nix flake check`                                                 | gritlint  | U8       |
-| Release dry run           | a pre-release tag produces the tarballs and publishes nothing                            | gritlint  | U9       |
-| Conventions gate          | `pnpm lint:conventions`: red on planted violations, then green                           | this repo | U11      |
-| Whole-repo gate           | `pnpm check:local` exits 0 after the last edit                                           | this repo | U11, U12 |
-| CI                        | `gh pr checks --watch --fail-fast` exits 0                                               | both      | all      |
+| Gate                      | Command                                                                                                 | Units           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | --------------- |
+| Rust gate                 | `pnpm gate:rust` (fmt, clippy -D warnings, tests, `test packs`, schema drift, deny, decide-module grep) | U1–U7, U14, U15 |
+| Nix build and sandbox run | `nix build .#gritlint`, the CI journey over a planted violation                                         | U8              |
+| Release packing           | the launcher and one platform package pack with exact pins, nothing published                           | U9              |
+| Conventions gate          | `pnpm lint:conventions`: red on planted violations, then green                                          | U11             |
+| Whole-repo gate           | `pnpm check:local` exits 0 after the last edit                                                          | all             |
+| CI                        | `gh pr checks --watch --fail-fast` exits 0                                                              | all             |
 
 ---
 
 ## Definition of Done
 
 - Every unit's Verification holds.
-- The gritlint repository's CI is green on `main`, with the packs' `gritlint test` inside it.
+- `pnpm gate:rust` runs inside `check:local` and CI.
 - This repository's PR shows the red-then-green gate evidence and is green in CI.
 - The two guards are gone, and no document cites them.
 - The owner-gated steps (the npm debut, skill deletion, closing #410) are either done or listed as pending in the PR body.
-- No spike scratch code, abandoned engine-adapter variant, or commented-out experiment remains in either diff.
+- No spike scratch code, abandoned engine-adapter variant, or commented-out experiment remains in the diff.
