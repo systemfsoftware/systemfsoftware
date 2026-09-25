@@ -102,9 +102,15 @@ overrides:
 packages:
   - packages/*
   - packages/atom/*
+  - packages/daemon/*
+  - packages/gherkin/*
   - packages/oxlint-plugin/*
   - packages/oxlint-presets/*
+  - packages/runner/*
+  - packages/schema/*
+  - packages/sim/*
   - packages/toolchain/*
+  - packages/trace/*
   - omp/plugins/*
   - examples/*
 patchedDependencies:

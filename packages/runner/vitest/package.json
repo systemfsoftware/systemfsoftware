@@ -1,0 +1,98 @@
+{
+  "name": "@systemfsoftware/vitest",
+  "license": "MIT",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/runner/vitest"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/runner/vitest#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "A fork of @effect/vitest whose defaults make the lazy test a good test: expect bound to the test's own callback, one check per observed state, fresh layers, a second run that catches leaked state, virtual time, and properties refuted against a constant impostor.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "vitest",
+    "testing",
+    "property-testing",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./guard": {
+      "@systemfsoftware/source": "./src/guard.ts",
+      "types": "./dist/guard.d.ts",
+      "default": "./dist/guard.mjs"
+    },
+    "./integration": {
+      "@systemfsoftware/source": "./src/integration.ts",
+      "types": "./dist/integration.d.ts",
+      "default": "./dist/integration.mjs"
+    },
+    "./TestClock": {
+      "@systemfsoftware/source": "./src/TestClock.ts",
+      "types": "./dist/TestClock.d.ts",
+      "default": "./dist/TestClock.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./guard": {
+        "types": "./dist/guard.d.ts",
+        "default": "./dist/guard.mjs"
+      },
+      "./integration": {
+        "types": "./dist/integration.d.ts",
+        "default": "./dist/integration.mjs"
+      },
+      "./TestClock": {
+        "types": "./dist/TestClock.d.ts",
+        "default": "./dist/TestClock.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

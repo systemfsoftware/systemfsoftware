@@ -78,11 +78,11 @@ hex-schema@v1.1.2
 And that the package.json files reflect the new versions:
 
 ```bash
-$ node -p "require('./packages/effect-schema-extensions/package.json').version"
+$ node -p "require('./packages/schema/effect-schema-extensions/package.json').version"
 0.4.1
-$ node -p "require('./packages/effect-schema-law/package.json').version"
+$ node -p "require('./packages/schema/effect-schema-law/package.json').version"
 0.3.2
-$ node -p "require('./packages/hex-schema/package.json').version"
+$ node -p "require('./packages/schema/hex-schema/package.json').version"
 1.1.2
 ```
 

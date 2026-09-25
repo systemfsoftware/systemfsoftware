@@ -17,10 +17,10 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 /** The files that own the process timers, clocks, and randomness the rest of production source must reach through them. */
 const PLATFORM_PORTS = [
   'packages/atom/effect-atom/src/internal/HostTimer.ts',
-  'packages/effect-schema-law/src/recursion-laws.ts',
+  'packages/schema/effect-schema-law/src/recursion-laws.ts',
   // Per-case salt for globally unique W3C trace IDs (traces are read back from a shared remote store); drawn outside the kernel run.
-  'packages/trace-spec/src/Suite.ts',
-  'packages/vitest/src/internal/virtual-time.ts',
+  'packages/trace/trace-spec/src/Suite.ts',
+  'packages/runner/vitest/src/internal/virtual-time.ts',
 ]
 
 const recommendedRules: NonNullable<OxlintConfig['rules']> = {

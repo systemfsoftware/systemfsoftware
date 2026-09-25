@@ -73,7 +73,7 @@ against 46.88% clean on the same tree. A gate that can report a stale pass is
 not a gate."
 
 I never verified that number. Challenged on it, I tried to, and it does not
-reproduce. Four experiments on `packages/hex-schema`, each comparing a cached
+reproduce. Four experiments on `packages/schema/hex-schema`, each comparing a cached
 run against a clean run of the same tree:
 
 | experiment                                             | cached    | clean     |
@@ -86,7 +86,7 @@ run against a clean run of the same tree:
 The last one is the decisive one. It breaks the hardest case for the differ:
 twelve tests vanish while every file the differ can read stays byte-identical
 (the regression is in `@systemfsoftware/effect-schema-vite`, not in
-`packages/hex-schema/`). The cached run caught it and scored identically to the
+`packages/schema/hex-schema/`). The cached run caught it and scored identically to the
 clean run. `incremental-differ.ts` in our fork is unmodified upstream code —
 two commits, the fork import and a formatting pass.
 

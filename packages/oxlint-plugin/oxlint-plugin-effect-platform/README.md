@@ -84,7 +84,7 @@ What the time-source rule leaves alone, each a shape the rule's own fixtures pin
 - `queueMicrotask(...)`: it yields to the microtask queue and reads no clock, so it is not a time source.
 - `new Date(0)` and any `new Date(arg)`: the argument fixes the instant, so there is nothing for a clock port to own.
 - A source injected as a parameter, shadowed by a local declaration, or imported from another module: the call crosses the boundary instead of reading the process, so the port — not the call site — owns the verdict.
-- A file listed in the rule's `ports` option, matched by repo-relative path or path suffix: the recommended config registers `packages/atom/effect-atom/src/internal/HostTimer.ts` and `packages/effect-schema-law/src/recursion-laws.ts`.
+- A file listed in the rule's `ports` option, matched by repo-relative path or path suffix: the recommended config registers `packages/atom/effect-atom/src/internal/HostTimer.ts` and `packages/schema/effect-schema-law/src/recursion-laws.ts`.
 - Test and fixture files (`.test.ts`, `.spec.ts`, `__tests__/`, `__fixtures__/`, `tests/`, `testResources/`): the regime binds production code.
 
 ## FAQ

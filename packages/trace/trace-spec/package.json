@@ -1,0 +1,88 @@
+{
+  "name": "@systemfsoftware/trace-spec",
+  "license": "Apache-2.0",
+  "version": "0.4.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/trace/trace-spec"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/trace/trace-spec#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Trace contracts as executable specs — own a trace id, observe the finished trace through an in-memory exporter, and relate the decoded span graph to a declared taxonomy.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "opentelemetry",
+    "tracing",
+    "contract-testing",
+    "observability",
+    "trace-based-testing",
+    "vitest"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown -l warn",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@effect/opentelemetry": "catalog:",
+    "@opentelemetry/api": "catalog:",
+    "@opentelemetry/resources": "catalog:",
+    "@opentelemetry/sdk-trace-base": "catalog:",
+    "@opentelemetry/semantic-conventions": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-spec-runtime": "workspace:^",
+    "@systemfsoftware/trace-taxonomy": "workspace:^"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/conformance-spec": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config-recommended": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@systemfsoftware/vitest": "workspace:^",
+    "effect": "catalog:peers",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

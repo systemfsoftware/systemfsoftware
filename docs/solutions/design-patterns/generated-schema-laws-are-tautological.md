@@ -32,7 +32,7 @@ tags:
 
 ## Context
 
-`packages/hex-schema` looked verified. Every exported schema carried a generated `ruleOfSchemas` pair, the package was wired into real Stryker (`cca5f66e8e`), and the round-trip laws were green at 500/500 inputs. The repo requires 100% mutation on changed pure-core files, and the package's own `stryker.config.json` sets `high: 100, low: 100` while holding `break: 0` — a deliberate ratchet, an admission that the package was climbing toward the gate rather than sitting at it.
+`packages/schema/hex-schema` looked verified. Every exported schema carried a generated `ruleOfSchemas` pair, the package was wired into real Stryker (`cca5f66e8e`), and the round-trip laws were green at 500/500 inputs. The repo requires 100% mutation on changed pure-core files, and the package's own `stryker.config.json` sets `high: 100, low: 100` while holding `break: 0` — a deliberate ratchet, an admission that the package was climbing toward the gate rather than sitting at it.
 
 The first real run came back at **55.95%**, and the survivors were not scattered. They were a cluster: every `S.pattern(...)` mutant survived, in all five of the package's pattern-carrying schema files — `colon-hex.schema.ts`, `hex-string.schema.ts`, `strict-hex.schema.ts`, `prefixed-hex.schema.ts`, `uint8array-from-prefixed-hex.schema.ts`. Every file that had a pattern to widen had a surviving widening.
 
@@ -42,10 +42,10 @@ The penny dropped on widening a pattern by hand — `{1,2}` to `{1,3}`, a charac
 
 **If a schema's `S.pattern(...)` (or any refinement) mutants survive while its round-trip laws stay green, the laws are tautological with respect to that refinement. Stop adding round-trip laws. Author rejection properties whose generators come from the domain contract, never from the pattern literal.**
 
-The mechanism is visible in `packages/effect-schema-law/src/RuleOfSchemas.ts`. `ruleOfSchemas` registers exactly two properties per schema, and feeds both from the schema itself:
+The mechanism is visible in `packages/schema/effect-schema-law/src/RuleOfSchemas.ts`. `ruleOfSchemas` registers exactly two properties per schema, and feeds both from the schema itself:
 
 ```ts
-// packages/effect-schema-law/src/RuleOfSchemas.ts
+// packages/schema/effect-schema-law/src/RuleOfSchemas.ts
 it.prop(`∀x_${name}Enc_=x`, { of: [schema], subject: encodeStable, runs: 100 }, (subject, [value]) => subject(value))
 it.prop(`∀x_${name}_=x`, { of: [schema], subject: roundTrips, runs: 100 }, (subject, [value]) => subject(value))
 ```
@@ -57,7 +57,7 @@ The `of: [schema]` generator is fast-check drawing from `Schema.Arbitrary`, whic
 **Verbatim** — the arbitrary restates the pattern's regex character for character:
 
 ```ts
-// packages/hex-schema/src/hex-string.schema.ts:10-12
+// packages/schema/hex-schema/src/hex-string.schema.ts:10-12
 S.pattern(/^(0x)?[0-9a-fA-F]*$/),
 S.annotations({
   arbitrary: () => (fc) => fc.stringMatching(/^(0x)?[0-9a-fA-F]*$/),
@@ -66,7 +66,7 @@ S.annotations({
 **Constructed-to-satisfy** — the arbitrary is a different expression that nonetheless cannot produce a violating value:
 
 ```ts
-// packages/hex-schema/src/prefixed-hex.schema.ts:7-8
+// packages/schema/hex-schema/src/prefixed-hex.schema.ts:7-8
 S.pattern(/^0x[0-9a-f]*$/),
 S.annotations({ arbitrary: () => (fc) => fc.hexaString().map((hex) => `0x${hex}`) }),
 ```
@@ -82,7 +82,7 @@ Before — the only laws that existed, per schema (generated, tautological): the
 After — a rejection property with a contract-derived generator:
 
 ```ts
-// packages/hex-schema/src/prefixed-hex.schema.property.test.ts:5-13
+// packages/schema/hex-schema/src/prefixed-hex.schema.property.test.ts:5-13
 const decode = S.decodeUnknownEither(PrefixedHex)
 
 it.prop(
@@ -140,7 +140,7 @@ Four landed rejection properties, quoted from the tree. In each, the generator c
 The schema requires `0x` and refuses uppercase (`prefixed-hex.schema.ts:7`) — unlike `HexString`, it does **not** accept `[A-F]`:
 
 ```ts
-// packages/hex-schema/src/prefixed-hex.schema.property.test.ts:7-25
+// packages/schema/hex-schema/src/prefixed-hex.schema.property.test.ts:7-25
 const hexBody = fc.stringMatching(/^[0-9a-f]*$/)
 
 it.prop(
@@ -169,7 +169,7 @@ The outsider alphabet deliberately excludes `x`, which would form a legal prefix
 The schema encodes bytes (`uint8array-from-prefixed-hex.schema.ts:7`) and its arbitrary maps real `Uint8Array`s to hex. Every generated value therefore has an **even-length body by construction** — the round-trip is not merely silent on alignment, it is structurally incapable of producing a misaligned input:
 
 ```ts
-// packages/hex-schema/src/uint8array-from-prefixed-hex.schema.property.test.ts:7-14
+// packages/schema/hex-schema/src/uint8array-from-prefixed-hex.schema.property.test.ts:7-14
 const bytePairs = fc.stringMatching(/^(?:[0-9a-f]{2})*$/)
 const nibble = fc.stringMatching(/^[0-9a-f]$/)
 
@@ -187,7 +187,7 @@ it.prop(
 `ColonHex` groups into one-or-two-digit groups (`colon-hex.schema.ts:11`) with arbitrary `fc.hexaString().map(hexToColon)`, so widening `{1,2}` to `{1,3}` survives every generated law:
 
 ```ts
-// packages/hex-schema/src/colon-hex.schema.ts:66-72
+// packages/schema/hex-schema/src/colon-hex.schema.ts:66-72
 const decodeColonHex = S.decodeUnknownEither(ColonHex)
 
 it.prop(
@@ -202,7 +202,7 @@ The same block carries a transform-pinning law that catches a `hexToColon` `.toU
 ### 4. `HexString` — alphabet refusal, in-source
 
 ```ts
-// packages/hex-schema/src/hex-string.schema.ts:66-73
+// packages/schema/hex-schema/src/hex-string.schema.ts:66-73
 const decodeHexString = S.decodeUnknownEither(HexString)
 const hexPart = fc.stringMatching(/^[0-9a-fA-F]*$/)
 

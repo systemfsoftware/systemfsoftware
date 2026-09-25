@@ -36,7 +36,7 @@ tags:
 
 This monorepo is a pnpm + Turborepo workspace of Effect-TS libraries: 46 packages as `turbo ls` counts them, typechecked with `@effect/tsgo`, linted with oxlint, tested with Vitest. For the life of the repo, `turbo.json` carried `"typecheck": { "cache": false }` (present since the initial commit, with no recorded reason), so all 45 typecheck tasks rebuilt on every gate run. On a warm tree with zero changes, `turbo typecheck` took 44.7s — every second spent recomputing an answer the run had already produced.
 
-The first candidate fix was `--incremental`. A `.tsbuildinfo` file removes work _inside_ one `tsc` process; it never removes the process itself. Measured on `packages/hex-schema` with a fully warm buildinfo and zero changes, `tsc` still spent 4.0s on startup, tsconfig reads, and program construction before it could consume the incremental data (two runs: 4.17s and 4.05s). Multiplied across 45 packages, 44 of them pay roughly that 4s fixed cost per run just to conclude nothing changed. That per-process fixed cost is exactly what a task cache removes and what a buildinfo cannot. Every timing in this document was measured once, on one developer machine, on a warm tree; the ratios and the direction are the transferable part, not the absolute seconds. The real fix was turbo's task cache — and enabling it turned out to be the beginning of the work, not the end.
+The first candidate fix was `--incremental`. A `.tsbuildinfo` file removes work _inside_ one `tsc` process; it never removes the process itself. Measured on `packages/schema/hex-schema` with a fully warm buildinfo and zero changes, `tsc` still spent 4.0s on startup, tsconfig reads, and program construction before it could consume the incremental data (two runs: 4.17s and 4.05s). Multiplied across 45 packages, 44 of them pay roughly that 4s fixed cost per run just to conclude nothing changed. That per-process fixed cost is exactly what a task cache removes and what a buildinfo cannot. Every timing in this document was measured once, on one developer machine, on a warm tree; the ratios and the direction are the transferable part, not the absolute seconds. The real fix was turbo's task cache — and enabling it turned out to be the beginning of the work, not the end.
 
 Once a cache can answer for a task, the gate's verdict may come from a stored entry instead of a fresh run. That makes the cache key a correctness surface: the key must move whenever the answer could change. Most of the effort went into proving that, and one attempt at the proof was actively wrong. The first version of the invalidation probe appended the same newline on every round, so the "edited" state had an identical input hash each time and matched a cache entry an earlier round had already written. The probe reported a HIT where a MISS was required, and the conclusion drawn from it was that turbo's invalidation was broken — a non-bug that came within one step of being "fixed". A wrong intermediate hypothesis formed in the same stretch (the turbo daemon plus unreliable fsnotify on this repo's virtiofs mount) and was falsified: the daemon was not running at all, and `--no-daemon` changed nothing.
 
@@ -182,11 +182,11 @@ turbo typecheck
 # 3. edit a real source file with a UNIQUE mutation, then run — require a MISS.
 #    Each round must mutate differently: appending the same newline every round
 #    reproduces the previous round's input hash, and the cache answers HIT.
-printf '\n// mutation-round-3\n' >> packages/hex-schema/src/mod.ts
+printf '\n// mutation-round-3\n' >> packages/schema/hex-schema/src/mod.ts
 turbo typecheck
 
 # 4. revert the edit and run — expect a HIT
-git restore packages/hex-schema/src/mod.ts
+git restore packages/schema/hex-schema/src/mod.ts
 turbo typecheck
 ```
 
