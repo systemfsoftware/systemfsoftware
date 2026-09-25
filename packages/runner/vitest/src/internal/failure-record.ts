@@ -219,7 +219,7 @@ interface Pair {
 
 const pairOf = (name: string, text: string): Pair => ({ name, text })
 
-const pairTextOf = (pair: Pair): string => `${pair.name}: ${pair.text}`
+const pairTextOf = (pair: Pair): string => `${JSON.stringify(pair.name)}:${pair.text}`
 
 const pairTextsOf = (pairs: ReadonlyArray<Pair>): ReadonlyArray<string> => pairs.map(pairTextOf)
 
@@ -232,9 +232,11 @@ const fieldsOf = (value: object): ReadonlyArray<Pair> => pairsOf(value).filter((
 
 const renderValue = (value: Opaque): string => isObject(value) ? renderObject(value) : renderScalar(value)
 
-const renderScalar = (value: Opaque): string => isText(value) ? value : renderPrimitive(value)
+const renderScalar = (value: Opaque): string => isText(value) ? JSON.stringify(value) : renderPrimitive(value)
 
-const renderPrimitive = (value: Opaque): string => isPrimitive(value) ? `${value}` : renderOther(value)
+const renderPrimitive = (value: Opaque): string => isBigInt(value) ? `${value}n` : renderPlain(value)
+
+const renderPlain = (value: Opaque): string => isPrimitive(value) ? `${value}` : renderOther(value)
 
 const renderOther = (value: Opaque): string => isNull(value) ? 'null' : renderUndefined(value)
 
@@ -242,15 +244,21 @@ const renderUndefined = (value: Opaque): string => value === undefined ? 'undefi
 
 const renderContainer = (value: Opaque): string => isArray(value) ? renderList(value) : typeof value
 
-const renderList = (value: ReadonlyArray<Opaque>): string => `[${value.map(renderValue).join('; ')}]`
+const renderList = (value: ReadonlyArray<Opaque>): string => `[${value.map(renderValue).join(',')}]`
 
 const renderObject = (value: object): string => tagFieldOf(value) ?? renderRecord(value)
 
-const renderRecord = (value: object): string => `{${pairTextsOf(pairsOf(value)).join('; ')}}`
+const renderRecord = (value: object): string => `{${pairTextsOf(pairsOf(value)).join(',')}}`
 
-const renderFields = (value: object): string => `{${pairTextsOf(fieldsOf(value)).join('; ')}}`
+const bracesOf = (pairs: ReadonlyArray<Pair>): string => ` {${pairTextsOf(pairs).join(',')}}`
 
-const summaryOf = (value: Opaque): string => isObject(value) ? objectSummaryOf(value) : renderScalar(value)
+const renderFields = (value: object): string => bracesOf(fieldsOf(value))
+
+const textSummaryOf = (text: string): string => text.length === 0 ? text : JSON.stringify(text)
+
+const scalarSummaryOf = (value: Opaque): string => isText(value) ? textSummaryOf(value) : renderScalar(value)
+
+const summaryOf = (value: Opaque): string => isObject(value) ? objectSummaryOf(value) : scalarSummaryOf(value)
 
 const objectSummaryOf = (value: object): string => {
   const tag = tagFieldOf(value)
@@ -460,7 +468,7 @@ const cellPairsOf = (cell: Tracer.NativeSpan): ReadonlyArray<Pair> => {
   return [...members, ...declared]
 }
 
-const pairsBracesOf = (cell: Tracer.NativeSpan): string => `{${pairTextsOf(cellPairsOf(cell)).join(', ')}}`
+const pairsBracesOf = (cell: Tracer.NativeSpan): string => bracesOf(cellPairsOf(cell))
 
 const outcomeOf = (cell: Tracer.NativeSpan): string => {
   const outcome = textAttrOf(cell, CELL_OUTCOME)

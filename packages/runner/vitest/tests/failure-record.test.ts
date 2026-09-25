@@ -154,7 +154,7 @@ it('Should_RenderTagAndFields_When_TheTaggedErrorHasNoMessage', function*({ expe
   yield* expect(record).toEqual({
     name: 'LogSourceError',
     record: [
-      'LogSourceError{source: host 127.0.0.1:1}',
+      'LogSourceError {"source":"host 127.0.0.1:1"}',
       `  raised at ${HANDLER_TEXT} (write)`,
       FAILING_STEP_LINE,
       '',
@@ -241,7 +241,7 @@ it('Should_CollapseRepeats_When_FiveIdenticalDecisionsRan', function*({ expect }
       '',
       'Steps and the decisions each caused:',
       GIVEN_STEP_LINE,
-      `      cell ${PROBE_CELL}: ResolveProbe{condition: Tcp} → ProbeTcp  (×5)`,
+      `      cell ${PROBE_CELL}: ResolveProbe {"condition":"Tcp"} → ProbeTcp  (×5)`,
       `        decide ${DECIDE_TEXT}   cell ${CELL_TEXT}`,
       FAILED_STEP_LINE,
       '',
@@ -271,7 +271,7 @@ it('Should_ShowOnlyDeclaredData_When_TheCommandCarriesAnUndeclaredField', functi
       '',
       'Steps and the decisions each caused:',
       GIVEN_STEP_LINE,
-      `      cell ${PROBE_CELL}: ResolveProbe{condition: Tcp, attempts: 2} → ProbeTcp`,
+      `      cell ${PROBE_CELL}: ResolveProbe {"condition":"Tcp","attempts":2} → ProbeTcp`,
       `        decide ${DECIDE_TEXT}   cell ${CELL_TEXT}`,
       FAILED_STEP_LINE,
       '',
@@ -338,7 +338,7 @@ it('Should_BreachR1_When_TheHeadlineIsEmpty', function*({ expect }) {
 
 it('Should_RenderEveryLayer_When_TheEntryEmbedsAMessageLessCause', function*({ expect }) {
   const inner = bare()
-  const message = `When "${WHEN_TEXT}" failed: LogSourceError{source: host 127.0.0.1:1}`
+  const message = `When "${WHEN_TEXT}" failed: LogSourceError {"source":"host 127.0.0.1:1"}`
   const entry = Object.assign(new Error(message), { _tag: 'StepError', cause: inner })
   entry.stack = `StepError: ${message}\n${frameLine('When', SPEC_WHEN)}`
   const record = yield* recordOf([whenStep(Effect.fail(entry))])
@@ -350,7 +350,7 @@ it('Should_RenderEveryLayer_When_TheEntryEmbedsAMessageLessCause', function*({ e
       FAILING_STEP_LINE,
       '',
       'Cause chain:',
-      '  LogSourceError{source: host 127.0.0.1:1}',
+      '  LogSourceError {"source":"host 127.0.0.1:1"}',
       '',
       'Steps and the decisions each caused:',
       FAILED_STEP_LINE,
@@ -366,9 +366,8 @@ it('Should_BreachR2_When_NoLocationSurvives', function*({ expect }) {
   const record = yield* recordOf([Effect.fail({ _tag: 'ScenarioBuildError', field: 1 })])
   yield* expect(record).toEqual({
     name: 'ScenarioBuildError',
-    record: ['ScenarioBuildError{field: 1}', 'Failing step: no step ran', '', 'Rerun only this scenario:', RERUN].join(
-      '\n',
-    ),
+    record: ['ScenarioBuildError {"field":1}', 'Failing step: no step ran', '', 'Rerun only this scenario:', RERUN]
+      .join('\n'),
     breaches: ['R2'],
   })
 })
