@@ -78,7 +78,7 @@ jobs:
         run: corepack pnpm check:static
 
   gritlint:
-    name: gritlint (pnpm gate:rust, sandboxed journey)
+    name: gritlint (pnpm gate:rust, sandboxed journey, pnpm lint:conventions)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -116,6 +116,8 @@ jobs:
           test "$status" -eq 1 || { echo "a planted violation must exit 1, got $status" >&2; exit 1; }
           printf '{"name": "app", "scripts": {"typecheck": "tsc -b"}}\n' > packages/app/package.json
           "$bin" check
+      - name: This repository's conventions
+        run: ./bin/gritlint check
 
   test:
     name: test · ${{ matrix.job.name }}
