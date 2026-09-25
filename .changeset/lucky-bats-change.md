@@ -1,5 +1,10 @@
 ---
 "@systemfsoftware/effect-daemon-spec": none
+"@systemfsoftware/effect-daemon-cluster": none
+"@systemfsoftware/effect-daemon-conformance": none
+"@systemfsoftware/effect-daemon-microvm": none
+"@systemfsoftware/effect-daemon-process": none
+"@systemfsoftware/effect-daemon-socket": none
 ---
 
-Comment in SupervisionLimits.schema.ts cites the arbitrary-filter-floors rule at its new pack path; no runtime change.
+Source comment update only; no change to published behaviour.
